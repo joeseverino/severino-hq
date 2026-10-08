@@ -57,8 +57,14 @@ def connected(ref, provider):
 
 
 def dns(name, content, *, proxied, record_type="A"):
-    return {"zone": "example.com", "name": name, "record_type": record_type,
-            "content": content, "proxied": proxied, "ttl": 1}
+    return {
+        "zone": "example.com",
+        "name": name,
+        "record_type": record_type,
+        "content": content,
+        "proxied": proxied,
+        "ttl": 1,
+    }
 
 
 def login(client, name="relations-op"):
@@ -81,7 +87,8 @@ class OneEdgeBothEndsTests(TestCase):
             service = relationships_for("service:hq.example.com", principal=READER)
 
         edges = [
-            edge for edge in graph.topology.edges
+            edge
+            for edge in graph.topology.edges
             if {edge.source, edge.target} == {"service:hq.example.com", "machine:example-host"}
         ]
         self.assertEqual([edge.kind for edge in edges], ["runs_on"])
@@ -107,7 +114,9 @@ class OneEdgeBothEndsTests(TestCase):
             response = self.client.get(reverse("control_plane:service", args=["hq.example.com"]))
 
         # Beside the hostname, with why on hover.
-        self.assertContains(response, '<span class="pill" title="HQ&#x27;s own name: changed by deploying HQ">Read-only</span>')
+        self.assertContains(
+            response, '<span class="pill" title="HQ&#x27;s own name: changed by deploying HQ">Read-only</span>'
+        )
         self.assertContains(response, '<span class="readout-label">Runs on</span>')
         self.assertNotContains(response, "Nothing set up in HQ")
         self.assertNotContains(response, "Add container stack")
@@ -136,28 +145,23 @@ class LinkBuilderTests(TestCase):
     def test_a_connection_links_to_its_row(self):
         link = entity_link("connection", "example-cloudflare")
 
-        self.assertEqual(
-            link.url, reverse("control_plane:connections") + "#connection-example-cloudflare"
-        )
+        self.assertEqual(link.url, reverse("control_plane:connections") + "#connection-example-cloudflare")
 
     def test_a_reading_links_to_its_console_from_stored_ids(self):
         pages = entity_link(
-            "cloudflare.pages_project", "",
+            "cloudflare.pages_project",
+            "",
             record={"name": "example-site", "account_id": ACCOUNT},
         )
         unlinked = entity_link("cloudflare.pages_project", "", record={"name": "example-site"})
 
         self.assertEqual(pages.label, "example-site")
-        self.assertEqual(
-            pages.url, f"https://dash.cloudflare.com/{ACCOUNT}/pages/view/example-site"
-        )
+        self.assertEqual(pages.url, f"https://dash.cloudflare.com/{ACCOUNT}/pages/view/example-site")
         self.assertTrue(pages.external)
         self.assertEqual((unlinked.label, unlinked.url, unlinked.external), ("example-site", "", False))
 
     def test_a_tailnet_device_links_to_the_admin_console(self):
-        link = entity_link(
-            TAILNET_KIND, "example-host", record={"addresses": ["fd7a::1", "100.64.0.1"]}
-        )
+        link = entity_link(TAILNET_KIND, "example-host", record={"addresses": ["fd7a::1", "100.64.0.1"]})
 
         self.assertEqual(link.url, "https://login.tailscale.com/admin/machines/100.64.0.1")
         self.assertTrue(link.external)
@@ -201,9 +205,14 @@ class RankTests(TestCase):
 
 
 EDGE = {
-    "connection_ref": "example-cloudflare", "account_id": ACCOUNT, "zone": "example.com",
-    "id": "e1", "hosts": ["example.com", "*.example.com"], "status": "active",
-    "certificate_authority": "google", "expires_on": "2099-01-01T00:00:00+00:00",
+    "connection_ref": "example-cloudflare",
+    "account_id": ACCOUNT,
+    "zone": "example.com",
+    "id": "e1",
+    "hosts": ["example.com", "*.example.com"],
+    "status": "active",
+    "certificate_authority": "google",
+    "expires_on": "2099-01-01T00:00:00+00:00",
 }
 
 
@@ -237,11 +246,13 @@ class EdgeCertificatePathTests(TestCase):
 
     def test_the_service_page_of_an_unproxied_name_names_no_edge_certificate(self):
         ManagedResource.objects.create(
-            key="tail-dns", kind="adguard.rewrite",
+            key="tail-dns",
+            kind="adguard.rewrite",
             spec={"domain": "tail.example.com", "answer": "100.64.0.1"},
         )
         ManagedResource.objects.create(
-            key="app-dns", kind="adguard.rewrite",
+            key="app-dns",
+            kind="adguard.rewrite",
             spec={"domain": "app.example.com", "answer": "192.0.2.10"},
         )
         login(self.client)
@@ -260,9 +271,14 @@ class EdgeCertificatePathTests(TestCase):
 
 def wildcard(key):
     return ManagedResource.objects.create(
-        key=key, kind="tls.certificate",
-        spec={"certificate_name": key, "domains": ["*.example.com"],
-              "install_on": ["a-proxy"], "renewal_window_days": 30},
+        key=key,
+        kind="tls.certificate",
+        spec={
+            "certificate_name": key,
+            "domains": ["*.example.com"],
+            "install_on": ["a-proxy"],
+            "renewal_window_days": 30,
+        },
     )
 
 
@@ -275,10 +291,15 @@ class ManagedCertificatePathTests(TestCase):
 
     def proxy(self, certificate=""):
         return ManagedResource.objects.create(
-            key="app-proxy", kind="npm.proxy_host",
-            spec={"domain_names": ["app.example.com"], "forward_scheme": "http",
-                  "forward_host": "10.0.0.10", "forward_port": 8000,
-                  "certificate_resource": certificate},
+            key="app-proxy",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["app.example.com"],
+                "forward_scheme": "http",
+                "forward_host": "10.0.0.10",
+                "forward_port": 8000,
+                "certificate_resource": certificate,
+            },
         )
 
     def certificates(self):
@@ -303,34 +324,44 @@ def estate(size):
     connected("example-tailnet", PROVIDERS[TAILNET_KIND].connection_providers[0])
     connected("example-cloudflare", "cloudflare_api")
     ManagedResource.objects.create(
-        key="example-com", kind="cloudflare.zone",
+        key="example-com",
+        kind="cloudflare.zone",
         spec={"zone": "example.com", "connection_ref": "example-cloudflare"},
     )
-    store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-cloudflare",
-                              "account_id": ACCOUNT})
+    store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-cloudflare", "account_id": ACCOUNT})
     devices, records, apps = [], [], []
     for index in range(size):
         name, address = f"example-host-{index}", f"100.64.0.{index + 1}"
+        ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": [address]})
         ManagedResource.objects.create(
-            key=name, kind="machine", spec={"name": name, "addresses": [address]}
-        )
-        ManagedResource.objects.create(
-            key=f"s{index}-dns", kind="adguard.rewrite",
+            key=f"s{index}-dns",
+            kind="adguard.rewrite",
             spec={"domain": f"s{index}.example.com", "answer": address},
         )
-        devices.append({"name": name, "addresses": [address],
-                        "dns_name": f"{name}.example.ts.net", "online": True})
+        devices.append({"name": name, "addresses": [address], "dns_name": f"{name}.example.ts.net", "online": True})
         records.append(dns(f"s{index}.example.com", address, proxied=True))
-        apps.append({"connection_ref": "example-cloudflare", "account_id": ACCOUNT,
-                     "id": f"a{index}", "name": f"example-gate-{index}",
-                     "domain": f"s{index}.example.com"})
+        apps.append(
+            {
+                "connection_ref": "example-cloudflare",
+                "account_id": ACCOUNT,
+                "id": f"a{index}",
+                "name": f"example-gate-{index}",
+                "domain": f"s{index}.example.com",
+            }
+        )
     store(TAILNET_KIND, *devices)
     store("cloudflare.dns_record", *records)
     store("cloudflare.access_app", *apps)
     store("cloudflare.edge_certificate", EDGE)
-    store("cloudflare.pages_project", {"connection_ref": "example-cloudflare",
-                                       "account_id": ACCOUNT, "name": "example-site",
-                                       "domains": ["example.com"]})
+    store(
+        "cloudflare.pages_project",
+        {
+            "connection_ref": "example-cloudflare",
+            "account_id": ACCOUNT,
+            "name": "example-site",
+            "domains": ["example.com"],
+        },
+    )
 
 
 class PageCostTests(TestCase):
@@ -422,7 +453,7 @@ class NoUnlinkedNamesTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
-        main = body[body.index("<main"):body.index("</main>")]
+        main = body[body.index("<main") : body.index("</main>")]
         parser = _Mentions()
         parser.feed(main)
         found = []
@@ -479,7 +510,8 @@ class NoRawKindsTests(TestCase):
     def test_the_machine_page_names_its_declarations_by_label(self):
         estate(1)
         ManagedResource.objects.create(
-            key="example-host-0-tailnet", kind=TAILNET_KIND,
+            key="example-host-0-tailnet",
+            kind=TAILNET_KIND,
             spec={"name": "example-host-0", "key_expiry_disabled": False},
         )
         login(self.client)
@@ -519,17 +551,21 @@ class DomainCardTests(TestCase):
 
         sweep(
             zones=[
-                {"zone": "example.com", "connection_ref": "cf-example",
-                 "posture": {"ssl": "strict", "min_tls_version": "1.3"}},
-                {"zone": "example.net", "connection_ref": "cf-example",
-                 "posture": {"ssl": "full", "min_tls_version": "1.0"}},
+                {
+                    "zone": "example.com",
+                    "connection_ref": "cf-example",
+                    "posture": {"ssl": "strict", "min_tls_version": "1.3"},
+                },
+                {
+                    "zone": "example.net",
+                    "connection_ref": "cf-example",
+                    "posture": {"ssl": "full", "min_tls_version": "1.0"},
+                },
             ],
             records=[
                 *APEX,
-                record("example.net", "A", "192.0.2.1", zone="example.net", rid="n1",
-                       proxied=True),
-                record("www.example.net", "CNAME", "example.net", zone="example.net",
-                       rid="n2", proxied=True),
+                record("example.net", "A", "192.0.2.1", zone="example.net", rid="n1", proxied=True),
+                record("www.example.net", "CNAME", "example.net", zone="example.net", rid="n2", proxied=True),
             ],
         )
         for key, name, rtype, content in (
@@ -537,10 +573,17 @@ class DomainCardTests(TestCase):
             ("net-www", "www.example.net", "CNAME", "example.net"),
         ):
             ManagedResource.objects.create(
-                key=key, kind="cloudflare.dns_record",
-                spec={"zone": "example.net", "name": name, "record_type": rtype,
-                      "content": content, "proxied": True, "ttl": 1,
-                      "connection_ref": "cf-example"},
+                key=key,
+                kind="cloudflare.dns_record",
+                spec={
+                    "zone": "example.net",
+                    "name": name,
+                    "record_type": rtype,
+                    "content": content,
+                    "proxied": True,
+                    "ttl": 1,
+                    "connection_ref": "cf-example",
+                },
             )
 
     def cards(self, zone):
@@ -549,9 +592,7 @@ class DomainCardTests(TestCase):
         return {card.label: card for card in find_zone(zone).cards}
 
     def test_there_are_four_cards_each_answering_one_question(self):
-        self.assertEqual(
-            list(self.cards("example.net")), ["Services", "Security", "Email", "Registration"]
-        )
+        self.assertEqual(list(self.cards("example.net")), ["Services", "Security", "Email", "Registration"])
 
     def test_a_parked_domain_says_so_with_who_handles_it(self):
         card = self.cards("example.net")["Services"]
@@ -620,18 +661,14 @@ class MachineServesAgreesTests(TestCase):
         login(self.client)
 
         with own("192.0.2.44"):
-            response = self.client.get(
-                reverse("control_plane:machine", args=["example-host"])
-            )
+            response = self.client.get(reverse("control_plane:machine", args=["example-host"]))
             with projection_scope():
                 panel = relationships_for("machine:example-host", principal=READER)
 
         body = response.content.decode()
         from ..ui import counted
 
-        header = body.split('<span class="band-label">Serves</span>', 1)[1].split(
-            "</div>", 1
-        )[0]
+        header = body.split('<span class="band-label">Serves</span>', 1)[1].split("</div>", 1)[0]
         for name in panel.labels(RELATIONS["runs_on"].inverse):
             self.assertIn(name, header)
         self.assertIn(f"<strong>{counted(len(panel.labels('Serves')), 'name')}</strong>", header)
@@ -639,10 +676,7 @@ class MachineServesAgreesTests(TestCase):
 
 class UnreadableScopeTests(TestCase):
     def test_a_refused_hostname_reading_is_named_on_a_service_and_not_elsewhere(self):
-        kind = next(
-            kind for kind, spec in OBSERVATIONS.items()
-            if spec.joins_hostnames and not spec.joins_addresses
-        )
+        kind = next(kind for kind, spec in OBSERVATIONS.items() if spec.joins_hostnames and not spec.joins_addresses)
         store(kind, reachable=False, error="refused")
         connected("example-ssh", "ssh")
         declare("example-host", "192.0.2.44")

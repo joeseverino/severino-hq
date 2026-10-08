@@ -48,9 +48,7 @@ class GeneratedFieldTests(TestCase):
         form = spec_form_class("npm.proxy_host")(PROXY)
 
         self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(
-            form.spec["domain_names"], ["app.example.com", "www.example.com"]
-        )
+        self.assertEqual(form.spec["domain_names"], ["app.example.com", "www.example.com"])
 
     def test_a_checkbox_is_never_required(self):
         """required=True on a BooleanField means "must be ticked", which is wrong.
@@ -169,17 +167,11 @@ class IdentityFieldTests(TestCase):
         self.assertEqual(form.spec["domain"], "renamed.example.com")
 
     def test_the_edit_page_warns_that_the_old_name_stops_resolving(self):
-        user = get_user_model().objects.create_user(
-            username="operator", password="test-only-password"
-        )
+        user = get_user_model().objects.create_user(username="operator", password="test-only-password")
         self.client.force_login(user)
-        ManagedResource.objects.create(
-            key="app-dns", kind="adguard.rewrite", spec=REWRITE
-        )
+        ManagedResource.objects.create(key="app-dns", kind="adguard.rewrite", spec=REWRITE)
 
-        response = self.client.get(
-            reverse("control_plane:edit", kwargs={"key": "app-dns"})
-        )
+        response = self.client.get(reverse("control_plane:edit", kwargs={"key": "app-dns"}))
 
         self.assertContains(response, "old name stops resolving")
 
@@ -191,9 +183,7 @@ class ResourceFormViewTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="test-only-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="test-only-password")
         self.client.force_login(self.user)
 
     def test_declaring_a_resource_writes_desired_state(self):
@@ -260,18 +250,14 @@ class ResourceFormViewTests(TestCase):
         problem. A create never stops to demand a different value for a field
         that is not shown and does not matter.
         """
-        ManagedResource.objects.create(
-            key="app-example-com-dns", kind="adguard.rewrite", spec=REWRITE
-        )
+        ManagedResource.objects.create(key="app-example-com-dns", kind="adguard.rewrite", spec=REWRITE)
 
         self.client.post(
             reverse("control_plane:create"),
             {"kind": "adguard.rewrite", **REWRITE, "answer": "10.0.0.99"},
         )
 
-        self.assertTrue(
-            ManagedResource.objects.filter(key="app-example-com-dns-2").exists()
-        )
+        self.assertTrue(ManagedResource.objects.filter(key="app-example-com-dns-2").exists())
 
     def test_choosing_a_kind_lists_the_providers_that_stand_on_their_own(self):
         """Every kind except those a provider says belong somewhere else.
@@ -313,9 +299,7 @@ class ResourceFormViewTests(TestCase):
         self.assertIn("/accounts/login/", response["Location"])
 
     def test_an_unknown_kind_is_not_found(self):
-        response = self.client.post(
-            reverse("control_plane:create"), {"kind": "example.nothing"}
-        )
+        response = self.client.post(reverse("control_plane:create"), {"kind": "example.nothing"})
 
         self.assertEqual(response.status_code, 404)
 
@@ -363,9 +347,7 @@ class ResourceFormViewTests(TestCase):
         from hq.platform.application.certificates import CertificateError
 
         with (
-            mock.patch(
-                "hq.domains.control_plane.resource_form_views._material_form", return_value=forms.Form
-            ),
+            mock.patch("hq.domains.control_plane.resource_form_views._material_form", return_value=forms.Form),
             mock.patch(
                 "hq.domains.control_plane.resource_form_views._store_material",
                 side_effect=CertificateError("The example material was refused."),
@@ -378,9 +360,7 @@ class ResourceFormViewTests(TestCase):
             )
 
         key = ManagedResource.objects.get().key
-        self.assertRedirects(
-            response, reverse("control_plane:upload_certificate", kwargs={"key": key})
-        )
+        self.assertRedirects(response, reverse("control_plane:upload_certificate", kwargs={"key": key}))
         self.assertContains(response, "The example material was refused.")
 
 
@@ -390,16 +370,12 @@ class RoutineKnobTests(TestCase):
     def test_the_renewal_window_stays_a_knob(self):
         """Renewal is automatic, so how early it starts is not a question."""
 
-        form = spec_form_class("tls.certificate")(
-            initial={"certificate_name": "example"}
-        )
+        form = spec_form_class("tls.certificate")(initial={"certificate_name": "example"})
 
         self.assertIn("renewal_window_days", {field.name for field in form.advanced})
 
     def test_a_knob_somebody_answered_comes_out_from_behind_it(self):
-        form = spec_form_class("tls.certificate")(
-            initial={"certificate_name": "example", "renewal_window_days": 45}
-        )
+        form = spec_form_class("tls.certificate")(initial={"certificate_name": "example", "renewal_window_days": 45})
 
         self.assertIn("renewal_window_days", {field.name for field in form.primary})
 

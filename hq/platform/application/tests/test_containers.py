@@ -29,34 +29,70 @@ def inventory(kind, records):
 
 def running(name, image, host="example-box"):
     return {
-        "name": name, "stack": name, "image": image, "state": "running", "status": "Up 2 days",
-        "host": host, "host_address": "", "connection_ref": "example-portainer", "ports": [],
-        "network_mode": "bridge", "portainer_managed": False,
+        "name": name,
+        "stack": name,
+        "image": image,
+        "state": "running",
+        "status": "Up 2 days",
+        "host": host,
+        "host_address": "",
+        "connection_ref": "example-portainer",
+        "ports": [],
+        "network_mode": "bridge",
+        "portainer_managed": False,
     }
 
 
 def estate(*, advisories=(), app_tags=("v1.2.0", "v1.3.0")):
     now = timezone.now().isoformat()
-    inventory("portainer.container", [
-        running("app", "ghcr.io/example/app:v1.2.0@sha256:aaa"),
-        running("web", "example/web:1.0.0"),
-        running("kuma", "example/kuma@sha256:bbb"),
-    ])
-    inventory("portainer.image", [
-        {"connection_ref": "example-portainer", "host": "example-box", "id": "sha256:bbb",
-         "tags": ["example/kuma:1"], "created_at": "2025-10-20T17:53:48+00:00",
-         "containers": [{"container": "kuma", "reference": "example/kuma@sha256:bbb"}]},
-    ])
-    inventory("registry.image", [
-        {"image": "ghcr.io/example/app", "tags": list(app_tags), "source": "https://github.com/example/app", "read_at": now},
-        {"image": "docker.io/example/web", "tags": ["1.0.0"], "read_at": now},
-        {"image": "docker.io/example/kuma", "tags": ["1", "2"], "read_at": now},
-    ])
-    inventory("registry.upstream", [
-        {"repository": "example/app", "url": "https://github.com/example/app", "read_at": now,
-         "releases": [{"tag": "v1.3.0", "url": "https://github.com/example/app/releases/v1.3.0", "published_at": now}],
-         "advisories": list(advisories)},
-    ])
+    inventory(
+        "portainer.container",
+        [
+            running("app", "ghcr.io/example/app:v1.2.0@sha256:aaa"),
+            running("web", "example/web:1.0.0"),
+            running("kuma", "example/kuma@sha256:bbb"),
+        ],
+    )
+    inventory(
+        "portainer.image",
+        [
+            {
+                "connection_ref": "example-portainer",
+                "host": "example-box",
+                "id": "sha256:bbb",
+                "tags": ["example/kuma:1"],
+                "created_at": "2025-10-20T17:53:48+00:00",
+                "containers": [{"container": "kuma", "reference": "example/kuma@sha256:bbb"}],
+            },
+        ],
+    )
+    inventory(
+        "registry.image",
+        [
+            {
+                "image": "ghcr.io/example/app",
+                "tags": list(app_tags),
+                "source": "https://github.com/example/app",
+                "read_at": now,
+            },
+            {"image": "docker.io/example/web", "tags": ["1.0.0"], "read_at": now},
+            {"image": "docker.io/example/kuma", "tags": ["1", "2"], "read_at": now},
+        ],
+    )
+    inventory(
+        "registry.upstream",
+        [
+            {
+                "repository": "example/app",
+                "url": "https://github.com/example/app",
+                "read_at": now,
+                "releases": [
+                    {"tag": "v1.3.0", "url": "https://github.com/example/app/releases/v1.3.0", "published_at": now}
+                ],
+                "advisories": list(advisories),
+            },
+        ],
+    )
 
 
 HIGH = {"id": "GHSA-high", "severity": "high", "summary": "s", "url": "u", "vulnerabilities": [["< 1.2.1", "1.2.1"]]}
@@ -110,21 +146,39 @@ class StandingTests(TestCase):
         self.assertEqual(
             [(step.phase, step.summary) for step in steps],
             [
-                ("do", "On example-box, set the image of kuma to docker.io/example/kuma:2 where it is defined, "
-                       "then start it again."),
+                (
+                    "do",
+                    "On example-box, set the image of kuma to docker.io/example/kuma:2 where it is defined, "
+                    "then start it again.",
+                ),
                 ("cannot", "HQ cannot apply an update itself yet."),
             ],
         )
 
     def test_an_update_names_the_command_when_its_compose_project_was_read(self):
         estate()
-        inventory("portainer.runtime", [
-            {"connection_ref": "example-portainer", "host": "example-box", "container": "kuma", "service": "kuma-web"},
-        ])
-        inventory("portainer.compose_project", [
-            {"connection_ref": "example-portainer", "host": "example-box", "name": "kuma",
-             "config_files": ["/opt/apps/kuma/compose.yaml", "/opt/apps/kuma/compose.override.yaml"]},
-        ])
+        inventory(
+            "portainer.runtime",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "container": "kuma",
+                    "service": "kuma-web",
+                },
+            ],
+        )
+        inventory(
+            "portainer.compose_project",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "name": "kuma",
+                    "config_files": ["/opt/apps/kuma/compose.yaml", "/opt/apps/kuma/compose.override.yaml"],
+                },
+            ],
+        )
 
         (item,) = [item for item in attention() if item.key == "container-updates"]
 
@@ -198,11 +252,14 @@ class StandingTests(TestCase):
 
     def test_nothing_known_asks_for_nothing(self):
         estate(app_tags=("v1.2.0",))
-        inventory("registry.image", [
-            {"image": "ghcr.io/example/app", "tags": ["v1.2.0"], "read_at": timezone.now().isoformat()},
-            {"image": "docker.io/example/web", "tags": ["1.0.0"], "read_at": timezone.now().isoformat()},
-            {"image": "docker.io/example/kuma", "tags": ["1"], "read_at": timezone.now().isoformat()},
-        ])
+        inventory(
+            "registry.image",
+            [
+                {"image": "ghcr.io/example/app", "tags": ["v1.2.0"], "read_at": timezone.now().isoformat()},
+                {"image": "docker.io/example/web", "tags": ["1.0.0"], "read_at": timezone.now().isoformat()},
+                {"image": "docker.io/example/kuma", "tags": ["1"], "read_at": timezone.now().isoformat()},
+            ],
+        )
 
         self.assertEqual(attention(), ())
 
@@ -214,7 +271,11 @@ class RefreshTests(TestCase):
 
         inventory("portainer.container", [running("app", "example/app:1.0.0"), running("hub", "ghcr.io/example/hub:2")])
         read = {
-            "docker.io/example/app": {"image": "docker.io/example/app", "tags": ["1.0.0"], "source": "https://github.com/example/app-src"},
+            "docker.io/example/app": {
+                "image": "docker.io/example/app",
+                "tags": ["1.0.0"],
+                "source": "https://github.com/example/app-src",
+            },
             "ghcr.io/example/hub": {"image": "ghcr.io/example/hub", "tags": ["2"], "source": ""},
         }
         upstreams = []
@@ -224,7 +285,9 @@ class RefreshTests(TestCase):
             return {"repository": repository, "releases": [], "advisories": []}
 
         with (
-            mock.patch("hq.platform.application.public_registry.read_image", side_effect=lambda name, references: read[name]),
+            mock.patch(
+                "hq.platform.application.public_registry.read_image", side_effect=lambda name, references: read[name]
+            ),
             mock.patch("hq.platform.application.public_registry.read_upstream", side_effect=upstream),
             mock.patch("hq.platform.application.public_registry._configured", return_value=False),
         ):
@@ -282,17 +345,25 @@ class PageTests(TestCase):
     def test_a_compose_file_copied_to_start_it_is_not_where_it_is_defined(self):
         from ..containers import _compose_files
 
-        inventory("portainer.compose_project", [
-            {"host": "example-box", "name": "app", "connection_ref": "example-portainer",
-             "config_files": ["/run/app-compose.X1/next.yml", "/opt/apps/app/docker-compose.yml"]},
-        ])
+        inventory(
+            "portainer.compose_project",
+            [
+                {
+                    "host": "example-box",
+                    "name": "app",
+                    "connection_ref": "example-portainer",
+                    "config_files": ["/run/app-compose.X1/next.yml", "/opt/apps/app/docker-compose.yml"],
+                },
+            ],
+        )
 
         self.assertEqual(_compose_files()[("example-box", "app")], ("/opt/apps/app/docker-compose.yml",))
 
     def test_a_declared_container_links_to_its_own_page_and_shows_its_standing(self):
         estate()
         ManagedResource.objects.create(
-            key="example-box-kuma", kind="portainer.container",
+            key="example-box-kuma",
+            kind="portainer.container",
             spec={"connection_ref": "example-portainer", "host": "example-box", "name": "kuma"},
         )
 
@@ -343,7 +414,9 @@ class QueryBudgetTests(TestCase):
         from django.test.utils import CaptureQueriesContext
 
         estate()
-        inventory("portainer.container", [running(f"app-{index}", "ghcr.io/example/app:v1.2.0") for index in range(count)])
+        inventory(
+            "portainer.container", [running(f"app-{index}", "ghcr.io/example/app:v1.2.0") for index in range(count)]
+        )
         with CaptureQueriesContext(connection) as captured:
             self.assertEqual(self.client.get(reverse("control_plane:containers")).status_code, 200)
         return len(captured)
@@ -358,12 +431,26 @@ class RetryTests(TestCase):
         from hq.platform.application.security import cli_principal
 
         inventory("portainer.container", [running("app", "example/app:1.0.0")])
-        answers = iter([
-            {"image": "docker.io/example/app", "tags": ["1.0.0", "1.0.1"], "digests": {"1.0.1": ""}, "unresolved": ["1.0.1"]},
-            {"image": "docker.io/example/app", "tags": ["1.0.0", "1.0.1"], "digests": {"1.0.1": "sha256:" + "1" * 64}, "unresolved": []},
-        ])
+        answers = iter(
+            [
+                {
+                    "image": "docker.io/example/app",
+                    "tags": ["1.0.0", "1.0.1"],
+                    "digests": {"1.0.1": ""},
+                    "unresolved": ["1.0.1"],
+                },
+                {
+                    "image": "docker.io/example/app",
+                    "tags": ["1.0.0", "1.0.1"],
+                    "digests": {"1.0.1": "sha256:" + "1" * 64},
+                    "unresolved": [],
+                },
+            ]
+        )
         with (
-            mock.patch("hq.platform.application.public_registry.read_image", side_effect=lambda name, references: next(answers)),
+            mock.patch(
+                "hq.platform.application.public_registry.read_image", side_effect=lambda name, references: next(answers)
+            ),
             mock.patch("hq.platform.application.public_registry.read_upstream", side_effect=AssertionError),
             mock.patch("hq.platform.application.public_registry._configured", return_value=False),
         ):

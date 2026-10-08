@@ -31,9 +31,7 @@ class ToolsRefreshTests(TestCase):
         with mock.patch(
             "hq.platform.application.capabilities.execute_capability", return_value={"ok": True}
         ) as execute:
-            response = self.client.post(
-                reverse("control_plane:tools"), {"tab": "dns", "address": ADDRESS}
-            )
+            response = self.client.post(reverse("control_plane:tools"), {"tab": "dns", "address": ADDRESS})
 
         execute.assert_called_once()
         self.assertEqual(execute.call_args.args[1], {"address": ADDRESS, "refresh": True})

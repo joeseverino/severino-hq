@@ -94,16 +94,10 @@ def services(zone) -> ZoneInsight | None:
     if len(parked) == len(members):
         handlers = sorted({service.provider_answers for service in parked} - {""})
         value = "Parked"
-        detail = (
-            f"Handled at {', '.join(handlers)}." if handlers else "Nothing answers there."
-        )
+        detail = f"Handled at {', '.join(handlers)}." if handlers else "Nothing answers there."
     else:
         value = counted(len(members), "service")
-        detail = (
-            f"{len(unhealthy)} missing something behind it."
-            if unhealthy
-            else "All fully wired."
-        )
+        detail = f"{len(unhealthy)} missing something behind it." if unhealthy else "All fully wired."
     # A count, with the list one click beneath it: the number opens onto the
     # whole list, and ``url`` reaches a page that does the same job.
     return ZoneInsight(
@@ -127,7 +121,7 @@ def services(zone) -> ZoneInsight | None:
 
 
 def _overlays(joined) -> str:
-    """"2 behind Access": readings that supply no facet, counted by relation."""
+    """ "2 behind Access": readings that supply no facet, counted by relation."""
 
     counts: dict[str, set] = {}
     for item in joined:
@@ -135,8 +129,7 @@ def _overlays(joined) -> str:
             continue
         counts.setdefault(item.relation, set()).update(item.hostnames)
     return " · ".join(
-        f"{len(names)} {relation[:1].lower()}{relation[1:]}"
-        for relation, names in sorted(counts.items())
+        f"{len(names)} {relation[:1].lower()}{relation[1:]}" for relation, names in sorted(counts.items())
     )
 
 
@@ -169,11 +162,7 @@ def certificates(zone) -> ZoneInsight | None:
             return ZoneInsight(
                 label="Certificates",
                 value="None managed here",
-                detail=(
-                    "Issuance is restricted to "
-                    + ", ".join(sorted(permitted))
-                    + "."
-                ),
+                detail=("Issuance is restricted to " + ", ".join(sorted(permitted)) + "."),
             )
         return ZoneInsight(
             label="Certificates",
@@ -227,7 +216,7 @@ def _covering(zone) -> list:
         spec = resolved_spec(resource, targets)
         try:
             names = tuple(provider.hostnames(spec))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
         if any(in_zone(name, zone.zone) for name in names):
             covering.append((resource, names))
@@ -274,9 +263,7 @@ def security(zone) -> ZoneInsight | None:
         # Only why a part could not be read; a readable edge is in the count.
         note=certificates_card.note if certificates_card is not None and not edge else "",
         concern=bool(
-            (tls and tls.concern)
-            or (certificates_card is not None and certificates_card.concern)
-            or stronger
+            (tls and tls.concern) or (certificates_card is not None and certificates_card.concern) or stronger
         ),
     )
 
@@ -293,9 +280,7 @@ def _strength(found: dict) -> tuple[int, tuple[int, ...]] | None:
     mode = str(found.get("ssl", "")).lower().replace("full_strict", "strict")
     if mode not in _SSL_ORDER:
         return None
-    version = tuple(
-        int(part) for part in str(found.get("min_tls_version", "") or "0").split(".") if part.isdigit()
-    )
+    version = tuple(int(part) for part in str(found.get("min_tls_version", "") or "0").split(".") if part.isdigit())
     return _SSL_ORDER.index(mode), version
 
 
@@ -347,16 +332,10 @@ def email(zone) -> ZoneInsight | None:
 
     mail = sorted(
         (r for r in zone.records if r.record_type == "MX"),
-        key=lambda r: (r.priority if r.priority is not None else 0),
+        key=lambda r: r.priority if r.priority is not None else 0,
     )
-    spf = [
-        r for r in zone.records
-        if r.record_type == "TXT" and "v=spf1" in r.content.lower()
-    ]
-    dmarc = [
-        r for r in zone.records
-        if r.record_type == "TXT" and r.name.startswith("_dmarc.")
-    ]
+    spf = [r for r in zone.records if r.record_type == "TXT" and "v=spf1" in r.content.lower()]
+    dmarc = [r for r in zone.records if r.record_type == "TXT" and r.name.startswith("_dmarc.")]
 
     if not (mail or spf or dmarc):
         return ZoneInsight(
@@ -376,9 +355,7 @@ def email(zone) -> ZoneInsight | None:
     if not mail:
         sentences.append("Nothing accepts mail for this domain.")
     sentences.append("SPF is published." if spf else "No SPF record.")
-    sentences.append(
-        f"{_dmarc_policy(dmarc[0].content)}." if dmarc else "No DMARC record."
-    )
+    sentences.append(f"{_dmarc_policy(dmarc[0].content)}." if dmarc else "No DMARC record.")
     return ZoneInsight(
         label="Email",
         url=reverse("zones:mail", kwargs={"zone": zone.zone}),
@@ -397,8 +374,7 @@ def leftover_challenges(zone) -> ZoneInsight | None:
     """
 
     stale = [
-        record for record in zone.records
-        if record.record_type == "TXT" and record.name.startswith("_acme-challenge.")
+        record for record in zone.records if record.record_type == "TXT" and record.name.startswith("_acme-challenge.")
     ]
     if not stale:
         return None
@@ -575,8 +551,7 @@ def registration(zone) -> ZoneInsight | None:
         detail=(
             f"Renews itself through {registrar or 'the registrar'}."
             if renews
-            else f"Auto-renew is off{f' at {registrar}' if registrar else ''}, "
-            "so this has to be renewed by hand."
+            else f"Auto-renew is off{f' at {registrar}' if registrar else ''}, so this has to be renewed by hand."
         ),
         # Only when both halves are true. A date alone is a calendar entry.
         concern=days <= 90 and not renews,
@@ -622,9 +597,7 @@ def _public_registration(subject, refused: str, refusal: str = "") -> ZoneInsigh
     note, note_title = _registrar_note(refused, refusal)
     if expires:
         registrar = next((item.title for item in public if item.title), "")
-        source = f"From the public registry, via {registrar}" if registrar else (
-            "From the public registry"
-        )
+        source = f"From the public registry, via {registrar}" if registrar else ("From the public registry")
         return ZoneInsight(
             label="Registration",
             value=expiry_phrase(expires),

@@ -5,26 +5,27 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0025_connection_manages'),
+        ("control_plane", "0025_connection_manages"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='NotManaged',
+            name="NotManaged",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('kind', models.CharField(max_length=64)),
-                ('token', models.CharField(max_length=16)),
-                ('label', models.CharField(blank=True, max_length=300)),
-                ('actor', models.CharField(blank=True, max_length=160)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("kind", models.CharField(max_length=64)),
+                ("token", models.CharField(max_length=16)),
+                ("label", models.CharField(blank=True, max_length=300)),
+                ("actor", models.CharField(blank=True, max_length=160)),
             ],
             options={
-                'ordering': ('kind', 'label'),
-                'constraints': [models.UniqueConstraint(fields=('kind', 'token'), name='one_not_managed_row_per_record')],
+                "ordering": ("kind", "label"),
+                "constraints": [
+                    models.UniqueConstraint(fields=("kind", "token"), name="one_not_managed_row_per_record")
+                ],
             },
         ),
     ]

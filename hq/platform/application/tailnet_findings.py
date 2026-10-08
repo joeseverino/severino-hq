@@ -29,8 +29,7 @@ def _devices_join_without_approval(estate: FindingEstate) -> tuple[Finding, ...]
             evidence=(("Device approval", "Off"),),
         )
         for node in estate.nodes()
-        if node.kind == "connection"
-        and any(key == "devices-join-unapproved" for key, _ in node.facts)
+        if node.kind == "connection" and any(key == "devices-join-unapproved" for key, _ in node.facts)
     )
 
 
@@ -51,8 +50,7 @@ def _empty_group_granted(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=(
                     f"{empty[0]} has no members but is still granted access"
                     if len(empty) == 1
-                    else f"{counted(len(empty), 'group has', 'groups have')} no "
-                    "members but are still granted access"
+                    else f"{counted(len(empty), 'group has', 'groups have')} no members but are still granted access"
                 ),
                 severity="neutral",
                 explanation=(
@@ -123,11 +121,7 @@ def _policy_remedy(estate: FindingEstate, capability: str, label: str) -> tuple[
     """
 
     policy = next(
-        (
-            node
-            for node in estate.nodes()
-            if node.kind == "resource" and node.kind_key == TAILNET_POLICY_KIND
-        ),
+        (node for node in estate.nodes() if node.kind == "resource" and node.kind_key == TAILNET_POLICY_KIND),
         None,
     )
     if policy is None:
@@ -157,11 +151,7 @@ def _tailnet_dns_off_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         if node.kind != "connection":
             continue
-        resolvers = tuple(
-            value
-            for key, value in node.facts
-            if key == "tailnet-dns-off-tailnet" and value
-        )
+        resolvers = tuple(value for key, value in node.facts if key == "tailnet-dns-off-tailnet" and value)
         if not resolvers:
             continue
         found.append(
@@ -205,9 +195,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "In the Tailscale admin console, open DNS and set the nameserver to the DNS server's tailnet address."
         ),
-        no_help_reason=(
-            "HQ cannot change the tailnet's DNS settings."
-        ),
+        no_help_reason=("HQ cannot change the tailnet's DNS settings."),
     ),
     FindingRule(
         "devices-join-without-approval",
@@ -217,9 +205,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "In the Tailscale admin console, open Settings, then Device management, and turn on Device approval."
         ),
-        no_help_reason=(
-            "HQ cannot change this setting."
-        ),
+        no_help_reason=("HQ cannot change this setting."),
     ),
     FindingRule(
         "empty-group-granted",
@@ -229,9 +215,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Remove the group from the policy's groups and from every rule that names it, or add its members."
         ),
-        no_help_reason=(
-            "HQ can only edit the policy once the policy is managed in HQ."
-        ),
+        no_help_reason=("HQ can only edit the policy once the policy is managed in HQ."),
     ),
     FindingRule(
         "trusted-wider-than-tailnet",
@@ -241,8 +225,6 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=(
             "Set SEVERINO_TRUSTED_NETWORKS to the addresses and routes the tailnet uses, then restart HQ."
         ),
-        no_help_reason=(
-            "HQ cannot change its own deploy settings."
-        ),
+        no_help_reason=("HQ cannot change its own deploy settings."),
     ),
 )

@@ -78,7 +78,10 @@ class ContractTests(SimpleTestCase):
         self.assertEqual((span.first_day, span.last_day, span.span), (TODAY, TODAY + timedelta(days=2), True))
         zone = timezone.get_current_timezone()
         late = CalendarEvent(
-            "b", "Late", datetime.combine(TODAY, time(22), zone), datetime.combine(TODAY + timedelta(days=1), time(0), zone)
+            "b",
+            "Late",
+            datetime.combine(TODAY, time(22), zone),
+            datetime.combine(TODAY + timedelta(days=1), time(0), zone),
         )
         self.assertFalse(late.span)
         self.assertEqual(late.time_label, "10p")
@@ -161,9 +164,7 @@ class MonthTests(TestCase):
             raise RuntimeError("down")
 
         fine = CalendarEvent("ok", "Fine", TODAY)
-        with _with(
-            _domain([CalendarSource("example.broken", "Broken", broken), _source("example.fine", [fine])])
-        ):
+        with _with(_domain([CalendarSource("example.broken", "Broken", broken), _source("example.fine", [fine])])):
             month = calendar_month(date(2026, 10, 1), today=TODAY)
         views = {view.id: view for _group, views in month.groups for view in views}
         self.assertEqual(views["example.broken"].failure, "Could not be read just now")
@@ -259,9 +260,7 @@ class WriteTests(TestCase):
             EntryCommand(title="Dentist", starts_on=TODAY, starts_at=time(15)), principal=cli_principal()
         )
         self.assertTrue(result["created"])
-        self.assertTrue(
-            AuditLog.objects.filter(object_type="Calendar entry", action=AuditLog.Action.CREATED).exists()
-        )
+        self.assertTrue(AuditLog.objects.filter(object_type="Calendar entry", action=AuditLog.Action.CREATED).exists())
         agenda = list_agenda(start=TODAY, days=1)
         self.assertIn("Dentist", [item["title"] for item in agenda["items"]])
 
@@ -274,7 +273,9 @@ class WriteTests(TestCase):
             delete_calendar_entry(DeleteCommand(confirm=str(entry.uid)), principal=reader, current_key=str(entry.uid))
         with self.assertRaises(ValueError):
             delete_calendar_entry(DeleteCommand(confirm="other"), principal=cli_principal(), current_key=str(entry.uid))
-        delete_calendar_entry(DeleteCommand(confirm=str(entry.uid)), principal=cli_principal(), current_key=str(entry.uid))
+        delete_calendar_entry(
+            DeleteCommand(confirm=str(entry.uid)), principal=cli_principal(), current_key=str(entry.uid)
+        )
         self.assertFalse(Entry.objects.exists())
 
     def test_an_agent_has_the_calendar_only_on_its_own_switch(self):
@@ -337,7 +338,10 @@ class PageTests(TestCase):
         response = self.client.get(reverse("calendar:month"))
 
         # Under its name, where a phone can read it; the operator's own events lead under no heading.
-        self.assertContains(response, '<span>My events<small class="calendar-source-note">Events you or your agents added.</small></span>')
+        self.assertContains(
+            response,
+            '<span>My events<small class="calendar-source-note">Events you or your agents added.</small></span>',
+        )
         self.assertNotContains(response, "<h3></h3>")
         self.assertNotContains(response, "My calendars")
 
@@ -360,16 +364,14 @@ class PageTests(TestCase):
         mark = CalendarEvent("mark", "Mark", timezone.localdate(), mark=True, state="done")
         with _with(_domain([_source("example.marks", [mark])])):
             body = self.client.get(reverse("calendar:month")).content.decode()
-        cell = body[body.rindex("<td", 0, body.index('class="month-mark')):]
+        cell = body[body.rindex("<td", 0, body.index('class="month-mark')) :]
         cell = cell[: cell.index("</td>")]
         self.assertLess(cell.index("month-day-head"), cell.index("month-mark"))
         self.assertLess(cell.index("month-mark"), cell.index("month-span"))
 
     def test_checking_a_source_returns_to_the_month_it_was_chosen_on(self):
         here = f"{reverse('calendar:month')}?month=2026-10"
-        response = self.client.post(
-            reverse("calendar:source", args=["history.deploys"]), {"shown": "1", "next": here}
-        )
+        response = self.client.post(reverse("calendar:source", args=["history.deploys"]), {"shown": "1", "next": here})
         self.assertRedirects(response, here, fetch_redirect_response=False)
         response = self.client.post(
             reverse("calendar:source", args=["history.deploys"]), {"shown": "1", "next": "https://evil.example/"}

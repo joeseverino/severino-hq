@@ -46,8 +46,7 @@ def refused_registration(reason, refusal=""):
 def proxied(name, record_type, content, zone="example.com", on=True):
     """A swept Cloudflare record, proxied unless ``on`` is false."""
 
-    return {"zone": zone, "name": name, "record_type": record_type,
-            "content": content, "proxied": on, "ttl": 1}
+    return {"zone": zone, "name": name, "record_type": record_type, "content": content, "proxied": on, "ttl": 1}
 
 
 def declare_record(key, name, record_type, content, zone="example.com"):
@@ -65,26 +64,50 @@ def declare_record(key, name, record_type, content, zone="example.com"):
 
 
 EDGE = (
-    {"connection_ref": CLOUDFLARE, "zone": "example.com", "id": "e1",
-     "hosts": ["example.com", "*.example.com"], "status": "active",
-     "certificate_authority": "example_ca", "expires_on": SOON},
-    {"connection_ref": CLOUDFLARE, "zone": "example.com", "id": "e2",
-     "hosts": ["www.example.com"], "status": "active",
-     "certificate_authority": "other_ca", "expires_on": LATER},
-    {"connection_ref": CLOUDFLARE, "zone": "example.net", "id": "e3",
-     "hosts": ["example.net"], "certificate_authority": "example_ca",
-     "expires_on": SOON},
+    {
+        "connection_ref": CLOUDFLARE,
+        "zone": "example.com",
+        "id": "e1",
+        "hosts": ["example.com", "*.example.com"],
+        "status": "active",
+        "certificate_authority": "example_ca",
+        "expires_on": SOON,
+    },
+    {
+        "connection_ref": CLOUDFLARE,
+        "zone": "example.com",
+        "id": "e2",
+        "hosts": ["www.example.com"],
+        "status": "active",
+        "certificate_authority": "other_ca",
+        "expires_on": LATER,
+    },
+    {
+        "connection_ref": CLOUDFLARE,
+        "zone": "example.net",
+        "id": "e3",
+        "hosts": ["example.net"],
+        "certificate_authority": "example_ca",
+        "expires_on": SOON,
+    },
 )
 PAGES = {
-    "connection_ref": CLOUDFLARE, "name": "example-site",
-    "subdomain": "example-site.pages.dev", "domains": ["example.com"],
+    "connection_ref": CLOUDFLARE,
+    "name": "example-site",
+    "subdomain": "example-site.pages.dev",
+    "domains": ["example.com"],
 }
 ACCESS = {
-    "connection_ref": CLOUDFLARE, "id": "a1", "name": "Admin",
-    "domain": "admin.example.com", "policies": [{"id": "p1", "name": "Operators"}],
+    "connection_ref": CLOUDFLARE,
+    "id": "a1",
+    "name": "Admin",
+    "domain": "admin.example.com",
+    "policies": [{"id": "p1", "name": "Operators"}],
 }
 TUNNEL = {
-    "connection_ref": CLOUDFLARE, "id": "t1", "name": "example-tunnel",
+    "connection_ref": CLOUDFLARE,
+    "id": "t1",
+    "name": "example-tunnel",
     "ingress": [{"hostname": "app.example.com", "service": "http://localhost:8080"}],
 }
 
@@ -93,7 +116,8 @@ def estate():
     """A zone with two edge certificates, a Pages project, an Access app and a tunnel."""
 
     ManagedResource.objects.create(
-        key="example-com", kind=ZONE_KIND,
+        key="example-com",
+        kind=ZONE_KIND,
         spec={"zone": "example.com", "connection_ref": CLOUDFLARE},
     )
     store(ZONE_KIND, {"zone": "example.com", "connection_ref": CLOUDFLARE})
@@ -101,8 +125,7 @@ def estate():
     store(
         "cloudflare.dns_record",
         *(
-            {"zone": "example.com", "name": name, "record_type": "CNAME",
-             "content": content, "proxied": True, "ttl": 1}
+            {"zone": "example.com", "name": name, "record_type": "CNAME", "content": content, "proxied": True, "ttl": 1}
             for name, content in (
                 ("example.com", "example-site.pages.dev"),
                 ("admin.example.com", "example-access.example.net"),
@@ -169,7 +192,7 @@ class DomainCardTests(TestCase):
     def test_the_pages_project_serving_the_apex_is_named(self):
         card = self.services_card()
 
-        (label, (link,)), = card.links
+        ((label, (link,)),) = card.links
         self.assertEqual((label, link.label), ("Served by", "example-site"))
         self.assertEqual(self.relationships().labels("Served by Pages project"), ("example-site",))
 
@@ -246,8 +269,15 @@ class RegistrationFallbackTests(TestCase):
         self.zone = find_zone("example.com")
 
     def test_the_public_registry_gives_the_expiry_and_auto_renew_is_unknown(self):
-        store(DOMAIN_KIND, {"domain": "example.com", "registrar": "Example Registrar",
-                            "expires_at": LATER, "read_at": timezone.now().isoformat()})
+        store(
+            DOMAIN_KIND,
+            {
+                "domain": "example.com",
+                "registrar": "Example Registrar",
+                "expires_at": LATER,
+                "read_at": timezone.now().isoformat(),
+            },
+        )
 
         card = registration(self.zone)
 
@@ -259,8 +289,15 @@ class RegistrationFallbackTests(TestCase):
         self.assertIn("Authentication error", card.note_title)
 
     def test_a_registrar_name_ending_in_a_period_ends_the_sentence(self):
-        store(DOMAIN_KIND, {"domain": "example.com", "registrar": "Example Registrar, Inc.",
-                            "expires_at": LATER, "read_at": timezone.now().isoformat()})
+        store(
+            DOMAIN_KIND,
+            {
+                "domain": "example.com",
+                "registrar": "Example Registrar, Inc.",
+                "expires_at": LATER,
+                "read_at": timezone.now().isoformat(),
+            },
+        )
 
         card = registration(self.zone)
 
@@ -270,8 +307,15 @@ class RegistrationFallbackTests(TestCase):
 
     def test_a_refused_permission_names_it_and_keeps_the_reason_in_the_title(self):
         refused_registration("Cloudflare refused the request: Forbidden", "permission")
-        store(DOMAIN_KIND, {"domain": "example.com", "registrar": "Example Registrar",
-                            "expires_at": LATER, "read_at": timezone.now().isoformat()})
+        store(
+            DOMAIN_KIND,
+            {
+                "domain": "example.com",
+                "registrar": "Example Registrar",
+                "expires_at": LATER,
+                "read_at": timezone.now().isoformat(),
+            },
+        )
         user = get_user_model().objects.create_user("operator", password="x" * 20)
         self.client.force_login(user)
 
@@ -286,14 +330,19 @@ class RegistrationFallbackTests(TestCase):
 
     def test_a_refused_credential_still_says_so(self):
         refused_registration("Cloudflare refused the request: Invalid API Token", "credential")
-        store(DOMAIN_KIND, {"domain": "example.com", "registrar": "Example Registrar",
-                            "expires_at": LATER, "read_at": timezone.now().isoformat()})
+        store(
+            DOMAIN_KIND,
+            {
+                "domain": "example.com",
+                "registrar": "Example Registrar",
+                "expires_at": LATER,
+                "read_at": timezone.now().isoformat(),
+            },
+        )
 
         card = registration(self.zone)
 
-        self.assertEqual(
-            card.note, "Registrar not read: Cloudflare refused the request: Invalid API Token"
-        )
+        self.assertEqual(card.note, "Registrar not read: Cloudflare refused the request: Invalid API Token")
         self.assertEqual(card.note_title, "")
 
     def test_without_a_public_reading_it_is_not_an_alarm(self):
@@ -308,8 +357,10 @@ class ServiceColumnTests(TestCase):
         estate()
         declare_record("parked", "parked.example.org", "A", "192.0.2.1", zone="example.org")
         declare_record("hosted", "hosted.example.com", "A", "203.0.113.7")
-        store(ADDRESS_KIND, {"address": "203.0.113.7", "organisation": "Example Hosting",
-                             "read_at": timezone.now().isoformat()})
+        store(
+            ADDRESS_KIND,
+            {"address": "203.0.113.7", "organisation": "Example Hosting", "read_at": timezone.now().isoformat()},
+        )
         self.user = get_user_model().objects.create_user("operator", password="x" * 20)
         self.client.force_login(self.user)
 
@@ -322,9 +373,7 @@ class ServiceColumnTests(TestCase):
         self.assertEqual([item.label for item in facet.readings], ["Edge certificate"])
 
     def test_runs_on_names_the_pages_project(self):
-        self.assertEqual(
-            self.services()["example.com"].origin.headline, "Cloudflare Pages · example-site"
-        )
+        self.assertEqual(self.services()["example.com"].origin.headline, "Cloudflare Pages · example-site")
 
     def test_a_documentation_address_is_parked(self):
         origin = self.services()["parked.example.org"].origin
@@ -346,12 +395,9 @@ class ServiceColumnTests(TestCase):
             "cloudflare.edge_certificate",
             {**EDGE[0], "hosts": ["multi.example.com"], "certificate_authority": "google"},
             {**EDGE[1], "hosts": ["multi.example.com"], "certificate_authority": "lets_encrypt"},
-            {**EDGE[1], "id": "e4", "hosts": ["multi.example.com"],
-             "certificate_authority": "unknown_ca"},
+            {**EDGE[1], "id": "e4", "hosts": ["multi.example.com"], "certificate_authority": "unknown_ca"},
         )
-        facet = next(
-            f for f in self.services()["multi.example.com"].facets if f.id == "certificate"
-        )
+        facet = next(f for f in self.services()["multi.example.com"].facets if f.id == "certificate")
 
         (line,) = facet.reading_lines
         self.assertEqual(line.label, "Edge")
@@ -383,9 +429,7 @@ class ServiceColumnTests(TestCase):
             {**EDGE[0], "certificate_authority": "lets_encrypt"},
         )
 
-        response = self.client.get(
-            reverse("control_plane:service", kwargs={"hostname": "admin.example.com"})
-        )
+        response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "admin.example.com"}))
 
         self.assertContains(response, "Let&#x27;s Encrypt")
         # Only the raw readout, which is the record as read, holds the id.
@@ -400,9 +444,7 @@ class ServiceColumnTests(TestCase):
         self.assertContains(response, "Parked")
 
     def test_the_service_page_shows_what_its_readings_say(self):
-        response = self.client.get(
-            reverse("control_plane:service", kwargs={"hostname": "admin.example.com"})
-        )
+        response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "admin.example.com"}))
 
         # In Relationships, each record through the link builder, and no
         # sentence under the cards repeating them.
@@ -427,22 +469,26 @@ class TopologyEstateTests(TestCase):
     def setUp(self):
         estate()
         ManagedResource.objects.create(
-            key="example-host", kind="machine",
+            key="example-host",
+            kind="machine",
             spec={"name": "example-host", "addresses": ["100.64.0.53"]},
         )
         store("tailscale.dns", {"record": "dns", "nameservers": ["100.64.0.53"]})
         for ref, provider in ((CLOUDFLARE, "cloudflare_api"), ("example-tailnet", "tailscale")):
             ProviderConnection.objects.create(
-                controller_id="example-controller", connection_ref=ref, provider=provider,
-                endpoint="https://api.example.test", reaches=["example.com"],
-                reachable=True, probed=True, observed_at=timezone.now(),
+                controller_id="example-controller",
+                connection_ref=ref,
+                provider=provider,
+                endpoint="https://api.example.test",
+                reaches=["example.com"],
+                reachable=True,
+                probed=True,
+                observed_at=timezone.now(),
             )
         self.finance = ConnectionSpecFixture.spec()
 
     def project(self):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(self.finance,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(self.finance,)):
             topology = derive_topology(principal=READ)
         return (
             {node.id: node for node in topology.nodes},
@@ -500,9 +546,7 @@ class TopologyEstateTests(TestCase):
     def test_the_page_draws_estate_lanes(self):
         user = get_user_model().objects.create_user("operator", password="x" * 20)
         self.client.force_login(user)
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(self.finance,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(self.finance,)):
             response = self.client.get(reverse("control_plane:topology"), {"all": 1})
 
         kinds = [group["kind"] for group in response.context["topology_groups"]]
@@ -514,21 +558,28 @@ class TopologyEstateTests(TestCase):
 class ZoneFactsTests(TestCase):
     def test_a_registration_does_not_drop_another_resources_facts(self):
         ManagedResource.objects.create(
-            key="example-com", kind=ZONE_KIND,
+            key="example-com",
+            kind=ZONE_KIND,
             spec={"zone": "example.com", "connection_ref": CLOUDFLARE},
         )
-        store(ZONE_KIND, {"zone": "example.com", "connection_ref": CLOUDFLARE,
-                          "registration": {"expires_at": LATER, "auto_renew": True}})
+        store(
+            ZONE_KIND,
+            {
+                "zone": "example.com",
+                "connection_ref": CLOUDFLARE,
+                "registration": {"expires_at": LATER, "auto_renew": True},
+            },
+        )
         ManagedResource.objects.create(
-            key="example-certificate", kind="tls.certificate",
+            key="example-certificate",
+            kind="tls.certificate",
             spec={"domains": ["example.com"]},
             status={"unreachable_consumers": [{"domain": "app.example.com"}]},
         )
         with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             nodes = {node.id: node for node in derive_topology(principal=READ).nodes}
 
-        self.assertIn(("unreachable", "app.example.com"),
-                      nodes["resource:example-certificate"].facts)
+        self.assertIn(("unreachable", "app.example.com"), nodes["resource:example-certificate"].facts)
         self.assertIn(("domain", "example.com"), nodes["resource:example-com"].facts)
 
 
@@ -538,10 +589,17 @@ class ConnectionSpecFixture:
         from ..connections import ConnectionInstance, ConnectionLink, ConnectionSpec
 
         return ConnectionSpec(
-            "example.finance", "Accounts", "A synthetic account connection.", Capability.READ,
+            "example.finance",
+            "Accounts",
+            "A synthetic account connection.",
+            Capability.READ,
             lambda: (
                 ConnectionInstance(
-                    "bank", "Example bank", "example_bank", "good", "Healthy",
+                    "bank",
+                    "Example bank",
+                    "example_bank",
+                    "good",
+                    "Healthy",
                     targets=(ConnectionLink("Example checking"),),
                 ),
             ),
@@ -556,9 +614,14 @@ class QueryCostTests(TestCase):
         user = get_user_model().objects.create_user("operator", password="x" * 20)
         self.client.force_login(user)
         ProviderConnection.objects.create(
-            controller_id="example-controller", connection_ref=CLOUDFLARE,
-            provider="cloudflare_api", endpoint="https://api.example.test",
-            reaches=["example.com"], reachable=True, probed=True, observed_at=timezone.now(),
+            controller_id="example-controller",
+            connection_ref=CLOUDFLARE,
+            provider="cloudflare_api",
+            endpoint="https://api.example.test",
+            reaches=["example.com"],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
         )
 
     def grow(self, count):
@@ -566,14 +629,12 @@ class QueryCostTests(TestCase):
             declare_record(f"n{index}", f"n{index}.example.com", "CNAME", "example.com")
         store(
             "cloudflare.access_app",
-            *[{**ACCESS, "id": f"a{index}", "domain": f"n{index}.example.com"}
-              for index in range(count)],
+            *[{**ACCESS, "id": f"a{index}", "domain": f"n{index}.example.com"} for index in range(count)],
         )
         store(
             "cloudflare.edge_certificate",
             *EDGE,
-            *[{**EDGE[1], "id": f"e{index}", "hosts": [f"n{index}.example.com"]}
-              for index in range(count)],
+            *[{**EDGE[1], "id": f"e{index}", "hosts": [f"n{index}.example.com"]} for index in range(count)],
         )
 
     def count(self, fetch):
@@ -588,9 +649,7 @@ class QueryCostTests(TestCase):
         self.assertLessEqual(large, small, f"{small} then {large}")
 
     def test_the_domain_page(self):
-        self.assert_flat(
-            lambda: self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
-        )
+        self.assert_flat(lambda: self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"})))
 
     def test_the_services_list(self):
         self.assert_flat(lambda: self.client.get(reverse("control_plane:services")))
@@ -609,21 +668,25 @@ class PublicRegistryRefreshTests(TestCase):
 
     def allocation(self, address):
         return {
-            "name": "EXAMPLE-NET", "handle": "NET-1", "country": "ZZ",
-            "entities": [{"roles": ["registrant"],
-                          "vcardArray": ["vcard", [["fn", {}, "text", "Example Hosting"]]]}],
+            "name": "EXAMPLE-NET",
+            "handle": "NET-1",
+            "country": "ZZ",
+            "entities": [{"roles": ["registrant"], "vcardArray": ["vcard", [["fn", {}, "text", "Example Hosting"]]]}],
         }
 
     def registration(self, domain):
         return {
             "events": [{"eventAction": "expiration", "eventDate": LATER}],
-            "entities": [{"roles": ["registrar"],
-                          "vcardArray": ["vcard", [["fn", {}, "text", "Example Registrar"]]]}],
+            "entities": [{"roles": ["registrar"], "vcardArray": ["vcard", [["fn", {}, "text", "Example Registrar"]]]}],
         }
 
     def test_a_refresh_stores_readings_the_engine_joins(self):
-        self.refresh(addresses=("203.0.113.7",), domains=("example.com",),
-                     allocations=self.allocation, registrations=self.registration)
+        self.refresh(
+            addresses=("203.0.113.7",),
+            domains=("example.com",),
+            allocations=self.allocation,
+            registrations=self.registration,
+        )
 
         found = readings().about(Subject.of(addresses=("203.0.113.7",), hostnames=("example.com",)))
         self.assertEqual(
@@ -632,16 +695,17 @@ class PublicRegistryRefreshTests(TestCase):
         )
 
     def test_a_second_request_within_the_hour_reads_nothing(self):
-        self.refresh(addresses=("203.0.113.7",), domains=(),
-                     allocations=self.allocation, registrations=self.registration)
+        self.refresh(
+            addresses=("203.0.113.7",), domains=(), allocations=self.allocation, registrations=self.registration
+        )
         refused = mock.Mock(side_effect=AssertionError("looked up again"))
 
-        self.refresh(addresses=("203.0.113.7",), domains=(),
-                     allocations=refused, registrations=refused)
+        self.refresh(addresses=("203.0.113.7",), domains=(), allocations=refused, registrations=refused)
 
     def test_a_fresh_record_is_read_again_only_when_forced(self):
-        self.refresh(addresses=("203.0.113.7",), domains=(),
-                     allocations=self.allocation, registrations=self.registration)
+        self.refresh(
+            addresses=("203.0.113.7",), domains=(), allocations=self.allocation, registrations=self.registration
+        )
         refused = mock.Mock(side_effect=AssertionError("looked up again"))
         again = mock.Mock(return_value={})
 

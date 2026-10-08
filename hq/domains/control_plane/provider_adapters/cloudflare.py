@@ -118,18 +118,13 @@ DNS_RECORD_TYPES: tuple[DNSRecordType, ...] = (
         False,
         "CAA value",
         'Flags, tag and value, e.g. 0 issue "letsencrypt.org".',
-        removal_impact=(
-            "If this is the last CAA record, any certificate authority can "
-            "issue for this domain."
-        ),
+        removal_impact=("If this is the last CAA record, any certificate authority can issue for this domain."),
         secondary=True,
     ),
 )
 
 
-DNS_RECORD_TYPES_BY_ID = {
-    record_type.id: record_type for record_type in DNS_RECORD_TYPES
-}
+DNS_RECORD_TYPES_BY_ID = {record_type.id: record_type for record_type in DNS_RECORD_TYPES}
 
 
 # Declared statically so the annotation is a real type, and checked against the
@@ -137,10 +132,7 @@ DNS_RECORD_TYPES_BY_ID = {
 DNSRecordTypeId = Literal["A", "AAAA", "CNAME", "TXT", "MX", "CAA"]
 
 if set(DNS_RECORD_TYPES_BY_ID) != set(get_args(DNSRecordTypeId)):
-    raise ValueError(
-        "DNS record type registry and its annotation disagree; a type was "
-        "added to one and not the other."
-    )
+    raise ValueError("DNS record type registry and its annotation disagree; a type was added to one and not the other.")
 
 
 # One expression, used both to validate a CAA value and to take it apart, so a
@@ -300,9 +292,7 @@ def _dns_record_value(spec: dict[str, Any]) -> str:
     return " ".join(part for part in parts if part)
 
 
-def _dns_record_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _dns_record_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     # Both sides through the same formatter, so desired and read-back values
     # compare equal.
     observed = _dns_record_value(status) if status.get("content") else ""
@@ -438,9 +428,7 @@ def _zone_key_hint(spec: dict[str, Any]) -> str:
     return normalized_hostname(spec.get("zone", ""))
 
 
-def _zone_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _zone_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """What HQ holds about this domain that is not said better elsewhere.
 
     Record summaries (MX, SPF, DMARC, CAA) come from
@@ -484,9 +472,7 @@ def _dns_record_seed(context: NameContext) -> dict[str, Any]:
     # back to the last two labels, which is right for most names and wrong for
     # every co.uk: a guess worth making only when there is nothing better.
     labels = context.hostname.split(".")
-    zone = context.public_zone or (
-        ".".join(labels[-2:]) if len(labels) > 2 else context.hostname
-    )
+    zone = context.public_zone or (".".join(labels[-2:]) if len(labels) > 2 else context.hostname)
     return {"name": context.hostname, "zone": zone}
 
 
@@ -530,13 +516,10 @@ DNS_RECORD = ProviderSpec(
 
 ZONE = ProviderSpec(
     ZONE_KIND,
-    "A domain HQ manages. Only declared domains have their records "
-    "managed, even if the connection can see more zones.",
+    "A domain HQ manages. Only declared domains have their records managed, even if the connection can see more zones.",
     CloudflareZoneSpec,
     actions={
-        "reconcile": locked(
-            "A domain has no settings to reconcile."
-        ),
+        "reconcile": locked("A domain has no settings to reconcile."),
     },
     label="Domain",
     home=lambda resource: named_page("zones:detail", resource, "zone"),
@@ -554,9 +537,7 @@ ZONE = ProviderSpec(
     declaration_only=True,
     contains=(DNS_RECORD_KIND, "zone", "zone"),
     parts=(
-        ReadingPart(
-            "posture", "Zone TLS posture", ("Zone Settings Read (zone)",), "cloudflare_api"
-        ),
+        ReadingPart("posture", "Zone TLS posture", ("Zone Settings Read (zone)",), "cloudflare_api"),
         ReadingPart("registration", "Domain registration", (REGISTRAR_READ,), "cloudflare_api"),
     ),
 )

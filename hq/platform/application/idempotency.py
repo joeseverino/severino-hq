@@ -34,9 +34,7 @@ class IdempotencyConflict(_KeyProblem):
 
 def validate_key(value: str) -> str:
     if not KEY.fullmatch(value):
-        raise InvalidIdempotencyKey(
-            "Idempotency-Key must be 1-128 URL-safe characters."
-        )
+        raise InvalidIdempotencyKey("Idempotency-Key must be 1-128 URL-safe characters.")
     return value
 
 
@@ -87,9 +85,7 @@ def execute_once(
         if not created:
             record = IdempotencyRecord.objects.select_for_update().get(pk=record.pk)
             if record.request_sha256 != request_sha256:
-                raise IdempotencyConflict(
-                    "This Idempotency-Key was already used for a different request."
-                )
+                raise IdempotencyConflict("This Idempotency-Key was already used for a different request.")
             if record.response is None or record.status_code is None:
                 raise RuntimeError("An idempotency record has no committed response.")
             return record.response, record.status_code, True

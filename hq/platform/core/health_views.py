@@ -30,9 +30,7 @@ def health_ready(request):
             cursor.execute("SELECT 1")
             checks["database"] = cursor.fetchone() == (1,)
         executor = MigrationExecutor(connection)
-        checks["migrations"] = not executor.migration_plan(
-            executor.loader.graph.leaf_nodes()
-        )
+        checks["migrations"] = not executor.migration_plan(executor.loader.graph.leaf_nodes())
     except Exception:  # noqa: BLE001 - readiness must fail closed
         checks["database"] = False
         checks["migrations"] = False
@@ -42,9 +40,7 @@ def health_ready(request):
         settings.EXPORTS_ROOT,
         Path(settings.DATABASES["default"]["NAME"]).parent,
     )
-    checks["storage"] = all(
-        path.is_dir() and os.access(path, os.W_OK) for path in writable_paths
-    )
+    checks["storage"] = all(path.is_dir() and os.access(path, os.W_OK) for path in writable_paths)
     # The image carries its assets and a start collects none, so an image
     # built without them is not ready. Read once, when the storage loads.
     checks["assets"] = settings.STATIC_LIVE or collected()

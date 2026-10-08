@@ -37,10 +37,7 @@ def _fts5_available() -> bool:
     """
     global _fts5_ready
     if not _fts5_ready:
-        _fts5_ready = (
-            connection.vendor == "sqlite"
-            and "search_index_fts" in connection.introspection.table_names()
-        )
+        _fts5_ready = connection.vendor == "sqlite" and "search_index_fts" in connection.introspection.table_names()
     return _fts5_ready
 
 
@@ -51,9 +48,7 @@ def _authorize(scope: str, principal: Principal) -> None:
     require_all(principal, required if isinstance(required, tuple) else (required,))
 
 
-def search_ids(
-    scope: str, query: str, *, principal: Principal, limit: int = 100
-) -> list[str]:
+def search_ids(scope: str, query: str, *, principal: Principal, limit: int = 100) -> list[str]:
     """Return relevance-ordered stable identifiers from the configured backend."""
     _authorize(scope, principal)
     # Its own ceiling, the shared rule. Search caps lower than a listing does
@@ -65,9 +60,7 @@ def search_ids(
     return _fallback_ids(BY_SCOPE[scope], query, capped_limit)
 
 
-def apply_search(
-    queryset: QuerySet, *, scope: str, query: str, principal: Principal
-) -> QuerySet:
+def apply_search(queryset: QuerySet, *, scope: str, query: str, principal: Principal) -> QuerySet:
     """Filter a domain queryset while retaining relevance as its default order.
 
     ``_search_rank`` is the row's position among the index's ranked hits, the
@@ -97,14 +90,10 @@ def _no_matches(queryset: QuerySet) -> QuerySet:
     or not a row is built, so the annotation is part of what an empty result
     promises.
     """
-    return queryset.none().annotate(
-        _search_rank=Value(0, output_field=IntegerField())
-    )
+    return queryset.none().annotate(_search_rank=Value(0, output_field=IntegerField()))
 
 
-def _apply_fallback_search(
-    queryset: QuerySet, scope: str, query: str, principal: Principal
-) -> QuerySet:
+def _apply_fallback_search(queryset: QuerySet, scope: str, query: str, principal: Principal) -> QuerySet:
     """Without an index there is no rank: every match ties, and the caller's
     tie-break (the table layer's primary key) is the whole order."""
     ids = search_ids(scope, query, principal=principal, limit=MAX_SEARCH_RESULTS)
@@ -121,9 +110,7 @@ def _fallback_snippet(definition: SearchDefinition, instance, query: str) -> Sni
     return _marked(definition.body(instance), query)
 
 
-def _snippet(
-    definition: SearchDefinition, instance, query: str, indexed: SnippetParts | None
-) -> SnippetParts:
+def _snippet(definition: SearchDefinition, instance, query: str, indexed: SnippetParts | None) -> SnippetParts:
     """The record's own readable text when it has some, else the index's snippet."""
     text = definition.snippet_text(instance)
     if text:
@@ -145,18 +132,16 @@ def _marked(text: str, query: str) -> SnippetParts:
             parts.append(("… ", False))
         if position > start:
             parts.append((body[start:position], False))
-        parts.append((body[position:position + len(term)], True))
+        parts.append((body[position : position + len(term)], True))
         if end > position + len(term):
-            parts.append((body[position + len(term):end], False))
+            parts.append((body[position + len(term) : end], False))
         if end < len(body):
             parts.append((" …", False))
         return parts
     return [(body[:150], False)] if body else []
 
 
-def _hits_by_scope(
-    scopes: list[str], query: str, limit: int
-) -> dict[str, list[tuple[str, SnippetParts | None]]]:
+def _hits_by_scope(scopes: list[str], query: str, limit: int) -> dict[str, list[tuple[str, SnippetParts | None]]]:
     """Ranked (object_id, snippet) hits per scope from whichever backend is active.
 
     The index answers every scope in one statement. A scope with no hit is
@@ -180,12 +165,7 @@ def _fallback_ids(definition: SearchDefinition, query: str, limit: int) -> list[
         for field in definition.fields:
             predicate |= Q(**{f"{field}__icontains": term})
         queryset = queryset.filter(predicate)
-    return [
-        str(identifier)
-        for identifier in queryset.values_list(
-            definition.identifier_field, flat=True
-        )[:limit]
-    ]
+    return [str(identifier) for identifier in queryset.values_list(definition.identifier_field, flat=True)[:limit]]
 
 
 def _fetch_records(definition: SearchDefinition, object_ids: list[str]) -> dict:
@@ -199,9 +179,7 @@ def _fetch_records(definition: SearchDefinition, object_ids: list[str]) -> dict:
     records = (
         definition.model.objects.in_bulk(typed_ids)
         if definition.identifier_field == "pk"
-        else definition.model.objects.in_bulk(
-            typed_ids, field_name=definition.identifier_field
-        )
+        else definition.model.objects.in_bulk(typed_ids, field_name=definition.identifier_field)
     )
     return {
         object_id: records[typed_id]
@@ -210,9 +188,7 @@ def _fetch_records(definition: SearchDefinition, object_ids: list[str]) -> dict:
     }
 
 
-def global_search(
-    query: str, *, principal: Principal, limit_per_scope: int = 8
-) -> dict:
+def global_search(query: str, *, principal: Principal, limit_per_scope: int = 8) -> dict:
     """Relevance-ranked, snippeted results across every scope the principal
     may search. Scopes the principal lacks (e.g. the audit log for a
     least-privilege adapter) are omitted entirely, not shown empty."""
@@ -276,9 +252,7 @@ def _global_items(
     ]
 
 
-def search_records(
-    scope: str, query: str, *, principal: Principal, limit: int = 50
-) -> dict:
+def search_records(scope: str, query: str, *, principal: Principal, limit: int = 50) -> dict:
     """Adapter-neutral JSON result for CLI, TUI, and remote delivery surfaces."""
     _authorize(scope, principal)
     definition = BY_SCOPE[scope]

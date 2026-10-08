@@ -39,17 +39,20 @@ def _refuse_vendor(self):
 
 class OneRuleTests(TestCase):
     def setUp(self):
-        self.client.force_login(
-            get_user_model().objects.create_user("operator", password="unused-test-pass")
-        )
+        self.client.force_login(get_user_model().objects.create_user("operator", password="unused-test-pass"))
 
     def test_a_model_rule_refuses_the_web_and_the_command_alike(self):
         with mock.patch.object(Expense, "clean", _refuse_vendor):
             response = self.client.post(
                 reverse("expenses:create"),
-                {"date": "2026-07-25", "vendor": "V", "item": "I",
-                 "category": "miscellaneous", "total_cost": "1.00",
-                 "business_use_percentage": "100"},
+                {
+                    "date": "2026-07-25",
+                    "vendor": "V",
+                    "item": "I",
+                    "category": "miscellaneous",
+                    "total_cost": "1.00",
+                    "business_use_percentage": "100",
+                },
             )
             self.assertEqual(response.status_code, 200)
             self.assertIn("Refused by the model.", response.context["form"].errors["vendor"])
@@ -91,9 +94,10 @@ class RecordViewTests(TestCase):
         }
         wrong, seen = [], set()
         for view in set(_views()):
-            resource = models.get(getattr(view, "model", None) or getattr(
-                getattr(getattr(view, "form_class", None), "_meta", None), "model", None
-            ))
+            resource = models.get(
+                getattr(view, "model", None)
+                or getattr(getattr(getattr(view, "form_class", None), "_meta", None), "model", None)
+            )
             if resource is None:
                 continue
             seen.add(resource)

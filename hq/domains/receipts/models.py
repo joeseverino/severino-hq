@@ -25,9 +25,7 @@ class Receipt(TimestampedModel):
 
     vendor = models.CharField(max_length=160, blank=True)
     date = models.DateField(null=True, blank=True)
-    amount = models.DecimalField(
-        max_digits=12, decimal_places=2, default=Decimal("0.00")
-    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     notes = models.TextField(blank=True)
 
     related_expense = models.ForeignKey(

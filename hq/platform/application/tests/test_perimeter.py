@@ -32,9 +32,7 @@ class PerimeterUncheckedTests(TestCase):
         (finding,) = raised("perimeter-unchecked")
 
         self.assertEqual(finding["severity"], "attention")
-        self.assertEqual(
-            finding["evidence"], [{"label": "Not tested", "value": "the machine reported no port to try"}]
-        )
+        self.assertEqual(finding["evidence"], [{"label": "Not tested", "value": "the machine reported no port to try"}])
         self.assertEqual(raised("perimeter-open"), [])
 
     def test_no_public_address_checked_nothing_either(self):
@@ -62,12 +60,8 @@ class PerimeterUncheckedTests(TestCase):
 
     def test_the_reason_is_derived_from_the_record(self):
         self.assertEqual(perimeter_unchecked({}), "no public address")
+        self.assertEqual(perimeter_unchecked({"public_addresses": ["203.0.113.5"]}), "no port to try")
         self.assertEqual(
-            perimeter_unchecked({"public_addresses": ["203.0.113.5"]}), "no port to try"
-        )
-        self.assertEqual(
-            perimeter_unchecked(
-                {"public_addresses": ["203.0.113.5"], "ports_checked": [22]}
-            ),
+            perimeter_unchecked({"public_addresses": ["203.0.113.5"], "ports_checked": [22]}),
             "",
         )

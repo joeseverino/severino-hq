@@ -32,7 +32,7 @@ def to_money(value, default: Decimal | None = None) -> Decimal | None:
         return default
     try:
         return quantize_money(Decimal(str(value)))
-    except (InvalidOperation, ValueError, TypeError):
+    except InvalidOperation, ValueError, TypeError:
         return default
 
 

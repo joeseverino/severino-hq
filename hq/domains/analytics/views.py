@@ -20,14 +20,12 @@ class AnalyticsOverviewView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         try:
             days = int(self.request.GET.get("days", DEFAULT_WINDOW_DAYS))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             # An unreadable window is the default window, not an error page.
             # The value comes from a link, and a mistyped one should still show
             # the operator their traffic.
             days = DEFAULT_WINDOW_DAYS
         context = super().get_context_data(**kwargs) | overview(days=days)
         # Page speed is three rates or, with no visit measured, one sentence.
-        context["vitals_measured"] = any(
-            metric["percent"] is not None for metric in context.get("vitals", {}).values()
-        )
+        context["vitals_measured"] = any(metric["percent"] is not None for metric in context.get("vitals", {}).values())
         return context

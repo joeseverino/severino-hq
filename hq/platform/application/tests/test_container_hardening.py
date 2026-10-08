@@ -17,7 +17,8 @@ SOCKET = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var
 
 def declare(name="web", **spec):
     ManagedResource.objects.create(
-        key=f"example-box-{name}", kind="portainer.container",
+        key=f"example-box-{name}",
+        kind="portainer.container",
         spec={"connection_ref": "example-portainer", "host": "example-box", "name": name, **spec},
     )
 
@@ -53,7 +54,8 @@ class HardeningTests(TestCase):
 
     def test_every_hardening_gap_is_written_for_its_own_service(self):
         found = self.hardening(
-            service="frontend", network_mode="bridge",
+            service="frontend",
+            network_mode="bridge",
             port_bindings=[
                 {"container_port": "80/tcp", "host_ip": "0.0.0.0", "host_port": "8080"},
                 {"container_port": "80/tcp", "host_ip": "::", "host_port": "8080"},
@@ -84,15 +86,21 @@ class HardeningTests(TestCase):
         self.assertIn("Only this machine", cautions["ports"])
 
     def test_reach_over_the_machine_is_written_or_removed(self):
-        found = self.hardening(**{
-            **KEPT, "privileged": True, "pid_mode": "host", "cap_add": ["SYS_ADMIN", "CHOWN"],
-            "security_opt": ["seccomp=unconfined", "no-new-privileges:true"], "devices": ["/dev/ttyUSB0"],
-            "mounts": [
-                {"type": "bind", "source": "/etc", "destination": "/host-etc", "read_only": False},
-                {"type": "bind", "source": "/etc/localtime", "destination": "/etc/localtime", "read_only": True},
-                {"type": "volume", "source": "web_data", "destination": "/data", "read_only": False},
-            ],
-        })
+        found = self.hardening(
+            **{
+                **KEPT,
+                "privileged": True,
+                "pid_mode": "host",
+                "cap_add": ["SYS_ADMIN", "CHOWN"],
+                "security_opt": ["seccomp=unconfined", "no-new-privileges:true"],
+                "devices": ["/dev/ttyUSB0"],
+                "mounts": [
+                    {"type": "bind", "source": "/etc", "destination": "/host-etc", "read_only": False},
+                    {"type": "bind", "source": "/etc/localtime", "destination": "/etc/localtime", "read_only": True},
+                    {"type": "volume", "source": "web_data", "destination": "/data", "read_only": False},
+                ],
+            }
+        )
 
         changes = {change.key: change for change in found.changes}
         self.assertEqual(set(changes), {"privileged", "security_opt", "volumes", "cap_drop"})
@@ -110,8 +118,14 @@ class HardeningTests(TestCase):
             {removal.check: removal.lines for removal in found.removals},
             {"own-process-namespace": ("pid: host",), "no-devices": ("devices: /dev/ttyUSB0",)},
         )
-        for check in ("not-privileged", "confined", "no-system-path-writable", "no-powerful-capability",
-                      "own-process-namespace", "no-devices"):
+        for check in (
+            "not-privileged",
+            "confined",
+            "no-system-path-writable",
+            "no-powerful-capability",
+            "own-process-namespace",
+            "no-devices",
+        ):
             self.assertTrue(found.covers(check), check)
 
     def test_unconfined_options_are_dropped_and_the_rest_kept(self):
@@ -126,9 +140,15 @@ class HardeningTests(TestCase):
         self.assertEqual(found.changes[0].yaml, 'security_opt:\n  - "no-new-privileges:true"')
 
     def test_a_non_root_user_names_the_data_to_hand_over(self):
-        found = self.hardening(**{**KEPT, "user": "root", "mounts": [
-            {"type": "bind", "source": "/opt/example/data", "destination": "/data", "read_only": False},
-        ]})
+        found = self.hardening(
+            **{
+                **KEPT,
+                "user": "root",
+                "mounts": [
+                    {"type": "bind", "source": "/opt/example/data", "destination": "/data", "read_only": False},
+                ],
+            }
+        )
 
         (change,) = found.changes
         self.assertEqual(change.yaml, 'user: "1000:1000"')
@@ -143,13 +163,27 @@ class HardeningTests(TestCase):
 
     def test_a_documented_health_endpoint_is_used_and_none_is_said(self):
         estate()
-        inventory("portainer.container", [{
-            "name": "grafana", "stack": "grafana", "image": "grafana/grafana:11.0.0", "state": "running",
-            "status": "Up", "host": "example-box", "connection_ref": "example-portainer", "ports": [],
-        }])
-        inventory("portainer.runtime", [
-            runtime("grafana", **{**KEPT, "healthcheck": False, "port_bindings": []}),
-        ])
+        inventory(
+            "portainer.container",
+            [
+                {
+                    "name": "grafana",
+                    "stack": "grafana",
+                    "image": "grafana/grafana:11.0.0",
+                    "state": "running",
+                    "status": "Up",
+                    "host": "example-box",
+                    "connection_ref": "example-portainer",
+                    "ports": [],
+                }
+            ],
+        )
+        inventory(
+            "portainer.runtime",
+            [
+                runtime("grafana", **{**KEPT, "healthcheck": False, "port_bindings": []}),
+            ],
+        )
 
         (item,) = containers()
         (change,) = item.hardening.changes
@@ -192,10 +226,17 @@ class PageTests(TestCase):
         estate()
         declare("web")
         inventory("portainer.runtime", [runtime("web", stack="web", **{**KEPT, "user": "", "mounts": [SOCKET]})])
-        inventory("portainer.compose_project", [
-            {"host": "example-box", "name": "web", "connection_ref": "example-portainer",
-             "config_files": ["/opt/example/web/docker-compose.yml"]},
-        ])
+        inventory(
+            "portainer.compose_project",
+            [
+                {
+                    "host": "example-box",
+                    "name": "web",
+                    "connection_ref": "example-portainer",
+                    "config_files": ["/opt/example/web/docker-compose.yml"],
+                },
+            ],
+        )
 
         page = self.client.get(reverse("control_plane:detail", args=["example-box-web"]))
 
@@ -223,17 +264,22 @@ class AttentionHelpTests(TestCase):
     def test_the_socket_item_offers_to_mark_each_watched_container(self):
         estate()
         declare("web")
-        inventory("portainer.runtime", [
-            runtime("web", **{**KEPT, "mounts": [SOCKET]}),
-            runtime("kuma", **{**KEPT, "mounts": [SOCKET]}),
-        ])
+        inventory(
+            "portainer.runtime",
+            [
+                runtime("web", **{**KEPT, "mounts": [SOCKET]}),
+                runtime("kuma", **{**KEPT, "mounts": [SOCKET]}),
+            ],
+        )
 
         item = self.items()["container-posture:no-docker-socket"]
         actions = {action.label: action for action in item.actions}
 
         mark = actions["Mark web as meant to control Docker"]
         self.assertEqual(mark.url, "/commands/infrastructure.resource.update/?target=example-box-web")
-        self.assertEqual((mark.capability, mark.target, mark.method), ("infrastructure.resource.update", "example-box-web", "GET"))
+        self.assertEqual(
+            (mark.capability, mark.target, mark.method), ("infrastructure.resource.update", "example-box-web", "GET")
+        )
         adopt = actions["Adopt kuma to mark it"]
         self.assertEqual(adopt.method, "POST")
         self.assertIn("/adopt/record/portainer.container/", adopt.url)

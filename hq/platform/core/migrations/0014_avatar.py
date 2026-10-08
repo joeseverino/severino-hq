@@ -7,23 +7,27 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0013_appearance'),
+        ("core", "0013_appearance"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Avatar',
+            name="Avatar",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('content_type', models.CharField(max_length=32)),
-                ('image', models.BinaryField()),
-                ('digest', models.CharField(max_length=64)),
-                ('source', models.CharField(max_length=500)),
-                ('fetched_at', models.DateTimeField(default=django.utils.timezone.now)),
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='avatar', to=settings.AUTH_USER_MODEL)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("content_type", models.CharField(max_length=32)),
+                ("image", models.BinaryField()),
+                ("digest", models.CharField(max_length=64)),
+                ("source", models.CharField(max_length=500)),
+                ("fetched_at", models.DateTimeField(default=django.utils.timezone.now)),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="avatar", to=settings.AUTH_USER_MODEL
+                    ),
+                ),
             ],
         ),
     ]

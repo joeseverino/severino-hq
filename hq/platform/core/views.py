@@ -48,10 +48,7 @@ class ThrottledLoginView(LoginView):
 
     @property
     def sso_only(self) -> bool:
-        return (
-            settings.SEVERINO_OIDC_ENABLED
-            and not settings.SEVERINO_PASSWORD_LOGIN_ENABLED
-        )
+        return settings.SEVERINO_OIDC_ENABLED and not settings.SEVERINO_PASSWORD_LOGIN_ENABLED
 
     @override
     def get(self, request, *args, **kwargs):
@@ -106,8 +103,7 @@ class ThrottledLoginView(LoginView):
         form.errors.pop("__all__", None)
         form.add_error(
             None,
-            "Too many failed sign-in attempts. Try again in "
-            f"{counted(state.minutes_remaining, 'minute')}.",
+            f"Too many failed sign-in attempts. Try again in {counted(state.minutes_remaining, 'minute')}.",
         )
         return self.render_to_response(self.get_context_data(form=form), status=429)
 
@@ -211,9 +207,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["show_all"] = bool(self.request.GET.get("all"))
         context["action_count"] = sum(len(group.rows) for group in context["groups"])
         context["shown_groups"] = (
-            context["groups"]
-            if context["show_all"]
-            else capability_policy.changed_only(context["groups"])
+            context["groups"] if context["show_all"] else capability_policy.changed_only(context["groups"])
         )
         context["agents"] = [column for column in context["columns"] if column.identity]
         # A column whose every settable rule is dormant is off as a whole, and
@@ -251,9 +245,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         for problem in problems:
             messages.error(request, problem)
         if changed:
-            messages.success(
-                request, f"Saved {counted(changed, 'change')}. Each is in the audit log."
-            )
+            messages.success(request, f"Saved {counted(changed, 'change')}. Each is in the audit log.")
         elif not problems:
             messages.info(request, "Nothing changed.")
         return redirect("agent_policy")
@@ -292,9 +284,7 @@ class SearchView(PageMixin, TemplateView):
             ("views", "Topology views"),
             ("checks", "Checks"),
         ):
-            items = tuple(item for item in discovery[key] if item.url)[
-                : min(self.palette_group_limit, remaining)
-            ]
+            items = tuple(item for item in discovery[key] if item.url)[: min(self.palette_group_limit, remaining)]
             if items:
                 groups.append({"key": key, "label": label, "items": items})
                 remaining -= len(items)
@@ -334,9 +324,7 @@ class SearchView(PageMixin, TemplateView):
                 outcome = global_search(
                     q,
                     principal=principal,
-                    limit_per_scope=(
-                        self.palette_search_limit if palette_request else self.result_limit
-                    ),
+                    limit_per_scope=(self.palette_search_limit if palette_request else self.result_limit),
                 )
                 groups = outcome["groups"]
                 total = outcome["total"]
@@ -357,9 +345,7 @@ class SearchView(PageMixin, TemplateView):
         }
         palette_groups = self._palette_groups(discovery)
         palette_search_groups = self._palette_search_groups(groups)
-        palette_search_count = sum(
-            len(group["items"]) for group in palette_search_groups
-        )
+        palette_search_count = sum(len(group["items"]) for group in palette_search_groups)
         discovery_total = sum(len(discovery[key]) for key in discovery)
         ctx.update(
             q=q,
@@ -378,10 +364,7 @@ class SearchView(PageMixin, TemplateView):
             palette_estate=[group for group in palette_groups if group["key"] == "estate"],
             palette_groups=[group for group in palette_groups if group["key"] != "estate"],
             palette_search_groups=palette_search_groups,
-            palette_count=(
-                sum(len(group["items"]) for group in palette_groups)
-                + palette_search_count
-            ),
+            palette_count=(sum(len(group["items"]) for group in palette_groups) + palette_search_count),
             palette_total=discovery_total + total,
             palette_result_limit=self.palette_result_limit,
         )
@@ -412,8 +395,7 @@ class ConnectionView(PageMixin, TemplateView):
     template_name = "core/connection.html"
     page_title = "Your connection"
     page_lede = (
-        "How you are connected to HQ right now, who it takes you to be, and the "
-        "behind every admission decision."
+        "How you are connected to HQ right now, who it takes you to be, and the behind every admission decision."
     )
 
     @override
@@ -447,9 +429,7 @@ class PublicAddressView(View):
         return self._render(
             request,
             address,
-            lambda principal: stored_address(
-                AddressCommand(address=address), principal=principal
-            ),
+            lambda principal: stored_address(AddressCommand(address=address), principal=principal),
         )
 
     def post(self, request):
@@ -461,9 +441,7 @@ class PublicAddressView(View):
         return self._render(
             request,
             address,
-            lambda principal: look_up_address(
-                AddressCommand(address=address, refresh=True), principal=principal
-            ),
+            lambda principal: look_up_address(AddressCommand(address=address, refresh=True), principal=principal),
         )
 
     def _render(self, request, address, read):

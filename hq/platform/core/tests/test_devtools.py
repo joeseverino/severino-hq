@@ -101,9 +101,7 @@ class SwitchTests(SimpleTestCase):
             for requested in (False, True):
                 for testing in (False, True):
                     with self.subTest(debug=debug, requested=requested, testing=testing):
-                        enabled = debug_toolbar_enabled(
-                            debug=debug, requested=requested, testing=testing
-                        )
+                        enabled = debug_toolbar_enabled(debug=debug, requested=requested, testing=testing)
                         expected = debug and requested and not testing and INSTALLED
                         self.assertEqual(enabled, expected)
 

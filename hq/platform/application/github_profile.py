@@ -81,22 +81,14 @@ def profiles() -> tuple[str, ...]:
     """The logins a profile is held for."""
 
     snapshot = _snapshot()
-    return tuple(
-        str(record.get("login", "")) for record in (snapshot.records if snapshot is not None else ())
-    )
+    return tuple(str(record.get("login", "")) for record in (snapshot.records if snapshot is not None else ()))
 
 
 def accounts() -> tuple[str, ...]:
     """Every GitHub account a sign-in names, once each."""
 
     return tuple(
-        sorted(
-            set(
-                LinkedAccount.objects.filter(provider=GITHUB)
-                .exclude(login="")
-                .values_list("login", flat=True)
-            )
-        )
+        sorted(set(LinkedAccount.objects.filter(provider=GITHUB).exclude(login="").values_list("login", flat=True)))
     )
 
 
@@ -125,9 +117,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
         return {"accounts": list(wanted), "due": True}
     now = now or timezone.now()
     held = {login.lower() for login in profiles()}
-    behind = now - snapshot.observed_at >= PROFILE_EVERY or any(
-        login.lower() not in held for login in wanted
-    )
+    behind = now - snapshot.observed_at >= PROFILE_EVERY or any(login.lower() not in held for login in wanted)
     return {"accounts": list(wanted), "due": behind and now - snapshot.updated_at >= RETRY_AFTER}
 
 

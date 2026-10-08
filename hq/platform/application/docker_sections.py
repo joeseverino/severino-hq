@@ -64,8 +64,7 @@ def _environments(machine) -> ServiceSection | None:
                 _text(record.get("docker_version")),
                 _text(
                     f"{record['containers_running']} of {record['containers_total']} running"
-                    if record.get("containers_total") is not None
-                    and record.get("containers_running") is not None
+                    if record.get("containers_total") is not None and record.get("containers_running") is not None
                     else ""
                 ),
                 Cell.of(entity_link("connection", str(record.get("connection_ref", ""))))

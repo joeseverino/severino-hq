@@ -113,9 +113,7 @@ class SearchFindsTheEstateTests(TestCase):
         self.assertEqual(found[0].label, "example-host")
 
     def test_a_magicdns_name_finds_the_machine(self):
-        self.assertEqual(
-            self.estate("example-host.example-tailnet.ts.net")[0].label, "example-host"
-        )
+        self.assertEqual(self.estate("example-host.example-tailnet.ts.net")[0].label, "example-host")
 
     def test_a_hostname_finds_its_service_then_its_domain(self):
         found = [(item.kind, item.label) for item in self.estate("app.example.com")]
@@ -125,12 +123,9 @@ class SearchFindsTheEstateTests(TestCase):
     def test_the_palette_puts_the_estate_above_records_and_audit(self):
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)
         self.client.force_login(user)
-        ManagedResource.objects.create(key="example-host-spec", kind="machine",
-                                       spec={"name": "example-host"})
+        ManagedResource.objects.create(key="example-host-spec", kind="machine", spec={"name": "example-host"})
 
-        response = self.client.get(
-            reverse("search"), {"q": "example-host"}, headers={"X-Fragment": "palette"}
-        )
+        response = self.client.get(reverse("search"), {"q": "example-host"}, headers={"X-Fragment": "palette"})
 
         content = response.content.decode()
         self.assertIn("command-center-group-estate", content)
@@ -143,9 +138,7 @@ class SearchFindsTheEstateTests(TestCase):
         none = Principal("test", "none", frozenset())
 
         self.assertEqual(
-            command_center("example-host", principal=none, include_live_connections=True)[
-                "estate"
-            ],
+            command_center("example-host", principal=none, include_live_connections=True)["estate"],
             (),
         )
 
@@ -159,9 +152,7 @@ class AuditSearchTitleTests(TestCase):
         self.client.force_login(user)
         resource = ManagedResource.objects.create(key="example-host", kind="machine", spec={})
         record_event(action=AuditLog.Action.UPDATED, obj=resource, type_label="Managed resource")
-        event = AuditLog.objects.filter(
-            object_id=str(resource.pk), action=AuditLog.Action.UPDATED
-        ).latest("created_at")
+        event = AuditLog.objects.filter(object_id=str(resource.pk), action=AuditLog.Action.UPDATED).latest("created_at")
 
         self.assertEqual(event.search_title, "Updated example-host")
         self.assertNotIn(str(resource.pk), str(event))
@@ -219,9 +210,7 @@ class SearchSnippetTests(TestCase):
         self.assertEqual(item["url"], reverse("control_plane:service", args=["app.example.com"]))
 
     def test_a_machine_declaration_opens_the_machine(self):
-        ManagedResource.objects.create(
-            key="example-host", kind="machine", spec={"name": "example-host"}
-        )
+        ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
 
         (item,) = self.group("example-host", "infrastructure.resources")
 
@@ -274,9 +263,7 @@ class EstateCardTests(TestCase):
         self.assertEqual(found["hq.estate.domains"]["value"], "1")
         self.assertEqual(found["hq.estate.domains"]["url"], reverse("zones:index"))
         self.assertEqual(found["hq.estate.connections"]["value"], "1")
-        self.assertEqual(
-            found["hq.estate.connections"]["detail"], "example-ssh not answering"
-        )
+        self.assertEqual(found["hq.estate.connections"]["detail"], "example-ssh not answering")
         # One connection with a problem leads to its own row.
         self.assertEqual(
             found["hq.estate.connections"]["url"],
@@ -293,9 +280,7 @@ class EstateCardTests(TestCase):
         )
         self.assertIn("days", found["hq.estate.certificate"]["value"])
         self.assertEqual(found["hq.estate.registration"]["detail"], "example.com · Registration")
-        self.assertEqual(
-            found["hq.estate.registration"]["url"], reverse("zones:detail", args=["example.com"])
-        )
+        self.assertEqual(found["hq.estate.registration"]["url"], reverse("zones:detail", args=["example.com"]))
 
     def test_the_dashboard_shows_the_estate_card(self):
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)
@@ -313,12 +298,17 @@ class EstateCardTests(TestCase):
 
         ProviderConnection.objects.all().delete()
         ProviderConnection.objects.create(
-            connection_ref="example-cf", controller_id="example-controller",
-            provider="cloudflare_api", reachable=True, probed=True,
+            connection_ref="example-cf",
+            controller_id="example-controller",
+            provider="cloudflare_api",
+            reachable=True,
+            probed=True,
             observed_at=timezone.now(),
         )
         store(
-            "cloudflare.pages_project", reachable=False, refusal=CREDENTIAL_REFUSAL,
+            "cloudflare.pages_project",
+            reachable=False,
+            refusal=CREDENTIAL_REFUSAL,
             error="Invalid API token",
         )
 
@@ -336,17 +326,21 @@ class EdgeCertificateExpiryTests(TestCase):
         declared(
             "example-cert",
             "tls.certificate",
-            {"certificate_name": "example-cert", "domains": ["app.example.com"],
-             "renewal_window_days": 30},
+            {"certificate_name": "example-cert", "domains": ["app.example.com"], "renewal_window_days": 30},
             status={"not_after": (timezone.now() + timedelta(days=50)).isoformat()},
         )
 
     def edge(self, days):
         store(
             "cloudflare.edge_certificate",
-            {"connection_ref": "example-dns", "zone": "example.com", "id": "e1",
-             "hosts": ["example.com"], "status": "active",
-             "expires_on": (timezone.now() + timedelta(days=days, hours=1)).isoformat()},
+            {
+                "connection_ref": "example-dns",
+                "zone": "example.com",
+                "id": "e1",
+                "hosts": ["example.com"],
+                "status": "active",
+                "expires_on": (timezone.now() + timedelta(days=days, hours=1)).isoformat(),
+            },
         )
 
     def figure(self):
@@ -371,9 +365,7 @@ class EdgeCertificateExpiryTests(TestCase):
 
         figure = self.figure()
 
-        self.assertEqual(
-            figure["detail"], "example.com · Edge · not renewed by its issuer"
-        )
+        self.assertEqual(figure["detail"], "example.com · Edge · not renewed by its issuer")
         self.assertEqual(figure["status"], "attention")
         self.assertEqual(figure["url"], reverse("zones:detail", args=["example.com"]))
         (item,) = self.items()
@@ -386,9 +378,7 @@ class EdgeCertificateExpiryTests(TestCase):
 class StaleGlanceTests(TestCase):
     def test_a_reading_older_than_its_cadence_is_shown_as_of_its_age_and_steps_aside(self):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        machine_spec = ManagedResource.objects.create(
-            key="example-host", kind="machine", spec={"name": "example-host"}
-        )
+        machine_spec = ManagedResource.objects.create(key="example-host", kind="machine", spec={"name": "example-host"})
         from hq.domains.control_plane.models import DashboardMachine
 
         from .. import readings
@@ -444,9 +434,10 @@ class OldGlanceTests(TestCase):
 
         html = render_to_string("core/_dashboard_glance.html", glance_context())
 
-        self.assertNotIn("<details class=\"glance-quiet", html)
+        self.assertNotIn('<details class="glance-quiet', html)
         self.assertIn("is-outdated", html)
         self.assertIn("as of <time", html)
+
 
 class ActionItemTests(TestCase):
     def test_an_update_names_the_version_other_devices_run(self):
@@ -479,8 +470,7 @@ class ActionItemTests(TestCase):
         self.assertTrue(found[0].subject.url)
 
     def test_a_domain_that_will_not_renew_reaches_the_queue(self):
-        declared("example-zone", "cloudflare.zone",
-                 {"zone": "example.com", "connection_ref": "example-dns"})
+        declared("example-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
         store(
             "cloudflare.zone",
             {
@@ -530,9 +520,7 @@ class ActionItemTests(TestCase):
 
         self.assertEqual([item.title for item in found], ["example-host is offline"])
         self.assertEqual(found[0].status, "serious")
-        self.assertEqual(
-            found[0].subject.url, reverse("control_plane:machine", args=["example-host"])
-        )
+        self.assertEqual(found[0].subject.url, reverse("control_plane:machine", args=["example-host"]))
 
     def test_a_persons_device_away_is_not_an_outage(self):
         """Untagged is a user's own device: a laptop asleep serving a dev name
@@ -558,8 +546,7 @@ class ActionItemTests(TestCase):
             declared(
                 key,
                 "tls.certificate",
-                {"certificate_name": key, "domains": ["app.example.com"],
-                 "renewal_window_days": 30},
+                {"certificate_name": key, "domains": ["app.example.com"], "renewal_window_days": 30},
                 status={"not_after": (timezone.now() + timedelta(days=days, hours=1)).isoformat()},
             )
 
@@ -656,8 +643,7 @@ class PublicAddressTests(TestCase):
     def test_the_machine_page_names_the_holder(self):
         store(
             "registry.address",
-            {"address": "203.0.113.7", "organisation": "Example Hosting",
-             "read_at": timezone.now().isoformat()},
+            {"address": "203.0.113.7", "organisation": "Example Hosting", "read_at": timezone.now().isoformat()},
         )
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)
         self.client.force_login(user)
@@ -667,8 +653,7 @@ class PublicAddressTests(TestCase):
 
         self.assertContains(
             response,
-            '<span class="muted">Public</span> <code>203.0.113.7</code> '
-            '<span class="muted">Example Hosting</span>',
+            '<span class="muted">Public</span> <code>203.0.113.7</code> <span class="muted">Example Hosting</span>',
             html=False,
         )
         self.assertContains(response, '<span class="muted">Tailnet</span> <code>100.64.0.10</code>')
@@ -681,7 +666,9 @@ class PublicAddressTests(TestCase):
                 "example-phone",
                 addresses=["100.64.0.11"],
                 endpoints=[
-                    "10.0.50.23:41641", "203.0.113.9:41641", "192.0.0.6:41641",
+                    "10.0.50.23:41641",
+                    "203.0.113.9:41641",
+                    "192.0.0.6:41641",
                     # Its carrier's address: its own, and still not where it lives.
                     "[2001:db8:0:9::1]:41641",
                 ],
@@ -733,9 +720,7 @@ class PublicAddressTests(TestCase):
             )
         )
 
-        self.assertContains(
-            self.header("example-router"), '<span class="muted">LAN</span> <code>10.0.60.5</code>'
-        )
+        self.assertContains(self.header("example-router"), '<span class="muted">LAN</span> <code>10.0.60.5</code>')
 
     def test_a_special_purpose_address_is_not_public(self):
         from ..reach import is_public
@@ -745,9 +730,7 @@ class PublicAddressTests(TestCase):
             self.assertTrue(is_public("203.0.113.7"))
 
     def test_without_the_public_range_nothing_is_public(self):
-        self.assertEqual(
-            {item.name: item.public_addresses for item in machine_catalog()}["example-vps"], ()
-        )
+        self.assertEqual({item.name: item.public_addresses for item in machine_catalog()}["example-vps"], ())
 
 
 class ContainerVisibilityTests(TestCase):
@@ -793,8 +776,7 @@ class EstateQueryBudgetTests(TestCase):
         return len(queries)
 
     def estate_of(self, size):
-        devices(*(device(f"example-host-{index}", addresses=[f"100.64.0.{index + 1}"])
-                  for index in range(size)))
+        devices(*(device(f"example-host-{index}", addresses=[f"100.64.0.{index + 1}"]) for index in range(size)))
         for index in range(size):
             declare_record(f"record-{index}", f"app{index}.example.com", f"100.64.0.{index + 1}")
             connection(f"example-ssh-{index}", reachable=False)
@@ -831,13 +813,15 @@ class WatchedTests(TestCase):
         def machine(state, presence=None):
             return Row(state=state, presence=presence)
 
-        estate = Estate(machines=(
-            machine(("online", "reachable")),
-            machine(("not answering", "unreachable")),
-            machine(("offline", "unreachable")),
-            machine(("away", "unprobed")),
-            machine(("not monitored", "unprobed")),
-        ))
+        estate = Estate(
+            machines=(
+                machine(("online", "reachable")),
+                machine(("not answering", "unreachable")),
+                machine(("offline", "unreachable")),
+                machine(("away", "unprobed")),
+                machine(("not monitored", "unprobed")),
+            )
+        )
 
         self.assertEqual(len(estate.watched), 3)
 

@@ -194,11 +194,21 @@ class DeployInProgressTests(TestCase):
             generation=1,
             observed_generation=1,
             last_observed_at=timezone.now(),
-            status={"extensions": [
-                {"plugin": "example.alpha", "running": "a" * 40, "admitted": "b" * 40, "stage": stage,
-                 "run_url": "https://github.example.com/example/host/actions/runs/9", **extension},
-            ]},
-            conditions=[{"type": "Degraded", "status": True, "reason": "NotDelivered", "message": message, "since": since}],
+            status={
+                "extensions": [
+                    {
+                        "plugin": "example.alpha",
+                        "running": "a" * 40,
+                        "admitted": "b" * 40,
+                        "stage": stage,
+                        "run_url": "https://github.example.com/example/host/actions/runs/9",
+                        **extension,
+                    },
+                ]
+            },
+            conditions=[
+                {"type": "Degraded", "status": True, "reason": "NotDelivered", "message": message, "since": since}
+            ],
         )
 
     def items(self):

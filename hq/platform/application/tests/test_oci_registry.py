@@ -49,14 +49,20 @@ class FakeRegistry:
         if not authorized:
             raise _challenge(url)
         if "/tags/list" in url and "last=" not in url:
-            return _Response({"tags": ["1.0.0", "1.1.0"]}, {"Link": '</v2/team/app/tags/list?last=1.1.0&n=1000>; rel="next"'})
+            return _Response(
+                {"tags": ["1.0.0", "1.1.0"]}, {"Link": '</v2/team/app/tags/list?last=1.1.0&n=1000>; rel="next"'}
+            )
         if "/tags/list" in url:
             return _Response({"tags": ["2.0.0"]})
         if "/manifests/" in url and "sha256:platform" not in url:
-            return _Response({"manifests": [
-                {"digest": "sha256:other", "platform": {"os": "linux", "architecture": "arm64"}},
-                {"digest": "sha256:platform", "platform": {"os": "linux", "architecture": "amd64"}},
-            ]})
+            return _Response(
+                {
+                    "manifests": [
+                        {"digest": "sha256:other", "platform": {"os": "linux", "architecture": "arm64"}},
+                        {"digest": "sha256:platform", "platform": {"os": "linux", "architecture": "amd64"}},
+                    ]
+                }
+            )
         if "/manifests/sha256:platform" in url:
             return _Response({"config": {"digest": "sha256:config"}})
         if "/blobs/sha256:config" in url:
@@ -135,20 +141,27 @@ class BoundaryTests(SimpleTestCase):
             headers["WWW-Authenticate"] = 'Bearer realm="https://internal.example/token",service="x"'
             raise HTTPError(request.full_url, 401, "Unauthorized", headers, io.BytesIO())
 
-        with mock.patch.multiple(
-            "hq.platform.application.oci_registry",
-            _public_host=mock.Mock(side_effect=public),
-            _opener=mock.Mock(open=challenge_to_internal),
-        ), self.assertRaisesMessage(RegistryReadError, "internal.example is not a public address"):
+        with (
+            mock.patch.multiple(
+                "hq.platform.application.oci_registry",
+                _public_host=mock.Mock(side_effect=public),
+                _opener=mock.Mock(open=challenge_to_internal),
+            ),
+            self.assertRaisesMessage(RegistryReadError, "internal.example is not a public address"),
+        ):
             tags(ImageRef.parse("registry.example/team/app:1"))
 
     def test_a_redirect_is_checked_and_leaves_the_token_behind(self):
         from urllib.request import Request
 
         handler = _CheckedRedirects()
-        request = Request("https://registry.example/v2/team/app/blobs/sha256:x", headers={"Authorization": "Bearer anonymous"})
+        request = Request(
+            "https://registry.example/v2/team/app/blobs/sha256:x", headers={"Authorization": "Bearer anonymous"}
+        )
         with mock.patch("hq.platform.application.oci_registry._public_host", return_value=True):
-            followed = handler.redirect_request(request, None, 307, "Temporary Redirect", Message(), "https://cdn.example/blob")
+            followed = handler.redirect_request(
+                request, None, 307, "Temporary Redirect", Message(), "https://cdn.example/blob"
+            )
         self.assertIsNone(followed.get_header("Authorization"))
         with (
             mock.patch("hq.platform.application.oci_registry._public_host", return_value=False),
@@ -183,16 +196,34 @@ class AttestationTests(SimpleTestCase):
             if request.headers.get("Authorization") != "Bearer anonymous":
                 raise _challenge(url)
             if url.endswith("/manifests/sha256:index"):
-                return _Response({"manifests": [
-                    {"digest": "sha256:platform", "platform": {"os": "linux", "architecture": "amd64"}},
-                    {"digest": "sha256:attached", "platform": {"os": "unknown", "architecture": "unknown"},
-                     "annotations": {"vnd.docker.reference.type": "attestation-manifest", "vnd.docker.reference.digest": "sha256:platform"}},
-                ]})
+                return _Response(
+                    {
+                        "manifests": [
+                            {"digest": "sha256:platform", "platform": {"os": "linux", "architecture": "amd64"}},
+                            {
+                                "digest": "sha256:attached",
+                                "platform": {"os": "unknown", "architecture": "unknown"},
+                                "annotations": {
+                                    "vnd.docker.reference.type": "attestation-manifest",
+                                    "vnd.docker.reference.digest": "sha256:platform",
+                                },
+                            },
+                        ]
+                    }
+                )
             if url.endswith("/manifests/sha256:attached"):
-                return _Response({"layers": [
-                    {"digest": f"sha256:{name}", "size": size, "annotations": {"in-toto.io/predicate-type": kind}}
-                    for name, (kind, size, _body) in layers.items()
-                ]})
+                return _Response(
+                    {
+                        "layers": [
+                            {
+                                "digest": f"sha256:{name}",
+                                "size": size,
+                                "annotations": {"in-toto.io/predicate-type": kind},
+                            }
+                            for name, (kind, size, _body) in layers.items()
+                        ]
+                    }
+                )
             for digest, body in blobs.items():
                 if url.endswith(f"/blobs/{digest}"):
                     return _Response(body)
@@ -203,15 +234,20 @@ class AttestationTests(SimpleTestCase):
     def test_the_sbom_and_provenance_beside_the_platform_are_read(self):
         from ..oci_registry import attestations
 
-        with self.registry({
-            "sbom": ("https://spdx.dev/Document", 10, {"predicate": {"packages": []}}),
-            "provenance": ("https://slsa.dev/provenance/v1", 10, {"predicate": {"runDetails": {}}}),
-            "other": ("https://example.test/unknown", 10, {"predicate": {}}),
-        }):
+        with self.registry(
+            {
+                "sbom": ("https://spdx.dev/Document", 10, {"predicate": {"packages": []}}),
+                "provenance": ("https://slsa.dev/provenance/v1", 10, {"predicate": {"runDetails": {}}}),
+                "other": ("https://example.test/unknown", 10, {"predicate": {}}),
+            }
+        ):
             found = attestations(self.image, "sha256:index")
 
         self.assertEqual(found["platform_digest"], "sha256:platform")
-        self.assertEqual([kind for kind, _predicate in found["statements"]], ["https://spdx.dev/Document", "https://slsa.dev/provenance/v1"])
+        self.assertEqual(
+            [kind for kind, _predicate in found["statements"]],
+            ["https://spdx.dev/Document", "https://slsa.dev/provenance/v1"],
+        )
 
     def test_an_attestation_too_large_to_be_one_is_refused_before_it_is_fetched(self):
         from ..oci_registry import MAX_STATEMENT_BYTES, attestations
@@ -230,7 +266,11 @@ class AttestationTests(SimpleTestCase):
                 return _Response({"token": "anonymous"})
             if request.headers.get("Authorization") != "Bearer anonymous":
                 raise _challenge(request.full_url)
-            return _Response({"manifests": [{"digest": "sha256:platform", "platform": {"os": "linux", "architecture": "amd64"}}]})
+            return _Response(
+                {"manifests": [{"digest": "sha256:platform", "platform": {"os": "linux", "architecture": "amd64"}}]}
+            )
 
         with reads(answer):
-            self.assertEqual(attestations(self.image, "sha256:index"), {"platform_digest": "sha256:platform", "statements": []})
+            self.assertEqual(
+                attestations(self.image, "sha256:index"), {"platform_digest": "sha256:platform", "statements": []}
+            )

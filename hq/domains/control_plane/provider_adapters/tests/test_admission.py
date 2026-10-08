@@ -71,16 +71,17 @@ class ObservationDiscoveryTests(SimpleTestCase):
 
     def test_the_registry_order_is_the_module_names(self):
         providers = [spec.provider for spec in observations.OBSERVATIONS.values()]
-        modules = [
-            module.__name__.rsplit(".", 1)[1] for module in observations._SPEC_MODULES
-        ]
+        modules = [module.__name__.rsplit(".", 1)[1] for module in observations._SPEC_MODULES]
 
         self.assertEqual(modules, sorted(modules))
         self.assertEqual(len(providers), len(observations.OBSERVATIONS))
 
     def test_a_reading_that_connects_must_name_what_it_connects(self):
         spec = ObservationSpec(
-            "example.group", "example", "Example group", ObservationRecord,
+            "example.group",
+            "example",
+            "Example group",
+            ObservationRecord,
             connects=lambda record: True,
         )
 

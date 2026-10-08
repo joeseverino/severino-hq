@@ -57,11 +57,7 @@ class CalendarView(PageMixin, TemplateView):
     @override
     def get_page_actions(self):
         day = self._selected() or timezone.localdate()
-        return (
-            PageAction(
-                "Add event", f"{reverse('calendar:entry_new')}?on={day.isoformat()}", primary=True
-            ),
-        )
+        return (PageAction("Add event", f"{reverse('calendar:entry_new')}?on={day.isoformat()}", primary=True),)
 
     @override
     def get_context_data(self, **kwargs):
@@ -88,7 +84,6 @@ class CalendarView(PageMixin, TemplateView):
         )
         return context
 
-
     def _entry(self, day: date | None) -> dict | None:
         """The entry opened beside the month: what it is, and what can be done to it."""
 
@@ -101,11 +96,9 @@ class CalendarView(PageMixin, TemplateView):
             "about": reference_of(entry, "about", principal=web_principal(self.request.user)),
             "when": when_label(entry),
             "repeat": repeat_label(entry),
-            "next": [
-                (when, month_url(when.replace(day=1), when))
-                for when in upcoming(entry, count=4)
-                if when != day
-            ][:3]
+            "next": [(when, month_url(when.replace(day=1), when)) for when in upcoming(entry, count=4) if when != day][
+                :3
+            ]
             if entry.repeat
             else (),
             "actions": (

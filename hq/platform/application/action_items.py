@@ -44,8 +44,7 @@ def with_aside_state(items: list[dict[str, Any]], user) -> list[dict[str, Any]]:
     """The items, each with whether ``user`` set this revision of it aside. One query."""
 
     aside = dict(
-        ActionItemRead.objects.filter(user=user, key__in=[item["key"] for item in items])
-        .values_list("key", "revision")
+        ActionItemRead.objects.filter(user=user, key__in=[item["key"] for item in items]).values_list("key", "revision")
     )
     return [{**item, "aside": aside.get(item["key"]) == item["revision"]} for item in items]
 
@@ -98,9 +97,7 @@ def set_aside(user, keys, *, aside: bool, current: list[dict[str, Any]]) -> None
                 )
         else:
             ActionItemRead.objects.filter(user=user, key__in=wanted).delete()
-        ActionItemRead.objects.filter(user=user, read_at__lt=now - FORGET_AFTER).exclude(
-            key__in=live
-        ).delete()
+        ActionItemRead.objects.filter(user=user, read_at__lt=now - FORGET_AFTER).exclude(key__in=live).delete()
 
 
 def by_source(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -141,7 +138,7 @@ def by_source(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def family_id(item: dict[str, Any]) -> str:
     """A family, named apart from another source's family of the same name."""
 
-    return f'{item["source_id"]}:{item.get("family", "")}'
+    return f"{item['source_id']}:{item.get('family', '')}"
 
 
 def of_family(items: list[dict[str, Any]], named: str) -> list[dict[str, Any]]:
@@ -157,7 +154,7 @@ def row_value(item: dict[str, Any]) -> str:
     the whole queue again to look it up.
     """
 
-    return f'{item["revision"]} {item["key"]}'
+    return f"{item['revision']} {item['key']}"
 
 
 def named_rows(values) -> dict[str, str]:
@@ -182,9 +179,7 @@ def dismiss_rows(user, rows: dict[str, str]) -> None:
     now = timezone.now()
     with transaction.atomic():
         for key, revision in rows.items():
-            ActionItemRead.objects.update_or_create(
-                user=user, key=key, defaults={"revision": revision, "read_at": now}
-            )
+            ActionItemRead.objects.update_or_create(user=user, key=key, defaults={"revision": revision, "read_at": now})
 
 
 def restore_rows(user, keys) -> None:
@@ -216,9 +211,5 @@ def filter_items(
         if (not status or item["status"] == status)
         and (not source or item["source_id"] == source)
         and (not about or (item.get("subject") or {}).get("url") == about)
-        and (
-            not query
-            or query
-            in " ".join((item["source"], item["label"], item["detail"], item["action"])).casefold()
-        )
+        and (not query or query in " ".join((item["source"], item["label"], item["detail"], item["action"])).casefold())
     ]

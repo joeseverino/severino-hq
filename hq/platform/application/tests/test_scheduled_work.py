@@ -88,9 +88,7 @@ class ShippedUnitTests(TestCase):
         self.assertEqual(self.asked_for(), {work.name for work in SCHEDULED})
 
     def test_each_timer_starts_work_of_its_own(self):
-        started = [
-            match["name"] for timer in UNITS.glob("*.timer") for match in INSTANCE.finditer(timer.read_text())
-        ]
+        started = [match["name"] for timer in UNITS.glob("*.timer") for match in INSTANCE.finditer(timer.read_text())]
         self.assertEqual(len(started), len(set(started)))
 
     def test_nothing_shipped_starts_a_process_in_the_web_container_for_it(self):

@@ -57,17 +57,13 @@ class AssetListView(PageMixin, TableListMixin, ListView):
     def get_queryset(self):
         qs = Asset.objects.all()
         if self.request.GET.get("missing_purchase"):
-            qs = qs.filter(status=Asset.Status.ACTIVE).filter(
-                Q(purchase_date__isnull=True) | Q(total_cost=0)
-            )
+            qs = qs.filter(status=Asset.Status.ACTIVE).filter(Q(purchase_date__isnull=True) | Q(total_cost=0))
         return self.apply_table_query(qs)
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        totals = self.object_list.aggregate(
-            total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount")
-        )
+        totals = self.object_list.aggregate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
         context["totals"] = cost_totals(totals, narrowed=bool(context["table"]["active_count"]))
         return context
 
@@ -110,9 +106,7 @@ class AssetDetailView(PageMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         asset = self.object
-        context["documents"] = related_documents(
-            asset.documentation_records.all(), listed=asset.related_projects.all()
-        )
+        context["documents"] = related_documents(asset.documentation_records.all(), listed=asset.related_projects.all())
         principal = web_principal(self.request.user)
         context["thing"] = reference_of(asset, "infrastructure", principal=principal)
         # A domain asset with no link is matched to the domain of its name.

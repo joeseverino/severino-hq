@@ -69,9 +69,7 @@ def delivery_progress(resource) -> Progress | None:
     behind = [
         item
         for item in (resource.status or {}).get("extensions") or ()
-        if isinstance(item, Mapping)
-        and item.get("admitted")
-        and item.get("admitted") != item.get("running")
+        if isinstance(item, Mapping) and item.get("admitted") and item.get("admitted") != item.get("running")
     ]
     stages = {_stage(item) for item in behind}
     if not stages or ENDED in stages:

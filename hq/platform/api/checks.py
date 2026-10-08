@@ -22,9 +22,7 @@ def _route_error(owner: str, name: str, route: str, error_id: str) -> Error | No
 
 
 @register(Tags.compatibility)
-def capability_contract_check(
-    app_configs: Sequence[AppConfig] | None, **kwargs: Any
-) -> list[CheckMessage]:
+def capability_contract_check(app_configs: Sequence[AppConfig] | None, **kwargs: Any) -> list[CheckMessage]:
     try:
         graph = integration_graph()
     except IntegrationGraphError as exc:

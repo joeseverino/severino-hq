@@ -126,18 +126,14 @@ class RefusalTests(TestCase):
         connect("example-tailnet", "tailscale")
 
     def test_an_unknown_connection_is_refused(self):
-        result = execute_capability(
-            READ_NOW, {"connection_ref": "no-such-connection"}, principal=cli_principal()
-        )
+        result = execute_capability(READ_NOW, {"connection_ref": "no-such-connection"}, principal=cli_principal())
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(ReadRequest.objects.exists())
 
     def test_an_unknown_kind_is_refused(self):
-        result = execute_capability(
-            READ_NOW, {"kind": "no.such.kind"}, principal=cli_principal()
-        )
+        result = execute_capability(READ_NOW, {"kind": "no.such.kind"}, principal=cli_principal())
 
         self.assertEqual(result["error"]["code"], "invalid_input")
 
@@ -159,9 +155,7 @@ class RefusalTests(TestCase):
     def test_a_reader_may_not_ask(self):
         reader = Principal("reader", "test", frozenset({Capability.READ}))
 
-        result = execute_capability(
-            READ_NOW, {"connection_ref": "example-tailnet"}, principal=reader
-        )
+        result = execute_capability(READ_NOW, {"connection_ref": "example-tailnet"}, principal=reader)
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "forbidden")
@@ -173,14 +167,10 @@ class RefusalTests(TestCase):
 class WebTests(TestCase):
     def setUp(self):
         connect("example-tailnet", "tailscale")
-        self.client.force_login(
-            get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        )
+        self.client.force_login(get_user_model().objects.create_user("operator", password="pw", is_staff=True))
 
     def test_get_has_no_side_effect(self):
-        response = self.client.get(
-            reverse("control_plane:read_now"), {"connection_ref": "example-tailnet"}
-        )
+        response = self.client.get(reverse("control_plane:read_now"), {"connection_ref": "example-tailnet"})
 
         self.assertEqual(response.status_code, 405)
         self.assertFalse(ReadRequest.objects.exists())
@@ -188,16 +178,13 @@ class WebTests(TestCase):
     def test_the_link_posts_what_it_names_and_returns_with_the_result(self):
         link = read_now_link(cli_principal(), connection_ref="example-tailnet")
 
-        response = self.client.post(
-            link.url, {"next": reverse("control_plane:connections")}, follow=True
-        )
+        response = self.client.post(link.url, {"next": reverse("control_plane:connections")}, follow=True)
 
         self.assertEqual(link.method, "POST")
         self.assertEqual(ReadRequest.objects.get().connection_ref, "example-tailnet")
         self.assertContains(
             response,
-            "Asked the controller to read example-tailnet now; this page updates when "
-            "it reports.",
+            "Asked the controller to read example-tailnet now; this page updates when it reports.",
         )
 
     def test_a_refusal_is_said_on_the_page_it_came_from(self):
@@ -229,7 +216,11 @@ class VerificationTests(TestCase):
         from ..finding_model import Finding
 
         return Finding(
-            rule="example-rule", subject="", title="t", severity="neutral", explanation="e",
+            rule="example-rule",
+            subject="",
+            title="t",
+            severity="neutral",
+            explanation="e",
             **fields,
         )
 

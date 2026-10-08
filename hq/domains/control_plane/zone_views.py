@@ -172,8 +172,7 @@ class ZoneMailView(View):
                 "spf_default": _spf_default(_spf_value(found)),
                 **page_context(
                     f"Email for {found.zone}",
-                    "Who receives mail for this domain, who may send as it, and what "
-                    "happens to forgeries.",
+                    "Who receives mail for this domain, who may send as it, and what happens to forgeries.",
                     trail=((found.zone, found.url),),
                 ),
             },
@@ -200,9 +199,7 @@ class ZoneMailView(View):
         except (DjangoValidationError, PolicyError, NotFoundError, ValueError) as exc:
             messages.error(request, _readable_error(exc))
             return redirect("zones:mail", zone=zone.zone)
-        messages.success(
-            request, f"{what} saved. Publishing within a minute."
-        )
+        messages.success(request, f"{what} saved. Publishing within a minute.")
         return redirect("zones:mail", zone=zone.zone)
 
     def post(self, request, zone: str):
@@ -225,22 +222,17 @@ class ZoneMailView(View):
                 terms.append(SpfTerm(qualifier, mechanism.lower(), argument))
             terms.append(SpfTerm(request.POST.get("default", "-"), "all", ""))
             spf_record = next(
-                (r for section in overview.sections if section.id == "sending"
-                 for r in section.records),
+                (r for section in overview.sections if section.id == "sending" for r in section.records),
                 None,
             )
-            return self._publish(
-                request, found, spf_record, compose_spf(tuple(terms)), "SPF"
-            )
+            return self._publish(request, found, spf_record, compose_spf(tuple(terms)), "SPF")
 
         # Unknown tags survive: the record belongs to the operator, and an
         # editor that drops what it does not model deletes policy silently.
         tags = dict(overview.dmarc_tags)
         for tag in DMARC_TAGS:
             tags[tag.id] = request.POST.get(tag.id, "").strip()
-        return self._publish(
-            request, found, overview.dmarc_record, compose_dmarc(tags), "DMARC"
-        )
+        return self._publish(request, found, overview.dmarc_record, compose_dmarc(tags), "DMARC")
 
 
 class ZonePinView(View):
@@ -267,11 +259,7 @@ def _pin_action(zone) -> PageAction:
         "★ Opens first" if zone.pinned else "☆ Open this one first",
         reverse("zones:pin", args=[zone.zone]),
         method="post",
-        title=(
-            "Domains opens on this one. Press to undo."
-            if zone.pinned
-            else "Make Domains open on this one."
-        ),
+        title=("Domains opens on this one. Press to undo." if zone.pinned else "Make Domains open on this one."),
     )
 
 
@@ -342,9 +330,7 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
                 reverse("control_plane:remove", args=[resource.key]),
                 danger=True,
                 title=(
-                    "HQ stops changing this domain. Its records stay live."
-                    if capabilities.removal == "forget"
-                    else ""
+                    "HQ stops changing this domain. Its records stay live." if capabilities.removal == "forget" else ""
                 ),
             )
         )
@@ -374,15 +360,14 @@ class ZoneAdoptView(View):
         try:
             records = adopt_zone_records(zone, principal=principal)
             adopted = len(records["adopted"])
-        except (NotFoundError, PolicyError, DjangoValidationError):
+        except NotFoundError, PolicyError, DjangoValidationError:
             # The domain is declared either way. A zone with nothing left to
             # take on is the ordinary case, not a failure worth interrupting.
             adopted = 0
 
         messages.success(
             request,
-            f"HQ now manages {zone} and {counted(adopted, 'record')} in it. "
-            "Nothing changed at Cloudflare.",
+            f"HQ now manages {zone} and {counted(adopted, 'record')} in it. Nothing changed at Cloudflare.",
         )
         return redirect("zones:detail", zone=zone)
 

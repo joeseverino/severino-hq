@@ -4,15 +4,25 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('jobs', '0002_rules'),
+        ("jobs", "0002_rules"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='job',
-            name='state',
-            field=models.CharField(choices=[('queued', 'Queued'), ('running', 'Running'), ('succeeded', 'Succeeded'), ('failed', 'Failed'), ('lost', 'Interrupted')], db_index=True, default='queued', max_length=16),
+            model_name="job",
+            name="state",
+            field=models.CharField(
+                choices=[
+                    ("queued", "Queued"),
+                    ("running", "Running"),
+                    ("succeeded", "Succeeded"),
+                    ("failed", "Failed"),
+                    ("lost", "Interrupted"),
+                ],
+                db_index=True,
+                default="queued",
+                max_length=16,
+            ),
         ),
     ]

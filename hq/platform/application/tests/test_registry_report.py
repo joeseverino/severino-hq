@@ -23,8 +23,11 @@ class OneRefusedImageTests(TestCase):
             observed_at=now,
             records=[
                 {"image": "docker.io/example/app", "tags": ["1.0.0"], "read_at": now.isoformat()},
-                {"image": "ghcr.io/example/private", "unread": "refused",
-                 "read_at": (now - timedelta(days=2)).isoformat()},
+                {
+                    "image": "ghcr.io/example/private",
+                    "unread": "refused",
+                    "read_at": (now - timedelta(days=2)).isoformat(),
+                },
             ],
         )
 

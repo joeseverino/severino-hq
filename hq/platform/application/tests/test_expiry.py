@@ -48,7 +48,11 @@ class DaysUntilTests(SimpleTestCase):
 
         root = Path(__file__).resolve().parents[4]
         pattern = re.compile(r"(?<!/)/\s*86400|\)\.days\b")
-        allowed = {"hq/platform/application/expiry.py", "hq/platform/application/ui.py", "hq/platform/application/analytics.py"}
+        allowed = {
+            "hq/platform/application/expiry.py",
+            "hq/platform/application/ui.py",
+            "hq/platform/application/analytics.py",
+        }
         found = []
         for path in root.glob("*/**/*.py"):
             relative = path.relative_to(root).as_posix()
@@ -72,11 +76,7 @@ class OneAnswerTests(TestCase):
             key="example-wildcard",
             kind=CERTIFICATE_KIND,
             spec={"certificate_name": "example-wildcard", "domains": ["*.example.com"]},
-            status={
-                "not_after": (
-                    dj_timezone.now() + timedelta(days=87, hours=12, minutes=30)
-                ).isoformat()
-            },
+            status={"not_after": (dj_timezone.now() + timedelta(days=87, hours=12, minutes=30)).isoformat()},
         )
 
     def test_every_surface_says_the_same_days_left(self):

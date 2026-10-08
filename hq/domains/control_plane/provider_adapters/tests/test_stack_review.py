@@ -34,8 +34,14 @@ class StackReviewTests(SimpleTestCase):
     def test_everything_root_equivalent_in_a_compose_file_is_named(self):
         found = _stack_warnings({"compose": DANGEROUS, "host": "edge-1"})
 
-        for what in ("privileged", "Docker socket", "host's network", "every process",
-                     "kernel capabilities", "root filesystem"):
+        for what in (
+            "privileged",
+            "Docker socket",
+            "host's network",
+            "every process",
+            "kernel capabilities",
+            "root filesystem",
+        ):
             with self.subTest(what=what):
                 self.assertTrue(any(what in line and "edge-1" in line for line in found), found)
 

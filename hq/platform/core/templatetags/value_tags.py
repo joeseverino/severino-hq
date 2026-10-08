@@ -184,7 +184,7 @@ def span(days):
 
     try:
         return said(int(days))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return MISSING
 
 
@@ -195,7 +195,7 @@ def seconds(value):
 
     try:
         whole = max(0, round(float(value)))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return or_empty(None)
     hours, rest = divmod(whole, 3600)
     minutes, left = divmod(rest, 60)
@@ -381,7 +381,6 @@ def web_url(value):
     """An href from data someone else wrote: http(s) or nothing."""
 
     return _web_url(value)
-
 
 
 @register.filter

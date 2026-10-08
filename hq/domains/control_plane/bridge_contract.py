@@ -182,9 +182,7 @@ def _violation(validator: Any, subject: str, value: Any) -> str | None:
     error: ValidationError | None = best_match(validator.iter_errors(value))
     if error is None:
         return None
-    pointer = "".join(
-        "/" + str(part).replace("~", "~0").replace("/", "~1") for part in error.absolute_path
-    )
+    pointer = "".join("/" + str(part).replace("~", "~0").replace("/", "~1") for part in error.absolute_path)
     expected = error.validator_value
     if error.validator in ("required", "additionalProperties"):
         # Member names only, which the contract itself publishes.
@@ -224,9 +222,7 @@ def departs(name: str, value: Any) -> str | None:
 
     if name not in contract()["components"]["schemas"]:
         raise ValueError(f"the bridge contract has no {name} schema")
-    validator = Draft202012Validator(
-        {"$ref": f"{CONTRACT_URI}#/components/schemas/{name}"}, registry=_registry()
-    )
+    validator = Draft202012Validator({"$ref": f"{CONTRACT_URI}#/components/schemas/{name}"}, registry=_registry())
     return _violation(validator, name, value)
 
 

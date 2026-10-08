@@ -257,15 +257,13 @@ def _observed_record(provider, record) -> tuple[tuple, tuple]:
     try:
         spec = provider.from_record(record)
         return tuple(provider.hostnames(spec)), tuple(provider.answers(spec))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         # The inventory sweep reports its own health. One unreadable row is
         # evidence about that row, not a reason to hide every healthy answer.
         return (), ()
 
 
-def _record_observed_answers(
-    found: dict[str, set[str]], names: tuple, addresses: tuple
-) -> None:
+def _record_observed_answers(found: dict[str, set[str]], names: tuple, addresses: tuple) -> None:
     """Normalize one provider's vocabulary into the shared answer index."""
 
     answered = tuple(str(address) for address in addresses if address)

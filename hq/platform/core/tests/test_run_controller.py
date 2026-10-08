@@ -83,7 +83,7 @@ class BridgeSocketDeliveryTests(SimpleTestCase):
         self.assertIn(f"chmod 0700 {directory}", dockerfile)
 
     def test_the_web_listener_is_not_the_socket(self):
-        command = re.search(r'^CMD \[(.+?)\]$', DOCKERFILE.read_text(), re.MULTILINE | re.DOTALL).group(1)
+        command = re.search(r"^CMD \[(.+?)\]$", DOCKERFILE.read_text(), re.MULTILINE | re.DOTALL).group(1)
         self.assertIn('"hq.config.asgi:application"', command)
         self.assertNotIn("--uds", command)
         self.assertNotIn("--fd", command)

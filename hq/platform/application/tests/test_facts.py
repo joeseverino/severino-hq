@@ -65,10 +65,8 @@ class JoinTests(TestCase):
     def test_a_reading_joins_by_address(self):
         store(
             PERIMETER,
-            {"record": "perimeter", "connection_ref": "example-edge",
-             "public_addresses": ["198.51.100.7"]},
-            {"record": "perimeter", "connection_ref": "other-edge",
-             "public_addresses": ["198.51.100.8"]},
+            {"record": "perimeter", "connection_ref": "example-edge", "public_addresses": ["198.51.100.7"]},
+            {"record": "perimeter", "connection_ref": "other-edge", "public_addresses": ["198.51.100.8"]},
         )
 
         facts = facts_about((), ("198.51.100.7",))
@@ -97,8 +95,13 @@ class JoinTests(TestCase):
     def test_a_container_joins_by_the_host_it_runs_on(self):
         store(
             CONTAINER_KIND,
-            {"name": "web", "host": "example-host", "host_address": "10.0.0.5",
-             "state": "running", "connection_ref": "example-portainer"},
+            {
+                "name": "web",
+                "host": "example-host",
+                "host_address": "10.0.0.5",
+                "state": "running",
+                "connection_ref": "example-portainer",
+            },
             {"name": "db", "host": "other-host", "state": "running"},
         )
 
@@ -119,7 +122,11 @@ class UnreadableTests(TestCase):
             name: str
 
         spec = ObservationSpec(
-            "example.reading", "example", "Example reading", Named, requires=("Zone Read",),
+            "example.reading",
+            "example",
+            "Example reading",
+            Named,
+            requires=("Zone Read",),
             hostnames=lambda record: (record.get("name", ""),),
         )
         store("example.reading", reachable=False, error="403 from the provider.")
@@ -141,20 +148,24 @@ class UnreadableTests(TestCase):
             name: str
 
         by_name = ObservationSpec(
-            "example.by_name", "example", "By name", Named,
+            "example.by_name",
+            "example",
+            "By name",
+            Named,
             hostnames=lambda record: (record.get("name", ""),),
         )
         by_address = ObservationSpec(
-            "example.by_address", "example", "By address", Named,
+            "example.by_address",
+            "example",
+            "By address",
+            Named,
             addresses=lambda record: (record.get("name", ""),),
         )
         joins_nothing = ObservationSpec("example.nothing", "example", "Nothing", Named)
         for spec in (by_name, by_address, joins_nothing):
             store(spec.kind, reachable=False, error="refused")
 
-        with mock.patch(
-            "hq.platform.application.facts.OBSERVATIONS", registry((by_name, by_address, joins_nothing))
-        ):
+        with mock.patch("hq.platform.application.facts.OBSERVATIONS", registry((by_name, by_address, joins_nothing))):
             service = unreadable_labels(Subject.of(hostnames=("app.example.com",)))
             address = unreadable_labels(Subject.of(addresses=("192.0.2.10",)))
             every = unreadable_labels()
@@ -180,9 +191,12 @@ class UnreadableTests(TestCase):
     def test_a_partial_read_names_the_part_it_could_not_read(self):
         store(
             PERIMETER,
-            {"record": "perimeter", "connection_ref": "example-edge",
-             "public_addresses": ["198.51.100.7"],
-             "unread": {"answered_publicly": "the probe was refused"}},
+            {
+                "record": "perimeter",
+                "connection_ref": "example-edge",
+                "public_addresses": ["198.51.100.7"],
+                "unread": {"answered_publicly": "the probe was refused"},
+            },
         )
 
         facts = facts_about((), ("198.51.100.7",))
@@ -227,25 +241,19 @@ class QueryCountTests(TestCase):
         store(
             PERIMETER,
             *(
-                {"record": "perimeter", "connection_ref": f"edge-{i}",
-                 "public_addresses": [f"198.51.100.{i}"]}
+                {"record": "perimeter", "connection_ref": f"edge-{i}", "public_addresses": [f"198.51.100.{i}"]}
                 for i in range(count)
             ),
         )
         store(
             CONTAINER_KIND,
-            *(
-                {"name": f"c{i}", "host": f"host-{i}", "host_address": f"10.0.3.{i}"}
-                for i in range(count)
-            ),
+            *({"name": f"c{i}", "host": f"host-{i}", "host_address": f"10.0.3.{i}"} for i in range(count)),
         )
 
     def _count(self, subjects):
         with CaptureQueriesContext(connection) as captured, projection_scope():
             for index in range(subjects):
-                facts_about(
-                    (f"host-{index}", f"n{index}.example.com"), (f"198.51.100.{index}",)
-                )
+                facts_about((f"host-{index}", f"n{index}.example.com"), (f"198.51.100.{index}",))
         return len(captured)
 
     def test_more_machines_cost_no_more_queries(self):
@@ -267,9 +275,7 @@ class QueryCountTests(TestCase):
         def page(count):
             self._inventory(count)
             with CaptureQueriesContext(connection) as captured:
-                response = self.client.get(
-                    reverse("control_plane:machine", kwargs={"name": "host-1"})
-                )
+                response = self.client.get(reverse("control_plane:machine", kwargs={"name": "host-1"}))
             self.assertEqual(response.status_code, 200)
             return len(captured)
 

@@ -74,9 +74,7 @@ class Counts(Facet):
     @property
     def touched(self) -> int:
         """Rows changed, as opposed to rows read."""
-        return sum(
-            value or 0 for value in (self.created, self.updated, self.deleted)
-        )
+        return sum(value or 0 for value in (self.created, self.updated, self.deleted))
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,24 +5,25 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0030_inventory_refused_parts'),
+        ("control_plane", "0030_inventory_refused_parts"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ReadRequest',
+            name="ReadRequest",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('connection_ref', models.CharField(blank=True, max_length=160)),
-                ('kind', models.CharField(blank=True, max_length=64)),
-                ('requested_at', models.DateTimeField(default=django.utils.timezone.now)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("connection_ref", models.CharField(blank=True, max_length=160)),
+                ("kind", models.CharField(blank=True, max_length=64)),
+                ("requested_at", models.DateTimeField(default=django.utils.timezone.now)),
             ],
             options={
-                'constraints': [models.UniqueConstraint(fields=('connection_ref', 'kind'), name='one_read_request_per_subject')],
+                "constraints": [
+                    models.UniqueConstraint(fields=("connection_ref", "kind"), name="one_read_request_per_subject")
+                ],
             },
         ),
     ]

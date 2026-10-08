@@ -40,14 +40,17 @@ class SecretSettingsTests(SimpleTestCase):
 
         from hq.config.settings import env_secret
 
-        with patch.dict(
-            "os.environ",
-            {
-                "TEST_MCP_TOKEN": TOKEN,
-                "TEST_MCP_TOKEN_FILE": "/unused",
-            },
-            clear=False,
-        ), self.assertRaisesRegex(RuntimeError, "Set only one"):
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "TEST_MCP_TOKEN": TOKEN,
+                    "TEST_MCP_TOKEN_FILE": "/unused",
+                },
+                clear=False,
+            ),
+            self.assertRaisesRegex(RuntimeError, "Set only one"),
+        ):
             env_secret("TEST_MCP_TOKEN")
 
 
@@ -76,9 +79,7 @@ class ServiceTests(TestCase):
         self.assertEqual(result["status"], "ok")
 
     def test_project_detail_returns_safe_relationships_only(self):
-        project = Project.objects.create(
-            name="HQ MCP", technologies_used="Django, MCP"
-        )
+        project = Project.objects.create(name="HQ MCP", technologies_used="Django, MCP")
         asset = Asset.objects.create(item_name="Lab server")
         asset.related_projects.add(project)
         safe_doc = DocumentationRecord.objects.create(
@@ -98,9 +99,7 @@ class ServiceTests(TestCase):
 
         self.assertEqual(result["technologies"], ["Django", "MCP"])
         self.assertEqual(result["relationships"]["assets"], [asset.slug])
-        self.assertEqual(
-            result["relationships"]["documentation"], ["rb-hq-mcp"]
-        )
+        self.assertEqual(result["relationships"]["documentation"], ["rb-hq-mcp"])
 
     def test_a_caller_that_may_read_nothing_is_answered_by_no_read_tool(self):
         from hq.platform.application.security import AuthorizationError
@@ -133,9 +132,7 @@ class ServiceTests(TestCase):
         result = services.documentation_status()
 
         self.assertEqual(result["total"], 1)
-        self.assertEqual(
-            [record["doc_id"] for record in result["records"]], ["rb-safe"]
-        )
+        self.assertEqual([record["doc_id"] for record in result["records"]], ["rb-safe"])
 
     def test_page_size_is_bounded(self):
         for number in range(105):
@@ -180,8 +177,18 @@ class ServiceTests(TestCase):
         names = {tool.name for tool in mcp._tool_manager.list_tools()}
 
         self.assertEqual(len(names), 15)
-        for wrapper in ("list_projects", "get_project", "list_assets", "get_asset", "list_managed_resources",
-                        "get_managed_resource", "list_services", "get_service", "list_expenses", "list_receipts"):
+        for wrapper in (
+            "list_projects",
+            "get_project",
+            "list_assets",
+            "get_asset",
+            "list_managed_resources",
+            "get_managed_resource",
+            "list_services",
+            "get_service",
+            "list_expenses",
+            "list_receipts",
+        ):
             self.assertNotIn(wrapper, names)
 
     def test_resource_registry_is_discoverable_and_generically_readable(self):
@@ -195,9 +202,7 @@ class ServiceTests(TestCase):
         projects = next(item for item in described["resources"] if item["name"] == "projects")
         self.assertEqual(projects["web_route"], "projects:list")
         capabilities = services.describe_capabilities()["capabilities"]
-        project_create = next(
-            item for item in capabilities if item["name"] == "project.create"
-        )
+        project_create = next(item for item in capabilities if item["name"] == "project.create")
         self.assertEqual(project_create["resource"], "projects")
         self.assertEqual(listed["items"][0]["slug"], project.slug)
         self.assertEqual(detail["slug"], project.slug)
@@ -225,16 +230,10 @@ class ServiceTests(TestCase):
             kind="cloudflare.zone",
             spec={"zone": "example.com", "connection_ref": "mcp-cloudflare"},
         )
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
-            topology = services.get_topology(
-                focus="resource:mcp-zone", direction="inbound", depth=2
-            )
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+            topology = services.get_topology(focus="resource:mcp-zone", direction="inbound", depth=2)
 
-        self.assertIn(
-            "resource:mcp-zone", {node["id"] for node in topology["nodes"]}
-        )
+        self.assertIn("resource:mcp-zone", {node["id"] for node in topology["nodes"]})
         self.assertEqual(topology["trace"]["focus"], "resource:mcp-zone")
         self.assertEqual(topology["trace"]["direction"], "inbound")
         self.assertIsNotNone(mcp._tool_manager.get_tool("get_topology"))
@@ -244,8 +243,8 @@ class ServiceTests(TestCase):
         from hq.domains.control_plane.models import ManagedResource
 
         ManagedResource.objects.create(
-            key="mcp-lonely", kind="adguard.rewrite",
-            spec={"domain": "app.example.test", "answer": "192.0.2.10"})
+            key="mcp-lonely", kind="adguard.rewrite", spec={"domain": "app.example.test", "answer": "192.0.2.10"}
+        )
         with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             whole = services.get_topology()
             narrowed = services.get_topology(lens="unobserved-resources")
@@ -272,9 +271,7 @@ class ServiceTests(TestCase):
         with override_settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True):
             bound = set_principal(mcp_principal())
             self.addCleanup(reset_principal, bound)
-            result = services.execute_capability(
-                "hq.sync", {"manifest": [], "manifets": []}
-            )
+            result = services.execute_capability("hq.sync", {"manifest": [], "manifets": []})
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
@@ -290,14 +287,10 @@ class ServiceTests(TestCase):
         with override_settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True):
             bound = set_principal(mcp_principal())
             self.addCleanup(reset_principal, bound)
-            result = services.execute_capability(
-                "hq.sync", {"manifest": "hunter2-not-for-logs"}
-            )
+            result = services.execute_capability("hq.sync", {"manifest": "hunter2-not-for-logs"})
 
         self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(
-            result["error"]["message"], "hq.sync: manifest must be a valid list."
-        )
+        self.assertEqual(result["error"]["message"], "hq.sync: manifest must be a valid list.")
         # Nor anywhere else: the agent's transcript keeps whatever it is told.
         self.assertNotIn("hunter2", json.dumps(result, default=repr))
 
@@ -306,9 +299,7 @@ class ServiceTests(TestCase):
 
         async def call():
             tool = mcp._tool_manager.get_tool("list_resource")
-            return await tool.run(
-                {"name": "projects", "filters": {"limti": "hunter2-not-for-logs"}}
-            )
+            return await tool.run({"name": "projects", "filters": {"limti": "hunter2-not-for-logs"}})
 
         with self.assertRaises(ToolError) as refused:
             async_to_sync(call)()
@@ -328,14 +319,10 @@ class ServiceTests(TestCase):
             Capability.MANAGE_INFRASTRUCTURE,
             provider,
         )
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
             listed = services.list_connections()
 
-        self.assertNotIn(
-            "example.infrastructure", [group["name"] for group in listed["groups"]]
-        )
+        self.assertNotIn("example.infrastructure", [group["name"] for group in listed["groups"]])
         provider.assert_not_called()
 
 
@@ -432,9 +419,7 @@ class MCPBoundaryTests(TestCase):
         self.assertEqual(body["error"], "not_found")
 
     def test_does_not_trust_spoofed_forwarded_address(self):
-        status, _ = self._request(
-            client="192.0.2.10", forwarded_for="100.64.0.10"
-        )
+        status, _ = self._request(client="192.0.2.10", forwarded_for="100.64.0.10")
 
         self.assertEqual(status, 404)
 
@@ -510,9 +495,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
         app, seen = self._capturing_app()
 
-        status, _ = self._request(
-            token=self.A_JWT, verifier=self._verifier_returning(agent), app=app
-        )
+        status, _ = self._request(token=self.A_JWT, verifier=self._verifier_returning(agent), app=app)
 
         self.assertEqual(status, 204)
         self.assertEqual(seen["principal"].actor, "example-agent")
@@ -529,9 +512,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
         app, seen = self._capturing_app()
 
-        self._request(
-            token=self.A_JWT, verifier=self._verifier_returning(agent), app=app
-        )
+        self._request(token=self.A_JWT, verifier=self._verifier_returning(agent), app=app)
 
         self.assertFalse(is_interactive(seen["principal"]))
 
@@ -540,9 +521,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         agent = Principal("example-agent", "mcp", granted)
         app, seen = self._capturing_app()
 
-        self._request(
-            token=self.A_JWT, verifier=self._verifier_returning(agent), app=app
-        )
+        self._request(token=self.A_JWT, verifier=self._verifier_returning(agent), app=app)
 
         self.assertEqual(seen["principal"].capabilities, granted)
         self.assertFalse(seen["principal"].permits("delete_projects"))
@@ -586,9 +565,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         from .identity import current_principal
 
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
-        self._request(
-            token=self.A_JWT, verifier=self._verifier_returning(agent)
-        )
+        self._request(token=self.A_JWT, verifier=self._verifier_returning(agent))
 
         from hq.platform.application.security import AuthorizationError
 
@@ -618,9 +595,7 @@ class AgentBrakeTests(MCPBoundaryTests):
             reached.append(True)
             await self._allowed_app(scope, receive, send)
 
-        status, body = self._request(
-            token=self.A_JWT, verifier=self._agent(), gate=self._gate(False), app=app
-        )
+        status, body = self._request(token=self.A_JWT, verifier=self._agent(), gate=self._gate(False), app=app)
 
         self.assertEqual(status, 403)
         self.assertEqual(body["error"], "agents_paused")
@@ -757,9 +732,7 @@ class ObservationTests(MCPBoundaryTests):
         async def paused():
             return False
 
-        status, _ = self._request(
-            token=self.A_JWT, verifier=lambda bearer: agent, gate=paused, observer=observer
-        )
+        status, _ = self._request(token=self.A_JWT, verifier=lambda bearer: agent, gate=paused, observer=observer)
 
         self.assertEqual(status, 403)
         self.assertEqual(seen, ["example-agent"])
@@ -861,16 +834,16 @@ class ResourceContractTests(SimpleTestCase):
                 "/resources/example.notes/{identifier}/": {
                     "parameters": [{"$ref": "#/components/parameters/Identifier"}],
                     "get": {
-                        "x-hq-resource": "example.notes", "description": "Synthetic notes.",
+                        "x-hq-resource": "example.notes",
+                        "description": "Synthetic notes.",
                         "x-hq-identifier": "slug",
                     },
                 },
-                "/resources/example.events/": {
-                    "get": {"x-hq-resource": "example.events", "description": "Events."}
-                },
+                "/resources/example.events/": {"get": {"x-hq-resource": "example.events", "description": "Events."}},
                 "/resources/example.single/{identifier}/": {
                     "get": {
-                        "x-hq-resource": "example.single", "description": "Single record.",
+                        "x-hq-resource": "example.single",
+                        "description": "Single record.",
                         "parameters": [{"name": "identifier", "in": "path"}],
                         "x-hq-identifier": "id",
                     }
@@ -882,7 +855,9 @@ class ResourceContractTests(SimpleTestCase):
     def test_an_injected_document_owns_the_catalog(self):
         from .contract import catalogue, resource_contract
 
-        with mock.patch("hq.platform.application.resources.resource_registry", side_effect=AssertionError("registry walk")):
+        with mock.patch(
+            "hq.platform.application.resources.resource_registry", side_effect=AssertionError("registry walk")
+        ):
             contract = resource_contract(self._document())
         self.assertEqual([r.name for r in contract.listable], ["example.events", "example.notes"])
         self.assertEqual([r.name for r in contract.addressable], ["example.notes", "example.single"])

@@ -29,7 +29,10 @@ class ReportsPageTests(TestCase):
 
     def test_categories_are_named_as_the_forms_name_them(self):
         Expense.objects.create(
-            date="2030-01-02", vendor="Example Host", item="Hosting", total_cost=Decimal("12.00"),
+            date="2030-01-02",
+            vendor="Example Host",
+            item="Hosting",
+            total_cost=Decimal("12.00"),
             category="content_production",
         )
         Asset.objects.create(item_name="Example Switch", slug="example-switch", category="networking")

@@ -52,9 +52,7 @@ class DemoModeMiddleware:
 
     def __call__(self, request):
         showing = bool(
-            getattr(request, "user", None)
-            and request.user.is_authenticated
-            and request.session.get(DEMO_SESSION_KEY)
+            getattr(request, "user", None) and request.user.is_authenticated and request.session.get(DEMO_SESSION_KEY)
         )
         request.showing_demo = showing
         with demo_scope(showing):
@@ -110,8 +108,7 @@ class RequestContextMiddleware:
             # available to anything that manages to run in the page.
             response.setdefault(
                 "Permissions-Policy",
-                "geolocation=(), microphone=(), camera=(), usb=(), payment=(), "
-                "interest-cohort=()",
+                "geolocation=(), microphone=(), camera=(), usb=(), payment=(), interest-cohort=()",
             )
             # Nothing here is meant to be read by another origin. Django's
             # default opener policy already isolates the browsing context;

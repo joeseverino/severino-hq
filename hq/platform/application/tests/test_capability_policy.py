@@ -56,9 +56,15 @@ class DefaultTests(PolicyTestCase):
         from hq.domains.docs_index.models import DocumentationRecord
 
         DocumentationRecord.objects.create(doc_id="example-kept", title="Kept", obsidian_path="Kept.md")
-        syncer = agent(capabilities=frozenset({
-            Capability.READ, Capability.SYNC_DOCUMENTATION, Capability.PRUNE_DOCUMENTATION,
-        }))
+        syncer = agent(
+            capabilities=frozenset(
+                {
+                    Capability.READ,
+                    Capability.SYNC_DOCUMENTATION,
+                    Capability.PRUNE_DOCUMENTATION,
+                }
+            )
+        )
 
         pruning = execute_capability(
             "documentation.sync",
@@ -82,9 +88,7 @@ class DestructiveDefaultTests(PolicyTestCase):
     """For an agent, anything destructive waits for a person unless a rule says otherwise."""
 
     def delete(self, principal, slug):
-        return execute_capability(
-            "project.delete", {"confirm": slug}, principal=principal, target=slug
-        )
+        return execute_capability("project.delete", {"confirm": slug}, principal=principal, target=slug)
 
     def test_an_agents_delete_waits_and_happens_only_once_approved(self):
         project = Project.objects.create(name="Kept")
@@ -177,9 +181,7 @@ class SurfaceRuleTests(PolicyTestCase):
     def test_a_held_change_to_a_record_goes_stale_if_the_record_moves(self):
         project = Project.objects.create(name="Original")
         self.rule(Scope.SURFACE, "mcp", "project.update", Rule.APPROVE)
-        held = execute_capability(
-            "project.update", {"name": "Renamed"}, principal=agent(), target=project.slug
-        )
+        held = execute_capability("project.update", {"name": "Renamed"}, principal=agent(), target=project.slug)
         Project.objects.filter(pk=project.pk).update(description="changed underneath")
 
         with self.assertRaisesMessage(Exception, "This changed after the agent asked"):
@@ -216,18 +218,14 @@ class SurfaceRuleTests(PolicyTestCase):
             ManagedResource.objects.get(key=POLICY_KEY).spec["document"],
             policy_document("group:elsewhere"),
         )
-        decision = decide(
-            spec("infrastructure.resource.update"), agent(), update_payload("x"), POLICY_KEY
-        )
+        decision = decide(spec("infrastructure.resource.update"), agent(), update_payload("x"), POLICY_KEY)
         self.assertTrue(decision.overrides_a_hold)
         self.assertEqual(decision.source, "mcp policy")
 
     def test_a_surface_rule_binds_only_its_surface(self):
         self.rule(Scope.SURFACE, "mcp", "project.create", Rule.DENY)
 
-        result = execute_capability(
-            "project.create", {"name": "Over the API"}, principal=agent(interface="api")
-        )
+        result = execute_capability("project.create", {"name": "Over the API"}, principal=agent(interface="api"))
 
         self.assertTrue(result["ok"])
 
@@ -255,9 +253,7 @@ class OutOfScopeTests(PolicyTestCase):
     def test_the_operator_is_never_held_or_refused_by_policy(self):
         self.rule(Scope.SURFACE, "mcp", "project.create", Rule.DENY)
 
-        self.assertEqual(
-            decide(spec("project.create"), self.operator, {}, None).rule, Rule.ALLOW
-        )
+        self.assertEqual(decide(spec("project.create"), self.operator, {}, None).rule, Rule.ALLOW)
 
     def test_the_cli_keeps_todays_behaviour(self):
         self.rule(Scope.SURFACE, "mcp", "project.create", Rule.DENY)
@@ -282,14 +278,11 @@ class SettingTests(PolicyTestCase):
         self.set(rule=None)
 
         messages = list(
-            AuditLog.objects.filter(object_type="Capability policy")
-            .order_by("id")
-            .values_list("message", flat=True)
+            AuditLog.objects.filter(object_type="Capability policy").order_by("id").values_list("message", flat=True)
         )
         self.assertEqual(
             messages,
-            ["mcp · project.delete: Default → Ask me first",
-             "mcp · project.delete: Ask me first → Default"],
+            ["mcp · project.delete: Default → Ask me first", "mcp · project.delete: Ask me first → Default"],
         )
         self.assertFalse(CapabilityRule.objects.exists())
 
@@ -323,9 +316,7 @@ class PageTests(PolicyTestCase):
     def setUp(self):
         super().setUp()
         self.client.force_login(self.user)
-        AgentIdentity.objects.create(
-            client_id="example-agent", interfaces=["mcp"], granted=["read", "write_projects"]
-        )
+        AgentIdentity.objects.create(client_id="example-agent", interfaces=["mcp"], granted=["read", "write_projects"])
 
     def page(self):
         # Every action: the page opens on the rules that differ, and here none do.
@@ -334,8 +325,15 @@ class PageTests(PolicyTestCase):
     def test_it_shows_both_surfaces_and_every_agent_seen(self):
         page = self.page()
 
-        for text in ("All MCP agents", "All API clients", "example-agent", "permissions from Pocket ID",
-                     "Projects", "0 rules changed from the default", "Agents are allowed"):
+        for text in (
+            "All MCP agents",
+            "All API clients",
+            "example-agent",
+            "permissions from Pocket ID",
+            "Projects",
+            "0 rules changed from the default",
+            "Agents are allowed",
+        ):
             self.assertContains(page, text)
         # Nothing waits, so nothing says how many wait.
         self.assertNotContains(page, "waiting for your approval")
@@ -393,9 +391,13 @@ class PageTests(PolicyTestCase):
 
         self.assertIn("Create project", actions)
         self.assertIn("Delete project", actions)
-        self.assertEqual([row.effect for row in projects.rows], sorted(
-            (row.effect for row in projects.rows), key=["read", "remote_write", "destructive", "infrastructure_change"].index
-        ))
+        self.assertEqual(
+            [row.effect for row in projects.rows],
+            sorted(
+                (row.effect for row in projects.rows),
+                key=["read", "remote_write", "destructive", "infrastructure_change"].index,
+            ),
+        )
 
     def test_no_two_groups_share_a_name(self):
         _, groups = matrix()
@@ -425,7 +427,6 @@ class PageTests(PolicyTestCase):
     def test_only_acronyms_are_capitalised(self):
         self.assertEqual(human_label("example.pace.set"), "Example Pace Set")
         self.assertEqual(human_label("tls.certificate"), "TLS Certificate")
-
 
     def test_the_matrix_costs_the_same_however_many_capabilities_and_agents(self):
         AgentIdentity.objects.create(client_id="second-agent", granted=["read"])
@@ -469,12 +470,14 @@ class CommandTitleTests(TestCase):
         from ..security import Capability, Principal
 
         ability = ConnectionAbility(
-            "example.remove", "Remove", "Removes one.", "destructive",
-            grant="coarse", capability="contact.submission.delete",
+            "example.remove",
+            "Remove",
+            "Removes one.",
+            "destructive",
+            grant="coarse",
+            capability="contact.submission.delete",
         )
-        operator = Principal(
-            "operator", "web", frozenset({Capability.READ, Capability.MANAGE_CONTACTS})
-        )
+        operator = Principal("operator", "web", frozenset({Capability.READ, Capability.MANAGE_CONTACTS}))
 
         state = _ability_state(
             ability,

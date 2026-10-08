@@ -13,9 +13,7 @@ class StaticLiveNeedsDebugTests(SimpleTestCase):
 
     def test_static_live_with_debug_or_off_passes(self):
         for live, debug in ((True, True), (False, False), (False, True)):
-            with self.subTest(live=live, debug=debug), override_settings(
-                STATIC_LIVE=live, DEBUG=debug
-            ):
+            with self.subTest(live=live, debug=debug), override_settings(STATIC_LIVE=live, DEBUG=debug):
                 self.assertEqual(checks.static_live_needs_debug(), [])
 
 

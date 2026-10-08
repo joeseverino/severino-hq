@@ -50,9 +50,7 @@ def search(q: str, limit: int) -> list[dict]:
     wanted = q.strip().casefold()
     if not wanted:
         return []
-    return [row for row in _rows() if wanted in str(row.get("name", "")).casefold()][
-        :limit
-    ]
+    return [row for row in _rows() if wanted in str(row.get("name", "")).casefold()][:limit]
 
 
 def refresh(*, force: bool = False) -> None:

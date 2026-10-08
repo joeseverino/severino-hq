@@ -189,14 +189,10 @@ class ControllerCapabilityRegistry(ProviderModel):
     capabilities: dict[str, ControllerProviderCapability]
 
 
-def applies(
-    *, automatic: bool = False, verification: ControllerVerification | None = None
-) -> ControllerActionPolicy:
+def applies(*, automatic: bool = False, verification: ControllerVerification | None = None) -> ControllerActionPolicy:
     """The controller may run this action."""
 
-    return ControllerActionPolicy(
-        mode="apply", automatic=automatic, verification=verification
-    )
+    return ControllerActionPolicy(mode="apply", automatic=automatic, verification=verification)
 
 
 def locked(reason: str) -> ControllerActionPolicy:
@@ -207,6 +203,7 @@ def locked(reason: str) -> ControllerActionPolicy:
     """
 
     return ControllerActionPolicy(mode="locked", reason=reason)
+
 
 def origin_is_authoritative(provider: ProviderSpec) -> bool:
     """Whether this provider's origin says where a request is *finally* served.
@@ -243,6 +240,7 @@ SERVICE_FACETS: tuple[tuple[str, str], ...] = (
     ("certificate", "Certificate"),
 )
 SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
+
 
 @dataclass(frozen=True, slots=True)
 class NameContext:
@@ -297,9 +295,7 @@ class ProviderSpec:
     summary: str
     spec_type: type
     resolved_type: type | None = None
-    resolver: (
-        Callable[[dict[str, Any], ProviderResolutionContext], dict[str, Any]] | None
-    ) = None
+    resolver: Callable[[dict[str, Any], ProviderResolutionContext], dict[str, Any]] | None = None
     destructive: bool = False
     public_effect: bool = False
     # Declared after the positional fields, and always passed by keyword: the
@@ -463,10 +459,7 @@ class ProviderSpec:
     # What this resource actually does, as (label, desired, observed) rows.
     # Desired and observed sit side by side because the interesting case is when they differ, and either
     # may be blank: a certificate has no authored expiry, only a found one.
-    readout: (
-        Callable[[dict[str, Any], dict[str, Any]], tuple[tuple[str, str, str], ...]]
-        | None
-    ) = None
+    readout: Callable[[dict[str, Any], dict[str, Any]], tuple[tuple[str, str, str], ...]] | None = None
     # ----- Identity ----------------------------------------------------------
     #
     # How to tell that a live record and a declaration are the same thing.
@@ -591,9 +584,7 @@ class ProviderResolutionContext:
     # ``(key, kinds) -> status``. Kinds rather than one kind because a proxy
     # host can be bound to a certificate HQ issued or one it was given, and it
     # names the resource without saying which it is.
-    resource_status: Callable[[str, tuple[str, ...]], dict[str, Any] | None] | None = (
-        None
-    )
+    resource_status: Callable[[str, tuple[str, ...]], dict[str, Any] | None] | None = None
     # The key of the resource being resolved, where resolution depends on which
     # resource is asking: a target's name belongs to one certificate, and the
     # rest are named after themselves.

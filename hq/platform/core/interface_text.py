@@ -37,12 +37,8 @@ from django.apps import apps
 from django.conf import settings
 
 EM_DASH = chr(0x2014)  # built, so this file holds no literal one
-TEMPLATE_COMMENT = re.compile(
-    r"\{#.*?#\}|\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}", re.DOTALL
-)
-_SKIPPED = frozenset(
-    {"tests", "migrations", "staticfiles", "node_modules", "var", "data", "docs", "deploy"}
-)
+TEMPLATE_COMMENT = re.compile(r"\{#.*?#\}|\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}", re.DOTALL)
+_SKIPPED = frozenset({"tests", "migrations", "staticfiles", "node_modules", "var", "data", "docs", "deploy"})
 _PLURALIZE = re.compile(r"\|\s*pluralize\b")
 # "account(s)": a plural hedged in brackets. Only flagged where a value is
 # interpolated (an f-string, a template), since a plain string such as a CSV
@@ -101,9 +97,7 @@ def _outermost(roots: list[Path]) -> list[Path]:
 def _files(root: Path) -> Iterator[Path]:
     """The templates and Python a root shows people, skipped trees never entered."""
     for directory, names, files in os.walk(root):
-        names[:] = sorted(
-            name for name in names if name not in _SKIPPED and not name.startswith(".")
-        )
+        names[:] = sorted(name for name in names if name not in _SKIPPED and not name.startswith("."))
         for name in sorted(files):
             if name.endswith((".html", ".py")) and not name.startswith(("test", ".")):
                 yield Path(directory, name)
@@ -175,9 +169,7 @@ def unclosed_template_comments(template_root: str | Path) -> list[str]:
         if source is None:
             found.append(f"{path.relative_to(root)}: unreadable")
             continue
-        found.extend(
-            f"{path.relative_to(root)}:{number}" for number in open_comment_lines(source)
-        )
+        found.extend(f"{path.relative_to(root)}:{number}" for number in open_comment_lines(source))
     return found
 
 
@@ -219,8 +211,7 @@ def _is_suffix_guess(node: ast.AST) -> bool:
 
 def _is_bracketed_plural(node: ast.AST) -> bool:
     return isinstance(node, ast.JoinedStr) and any(
-        isinstance(part, ast.Constant) and _BRACKETED.search(str(part.value))
-        for part in node.values
+        isinstance(part, ast.Constant) and _BRACKETED.search(str(part.value)) for part in node.values
     )
 
 
@@ -254,7 +245,7 @@ def _has_em_dash(node: ast.AST) -> bool:
 def _read_python(path: Path, source: str, worded: bool, reading: Reading) -> None:
     try:
         tree = ast.parse(source)
-    except (SyntaxError, ValueError):
+    except SyntaxError, ValueError:
         return
     documented = docstrings(tree) if worded else set()
     for node in ast.walk(tree):

@@ -101,8 +101,13 @@ class PluginContractTests(TestCase):
         """An extension's admission checks this repository out as ``host``."""
 
         root = Path(__file__).resolve().parents[4]
-        sources = (root / ".github" / "actions" / "admit-plugin" / "action.yml", *(root / ".github" / "workflows").glob("*.yml"))
-        named = {path for source in sources for path in re.findall(r"\bhost/([A-Za-z0-9_./-]+\.[a-z]+)", source.read_text())}
+        sources = (
+            root / ".github" / "actions" / "admit-plugin" / "action.yml",
+            *(root / ".github" / "workflows").glob("*.yml"),
+        )
+        named = {
+            path for source in sources for path in re.findall(r"\bhost/([A-Za-z0-9_./-]+\.[a-z]+)", source.read_text())
+        }
         self.assertIn("hq/platform/application/plugins.py", named)
         for path in sorted(named):
             with self.subTest(path=path):
@@ -125,11 +130,7 @@ class PluginContractTests(TestCase):
         )
         importer = mock.patch(
             "hq.platform.application.plugins._import",
-            side_effect=lambda reference: (
-                PluginIntegration
-                if reference == manifest.integration_provider
-                else manifest
-            ),
+            side_effect=lambda reference: PluginIntegration if reference == manifest.integration_provider else manifest,
         )
         return env, importer
 
@@ -149,14 +150,11 @@ class PluginContractTests(TestCase):
         """
 
         root = Path(__file__).resolve().parents[4]
-        document = json.loads(
-            (root / "composition" / "extensions.json").read_text(encoding="utf-8")
-        )
+        document = json.loads((root / "composition" / "extensions.json").read_text(encoding="utf-8"))
         self.assertEqual(
             document["extensions"],
             [],
-            "the installed set belongs in COMPOSITION_EXTENSIONS at composition "
-            "time, not in the host source",
+            "the installed set belongs in COMPOSITION_EXTENSIONS at composition time, not in the host source",
         )
 
     def test_the_host_source_never_names_an_installed_extension(self):
@@ -197,17 +195,13 @@ class PluginContractTests(TestCase):
 
         # One alternation over each file rather than one pass per word: the
         # cost is the tree, not the tree times the extension count.
-        needle = re.compile(
-            "|".join(re.escape(word) for word in sorted(forbidden)), re.IGNORECASE
-        )
+        needle = re.compile("|".join(re.escape(word) for word in sorted(forbidden)), re.IGNORECASE)
         kind_of = {word.lower(): kind for word, kind in forbidden.items()}
 
         root = Path(__file__).resolve().parents[4]
         offences: list[str] = []
         for directory, subdirectories, filenames in os.walk(root):
-            subdirectories[:] = [
-                name for name in subdirectories if name not in SKIP_DIRECTORIES
-            ]
+            subdirectories[:] = [name for name in subdirectories if name not in SKIP_DIRECTORIES]
             for filename in filenames:
                 path = Path(directory) / filename
                 if path.suffix.lower() in SKIP_SUFFIXES:
@@ -216,7 +210,7 @@ class PluginContractTests(TestCase):
                     continue
                 try:
                     body = path.read_text(encoding="utf-8")
-                except (OSError, UnicodeDecodeError):
+                except OSError, UnicodeDecodeError:
                     continue  # binary or unreadable: it is not carrying prose
                 found = needle.search(body)
                 if found:
@@ -260,18 +254,12 @@ class PluginContractTests(TestCase):
                 mcp_read_capabilities=("notes.export",),
             )
         )
-        with env, importer, self.assertRaisesRegex(
-            ImproperlyConfigured, "operator does not hold"
-        ):
+        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "operator does not hold"):
             installed_plugins()
 
     def test_malformed_plugin_capability_names_fail_closed(self):
-        env, importer = self.load(
-            replace(VALID, operator_capabilities=("Notes Write",))
-        )
-        with env, importer, self.assertRaisesRegex(
-            ImproperlyConfigured, "invalid capability"
-        ):
+        env, importer = self.load(replace(VALID, operator_capabilities=("Notes Write",)))
+        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "invalid capability"):
             installed_plugins()
 
     def test_a_plugin_cannot_declare_a_host_capability(self):
@@ -284,9 +272,7 @@ class PluginContractTests(TestCase):
                 mcp_read_capabilities=("manage_infrastructure",),
             )
         )
-        with env, importer, self.assertRaisesRegex(
-            ImproperlyConfigured, "host capability"
-        ):
+        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "host capability"):
             installed_plugins()
 
     def test_duplicate_ids_fail_closed(self):
@@ -361,33 +347,21 @@ class PluginContractTests(TestCase):
 
     def test_every_plugin_must_declare_its_integration(self):
         env, importer = self.load(replace(VALID, integration_provider=""))
-        with env, importer, self.assertRaisesRegex(
-            ImproperlyConfigured, "invalid integration_provider"
-        ):
+        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "invalid integration_provider"):
             installed_plugins()
 
     def test_invalid_integration_provider_reference_fails_at_startup(self):
-        env, importer = self.load(
-            replace(VALID, integration_provider="not a module reference")
-        )
-        with env, importer, self.assertRaisesRegex(
-            ImproperlyConfigured, "invalid integration_provider"
-        ):
+        env, importer = self.load(replace(VALID, integration_provider="not a module reference"))
+        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "invalid integration_provider"):
             installed_plugins()
 
     def test_the_manifest_has_one_executable_integration_provider(self):
-        provider_fields = [
-            field.name
-            for field in fields(PluginManifest)
-            if field.name.endswith("provider")
-        ]
+        provider_fields = [field.name for field in fields(PluginManifest) if field.name.endswith("provider")]
 
         self.assertEqual(provider_fields, ["integration_provider"])
 
     def test_plugin_api_version_is_authored_not_inherited_from_the_host(self):
-        api_version = next(
-            field for field in fields(PluginManifest) if field.name == "api_version"
-        )
+        api_version = next(field for field in fields(PluginManifest) if field.name == "api_version")
 
         self.assertIs(api_version.default, MISSING)
 
@@ -402,8 +376,7 @@ class PluginContractTests(TestCase):
                 plugins,
                 "import_module",
                 side_effect=TypeError(
-                    "PluginManifest.__init__() got an unexpected keyword "
-                    "argument 'capability_provider'"
+                    "PluginManifest.__init__() got an unexpected keyword argument 'capability_provider'"
                 ),
             ),
             self.assertRaisesRegex(
@@ -430,9 +403,8 @@ class PluginContractTests(TestCase):
                 raise AssertionError(f"the manifest accepted {field}")
 
             with (
-                self.subTest(field=field), mock.patch.object(
-                    plugins, "import_module", side_effect=import_legacy_module
-                ),
+                self.subTest(field=field),
+                mock.patch.object(plugins, "import_module", side_effect=import_legacy_module),
                 self.assertRaisesRegex(
                     ImproperlyConfigured,
                     f"plugin API 1 provider fields.*{field}.*supports {PLUGIN_API_VERSION}",
@@ -443,21 +415,27 @@ class PluginContractTests(TestCase):
     def test_a_provider_type_error_is_not_misattributed_to_the_plugin_api(self):
         from hq.platform.application import plugins
 
-        with mock.patch.object(
-            plugins,
-            "import_module",
-            side_effect=TypeError("extension initialization bug"),
-        ), self.assertRaisesRegex(TypeError, "extension initialization bug"):
+        with (
+            mock.patch.object(
+                plugins,
+                "import_module",
+                side_effect=TypeError("extension initialization bug"),
+            ),
+            self.assertRaisesRegex(TypeError, "extension initialization bug"),
+        ):
             plugins._import("example.provider:integration")
 
     def test_an_unrelated_manifest_import_type_error_keeps_its_real_cause(self):
         from hq.platform.application import plugins
 
-        with mock.patch.object(
-            plugins,
-            "import_module",
-            side_effect=TypeError("extension initialization bug"),
-        ), self.assertRaisesRegex(TypeError, "extension initialization bug"):
+        with (
+            mock.patch.object(
+                plugins,
+                "import_module",
+                side_effect=TypeError("extension initialization bug"),
+            ),
+            self.assertRaisesRegex(TypeError, "extension initialization bug"),
+        ):
             plugins._load_manifest("example.plugin:manifest")
 
     def test_integration_surfaces_stay_lazy_and_independent(self):
@@ -478,9 +456,7 @@ class PluginContractTests(TestCase):
             env,
             mock.patch(
                 "hq.platform.application.plugins._import",
-                side_effect=lambda reference: (
-                    factory if reference == VALID.integration_provider else VALID
-                ),
+                side_effect=lambda reference: factory if reference == VALID.integration_provider else VALID,
             ),
         ):
             ((manifest, composed),) = installed_integrations()
@@ -510,9 +486,7 @@ class PluginContractTests(TestCase):
             mock.patch(
                 "hq.platform.application.plugins._import",
                 side_effect=lambda reference: (
-                    (lambda: contribution)
-                    if reference == VALID.integration_provider
-                    else VALID
+                    (lambda: contribution) if reference == VALID.integration_provider else VALID
                 ),
             ),
             self.assertRaisesRegex(ImproperlyConfigured, "must be callable: health"),
@@ -520,12 +494,8 @@ class PluginContractTests(TestCase):
             installed_integrations()
 
     def test_malformed_url_prefix_fails_at_startup(self):
-        env, importer = self.load(
-            replace(VALID, url_prefix="/notes", urlconf="example.urls")
-        )
-        with env, importer, self.assertRaisesRegex(
-            ImproperlyConfigured, "invalid url_prefix"
-        ):
+        env, importer = self.load(replace(VALID, url_prefix="/notes", urlconf="example.urls"))
+        with env, importer, self.assertRaisesRegex(ImproperlyConfigured, "invalid url_prefix"):
             installed_plugins()
 
     def test_route_configuration_is_atomic(self):
@@ -543,9 +513,7 @@ class PluginContractTests(TestCase):
             )
         )
         with env, importer:
-            self.assertEqual(
-                plugin_token_authenticated_prefixes(), ("/mobile/webhook/",)
-            )
+            self.assertEqual(plugin_token_authenticated_prefixes(), ("/mobile/webhook/",))
 
     def test_a_token_route_cannot_escape_its_own_mount(self):
         for route in ("/admin/", "../admin/", ""):
@@ -562,9 +530,7 @@ class PluginContractTests(TestCase):
                     installed_plugins()
 
     def test_a_token_route_without_a_mount_fails_closed(self):
-        env, importer = self.load(
-            replace(VALID, token_authenticated_routes=("webhook/",))
-        )
+        env, importer = self.load(replace(VALID, token_authenticated_routes=("webhook/",)))
         with env, importer, self.assertRaises(ImproperlyConfigured):
             installed_plugins()
 
@@ -580,9 +546,7 @@ class PluginContractTests(TestCase):
                 "items": (Kpi("Notes", 0, "No records yet", is_zero=True),),
             },
         )
-        empty = render_to_string(
-            "partials/_empty_state.html", {"message": "No notes have been created."}
-        )
+        empty = render_to_string("partials/_empty_state.html", {"message": "No notes have been created."})
         page_navigation = render_to_string(
             "partials/_page_navigation.html",
             {"navigation": PageNavigation((PageSection("notes", "Notes"),))},
@@ -739,9 +703,7 @@ class AttentionContractTests(TestCase):
             )
             for manifest in manifests
         )
-        with mock.patch.object(
-            plugins, "installed_integrations", return_value=integrations
-        ):
+        with mock.patch.object(plugins, "installed_integrations", return_value=integrations):
             return plugins.plugin_attention_items()
 
     def test_serious_items_sort_ahead_of_attention_across_extensions(self):

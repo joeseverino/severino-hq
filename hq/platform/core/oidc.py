@@ -164,13 +164,9 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             # An unverified address is a claim the person made about
             # themselves, not one the provider stands behind.
             verified_email = email if claims.get("email_verified") is True else ""
-            return bool(groups & allowed_groups) or (
-                bool(verified_email) and verified_email in allowed_emails
-            )
+            return bool(groups & allowed_groups) or (bool(verified_email) and verified_email in allowed_emails)
 
-        raise PermissionDenied(
-            "SEVERINO_OIDC_ALLOWED_EMAILS or SEVERINO_OIDC_ALLOWED_GROUPS must be set."
-        )
+        raise PermissionDenied("SEVERINO_OIDC_ALLOWED_EMAILS or SEVERINO_OIDC_ALLOWED_GROUPS must be set.")
 
     @staticmethod
     def _subject_key(claims) -> str:
@@ -197,9 +193,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         key = self._subject_key(claims)
         if not key:
             return self.UserModel.objects.none()
-        bound = self.UserModel.objects.filter(
-            linked_accounts__provider=SIGN_IN, linked_accounts__login=key
-        )
+        bound = self.UserModel.objects.filter(linked_accounts__provider=SIGN_IN, linked_accounts__login=key)
         if bound.exists():
             return bound
         unbound = self.UserModel.objects.exclude(linked_accounts__provider=SIGN_IN)
@@ -221,11 +215,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     @override
     def create_user(self, claims):
         email = claims.get("email", "").strip().lower()
-        username = (
-            claims.get("preferred_username", "").strip()
-            or email.split("@", 1)[0]
-            or claims.get("sub", "")
-        )
+        username = claims.get("preferred_username", "").strip() or email.split("@", 1)[0] or claims.get("sub", "")
         username = self._unique_username(username)
 
         user = self.UserModel.objects.create_user(
@@ -302,9 +292,7 @@ def _page_behind(request) -> str:
     from django.utils.http import url_has_allowed_host_and_scheme
 
     referer = request.headers.get("referer", "")
-    if url_has_allowed_host_and_scheme(
-        referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()
-    ):
+    if url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
         parts = urlsplit(referer)
         return parts.path + (f"?{parts.query}" if parts.query else "")
     return "/"

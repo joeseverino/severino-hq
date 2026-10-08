@@ -43,9 +43,7 @@ def login(client):
 
 class PublicEndpointTests(TestCase):
     def test_ipv6_privacy_addresses_fold_into_one_prefix(self):
-        found = public_endpoints(
-            ("203.0.113.7", "2001:db8:0:1::a1", "2001:db8:0:1::b2", "2001:db8:0:2::1")
-        )
+        found = public_endpoints(("203.0.113.7", "2001:db8:0:1::a1", "2001:db8:0:1::b2", "2001:db8:0:2::1"))
 
         self.assertEqual(
             [address for address, _holder in found],
@@ -62,11 +60,15 @@ class PublicEndpointTests(TestCase):
         self.assertEqual(found, (("2001:db8:0:1::/64", "Example ISP"),))
 
     def test_the_machine_page_shows_the_prefix_once(self):
-        store("tailscale.device", {
-            "name": "example-laptop", "online": True, "addresses": ["100.64.0.7"],
-            "endpoints": ["203.0.113.7:41641", "[2001:db8:0:1::a1]:41641",
-                          "[2001:db8:0:1::b2]:41641"],
-        })
+        store(
+            "tailscale.device",
+            {
+                "name": "example-laptop",
+                "online": True,
+                "addresses": ["100.64.0.7"],
+                "endpoints": ["203.0.113.7:41641", "[2001:db8:0:1::a1]:41641", "[2001:db8:0:1::b2]:41641"],
+            },
+        )
         login(self.client)
 
         with mock.patch("hq.platform.application.reach.DOCUMENTATION", (ip_network("192.0.2.0/24"),)):
@@ -97,9 +99,7 @@ class AgoFilterTests(TestCase):
 class SelfLinkTests(TestCase):
     def render(self, path, link):
         request = RequestFactory().get(path)
-        return Template("{% load value_tags %}{% entity link %}").render(
-            Context({"request": request, "link": link})
-        )
+        return Template("{% load value_tags %}{% entity link %}").render(Context({"request": request, "link": link}))
 
     def test_a_link_to_the_page_it_is_on_renders_plain(self):
         link = entity_link("machine", "example-host")
@@ -116,8 +116,7 @@ class SelfLinkTests(TestCase):
         self.assertIn("<a ", self.render(reverse("control_plane:connections"), connection))
 
     def test_the_machine_page_does_not_link_to_itself_or_repeat_its_declaration(self):
-        store("tailscale.device", {"name": "example-host", "online": True,
-                                   "addresses": ["100.64.0.5"]})
+        store("tailscale.device", {"name": "example-host", "online": True, "addresses": ["100.64.0.5"]})
         ManagedResource.objects.create(
             key="example-host-device", kind="tailscale.device", spec={"name": "example-host"}
         )
@@ -138,8 +137,13 @@ class FacetVisibilityTests(TestCase):
         ManagedResource.objects.create(
             key="app-record",
             kind="cloudflare.dns_record",
-            spec={"zone": "example.com", "name": "app.example.com", "record_type": "A",
-                  "content": "192.0.2.10", "connection_ref": "example-dns"},
+            spec={
+                "zone": "example.com",
+                "name": "app.example.com",
+                "record_type": "A",
+                "content": "192.0.2.10",
+                "connection_ref": "example-dns",
+            },
         )
         login(self.client)
 
@@ -164,8 +168,11 @@ class FacetVisibilityTests(TestCase):
     def test_a_connection_that_does_not_read_it_is_named(self):
         for ref, provider in (("example-dns", "cloudflare_api"), ("example-npm", "npm")):
             ProviderConnection.objects.create(
-                connection_ref=ref, controller_id="example-controller",
-                provider=provider, reachable=True, probed=True,
+                connection_ref=ref,
+                controller_id="example-controller",
+                provider=provider,
+                reachable=True,
+                probed=True,
                 observed_at=timezone.now(),
             )
 
@@ -177,8 +184,7 @@ class FacetVisibilityTests(TestCase):
         from hq.domains.control_plane.providers import PROVIDERS
 
         kind = next(
-            kind for kind, provider in PROVIDERS.items()
-            if provider.facet == "proxy" and not provider.unobserved_reason
+            kind for kind, provider in PROVIDERS.items() if provider.facet == "proxy" and not provider.unobserved_reason
         )
         store(kind)
 
@@ -194,17 +200,19 @@ class DomainServiceCountTests(TestCase):
             ManagedResource.objects.create(
                 key=f"record-{index}",
                 kind="cloudflare.dns_record",
-                spec={"zone": "example.com", "name": f"app{index}.example.com",
-                      "record_type": "A", "content": "192.0.2.44",
-                      "connection_ref": "example-dns"},
+                spec={
+                    "zone": "example.com",
+                    "name": f"app{index}.example.com",
+                    "record_type": "A",
+                    "content": "192.0.2.44",
+                    "connection_ref": "example-dns",
+                },
             )
 
     def test_the_card_counts_what_the_domain_contains(self):
         with own("192.0.2.44"), projection_scope():
             card = services_card(find_zone("example.com"))
-            contains = relationships_for("zone:example.com", principal=READER).labels(
-                RELATIONS["contains"].phrase
-            )
+            contains = relationships_for("zone:example.com", principal=READER).labels(RELATIONS["contains"].phrase)
 
         self.assertIn("hq.example.com", contains)
         self.assertEqual(card.value, f"{len(contains)} services")

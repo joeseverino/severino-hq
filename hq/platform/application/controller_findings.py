@@ -51,9 +51,7 @@ def _the_others(count: int, noun: str) -> str:
 
 
 def _read_again(label: str = READ_NOW) -> Remedy:
-    return Remedy(
-        capability="infrastructure.controller.refresh", target="", label=label, effect=""
-    )
+    return Remedy(capability="infrastructure.controller.refresh", target="", label=label, effect="")
 
 
 # ``_STALE_AFTER`` is imported rather than restated: the lens that asks "what
@@ -94,11 +92,7 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
         behind = newest - moment
         if behind <= _STALE_AFTER:
             continue
-        siblings = sum(
-            1
-            for other in estate.nodes()
-            if other.kind_key == node.kind_key and other.id in estate.observed
-        )
+        siblings = sum(1 for other in estate.nodes() if other.kind_key == node.kind_key and other.id in estate.observed)
         name = node_name(node)
         others = siblings - 1
         found.append(
@@ -227,9 +221,7 @@ def _controller_sweep_stale(estate: FindingEstate) -> tuple[Finding, ...]:
     trace its impact, and offer the controller's existing safe read actions.
     """
 
-    stale_kinds = {
-        finding.scope for finding in _kind_never_swept(estate) if finding.scope
-    }
+    stale_kinds = {finding.scope for finding in _kind_never_swept(estate) if finding.scope}
     grouped: dict[str, set[str]] = {}
     for kind in stale_kinds:
         for controller in estate.controllers_by_kind.get(kind, frozenset()):
@@ -242,9 +234,7 @@ def _controller_sweep_stale(estate: FindingEstate) -> tuple[Finding, ...]:
     )
 
 
-def _controller_stopped(
-    estate: FindingEstate, machine: str, controller: str, kinds: set[str]
-) -> Finding:
+def _controller_stopped(estate: FindingEstate, machine: str, controller: str, kinds: set[str]) -> Finding:
     """One card for a controller that has stopped reading several types of record."""
 
     last = max((estate.latest_by_kind[kind] for kind in kinds if kind in estate.latest_by_kind), default=None)
@@ -253,8 +243,7 @@ def _controller_stopped(
         subject=controller,
         title=(
             f"The controller on {machine} has not read "
-            f"{counted(len(kinds), 'type of record', 'types of record')}"
-            + (f" since {ago(last)}" if last else "")
+            f"{counted(len(kinds), 'type of record', 'types of record')}" + (f" since {ago(last)}" if last else "")
         ),
         severity="serious",
         explanation="Everything listed is read by the same controller, so check it first.",
@@ -379,8 +368,7 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             title=_fault_title(node, f"{node_name(node)} reports an error"),
             severity="serious" if node.status == "serious" else "attention",
-            explanation=node.detail
-            or "It reports an error, and your last change to it has not been applied.",
+            explanation=node.detail or "It reports an error, and your last change to it has not been applied.",
             evidence=_fault_evidence(node),
             remedies=_fault_remedies(node),
             no_help_reason=_cannot_fix_report(node),
@@ -493,10 +481,7 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="weakly-verified",
             subject=node.id,
-            title=(
-                f"HQ could not confirm {counted(len(node.unconfirmed_fields), 'setting')} "
-                f"of {node_name(node)}"
-            ),
+            title=(f"HQ could not confirm {counted(len(node.unconfirmed_fields), 'setting')} of {node_name(node)}"),
             severity="attention",
             explanation=(
                 f"HQ set these and the last reading did not include them: {_settings(node)}. "
@@ -520,9 +505,7 @@ def _settings(node: TopologyNode) -> str:
     provider = PROVIDERS.get(node.kind_key)
     fields = provider.spec_type.model_fields if provider else {}
     return ", ".join(
-        (fields[name].title or name.replace("_", " ")).lower()
-        if name in fields
-        else name.replace("_", " ")
+        (fields[name].title or name.replace("_", " ")).lower() if name in fields else name.replace("_", " ")
         for name in node.unconfirmed_fields
     )
 
@@ -587,9 +570,7 @@ RULES: tuple[FindingRule, ...] = (
         "A connection works but something through it keeps failing",
         "attention",
         _work_that_keeps_failing,
-        operator_action=(
-            "Read the controller's log for this connection and fix what it names."
-        ),
+        operator_action=("Read the controller's log for this connection and fix what it names."),
         no_help_reason="HQ cannot read the controller's log.",
     ),
     FindingRule(
@@ -597,9 +578,7 @@ RULES: tuple[FindingRule, ...] = (
         "The controller has stopped reading",
         "serious",
         _controller_sweep_stale,
-        operator_action=(
-            "On its machine, check the controller is running, then press Read all now."
-        ),
+        operator_action=("On its machine, check the controller is running, then press Read all now."),
         no_help_reason="HQ cannot start the controller.",
         subsumes=("kind-never-swept",),
     ),
@@ -608,9 +587,7 @@ RULES: tuple[FindingRule, ...] = (
         "Not found the last time HQ looked",
         "serious",
         _skipped_by_a_sweep,
-        operator_action=(
-            "If it is gone, remove it from HQ. If it only runs sometimes, mark it so."
-        ),
+        operator_action=("If it is gone, remove it from HQ. If it only runs sometimes, mark it so."),
         no_help_reason="HQ cannot tell whether it was removed on purpose.",
     ),
     FindingRule(
@@ -637,9 +614,7 @@ RULES: tuple[FindingRule, ...] = (
         "Differs from HQ's settings",
         "serious",
         _reconciled_but_still_wrong,
-        operator_action=(
-            "Change the settings in HQ to something the service accepts, then apply again."
-        ),
+        operator_action=("Change the settings in HQ to something the service accepts, then apply again."),
         no_help_reason="HQ cannot tell which setting was refused.",
     ),
     FindingRule(
@@ -655,9 +630,7 @@ RULES: tuple[FindingRule, ...] = (
         "Added to HQ but never found",
         "attention",
         _never_observed,
-        operator_action=(
-            "Check it exists on the service under this exact name, or remove it from HQ."
-        ),
+        operator_action=("Check it exists on the service under this exact name, or remove it from HQ."),
         no_help_reason="HQ cannot tell whether it exists under another name.",
     ),
 )

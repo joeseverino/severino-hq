@@ -100,9 +100,7 @@ class NamesNoDomainTests(TestCase):
 
         self.assertEqual(finding["subject"], "resource:in-no-domain")
         # The record is called what every page calls it.
-        self.assertEqual(
-            finding["title"], "app.typo.example → 192.0.2.10 is in typo.example, which HQ does not have"
-        )
+        self.assertEqual(finding["title"], "app.typo.example → 192.0.2.10 is in typo.example, which HQ does not have")
         self.assertEqual(
             finding["explanation"],
             "HQ expects no domain called typo.example and no connection reads one, so "

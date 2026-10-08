@@ -16,9 +16,7 @@ from ..tables import TableListMixin
 def _expenses(count: int) -> None:
     for index in range(count):
         project = Project.objects.create(name=f"Example project {index}")
-        Expense.objects.create(
-            date=date(2026, 10, 1), vendor="Example", item=f"Item {index}", related_project=project
-        )
+        Expense.objects.create(date=date(2026, 10, 1), vendor="Example", item=f"Item {index}", related_project=project)
 
 
 class GuardedTests(TestCase):

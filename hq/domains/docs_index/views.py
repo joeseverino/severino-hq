@@ -59,9 +59,7 @@ class DocsListView(PageMixin, TableListMixin, ListView):
             "environment",
             DocumentationRecord.Environment.choices,
         ),
-        TableFilter(
-            "doc_type", "Type", "doc_type", DocumentationRecord.DocType.choices
-        ),
+        TableFilter("doc_type", "Type", "doc_type", DocumentationRecord.DocType.choices),
         TableFilter(
             "sensitivity",
             "Sensitivity",
@@ -240,9 +238,6 @@ class ManifestImportView(View):
         stats = result["stats"]
         messages.success(
             request,
-            (
-                f"Manifest imported: {stats['created']} new, "
-                f"{stats['updated']} changed, {stats['skipped']} unchanged."
-            ),
+            (f"Manifest imported: {stats['created']} new, {stats['updated']} changed, {stats['skipped']} unchanged."),
         )
         return redirect("docs_index:list")

@@ -11,16 +11,12 @@ class Migration(migrations.Migration):
             fields=[
                 (
                     "created_at",
-                    models.DateTimeField(
-                        default=django.utils.timezone.now, editable=False
-                    ),
+                    models.DateTimeField(default=django.utils.timezone.now, editable=False),
                 ),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "id",
-                    models.CharField(
-                        default="topology", max_length=64, primary_key=True, serialize=False
-                    ),
+                    models.CharField(default="topology", max_length=64, primary_key=True, serialize=False),
                 ),
                 ("schema_version", models.PositiveIntegerField()),
                 ("checksum", models.CharField(max_length=64)),

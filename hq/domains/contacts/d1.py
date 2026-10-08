@@ -68,8 +68,7 @@ def connection_specs():
                 status_label="configured",
                 detail="Stores the messages sent through the contact form.",
                 endpoint=(
-                    f"https://api.cloudflare.com/client/v4/accounts/{target.account}"
-                    f"/d1/database/{target.database}"
+                    f"https://api.cloudflare.com/client/v4/accounts/{target.account}/d1/database/{target.database}"
                 ),
                 # An API token is Cloudflare's scoped kind. HQ does not yet
                 # read its permissions, so its abilities report a scoped
@@ -81,9 +80,7 @@ def connection_specs():
                     "cloudflare.d1_submission_review",
                     "cloudflare.d1_submission_delete",
                 ),
-                targets=(
-                    ConnectionLink("Messages", reverse("contacts:list")),
-                ),
+                targets=(ConnectionLink("Messages", reverse("contacts:list")),),
                 facts=(
                     ConnectionFact("Database", target.database),
                     ConnectionFact("Source", target.source),
@@ -186,10 +183,7 @@ def database() -> D1Target:
 
 def _endpoint() -> str:
     target = database()
-    return (
-        f"https://api.cloudflare.com/client/v4/accounts/{target.account}"
-        f"/d1/database/{target.database}/query"
-    )
+    return f"https://api.cloudflare.com/client/v4/accounts/{target.account}/d1/database/{target.database}/query"
 
 
 def query(sql: str, params: list | None = None) -> list[dict]:
@@ -251,10 +245,7 @@ def get_dashboard_state(limit: int = 4) -> tuple[list[dict], int]:
     )
     unread = int(rows[0].get("unread_count", 0)) if rows else 0
     return (
-        [
-            {key: value for key, value in row.items() if key != "unread_count"}
-            for row in rows
-        ],
+        [{key: value for key, value in row.items() if key != "unread_count"} for row in rows],
         unread,
     )
 
@@ -274,10 +265,7 @@ def _changed() -> None:
 
 def list_submissions(status: str = "", q: str = "", limit: int = 500) -> list[dict]:
     """Fetch submissions, optionally filtered by status and/or a search term."""
-    cols = (
-        "id, created_at, name, email, status, country, "
-        "substr(message, 1, 160) AS message_preview"
-    )
+    cols = "id, created_at, name, email, status, country, substr(message, 1, 160) AS message_preview"
     where: list[str] = []
     params: list = []
     if status:
@@ -288,25 +276,21 @@ def list_submissions(status: str = "", q: str = "", limit: int = 500) -> list[di
         params.extend([f"%{q}%"] * 3)
     clause = f"WHERE {' AND '.join(where)} " if where else ""
     return query(
-        f"SELECT {cols} FROM contact_submissions {clause}"
-        f"ORDER BY id DESC LIMIT ?",
+        f"SELECT {cols} FROM contact_submissions {clause}ORDER BY id DESC LIMIT ?",
         [*params, limit],
     )
 
 
 def status_counts() -> dict[str, int]:
     """Return submission counts per status."""
-    rows = query(
-        "SELECT status, COUNT(*) AS n FROM contact_submissions GROUP BY status"
-    )
+    rows = query("SELECT status, COUNT(*) AS n FROM contact_submissions GROUP BY status")
     return {row["status"]: row["n"] for row in rows}
 
 
 def set_status(pk: int, status: str) -> None:
     """Flip a submission's status without touching assignee or notes."""
     query(
-        "UPDATE contact_submissions SET status = ?, "
-        "updated_at = datetime('now') WHERE id = ?",
+        "UPDATE contact_submissions SET status = ?, updated_at = datetime('now') WHERE id = ?",
         [status, pk],
     )
     _changed()

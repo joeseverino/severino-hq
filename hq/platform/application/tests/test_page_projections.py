@@ -64,12 +64,8 @@ POLICY = {
         {"src": ["group:empty"], "dst": ["tag:server"], "ip": ["tcp:443"]},
     ],
     "tests": [{"src": "group:admins", "accept": ["example-host:22"]}],
-    "ssh_rules": [
-        {"src": ["group:admins"], "dst": ["tag:server"], "users": ["root"], "action": "check"}
-    ],
-    "app_connectors": [
-        {"name": "example-connector", "connectors": ["tag:server"], "domains": ["example.org"]}
-    ],
+    "ssh_rules": [{"src": ["group:admins"], "dst": ["tag:server"], "users": ["root"], "action": "check"}],
+    "app_connectors": [{"name": "example-connector", "connectors": ["tag:server"], "domains": ["example.org"]}],
 }
 DEVICE = {
     "name": "example-host",
@@ -102,9 +98,7 @@ def without_request(payload):
 class TailnetProjectionTests(TestCase):
     def setUp(self):
         populate()
-        self.client.force_login(
-            get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        )
+        self.client.force_login(get_user_model().objects.create_user("operator", password="pw", is_staff=True))
 
     def test_the_page_and_the_read_are_one_projection(self):
         response = self.client.get(reverse("control_plane:tailnet"))
@@ -125,9 +119,7 @@ class TailnetProjectionTests(TestCase):
         self.assertEqual(tailnet["counts"], {"grants": 2, "groups": 2, "tags": 1, "tests": 1})
         settings = {item["label"]: item for item in tailnet["settings"]}
         self.assertEqual(settings["New devices"]["value"], "Join without approval")
-        self.assertEqual(
-            settings["Resolves through"]["machines"][0]["link"]["label"], "example-host (100.64.0.5)"
-        )
+        self.assertEqual(settings["Resolves through"]["machines"][0]["link"]["label"], "example-host (100.64.0.5)")
         self.assertEqual(tailnet["grants"][0]["ports"], [{"entry": "tcp:22", "name": "SSH"}])
         self.assertEqual(tailnet["grants"][0]["destinations"][0]["link"]["label"], "example-host")
         self.assertEqual(tailnet["ssh_rules"][0]["action"], "check")
@@ -173,9 +165,7 @@ class TailnetProjectionTests(TestCase):
 class ConnectionProjectionTests(TestCase):
     def setUp(self):
         populate()
-        self.client.force_login(
-            get_user_model().objects.create_user("operator", password="pw", is_staff=True)
-        )
+        self.client.force_login(get_user_model().objects.create_user("operator", password="pw", is_staff=True))
 
     def test_the_page_and_the_read_are_one_projection(self):
         response = self.client.get(reverse("control_plane:connections"))
@@ -201,18 +191,13 @@ class ConnectionProjectionTests(TestCase):
             {control["id"] for control in web["request"]["controls"]},
             {"network", "transport", "proxy"},
         )
-        self.assertFalse(
-            {"network", "transport", "proxy"}
-            & {control["id"] for control in read["posture"]["controls"]}
-        )
+        self.assertFalse({"network", "transport", "proxy"} & {control["id"] for control in read["posture"]["controls"]})
 
     def test_one_connection_reads_as_its_row(self):
         read = list_resource("connection.standing", principal=cli_principal())
         row = get_resource("connection.standing", "example-host", principal=cli_principal())
 
-        self.assertEqual(
-            row, next(item for item in read["items"] if item["connection_ref"] == "example-host")
-        )
+        self.assertEqual(row, next(item for item in read["items"] if item["connection_ref"] == "example-host"))
         with self.assertRaises(ResourceNotFound):
             get_resource("connection.standing", "no-such-connection", principal=cli_principal())
 
@@ -252,14 +237,10 @@ class ConnectionProjectionTests(TestCase):
         self.assertContains(response, "Would also see Tailnet user with users:read")
         self.assertContains(response, "Reached over the internet")
         self.assertContains(response, "Read all now")
-        self.assertContains(
-            response, 'formaction="/infrastructure/connections/read/?connection_ref=example-host"'
-        )
+        self.assertContains(response, 'formaction="/infrastructure/connections/read/?connection_ref=example-host"')
 
     def test_a_read_asked_for_shows_on_its_row(self):
-        self.client.post(
-            reverse("control_plane:read_now"), {"connection_ref": "example-tailnet"}
-        )
+        self.client.post(reverse("control_plane:read_now"), {"connection_ref": "example-tailnet"})
 
         rows = {
             item["connection_ref"]: item

@@ -26,12 +26,8 @@ class DashboardQueueTests(TestCase):
             rule="changed",
             subject="account:one",
             scope="",
-            remedies=(
-                ActionLink("remedy", "Inspect evidence", "read", "/example/evidence/", recommended=True),
-            ),
-            verification=ActionLink(
-                "verify", "Recheck facts", "write", "/dashboard/glance/", method="POST"
-            ),
+            remedies=(ActionLink("remedy", "Inspect evidence", "read", "/example/evidence/", recommended=True),),
+            verification=ActionLink("verify", "Recheck facts", "write", "/dashboard/glance/", method="POST"),
         )
         insights = (
             Insight(
@@ -60,9 +56,7 @@ class DashboardQueueTests(TestCase):
             ),
         )
         entries = gather_attention((("example.utility", "Example", lambda: insights),))
-        self.source = patch(
-            "hq.platform.application.dashboard.domain_attention_items", return_value=entries
-        )
+        self.source = patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries)
         self.source.start()
         self.addCleanup(self.source.stop)
 
@@ -72,9 +66,7 @@ class DashboardQueueTests(TestCase):
         self.assertEqual([item["status"] for item in queue], ["serious", "attention"])
         self.assertIsNone(queue[0]["workflow"])
         self.assertEqual(queue[1]["action"], "Reconcile the bill")
-        self.assertEqual(
-            queue[1]["workflow"]["steps"][-1]["actions"][0]["method"], "POST"
-        )
+        self.assertEqual(queue[1]["workflow"]["steps"][-1]["actions"][0]["method"], "POST")
 
     def test_queue_has_safe_actions_and_dashboard_keeps_domain_overviews_first(self):
         from hq.domains.control_plane.models import DashboardRefreshRequest
@@ -121,8 +113,7 @@ class DashboardQueueTests(TestCase):
         from hq.platform.application.action_items import set_aside
 
         for size in (4, 40):
-            items = [{**work_queue()[0], "key": f"example:{i}", "label": f"Decision {i}"}
-                     for i in range(size)]
+            items = [{**work_queue()[0], "key": f"example:{i}", "label": f"Decision {i}"} for i in range(size)]
             set_aside(self.user, [items[0]["key"]], aside=True, current=items)
             # The queue is replaced, not written: derive with the store bypassed.
             with (
@@ -161,10 +152,13 @@ class DashboardQueueTests(TestCase):
     def test_an_empty_month_takes_no_space(self):
         # Nothing contributes, the calendar's sources included, so the month is
         # empty whatever is installed.
-        with patch(
-            "hq.platform.core.dashboard_views.dashboard_highlights",
-            return_value={"highlights": [], "compact": []},
-        ), patch("hq.platform.application.calendar.calendar_sources", return_value=()):
+        with (
+            patch(
+                "hq.platform.core.dashboard_views.dashboard_highlights",
+                return_value={"highlights": [], "compact": []},
+            ),
+            patch("hq.platform.application.calendar.calendar_sources", return_value=()),
+        ):
             response = self.client.get("/")
         self.assertNotContains(response, 'id="dashboard-calendar"')
         self.assertNotContains(response, 'class="dashboard-patterns"')

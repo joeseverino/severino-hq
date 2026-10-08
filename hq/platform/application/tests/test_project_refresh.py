@@ -81,9 +81,7 @@ class RefreshAsksTheAppTests(TestCase):
         self.assertTrue(result["github_app"]["ok"], result)
         self.assertEqual(result["github_app"]["connection_ref"], REF)
         self.assertIn(REF, result["github_app"]["message"])
-        self.assertEqual(
-            list(ReadRequest.objects.values_list("connection_ref", "kind")), [(REF, "")]
-        )
+        self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [(REF, "")])
         # The App's own read is the source, so the public one is not asked.
         self.assertEqual(fetcher.asked, [])
         self.project.refresh_from_db()
@@ -100,9 +98,7 @@ class RefreshAsksTheAppTests(TestCase):
         self.assertIn("manage_infrastructure", result["github_app"]["error"])
         self.assertFalse(ReadRequest.objects.exists())
         # Refused where every capability is refused, and recorded there.
-        self.assertTrue(
-            AuditLog.objects.filter(metadata__capability="infrastructure.controller.refresh").exists()
-        )
+        self.assertTrue(AuditLog.objects.filter(metadata__capability="infrastructure.controller.refresh").exists())
         self.assertEqual(fetcher.asked, [self.project.repository_url])
         self.assertTrue(result["github"]["ok"])
 

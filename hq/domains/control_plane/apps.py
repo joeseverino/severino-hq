@@ -5,8 +5,8 @@ from django.apps import AppConfig
 
 class ControlPlaneConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = 'hq.domains.control_plane'
-    label = 'control_plane'
+    name = "hq.domains.control_plane"
+    label = "control_plane"
     verbose_name = "Infrastructure Control Plane"
 
     @override
@@ -40,9 +40,7 @@ class ControlPlaneConfig(AppConfig):
         # Who asked for a held change, who agreed to it and when.
         register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL)
         # Who asked for a connection to be read now, and when.
-        register_audit(
-            ReadRequest, "Read request", connection=lambda request: request.connection_ref
-        )
+        register_audit(ReadRequest, "Read request", connection=lambda request: request.connection_ref)
 
 
 def _resource_connection(resource) -> str:

@@ -28,12 +28,8 @@ class ContentItem(TimestampedModel):
 
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=220, unique=True, blank=True)
-    content_type = models.CharField(
-        max_length=24, choices=Type.choices, default=Type.ARTICLE
-    )
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.DRAFT
-    )
+    content_type = models.CharField(max_length=24, choices=Type.choices, default=Type.ARTICLE)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     topic = models.CharField(max_length=300, blank=True)
     tags = models.CharField(
         max_length=300,
@@ -46,15 +42,9 @@ class ContentItem(TimestampedModel):
     published_at = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
-    related_projects = models.ManyToManyField(
-        "projects.Project", blank=True, related_name="content_items"
-    )
-    related_assets = models.ManyToManyField(
-        "assets.Asset", blank=True, related_name="content_items"
-    )
-    related_expenses = models.ManyToManyField(
-        "expenses.Expense", blank=True, related_name="content_items"
-    )
+    related_projects = models.ManyToManyField("projects.Project", blank=True, related_name="content_items")
+    related_assets = models.ManyToManyField("assets.Asset", blank=True, related_name="content_items")
+    related_expenses = models.ManyToManyField("expenses.Expense", blank=True, related_name="content_items")
     related_documentation = models.ManyToManyField(
         "docs_index.DocumentationRecord",
         blank=True,
@@ -79,9 +69,7 @@ class ContentItem(TimestampedModel):
             base = slugify(self.title) or "content-item"
             slug = base
             n = 2
-            while (
-                ContentItem.objects.filter(slug=slug).exclude(pk=self.pk).exists()
-            ):
+            while ContentItem.objects.filter(slug=slug).exclude(pk=self.pk).exists():
                 slug = f"{base}-{n}"
                 n += 1
             self.slug = slug

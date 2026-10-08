@@ -110,10 +110,7 @@ def populate(size: int = 8) -> None:
     )
     _store(
         "portainer.container",
-        [
-            {"host": f"example-host-{index}", "name": f"app-{index}", "ports": [8000 + index]}
-            for index in range(size)
-        ],
+        [{"host": f"example-host-{index}", "name": f"app-{index}", "ports": [8000 + index]} for index in range(size)],
     )
     for index in range(size):
         ManagedResource.objects.create(

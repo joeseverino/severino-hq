@@ -42,24 +42,14 @@ class MCPBoundary:
         self.gate = gate
         self.on_denied = on_denied
         self.observer = observer
-        self.allowed_hosts = {
-            normalized
-            for host in allowed_hosts
-            if (normalized := strict_host(host))
-        }
-        self.allowed_networks = tuple(
-            ipaddress.ip_network(network) for network in allowed_networks
-        )
+        self.allowed_hosts = {normalized for host in allowed_hosts if (normalized := strict_host(host))}
+        self.allowed_networks = tuple(ipaddress.ip_network(network) for network in allowed_networks)
         self.allowed_origins = set(allowed_origins)
         # One credential: an access token from the identity provider, naming the
         # agent that holds it. Without a verifier nothing can authenticate, so
         # the endpoint is off. The network gates are not optional either: they
         # make the endpoint unreachable rather than merely unauthorized.
-        self.enabled = (
-            verifier is not None
-            and bool(self.allowed_hosts)
-            and bool(self.allowed_networks)
-        )
+        self.enabled = verifier is not None and bool(self.allowed_hosts) and bool(self.allowed_networks)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "lifespan":
@@ -212,9 +202,7 @@ class MCPBoundary:
         return any(address in network for network in self.allowed_networks)
 
     @staticmethod
-    async def _deny(
-        scope: Scope, receive: Receive, send: Send, status: int, error: str
-    ) -> None:
+    async def _deny(scope: Scope, receive: Receive, send: Send, status: int, error: str) -> None:
         response = JSONResponse(
             {"error": error},
             status_code=status,

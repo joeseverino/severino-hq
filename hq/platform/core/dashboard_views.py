@@ -87,9 +87,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         today = timezone.localdate()
         month = month_of(self.request.GET.get("month"), today)
         return {
-            "calendar": calendar_month(
-                month, choices=calendar_choices(self.request.user), today=today
-            ),
+            "calendar": calendar_month(month, choices=calendar_choices(self.request.user), today=today),
             "calendar_paging": {
                 "previous": f"?month={(month - timedelta(days=1)):%Y-%m}",
                 "next": f"?month={(month + timedelta(days=32)):%Y-%m}",
@@ -133,9 +131,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         doing, told = queue_state.split_waiting(queue)
         action_queue_count = len(doing)
         hour = timezone.localtime().hour
-        greeting = (
-            "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
-        )
+        greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
         if name := self.request.user.first_name:
             greeting = f"{greeting}, {name}"
 
@@ -144,8 +140,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         content_rows = [
             ListRow(
                 title=item["title"],
-                meta=f"{item['content_type_label']} · "
-                f"{when_day(item['updated_at'])}",
+                meta=f"{item['content_type_label']} · {when_day(item['updated_at'])}",
                 url=reverse("content:detail", args=[item["slug"]]),
             )
             for item in snapshot["draft_content"]
@@ -154,8 +149,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             ListRow(
                 title=item["title"],
                 meta=when_day(item["published_at"] or item["updated_at"]),
-                url=item["published_url"]
-                or reverse("content:detail", args=[item["slug"]]),
+                url=item["published_url"] or reverse("content:detail", args=[item["slug"]]),
                 external=bool(item["published_url"]),
             )
             for item in snapshot["recent_published"]
@@ -214,9 +208,7 @@ class DashboardGlanceView(View):
     def get(self, request):
         """The strip as it stands; "unchanged" to a poll while nothing was written."""
 
-        return fragments.render(
-            request, self.template_name, glance_context, revision=every_revision()
-        )
+        return fragments.render(request, self.template_name, glance_context, revision=every_revision())
 
     def post(self, request):
         """Request a refresh: of every panel, or with ``scope=stale`` of stale ones.
@@ -233,10 +225,7 @@ class DashboardGlanceView(View):
         panels = dashboard_panels(configuration)
         requested = request_stale_panel_refresh(panels, principal=principal)
         if requested:
-            panels = tuple(
-                {**panel, "refreshing": True} if panel["id"] in requested else panel
-                for panel in panels
-            )
+            panels = tuple({**panel, "refreshing": True} if panel["id"] in requested else panel for panel in panels)
         return render(
             request,
             self.template_name,

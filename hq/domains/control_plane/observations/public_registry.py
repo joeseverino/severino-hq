@@ -144,9 +144,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Address owner",
         AddressHolderRecord,
         addresses=_address,
-        title=lambda record: organisation_name(
-            str(record.get("organisation") or record.get("network") or "")
-        ),
+        title=lambda record: organisation_name(str(record.get("organisation") or record.get("network") or "")),
         relation="On the network of",
         facet="network",
         read_by="hq",

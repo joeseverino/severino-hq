@@ -25,9 +25,7 @@ _SPEC_MODULES = tuple(
     if info.name != "contract" and not info.name.startswith(("_", "test"))
 )
 
-OBSERVATIONS = registry(
-    tuple(spec for module in _SPEC_MODULES for spec in module.OBSERVATIONS)
-)
+OBSERVATIONS = registry(tuple(spec for module in _SPEC_MODULES for spec in module.OBSERVATIONS))
 
 __all__ = [
     "OBSERVATIONS",

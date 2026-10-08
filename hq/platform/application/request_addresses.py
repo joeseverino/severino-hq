@@ -61,9 +61,7 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
         if found.untrusted_forwarding
         else "this request came from it"
     )
-    rows: list[Address | None] = [
-        _address_row(current, current_source, current=True)
-    ]
+    rows: list[Address | None] = [_address_row(current, current_source, current=True)]
     device = found.caller_device
     if device is not None:
         rows.extend(
@@ -79,10 +77,7 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
                 "seen as this device's endpoint",
             )
         )
-        rows.extend(
-            _address_row(endpoint, "seen as one of this device's endpoints")
-            for endpoint in presence.endpoints
-        )
+        rows.extend(_address_row(endpoint, "seen as one of this device's endpoints") for endpoint in presence.endpoints)
     return tuple(_deduplicated(rows))
 
 
@@ -92,9 +87,7 @@ def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
     serves = found.serves
     if serves is None:
         return ()
-    rows: list[Address | None] = [
-        _address_row(address, "HQ answers here") for address in serves.addresses
-    ]
+    rows: list[Address | None] = [_address_row(address, "HQ answers here") for address in serves.addresses]
     return tuple(_deduplicated(rows))
 
 

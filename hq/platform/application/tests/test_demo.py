@@ -139,29 +139,18 @@ class ToggleTests(TestCase):
         self.client.post(reverse("demo_mode"))
         self.client.post(reverse("demo_mode"))
 
-        said = [
-            event.message
-            for event in AuditLog.objects.filter(object_type="Demo mode").order_by("id")
-        ]
+        said = [event.message for event in AuditLog.objects.filter(object_type="Demo mode").order_by("id")]
         self.assertEqual(said, ["Demo mode on", "Demo mode off"])
 
     def test_it_returns_to_the_page_it_was_flipped_from(self):
-        response = self.client.post(
-            reverse("demo_mode"), {"next": reverse("action_items")}
-        )
+        response = self.client.post(reverse("demo_mode"), {"next": reverse("action_items")})
 
-        self.assertRedirects(
-            response, reverse("action_items"), fetch_redirect_response=False
-        )
+        self.assertRedirects(response, reverse("action_items"), fetch_redirect_response=False)
 
     def test_a_destination_off_this_host_is_refused(self):
-        response = self.client.post(
-            reverse("demo_mode"), {"next": "https://example.test/elsewhere"}
-        )
+        response = self.client.post(reverse("demo_mode"), {"next": "https://example.test/elsewhere"})
 
-        self.assertRedirects(
-            response, reverse("dashboard"), fetch_redirect_response=False
-        )
+        self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
 
     def test_the_header_carries_a_mark_while_it_is_on(self):
         """The mode outlives whichever page is open, so the header says so.

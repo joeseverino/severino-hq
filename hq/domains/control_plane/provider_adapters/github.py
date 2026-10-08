@@ -75,12 +75,11 @@ class GitHubDeliverySpec(ProviderModel):
         pattern=r"^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$",
         title="Deploy workflow",
     )
-    branch: str = Field(
-        default=MAIN_BRANCH, pattern=r"^[A-Za-z0-9_./-]+$", title="Branch"
-    )
+    branch: str = Field(default=MAIN_BRANCH, pattern=r"^[A-Za-z0-9_./-]+$", title="Branch")
     production: Literal[CURRENT] = Field(  # type: ignore[valid-type]
         default=CURRENT, title="Production"
     )
+
 
 DEFINITION = ProviderSpec(
     KIND,
@@ -127,8 +126,7 @@ SHARED = (
     SharedValue(
         "GitHubDeliverySpec",
         GitHubDeliverySpec,
-        "A github.delivery declaration. The defaults are the declaration a sweep "
-        "reports and HQ adopts.",
+        "A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts.",
         refs=(("production", "GitHubDeliveryProduction"),),
     ),
 )

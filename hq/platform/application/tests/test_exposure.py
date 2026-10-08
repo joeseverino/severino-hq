@@ -28,8 +28,16 @@ class ExposureTests(TestCase):
         self.assertEqual(self.level("vpn.example.com"), PRIVATE)
 
     def test_a_reading_that_restricts_the_name_gates_it(self):
-        store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Shop admin",
-                                        "domain": "shop.example.com", "type": "self_hosted"})
+        store(
+            "cloudflare.access_app",
+            {
+                "connection_ref": CLOUDFLARE,
+                "id": "a1",
+                "name": "Shop admin",
+                "domain": "shop.example.com",
+                "type": "self_hosted",
+            },
+        )
 
         with projection_scope():
             exposure = exposure_of_name("shop.example.com")
@@ -39,14 +47,30 @@ class ExposureTests(TestCase):
         self.assertIn("behind a login as shop.example.com", exposure.sentence)
 
     def test_a_gate_on_every_path_gates_the_name(self):
-        store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Shop",
-                                        "domain": "shop.example.com/*", "type": "self_hosted"})
+        store(
+            "cloudflare.access_app",
+            {
+                "connection_ref": CLOUDFLARE,
+                "id": "a1",
+                "name": "Shop",
+                "domain": "shop.example.com/*",
+                "type": "self_hosted",
+            },
+        )
 
         self.assertEqual(self.level("shop.example.com"), GATED)
 
     def test_a_gate_on_one_path_leaves_the_name_open_and_says_where(self):
-        store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Shop admin",
-                                        "domain": "shop.example.com/admin*", "type": "self_hosted"})
+        store(
+            "cloudflare.access_app",
+            {
+                "connection_ref": CLOUDFLARE,
+                "id": "a1",
+                "name": "Shop admin",
+                "domain": "shop.example.com/admin*",
+                "type": "self_hosted",
+            },
+        )
 
         with projection_scope():
             exposure = exposure_of_name("shop.example.com")
@@ -112,10 +136,15 @@ class ServiceReachTests(TestCase):
         from hq.domains.control_plane.models import ManagedResource
 
         ManagedResource.objects.create(
-            key="example-shop-proxy", kind="npm.proxy_host",
-            spec={"domain_names": ["shop.example.com"], "forward_scheme": "http",
-                  "forward_host": "198.51.100.20", "forward_port": 8080,
-                  "connection_ref": "example-npm"},
+            key="example-shop-proxy",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["shop.example.com"],
+                "forward_scheme": "http",
+                "forward_host": "198.51.100.20",
+                "forward_port": 8080,
+                "connection_ref": "example-npm",
+            },
         )
 
         body = self.service("shop.example.com")
@@ -137,9 +166,9 @@ class ServiceReachTests(TestCase):
 
         with CaptureQueriesContext(connection) as few:
             self.page()
-        store("cloudflare.dns_record", *(
-            record(f"extra-{index}.example.com", "A", "198.51.100.20") for index in range(8)
-        ))
+        store(
+            "cloudflare.dns_record", *(record(f"extra-{index}.example.com", "A", "198.51.100.20") for index in range(8))
+        )
         with CaptureQueriesContext(connection) as many:
             self.page()
 

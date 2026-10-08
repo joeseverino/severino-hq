@@ -231,7 +231,9 @@ class GuardedKindTests(TestCase):
         self.field = Expense._meta.get_field("paid_from")
 
     def test_a_viewer_without_the_capability_is_told_nothing(self):
-        self.assertIsNone(references.resolve("example.account:an-account", "An Example Account", principal=self.stranger))
+        self.assertIsNone(
+            references.resolve("example.account:an-account", "An Example Account", principal=self.stranger)
+        )
         self.assertEqual(
             references.resolve("example.account:an-account", principal=self.reader).label, "An Example Account"
         )
@@ -340,7 +342,10 @@ class ReferencedByTests(TestCase):
         Entry.objects.create(title="Replace the fan", starts_on=date(2026, 3, 1), about="machine:lab-1")
         an_expense(about="machine:lab-1")
 
-        found = {group.heading: group.items for group in references.referenced_by("machine", "lab-1", principal=self.principal)}
+        found = {
+            group.heading: group.items
+            for group in references.referenced_by("machine", "lab-1", principal=self.principal)
+        }
 
         self.assertEqual(set(found), {"Assets", "On the calendar", "Expenses"})
         (asset,) = found["Assets"]
@@ -420,8 +425,11 @@ class DanglingTests(TestCase):
         from ..attention import assets, expenses
 
         Asset.objects.create(
-            item_name="A server", purchase_date=date(2025, 1, 5), total_cost=Decimal("1.00"),
-            infrastructure="machine:lab-9", infrastructure_name="lab-9",
+            item_name="A server",
+            purchase_date=date(2025, 1, 5),
+            total_cost=Decimal("1.00"),
+            infrastructure="machine:lab-9",
+            infrastructure_name="lab-9",
         )
         an_expense(about="machine:lab-9", about_name="lab-9")
 
@@ -447,7 +455,9 @@ class PageTests(TestCase):
         response = self.client.get(self.asset.get_absolute_url())
 
         machine = reverse("control_plane:machine", kwargs={"name": "lab-1"})
-        self.assertContains(response, f'<dt>This is</dt><dd>Machine <a href="{machine}" data-entity="Machine">lab-1</a></dd>', html=True)
+        self.assertContains(
+            response, f'<dt>This is</dt><dd>Machine <a href="{machine}" data-entity="Machine">lab-1</a></dd>', html=True
+        )
         self.assertContains(response, "<h3>On the calendar</h3>", html=True)
         self.assertContains(response, f'href="{entry.get_absolute_url()}"'.replace("&", "&amp;"))
 
@@ -474,7 +484,11 @@ class PageTests(TestCase):
 
         response = self.client.get(entry.get_absolute_url())
 
-        self.assertContains(response, f'About asset <a href="{self.asset.get_absolute_url()}" data-entity="Asset">A server</a>', html=True)
+        self.assertContains(
+            response,
+            f'About asset <a href="{self.asset.get_absolute_url()}" data-entity="Asset">A server</a>',
+            html=True,
+        )
 
     def test_the_tag_lists_what_names_a_kind_and_identity(self):
         from django.template import Context, Template
@@ -496,4 +510,6 @@ class PageTests(TestCase):
             self.client.get(url)
             with self.subTest(url=url), CaptureQueriesContext(connection) as queries:
                 self.client.get(url)
-            self.assertLessEqual(len(queries), budget, [query["sql"][:90] + " ... " + query["sql"][-150:] for query in queries])
+            self.assertLessEqual(
+                len(queries), budget, [query["sql"][:90] + " ... " + query["sql"][-150:] for query in queries]
+            )

@@ -36,9 +36,7 @@ def store(kind, *records):
 
 
 def machine(name, address):
-    ManagedResource.objects.create(
-        key=name, kind="machine", spec={"name": name, "addresses": [address]}
-    )
+    ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": [address]})
 
 
 # 198.51.100.0/24 stands for a public address here; 192.0.2.0/24 stays parked.
@@ -47,30 +45,47 @@ class CaddyPathTests(TestCase):
     def setUp(self):
         machine("edge-1", "198.51.100.20")
         machine("lab-1", "100.64.0.10")
-        store("cloudflare.dns_record",
-              {"zone": "example.com", "name": "shop.example.com", "record_type": "A",
-               "content": "198.51.100.20", "proxied": False, "ttl": 1})
-        store("portainer.container",
-              {"host": "edge-1", "name": "shop", "ports": [8080], "state": "running"},
-              {"host": "lab-1", "name": "shop", "ports": [8080], "state": "running"})
+        store(
+            "cloudflare.dns_record",
+            {
+                "zone": "example.com",
+                "name": "shop.example.com",
+                "record_type": "A",
+                "content": "198.51.100.20",
+                "proxied": False,
+                "ttl": 1,
+            },
+        )
+        store(
+            "portainer.container",
+            {"host": "edge-1", "name": "shop", "ports": [8080], "state": "running"},
+            {"host": "lab-1", "name": "shop", "ports": [8080], "state": "running"},
+        )
 
     def walk(self):
         with projection_scope():
             return path_to("shop.example.com")
 
     def route(self, **extra):
-        store("caddy.route", {"connection_ref": "example-edge", "domain": "shop.example.com",
-                              "upstream": "shop:8080", **extra})
+        store(
+            "caddy.route",
+            {"connection_ref": "example-edge", "domain": "shop.example.com", "upstream": "shop:8080", **extra},
+        )
 
     def test_the_path_names_the_certificate_the_route_serves(self):
-        self.route(certificate={"name": "example.com", "provider": "Example CA",
-                                "expires_on": EXPIRES, "domains": ["*.example.com"]})
+        self.route(
+            certificate={
+                "name": "example.com",
+                "provider": "Example CA",
+                "expires_on": EXPIRES,
+                "domains": ["*.example.com"],
+            }
+        )
 
         ingress = next(hop for hop in self.walk().primary.hops if hop.step == "ingress")
 
         self.assertEqual(ingress.certificate.role, "Served")
-        self.assertEqual((ingress.certificate.name, ingress.certificate.issuer),
-                         ("example.com", "Example CA"))
+        self.assertEqual((ingress.certificate.name, ingress.certificate.issuer), ("example.com", "Example CA"))
         self.assertFalse(ingress.certificate.unread)
         self.assertIn("60 days", ingress.certificate.expiry)
 
@@ -81,8 +96,7 @@ class CaddyPathTests(TestCase):
 
         self.assertEqual(
             ingress.certificate.unread,
-            "not read: Served certificate, because the edge target does not report its "
-            "certificate",
+            "not read: Served certificate, because the edge target does not report its certificate",
         )
 
     def test_a_container_name_resolves_on_the_proxy_machine(self):
@@ -102,17 +116,34 @@ class RequestedHostRouteTests(TestCase):
 
     def setUp(self):
         machine("edge-1", "198.51.100.20")
-        store("cloudflare.dns_record",
-              {"zone": "example.dev", "name": "example.dev", "record_type": "A",
-               "content": "198.51.100.20", "proxied": False, "ttl": 1},
-              {"zone": "example.dev", "name": "*.example.dev", "record_type": "A",
-               "content": "198.51.100.20", "proxied": False, "ttl": 1})
+        store(
+            "cloudflare.dns_record",
+            {
+                "zone": "example.dev",
+                "name": "example.dev",
+                "record_type": "A",
+                "content": "198.51.100.20",
+                "proxied": False,
+                "ttl": 1,
+            },
+            {
+                "zone": "example.dev",
+                "name": "*.example.dev",
+                "record_type": "A",
+                "content": "198.51.100.20",
+                "proxied": False,
+                "ttl": 1,
+            },
+        )
 
     def routes(self, upstream, **extra):
-        store("caddy.route", *(
-            {"connection_ref": "example-edge", "domain": domain, "upstream": upstream, **extra}
-            for domain in ("example.dev", "*.example.dev")
-        ))
+        store(
+            "caddy.route",
+            *(
+                {"connection_ref": "example-edge", "domain": domain, "upstream": upstream, **extra}
+                for domain in ("example.dev", "*.example.dev")
+            ),
+        )
 
     def rules(self):
         with projection_scope():
@@ -126,8 +157,10 @@ class RequestedHostRouteTests(TestCase):
             hops = [(hop.step, hop.name) for hop in path_to("example.dev").primary.hops]
 
         self.assertIn("ingress", [step for step, _ in hops])
-        self.assertFalse({"upstream", "machine", "container"} & {step for step, _ in hops[hops.index(
-            next(hop for hop in hops if hop[0] == "ingress")) + 1:]})
+        self.assertFalse(
+            {"upstream", "machine", "container"}
+            & {step for step, _ in hops[hops.index(next(hop for hop in hops if hop[0] == "ingress")) + 1 :]}
+        )
 
     def test_it_raises_what_a_route_caddy_answers_itself_raises_and_no_more(self):
         self.routes("")
@@ -165,7 +198,8 @@ class RequestedHostRouteTests(TestCase):
 
     def test_a_declared_route_with_a_placeholder_names_no_machine(self):
         resource = ManagedResource(
-            key="example-dev-caddy", kind="caddy.route",
+            key="example-dev-caddy",
+            kind="caddy.route",
             spec={"connection_ref": "example-edge", "domain": "example.dev", "upstream": PLACEHOLDER},
         )
 
@@ -177,13 +211,23 @@ class ServedCertificateExpiryTests(TestCase):
 
     def routes(self, days, *domains):
         expires = (timezone.now() + timedelta(days=days)).isoformat()
-        store("caddy.route", *(
-            {"connection_ref": "example-edge", "domain": domain, "upstream": "shop:8080",
-             "certificate": {"name": "example.dev", "provider": "Example Root CA",
-                             "expires_on": expires,
-                             "domains": ["example.dev", "*.example.dev"]}}
-            for domain in domains
-        ))
+        store(
+            "caddy.route",
+            *(
+                {
+                    "connection_ref": "example-edge",
+                    "domain": domain,
+                    "upstream": "shop:8080",
+                    "certificate": {
+                        "name": "example.dev",
+                        "provider": "Example Root CA",
+                        "expires_on": expires,
+                        "domains": ["example.dev", "*.example.dev"],
+                    },
+                }
+                for domain in domains
+            ),
+        )
 
     def found(self):
         with projection_scope():
@@ -197,14 +241,19 @@ class ServedCertificateExpiryTests(TestCase):
         self.assertEqual(finding["severity"], "serious")
         self.assertTrue(finding["title"].startswith("Certificate example.dev expires"))
         self.assertIn({"label": "Held in", "value": "example-edge"}, finding["evidence"])
-        self.assertIn({"label": "Serves", "value": "*.example.dev, example.dev"},
-                      finding["evidence"])
+        self.assertIn({"label": "Serves", "value": "*.example.dev, example.dev"}, finding["evidence"])
 
     def test_a_distant_one_and_a_route_caddy_manages_say_nothing(self):
         self.routes(400, "example.dev")
         self.assertEqual(self.found(), [])
 
-        store("caddy.route", {"connection_ref": "example-edge", "domain": "example.dev",
-                              "upstream": "shop:8080", "certificate_unread": "managed by Caddy"})
+        store(
+            "caddy.route",
+            {
+                "connection_ref": "example-edge",
+                "domain": "example.dev",
+                "upstream": "shop:8080",
+                "certificate_unread": "managed by Caddy",
+            },
+        )
         self.assertEqual(self.found(), [])
-

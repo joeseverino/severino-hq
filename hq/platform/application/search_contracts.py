@@ -56,18 +56,10 @@ class SearchDefinition:
         return str(getattr(instance, self.identifier_field))
 
     def body(self, instance) -> str:
-        return "\n".join(
-            line
-            for field in self.fields
-            for line in search_lines(getattr(instance, field, None))
-        )
+        return "\n".join(line for field in self.fields for line in search_lines(getattr(instance, field, None)))
 
     def title(self, instance) -> str:
-        return (
-            str(getattr(instance, self.title_field))
-            if self.title_field
-            else str(instance)
-        )
+        return str(getattr(instance, self.title_field)) if self.title_field else str(instance)
 
     def badge(self, instance) -> str:
         return str(getattr(instance, self.badge_field)) if self.badge_field else ""

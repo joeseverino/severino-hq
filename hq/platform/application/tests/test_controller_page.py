@@ -74,7 +74,12 @@ class ControllerPageTests(TestCase):
 
     def test_work_and_reads_waiting_for_it_are_listed_and_finished_work_is_not(self):
         resource = ManagedResource.objects.create(key="example-dns", kind="adguard.rewrite", spec={})
-        asked = {"resource": resource, "action": "reconcile", "requested_actor": "someone", "requested_interface": "web"}
+        asked = {
+            "resource": resource,
+            "action": "reconcile",
+            "requested_actor": "someone",
+            "requested_interface": "web",
+        }
         OperationRequest.objects.create(**asked, idempotency_key="waiting")
         OperationRequest.objects.create(
             **asked,

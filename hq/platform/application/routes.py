@@ -26,9 +26,7 @@ from .projection import read_once
 
 @lru_cache(maxsize=4096)
 def _resolved(urlconf: Any, prefix: str, current_app: Any, viewname: Any, args: tuple, kwargs: tuple) -> str:
-    return _reverse(
-        viewname, urlconf=urlconf, args=args or None, kwargs=dict(kwargs) or None, current_app=current_app
-    )
+    return _reverse(viewname, urlconf=urlconf, args=args or None, kwargs=dict(kwargs) or None, current_app=current_app)
 
 
 def _in_force() -> tuple[Any, str]:

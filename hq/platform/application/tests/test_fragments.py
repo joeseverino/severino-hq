@@ -29,9 +29,7 @@ class RequestedPartTests(TestCase):
 
     def test_a_part_is_tried_before_its_page(self):
         request = RequestFactory().get("/", headers=PART)
-        self.assertEqual(
-            fragments.template_names(request, ["a.html"]), ["a.html#calendar", "a.html"]
-        )
+        self.assertEqual(fragments.template_names(request, ["a.html"]), ["a.html#calendar", "a.html"])
         self.assertEqual(fragments.template_names(RequestFactory().get("/"), ["a.html"]), ["a.html"])
 
 
@@ -83,9 +81,7 @@ class PagePartTests(TestCase):
         self.assertNotContains(response, "<html")
 
     def test_the_policy_test_is_answered_with_its_result(self):
-        response = self.client.get(
-            reverse("control_plane:tailnet"), headers={"X-Fragment": "whatif"}
-        )
+        response = self.client.get(reverse("control_plane:tailnet"), headers={"X-Fragment": "whatif"})
 
         self.assertContains(response, 'id="whatif-result"')
         self.assertNotContains(response, "<html")
@@ -122,9 +118,7 @@ class UnchangedPartTests(TestCase):
 
     def test_it_vouches_for_one_reader_only(self):
         validator = self.client.get(self.url)["ETag"]
-        self.client.force_login(
-            get_user_model().objects.create_superuser("second", password="z" * 20)
-        )
+        self.client.force_login(get_user_model().objects.create_superuser("second", password="z" * 20))
         mine, theirs = (RequestFactory().get(self.url) for _ in range(2))
         mine.user, theirs.user = self.user, get_user_model().objects.get(username="second")
 

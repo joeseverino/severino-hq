@@ -12,13 +12,7 @@ def table_sort_header(context, label, ascending, descending="", css=""):
     params = context["request"].GET.copy()
     params["sort"] = next_sort
     params.pop("page", None)
-    direction = (
-        "ascending"
-        if current == ascending
-        else "descending"
-        if current == descending
-        else "none"
-    )
+    direction = "ascending" if current == ascending else "descending" if current == descending else "none"
     return {
         "label": label,
         # The column's own classes, which a heading that sorts still carries.

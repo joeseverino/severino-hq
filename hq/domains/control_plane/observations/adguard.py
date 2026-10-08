@@ -128,9 +128,7 @@ def upstream(line: Any) -> dict[str, Any] | None:
     domains: tuple[str, ...] = ()
     if text.startswith("[/") and "/]" in text:
         scope, _, text = text[2:].partition("/]")
-        domains = tuple(
-            name for name in (normalized_hostname(part) for part in scope.split("/")) if name
-        )
+        domains = tuple(name for name in (normalized_hostname(part) for part in scope.split("/")) if name)
         text = text.strip()
     if not text or text.startswith("#"):
         return None
@@ -191,7 +189,7 @@ def window_phrase(hours: Any) -> str:
 
     try:
         value = float(hours or 0)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         value = 0.0
     if value >= 48:
         return counted(round(value / 24), "day")
@@ -249,9 +247,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "DNS client",
         AdGuardClientRecord,
         addresses=lambda record: tuple(record.get("addresses") or ()),
-        title=lambda record: str(
-            record.get("name") or next(iter(record.get("addresses") or ()), "")
-        ),
+        title=lambda record: str(record.get("name") or next(iter(record.get("addresses") or ()), "")),
         relation="Name in AdGuard",
     ),
     ObservationSpec(

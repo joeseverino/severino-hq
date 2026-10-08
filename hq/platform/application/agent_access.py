@@ -29,9 +29,7 @@ def set_agents_paused(paused: bool, *, principal: Principal, user) -> AgentAcces
     """Set, not toggle, so a repeated request cannot undo itself. Operators only."""
 
     if not is_interactive(principal):
-        raise AuthorizationError(
-            f"{principal.interface} principal {principal.actor!r} cannot change agent access."
-        )
+        raise AuthorizationError(f"{principal.interface} principal {principal.actor!r} cannot change agent access.")
 
     with transaction.atomic():
         row, _ = AgentAccess.objects.select_for_update().get_or_create(pk=1)

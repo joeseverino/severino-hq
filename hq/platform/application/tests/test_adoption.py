@@ -175,29 +175,19 @@ class StopManagingSticksTests(TestCase):
         row = NotManaged.objects.get(kind=ZONE_KIND)
         self.assertEqual(row.label, "example.com")
         self.assertTrue(row.actor)
-        self.assertTrue(
-            AuditLog.objects.filter(
-                object_type="Not managed", action=AuditLog.Action.CREATED
-            ).exists()
-        )
+        self.assertTrue(AuditLog.objects.filter(object_type="Not managed", action=AuditLog.Action.CREATED).exists())
 
     def test_managing_it_again_adopts_it_and_clears_the_choice(self):
         self.forget()
         swept()
         token = find_zone("example.com").adopt_token
 
-        response = self.client.post(
-            reverse("zones:adopt", kwargs={"zone": "example.com"}), {"token": token}
-        )
+        response = self.client.post(reverse("zones:adopt", kwargs={"zone": "example.com"}), {"token": token})
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(ManagedResource.objects.filter(kind=ZONE_KIND).exists())
         self.assertFalse(NotManaged.objects.exists())
-        self.assertTrue(
-            AuditLog.objects.filter(
-                object_type="Not managed", action=AuditLog.Action.DELETED
-            ).exists()
-        )
+        self.assertTrue(AuditLog.objects.filter(object_type="Not managed", action=AuditLog.Action.DELETED).exists())
 
         swept()
 
@@ -252,21 +242,31 @@ class OperatorOwnedRouteTests(TestCase):
 
     KIND = "caddy.route"
     ROUTES = [
-        {"connection_ref": "example-edge", "domain": "example.dev",
-         "upstream": "{http.request.host}:443", "to_requested_host": True},
-        {"connection_ref": "example-edge", "domain": "*.example.dev",
-         "upstream": "{http.request.host}:443", "to_requested_host": True},
-        {"connection_ref": "example-edge", "domain": "status.example.com",
-         "upstream": "status:3001", "to_requested_host": False},
+        {
+            "connection_ref": "example-edge",
+            "domain": "example.dev",
+            "upstream": "{http.request.host}:443",
+            "to_requested_host": True,
+        },
+        {
+            "connection_ref": "example-edge",
+            "domain": "*.example.dev",
+            "upstream": "{http.request.host}:443",
+            "to_requested_host": True,
+        },
+        {
+            "connection_ref": "example-edge",
+            "domain": "status.example.com",
+            "upstream": "status:3001",
+            "to_requested_host": False,
+        },
     ]
 
     def setUp(self):
         connection("ssh", "example-edge")
 
     def sweep(self):
-        return record_sweep(
-            {self.KIND: {"ok": True, "records": self.ROUTES}}, principal=cli_principal()
-        )
+        return record_sweep({self.KIND: {"ok": True, "records": self.ROUTES}}, principal=cli_principal())
 
     def test_a_sweep_through_a_managing_connection_adopts_none_of_them(self):
         result = self.sweep()
@@ -298,7 +298,8 @@ class OperatorOwnedRouteTests(TestCase):
         from ..infrastructure import resolved_spec
 
         declared = ManagedResource.objects.create(
-            key="app-example-com-caddy", kind=self.KIND,
+            key="app-example-com-caddy",
+            kind=self.KIND,
             spec={"connection_ref": "example-edge", "domain": "app.example.com", "upstream": "app:8080"},
         )
         self.sweep()

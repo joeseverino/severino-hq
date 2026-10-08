@@ -34,10 +34,34 @@ PAGE_LIMIT = 400
 # Words ending in "s" that are not plurals, so "1 needs" and "1 status" pass.
 NOT_PLURAL = frozenset(
     {
-        "access", "across", "address", "alias", "always", "analysis", "bonus",
-        "canvas", "class", "does", "focus", "has", "is", "its", "less", "lens",
-        "news", "needs", "pass", "plus", "process", "series", "status", "this",
-        "unless", "was", "yes", "ms",
+        "access",
+        "across",
+        "address",
+        "alias",
+        "always",
+        "analysis",
+        "bonus",
+        "canvas",
+        "class",
+        "does",
+        "focus",
+        "has",
+        "is",
+        "its",
+        "less",
+        "lens",
+        "news",
+        "needs",
+        "pass",
+        "plus",
+        "process",
+        "series",
+        "status",
+        "this",
+        "unless",
+        "was",
+        "yes",
+        "ms",
     }
 )
 ONE_PLURAL = re.compile(r"(?<![\d.,:/-])\b1 ([a-z]+s)\b")
@@ -130,9 +154,7 @@ class RenderedPageTests(TestCase):
                 continue
             seen.add(path)
             response = self.client.get(path)
-            if response.status_code != 200 or "text/html" not in response.get(
-                "Content-Type", ""
-            ):
+            if response.status_code != 200 or "text/html" not in response.get("Content-Type", ""):
                 continue
             html = response.content.decode()
             page = _Page()
@@ -168,10 +190,10 @@ class RenderedPageTests(TestCase):
                 problems.append(f"{path}: ids used twice: {', '.join(doubled[:5])}")
             if "—" in text:
                 at = text.index("—")
-                problems.append(f"{path}: em dash in {text[max(at - 30, 0):at + 30]!r}")
+                problems.append(f"{path}: em dash in {text[max(at - 30, 0) : at + 30]!r}")
             # "-ous" words are adjectives ("1 serious"), not plurals.
             problems.extend(
-                f"{path}: \"1 {noun}\""
+                f'{path}: "1 {noun}"'
                 for noun in ONE_PLURAL.findall(text)
                 if noun not in NOT_PLURAL and not noun.endswith("ous")
             )

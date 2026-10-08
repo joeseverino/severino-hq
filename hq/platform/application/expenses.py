@@ -49,9 +49,7 @@ class CategoryTotal:
     url: str
 
 
-def costs_by_category(
-    rows, *, query, choices, narrowed: bool
-) -> tuple[CostTotals, tuple[CategoryTotal, ...]]:
+def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTotals, tuple[CategoryTotal, ...]]:
     """What a list of expenses adds up to, whole and by category, from one statement.
 
     ``rows`` is the list as its filters leave it and ``query`` the request's
@@ -134,9 +132,7 @@ def serialize_expense(expense: Expense) -> dict[str, Any]:
         "related_project": expense.related_project.slug if expense.related_project else None,
         "related_asset": expense.related_asset.slug if expense.related_asset else None,
         "related_content": expense.related_content.slug if expense.related_content else None,
-        "related_documentation": (
-            doc.doc_id if doc and doc.sensitivity in SAFE_SENSITIVITIES else None
-        ),
+        "related_documentation": (doc.doc_id if doc and doc.sensitivity in SAFE_SENSITIVITIES else None),
         "paid_from": expense.paid_from,
         "about": expense.about,
         "updated_at": expense.updated_at.isoformat(),
@@ -162,9 +158,7 @@ def save_expense(
 ) -> dict[str, Any]:
     principal.require(records_of("expenses").write)
     operation = "expense.create" if current_id is None else "expense.update"
-    with operation_context(
-        interface=principal.interface, actor=principal.actor, operation=operation
-    ):
+    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
         if current_id is None:
             expense, created = Expense(), True
         else:
@@ -181,9 +175,7 @@ def save_expense(
             "related_project": _one(Project, "slug", values.pop("related_project")),
             "related_asset": _one(Asset, "slug", values.pop("related_asset")),
             "related_content": _one(ContentItem, "slug", values.pop("related_content")),
-            "related_documentation": _one(
-                DocumentationRecord, "doc_id", values.pop("related_documentation")
-            ),
+            "related_documentation": _one(DocumentationRecord, "doc_id", values.pop("related_documentation")),
         }
         for field, value in {**values, **relations}.items():
             setattr(expense, field, value)

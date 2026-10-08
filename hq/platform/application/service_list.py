@@ -31,9 +31,7 @@ def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
     is a service marked observed, so a link to it lands on its page.
     """
 
-    return read_once(
-        f"services.listed:{'|'.join(favorites)}", lambda: _listed(favorites)
-    )
+    return read_once(f"services.listed:{'|'.join(favorites)}", lambda: _listed(favorites))
 
 
 def _listed(favorites: tuple[str, ...]) -> tuple[Service, ...]:
@@ -48,31 +46,19 @@ def _listed(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     wanted: dict[str, str] = {own.hostname: HQ_MARK} if own is not None else {}
     for name in observed_names():
         wanted.setdefault(name, OBSERVED_MARK)
-    wanted = {
-        name: mark
-        for name, mark in wanted.items()
-        if name not in declared and name not in folded
-    }
-    marked = tuple(
-        replace(service, mark=HQ_MARK) if service.hostname in own_names else service
-        for service in catalog
-    )
-    unlisted = tuple(
-        replace(service, mark=wanted[service.hostname])
-        for service in prospects(tuple(wanted))
-    )
-    return ordered_services(
-        tuple(sorted(marked + unlisted, key=lambda service: service.hostname)), favorites
-    )
+    wanted = {name: mark for name, mark in wanted.items() if name not in declared and name not in folded}
+    marked = tuple(replace(service, mark=HQ_MARK) if service.hostname in own_names else service for service in catalog)
+    unlisted = tuple(replace(service, mark=wanted[service.hostname]) for service in prospects(tuple(wanted)))
+    return ordered_services(tuple(sorted(marked + unlisted, key=lambda service: service.hostname)), favorites)
 
 
 def listed_service(hostname: str) -> Service:
     """The listed service for a name, with its mark; a prospect for any other name."""
 
     wanted = normalized_hostname(hostname)
-    return next(
-        (service for service in listed_services() if service.hostname == wanted), None
-    ) or prospects((wanted,))[0]
+    return (
+        next((service for service in listed_services() if service.hostname == wanted), None) or prospects((wanted,))[0]
+    )
 
 
 def observed_names() -> tuple[str, ...]:
@@ -85,9 +71,7 @@ def observed_names() -> tuple[str, ...]:
 
     zones = zone_names()
     found = {
-        name
-        for name in readings().hostnames(names_services=True)
-        if is_hostname(name) and zone_holding(name, zones)
+        name for name in readings().hostnames(names_services=True) if is_hostname(name) and zone_holding(name, zones)
     }
     return tuple(sorted(found))
 
@@ -140,9 +124,7 @@ def get_service(hostname: str) -> dict[str, Any]:
 
     wanted = normalized_hostname(hostname)
     with projection_scope():
-        found = next(
-            (service for service in listed_services() if service.hostname == wanted), None
-        )
+        found = next((service for service in listed_services() if service.hostname == wanted), None)
         if found is None:
             raise NotFoundError(f"No service is listed for {hostname!r}.")
         return {"service": serialize_service(found), "path": serialize_path(found.path)}

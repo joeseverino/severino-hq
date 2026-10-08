@@ -138,9 +138,7 @@ class GrantTests(SimpleTestCase):
             security.api_principal({"sub": "s"})
 
     def test_the_actor_is_the_client_that_presented_the_token(self):
-        principal = security.api_principal(
-            {"scope": "read", "client_id": "example-automation", "sub": "s"}
-        )
+        principal = security.api_principal({"scope": "read", "client_id": "example-automation", "sub": "s"})
         self.assertEqual(principal.actor, "example-automation")
 
 
@@ -189,9 +187,7 @@ class CompositionCheckTests(SimpleTestCase):
             list_query_type=EmptyQuery,
             web_route="missing:list",
         )
-        graph = compile_integration_graph(
-            capabilities=(), resources=(resource,), connections=()
-        )
+        graph = compile_integration_graph(capabilities=(), resources=(resource,), connections=())
         with override_integration_graph(graph):
             errors = capability_contract_check(None)
 
@@ -215,13 +211,12 @@ class CompositionCheckTests(SimpleTestCase):
             lambda: (),
             web_route="missing:connections",
         )
-        graph = compile_integration_graph(
-            capabilities=(), resources=(), connections=(connection,)
-        )
+        graph = compile_integration_graph(capabilities=(), resources=(), connections=(connection,))
         with override_integration_graph(graph):
             errors = capability_contract_check(None)
 
         self.assertEqual([error.id for error in errors], ["hq_api.E006"])
+
 
 @override_settings(
     OIDC_ISSUER=ISSUER,
@@ -267,9 +262,7 @@ class TransportTests(TestCase):
 
     def test_an_ungranted_capability_is_403(self):
         with _serving():
-            response = self._post(
-                "project.create", {"payload": {}}, token=_token(scope="example.write")
-            )
+            response = self._post("project.create", {"payload": {}}, token=_token(scope="example.write"))
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["error"]["code"], "forbidden")
 
@@ -287,9 +280,7 @@ class TransportTests(TestCase):
         body = {"payload": {"name": "Paused", "slug": "paused", "status": "active"}}
         with _serving():
             write = self._post("project.create", body, token=_token(scope="write_projects"))
-            read = self.client.get(
-                "/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}"
-            )
+            read = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}")
         for response in (write, read):
             self.assertEqual(response.status_code, 403)
             self.assertEqual(response.json()["error"]["code"], "agents_paused")
@@ -307,9 +298,12 @@ class TransportTests(TestCase):
     def test_an_unreadable_switch_refuses_on_the_machine_api(self):
         from django.db import DatabaseError
 
-        with _serving(), patch(
-            "hq.platform.application.agent_access.AgentAccess.objects.filter",
-            side_effect=DatabaseError("locked"),
+        with (
+            _serving(),
+            patch(
+                "hq.platform.application.agent_access.AgentAccess.objects.filter",
+                side_effect=DatabaseError("locked"),
+            ),
         ):
             response = self._post(
                 "project.create",
@@ -448,9 +442,7 @@ class TransportTests(TestCase):
                 },
                 token=_token(scope="write_projects"),
             )
-        self.assertTrue(
-            AuditLog.objects.filter(object_repr__icontains="Audited").exists()
-        )
+        self.assertTrue(AuditLog.objects.filter(object_repr__icontains="Audited").exists())
 
     def test_an_unknown_capability_is_404(self):
         with _serving():
@@ -580,9 +572,7 @@ class TransportTests(TestCase):
 
     def test_the_root_reports_what_the_credential_may_do(self):
         with _serving():
-            response = self.client.get(
-                "/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}"
-            )
+            response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
         self.assertEqual(response.status_code, 200)
         data = response.json()["data"]
         self.assertEqual(data["granted"], ["example.write"])
@@ -595,18 +585,14 @@ class TransportTests(TestCase):
 
     def test_capabilities_flag_what_this_token_may_run(self):
         with _serving():
-            response = self.client.get(
-                "/api/v2/capabilities/", HTTP_AUTHORIZATION=f"Bearer {_token()}"
-            )
+            response = self.client.get("/api/v2/capabilities/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
         self.assertEqual(response.status_code, 200)
         specs = response.json()["data"]["capabilities"]
         self.assertTrue(specs)
         # Nothing in HQ core is grantable by `example.write` alone, so a token
         # scoped to it must not come back permitted for anything here.
         self.assertFalse([spec for spec in specs if spec["permitted"]])
-        project_create = next(
-            spec for spec in specs if spec["name"] == "project.create"
-        )
+        project_create = next(spec for spec in specs if spec["name"] == "project.create")
         self.assertTrue(project_create["idempotency_key_required"])
         self.assertFalse(project_create["request_schema"]["additionalProperties"])
         self.assertEqual(project_create["resource"], "projects")
@@ -614,9 +600,7 @@ class TransportTests(TestCase):
             project_create["request_schema"]["properties"]["payload"],
             project_create["input_schema"],
         )
-        project_update = next(
-            spec for spec in specs if spec["name"] == "project.update"
-        )
+        project_update = next(spec for spec in specs if spec["name"] == "project.update")
         self.assertEqual(project_update["request_schema"]["required"], ["target"])
         nested = views._request_schema(
             {
@@ -668,21 +652,12 @@ class TransportTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         data = response.json()["data"]
-        core = next(
-            item
-            for item in data["connections"]
-            if item["name"] == "infrastructure.controllers"
-        )
+        core = next(item for item in data["connections"] if item["name"] == "infrastructure.controllers")
         state = next(
-            item
-            for group in data["groups"]
-            for item in group["instances"]
-            if item["id"] == "controller:api-cloudflare"
+            item for group in data["groups"] for item in group["instances"] if item["id"] == "controller:api-cloudflare"
         )
         self.assertTrue(core["permitted"])
-        self.assertIn(
-            "cloudflare.dns_record", {ability["name"] for ability in state["abilities"]}
-        )
+        self.assertIn("cloudflare.dns_record", {ability["name"] for ability in state["abilities"]})
         self.assertNotIn("token", state)
 
     def test_connections_never_invoke_a_family_the_token_cannot_read(self):
@@ -697,11 +672,7 @@ class TransportTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         data = response.json()["data"]
-        core = next(
-            item
-            for item in data["connections"]
-            if item["name"] == "infrastructure.controllers"
-        )
+        core = next(item for item in data["connections"] if item["name"] == "infrastructure.controllers")
         self.assertFalse(core["permitted"])
         self.assertEqual(data["groups"], [])
         provider.assert_not_called()
@@ -743,9 +714,7 @@ class TransportTests(TestCase):
         self.assertEqual(topology["trace"]["hops"][0], {"node": "resource:api-zone", "hop": 0})
         self.assertIn("resource:api-zone", {node["id"] for node in topology["nodes"]})
         self.assertTrue(topology["edges"])
-        resource = next(
-            node for node in topology["nodes"] if node["id"] == "resource:api-zone"
-        )
+        resource = next(node for node in topology["nodes"] if node["id"] == "resource:api-zone")
         self.assertEqual([action["name"] for action in resource["actions"]], ["open"])
         self.assertNotIn("token", json.dumps(topology).lower())
 
@@ -781,12 +750,8 @@ class TransportTests(TestCase):
         project = Project.objects.create(name="Machine readable")
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
-            listed = self.client.get(
-                "/api/v2/resources/projects/?query=readable", **headers
-            )
-            detail = self.client.get(
-                f"/api/v2/resources/projects/{project.slug}/", **headers
-            )
+            listed = self.client.get("/api/v2/resources/projects/?query=readable", **headers)
+            detail = self.client.get(f"/api/v2/resources/projects/{project.slug}/", **headers)
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["data"]["items"][0]["slug"], project.slug)
         self.assertEqual(detail.status_code, 200)
@@ -796,14 +761,10 @@ class TransportTests(TestCase):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
             unknown = self.client.get("/api/v2/resources/projects/?limti=10", **headers)
-            repeated = self.client.get(
-                "/api/v2/resources/projects/?limit=1&limit=2", **headers
-            )
+            repeated = self.client.get("/api/v2/resources/projects/?limit=1&limit=2", **headers)
         self.assertEqual(unknown.status_code, 400)
         self.assertEqual(unknown.json()["error"]["code"], "invalid_input")
-        self.assertEqual(
-            unknown.json()["error"]["message"], "projects: limti is not a known field."
-        )
+        self.assertEqual(unknown.json()["error"]["message"], "projects: limti is not a known field.")
         self.assertEqual(repeated.status_code, 400)
 
     def test_resource_read_requires_its_declared_grant(self):
@@ -817,9 +778,7 @@ class TransportTests(TestCase):
 
     def test_a_response_is_never_cacheable(self):
         with _serving():
-            response = self.client.get(
-                "/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}"
-            )
+            response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
         self.assertEqual(response["Cache-Control"], "private, no-store")
 
     @override_settings(SEVERINO_API_RESOURCE="")

@@ -23,9 +23,7 @@ from .providers import resolve_provider_spec
 
 
 def _canonical(payload: dict[str, Any]) -> bytes:
-    return json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode()
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
 def desired_fingerprint(
@@ -76,7 +74,7 @@ def desired_fingerprint(
                 names_at=names_at,
             ),
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         resolved = spec
     if resolved != spec:
         desired["resolved"] = resolved

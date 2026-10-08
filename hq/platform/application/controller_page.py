@@ -123,9 +123,7 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
         standing=controller_standing(now),
         swept_at=max((reading.attempted_at for reading in readings), default=None),
         sweep_due=due,
-        next_sweep_at=(
-            None if due or age is None else now + timedelta(seconds=max(0, interval - int(age)))
-        ),
+        next_sweep_at=(None if due or age is None else now + timedelta(seconds=max(0, interval - int(age)))),
         sweep_every=duration(every),
         oldest=oldest,
         overdue=oldest is not None and interval > 0 and now - oldest.attempted_at > 2 * every,

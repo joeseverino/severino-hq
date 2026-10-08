@@ -63,14 +63,10 @@ class ConnectionRowsTests(TestCase):
     def setUp(self):
         estate(1)
         connected("example-broken", "cloudflare_api")
-        ProviderConnection.objects.filter(connection_ref="example-broken").update(
-            reachable=False
-        )
+        ProviderConnection.objects.filter(connection_ref="example-broken").update(reachable=False)
 
     def context(self):
-        with host_only(), mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with host_only(), mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             return connections_context(principal=cli_principal())
 
     def test_every_connection_sits_under_the_part_of_hq_that_uses_it(self):
@@ -103,8 +99,14 @@ class ConnectionRowsTests(TestCase):
 
 def _row(key, kind, label, tone="healthy", **extra):
     return SimpleNamespace(
-        key=key, kind=kind, kind_label=label, shown_name=key, summary=extra.get("summary", ""),
-        record_status=RecordStatus("working" if tone == "healthy" else "degraded", tone, "Working" if tone == "healthy" else "Has a problem"),
+        key=key,
+        kind=kind,
+        kind_label=label,
+        shown_name=key,
+        summary=extra.get("summary", ""),
+        record_status=RecordStatus(
+            "working" if tone == "healthy" else "degraded", tone, "Working" if tone == "healthy" else "Has a problem"
+        ),
     )
 
 
@@ -118,8 +120,10 @@ class RecordListTests(TestCase):
     def test_rows_sit_under_their_type_with_what_needs_a_look_first(self):
         listed = record_list(self.ROWS)
 
-        self.assertEqual([(group.label, len(group.rows), group.unsettled) for group in listed.groups],
-                         [("Internal DNS record", 2, 1), ("Proxy host", 1, 0)])
+        self.assertEqual(
+            [(group.label, len(group.rows), group.unsettled) for group in listed.groups],
+            [("Internal DNS record", 2, 1), ("Proxy host", 1, 0)],
+        )
         self.assertEqual([row.key for row in listed.groups[0].rows], ["c-dns", "a-dns"])
         self.assertEqual((listed.total, listed.unsettled, listed.filtered), (3, 1, False))
 

@@ -50,7 +50,7 @@ class ActionItemsView(PageMixin, TemplateView):
             if name not in ACTION_ITEM_FILTERS:
                 del shown[name]
         shown["part"] = part
-        return f'{reverse("action_items_set_aside")}?{shown.urlencode()}'
+        return f"{reverse('action_items_set_aside')}?{shown.urlencode()}"
 
     @override
     def get_context_data(self, **kwargs):
@@ -58,9 +58,7 @@ class ActionItemsView(PageMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         status = self.request.GET.get("status", "").strip()
         source = self.request.GET.get("source", "").strip()
-        sources = tuple(
-            {item["source_id"]: item["source"] for item in all_items}.items()
-        )
+        sources = tuple({item["source_id"]: item["source"] for item in all_items}.items())
         doing, told = queue_state.split_waiting(items)
         context.update(
             aside_all_url=self._aside_all_url("doing"),
@@ -139,11 +137,7 @@ class ActionItemAsideView(View):
             family = request.GET.get("family", "")
             if family:
                 part = queue_state.of_family(part, family)
-            queue_state.set_aside(
-                request.user, [item["key"] for item in part], aside=True, current=current
-            )
+            queue_state.set_aside(request.user, [item["key"] for item in part], aside=True, current=current)
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
             return HttpResponse(status=204)
-        return redirect(
-            safe_next(request, scope=reverse("action_items"), fallback=reverse("action_items"))
-        )
+        return redirect(safe_next(request, scope=reverse("action_items"), fallback=reverse("action_items")))

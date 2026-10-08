@@ -41,9 +41,7 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 # every process in the container gets it, including `docker compose exec`
 # sessions (hq sync / shell / superuser), which never run the entrypoint.
 # setdefault: real environment variables always win.
-_APP_ENV_FILE = Path(
-    os.environ.get("SEVERINO_APP_ENV_PATH", "/run/secrets/severino_hq_env")
-)
+_APP_ENV_FILE = Path(os.environ.get("SEVERINO_APP_ENV_PATH", "/run/secrets/severino_hq_env"))
 if _APP_ENV_FILE.is_file():
     for _token in shlex.split(_APP_ENV_FILE.read_text(encoding="utf-8")):
         _key, _sep, _value = _token.partition("=")
@@ -58,9 +56,7 @@ def env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def env_int(
-    name: str, default: int, *, minimum: int | None = None, maximum: int | None = None
-) -> int:
+def env_int(name: str, default: int, *, minimum: int | None = None, maximum: int | None = None) -> int:
     """A whole number from the environment, or the default when it is not one.
 
     Refusing to start over a malformed cadence value would take HQ down to
@@ -118,9 +114,7 @@ if not SECRET_KEY:
         # one, so this is the floor rather than the usual path.
         SECRET_KEY = secrets.token_urlsafe(64)
     else:
-        raise RuntimeError(
-            "DJANGO_SECRET_KEY must be set in the environment for production."
-        )
+        raise RuntimeError("DJANGO_SECRET_KEY must be set in the environment for production.")
 
 ALLOWED_HOSTS = env_list(
     "DJANGO_ALLOWED_HOSTS",
@@ -148,9 +142,7 @@ def site_host(origins, hosts) -> str:
 # page, an exported file, the host a plain-HTTP request is sent back to. Not
 # taken from the request: a brief printed from a laptop names the same host as
 # one printed from the server.
-SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST") or site_host(
-    CSRF_TRUSTED_ORIGINS, ALLOWED_HOSTS
-)
+SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST") or site_host(CSRF_TRUSTED_ORIGINS, ALLOWED_HOSTS)
 
 # Tighter defaults in production. These can be overridden via env behind a
 # TLS-terminating reverse proxy on a Tailscale-only interface.
@@ -192,18 +184,14 @@ CSRF_FAILURE_VIEW = "hq.platform.core.error_views.csrf_failure"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"
-SECURE_PROXY_SSL_HEADER = (
-    ("HTTP_X_FORWARDED_PROTO", "https") if env_bool("DJANGO_BEHIND_TLS_PROXY") else None
-)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if env_bool("DJANGO_BEHIND_TLS_PROXY") else None
 # A year, on by default. HQ is HTTPS-only behind the proxy, and the header
 # costs nothing until a browser has already reached it over TLS once.
 SECURE_HSTS_SECONDS = env_int("DJANGO_HSTS_SECONDS", 31536000)
 # Subdomains included by default, because the guarantee is about the name and
 # everything under it. Nothing is served under HQ's host, so this costs nothing
 # today and forecloses a plain-HTTP sibling appearing there later.
-SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
-    "DJANGO_HSTS_INCLUDE_SUBDOMAINS", default=True
-)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", default=True)
 # Preload stays opt-in. It is a submission to a list baked into browsers, is
 # slow to undo, and is meaningless for a name the public internet cannot
 # resolve, which is deliberately true of this deployment.
@@ -296,9 +284,7 @@ SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
 # HQ answers the private LAN, the tailnet, and loopback (the container
 # healthcheck). Defaults are in `core.network`; both lists are overridable for
 # a deployment whose network does not look like this one.
-SEVERINO_ENFORCE_TRUSTED_NETWORK = env_bool(
-    "SEVERINO_ENFORCE_TRUSTED_NETWORK", default=True
-)
+SEVERINO_ENFORCE_TRUSTED_NETWORK = env_bool("SEVERINO_ENFORCE_TRUSTED_NETWORK", default=True)
 # The tailnet and loopback, and nothing else.
 #
 # Not the private LAN ranges: a home LAN is not a trust boundary. It holds a
@@ -415,9 +401,7 @@ TEMPLATES = [
         "APP_DIRS": False,
         "OPTIONS": {
             "loaders": (
-                [("django.template.loaders.cached.Loader", _TEMPLATE_LOADERS)]
-                if TEMPLATE_CACHE
-                else _TEMPLATE_LOADERS
+                [("django.template.loaders.cached.Loader", _TEMPLATE_LOADERS)] if TEMPLATE_CACHE else _TEMPLATE_LOADERS
             ),
             "context_processors": [
                 "django.template.context_processors.request",
@@ -468,11 +452,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": str(database_path(BASE_DIR, os.environ.get("SEVERINO_DATABASE_PATH"))),
         "OPTIONS": {
-            "init_command": (
-                "PRAGMA journal_mode=WAL;"
-                "PRAGMA synchronous=NORMAL;"
-                "PRAGMA foreign_keys=ON;"
-            ),
+            "init_command": ("PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA foreign_keys=ON;"),
             "transaction_mode": "IMMEDIATE",
             # How long a writer waits for another writer before giving up.
             # WAL lets readers carry on through a write, but writers are still
@@ -557,9 +537,7 @@ PASSWORD_HASHERS = [
 ]
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
         "OPTIONS": {"min_length": 12},
@@ -607,21 +585,15 @@ OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = env_int("SEVERINO_OIDC_RENEW_SECONDS", 15 *
 # The override is the break-glass path for the day SSO itself is what is
 # broken: set it, restart, and the form is back. Deliberate, and it lands in
 # the audit log the moment it is used.
-SEVERINO_PASSWORD_LOGIN_ENABLED = env_bool(
-    "SEVERINO_PASSWORD_LOGIN_ENABLED", default=not SEVERINO_OIDC_ENABLED
-)
+SEVERINO_PASSWORD_LOGIN_ENABLED = env_bool("SEVERINO_PASSWORD_LOGIN_ENABLED", default=not SEVERINO_OIDC_ENABLED)
 
 # The backend is removed, not merely unused: the guarantee has to hold for
 # any caller of `authenticate()`, not only for the login view.
 AUTHENTICATION_BACKENDS = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend"] + (
-    ["django.contrib.auth.backends.ModelBackend"]
-    if SEVERINO_PASSWORD_LOGIN_ENABLED
-    else []
+    ["django.contrib.auth.backends.ModelBackend"] if SEVERINO_PASSWORD_LOGIN_ENABLED else []
 )
 
-SEVERINO_OIDC_ALLOWED_EMAILS = {
-    email.lower() for email in env_list("SEVERINO_OIDC_ALLOWED_EMAILS")
-}
+SEVERINO_OIDC_ALLOWED_EMAILS = {email.lower() for email in env_list("SEVERINO_OIDC_ALLOWED_EMAILS")}
 SEVERINO_OIDC_ALLOWED_GROUPS = set(env_list("SEVERINO_OIDC_ALLOWED_GROUPS"))
 
 # Empty rejects every token: no issuer matches it.
@@ -631,9 +603,7 @@ OIDC_RP_CLIENT_SECRET = os.environ.get("SEVERINO_OIDC_CLIENT_SECRET", "")
 # The `email` scope is requested only when an email allowlist is configured.
 # Without it the claim never arrives, so SEVERINO_OIDC_ALLOWED_EMAILS could be
 # set and simply never match: failing closed, but silently.
-OIDC_RP_SCOPES = "openid profile groups" + (
-    " email" if SEVERINO_OIDC_ALLOWED_EMAILS else ""
-)
+OIDC_RP_SCOPES = "openid profile groups" + (" email" if SEVERINO_OIDC_ALLOWED_EMAILS else "")
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_OP_AUTHORIZATION_ENDPOINT = f"{OIDC_ISSUER}/authorize"
 OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/token"
@@ -665,9 +635,7 @@ SEVERINO_API_LEEWAY_SECONDS = env_int("SEVERINO_API_LEEWAY_SECONDS", 30)
 # A retry key represents one machine request for this long. The record is
 # durable because a process restart is exactly when an in-memory replay cache
 # would fail the client that needs it.
-SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = env_int(
-    "SEVERINO_API_IDEMPOTENCY_TTL_SECONDS", 86400, minimum=60
-)
+SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = env_int("SEVERINO_API_IDEMPOTENCY_TTL_SECONDS", 86400, minimum=60)
 
 # Encrypts the few secrets an operator deliberately hands to HQ: today, the
 # private key of an internally signed certificate that has to reach a proxy.
@@ -704,9 +672,7 @@ SEVERINO_MCP_ENABLE_CALENDAR = env_bool("SEVERINO_MCP_ENABLE_CALENDAR", False)
 # the person it waits for sleeps, and a request still clickable a month later is
 # a change nobody is looking at any more being applied on an old decision.
 SEVERINO_APPROVAL_WINDOW_HOURS = env_int("SEVERINO_APPROVAL_WINDOW_HOURS", 24)
-SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool(
-    "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False
-)
+SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool("SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False)
 
 
 # ----- Controller cadence ------------------------------------------------------
@@ -723,14 +689,10 @@ SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool(
 # again before the last has finished, every run is a sweep, and a doorbell rung
 # while it runs is not heard until it ends. The controller being idle between
 # sweeps is what lets queued work start the moment it is asked for.
-SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS = env_int(
-    "SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS", 300
-)
+SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS = env_int("SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS", 300)
 # And while nobody is. Every sweep costs a call to each provider, and nothing
 # reads the answer until somebody opens a page.
-SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS = env_int(
-    "SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS", 12 * 60 * 60
-)
+SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS = env_int("SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS", 12 * 60 * 60)
 # How long after a request HQ still counts as in use. Long enough to cover
 # reading a page and acting on it without the tab being open throughout.
 SEVERINO_ACTIVE_WINDOW_SECONDS = env_int("SEVERINO_ACTIVE_WINDOW_SECONDS", 900)
@@ -801,14 +763,10 @@ STORAGES = {
 
 # Media (uploaded receipts) lives OUTSIDE the app code in production.
 # Receipt files are served only through an auth-protected view, never via MEDIA_URL.
-MEDIA_ROOT = Path(
-    os.environ.get("SEVERINO_MEDIA_ROOT", str(BASE_DIR / "var" / "media"))
-)
+MEDIA_ROOT = Path(os.environ.get("SEVERINO_MEDIA_ROOT", str(BASE_DIR / "var" / "media")))
 MEDIA_URL = "/_internal-media/"  # not actually exposed; receipts use protected view
 
-EXPORTS_ROOT = Path(
-    os.environ.get("SEVERINO_EXPORTS_ROOT", str(BASE_DIR / "var" / "exports"))
-)
+EXPORTS_ROOT = Path(os.environ.get("SEVERINO_EXPORTS_ROOT", str(BASE_DIR / "var" / "exports")))
 
 # Upload guardrails.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -846,9 +804,7 @@ LOGGING = {
 # ----- App-specific ------------------------------------------------------------
 
 SEVERINO_SITE_NAME = os.environ.get("SEVERINO_SITE_NAME", "Severino HQ")
-SEVERINO_FISCAL_YEAR_START_MONTH = env_int(
-    "SEVERINO_FISCAL_YEAR_START_MONTH", 1, minimum=1, maximum=12
-)
+SEVERINO_FISCAL_YEAR_START_MONTH = env_int("SEVERINO_FISCAL_YEAR_START_MONTH", 1, minimum=1, maximum=12)
 SEVERINO_DOC_REVIEW_INTERVAL_DAYS = env_int("SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180, minimum=1)
 
 # Cloudflare D1: the contact-form submissions live in a Cloudflare D1
@@ -862,9 +818,7 @@ SEVERINO_DOC_REVIEW_INTERVAL_DAYS = env_int("SEVERINO_DOC_REVIEW_INTERVAL_DAYS",
 # which is what makes it acceptable for the web process to make the call
 # rather than routing it through the controller. Blanking the endpoint
 # disables every lookup surface fail-closed.
-SEVERINO_LOOKUP_ENDPOINT = os.environ.get(
-    "SEVERINO_LOOKUP_ENDPOINT", "https://dns-lookup.com"
-)
+SEVERINO_LOOKUP_ENDPOINT = os.environ.get("SEVERINO_LOOKUP_ENDPOINT", "https://dns-lookup.com")
 # Short on purpose. This runs in the request path of a page an operator is
 # waiting on, and a lookup that has not answered in a few seconds is one the
 # page should report as unavailable rather than keep waiting for.
@@ -920,8 +874,4 @@ if SEVERINO_DEBUG_TOOLBAR:
     SECURE_CSP = without_trusted_types(SECURE_CSP)
 # Who sees the toolbar: loopback, unless a developer behind a proxy names more.
 # Empty, Django's default, whenever it is off.
-INTERNAL_IPS = (
-    env_list("SEVERINO_DEBUG_TOOLBAR_IPS", ["127.0.0.1", "::1"])
-    if SEVERINO_DEBUG_TOOLBAR
-    else []
-)
+INTERNAL_IPS = env_list("SEVERINO_DEBUG_TOOLBAR_IPS", ["127.0.0.1", "::1"]) if SEVERINO_DEBUG_TOOLBAR else []

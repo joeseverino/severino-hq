@@ -106,6 +106,7 @@ class Machine:
         """Public addresses the machine's tailnet client reports."""
 
         return self.presence.public_addresses if self.presence is not None else ()
+
     # What the tailnet says about it, where the tailnet knows it at all.
     presence: Presence | None = None
 
@@ -206,37 +207,22 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
     # queried again because the readings above are exactly its evidence.
     addresses = _host_addresses(containers)
     index = index_of(
-        declared=[
-            {"name": name, "addresses": entry.addresses}
-            for name, entry in declared.items()
-        ]
+        declared=[{"name": name, "addresses": entry.addresses} for name, entry in declared.items()]
         # The tailnet's own addresses, as evidence rather than as something
         # somebody has to retype: without them a tailnet address resolves to a
         # machine only when an operator has copied it into the declaration.
         #
         # After the declarations, so a declared name still wins the address it
         # claims and nothing about precedence moves.
-        + [
-            {"name": name, "addresses": presence.addresses}
-            for name, presence in present.items()
-        ],
+        + [{"name": name, "addresses": presence.addresses} for name, presence in present.items()],
         hosts=addresses,
         connections=connections,
     )
     services = _services_by_host(index)
     resources, device_keys = _resources_by_host()
     # A declared machine counts on its own; declaring one is a deliberate act.
-    names = (
-        set(containers)
-        | set(reached)
-        | set(services)
-        | set(resources)
-        | set(declared)
-        | set(present)
-    )
-    answered = {
-        connection.connection_ref for connection in connections if connection.reachable
-    }
+    names = set(containers) | set(reached) | set(services) | set(resources) | set(declared) | set(present)
+    answered = {connection.connection_ref for connection in connections if connection.reachable}
     aliases = same_machine(index, addresses, connections, present)
     canonical = sorted(names - set(aliases))
     hq_names = hq_hostnames()
@@ -258,11 +244,7 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
             # "mac" here, and it is one machine either way.
             presence=present.get(name)
             or next(
-                (
-                    present[alias]
-                    for alias, target in aliases.items()
-                    if target == name and alias in present
-                ),
+                (present[alias] for alias, target in aliases.items() if target == name and alias in present),
                 None,
             ),
             # Keyed by the tailnet's name for the device, for the same reason
@@ -270,24 +252,16 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
             # the tailnet used, not the one HQ lists the machine under.
             route_approval_key=device_keys.get(name)
             or next(
-                (
-                    device_keys[alias]
-                    for alias, target in aliases.items()
-                    if target == name and alias in device_keys
-                ),
+                (device_keys[alias] for alias, target in aliases.items() if target == name and alias in device_keys),
                 "",
             ),
             telemetry=declared.get(name, Declared()).telemetry,
             telemetry_observed_at=declared.get(name, Declared()).telemetry_observed_at,
             reachable=any(ref in answered for ref in _refs(reached, name, aliases)),
-            unanswered=tuple(
-                ref for ref in _refs(reached, name, aliases) if ref not in answered
-            ),
+            unanswered=tuple(ref for ref in _refs(reached, name, aliases) if ref not in answered),
             reached_by=_refs(reached, name, aliases),
             opened_by=_refs(opened, name, aliases),
-            aliases=tuple(
-                sorted(alias for alias, target in aliases.items() if target == name)
-            ),
+            aliases=tuple(sorted(alias for alias, target in aliases.items() if target == name)),
             address=(
                 next(filter(_own, (addresses.get(name, ""),)), "")
                 or _address(name, connections)
@@ -324,21 +298,11 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
             # Gathered across aliases like everything else here. A machine known
             # by two names runs one set of containers.
             containers=tuple(containers.get(name, ()))
-            + tuple(
-                item
-                for alias, target in aliases.items()
-                if target == name
-                for item in containers.get(alias, ())
-            ),
+            + tuple(item for alias, target in aliases.items() if target == name for item in containers.get(alias, ())),
             hostnames=tuple(
                 sorted(
                     set(services.get(name, ()))
-                    | {
-                        hostname
-                        for alias in aliases
-                        if aliases[alias] == name
-                        for hostname in services.get(alias, ())
-                    }
+                    | {hostname for alias in aliases if aliases[alias] == name for hostname in services.get(alias, ())}
                 )
             ),
             resources=tuple(sorted(resources.get(name, ()))),
@@ -371,11 +335,7 @@ def declaration_seed(found: Machine) -> dict[str, Any]:
 def _host_addresses(containers: dict[str, list[Running]]) -> dict[str, str]:
     """Where the sweep says each name it filed containers under actually is."""
 
-    return {
-        host: found[0].host_address
-        for host, found in containers.items()
-        if found and found[0].host_address
-    }
+    return {host: found[0].host_address for host, found in containers.items() if found and found[0].host_address}
 
 
 def machine(name: str, *, served_at: tuple[str, ...] | None = None) -> Machine | None:
@@ -394,8 +354,7 @@ def machine(name: str, *, served_at: tuple[str, ...] | None = None) -> Machine |
             (
                 item
                 for item in catalog
-                if wanted
-                in {alias.lower() for alias in (*item.aliases, item.declaration) if alias}
+                if wanted in {alias.lower() for alias in (*item.aliases, item.declaration) if alias}
             ),
             None,
         ),
@@ -411,9 +370,7 @@ def _containers() -> dict[str, list[Running]]:
         for record in snapshot.records:
             host = str(record.get("host", ""))
             if host:
-                found.setdefault(host, []).append(
-                    Running.of(record, snapshot.observed_at, watchers)
-                )
+                found.setdefault(host, []).append(Running.of(record, snapshot.observed_at, watchers))
     return found
 
 
@@ -437,9 +394,7 @@ def _reached(connections: tuple[ProviderConnection, ...]) -> dict[str, set[str]]
         # does, so a machine HQ can log into is a machine whether or not
         # anything else ever mentions it.
         if points_at_host(connection.endpoint):
-            found.setdefault(connection.connection_ref, set()).add(
-                connection.connection_ref
-            )
+            found.setdefault(connection.connection_ref, set()).add(connection.connection_ref)
     return found
 
 
@@ -460,15 +415,11 @@ def _with_tailnet(
     by_controller: dict[str, set[str]] = {}
     for connection in connections:
         if connection.provider in providers:
-            by_controller.setdefault(connection.controller_id, set()).add(
-                connection.connection_ref
-            )
+            by_controller.setdefault(connection.controller_id, set()).add(connection.connection_ref)
     found = {name: set(refs) for name, refs in opened.items()}
     for name, presence in present.items():
         refs = (
-            {presence.connection_ref}
-            if presence.connection_ref
-            else by_controller.get(presence.controller_id, set())
+            {presence.connection_ref} if presence.connection_ref else by_controller.get(presence.controller_id, set())
         )
         if refs:
             found.setdefault(name, set()).update(refs)
@@ -481,12 +432,7 @@ def _refs(reached: dict[str, set[str]], name: str, aliases: dict[str, str]) -> t
     return tuple(
         sorted(
             set(reached.get(name, ()))
-            | {
-                ref
-                for alias, target in aliases.items()
-                if target == name
-                for ref in reached.get(alias, ())
-            }
+            | {ref for alias, target in aliases.items() if target == name for ref in reached.get(alias, ())}
         )
     )
 
@@ -504,10 +450,7 @@ def _reaches_machines(provider: str) -> bool:
 
     if not provider:
         return False
-    return any(
-        provider in spec.connection_providers and declares_host(kind)
-        for kind, spec in PROVIDERS.items()
-    )
+    return any(provider in spec.connection_providers and declares_host(kind) for kind, spec in PROVIDERS.items())
 
 
 def _address(name: str, connections: tuple[ProviderConnection, ...]) -> str:
@@ -584,7 +527,7 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
         try:
             origin = provider.origin(resource.spec)
             names = tuple(provider.hostnames(resource.spec))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
         if not origin:
             continue
@@ -672,7 +615,7 @@ def _served_by() -> dict[tuple[str, str], set[str]]:
         try:
             origin = provider.origin(resource.spec)
             names = tuple(provider.hostnames(resource.spec))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
         if not origin:
             continue

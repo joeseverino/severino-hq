@@ -4,30 +4,29 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('expenses', '0003_business_use_in_range'),
+        ("expenses", "0003_business_use_in_range"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='expense',
-            name='about',
-            field=models.CharField(blank=True, db_index=True, default='', max_length=300, verbose_name='for'),
+            model_name="expense",
+            name="about",
+            field=models.CharField(blank=True, db_index=True, default="", max_length=300, verbose_name="for"),
         ),
         migrations.AddField(
-            model_name='expense',
-            name='about_name',
-            field=models.CharField(blank=True, default='', editable=False, max_length=200),
+            model_name="expense",
+            name="about_name",
+            field=models.CharField(blank=True, default="", editable=False, max_length=200),
         ),
         migrations.AddField(
-            model_name='expense',
-            name='paid_from',
-            field=models.CharField(blank=True, db_index=True, default='', max_length=300, verbose_name='paid from'),
+            model_name="expense",
+            name="paid_from",
+            field=models.CharField(blank=True, db_index=True, default="", max_length=300, verbose_name="paid from"),
         ),
         migrations.AddField(
-            model_name='expense',
-            name='paid_from_name',
-            field=models.CharField(blank=True, default='', editable=False, max_length=200),
+            model_name="expense",
+            name="paid_from_name",
+            field=models.CharField(blank=True, default="", editable=False, max_length=200),
         ),
     ]

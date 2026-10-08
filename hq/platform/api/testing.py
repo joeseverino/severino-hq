@@ -47,9 +47,7 @@ class Contract:
 
     def __init__(self, value: dict[str, Any]) -> None:
         self.value = value
-        self.registry = Registry().with_resource(
-            URI, Resource.from_contents(value, default_specification=DRAFT202012)
-        )
+        self.registry = Registry().with_resource(URI, Resource.from_contents(value, default_specification=DRAFT202012))
         self.templates = [
             (re.compile("^" + re.sub(r"\\\{\w+\\\}", "[^/]+", re.escape(path)) + "$"), path)
             for path in value["paths"]
@@ -111,9 +109,7 @@ class ContractClient(Client):
             self._conform(method.lower(), url, data, response)
         return response
 
-    def _conform(
-        self, method: str, url: str, data: Any, response: HttpResponse | _MonkeyPatchedWSGIResponse
-    ) -> None:
+    def _conform(self, method: str, url: str, data: Any, response: HttpResponse | _MonkeyPatchedWSGIResponse) -> None:
         contract = self.contract
         path = contract.path(url)
         if path is None:

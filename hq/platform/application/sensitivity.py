@@ -22,9 +22,7 @@ def safe_doc_ids(documentation: QuerySet[DocumentationRecord]) -> list[str]:
     """The ``doc_id`` of each related record an AI-facing surface may name, in order."""
 
     return list(
-        documentation.filter(sensitivity__in=SAFE_SENSITIVITIES)
-        .order_by("doc_id")
-        .values_list("doc_id", flat=True)
+        documentation.filter(sensitivity__in=SAFE_SENSITIVITIES).order_by("doc_id").values_list("doc_id", flat=True)
     )
 
 

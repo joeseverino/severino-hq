@@ -51,13 +51,9 @@ class Asset(TimestampedModel):
     item_name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=180, unique=True, blank=True)
     vendor = models.CharField(max_length=120, blank=True)
-    category = models.CharField(
-        max_length=30, choices=ASSET_CATEGORY_CHOICES, default="other"
-    )
+    category = models.CharField(max_length=30, choices=ASSET_CATEGORY_CHOICES, default="other")
     purchase_date = models.DateField(null=True, blank=True)
-    total_cost = models.DecimalField(
-        max_digits=12, decimal_places=2, default=Decimal("0.00")
-    )
+    total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     business_use_percentage = models.PositiveSmallIntegerField(
         default=100,
         validators=business_use.VALIDATORS,
@@ -68,23 +64,15 @@ class Asset(TimestampedModel):
         decimal_places=2,
         default=Decimal("0.00"),
         editable=False,
-        help_text=(
-            "total_cost × business_use_percentage / 100. Estimate, not tax advice."
-        ),
+        help_text=("total_cost × business_use_percentage / 100. Estimate, not tax advice."),
     )
-    payment_method = models.CharField(
-        max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True
-    )
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
     serial_number = models.CharField(max_length=120, blank=True)
     warranty_date = models.DateField(null=True, blank=True)
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.ACTIVE
-    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     notes = models.TextField(blank=True)
 
-    related_projects = models.ManyToManyField(
-        "projects.Project", blank=True, related_name="assets"
-    )
+    related_projects = models.ManyToManyField("projects.Project", blank=True, related_name="assets")
     # The machine, domain or certificate this asset is.
     infrastructure = ReferenceField(
         "this is",
@@ -121,9 +109,7 @@ class Asset(TimestampedModel):
                 n += 1
             self.slug = slug
         cost = self.total_cost or Decimal("0.00")
-        self.estimated_deductible_amount = quantize_money(
-            cost * Decimal(self.business_use_percentage) / Decimal(100)
-        )
+        self.estimated_deductible_amount = quantize_money(cost * Decimal(self.business_use_percentage) / Decimal(100))
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:

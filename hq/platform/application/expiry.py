@@ -41,7 +41,7 @@ def renewal_window(spec: Mapping[str, Any]) -> int:
 
     try:
         return int(spec.get("renewal_window_days") or DEFAULT_RENEWAL_WINDOW_DAYS)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return DEFAULT_RENEWAL_WINDOW_DAYS
 
 

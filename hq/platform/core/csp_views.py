@@ -34,11 +34,7 @@ def _csp_violations(payload):
         report = payload.get("csp-report")
         return [report] if isinstance(report, dict) else []
     if isinstance(payload, list):
-        return [
-            item["body"]
-            for item in payload
-            if isinstance(item, dict) and isinstance(item.get("body"), dict)
-        ]
+        return [item["body"] for item in payload if isinstance(item, dict) and isinstance(item.get("body"), dict)]
     return []
 
 
@@ -60,12 +56,11 @@ def csp_report(request):
     it answers the same 204 whatever it decides, so nothing here is an oracle.
     """
 
-
     if len(request.body) > _CSP_REPORT_MAX_BYTES:
         return HttpResponse(status=204)
     try:
         payload = json.loads(request.body.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
+    except ValueError, UnicodeDecodeError:
         return HttpResponse(status=204)
 
     for violation in _csp_violations(payload)[:10]:
@@ -75,12 +70,8 @@ def csp_report(request):
             or violation.get("violated-directive")
             or ""
         )[:_CSP_FIELD_LIMIT]
-        blocked = str(
-            violation.get("blocked-uri") or violation.get("blockedURL") or ""
-        )[:_CSP_FIELD_LIMIT]
-        document = str(
-            violation.get("document-uri") or violation.get("documentURL") or ""
-        )[:_CSP_FIELD_LIMIT]
+        blocked = str(violation.get("blocked-uri") or violation.get("blockedURL") or "")[:_CSP_FIELD_LIMIT]
+        document = str(violation.get("document-uri") or violation.get("documentURL") or "")[:_CSP_FIELD_LIMIT]
         if not directive:
             continue
         # One row per distinct complaint per hour. A page that violates the

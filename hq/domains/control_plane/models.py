@@ -122,9 +122,7 @@ class ManagedResource(TimestampedModel):
         from .providers import readout_rows
 
         rows = " · ".join(
-            f"{label}: {desired or observed}"
-            for label, desired, observed in readout_rows(self)
-            if desired or observed
+            f"{label}: {desired or observed}" for label, desired, observed in readout_rows(self) if desired or observed
         )
         return rows or self.kind_label
 
@@ -150,9 +148,7 @@ class ProviderInventory(TimestampedModel):
     error = models.CharField(max_length=500, blank=True)
     # What the provider refused when unreachable: the credential, or one
     # permission. Blank when the read failed for another reason.
-    refusal = models.CharField(
-        max_length=16, blank=True, choices=[(value, value) for value in REFUSALS]
-    )
+    refusal = models.CharField(max_length=16, blank=True, choices=[(value, value) for value in REFUSALS])
     # Parts of the kind the last read could not read while the rest read, as
     # ``control_plane.reading_parts.clean_refused_parts`` stores them.
     refused_parts = models.JSONField(default=list, blank=True)
@@ -204,9 +200,7 @@ class ProviderConnection(TimestampedModel):
     # Why the last probe failed: a refusal, the address answering as something
     # other than the API, or no answer. Blank when it answered or the cause is
     # unknown.
-    failure = models.CharField(
-        max_length=16, blank=True, choices=[(value, value) for value in FAILURES]
-    )
+    failure = models.CharField(max_length=16, blank=True, choices=[(value, value) for value in FAILURES])
     # Whether the connection's item declares that HQ manages through it. False
     # means it only observes, and nothing it reads is adopted.
     manages = models.BooleanField(default=False)
@@ -261,11 +255,7 @@ class NotManaged(TimestampedModel):
 
     class Meta:
         ordering = ("kind", "label")
-        constraints = [
-            models.UniqueConstraint(
-                fields=("kind", "token"), name="one_not_managed_row_per_record"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=("kind", "token"), name="one_not_managed_row_per_record")]
 
     @override
     def __str__(self) -> str:
@@ -293,11 +283,7 @@ class ReadRequest(TimestampedModel):
     requested_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=("connection_ref", "kind"), name="one_read_request_per_subject"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=("connection_ref", "kind"), name="one_read_request_per_subject")]
 
     @override
     def __str__(self) -> str:
@@ -352,9 +338,7 @@ class CertificateMaterial(TimestampedModel):
     resource's export prints.
     """
 
-    resource = models.OneToOneField(
-        ManagedResource, on_delete=models.CASCADE, related_name="material"
-    )
+    resource = models.OneToOneField(ManagedResource, on_delete=models.CASCADE, related_name="material")
     sealed_fullchain = models.TextField()
     sealed_private_key = models.TextField()
     # Held in the clear because they are printed, not protected: an operator has
@@ -404,9 +388,7 @@ class OperationRequest(TimestampedModel):
     State = OperationState
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    resource = models.ForeignKey(
-        ManagedResource, on_delete=models.PROTECT, related_name="operations"
-    )
+    resource = models.ForeignKey(ManagedResource, on_delete=models.PROTECT, related_name="operations")
     action = models.CharField(max_length=20, choices=Action.choices)
     state = models.CharField(max_length=20, choices=State.choices, default=State.QUEUED)
     requested_by = models.ForeignKey(
@@ -457,9 +439,7 @@ class OperationRequest(TimestampedModel):
             ),
             Rule(
                 # Finished exactly when it says when.
-                condition=models.Q(
-                    state__in=("succeeded", "failed", "cancelled"), completed_at__isnull=False
-                )
+                condition=models.Q(state__in=("succeeded", "failed", "cancelled"), completed_at__isnull=False)
                 | models.Q(state__in=("queued", "claimed"), completed_at__isnull=True),
                 name="operation_finished_says_when",
                 violation_error_message="An operation has a completion time exactly when it has finished.",
@@ -571,9 +551,7 @@ class ApprovalRequest(TimestampedModel):
             ),
             Rule(
                 # A person decides an approval or a rejection, and nothing else.
-                condition=(
-                    models.Q(state__in=("approved", "rejected")) & ~models.Q(decided_actor="")
-                )
+                condition=(models.Q(state__in=("approved", "rejected")) & ~models.Q(decided_actor=""))
                 | (~models.Q(state__in=("approved", "rejected")) & models.Q(decided_actor="")),
                 name="approval_decision_names_who_decided",
                 violation_error_message="An approval or a rejection names who decided it, and nothing else does.",
@@ -644,9 +622,7 @@ class CapabilityRule(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=("scope", "subject", "capability"), name="unique_capability_rule"
-            )
+            models.UniqueConstraint(fields=("scope", "subject", "capability"), name="unique_capability_rule")
         ]
         ordering = ("scope", "subject", "capability")
 

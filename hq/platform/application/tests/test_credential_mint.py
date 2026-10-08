@@ -82,23 +82,12 @@ def connect(store=STORE, **fields) -> ProviderConnection:
 
 
 def missing_from_readings() -> tuple[str, ...]:
-    return tuple(
-        sorted(
-            {
-                name
-                for kind in cloudflare_kinds()
-                if kind != PAGES
-                for name in OBSERVATIONS[kind].requires
-            }
-        )
-    )
+    return tuple(sorted({name for kind in cloudflare_kinds() if kind != PAGES for name in OBSERVATIONS[kind].requires}))
 
 
 class StoreReferenceTests(TestCase):
     def test_only_references_are_kept(self):
-        self.assertEqual(
-            store_references({**STORE, "API_TOKEN": SECRET, "value": SECRET}), STORE
-        )
+        self.assertEqual(store_references({**STORE, "API_TOKEN": SECRET, "value": SECRET}), STORE)
 
     def test_a_malformed_item_or_vault_is_dropped(self):
         self.assertEqual(store_references({"vault": "a/b", "item": "x"}), {})
@@ -116,9 +105,7 @@ class StoreReferenceTests(TestCase):
             "op://Operator Vault/line\nbreak",
         ):
             with self.subTest(bootstrap=bootstrap):
-                self.assertNotIn(
-                    "bootstrap", store_references({**STORE, "bootstrap": bootstrap})
-                )
+                self.assertNotIn("bootstrap", store_references({**STORE, "bootstrap": bootstrap}))
 
     def test_expiry_is_an_aware_moment_or_nothing(self):
         self.assertIsNotNone(parse_expiry("2030-01-01T00:00:00Z"))
@@ -246,9 +233,7 @@ class MintCommandTests(TestCase):
         self.assertTrue(any("CLOUDFLARE_BOOTSTRAP_TOKEN" in gap for gap in fix.gaps))
 
     def test_a_healthy_credential_offers_nothing(self):
-        ProviderInventory.objects.create(
-            kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now()
-        )
+        ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())
         connect(expires_at=timezone.now() + timedelta(days=80))
 
         fix = credential_fixes()["example-api"]
@@ -322,9 +307,7 @@ class CredentialFindingTests(TestCase):
         self.assertTrue(finding.steps)
 
     def test_expiry_inside_the_window_raises_a_finding_with_the_mint(self):
-        ProviderInventory.objects.create(
-            kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now()
-        )
+        ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())
         connect(expires_at=timezone.now() + timedelta(days=10))
 
         found = {finding.rule: finding for finding in self.findings()}
@@ -334,9 +317,7 @@ class CredentialFindingTests(TestCase):
         self.assertEqual(finding.steps[0].command, COMMAND)
 
     def test_an_expired_credential_is_serious(self):
-        ProviderInventory.objects.create(
-            kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now()
-        )
+        ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())
         connect(expires_at=timezone.now() - timedelta(days=1))
 
         finding = {f.rule: f for f in self.findings()}["credential-expiring"]
@@ -345,9 +326,7 @@ class CredentialFindingTests(TestCase):
         self.assertIn("has expired", finding.title)
 
     def test_expiry_outside_the_window_is_quiet(self):
-        ProviderInventory.objects.create(
-            kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now()
-        )
+        ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())
         connect(expires_at=timezone.now() + timedelta(days=60))
 
         self.assertNotIn("credential-expiring", {f.rule for f in self.findings()})
@@ -355,9 +334,7 @@ class CredentialFindingTests(TestCase):
 
 class RenderedFixTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_superuser(
-            username="operator", password="not-a-real-password"
-        )
+        user = get_user_model().objects.create_superuser(username="operator", password="not-a-real-password")
         self.client.force_login(user)
         production_shape()
         report_connections(

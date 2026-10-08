@@ -5,24 +5,23 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0006_audit_denied_action'),
+        ("core", "0006_audit_denied_action"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='AgentIdentity',
+            name="AgentIdentity",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('client_id', models.CharField(max_length=160, unique=True)),
-                ('interfaces', models.JSONField(default=list)),
-                ('granted', models.JSONField(default=list)),
-                ('first_seen', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
-                ('last_seen', models.DateTimeField(default=django.utils.timezone.now)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("client_id", models.CharField(max_length=160, unique=True)),
+                ("interfaces", models.JSONField(default=list)),
+                ("granted", models.JSONField(default=list)),
+                ("first_seen", models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ("last_seen", models.DateTimeField(default=django.utils.timezone.now)),
             ],
             options={
-                'ordering': ('client_id',),
+                "ordering": ("client_id",),
             },
         ),
     ]

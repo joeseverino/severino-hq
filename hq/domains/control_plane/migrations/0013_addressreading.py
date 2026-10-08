@@ -5,21 +5,20 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0012_hq_owns_the_topology'),
+        ("control_plane", "0012_hq_owns_the_topology"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='AddressReading',
+            name="AddressReading",
             fields=[
-                ('address', models.GenericIPAddressField(primary_key=True, serialize=False)),
-                ('reading', models.JSONField(default=dict)),
-                ('observed_at', models.DateTimeField(default=django.utils.timezone.now)),
+                ("address", models.GenericIPAddressField(primary_key=True, serialize=False)),
+                ("reading", models.JSONField(default=dict)),
+                ("observed_at", models.DateTimeField(default=django.utils.timezone.now)),
             ],
             options={
-                'ordering': ('-observed_at',),
+                "ordering": ("-observed_at",),
             },
         ),
     ]

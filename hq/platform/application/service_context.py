@@ -100,9 +100,7 @@ class ServiceSection:
             )
             if len(keep) < len(self.columns):
                 object.__setattr__(self, "columns", tuple(self.columns[i] for i in keep))
-                object.__setattr__(
-                    self, "records", tuple(tuple(row[i] for i in keep) for row in self.records)
-                )
+                object.__setattr__(self, "records", tuple(tuple(row[i] for i in keep) for row in self.records))
 
 
 def sections_for(service) -> tuple[ServiceSection, ...]:
@@ -122,7 +120,6 @@ def _repository_label(url: str) -> str:
 
     path = urlparse(url).path.strip("/")
     return path or url
-
 
 
 def _activity(service, project) -> ServiceSection | None:
@@ -174,9 +171,7 @@ def _traffic(service) -> SummaryItem | None:
     hostname = getattr(service, "hostname", "") or ""
     if not hostname:
         return None
-    measured = traffic_for_hosts({hostname}, days=HOST_TRAFFIC_DAYS).get(
-        normalized_hostname(hostname)
-    )
+    measured = traffic_for_hosts({hostname}, days=HOST_TRAFFIC_DAYS).get(normalized_hostname(hostname))
     if not measured:
         return None
     interval = measured.get("sample_interval") or 1
@@ -256,8 +251,7 @@ def _what(service) -> str:
     if service.is_observed:
         seen = ", ".join(
             dict.fromkeys(
-                f"{hop.source.label} {hop.name}".strip() if hop.source else hop.name
-                for hop in service.path.observed
+                f"{hop.source.label} {hop.name}".strip() if hop.source else hop.name for hop in service.path.observed
             )
         )
         return f"Read through {seen}. Not in HQ's settings." if seen else "Read"
@@ -343,7 +337,8 @@ def _project(service) -> SummaryItem | None:
     project = Project.objects.filter(slug=service.project["slug"]).only("repository_url", "last_push_at").first()
     repo = repository_for(project.repository_url) if project and project.repository_url else None
     parts = [
-        _repository_detail(repo) or (_repository_label(project.repository_url) if project and project.repository_url else ""),
+        _repository_detail(repo)
+        or (_repository_label(project.repository_url) if project and project.repository_url else ""),
         f"pushed {ago(project.last_push_at)}" if project and project.last_push_at else "",
     ]
     return SummaryItem(
@@ -427,13 +422,14 @@ def part_rows(service, route) -> tuple[PartRow, ...]:
     for index, hop in enumerate(route.hops):
         claim = claims.get(hop.link.url) if hop.link and hop.link.url else None
         certificate = hop.certificate
-        certificate_claim = (
-            claims.get(certificate.link.url) if certificate is not None and certificate.link else None
-        )
+        certificate_claim = claims.get(certificate.link.url) if certificate is not None and certificate.link else None
         used.update(item.url for item in (claim, certificate_claim) if item is not None)
         neighbours = {
             _shown(item)
-            for item in (route.hops[index - 1] if index else None, route.hops[index + 1] if index + 1 < len(route.hops) else None)
+            for item in (
+                route.hops[index - 1] if index else None,
+                route.hops[index + 1] if index + 1 < len(route.hops) else None,
+            )
             if item is not None
         }
         rows.append(
@@ -491,8 +487,10 @@ def _observed_health(hops, index: int) -> tuple[str, str] | None:
         return None
     if hop.step in ("upstream", "container"):
         # What answers a forward is the container behind it.
-        container = hop if hop.step == "container" else next(
-            (item for item in hops[index + 1 :] if item.step == "container"), None
+        container = (
+            hop
+            if hop.step == "container"
+            else next((item for item in hops[index + 1 :] if item.step == "container"), None)
         )
         on = next((item for item in reversed(hops[:index]) if item.step == "machine"), None)
         found = machine(on.name) if on else None

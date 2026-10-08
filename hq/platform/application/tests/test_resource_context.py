@@ -17,7 +17,10 @@ class ControllerSummaryTests(SimpleTestCase):
     def test_a_controller_that_can_do_nothing_is_observing_only_and_says_why_once(self):
         observes = "Its connection only observes. Set manages on the connection to act."
         found = controller_summary(
-            {"reconcile": allowance(False, observes, automatic=True), "renew": allowance(False, observes, automatic=True)},
+            {
+                "reconcile": allowance(False, observes, automatic=True),
+                "renew": allowance(False, observes, automatic=True),
+            },
             label,
         )
 

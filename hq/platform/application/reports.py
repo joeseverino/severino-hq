@@ -9,9 +9,7 @@ from hq.platform.core.models import AuditLog
 from .security import Capability, Principal
 
 
-def export_year_summary(
-    year: int, output_format: str, *, principal: Principal
-) -> dict[str, Any]:
+def export_year_summary(year: int, output_format: str, *, principal: Principal) -> dict[str, Any]:
     principal.require(Capability.READ)
     normalized = "md" if output_format == "markdown" else output_format
     if normalized == "md":

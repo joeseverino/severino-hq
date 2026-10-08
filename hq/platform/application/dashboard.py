@@ -62,19 +62,14 @@ def work_queue() -> list[dict[str, Any]]:
     a change to one composes the rest from what is stored.
     """
 
-    return [
-        queue_item(entry["source_id"], entry["source"], entry["item"])
-        for entry in domain_attention_items()
-    ]
+    return [queue_item(entry["source_id"], entry["source"], entry["item"]) for entry in domain_attention_items()]
 
 
 def _count_variant(user_pk: int) -> tuple[Any, ...]:
     return (user_pk, *composed_variant())
 
 
-@derivation(
-    "attention.count", reads=(*QUEUE_READS, "core.ActionItemRead"), vary=_count_variant
-)
+@derivation("attention.count", reads=(*QUEUE_READS, "core.ActionItemRead"), vary=_count_variant)
 def waiting(user_pk: int) -> int:
     """How many items wait on one person: the queue, less what they set aside."""
 

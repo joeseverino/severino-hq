@@ -39,6 +39,7 @@ def __getattr__(name: str) -> str:
         return site_label()
     raise AttributeError(name)
 
+
 # Names a deployment answers to that are not a place anyone reaches it by.
 _NOT_A_SITE = frozenset({"localhost", "testserver"})
 
@@ -104,7 +105,7 @@ def served_port(request: Any) -> int | None:
         return None
     try:
         return int(server[1])
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -209,9 +210,7 @@ def hq_machine(
     return owners.pop() if len(owners) == 1 else ""
 
 
-def hq_service(
-    request: Any = None, *, catalog: Iterable[Any] | None = None
-) -> SelfService | None:
+def hq_service(request: Any = None, *, catalog: Iterable[Any] | None = None) -> SelfService | None:
     """HQ's own service, or None when it answers at no name worth listing.
 
     The machine is the machine catalogue's answer, so every page agrees.

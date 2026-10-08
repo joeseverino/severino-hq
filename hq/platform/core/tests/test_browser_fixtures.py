@@ -144,9 +144,7 @@ def build_estate():
     ProviderInventory.objects.update_or_create(
         kind="cloudflare.access_app",
         defaults={
-            "records": [
-                {"id": "a1", "name": "Example admin", "domain": "admin.example.com"}
-            ],
+            "records": [{"id": "a1", "name": "Example admin", "domain": "admin.example.com"}],
             "reachable": True,
             "observed_at": timezone.now(),
         },
@@ -280,19 +278,14 @@ def _highlights():
                 "id": "example.second",
                 "label": "Example two",
                 "cards": [],
-                "overview": DomainOverview(
-                    "Example", "/example/", long, (chart,), (calendar,)
-                ),
+                "overview": DomainOverview("Example", "/example/", long, (chart,), (calendar,)),
             },
         ],
         "compact": [{"label": "Example count", "value": 3, "url": "/example/"}],
     }
 
 
-_LINKS = [
-    {"href": "https://example.com/", "label": f"Example link {i}", "sub": "example.com"}
-    for i in range(24)
-]
+_LINKS = [{"href": "https://example.com/", "label": f"Example link {i}", "sub": "example.com"} for i in range(24)]
 
 
 @contextmanager
@@ -325,6 +318,7 @@ _THROUGH_THE_PROXY = {
     "HTTP_X_FORWARDED_SCHEME": "https",
 }
 
+
 def _calendar():
     """A full month: a trip over a weekend, a timed visit with a
     long name and a place, a day too busy for its cell, and a weekly class."""
@@ -333,7 +327,11 @@ def _calendar():
 
     today = timezone.localdate()
     sunday = today - timedelta(days=(today.weekday() + 1) % 7)
-    Entry.objects.create(title="Example trip to a city with a long name", starts_on=sunday - timedelta(days=2), ends_on=sunday + timedelta(days=1))
+    Entry.objects.create(
+        title="Example trip to a city with a long name",
+        starts_on=sunday - timedelta(days=2),
+        ends_on=sunday + timedelta(days=1),
+    )
     Entry.objects.create(
         title="Example appointment with a long descriptive title",
         starts_on=today,

@@ -190,9 +190,7 @@ class DoorbellTests(TestCase):
         ring_doorbell()
         ring_doorbell()
 
-        self.assertEqual(
-            [path.name for path in self.directory.iterdir()], ["doorbell"]
-        )
+        self.assertEqual([path.name for path in self.directory.iterdir()], ["doorbell"])
 
     @override_settings(
         SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=60,
@@ -201,9 +199,7 @@ class DoorbellTests(TestCase):
     def test_an_operator_can_request_a_due_sweep_without_provider_authority(self):
         swept(age_seconds=600)
 
-        result = request_controller_sweep(
-            ControllerSweepCommand(), principal=cli_principal()
-        )
+        result = request_controller_sweep(ControllerSweepCommand(), principal=cli_principal())
 
         self.assertTrue(result["requested"])
         self.assertTrue(result["due"])
@@ -212,9 +208,7 @@ class DoorbellTests(TestCase):
     @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
     def test_an_explicit_sweep_request_reports_an_unreachable_doorbell(self):
         with self.assertRaisesRegex(ValueError, "could not reach the controller"):
-            request_controller_sweep(
-                ControllerSweepCommand(), principal=cli_principal()
-            )
+            request_controller_sweep(ControllerSweepCommand(), principal=cli_principal())
 
     @override_settings(SEVERINO_CONTROLLER_DOORBELL="/proc/nonexistent/doorbell")
     def test_a_doorbell_it_cannot_write_does_not_fail_the_write(self):
@@ -241,9 +235,7 @@ class ActivityTests(TestCase):
         self.settings_override, self.directory = markers()
         self.settings_override.enable()
         self.addCleanup(self.settings_override.disable)
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
 
     def test_opening_a_page_counts_as_using_hq(self):
@@ -306,8 +298,7 @@ class ProbesAreNotPresenceTests(TestCase):
 class CarriedConnectionPolicyTests(TestCase):
     """Which SSH connections a sweep may report without logging in again."""
 
-    def _connection(self, ref, *, controller="here", provider="ssh", age_minutes=5,
-                    reachable=True, probed=True):
+    def _connection(self, ref, *, controller="here", provider="ssh", age_minutes=5, reachable=True, probed=True):
         from hq.domains.control_plane.models import ProviderConnection
 
         return ProviderConnection.objects.create(

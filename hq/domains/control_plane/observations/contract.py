@@ -56,9 +56,7 @@ def _nowhere(_record: Mapping[str, Any], _hostname: str) -> str:
 
 # What a reading can supply to a subject beyond the relation it states: the
 # service facets, a domain's registration, and who holds a network.
-READING_FACETS = frozenset(
-    {"runtime", "dns", "proxy", "certificate", "registration", "network"}
-)
+READING_FACETS = frozenset({"runtime", "dns", "proxy", "certificate", "registration", "network"})
 # Who takes a reading: a controller through a connection credential, HQ itself
 # from a keyless public registry, or HQ from the requests it serves.
 READERS = ("controller", "hq", "request")
@@ -186,11 +184,7 @@ class ObservationSpec:
         refused = 0
         for record in records:
             try:
-                kept.append(
-                    self.record.model_validate(record).model_dump(
-                        mode="json", exclude_unset=True
-                    )
-                )
+                kept.append(self.record.model_validate(record).model_dump(mode="json", exclude_unset=True))
             except ValidationError:
                 refused += 1
         return kept, refused
@@ -207,9 +201,7 @@ def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec
     for spec in specs:
         if spec.kind in found:
             raise ValueError(f"Duplicate observation kind {spec.kind!r}.")
-        if isinstance(spec.requires, str) or any(
-            not name.strip() or ";" in name for name in spec.requires
-        ):
+        if isinstance(spec.requires, str) or any(not name.strip() or ";" in name for name in spec.requires):
             raise ValueError(f"{spec.kind!r}: requires is a tuple of permission names.")
         if spec.facet and spec.facet not in READING_FACETS:
             raise ValueError(f"{spec.kind!r}: unknown facet {spec.facet!r}.")
@@ -230,8 +222,6 @@ def _check_parts(spec: ObservationSpec) -> None:
         raise ValueError(f"{spec.kind!r}: parts have unique, non-blank names.")
     for part in spec.parts:
         if not set(part.requires) <= set(spec.requires):
-            raise ValueError(
-                f"{spec.kind!r}: part {part.name!r} requires more than the reading declares."
-            )
+            raise ValueError(f"{spec.kind!r}: part {part.name!r} requires more than the reading declares.")
         if part.provider and part.provider != spec.provider:
             raise ValueError(f"{spec.kind!r}: part {part.name!r} is read by the reading's provider.")

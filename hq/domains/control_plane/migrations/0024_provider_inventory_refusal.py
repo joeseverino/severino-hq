@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0023_provider_inventory_connected'),
+        ("control_plane", "0023_provider_inventory_connected"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='providerinventory',
-            name='refusal',
-            field=models.CharField(blank=True, choices=[('credential', 'credential'), ('permission', 'permission')], max_length=16),
+            model_name="providerinventory",
+            name="refusal",
+            field=models.CharField(
+                blank=True, choices=[("credential", "credential"), ("permission", "permission")], max_length=16
+            ),
         ),
     ]

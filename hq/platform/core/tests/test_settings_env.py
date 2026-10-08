@@ -41,18 +41,14 @@ def subprocess_env(*, drop: tuple[str, ...] = (), **overrides: str) -> dict[str,
     """The caller's environment, minus the extension set, plus overrides."""
 
     removed = set(PLUGIN_ENV) | set(drop)
-    env = {
-        key: value for key, value in os.environ.items() if key not in removed
-    }
+    env = {key: value for key, value in os.environ.items() if key not in removed}
     env.update(overrides)
     return env
 
 
 class MountedAppEnvTests(SimpleTestCase):
     def test_settings_load_shell_quoted_env_file(self):
-        with tempfile.NamedTemporaryFile(
-            "w", suffix=".env", delete=False, encoding="utf-8"
-        ) as fh:
+        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False, encoding="utf-8") as fh:
             fh.write(
                 "DJANGO_SECRET_KEY='file-secret-key-0123456789abcdef'\n"
                 "SEVERINO_SITE_NAME='Severino HQ'\n"
@@ -91,9 +87,7 @@ class MountedAppEnvTests(SimpleTestCase):
         self.assertIn("hq.example.com", lines[-1])
 
     def test_real_environment_wins_over_file(self):
-        with tempfile.NamedTemporaryFile(
-            "w", suffix=".env", delete=False, encoding="utf-8"
-        ) as fh:
+        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False, encoding="utf-8") as fh:
             fh.write("DJANGO_SECRET_KEY='from-file'\n")
             env_path = fh.name
         self.addCleanup(os.unlink, env_path)
@@ -178,14 +172,13 @@ class EnvIntTests(SimpleTestCase):
 
     def test_bounded_value_refuses_what_it_cannot_honor(self):
         for raw in ("13", "0", "ten"):
-            with self.subTest(raw=raw), self.assertRaisesMessage(
-                RuntimeError, f"{self.NAME} must be between 1 and 12."
+            with (
+                self.subTest(raw=raw),
+                self.assertRaisesMessage(RuntimeError, f"{self.NAME} must be between 1 and 12."),
             ):
                 self.read(raw, 1, minimum=1, maximum=12)
         for raw in ("59", "soon"):
-            with self.subTest(raw=raw), self.assertRaisesMessage(
-                RuntimeError, f"{self.NAME} must be at least 60."
-            ):
+            with self.subTest(raw=raw), self.assertRaisesMessage(RuntimeError, f"{self.NAME} must be at least 60."):
                 self.read(raw, 86400, minimum=60)
 
     def test_settings_read_every_integer_through_env_int(self):

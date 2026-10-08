@@ -45,9 +45,7 @@ def _payload():
 )
 class ContentSyncTests(TestCase):
     def setUp(self):
-        self.project = Project.objects.create(
-            name="Example Site", slug="example-site"
-        )
+        self.project = Project.objects.create(name="Example Site", slug="example-site")
 
     def test_creates_items_and_relates_to_project(self):
         stats = sync_content_index(payload=_payload())
@@ -246,9 +244,7 @@ class ContentPageTests(TestCase):
         self.assertContains(published, "<dt>Added to HQ</dt>")
 
     def _published(self, slug: str, url: str) -> ContentItem:
-        return ContentItem.objects.create(
-            title=slug, slug=slug, status=ContentItem.Status.PUBLISHED, published_url=url
-        )
+        return ContentItem.objects.create(title=slug, slug=slug, status=ContentItem.Status.PUBLISHED, published_url=url)
 
     def test_the_writeups_list_says_once_where_it_is_published(self):
         from django.urls import reverse

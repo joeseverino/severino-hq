@@ -84,14 +84,9 @@ class CommittedSchemaMatchesMcpTests(SimpleTestCase):
             check=False,
         )
         if proc.returncode != 0:
-            self.skipTest(
-                "installed severino-vault-mcp predates `schema`: run "
-                "`site reinstall-mcp`"
-            )
+            self.skipTest("installed severino-vault-mcp predates `schema`: run `site reinstall-mcp`")
         emitted = json.loads(proc.stdout)
-        committed = json.loads(
-            frontmatter_schema.SCHEMA_PATH.read_text(encoding="utf-8")
-        )
+        committed = json.loads(frontmatter_schema.SCHEMA_PATH.read_text(encoding="utf-8"))
         self.assertEqual(
             emitted,
             committed,

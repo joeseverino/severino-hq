@@ -31,8 +31,7 @@ PHRASE = f"Redirect rules not read: missing {MISSING}"
 
 
 def refused(zone, part="rules", refusal="permission"):
-    return {"part": part, "refusal": refusal, "reason": AUTH, "scope": zone,
-            "connection_ref": "example-api"}
+    return {"part": part, "refusal": refusal, "reason": AUTH, "scope": zone, "connection_ref": "example-api"}
 
 
 def sweep(**kinds):
@@ -42,12 +41,15 @@ def sweep(**kinds):
 def refused_on_every_zone():
     """Page rules read (none); redirect rules refused on both zones."""
 
-    return sweep(**{
-        REDIRECT: {"ok": True, "records": [],
-                   "refused_parts": [refused("example.com"), refused("example.net")]},
-        "cloudflare.pages_project": {"ok": True, "records": [
-            {"name": "site", "account_id": ACCOUNT, "connection_ref": "example-api"}]},
-    })
+    return sweep(
+        **{
+            REDIRECT: {"ok": True, "records": [], "refused_parts": [refused("example.com"), refused("example.net")]},
+            "cloudflare.pages_project": {
+                "ok": True,
+                "records": [{"name": "site", "account_id": ACCOUNT, "connection_ref": "example-api"}],
+            },
+        }
+    )
 
 
 @mock.patch("hq.platform.application.reach.DOCUMENTATION", (ip_network("192.0.2.0/24"),))
@@ -55,19 +57,30 @@ class PartlyRefusedReadingTests(TestCase):
     def setUp(self):
         for zone in ("example.com", "example.net"):
             ManagedResource.objects.create(
-                key=f"{zone.replace('.', '-')}-zone", kind="cloudflare.zone",
+                key=f"{zone.replace('.', '-')}-zone",
+                kind="cloudflare.zone",
                 spec={"zone": zone, "connection_ref": "example-api"},
             )
         ProviderInventory.objects.create(
             kind="cloudflare.dns_record",
-            records=[{"zone": "example.net", "name": "example.net", "record_type": "A",
-                      "content": "192.0.2.1", "proxied": True, "ttl": 1,
-                      "connection_ref": "example-dns"}],
+            records=[
+                {
+                    "zone": "example.net",
+                    "name": "example.net",
+                    "record_type": "A",
+                    "content": "192.0.2.1",
+                    "proxied": True,
+                    "ttl": 1,
+                    "connection_ref": "example-dns",
+                }
+            ],
             observed_at=timezone.now(),
         )
         ProviderConnection.objects.create(
-            connection_ref="example-api", controller_id="example-controller",
-            provider="cloudflare_api", observed_at=timezone.now(),
+            connection_ref="example-api",
+            controller_id="example-controller",
+            provider="cloudflare_api",
+            observed_at=timezone.now(),
             store={"vault": "Example Vault", "item": "exampleitem01"},
         )
         self.summary = refused_on_every_zone()
@@ -119,8 +132,7 @@ class PartlyRefusedReadingTests(TestCase):
         with projection_scope():
             found = {
                 finding.rule: finding
-                for finding in derive_findings(derive_topology(principal=principal),
-                                               principal=principal)
+                for finding in derive_findings(derive_topology(principal=principal), principal=principal)
             }
 
         finding = found["credential-missing-permissions"]
@@ -142,37 +154,41 @@ class NoConnectionTests(TestCase):
 
         self.assertEqual(
             summary["kinds"]["cloudflare.tunnel"],
-            {"state": "not_connected", "label": "Not connected", "records": None,
-             "refused_parts": []},
+            {"state": "not_connected", "label": "Not connected", "records": None, "refused_parts": []},
         )
 
 
 class CleanTests(TestCase):
     def test_only_declared_parts_are_kept_with_bounded_text(self):
-        cleaned = clean_refused_parts(REDIRECT, [
-            refused("Example.COM"),
-            # A part the contract names and this kind does not declare.
-            refused_part("querylog", refusal="permission"),
-            refused_part("page_rules", reason="x" * 999),
-        ])
+        cleaned = clean_refused_parts(
+            REDIRECT,
+            [
+                refused("Example.COM"),
+                # A part the contract names and this kind does not declare.
+                refused_part("querylog", refusal="permission"),
+                refused_part("page_rules", reason="x" * 999),
+            ],
+        )
 
         self.assertEqual([entry["part"] for entry in cleaned], ["rules", "page_rules"])
         self.assertEqual(cleaned[0]["scope"], "example.com")
         self.assertEqual(len(cleaned[1]["reason"]), 300)
 
     def test_a_machine_scope_keeps_its_address_only_when_it_is_one(self):
-        cleaned = clean_refused_parts("portainer.image", [
-            refused_part("", scope="edge-2", address=" 198.51.100.30 "),
-            refused_part("", scope="edge-3", address="not-an-address"),
-        ])
+        cleaned = clean_refused_parts(
+            "portainer.image",
+            [
+                refused_part("", scope="edge-2", address=" 198.51.100.30 "),
+                refused_part("", scope="edge-3", address="not-an-address"),
+            ],
+        )
 
         self.assertEqual(cleaned[0]["address"], "198.51.100.30")
         self.assertNotIn("address", cleaned[1])
         self.assertNotIn("address", clean_refused_parts(REDIRECT, [refused("example.com")])[0])
 
     def test_a_refused_read_keeps_no_parts(self):
-        sweep(**{REDIRECT: {"ok": False, "records": [], "error": AUTH,
-                            "refused_parts": [refused("example.com")]}})
+        sweep(**{REDIRECT: {"ok": False, "records": [], "error": AUTH, "refused_parts": [refused("example.com")]}})
 
         self.assertEqual(ProviderInventory.objects.get(kind=REDIRECT).refused_parts, [])
 

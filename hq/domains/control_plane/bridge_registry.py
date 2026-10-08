@@ -60,16 +60,10 @@ def go_name(value: str) -> str:
     it, and the controller then fails to build wherever it used the old one.
     """
 
-    return "".join(
-        _WORDS.get(word, word[:1].upper() + word[1:])
-        for word in re.split(r"[._]", value.lower())
-        if word
-    )
+    return "".join(_WORDS.get(word, word[:1].upper() + word[1:]) for word in re.split(r"[._]", value.lower()) if word)
 
 
-def _enumeration(
-    description: str, values: Iterable[str], prefix: str, *, blank: str = ""
-) -> dict[str, Any]:
+def _enumeration(description: str, values: Iterable[str], prefix: str, *, blank: str = "") -> dict[str, Any]:
     """A closed list of names, with the controller's constant for each."""
 
     listed = list(values)
@@ -77,9 +71,7 @@ def _enumeration(
         "type": "string",
         "description": description,
         "enum": listed,
-        "x-enum-varnames": [
-            (prefix + go_name(value)) if value else blank for value in listed
-        ],
+        "x-enum-varnames": [(prefix + go_name(value)) if value else blank for value in listed],
     }
 
 
@@ -102,8 +94,7 @@ def _enumerations() -> dict[str, dict[str, Any]]:
             "ResourceKind",
         ),
         "SweptKind": _enumeration(
-            "A kind the controller reads in a sweep: exactly the kinds it registers a "
-            "reader for.",
+            "A kind the controller reads in a sweep: exactly the kinds it registers a reader for.",
             swept_kinds(),
             "Swept",
         ),
@@ -158,11 +149,7 @@ def _clean(node: Any, rename: Mapping[str, str]) -> Any:
         return [_clean(item, rename) for item in node]
     if not isinstance(node, dict):
         return node
-    found = {
-        key: _clean(value, rename)
-        for key, value in node.items()
-        if key != "title" or not isinstance(value, str)
-    }
+    found = {key: _clean(value, rename) for key, value in node.items() if key != "title" or not isinstance(value, str)}
     reference = found.get("$ref")
     if isinstance(reference, str):
         found["$ref"] = REFERENCE + rename[reference.removeprefix(REFERENCE)]
@@ -209,8 +196,7 @@ def _shared(value: SharedValue) -> dict[str, dict[str, Any]]:
                 "type": "string",
                 "description": value.description,
                 "enum": list(value.schema),
-                "x-enum-varnames": list(value.varnames)
-                or [value.name + go_name(item) for item in value.schema],
+                "x-enum-varnames": list(value.varnames) or [value.name + go_name(item) for item in value.schema],
             }
         }
     found = components(value.name, value.schema, mode=value.mode, description=value.description)
@@ -287,9 +273,7 @@ def _shape(shape: ConnectionShape) -> dict[str, Any]:
         "type": "object",
         "description": f"The settings a connection of the {shape.name} shape arrives with.",
         "properties": properties,
-        "required": [
-            setting_key(setting.name) for setting in shape.settings if not setting.optional
-        ],
+        "required": [setting_key(setting.name) for setting in shape.settings if not setting.optional],
         "additionalProperties": False,
     }
 

@@ -91,15 +91,9 @@ class Subject:
     ) -> Subject:
         return cls(
             containers=frozenset(key for key in containers if key),
-            hostnames=frozenset(
-                name for name in (normalized_hostname(str(h)) for h in hostnames) if name
-            ),
-            addresses=frozenset(
-                address for address in (host_of(a) for a in addresses) if address
-            ),
-            zones=frozenset(
-                zone for zone in (normalized_hostname(str(z)) for z in zones) if zone
-            ),
+            hostnames=frozenset(name for name in (normalized_hostname(str(h)) for h in hostnames) if name),
+            addresses=frozenset(address for address in (host_of(a) for a in addresses) if address),
+            zones=frozenset(zone for zone in (normalized_hostname(str(z)) for z in zones) if zone),
         )
 
     def __bool__(self) -> bool:
@@ -117,9 +111,7 @@ class Subject:
             return False
         if key in self.hostnames:
             return True
-        if key.startswith("*.") and any(
-            certificate_covers(hostname, frozenset({key})) for hostname in self.hostnames
-        ):
+        if key.startswith("*.") and any(certificate_covers(hostname, frozenset({key})) for hostname in self.hostnames):
             return True
         return any(in_zone(key, zone) for zone in self.zones)
 
@@ -288,9 +280,7 @@ class Readings:
             names = tuple(name for name in entry.hostnames if subject.matches(name))
             if entry.spec.fronted_by and names:
                 names = self._fronted_names(entry, names, subject)
-            addresses = tuple(
-                address for address in entry.addresses if address in subject.addresses
-            )
+            addresses = tuple(address for address in entry.addresses if address in subject.addresses)
             containers = tuple(key for key in entry.containers if key in subject.containers)
             if not (names or addresses or containers):
                 continue
@@ -321,9 +311,7 @@ class Readings:
             )
         )
 
-    def _fronted_names(
-        self, entry: _Entry, names: tuple[str, ...], subject: Subject
-    ) -> tuple[str, ...]:
+    def _fronted_names(self, entry: _Entry, names: tuple[str, ...], subject: Subject) -> tuple[str, ...]:
         """The keys that apply: under a subject zone, or naming a subject
         hostname that a record of ``fronted_by`` fronts."""
 
@@ -384,20 +372,13 @@ def readings() -> Readings:
                         hostnames=tuple(
                             dict.fromkeys(
                                 name
-                                for name in (
-                                    normalized_hostname(str(item))
-                                    for item in spec.hostnames(record)
-                                )
+                                for name in (normalized_hostname(str(item)) for item in spec.hostnames(record))
                                 if name
                             )
                         ),
                         addresses=tuple(
                             dict.fromkeys(
-                                address
-                                for address in (
-                                    host_of(item) for item in spec.addresses(record)
-                                )
-                                if address
+                                address for address in (host_of(item) for item in spec.addresses(record)) if address
                             )
                         ),
                         containers=tuple(dict.fromkeys(spec.containers(record))),
@@ -427,11 +408,9 @@ def fronted_names(kind: str) -> frozenset[str]:
                 if not provider.fronts(spec):
                     continue
                 names = provider.hostnames(spec) if provider.hostnames else ()
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 continue
-            found.update(
-                name for name in (normalized_hostname(str(n)) for n in names) if name
-            )
+            found.update(name for name in (normalized_hostname(str(n)) for n in names) if name)
         return frozenset(found)
 
     return read_once(f"facts.fronted:{kind}", build)
@@ -445,8 +424,7 @@ def reading_could_join(spec: ObservationSpec, subject: Subject) -> bool:
     """
 
     return bool(
-        (spec.joins_hostnames and (subject.dns_names or subject.zones))
-        or (spec.joins_addresses and subject.addresses)
+        (spec.joins_hostnames and (subject.dns_names or subject.zones)) or (spec.joins_addresses and subject.addresses)
     )
 
 
@@ -461,8 +439,7 @@ def inventory_could_join(kind: str, subject: Subject) -> bool:
     by_name = provider.hostnames is not None or provider.identity is not None
     by_address = provider.answers is not None or provider.origin is not None
     return bool(
-        (by_name and (subject.hostnames or subject.zones))
-        or (by_address and (subject.addresses or subject.hostnames))
+        (by_name and (subject.hostnames or subject.zones)) or (by_address and (subject.addresses or subject.hostnames))
     )
 
 
@@ -480,15 +457,11 @@ def part_refusals(kinds: Iterable[str] | None = None) -> tuple[PartRefusal, ...]
 
     wanted = frozenset(kinds) if kinds is not None else None
     return tuple(
-        refused
-        for refused in read_once("facts.part_refusals", load)
-        if wanted is None or refused.kind in wanted
+        refused for refused in read_once("facts.part_refusals", load) if wanted is None or refused.kind in wanted
     )
 
 
-def refusals_about(
-    subject: Subject, kinds: Iterable[str] | None = None
-) -> tuple[PartRefusal, ...]:
+def refusals_about(subject: Subject, kinds: Iterable[str] | None = None) -> tuple[PartRefusal, ...]:
     """The refused parts that could hide something about ``subject``."""
 
     return tuple(refused for refused in part_refusals(kinds) if _refusal_about(refused, subject))
@@ -503,10 +476,7 @@ def _refusal_about(refused: PartRefusal, subject: Subject) -> bool:
     return (
         refused.holds(subject.addresses)
         or any(refused.covers(name) for name in subject.hostnames)
-        or any(
-            in_zone(refused.scope, zone) or in_zone(zone, refused.scope)
-            for zone in subject.zones
-        )
+        or any(in_zone(refused.scope, zone) or in_zone(zone, refused.scope) for zone in subject.zones)
     )
 
 
@@ -536,14 +506,9 @@ def unreadable_labels(subject: Subject | None = None) -> tuple[str, ...]:
     """
 
     labels = {
-        item.spec.label
-        for item in readings().unread()
-        if subject is None or reading_could_join(item.spec, subject)
+        item.spec.label for item in readings().unread() if subject is None or reading_could_join(item.spec, subject)
     }
-    labels.update(
-        refused.part.label
-        for refused in (part_refusals() if subject is None else refusals_about(subject))
-    )
+    labels.update(refused.part.label for refused in (part_refusals() if subject is None else refusals_about(subject)))
     for kind, provider in PROVIDERS.items():
         if provider.from_record is None and kind != CONTAINER_KIND:
             continue
@@ -558,10 +523,7 @@ def inventory_records(kind: str) -> tuple[tuple[Any, Mapping[str, Any]], ...]:
     """``(snapshot, record)`` for every record of a connected, reachable kind."""
 
     return tuple(
-        (snapshot, record)
-        for snapshot in _inventory(kind)
-        if snapshot.reachable
-        for record in snapshot.records
+        (snapshot, record) for snapshot in _inventory(kind) if snapshot.reachable for record in snapshot.records
     )
 
 
@@ -586,7 +548,7 @@ def inventory_about(kind: str, subject: Subject) -> tuple[tuple[Any, Mapping[str
                 names = identity if len(identity) == 1 else ()
             answers = tuple(provider.answers(spec)) if provider.answers else ()
             origin = provider.origin(spec) if provider.origin else ""
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
         if (
             subject.names(names)
@@ -637,9 +599,11 @@ def _aged(fact: Fact, stale_after: timedelta) -> Fact:
 def _joined_kinds() -> tuple[str, ...]:
     """The kinds read here other than the tailnet, which has its own reader."""
 
-    return tuple(OBSERVATIONS) + tuple(
-        kind for kind, provider in PROVIDERS.items() if provider.from_record is not None
-    ) + (CONTAINER_KIND,)
+    return (
+        tuple(OBSERVATIONS)
+        + tuple(kind for kind, provider in PROVIDERS.items() if provider.from_record is not None)
+        + (CONTAINER_KIND,)
+    )
 
 
 def _joinable_providers() -> Iterator[tuple[str, Any]]:
@@ -650,9 +614,7 @@ def _joinable_providers() -> Iterator[tuple[str, Any]]:
             yield kind, provider
 
 
-def connection_facts(
-    connection_ref: str, provider: str
-) -> tuple[tuple[str, str], ...]:
+def connection_facts(connection_ref: str, provider: str) -> tuple[tuple[str, str], ...]:
     """What the readings this connection took say about it, through ``ObservationSpec.facts``.
 
     A record naming no connection speaks for every connection of its provider.
@@ -708,8 +670,14 @@ def _inventory(kind: str) -> tuple[Any, ...]:
 
 
 def _unreadable(
-    snapshot, label: str, requires: str, *, reason: str = "", part: str = "",
-    connection_ref: str = "", record: Mapping[str, Any] | None = None,
+    snapshot,
+    label: str,
+    requires: str,
+    *,
+    reason: str = "",
+    part: str = "",
+    connection_ref: str = "",
+    record: Mapping[str, Any] | None = None,
 ) -> Fact:
     because = reason or snapshot.error or "The last read failed and gave no reason."
     detail = f"{because} Requires: {requires}." if requires else because
@@ -727,7 +695,11 @@ def _unreadable(
 
 
 def _partial(
-    snapshot, label: str, requires: str, record: Mapping[str, Any], connection_ref: str,
+    snapshot,
+    label: str,
+    requires: str,
+    record: Mapping[str, Any],
+    connection_ref: str,
     readout: Mapping[str, Any] | None = None,
 ) -> list[Fact]:
     """One unreadable fact per part a record says it could not read."""
@@ -817,9 +789,7 @@ def _joined_source(joined: Joined) -> Callable[..., Fact]:
     return fact
 
 
-def _source(
-    snapshot, label: str, connection_ref: str, record: Mapping[str, Any] | None = None
-) -> Callable[..., Fact]:
+def _source(snapshot, label: str, connection_ref: str, record: Mapping[str, Any] | None = None) -> Callable[..., Fact]:
     def fact(name: str, value: str, detail: str = "") -> Fact:
         return Fact(
             label=name,
@@ -913,9 +883,7 @@ def _container_facts(subject: Subject) -> Iterator[Fact]:
             yield source("Container", running.name, detail=running.state)
             if running.host_address:
                 yield source("Address", running.host_address)
-            yield from _partial(
-                snapshot, label, _requires(provider), record, running.connection_ref
-            )
+            yield from _partial(snapshot, label, _requires(provider), record, running.connection_ref)
 
 
 def _tailnet_facts(subject: Subject) -> Iterator[Fact]:
@@ -934,10 +902,7 @@ def _tailnet_facts(subject: Subject) -> Iterator[Fact]:
             device = known.get(str(record.get("name", "")))
             if device is None:
                 continue
-            if not (
-                subject.names((device.name, device.label, device.dns_name))
-                or subject.holds(device.addresses)
-            ):
+            if not (subject.names((device.name, device.label, device.dns_name)) or subject.holds(device.addresses)):
                 continue
             connection_ref = str(record.get("connection_ref", "") or "")
             source = _source(snapshot, label, connection_ref)

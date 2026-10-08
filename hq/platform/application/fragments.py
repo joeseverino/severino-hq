@@ -93,9 +93,7 @@ def presented(request: HttpRequest, derived_from: str | None) -> str | None:
     return found[0]
 
 
-def standing(
-    derived_from: str | None, until: datetime | None = None, *, longest: int = LONGEST
-) -> str | None:
+def standing(derived_from: str | None, until: datetime | None = None, *, longest: int = LONGEST) -> str | None:
     """The validator for an answer just composed from ``derived_from``."""
 
     if derived_from is None:
@@ -140,9 +138,7 @@ def render(
     else:
         template = loader.select_template(template_names(request, [template_name]))
         body = template.render(context() if callable(context) else context, request)
-        response = hold(
-            HttpResponse(body, status=status), standing(derived_from, longest=PART_HOLDS)
-        )
+        response = hold(HttpResponse(body, status=status), standing(derived_from, longest=PART_HOLDS))
     patch_vary_headers(response, (HEADER,))
     return response
 

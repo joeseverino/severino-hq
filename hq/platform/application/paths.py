@@ -76,7 +76,7 @@ def _kinds(facet: str) -> tuple[str, ...]:
 
 
 def why_unread(kind: str) -> str:
-    """"not read: <kind>, because <reason>", or "" when a connection read it."""
+    """ "not read: <kind>, because <reason>", or "" when a connection read it."""
 
     rows = snapshots_of(kind)
     label = Source(kind).label
@@ -91,7 +91,7 @@ def why_unread(kind: str) -> str:
 def _names(provider, spec) -> tuple[str, ...]:
     try:
         return tuple(normalized_hostname(str(name)) for name in provider.hostnames(spec))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return ()
 
 
@@ -101,9 +101,7 @@ def _swept(kind: str) -> dict[str, list[_Row]]:
     provider = PROVIDERS[kind]
     # Matched by identity, the way the inventory decides a record is managed.
     declared = {
-        record_identity(kind, resource.spec): resource.key
-        for resource in enabled_resources()
-        if resource.kind == kind
+        record_identity(kind, resource.spec): resource.key for resource in enabled_resources() if resource.kind == kind
     }
     found: dict[str, list[_Row]] = {}
     for snapshot in snapshots_of(kind):
@@ -112,7 +110,7 @@ def _swept(kind: str) -> dict[str, list[_Row]]:
         for record in snapshot.records or ():
             try:
                 spec = provider.from_record(record)
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 continue
             source = Source(kind, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
             declaration = declared.get(record_identity(kind, spec), "")
@@ -139,9 +137,7 @@ def _rows(kind: str) -> dict[str, list[_Row]]:
     Swept records when a connection read the kind; its declarations otherwise.
     """
 
-    return read_once(
-        f"paths.rows:{kind}", lambda: _declared(kind) if why_unread(kind) else _swept(kind)
-    )
+    return read_once(f"paths.rows:{kind}", lambda: _declared(kind) if why_unread(kind) else _swept(kind))
 
 
 def routed_names() -> tuple[str, ...]:
@@ -152,16 +148,7 @@ def routed_names() -> tuple[str, ...]:
     would otherwise report HQ's gap in knowledge as a fault in the estate.
     """
 
-    return tuple(
-        sorted(
-            {
-                name
-                for kind in _kinds("dns")
-                for name in (*_rows(kind), *_declared(kind))
-                if name
-            }
-        )
-    )
+    return tuple(sorted({name for kind in _kinds("dns") for name in (*_rows(kind), *_declared(kind)) if name}))
 
 
 def reads_every_route() -> bool:
@@ -193,9 +180,7 @@ def _reading_gap(kinds: Iterable[str], name: str = "") -> str:
         return whole
     from .facts import refusals_about
 
-    return next(
-        (refused.phrase for refused in refusals_about(Subject.of(hostnames=(name,)), kinds)), ""
-    )
+    return next((refused.phrase for refused in refusals_about(Subject.of(hostnames=(name,)), kinds)), "")
 
 
 # ----- The walk --------------------------------------------------------------
@@ -316,7 +301,7 @@ def _answer(row: _Row) -> str:
     provider = PROVIDERS[row.kind]
     try:
         return str(provider.origin(row.spec) or "")
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return ""
 
 
@@ -326,7 +311,7 @@ def _fronted(row: _Row) -> bool:
         return False
     try:
         return bool(provider.fronts(row.spec))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return False
 
 
@@ -396,19 +381,13 @@ def _edge_operator(kind: str) -> str:
     """Who answers in front of the name: the fronting kind's connection provider."""
 
     return next(
-        (
-            CONNECTION_LABELS[name]
-            for name in PROVIDERS[kind].connection_providers
-            if name in CONNECTION_LABELS
-        ),
+        (CONNECTION_LABELS[name] for name in PROVIDERS[kind].connection_providers if name in CONNECTION_LABELS),
         kind_label(kind),
     )
 
 
 def _edge_certificate(name: str, fronting_kind: str) -> Certificate:
-    kinds = _reading_kinds(
-        lambda spec: spec.facet == "certificate" and spec.fronted_by == fronting_kind
-    )
+    kinds = _reading_kinds(lambda spec: spec.facet == "certificate" and spec.fronted_by == fronting_kind)
     found = _about(name, kinds=kinds)
     if found:
         return _certificate_of("Edge", found)
@@ -866,11 +845,7 @@ def _to_hq(name: str, routes: tuple[Route, ...]) -> tuple[Route, ...]:
     if own is None or name not in own.hostnames:
         return routes
     if not routes:
-        machine = (
-            (Hop("machine", "Machine", own.machine, entity_link("machine", own.machine)),)
-            if own.machine
-            else ()
-        )
+        machine = (Hop("machine", "Machine", own.machine, entity_link("machine", own.machine)),) if own.machine else ()
         routes = (Route("HQ", machine),)
     return tuple(Route(route.via, (*route.hops, _hq_hop(own))) for route in routes)
 

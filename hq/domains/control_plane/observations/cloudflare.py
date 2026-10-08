@@ -166,9 +166,7 @@ def _tunnel_service(record: Mapping[str, Any], hostname: str) -> str:
 
 
 def _origin_addresses(record: Mapping[str, Any]) -> tuple[str, ...]:
-    return _present(
-        [entry.get("origin_ip") for entry in record.get("connections") or ()]
-    )
+    return _present([entry.get("origin_ip") for entry in record.get("connections") or ()])
 
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
@@ -178,16 +176,12 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Pages project",
         PagesProjectRecord,
         requires=("Cloudflare Pages Read (account)",),
-        hostnames=lambda record: _present(
-            record.get("domains") or (), record.get("subdomain")
-        ),
+        hostnames=lambda record: _present(record.get("domains") or (), record.get("subdomain")),
         title=lambda record: str(record.get("name", "")),
         relation="Served by Pages project",
         facet="runtime",
         names_services=True,
-        console=lambda record: cloudflare_dashboard(
-            record, "pages", "view", str(record.get("name", ""))
-        ),
+        console=lambda record: cloudflare_dashboard(record, "pages", "view", str(record.get("name", ""))),
     ),
     ObservationSpec(
         "cloudflare.d1_database",
@@ -198,9 +192,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         parts=(ReadingPart("file_size", "Database size", ("D1 Read (account)",)),),
         title=lambda record: str(record.get("name", "")),
         relation="Backed by D1 database",
-        console=lambda record: cloudflare_dashboard(
-            record, "workers", "d1", "databases", str(record.get("uuid", ""))
-        ),
+        console=lambda record: cloudflare_dashboard(record, "workers", "d1", "databases", str(record.get("uuid", ""))),
     ),
     ObservationSpec(
         "cloudflare.access_app",
@@ -226,9 +218,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Access service token",
         AccessServiceTokenRecord,
         requires=("Access: Service Tokens Read (account)", "Access: Apps Read (account)"),
-        parts=(
-            ReadingPart("apps", "Applications admitting it", ("Access: Apps Read (account)",)),
-        ),
+        parts=(ReadingPart("apps", "Applications admitting it", ("Access: Apps Read (account)",)),),
         title=lambda record: str(record.get("name", "")),
         relation="Let in by service token",
         expires=lambda record: str(record.get("expires_at", "")),
@@ -285,15 +275,11 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
             ReadingPart("rules", "Redirect rules", ("Single Redirect Read (zone)",)),
             ReadingPart("page_rules", "Page rules", ("Page Rules Read (zone)",)),
         ),
-        hostnames=lambda record: (
-            _present(record.get("hostnames") or ()) if record.get("enabled", True) else ()
-        ),
+        hostnames=lambda record: _present(record.get("hostnames") or ()) if record.get("enabled", True) else (),
         title=_redirect_title,
         relation="Redirects to",
         names_services=True,
         redirects_to=redirect_target,
-        console=lambda record: cloudflare_dashboard(
-            record, str(record.get("zone", "")), "rules", "redirect-rules"
-        ),
+        console=lambda record: cloudflare_dashboard(record, str(record.get("zone", "")), "rules", "redirect-rules"),
     ),
 )

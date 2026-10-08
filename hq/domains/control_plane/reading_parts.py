@@ -70,7 +70,7 @@ class PartRefusal:
 
     @property
     def phrase(self) -> str:
-        """"<part> not read: missing <permissions>", or the provider's reason."""
+        """ "<part> not read: missing <permissions>", or the provider's reason."""
 
         if self.missing:
             return f"{self.part.label} not read: missing {', '.join(self.missing)}"
@@ -88,9 +88,7 @@ class PartRefusal:
         return bool(self.address) and self.address in addresses
 
 
-def clean_refused_parts(
-    kind: str, reported: Iterable[Mapping[str, Any]] | None
-) -> list[dict[str, str]]:
+def clean_refused_parts(kind: str, reported: Iterable[Mapping[str, Any]] | None) -> list[dict[str, str]]:
     """The contract's ``RefusedPart``s a controller reported, as stored: the
     parts this kind declares, with bounded text. A part it does not declare is
     dropped."""

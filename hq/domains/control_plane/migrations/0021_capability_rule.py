@@ -7,27 +7,42 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0020_providerconnection_failing_steps'),
+        ("control_plane", "0020_providerconnection_failing_steps"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='CapabilityRule',
+            name="CapabilityRule",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('scope', models.CharField(choices=[('surface', 'Surface'), ('agent', 'Agent')], max_length=16)),
-                ('subject', models.CharField(max_length=160)),
-                ('capability', models.CharField(max_length=64)),
-                ('rule', models.CharField(choices=[('allow', 'Allow'), ('approve', 'Require approval'), ('deny', 'Deny')], max_length=16)),
-                ('changed_at', models.DateTimeField(default=django.utils.timezone.now)),
-                ('changed_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to=settings.AUTH_USER_MODEL)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("scope", models.CharField(choices=[("surface", "Surface"), ("agent", "Agent")], max_length=16)),
+                ("subject", models.CharField(max_length=160)),
+                ("capability", models.CharField(max_length=64)),
+                (
+                    "rule",
+                    models.CharField(
+                        choices=[("allow", "Allow"), ("approve", "Require approval"), ("deny", "Deny")], max_length=16
+                    ),
+                ),
+                ("changed_at", models.DateTimeField(default=django.utils.timezone.now)),
+                (
+                    "changed_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="+",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'ordering': ('scope', 'subject', 'capability'),
-                'constraints': [models.UniqueConstraint(fields=('scope', 'subject', 'capability'), name='unique_capability_rule')],
+                "ordering": ("scope", "subject", "capability"),
+                "constraints": [
+                    models.UniqueConstraint(fields=("scope", "subject", "capability"), name="unique_capability_rule")
+                ],
             },
         ),
     ]

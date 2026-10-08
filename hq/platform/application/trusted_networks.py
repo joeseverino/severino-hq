@@ -34,11 +34,7 @@ def wider_than_tailnet(estate: Any) -> tuple[dict[str, Any], ...]:
     for node in estate.nodes():
         if node.kind != "connection" or any(key == HQ_ADMITS_ONLY_NAMED for key, _ in node.facts):
             continue
-        addresses = tuple(
-            address
-            for key, address in node.facts
-            if key == "tailnet-address" and _within(address, wide)
-        )
+        addresses = tuple(address for key, address in node.facts if key == "tailnet-address" and _within(address, wide))
         routes = tuple(v for k, v in node.facts if k == "tailnet-route" and v)
         if not addresses:
             continue
@@ -64,10 +60,7 @@ def wider_than_tailnet(estate: Any) -> tuple[dict[str, Any], ...]:
                 "steps": (
                     OperatorStep(
                         label="Set this where HQ is deployed, then restart HQ",
-                        command=(
-                            "SEVERINO_TRUSTED_NETWORKS="
-                            f"{narrowed(wide, addresses, routes)}"
-                        ),
+                        command=(f"SEVERINO_TRUSTED_NETWORKS={narrowed(wide, addresses, routes)}"),
                         notes=("A device that joins later is refused until it is added.",),
                     ),
                 ),
@@ -92,10 +85,7 @@ def _wide_trust() -> tuple:
         network
         for cidr in settings.SEVERINO_TRUSTED_NETWORKS
         if (network := _network(cidr)) is not None
-        and any(
-            network.version == tailnet.version and network.supernet_of(tailnet)
-            for tailnet in TAILNET
-        )
+        and any(network.version == tailnet.version and network.supernet_of(tailnet) for tailnet in TAILNET)
     )
 
 
@@ -120,8 +110,7 @@ def narrowed(wide, addresses, routes) -> str:
     kept = [
         str(cidr).strip()
         for cidr in settings.SEVERINO_TRUSTED_NETWORKS
-        if (network := _network(cidr)) is not None
-        and (network not in wide or not _within_any(hosts, network))
+        if (network := _network(cidr)) is not None and (network not in wide or not _within_any(hosts, network))
     ]
     used = [str(ip_network(host)) for host in hosts] + sorted(routes)
     return ",".join(dict.fromkeys([*kept, *used]))

@@ -37,6 +37,7 @@ STRICT = {
     "Token-Permissions",
 }
 
+
 def main(path: str) -> int:
     with Path(path).open() as handle:
         report = json.load(handle)

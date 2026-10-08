@@ -29,9 +29,7 @@ class CadenceWeek:
 
     def __post_init__(self) -> None:
         if self.no_data and (self.hit or self.count):
-            raise ValueError(
-                f"{self.label!r} cannot both have no data and have been done."
-            )
+            raise ValueError(f"{self.label!r} cannot both have no data and have been done.")
 
     @property
     def said(self) -> str:

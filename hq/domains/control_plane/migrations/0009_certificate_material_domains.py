@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0008_certificate_material'),
+        ("control_plane", "0008_certificate_material"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='certificatematerial',
-            name='domains',
+            model_name="certificatematerial",
+            name="domains",
             field=models.JSONField(blank=True, default=list),
         ),
     ]

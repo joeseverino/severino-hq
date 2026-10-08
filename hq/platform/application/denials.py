@@ -49,7 +49,9 @@ def record_denial(
         )
     except Exception:  # noqa: BLE001 - best effort by contract
         logger.warning(
-            "Refusal not recorded: %s on %s", reason, interface,
+            "Refusal not recorded: %s on %s",
+            reason,
+            interface,
             extra={"event": "audit.denial.unrecorded"},
         )
 

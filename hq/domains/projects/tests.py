@@ -62,7 +62,9 @@ class ProjectPageTests(TestCase):
         response = self.page()
 
         self.assertContains(response, "<h3>Related projects</h3>")
-        self.assertContains(response, f'<a href="{self.other.get_absolute_url()}" data-entity="Project">Example Site</a>')
+        self.assertContains(
+            response, f'<a href="{self.other.get_absolute_url()}" data-entity="Project">Example Site</a>'
+        )
         self.assertNotContains(response, "Example Site notes")
         self.assertNotContains(response, 'title="project-example-tool"')
         # A note for a project HQ does not hold stays a document.
@@ -72,7 +74,10 @@ class ProjectPageTests(TestCase):
         item = ContentItem.objects.create(title="Building the example tool", slug="building-example-tool")
         item.related_projects.add(self.project)
         expense = Expense.objects.create(
-            date="2030-01-02", vendor="Example Host", item="Hosting", total_cost=Decimal("12.00"),
+            date="2030-01-02",
+            vendor="Example Host",
+            item="Hosting",
+            total_cost=Decimal("12.00"),
             related_project=self.project,
         )
 
@@ -81,7 +86,9 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, "<h3>Writeups and pages</h3>")
         self.assertNotContains(response, "Content items")
         self.assertContains(response, f'href="{item.get_absolute_url()}"')
-        self.assertContains(response, f'<a href="{expense.get_absolute_url()}" data-entity="Expense">Example Host · Hosting</a>')
+        self.assertContains(
+            response, f'<a href="{expense.get_absolute_url()}" data-entity="Expense">Example Host · Hosting</a>'
+        )
 
     def test_a_project_with_nothing_linked_says_so_plainly(self):
         self.assertContains(self.page(), "Nothing is linked to this project yet.")
@@ -128,7 +135,9 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
     def test_an_extension_names_the_project_it_is_built_from(self):
         from hq_sdk.pages import built_from
 
-        Project.objects.create(name="Example Tool", slug="example-tool", repository_url="https://github.com/example/tool")
+        Project.objects.create(
+            name="Example Tool", slug="example-tool", repository_url="https://github.com/example/tool"
+        )
         self.assertIsNone(built_from("example.alpha"))
         built = Project.objects.create(
             name="Example Alpha", slug="example-alpha", repository_url="https://github.com/Example/example-alpha.git"

@@ -51,9 +51,10 @@ class ThemeServiceTests(TestCase):
         self.assertFalse(Appearance.objects.exists())
 
     def test_the_choice_does_not_happen_without_its_record(self):
-        with mock.patch(
-            "hq.platform.application.appearance.record_event", side_effect=RuntimeError("audit down")
-        ), self.assertRaises(RuntimeError):
+        with (
+            mock.patch("hq.platform.application.appearance.record_event", side_effect=RuntimeError("audit down")),
+            self.assertRaises(RuntimeError),
+        ):
             set_theme("dark", principal=self.person, user=self.user)
         self.assertEqual(theme_for(self.user), "system")
 

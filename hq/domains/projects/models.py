@@ -41,9 +41,7 @@ class Project(TimestampedModel):
         choices=PROJECT_CATEGORY_CHOICES,
         default="other",
     )
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.IDEA
-    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.IDEA)
     description = models.TextField(blank=True)
     technologies_used = models.CharField(
         max_length=300,

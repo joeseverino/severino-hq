@@ -43,9 +43,7 @@ class APIPropertyTests(TestCase):
         self.enterContext(
             patch(
                 "socket.socket.connect",
-                side_effect=AssertionError(
-                    "Outbound network access in API property test"
-                ),
+                side_effect=AssertionError("Outbound network access in API property test"),
             )
         )
         self.enterContext(
@@ -87,8 +85,7 @@ class APIPropertyTests(TestCase):
                 value["operationId"]
                 for path in schema.raw_schema["paths"].values()
                 for method, value in path.items()
-                if method
-                in {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
+                if method in {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
             }
             # Schemathesis excludes the schema-serving operation itself.
             live = Client(schema.app).get(
@@ -98,9 +95,7 @@ class APIPropertyTests(TestCase):
             )
             self.assertEqual(live.status_code, 200)
             self.assertEqual(live.json, schema.raw_schema)
-            covered = {
-                schema.raw_schema["paths"]["/api/v2/openapi.json"]["get"]["operationId"]
-            }
+            covered = {schema.raw_schema["paths"]["/api/v2/openapi.json"]["get"]["operationId"]}
             for result in schema.get_all_operations():
                 operation = result.ok()
                 with self.subTest(operation=operation.label):
@@ -140,9 +135,7 @@ class APIPropertyTests(TestCase):
             ExampleCommand,
             handler,
         )
-        graph = compile_integration_graph(
-            capabilities=(spec,), resources=(), connections=()
-        )
+        graph = compile_integration_graph(capabilities=(spec,), resources=(), connections=())
         claims = {"sub": "example-properties", "scope": "read example.write"}
         headers = {
             "Authorization": "Bearer example-properties",
@@ -162,9 +155,7 @@ class APIPropertyTests(TestCase):
             operation = schema["/api/v2/capabilities/example.properties/"]["POST"]
             for mode in (GenerationMode.POSITIVE, GenerationMode.NEGATIVE):
 
-                @settings(
-                    max_examples=3, derandomize=True, database=None, deadline=None
-                )
+                @settings(max_examples=3, derandomize=True, database=None, deadline=None)
                 @given(case=operation.as_strategy(generation_mode=mode))
                 def exercise(case):
                     handler.reset_mock()
@@ -189,9 +180,7 @@ class APIPropertyTests(TestCase):
                                 environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
                             )
                             self.assertEqual(second.content, first.content)
-                            self.assertEqual(
-                                second.headers["idempotency-replayed"], ["true"]
-                            )
+                            self.assertEqual(second.headers["idempotency-replayed"], ["true"])
                             handler.assert_called_once()
                         elif first.status_code >= 400:
                             handler.assert_not_called()

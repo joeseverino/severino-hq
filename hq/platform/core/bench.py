@@ -37,9 +37,18 @@ from hq.platform.core.models import AuditLog
 from hq.platform.search_index.services import rebuild_search_index
 
 VENDORS = (
-    "Example Hosting", "Example Registrar", "Example Cloud", "Example Hardware",
-    "Example Software", "Example Office", "Example Networks", "Example Books",
-    "Example Telecom", "Example Tools", "Example Power", "Example Storage",
+    "Example Hosting",
+    "Example Registrar",
+    "Example Cloud",
+    "Example Hardware",
+    "Example Software",
+    "Example Office",
+    "Example Networks",
+    "Example Books",
+    "Example Telecom",
+    "Example Tools",
+    "Example Power",
+    "Example Storage",
 )
 ZONES = ("example.com", "example.net", "example.org")
 EDGE_ADDRESS = "198.51.100.20"
@@ -77,8 +86,7 @@ def unchanged_sweep() -> None:
 
     by_name = {action.name: action for action in ACTIONS}
     inventory = {
-        row.kind: {"ok": True, "connected": True, "records": row.records}
-        for row in ProviderInventory.objects.all()
+        row.kind: {"ok": True, "connected": True, "records": row.records} for row in ProviderInventory.objects.all()
     }
     connections = [
         {
@@ -129,45 +137,54 @@ def _spread(model, field: str, rows: list[Any], days: int) -> None:
 def _projects(rng: random.Random, scale: float) -> list[Project]:
     categories = _choices(Project, "category")
     statuses = _choices(Project, "status")
-    return _create(Project, [
-        Project(
-            name=f"Example project {index}",
-            slug=f"example-project-{index}",
-            category=categories[index % len(categories)],
-            status=statuses[index % len(statuses)],
-            description="A project in the bench estate.",
-            technologies_used="Django, SQLite, Go",
-            repository_url=f"https://example.com/repos/example-project-{index}",
-        )
-        for index in range(_count(scale, 40))
-    ])
+    return _create(
+        Project,
+        [
+            Project(
+                name=f"Example project {index}",
+                slug=f"example-project-{index}",
+                category=categories[index % len(categories)],
+                status=statuses[index % len(statuses)],
+                description="A project in the bench estate.",
+                technologies_used="Django, SQLite, Go",
+                repository_url=f"https://example.com/repos/example-project-{index}",
+            )
+            for index in range(_count(scale, 40))
+        ],
+    )
 
 
 def _assets(rng: random.Random, scale: float, today: date, projects: list[Project]) -> list[Asset]:
     categories = _choices(Asset, "category")
     statuses = _choices(Asset, "status")
-    assets = _create(Asset, [
-        Asset(
-            item_name=f"Example asset {index}",
-            slug=f"example-asset-{index}",
-            vendor=rng.choice(VENDORS),
-            category=categories[index % len(categories)],
-            purchase_date=today - timedelta(days=rng.randrange(1500)),
-            total_cost=Decimal(rng.randrange(1000, 250000)) / 100,
-            business_use_percentage=rng.choice((25, 50, 100)),
-            estimated_deductible_amount=Decimal("10.00"),
-            serial_number=f"SN-{index:05d}",
-            warranty_date=today + timedelta(days=rng.randrange(-200, 700)),
-            status=statuses[0] if index % 5 else statuses[index % len(statuses)],
-        )
-        for index in range(_count(scale, 300))
-    ])
+    assets = _create(
+        Asset,
+        [
+            Asset(
+                item_name=f"Example asset {index}",
+                slug=f"example-asset-{index}",
+                vendor=rng.choice(VENDORS),
+                category=categories[index % len(categories)],
+                purchase_date=today - timedelta(days=rng.randrange(1500)),
+                total_cost=Decimal(rng.randrange(1000, 250000)) / 100,
+                business_use_percentage=rng.choice((25, 50, 100)),
+                estimated_deductible_amount=Decimal("10.00"),
+                serial_number=f"SN-{index:05d}",
+                warranty_date=today + timedelta(days=rng.randrange(-200, 700)),
+                status=statuses[0] if index % 5 else statuses[index % len(statuses)],
+            )
+            for index in range(_count(scale, 300))
+        ],
+    )
     through = Asset.related_projects.through
-    through.objects.bulk_create([
-        through(asset_id=asset.pk, project_id=projects[(index + step) % len(projects)].pk)
-        for index, asset in enumerate(assets)
-        for step in range(index % 3)
-    ], batch_size=500)
+    through.objects.bulk_create(
+        [
+            through(asset_id=asset.pk, project_id=projects[(index + step) % len(projects)].pk)
+            for index, asset in enumerate(assets)
+            for step in range(index % 3)
+        ],
+        batch_size=500,
+    )
     return assets
 
 
@@ -184,59 +201,71 @@ def _documentation(scale: float, today: date, projects, assets) -> list[Document
         for doc_type in doc_types
     }
     sensitivities = _choices(DocumentationRecord, "sensitivity")
-    records = _create(DocumentationRecord, [
-        DocumentationRecord(
-            doc_id=f"example-doc-{index}",
-            title=f"Example runbook {index}",
-            doc_type=(doc_type := doc_types[index % len(doc_types)]),
-            system_service=f"example-service-{index % 12}",
-            environment=environments[index % len(environments)],
-            status=statuses[doc_type][index % len(statuses[doc_type])],
-            sensitivity=sensitivities[index % len(sensitivities)],
-            obsidian_path=f"03 Runbooks/Example runbook {index}.md",
-            last_reviewed=today - timedelta(days=index % 400),
-        )
-        for index in range(_count(scale, 150))
-    ])
+    records = _create(
+        DocumentationRecord,
+        [
+            DocumentationRecord(
+                doc_id=f"example-doc-{index}",
+                title=f"Example runbook {index}",
+                doc_type=(doc_type := doc_types[index % len(doc_types)]),
+                system_service=f"example-service-{index % 12}",
+                environment=environments[index % len(environments)],
+                status=statuses[doc_type][index % len(statuses[doc_type])],
+                sensitivity=sensitivities[index % len(sensitivities)],
+                obsidian_path=f"03 Runbooks/Example runbook {index}.md",
+                last_reviewed=today - timedelta(days=index % 400),
+            )
+            for index in range(_count(scale, 150))
+        ],
+    )
     for field, targets, column in (
         ("related_projects", projects, "project_id"),
         ("related_assets", assets, "asset_id"),
     ):
         through = getattr(DocumentationRecord, field).through
-        through.objects.bulk_create([
-            through(documentationrecord_id=record.pk, **{column: targets[(index + step) % len(targets)].pk})
-            for index, record in enumerate(records)
-            for step in range(index % 3)
-        ], batch_size=500)
+        through.objects.bulk_create(
+            [
+                through(documentationrecord_id=record.pk, **{column: targets[(index + step) % len(targets)].pk})
+                for index, record in enumerate(records)
+                for step in range(index % 3)
+            ],
+            batch_size=500,
+        )
     return records
 
 
 def _content(scale: float, today: date, projects, records) -> list[ContentItem]:
     types = _choices(ContentItem, "content_type")
     statuses = _choices(ContentItem, "status")
-    items = _create(ContentItem, [
-        ContentItem(
-            title=f"Example writeup {index}",
-            slug=f"example-writeup-{index}",
-            content_type=types[index % len(types)],
-            status=statuses[index % len(statuses)],
-            topic="Operations",
-            tags="example, bench",
-            published_url=f"https://example.com/writeups/example-writeup-{index}/",
-            published_at=today - timedelta(days=index * 9),
-        )
-        for index in range(_count(scale, 80))
-    ])
+    items = _create(
+        ContentItem,
+        [
+            ContentItem(
+                title=f"Example writeup {index}",
+                slug=f"example-writeup-{index}",
+                content_type=types[index % len(types)],
+                status=statuses[index % len(statuses)],
+                topic="Operations",
+                tags="example, bench",
+                published_url=f"https://example.com/writeups/example-writeup-{index}/",
+                published_at=today - timedelta(days=index * 9),
+            )
+            for index in range(_count(scale, 80))
+        ],
+    )
     for field, targets, column in (
         ("related_projects", projects, "project_id"),
         ("related_documentation", records, "documentationrecord_id"),
     ):
         through = getattr(ContentItem, field).through
-        through.objects.bulk_create([
-            through(contentitem_id=item.pk, **{column: targets[(index + step) % len(targets)].pk})
-            for index, item in enumerate(items)
-            for step in range(index % 3)
-        ], batch_size=500)
+        through.objects.bulk_create(
+            [
+                through(contentitem_id=item.pk, **{column: targets[(index + step) % len(targets)].pk})
+                for index, item in enumerate(items)
+                for step in range(index % 3)
+            ],
+            batch_size=500,
+        )
     return items
 
 
@@ -251,21 +280,23 @@ def _expenses(rng, scale, today, projects, assets, content, records) -> list[Exp
     for index in range(_count(scale, 4000)):
         cost = Decimal(rng.randrange(500, 90000)) / 100
         share = rng.choice((50, 100, 100, 100))
-        rows.append(Expense(
-            date=today - timedelta(days=rng.randrange(4 * 365)),
-            vendor=rng.choice(VENDORS),
-            item=f"Example purchase {index}",
-            category=categories[index % len(categories)],
-            total_cost=cost,
-            business_use_percentage=share,
-            estimated_deductible_amount=(cost * share / 100).quantize(Decimal("0.01")),
-            payment_method=methods[index % len(methods)],
-            business_purpose="Operating the example estate",
-            related_project=related(index, 2, projects),
-            related_asset=related(index, 5, assets),
-            related_content=related(index, 11, content),
-            related_documentation=related(index, 13, records),
-        ))
+        rows.append(
+            Expense(
+                date=today - timedelta(days=rng.randrange(4 * 365)),
+                vendor=rng.choice(VENDORS),
+                item=f"Example purchase {index}",
+                category=categories[index % len(categories)],
+                total_cost=cost,
+                business_use_percentage=share,
+                estimated_deductible_amount=(cost * share / 100).quantize(Decimal("0.01")),
+                payment_method=methods[index % len(methods)],
+                business_purpose="Operating the example estate",
+                related_project=related(index, 2, projects),
+                related_asset=related(index, 5, assets),
+                related_content=related(index, 11, content),
+                related_documentation=related(index, 13, records),
+            )
+        )
     return _create(Expense, rows)
 
 
@@ -273,17 +304,19 @@ def _receipts(rng, scale, expenses: list[Expense], assets: list[Asset]) -> list[
     rows = []
     for index in range(_count(scale, 3000)):
         expense = expenses[index % len(expenses)] if index % 10 else None
-        rows.append(Receipt(
-            file=f"receipts/example/receipt-{index}.pdf",
-            original_filename=f"receipt-{index}.pdf",
-            content_type="application/pdf",
-            size_bytes=rng.randrange(20_000, 900_000),
-            vendor=expense.vendor if expense else rng.choice(VENDORS),
-            date=expense.date if expense else None,
-            amount=expense.total_cost if expense else Decimal("12.00"),
-            related_expense=expense,
-            related_asset=assets[index % len(assets)] if index % 7 == 0 else None,
-        ))
+        rows.append(
+            Receipt(
+                file=f"receipts/example/receipt-{index}.pdf",
+                original_filename=f"receipt-{index}.pdf",
+                content_type="application/pdf",
+                size_bytes=rng.randrange(20_000, 900_000),
+                vendor=expense.vendor if expense else rng.choice(VENDORS),
+                date=expense.date if expense else None,
+                amount=expense.total_cost if expense else Decimal("12.00"),
+                related_expense=expense,
+                related_asset=assets[index % len(assets)] if index % 7 == 0 else None,
+            )
+        )
     receipts = _create(Receipt, rows)
     _spread(Receipt, "uploaded_at", receipts, 4 * 365)
     return receipts
@@ -291,15 +324,18 @@ def _receipts(rng, scale, expenses: list[Expense], assets: list[Asset]) -> list[
 
 def _entries(scale: float, today: date) -> list[Entry]:
     repeats = ("", "", "", "weekly", "monthly", "yearly")
-    return _create(Entry, [
-        Entry(
-            title=f"Example appointment {index}",
-            starts_on=today + timedelta(days=index % 240 - 120),
-            location="Example office" if index % 4 == 0 else "",
-            repeat=repeats[index % len(repeats)],
-        )
-        for index in range(_count(scale, 300))
-    ])
+    return _create(
+        Entry,
+        [
+            Entry(
+                title=f"Example appointment {index}",
+                starts_on=today + timedelta(days=index % 240 - 120),
+                location="Example office" if index % 4 == 0 else "",
+                repeat=repeats[index % len(repeats)],
+            )
+            for index in range(_count(scale, 300))
+        ],
+    )
 
 
 def _references(assets, expenses, entries) -> None:
@@ -307,9 +343,7 @@ def _references(assets, expenses, entries) -> None:
 
     asset, machine = assets[0], "machine:lab-1"
     Asset.objects.filter(pk=asset.pk).update(infrastructure=machine, infrastructure_name="lab-1")
-    Expense.objects.filter(pk__in=[expense.pk for expense in expenses[::25]]).update(
-        about=machine, about_name="lab-1"
-    )
+    Expense.objects.filter(pk__in=[expense.pk for expense in expenses[::25]]).update(about=machine, about_name="lab-1")
     about_asset = [entry.pk for entry in entries[::10]]
     Entry.objects.filter(pk__in=about_asset).update(about=f"asset:{asset.slug}", about_name=asset.item_name)
     Entry.objects.filter(pk=entries[1].pk).update(about=machine, about_name="lab-1")
@@ -322,17 +356,19 @@ def _history(rng, scale, user, expenses, assets) -> list[AuditLog]:
     rows = []
     for index in range(_count(scale, 6000)):
         kind, key, label = subjects[index % len(subjects)]
-        rows.append(AuditLog(
-            user=user if index % 6 else None,
-            action=actions[index % len(actions)],
-            object_type=kind,
-            object_id=str(key),
-            object_repr=label[:200],
-            operation_id=f"example-operation-{index}",
-            connection="example-ssh" if index % 9 == 0 else "",
-            message="Recorded by the bench seed.",
-            metadata={"changes": {"notes": ["", "example"]}} if index % 3 == 0 else {},
-        ))
+        rows.append(
+            AuditLog(
+                user=user if index % 6 else None,
+                action=actions[index % len(actions)],
+                object_type=kind,
+                object_id=str(key),
+                object_repr=label[:200],
+                operation_id=f"example-operation-{index}",
+                connection="example-ssh" if index % 9 == 0 else "",
+                message="Recorded by the bench seed.",
+                metadata={"changes": {"notes": ["", "example"]}} if index % 3 == 0 else {},
+            )
+        )
     history = _create(AuditLog, rows)
     _spread(AuditLog, "created_at", history, 4 * 365)
     return history
@@ -341,20 +377,23 @@ def _history(rng, scale, user, expenses, assets) -> list[AuditLog]:
 def _jobs(scale: float, user) -> list[Job]:
     now = timezone.now()
     states = ("succeeded", "succeeded", "succeeded", "failed", "lost")
-    Job.objects.bulk_create([
-        Job(
-            kind=f"example.job.{index % 6}",
-            label=f"Example job {index}",
-            state=states[index % len(states)],
-            percent=100,
-            actor="bench",
-            requested_by=user,
-            result={"imported": index},
-            started_at=now - timedelta(hours=index),
-            finished_at=now - timedelta(hours=index) + timedelta(seconds=30),
-        )
-        for index in range(_count(scale, 200))
-    ], batch_size=500)
+    Job.objects.bulk_create(
+        [
+            Job(
+                kind=f"example.job.{index % 6}",
+                label=f"Example job {index}",
+                state=states[index % len(states)],
+                percent=100,
+                actor="bench",
+                requested_by=user,
+                result={"imported": index},
+                started_at=now - timedelta(hours=index),
+                finished_at=now - timedelta(hours=index) + timedelta(seconds=30),
+            )
+            for index in range(_count(scale, 200))
+        ],
+        batch_size=500,
+    )
     jobs = list(Job.objects.all())
     _spread(Job, "created_at", jobs, 365)
     return jobs
@@ -372,53 +411,80 @@ def _analytics(rng, scale, today: date) -> None:
     }
     for host in ZONES[:2]:
         site = AnalyticsSite.objects.create(
-            site_tag=f"tag-{host}", host=host, connection_ref="example-cloudflare_api",
-            first_seen_at=now - timedelta(days=400), observed_at=now,
+            site_tag=f"tag-{host}",
+            host=host,
+            connection_ref="example-cloudflare_api",
+            first_seen_at=now - timedelta(days=400),
+            observed_at=now,
         )
         days = [today - timedelta(days=offset) for offset in range(_count(scale, 90))]
         AnalyticsCoverage.objects.bulk_create([AnalyticsCoverage(site=site, date=day) for day in days])
-        RumDaily.objects.bulk_create([
-            RumDaily(
-                site=site, date=day, dimension=dimension, value=value,
-                pageviews=rng.randrange(1, 400), visits=rng.randrange(1, 200),
-                sample_interval=1, observed_at=now,
-            )
-            for day in days
-            for dimension, values in dimensions.items()
-            for value in values
-        ], batch_size=500)
-        VitalsDaily.objects.bulk_create([
-            VitalsDaily(
-                site=site, date=day, largest_contentful_paint_ms=1800,
-                interaction_to_next_paint_ms=120, first_contentful_paint_ms=900,
-                time_to_first_byte_ms=200, cumulative_layout_shift=Decimal("0.05"),
-                lcp_good=90, inp_good=95, cls_good=97, sample_interval=1, observed_at=now,
-            )
-            for day in days
-        ])
+        RumDaily.objects.bulk_create(
+            [
+                RumDaily(
+                    site=site,
+                    date=day,
+                    dimension=dimension,
+                    value=value,
+                    pageviews=rng.randrange(1, 400),
+                    visits=rng.randrange(1, 200),
+                    sample_interval=1,
+                    observed_at=now,
+                )
+                for day in days
+                for dimension, values in dimensions.items()
+                for value in values
+            ],
+            batch_size=500,
+        )
+        VitalsDaily.objects.bulk_create(
+            [
+                VitalsDaily(
+                    site=site,
+                    date=day,
+                    largest_contentful_paint_ms=1800,
+                    interaction_to_next_paint_ms=120,
+                    first_contentful_paint_ms=900,
+                    time_to_first_byte_ms=200,
+                    cumulative_layout_shift=Decimal("0.05"),
+                    lcp_good=90,
+                    inp_good=95,
+                    cls_good=97,
+                    sample_interval=1,
+                    observed_at=now,
+                )
+                for day in days
+            ]
+        )
 
 
 def _store(kind: str, records: list[dict[str, Any]]) -> None:
     ProviderInventory.objects.create(
-        kind=kind, records=records, reachable=True, connected=True,
-        observed_at=timezone.now(), controller_id=CONTROLLER,
+        kind=kind,
+        records=records,
+        reachable=True,
+        connected=True,
+        observed_at=timezone.now(),
+        controller_id=CONTROLLER,
     )
 
 
 def _resource(kind: str, key: str, spec: dict[str, Any], now: datetime, **fields: Any) -> ManagedResource:
     return ManagedResource(
-        key=key, kind=kind, spec=spec, observed_generation=1, last_observed_at=now,
-        conditions=[{"type": "Ready", "status": True}], **fields,
+        key=key,
+        kind=kind,
+        spec=spec,
+        observed_generation=1,
+        last_observed_at=now,
+        conditions=[{"type": "Ready", "status": True}],
+        **fields,
     )
 
 
 def _machines(now: datetime) -> tuple[list[ManagedResource], list[dict[str, Any]]]:
     hosts = [(f"lab-{index}", f"192.0.2.{10 + index}") for index in range(1, 7)]
     hosts.append(("edge-1", EDGE_ADDRESS))
-    resources = [
-        _resource("machine", name, {"name": name, "addresses": [address]}, now)
-        for name, address in hosts
-    ]
+    resources = [_resource("machine", name, {"name": name, "addresses": [address]}, now) for name, address in hosts]
     resources += [
         _resource("tailscale.device", f"device-{name}", {"name": name, "connection_ref": "example-tailscale"}, now)
         for name, _ in hosts
@@ -429,7 +495,10 @@ def _machines(now: datetime) -> tuple[list[ManagedResource], list[dict[str, Any]
     ]
     devices = [
         {
-            "name": name, "online": index % 4 != 0, "tags": ["tag:server"], "addresses": [address],
+            "name": name,
+            "online": index % 4 != 0,
+            "tags": ["tag:server"],
+            "addresses": [address],
             "last_seen": (now - timedelta(hours=index)).isoformat(),
             "key_expires": (now + timedelta(days=60 + index)).isoformat(),
         }
@@ -439,10 +508,7 @@ def _machines(now: datetime) -> tuple[list[ManagedResource], list[dict[str, Any]
 
 
 def _names(scale: float) -> list[tuple[str, str]]:
-    return [
-        (f"app{index}.{ZONES[index % len(ZONES)]}", f"lab-{index % 6 + 1}")
-        for index in range(_count(scale, 120))
-    ]
+    return [(f"app{index}.{ZONES[index % len(ZONES)]}", f"lab-{index % 6 + 1}") for index in range(_count(scale, 120))]
 
 
 def _infrastructure(scale: float) -> list[ManagedResource]:
@@ -454,17 +520,30 @@ def _infrastructure(scale: float) -> list[ManagedResource]:
     for index, (name, host) in enumerate(names):
         zone = name.split(".", 1)[1]
         record = {
-            "zone": zone, "name": name, "record_type": "A", "content": EDGE_ADDRESS,
-            "proxied": index % 2 == 0, "ttl": 1,
+            "zone": zone,
+            "name": name,
+            "record_type": "A",
+            "content": EDGE_ADDRESS,
+            "proxied": index % 2 == 0,
+            "ttl": 1,
         }
         records.append({**record, "connection_ref": "example-cloudflare_api"})
         resources.append(_resource("cloudflare.dns_record", f"record-{index}", record, now))
-        container = {"host": host, "name": f"app{index}", "ports": [8000 + index], "state": "running",
-                     "connection_ref": "example-portainer"}
+        container = {
+            "host": host,
+            "name": f"app{index}",
+            "ports": [8000 + index],
+            "state": "running",
+            "connection_ref": "example-portainer",
+        }
         containers.append(container)
         if index % 4 == 0:
-            proxy = {"domain_names": [name], "forward_scheme": "http",
-                     "forward_host": address[host], "forward_port": 8000 + index}
+            proxy = {
+                "domain_names": [name],
+                "forward_scheme": "http",
+                "forward_host": address[host],
+                "forward_port": 8000 + index,
+            }
             proxies.append({**proxy, "connection_ref": "example-npm"})
             resources.append(_resource("npm.proxy_host", f"proxy-{index}", proxy, now))
             rewrite = {"domain": name, "answer": address[host]}
@@ -475,33 +554,60 @@ def _infrastructure(scale: float) -> list[ManagedResource]:
             routes.append(route)
             resources.append(_resource("caddy.route", f"route-{index}", route, now))
         if index % 3 == 0:
-            resources.append(_resource(
-                "portainer.container", f"container-{index}",
-                {"connection_ref": "example-portainer", "host": host, "name": f"app{index}"}, now,
-            ))
+            resources.append(
+                _resource(
+                    "portainer.container",
+                    f"container-{index}",
+                    {"connection_ref": "example-portainer", "host": host, "name": f"app{index}"},
+                    now,
+                )
+            )
     for index, zone in enumerate(ZONES):
-        resources.append(_resource(
-            "cloudflare.zone", zone.replace(".", "-"), {"zone": zone, "connection_ref": "example-cloudflare_api"}, now,
-        ))
-        resources.append(_resource(
-            "tls.certificate", f"certificate-{index}",
-            {"certificate_name": f"example-cert-{index}", "domains": [f"*.{zone}"]}, now,
-            status={"not_after": (now + timedelta(days=20 + 30 * index)).isoformat()},
-        ))
+        resources.append(
+            _resource(
+                "cloudflare.zone",
+                zone.replace(".", "-"),
+                {"zone": zone, "connection_ref": "example-cloudflare_api"},
+                now,
+            )
+        )
+        resources.append(
+            _resource(
+                "tls.certificate",
+                f"certificate-{index}",
+                {"certificate_name": f"example-cert-{index}", "domains": [f"*.{zone}"]},
+                now,
+                status={"not_after": (now + timedelta(days=20 + 30 * index)).isoformat()},
+            )
+        )
     ManagedResource.objects.bulk_create(resources, batch_size=500)
     _store("tailscale.device", devices)
     _store("cloudflare.dns_record", records)
-    _store("cloudflare.zone", [
-        {"zone": zone, "connection_ref": "example-cloudflare_api",
-         "registration": {"expires_at": (now + timedelta(days=200)).isoformat(), "auto_renew": True}}
-        for zone in ZONES
-    ])
-    _store("cloudflare.edge_certificate", [
-        {"connection_ref": "example-cloudflare_api", "zone": zone, "id": f"edge-{zone}",
-         "hosts": [zone, f"*.{zone}"], "status": "active",
-         "expires_on": (now + timedelta(days=60)).isoformat()}
-        for zone in ZONES
-    ])
+    _store(
+        "cloudflare.zone",
+        [
+            {
+                "zone": zone,
+                "connection_ref": "example-cloudflare_api",
+                "registration": {"expires_at": (now + timedelta(days=200)).isoformat(), "auto_renew": True},
+            }
+            for zone in ZONES
+        ],
+    )
+    _store(
+        "cloudflare.edge_certificate",
+        [
+            {
+                "connection_ref": "example-cloudflare_api",
+                "zone": zone,
+                "id": f"edge-{zone}",
+                "hosts": [zone, f"*.{zone}"],
+                "status": "active",
+                "expires_on": (now + timedelta(days=60)).isoformat(),
+            }
+            for zone in ZONES
+        ],
+    )
     _store("npm.proxy_host", proxies)
     _store("adguard.rewrite", rewrites)
     _store("caddy.route", routes)
@@ -520,50 +626,64 @@ def _connections(now: datetime, address: dict[str, str]) -> None:
         ("example-edge", "ssh", f"{EDGE_ADDRESS}:22"),
     ]
     endpoints += [(name, "ssh", f"{host}:22") for name, host in address.items()]
-    ProviderConnection.objects.bulk_create([
-        ProviderConnection(
-            connection_ref=ref, controller_id=CONTROLLER, provider=provider, endpoint=endpoint,
-            reachable=True, probed=True, manages=True, observed_at=now, reported_at=now,
-        )
-        for ref, provider, endpoint in endpoints
-    ])
+    ProviderConnection.objects.bulk_create(
+        [
+            ProviderConnection(
+                connection_ref=ref,
+                controller_id=CONTROLLER,
+                provider=provider,
+                endpoint=endpoint,
+                reachable=True,
+                probed=True,
+                manages=True,
+                observed_at=now,
+                reported_at=now,
+            )
+            for ref, provider, endpoint in endpoints
+        ]
+    )
 
 
 def _operations(scale: float, user, resources: list[ManagedResource]) -> None:
     now = timezone.now()
-    OperationRequest.objects.bulk_create([
-        OperationRequest(
-            resource=resources[index % len(resources)],
-            action="reconcile",
-            state="succeeded" if index % 9 else "failed",
-            requested_by=user,
-            requested_actor="bench",
-            requested_interface="web",
-            idempotency_key=f"example-operation-{index}",
-            result={"changed": False},
-            completed_at=now - timedelta(hours=index),
-        )
-        for index in range(_count(scale, 300))
-    ], batch_size=500)
+    OperationRequest.objects.bulk_create(
+        [
+            OperationRequest(
+                resource=resources[index % len(resources)],
+                action="reconcile",
+                state="succeeded" if index % 9 else "failed",
+                requested_by=user,
+                requested_actor="bench",
+                requested_interface="web",
+                idempotency_key=f"example-operation-{index}",
+                result={"changed": False},
+                completed_at=now - timedelta(hours=index),
+            )
+            for index in range(_count(scale, 300))
+        ],
+        batch_size=500,
+    )
     _spread(OperationRequest, "created_at", list(OperationRequest.objects.all()), 365)
-    ApprovalRequest.objects.bulk_create([
-        ApprovalRequest(
-            capability="example.change",
-            target=resources[index % len(resources)].key,
-            resource_kind=resources[index % len(resources)].kind,
-            resource_key=resources[index % len(resources)].key,
-            content_fingerprint=f"{index:064x}",
-            requested_actor="example-agent",
-            requested_interface="api",
-            expires_at=now + timedelta(days=1),
-            **(
-                {"state": "pending"}
-                if index % 15 == 1
-                else {"state": "approved", "decided_actor": "bench", "decided_at": now}
-            ),
-        )
-        for index in range(_count(scale, 40))
-    ])
+    ApprovalRequest.objects.bulk_create(
+        [
+            ApprovalRequest(
+                capability="example.change",
+                target=resources[index % len(resources)].key,
+                resource_kind=resources[index % len(resources)].kind,
+                resource_key=resources[index % len(resources)].key,
+                content_fingerprint=f"{index:064x}",
+                requested_actor="example-agent",
+                requested_interface="api",
+                expires_at=now + timedelta(days=1),
+                **(
+                    {"state": "pending"}
+                    if index % 15 == 1
+                    else {"state": "approved", "decided_actor": "bench", "decided_at": now}
+                ),
+            )
+            for index in range(_count(scale, 40))
+        ]
+    )
 
 
 def seed(scale: float = 1.0) -> Seeded:

@@ -43,11 +43,7 @@ class Command(BaseCommand):
     @override
     def handle(self, *args, **options):
         try:
-            published_at = (
-                date.fromisoformat(options["published_at"])
-                if options["published_at"]
-                else None
-            )
+            published_at = date.fromisoformat(options["published_at"]) if options["published_at"] else None
         except ValueError as exc:
             raise CommandError("--published-at must use YYYY-MM-DD") from exc
 

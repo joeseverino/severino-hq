@@ -105,10 +105,7 @@ class TLSCertificateSpec(ProviderModel):
     install_on: list[str] = Field(
         default_factory=list,
         title="Install it on",
-        description=(
-            "Where the certificate is deployed. Delivery settings are on each "
-            "target."
-        ),
+        description=("Where the certificate is deployed. Delivery settings are on each target."),
     )
 
     renewal_window_days: int = Field(
@@ -117,8 +114,7 @@ class TLSCertificateSpec(ProviderModel):
         le=60,
         title="Renew this many days early",
         description=(
-            "Days before expiry that renewal starts. HQ also renews at once "
-            "if a consumer serves the wrong certificate."
+            "Days before expiry that renewal starts. HQ also renews at once if a consumer serves the wrong certificate."
         ),
     )
 
@@ -133,9 +129,7 @@ class TLSCertificateSpec(ProviderModel):
             if not value
         ]
         if missing:
-            raise ValueError(
-                f"{self.certificate_name} still needs " + " and ".join(missing) + "."
-            )
+            raise ValueError(f"{self.certificate_name} still needs " + " and ".join(missing) + ".")
         return self
 
 
@@ -171,15 +165,10 @@ class ResolvedTLSCertificateSpec(ProviderModel):
         for consumer in self.consumers:
             if not isinstance(consumer, CPanelTLSConsumer):
                 continue
-            uncovered = [
-                domain
-                for domain in consumer.install_domains
-                if not certificate_covers(domain, covered)
-            ]
+            uncovered = [domain for domain in consumer.install_domains if not certificate_covers(domain, covered)]
             if uncovered:
                 raise ValueError(
-                    "cPanel install domains must be present in certificate domains: "
-                    + ", ".join(uncovered)
+                    "cPanel install domains must be present in certificate domains: " + ", ".join(uncovered)
                 )
         return self
 
@@ -209,10 +198,7 @@ class UploadedCertificateSpec(ProviderModel):
     domains: list[str] = Field(
         default_factory=list,
         title="Names it covers",
-        description=(
-            "Read from the certificate on each upload. Remove names HQ should "
-            "not treat as covered."
-        ),
+        description=("Read from the certificate on each upload. Remove names HQ should not treat as covered."),
     )
 
 
@@ -223,16 +209,11 @@ class ResolvedUploadedCertificateSpec(ProviderModel):
     domains: list[str] = Field(default_factory=list)
 
 
-def _delivery_target(
-    connection_ref: str, context: ProviderResolutionContext
-) -> dict[str, Any]:
+def _delivery_target(connection_ref: str, context: ProviderResolutionContext) -> dict[str, Any]:
     for target in context.delivery_targets:
         if target.get("connection_ref") == connection_ref:
             return target
-    raise ValueError(
-        f"{connection_ref!r} is not a certificate target. Add it as one "
-        "first."
-    )
+    raise ValueError(f"{connection_ref!r} is not a certificate target. Add it as one first.")
 
 
 def _consumer_at(
@@ -260,9 +241,7 @@ def _consumer_at(
     """
 
     kind = target["kind"]
-    owns_the_name = bool(certificate_key) and (
-        target.get("certificate_resource") == certificate_key
-    )
+    owns_the_name = bool(certificate_key) and (target.get("certificate_resource") == certificate_key)
     covered = set(domains)
     landing = names_at(target["connection_ref"]) if names_at else ()
     consumer = {
@@ -286,15 +265,11 @@ def _consumer_at(
         # serves a verified name" once it has asked the account for its sites,
         # so the install list is derived from the verify list and cannot
         # disagree with it.
-        consumer["install_domains"] = (
-            list(target.get("install_domains") or []) if owns_the_name else []
-        )
+        consumer["install_domains"] = list(target.get("install_domains") or []) if owns_the_name else []
     return consumer
 
 
-def _publication_at(
-    target: dict[str, Any], *, certificate_name: str
-) -> dict[str, Any]:
+def _publication_at(target: dict[str, Any], *, certificate_name: str) -> dict[str, Any]:
     """Where one certificate's facts are written at one 1Password target.
 
     The vault and the item are the target's, and that is deliberately all of it.
@@ -312,24 +287,16 @@ def _publication_at(
     }
 
 
-def _resolve_tls(
-    authored: dict[str, Any], context: ProviderResolutionContext
-) -> dict[str, Any]:
+def _resolve_tls(authored: dict[str, Any], context: ProviderResolutionContext) -> dict[str, Any]:
     domains = list(authored["domains"])
-    targets = [
-        _delivery_target(connection_ref, context)
-        for connection_ref in authored["install_on"]
-    ]
+    targets = [_delivery_target(connection_ref, context) for connection_ref in authored["install_on"]]
     consumers = [target for target in targets if target["kind"] != "onepassword"]
     if not consumers:
         # Said here rather than left to the resolved model, which would report
         # an empty list and not why it is empty. Recording a certificate is not
         # installing one, so a certificate whose only target records it has
         # nowhere to go, and nothing HQ could observe to confirm it arrived.
-        raise ValueError(
-            f"{authored['certificate_name']} has no install target. Add one "
-            "that serves it."
-        )
+        raise ValueError(f"{authored['certificate_name']} has no install target. Add one that serves it.")
     return {
         "certificate_name": authored["certificate_name"],
         "domains": domains,
@@ -356,22 +323,16 @@ def _resolve_tls(
 UPLOADED_CERTIFICATE_REFUSALS: Mapping[str, str] = MappingProxyType(
     {
         "cpanel": (
-            "Uploaded certificates cannot be installed on cPanel. It "
-            "rejects certificates signed by a private CA."
+            "Uploaded certificates cannot be installed on cPanel. It rejects certificates signed by a private CA."
         ),
         # Publishing records what a reconcile observed about a certificate HQ
         # issued; an uploaded certificate is not reconciled that way.
-        "onepassword": (
-            "Uploaded certificates cannot be recorded in 1Password. "
-            "Only certificates HQ issues can."
-        ),
+        "onepassword": ("Uploaded certificates cannot be recorded in 1Password. Only certificates HQ issues can."),
     }
 )
 
 
-def _resolve_uploaded(
-    authored: dict[str, Any], context: ProviderResolutionContext
-) -> dict[str, Any]:
+def _resolve_uploaded(authored: dict[str, Any], context: ProviderResolutionContext) -> dict[str, Any]:
     consumers = []
     for connection_ref in authored["install_on"]:
         target = _delivery_target(connection_ref, context)
@@ -397,7 +358,6 @@ def _resolve_uploaded(
     }
 
 
-
 # Each reads a *resolved* spec. A certificate's names are authored and survive a
 # failed resolution, which is why an unresolvable one still reports what it
 # covers; what resolution adds is where it installs.
@@ -407,9 +367,7 @@ def _certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     return tuple(spec.get("domains", ()))
 
 
-def _certificate_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _certificate_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     # Compact on purpose. This readout is what a *service* page shows beside a
     # hostname, and there the question is whether this name is covered by
     # something healthy: who issued it and when it runs out. Where it is
@@ -428,9 +386,7 @@ def _uploaded_certificate_hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     return tuple(spec.get("domains", ()))
 
 
-def _uploaded_certificate_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _uploaded_certificate_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     return (
         ("Name", spec.get("certificate_name", ""), ""),
         ("Expires", "", expiry_phrase(status.get("not_after", ""))),
@@ -479,8 +435,7 @@ def _managed_certificate_applies(context: NameContext) -> str:
 
 CERTIFICATE = ProviderSpec(
     CERTIFICATE_KIND,
-    "Issues a Let's Encrypt certificate, renews it, and installs it "
-    "wherever these names are served.",
+    "Issues a Let's Encrypt certificate, renews it, and installs it wherever these names are served.",
     TLSCertificateSpec,
     ResolvedTLSCertificateSpec,
     _resolve_tls,
@@ -502,8 +457,7 @@ CERTIFICATE = ProviderSpec(
     change_effects=(
         (
             "domains",
-            "Saving reissues the certificate and redeploys it to every "
-            "target. Takes about a minute.",
+            "Saving reissues the certificate and redeploys it to every target. Takes about a minute.",
         ),
     ),
     facet="certificate",
@@ -512,19 +466,14 @@ CERTIFICATE = ProviderSpec(
     seed=_certificate_seed,
     covers=True,
     unobserved_reason=(
-        "No sweep reads certificates. HQ updates this record when it "
-        "issues or installs the certificate."
+        "No sweep reads certificates. HQ updates this record when it issues or installs the certificate."
     ),
-    removal_gap=(
-        "The controller cannot delete certificates yet, so renewals would "
-        "not stop."
-    ),
+    removal_gap=("The controller cannot delete certificates yet, so renewals would not stop."),
 )
 
 UPLOADED_CERTIFICATE = ProviderSpec(
     UPLOADED_CERTIFICATE_KIND,
-    "Installs a certificate you generated elsewhere. HQ keeps a copy so "
-    "you can install it on more targets later.",
+    "Installs a certificate you generated elsewhere. HQ keeps a copy so you can install it on more targets later.",
     UploadedCertificateSpec,
     ResolvedUploadedCertificateSpec,
     _resolve_uploaded,
@@ -542,10 +491,7 @@ UPLOADED_CERTIFICATE = ProviderSpec(
     hostnames=_uploaded_certificate_hostnames,
     covers=True,
     readout=_uploaded_certificate_readout,
-    unobserved_reason=(
-        "HQ stores the file. Installs are checked when the certificate "
-        "is reconciled."
-    ),
+    unobserved_reason=("HQ stores the file. Installs are checked when the certificate is reconciled."),
 )
 
 # Declarations only: the controller half is still the core's.
@@ -557,11 +503,7 @@ def consumer_kinds() -> tuple[str, ...]:
 
     union, _field = get_args(TLSConsumer)
     return tuple(
-        sorted(
-            literal
-            for model in get_args(union)
-            for literal in get_args(model.model_fields["kind"].annotation)
-        )
+        sorted(literal for model in get_args(union) for literal in get_args(model.model_fields["kind"].annotation))
     )
 
 
@@ -576,7 +518,6 @@ SHARED = (
     SharedValue(
         "TLSConsumerKind",
         consumer_kinds(),
-        "Where a certificate is served from: the kinds of TLS consumer a certificate "
-        "spec declares.",
+        "Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.",
     ),
 )

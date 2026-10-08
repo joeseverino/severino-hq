@@ -19,7 +19,9 @@ def _diagnose():
 
 class DiagnoseTests(SimpleTestCase):
     def test_a_known_failure_is_named_with_its_fix(self):
-        found = _diagnose().diagnose("#15 pushing\\ndenied: permission_denied: write_package\\n##[error]Process completed")
+        found = _diagnose().diagnose(
+            "#15 pushing\\ndenied: permission_denied: write_package\\n##[error]Process completed"
+        )
 
         self.assertEqual(found["id"], "package-write")
         self.assertIn("Write role", found["fix"])

@@ -56,10 +56,7 @@ def operator_steps(
     if not command and not notes and not by_hand:
         return ()
     if by_hand:
-        notes += (
-            f"Or by hand: {by_hand}"
-            + (f", adding {', '.join(missing)}." if missing else "."),
-        )
+        notes += (f"Or by hand: {by_hand}" + (f", adding {', '.join(missing)}." if missing else "."),)
     return (
         OperatorStep(
             label="Make a new token on your Mac" if command else "Make a new token",
@@ -116,8 +113,7 @@ def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
                 label=f"Point the connection at {_service(node)}'s own API address",
                 notes=(
                     *((f"{endpoint} is not the API.",) if endpoint else ()),
-                    "Set the address in the connection's 1Password item, "
-                    f"{address_fields()}.",
+                    f"Set the address in the connection's 1Password item, {address_fields()}.",
                     THEN_READ_NOW,
                 ),
             ),
@@ -210,9 +206,7 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                 "rule": "credential-expiring",
                 "subject": node.id,
                 "title": (
-                    f"{node.label}'s token has expired"
-                    if expired
-                    else f"{node.label}'s token expires in {span(left)}"
+                    f"{node.label}'s token has expired" if expired else f"{node.label}'s token expires in {span(left)}"
                 ),
                 "severity": "serious" if expired else "attention",
                 "explanation": (
@@ -239,9 +233,7 @@ RULES: tuple[FindingRule, ...] = (
         "A token is missing permissions",
         "attention",
         lambda estate: built_findings(missing_permissions(estate)),
-        operator_action=(
-            f"Make a new token with the command on the connection's page. {THEN_READ_NOW}"
-        ),
+        operator_action=(f"Make a new token with the command on the connection's page. {THEN_READ_NOW}"),
         no_help_reason=_CANNOT_ISSUE,
     ),
     FindingRule(

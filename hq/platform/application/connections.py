@@ -104,9 +104,7 @@ def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
     saying exactly what HQ knows.
     """
 
-    by_url = {
-        known[name.lower()].url: name for name in row.reaches if name.lower() in known
-    }
+    by_url = {known[name.lower()].url: name for name in row.reaches if name.lower() in known}
     # And every machine the catalog says this connection reaches, such as the
     # devices a tailnet connection read.
     for item in known.values():
@@ -142,14 +140,12 @@ def _one_name(resource) -> str:
             names = tuple(provider.identity(spec))
         else:
             return ""
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return ""
     return normalized_hostname(str(names[0])) if len(names) == 1 else ""
 
 
-def _depends(reading: ConnectionReading) -> tuple[
-    tuple[ConnectionLink, ...], tuple[ConnectionLink, ...]
-]:
+def _depends(reading: ConnectionReading) -> tuple[tuple[ConnectionLink, ...], tuple[ConnectionLink, ...]]:
     """Targets and dependencies, with a declaration that is a target shown once.
 
     A declaration naming the same thing a target names folds into the target:
@@ -176,9 +172,7 @@ def _depends(reading: ConnectionReading) -> tuple[
         folded.add(key)
         merged.append(ConnectionLink(link.label, link.url or home, resource_key=key))
     dependencies = tuple(
-        ConnectionLink(key, url, resource_key=key)
-        for key, url in reading.resources
-        if key not in folded
+        ConnectionLink(key, url, resource_key=key) for key, url in reading.resources if key not in folded
     )
     return tuple(merged), dependencies
 
@@ -197,14 +191,11 @@ def connection_rows() -> tuple:
 
     from .projection import read_once
 
-    return read_once(
-        "connections.rows", lambda: tuple(ProviderConnection.objects.all())
-    )
+    return read_once("connections.rows", lambda: tuple(ProviderConnection.objects.all()))
 
 
 def connection_readings() -> tuple[ConnectionReading, ...]:
     """Every connection every controller last reported, and what ties to it."""
-
 
     from .infrastructure import enabled_resources
     from .locate import index_of
@@ -224,9 +215,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
     # bare endpoint. The catalogue's own addresses are the evidence: a machine
     # is whatever the board decided it was, joined on a fact rather than on the
     # label a template happens to render.
-    located = index_of(
-        declared=[{"name": item.name, "addresses": item.addresses} for item in catalog]
-    )
+    located = index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog])
     from hq.domains.control_plane.providers import resource_home
 
     using: dict[str, list[tuple[str, str]]] = {}
@@ -242,9 +231,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             )
             name = _one_name(resource)
             if name:
-                named.setdefault(ref, []).append(
-                    (name, resource.key, resource_home(resource))
-                )
+                named.setdefault(ref, []).append((name, resource.key, resource_home(resource)))
     return tuple(
         ConnectionReading(
             connection_ref=row.connection_ref,
@@ -256,11 +243,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             probed=row.probed,
             detail=row.detail,
             observed_at=row.reported_at or row.observed_at,
-            probed_at=(
-                row.observed_at
-                if row.reported_at and row.reported_at > row.observed_at
-                else None
-            ),
+            probed_at=(row.observed_at if row.reported_at and row.reported_at > row.observed_at else None),
             machines=_machines_reached(row, known, located),
             resources=tuple(sorted(using.get(row.connection_ref, ()))),
             named=tuple(sorted(named.get(row.connection_ref, ()))),
@@ -286,15 +269,11 @@ def unfinished_work() -> dict[tuple[str, str], tuple[str, ...]]:
     for row in connection_rows():
         steps = _failing_steps(row)
         if steps:
-            found[(row.controller_id, row.connection_ref)] = tuple(
-                f"{step} ({reason})" for step, reason in steps
-            )
+            found[(row.controller_id, row.connection_ref)] = tuple(f"{step} ({reason})" for step, reason in steps)
     return found
 
 
-def _controller_contract() -> tuple[
-    tuple[ConnectionAbility, ...], dict[str, tuple[str, ...]]
-]:
+def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tuple[str, ...]]]:
     """Derive abilities and their connection kinds in one provider scan."""
 
     abilities = []
@@ -347,9 +326,7 @@ def _controller_contract() -> tuple[
         )
         by_provider.setdefault(reading.provider, []).append(kind)
 
-    return tuple(abilities), {
-        provider: tuple(kinds) for provider, kinds in by_provider.items()
-    }
+    return tuple(abilities), {provider: tuple(kinds) for provider, kinds in by_provider.items()}
 
 
 def _controller_instances(
@@ -365,13 +342,7 @@ def _controller_instances(
                 id=f"{reading.controller_id}:{reading.connection_ref}",
                 label=reading.connection_ref,
                 kind=reading.provider or "unclassified",
-                status=(
-                    "serious"
-                    if not reading.reachable
-                    else "good"
-                    if reading.probed
-                    else "neutral"
-                ),
+                status=("serious" if not reading.reachable else "good" if reading.probed else "neutral"),
                 status_label=reading.status_label,
                 detail=reading.detail,
                 endpoint=reading.endpoint,
@@ -385,9 +356,7 @@ def _controller_instances(
                         ConnectionFact("Controller", reading.controller_id)
                         if name_controller and reading.controller_id
                         else None,
-                        ConnectionFact("Tested", ago(reading.probed_at))
-                        if reading.probed_at
-                        else None,
+                        ConnectionFact("Tested", ago(reading.probed_at)) if reading.probed_at else None,
                         *(
                             ConnectionFact("Could not finish", f"{step} ({reason})")
                             for step, reason in reading.failing_steps
@@ -476,9 +445,7 @@ def list_connections(*, principal: Principal) -> dict:
                 "label": group.spec.label,
                 "summary": group.spec.summary,
                 "secret_store": group.spec.secret_store or None,
-                "instances": [
-                    serialize_connection(connection) for connection in group.connections
-                ],
+                "instances": [serialize_connection(connection) for connection in group.connections],
             }
             for group in groups
         ],

@@ -11,8 +11,11 @@ def runtime(container="web", **fields):
 
 # How a well-run container reads: a user, no-new-privileges, a limit, a check.
 KEPT = {
-    "user": "1000", "security_opt": ["no-new-privileges:true"], "memory_limit": 268435456,
-    "healthcheck": True, "network_mode": "bridge",
+    "user": "1000",
+    "security_opt": ["no-new-privileges:true"],
+    "memory_limit": 268435456,
+    "healthcheck": True,
+    "network_mode": "bridge",
     "port_bindings": [{"container_port": "80/tcp", "host_ip": "127.0.0.1", "host_port": "8080"}],
 }
 
@@ -30,28 +33,50 @@ class StandardTests(TestCase):
         self.assertFalse(found.serious)
 
     def test_reach_over_the_machine_is_serious(self):
-        found = self.posture(**{
-            **KEPT, "privileged": True, "pid_mode": "host", "cap_add": ["SYS_ADMIN"],
-            "security_opt": ["seccomp=unconfined"],
-            "mounts": [
-                {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True},
-                {"type": "bind", "source": "/etc", "destination": "/host-etc", "read_only": False},
-            ],
-        })
+        found = self.posture(
+            **{
+                **KEPT,
+                "privileged": True,
+                "pid_mode": "host",
+                "cap_add": ["SYS_ADMIN"],
+                "security_opt": ["seccomp=unconfined"],
+                "mounts": [
+                    {
+                        "type": "bind",
+                        "source": "/var/run/docker.sock",
+                        "destination": "/var/run/docker.sock",
+                        "read_only": True,
+                    },
+                    {"type": "bind", "source": "/etc", "destination": "/host-etc", "read_only": False},
+                ],
+            }
+        )
 
         serious = {result.check.id for result in found.unmet if result.check.serious}
-        self.assertEqual(serious, {
-            "not-privileged", "no-docker-socket", "own-process-namespace", "confined",
-            "no-system-path-writable", "no-powerful-capability",
-        })
+        self.assertEqual(
+            serious,
+            {
+                "not-privileged",
+                "no-docker-socket",
+                "own-process-namespace",
+                "confined",
+                "no-system-path-writable",
+                "no-powerful-capability",
+            },
+        )
 
     def test_a_check_declared_by_design_is_shown_with_its_reason_and_never_a_gap(self):
         from hq.domains.control_plane.models import ManagedResource
 
         ManagedResource.objects.create(
-            key="example-box-web", kind="portainer.container",
-            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "web",
-                  "by_design": {"own-network": "It answers DNS on the host's port 53."}},
+            key="example-box-web",
+            kind="portainer.container",
+            spec={
+                "connection_ref": "example-portainer",
+                "host": "example-box",
+                "name": "web",
+                "by_design": {"own-network": "It answers DNS on the host's port 53."},
+            },
         )
 
         found = self.posture(**{**KEPT, "network_mode": "host", "user": "root"})
@@ -79,10 +104,21 @@ class StandardTests(TestCase):
     def test_a_container_declared_to_hold_the_socket_is_not_flagged_for_it(self):
         from hq.domains.control_plane.models import ManagedResource
 
-        socket = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
+        socket = {
+            "type": "bind",
+            "source": "/var/run/docker.sock",
+            "destination": "/var/run/docker.sock",
+            "read_only": True,
+        }
         ManagedResource.objects.create(
-            key="example-box-web", kind="portainer.container",
-            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "web", "holds_docker_socket": True},
+            key="example-box-web",
+            kind="portainer.container",
+            spec={
+                "connection_ref": "example-portainer",
+                "host": "example-box",
+                "name": "web",
+                "holds_docker_socket": True,
+            },
         )
 
         self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), MET)
@@ -90,16 +126,34 @@ class StandardTests(TestCase):
     def test_a_declared_socket_holder_may_write_dockers_own_data_but_nothing_else(self):
         from hq.domains.control_plane.models import ManagedResource
 
-        socket = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
-        volumes = {"type": "bind", "source": "/var/lib/docker/volumes", "destination": "/var/lib/docker/volumes", "read_only": False}
+        socket = {
+            "type": "bind",
+            "source": "/var/run/docker.sock",
+            "destination": "/var/run/docker.sock",
+            "read_only": True,
+        }
+        volumes = {
+            "type": "bind",
+            "source": "/var/lib/docker/volumes",
+            "destination": "/var/lib/docker/volumes",
+            "read_only": False,
+        }
         etc = {"type": "bind", "source": "/etc", "destination": "/host-etc", "read_only": False}
         ManagedResource.objects.create(
-            key="example-box-web", kind="portainer.container",
-            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "web", "holds_docker_socket": True},
+            key="example-box-web",
+            kind="portainer.container",
+            spec={
+                "connection_ref": "example-portainer",
+                "host": "example-box",
+                "name": "web",
+                "holds_docker_socket": True,
+            },
         )
 
         self.assertEqual(self.posture(**{**KEPT, "mounts": [socket, volumes]}).state_of("no-system-path-writable"), MET)
-        self.assertEqual(self.posture(**{**KEPT, "mounts": [socket, volumes, etc]}).state_of("no-system-path-writable"), UNMET)
+        self.assertEqual(
+            self.posture(**{**KEPT, "mounts": [socket, volumes, etc]}).state_of("no-system-path-writable"), UNMET
+        )
 
     def test_an_undeclared_container_writing_dockers_data_is_still_flagged(self):
         volumes = {"type": "bind", "source": "/var/lib/docker/volumes", "destination": "/v", "read_only": False}
@@ -107,25 +161,45 @@ class StandardTests(TestCase):
         self.assertEqual(self.posture(**{**KEPT, "mounts": [volumes]}).state_of("no-system-path-writable"), UNMET)
 
     def test_a_container_not_declared_to_hold_the_socket_still_is(self):
-        socket = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
+        socket = {
+            "type": "bind",
+            "source": "/var/run/docker.sock",
+            "destination": "/var/run/docker.sock",
+            "read_only": True,
+        }
 
         self.assertEqual(self.posture(**{**KEPT, "mounts": [socket]}).state_of("no-docker-socket"), UNMET)
 
     def test_a_read_only_system_mount_and_a_data_bind_are_not_reach(self):
-        found = self.posture(**{**KEPT, "mounts": [
-            {"type": "bind", "source": "/etc/localtime", "destination": "/etc/localtime", "read_only": True},
-            {"type": "bind", "source": "/opt/apps/web/data", "destination": "/data", "read_only": False},
-        ]})
+        found = self.posture(
+            **{
+                **KEPT,
+                "mounts": [
+                    {"type": "bind", "source": "/etc/localtime", "destination": "/etc/localtime", "read_only": True},
+                    {"type": "bind", "source": "/opt/apps/web/data", "destination": "/data", "read_only": False},
+                ],
+            }
+        )
 
         self.assertEqual(found.state_of("no-system-path-writable"), MET)
 
     def test_an_applications_own_runtime_directory_is_not_the_machines(self):
-        found = self.posture(**{**KEPT, "mounts": [
-            {"type": "bind", "source": "/run/web", "destination": "/run/web", "read_only": False},
-        ]})
-        whole = self.posture(**{**KEPT, "mounts": [
-            {"type": "bind", "source": "/run", "destination": "/host-run", "read_only": False},
-        ]})
+        found = self.posture(
+            **{
+                **KEPT,
+                "mounts": [
+                    {"type": "bind", "source": "/run/web", "destination": "/run/web", "read_only": False},
+                ],
+            }
+        )
+        whole = self.posture(
+            **{
+                **KEPT,
+                "mounts": [
+                    {"type": "bind", "source": "/run", "destination": "/host-run", "read_only": False},
+                ],
+            }
+        )
 
         self.assertEqual(found.state_of("no-system-path-writable"), MET)
         self.assertEqual(whole.state_of("no-system-path-writable"), UNMET)
@@ -184,10 +258,13 @@ class AttentionTests(TestCase):
         from ..containers import attention
 
         estate()
-        inventory("portainer.runtime", [
-            runtime("web", privileged=True, user=""),
-            runtime("kuma", privileged=True, user=""),
-        ])
+        inventory(
+            "portainer.runtime",
+            [
+                runtime("web", privileged=True, user=""),
+                runtime("kuma", privileged=True, user=""),
+            ],
+        )
 
         keys = {item.key: item for item in attention()}
 

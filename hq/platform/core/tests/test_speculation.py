@@ -20,9 +20,7 @@ class RulesTests(TestCase):
 
     def test_a_page_names_the_rules_and_a_part_of_one_does_not(self):
         page = self.client.get(reverse("calendar:month"))
-        part = self.client.get(
-            reverse("calendar:month"), headers={"X-Requested-With": "XMLHttpRequest"}
-        )
+        part = self.client.get(reverse("calendar:month"), headers={"X-Requested-With": "XMLHttpRequest"})
 
         self.assertEqual(page["Speculation-Rules"], f'"{reverse("speculation_rules")}"')
         self.assertNotIn("Speculation-Rules", part)
@@ -103,9 +101,7 @@ class SpeculativeRequestTests(TestCase):
     def test_a_prerender_is_refused_whole(self):
         self.client.force_login(get_user_model().objects.create_superuser("operator"))
 
-        response = self.client.get(
-            reverse("dashboard"), headers={"Sec-Purpose": "prefetch;prerender"}
-        )
+        response = self.client.get(reverse("dashboard"), headers={"Sec-Purpose": "prefetch;prerender"})
 
         self.assertEqual(response.status_code, 503)
 

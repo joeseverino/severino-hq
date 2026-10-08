@@ -58,9 +58,7 @@ class NetworkSpec(ProviderModel):
         default="",
         max_length=300,
         title="Purpose",
-        description=(
-            "One line. What uses this range."
-        ),
+        description=("One line. What uses this range."),
     )
 
     @field_validator("cidr")
@@ -107,9 +105,7 @@ class CertificateAuthoritySpec(ProviderModel):
         default="",
         max_length=300,
         title="Key location",
-        description=(
-            "Where the private key is stored. Never paste the key."
-        ),
+        description=("Where the private key is stored. Never paste the key."),
     )
     issued_with: str = Field(
         default="",
@@ -210,25 +206,20 @@ class TLSDeliveryTargetSpec(ProviderModel):
         default="",
         max_length=160,
         title="Certificate using this name",
-        description=(
-            "The certificate that uses the name above. Blank if none."
-        ),
+        description=("The certificate that uses the name above. Blank if none."),
     )
     verify_domains: list[str] = Field(
         default_factory=list,
         title="Check these names",
         description=(
-            "Names HQ connects to here to confirm the certificate arrived. "
-            "Leave empty to check every name it covers."
+            "Names HQ connects to here to confirm the certificate arrived. Leave empty to check every name it covers."
         ),
     )
     certificate_directory: str = Field(
         default="",
         max_length=500,
         title="Certificate directory",
-        description=(
-            "Caddy only. The directory the certificate and key are written to."
-        ),
+        description=("Caddy only. The directory the certificate and key are written to."),
     )
     discover_covered_hosts: bool = Field(
         default=False,
@@ -282,17 +273,12 @@ class TLSDeliveryTargetSpec(ProviderModel):
         if self.kind == "caddy" and not self.certificate_directory:
             raise ValueError("A Caddy target needs a certificate directory.")
         if self.kind == "onepassword" and not (self.vault and self.item):
-            raise ValueError(
-                "A 1Password target needs a vault and an item."
-            )
+            raise ValueError("A 1Password target needs a vault and an item.")
         # Nothing is served here, so there is nothing to connect to and check.
         # Refused rather than ignored, for the same reason as the rest: a name
         # typed here would read as verified and never be probed.
         if self.kind == "onepassword" and self.verify_domains:
-            raise ValueError(
-                "A 1Password target serves nothing. Leave the names to check "
-                "empty."
-            )
+            raise ValueError("A 1Password target serves nothing. Leave the names to check empty.")
         return self
 
 
@@ -300,9 +286,7 @@ def _network_key_hint(spec: dict[str, Any]) -> str:
     return key_from(spec.get("name", ""))
 
 
-def _network_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _network_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """What was declared. Nothing sweeps a range, so nothing is observed."""
 
     del status
@@ -317,9 +301,7 @@ def _authority_key_hint(spec: dict[str, Any]) -> str:
     return key_from(spec.get("name", ""))
 
 
-def _authority_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _authority_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """What was declared, and how long it has left.
 
     The expiry is the reason this record exists, so it is phrased as the time
@@ -356,9 +338,7 @@ def _machine_key_hint(spec: dict[str, Any]) -> str:
     return str(spec.get("name", ""))
 
 
-def _machine_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _machine_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """What was declared. Whether it answers is the machine page's to say."""
 
     return (
@@ -371,9 +351,7 @@ def _delivery_target_key_hint(spec: dict[str, Any]) -> str:
     return str(spec.get("connection_ref", ""))
 
 
-def _delivery_target_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _delivery_target_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """What was declared about this target. Nothing here is observed.
 
     A target is a statement about how a place takes a certificate, so there is
@@ -390,11 +368,7 @@ def _delivery_target_readout(
         "cpanel": ("Installs", ", ".join(spec.get("install_domains", ()))),
         "onepassword": (
             "Recorded in",
-            " in ".join(
-                part
-                for part in (spec.get("item", ""), spec.get("vault", ""))
-                if part
-            ),
+            " in ".join(part for part in (spec.get("item", ""), spec.get("vault", "")) if part),
         ),
     }.get(str(spec.get("kind", "")))
     # Named first because the list beside this shows only the first row, and
@@ -419,13 +393,10 @@ def _delivery_target_readout(
 
 NETWORK = ProviderSpec(
     NETWORK_KIND,
-    "An address range. HQ uses it to tell which network an address is "
-    "on.",
+    "An address range. HQ uses it to tell which network an address is on.",
     NetworkSpec,
     actions={
-        "reconcile": locked(
-            "HQ does not create subnets. This entry records one."
-        ),
+        "reconcile": locked("HQ does not create subnets. This entry records one."),
     },
     label="Network",
     declaration_only=True,
@@ -435,23 +406,17 @@ NETWORK = ProviderSpec(
     # things that answer inside one.
     key_hint=_network_key_hint,
     removal_note=lambda spec: (
-        f"HQ forgets {spec.get('name', 'this network')}. Addresses in it "
-        "are no longer linked to a network."
+        f"HQ forgets {spec.get('name', 'this network')}. Addresses in it are no longer linked to a network."
     ),
-    unobserved_reason=(
-        "A range is a record. There is nothing to observe."
-    ),
+    unobserved_reason=("A range is a record. There is nothing to observe."),
 )
 
 AUTHORITY = ProviderSpec(
     AUTHORITY_KIND,
-    "A certificate authority you trust, including an offline root. HQ "
-    "records it and does not renew it.",
+    "A certificate authority you trust, including an offline root. HQ records it and does not renew it.",
     CertificateAuthoritySpec,
     actions={
-        "reconcile": locked(
-            "The authority is kept offline. HQ does not reach it."
-        ),
+        "reconcile": locked("The authority is kept offline. HQ does not reach it."),
     },
     label="Certificate authority",
     declaration_only=True,
@@ -459,29 +424,21 @@ AUTHORITY = ProviderSpec(
     readout=_authority_readout,
     key_hint=_authority_key_hint,
     removal_note=lambda spec: (
-        f"HQ forgets {spec.get('name', 'this authority')}. Certificates it "
-        "issued are no longer linked to it."
+        f"HQ forgets {spec.get('name', 'this authority')}. Certificates it issued are no longer linked to it."
     ),
-    unobserved_reason=(
-        "Kept offline. There is nothing to observe."
-    ),
+    unobserved_reason=("Kept offline. There is nothing to observe."),
 )
 
 MACHINE = ProviderSpec(
     MACHINE_KIND,
-    "A machine no sweep finds, and its addresses. Machines behind "
-    "Portainer or another connection are listed already.",
+    "A machine no sweep finds, and its addresses. Machines behind Portainer or another connection are listed already.",
     MachineSpec,
     actions={
-        "reconcile": locked(
-            "HQ does not create machines. This entry records one."
-        ),
+        "reconcile": locked("HQ does not create machines. This entry records one."),
     },
     label="Machine",
     home=lambda resource: named_page("control_plane:machine", resource, "name"),
-    unobserved_reason=(
-        "What HQ sees of it comes through its connections, on its machine page."
-    ),
+    unobserved_reason=("What HQ sees of it comes through its connections, on its machine page."),
     declaration_only=True,
     hostnames=None,
     readout=_machine_readout,
@@ -496,20 +453,16 @@ MACHINE = ProviderSpec(
     # different one, so this marks which is which rather than locking it.
     notes="hq.platform.application.provider_choices:machine_address_notes",
     removal_note=lambda spec: (
-        f"HQ forgets {spec.get('name', 'this machine')}. Anything "
-        "forwarding to its addresses shows an unknown host."
+        f"HQ forgets {spec.get('name', 'this machine')}. Anything forwarding to its addresses shows an unknown host."
     ),
 )
 
 DELIVERY_TARGET = ProviderSpec(
     DELIVERY_TARGET_KIND,
-    "A place certificates are installed, and how they get there. "
-    "Certificates can only install on declared targets.",
+    "A place certificates are installed, and how they get there. Certificates can only install on declared targets.",
     TLSDeliveryTargetSpec,
     actions={
-        "reconcile": locked(
-            "Nothing to reconcile. Reconcile the certificates installed here."
-        ),
+        "reconcile": locked("Nothing to reconcile. Reconcile the certificates installed here."),
     },
     label="Certificate target",
     connection_providers=("npm", "ssh", "onepassword"),
@@ -528,9 +481,7 @@ DELIVERY_TARGET = ProviderSpec(
         f"Certificates stop being installed on {spec.get('name', 'this target')}. "
         "Certificates that list it stop resolving."
     ),
-    unobserved_reason=(
-        "Nothing to observe. Each certificate reports its own install."
-    ),
+    unobserved_reason=("Nothing to observe. Each certificate reports its own install."),
 )
 
 # Declarations only: the controller half is still the core's.

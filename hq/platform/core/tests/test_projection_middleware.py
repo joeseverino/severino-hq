@@ -14,18 +14,16 @@ class ProjectionMiddlewareTests(TestCase):
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)
         self.client.force_login(user)
         ManagedResource.objects.create(
-            key="app-proxy", kind="npm.proxy_host",
-            spec={"domain_names": ["app.example.com"], "forward_host": "10.0.0.5",
-                  "forward_port": 8080},
+            key="app-proxy",
+            kind="npm.proxy_host",
+            spec={"domain_names": ["app.example.com"], "forward_host": "10.0.0.5", "forward_port": 8080},
             enabled=True,
         )
 
     def counted(self, method, url):
         from hq.platform.application import machines
 
-        with mock.patch.object(
-            machines, "machine_catalog", wraps=machines.machine_catalog
-        ) as catalog:
+        with mock.patch.object(machines, "machine_catalog", wraps=machines.machine_catalog) as catalog:
             getattr(self.client, method)(url)
         return catalog.call_count
 

@@ -244,14 +244,11 @@ def machine_links(machine, relationships) -> dict[str, object]:
     serves = serves_links(machine, relationships)
     links: dict[str, object] = {
         "reached_links": tuple(
-            (entity_link("connection", ref), ref in machine.unanswered)
-            for ref in machine.reached_by
+            (entity_link("connection", ref), ref in machine.unanswered) for ref in machine.reached_by
         ),
         "serves_links": serves,
         "serves_count": len(serves) + len(getattr(machine, "roles", ()) or ()),
-        "declaration_links": tuple(
-            entity_link("resource", key) for key in machine.other_declarations
-        ),
+        "declaration_links": tuple(entity_link("resource", key) for key in machine.other_declarations),
         "labelled_addresses": (),
         "tailscale_version": "",
         "device_link": None,
@@ -270,13 +267,9 @@ def machine_links(machine, relationships) -> dict[str, object]:
         else entity_link(TAILNET_KIND, presence.tailnet_name, record=record)
     )
     if presence.dns_name:
-        links["magic_dns_link"] = entity_link(
-            TAILNET_KIND, presence.dns_name, record=record
-        )
+        links["magic_dns_link"] = entity_link(TAILNET_KIND, presence.dns_name, record=record)
     names = PolicyNames()
-    links["opening_links"] = tuple(
-        (port, names.of(who)) for port, who in presence.openings
-    )
+    links["opening_links"] = tuple((port, names.of(who)) for port, who in presence.openings)
     return links
 
 
@@ -313,12 +306,10 @@ def header_addresses(machine) -> tuple[tuple[str, str, str], ...]:
     seen = tailnet_sightings()
     lan = seen.lan_address(presence)
     return (
-        (("Tailnet", presence.tailnet_address, ""),) if presence.tailnet_address else ()
-    ) + ((("LAN", lan, ""),) if lan else ()) + tuple(
-        ("Public", address, holder)
-        for address, holder in public_endpoints(seen.public_addresses(presence))
+        ((("Tailnet", presence.tailnet_address, ""),) if presence.tailnet_address else ())
+        + ((("LAN", lan, ""),) if lan else ())
+        + tuple(("Public", address, holder) for address, holder in public_endpoints(seen.public_addresses(presence)))
     )
-
 
 
 # The list of sections, stated once. A section with nothing to say returns

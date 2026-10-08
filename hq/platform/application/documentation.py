@@ -30,9 +30,7 @@ MAX_MANIFEST_ITEMS = 2000
 # A project's own note in the vault is ``project-<slug>``: the document that
 # stands for the project, so a page links the project and not the note.
 PROJECT_NOTE_PREFIX = "project-"
-CLOSED_TASK_STATUSES = frozenset(
-    {DocumentationRecord.TaskStatus.DONE, DocumentationRecord.TaskStatus.WONTFIX}
-)
+CLOSED_TASK_STATUSES = frozenset({DocumentationRecord.TaskStatus.DONE, DocumentationRecord.TaskStatus.WONTFIX})
 
 
 def document_link(record: DocumentationRecord, *, label: str = "") -> EntityLink:
@@ -81,9 +79,7 @@ def _noted_projects(records: list[DocumentationRecord]) -> dict[int, Project]:
 def _task_groups(tasks: list[DocumentationRecord]) -> list[DocumentGroup]:
     groups = []
     for label, closed in (("Open tasks", False), ("Done tasks", True)):
-        found = tuple(
-            document_link(record) for record in tasks if (record.status in CLOSED_TASK_STATUSES) == closed
-        )
+        found = tuple(document_link(record) for record in tasks if (record.status in CLOSED_TASK_STATUSES) == closed)
         if found:
             groups.append(DocumentGroup(label, found, folded=closed))
     return groups
@@ -115,8 +111,7 @@ def related_documents(
     groups = [
         DocumentGroup(plural(str(label)), found)
         for value, label in DocumentationRecord.DocType.choices
-        if value != task
-        and (found := tuple(document_link(record) for record in rest if record.doc_type == value))
+        if value != task and (found := tuple(document_link(record) for record in rest if record.doc_type == value))
     ]
     groups += _task_groups([record for record in rest if record.doc_type == task])
     return RelatedDocuments(
@@ -172,24 +167,14 @@ def serialize_documentation(record: DocumentationRecord) -> dict[str, Any]:
         "obsidian_path": record.obsidian_path if safe else "",
         "github_path": record.github_path if safe else "",
         "external_url": record.external_url if safe else "",
-        "last_reviewed": (
-            record.last_reviewed.isoformat() if record.last_reviewed else None
-        ),
-        "published_at": (
-            record.published_at.isoformat() if record.published_at else None
-        ),
+        "last_reviewed": (record.last_reviewed.isoformat() if record.last_reviewed else None),
+        "published_at": (record.published_at.isoformat() if record.published_at else None),
         "notes": record.notes if safe else "",
         "updated_at": record.updated_at.isoformat(),
         "relationships": {
-            "projects": list(
-                record.related_projects.order_by("slug").values_list("slug", flat=True)
-            ),
-            "assets": list(
-                record.related_assets.order_by("slug").values_list("slug", flat=True)
-            ),
-            "expense_ids": list(
-                record.related_expenses.order_by("id").values_list("id", flat=True)
-            ),
+            "projects": list(record.related_projects.order_by("slug").values_list("slug", flat=True)),
+            "assets": list(record.related_assets.order_by("slug").values_list("slug", flat=True)),
+            "expense_ids": list(record.related_expenses.order_by("id").values_list("id", flat=True)),
         },
     }
 
@@ -199,9 +184,7 @@ def _resolve(model, field, values, label):
     found = {getattr(record, field) for record in records}
     missing = sorted(set(values) - found)
     if missing:
-        found_none = counted(
-            len(missing), f"related {label} not found", f"related {plural(label)} not found"
-        )
+        found_none = counted(len(missing), f"related {label} not found", f"related {plural(label)} not found")
         raise ManifestImportError(f"{found_none}: {missing}")
     return records
 
@@ -215,36 +198,22 @@ def save_documentation(
     expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     principal.require(records_of("documentation").write)
-    operation = (
-        "documentation.create" if current_doc_id is None else "documentation.update"
-    )
-    with operation_context(
-        interface=principal.interface, actor=principal.actor, operation=operation
-    ):
+    operation = "documentation.create" if current_doc_id is None else "documentation.update"
+    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
         if current_doc_id is None:
             record, created = DocumentationRecord(), True
         else:
             try:
-                record = DocumentationRecord.objects.select_for_update().get(
-                    doc_id=current_doc_id
-                )
+                record = DocumentationRecord.objects.select_for_update().get(doc_id=current_doc_id)
             except DocumentationRecord.DoesNotExist as exc:
-                raise ManifestImportError(
-                    f"Documentation record {current_doc_id!r} was not found."
-                ) from exc
+                raise ManifestImportError(f"Documentation record {current_doc_id!r} was not found.") from exc
             created = False
             if expected_updated_at and record.updated_at.isoformat() != expected_updated_at:
-                raise ManifestImportError(
-                    f"Documentation record {current_doc_id!r} changed after it was read."
-                )
+                raise ManifestImportError(f"Documentation record {current_doc_id!r} changed after it was read.")
         values = asdict(command)
-        projects = _resolve(
-            Project, "slug", values.pop("related_projects"), "project"
-        )
+        projects = _resolve(Project, "slug", values.pop("related_projects"), "project")
         assets = _resolve(Asset, "slug", values.pop("related_assets"), "asset")
-        expenses = _resolve(
-            Expense, "id", values.pop("related_expenses"), "expense"
-        )
+        expenses = _resolve(Expense, "id", values.pop("related_expenses"), "expense")
         for field, value in values.items():
             setattr(record, field, value)
         record.full_clean()
@@ -274,18 +243,14 @@ def sync_documentation(
     if prune_orphans:
         principal.require(Capability.PRUNE_DOCUMENTATION)
     if len(manifest) > MAX_MANIFEST_ITEMS:
-        raise ManifestImportError(
-            f"Manifest exceeds the {MAX_MANIFEST_ITEMS}-record safety limit."
-        )
+        raise ManifestImportError(f"Manifest exceeds the {MAX_MANIFEST_ITEMS}-record safety limit.")
     if any(not isinstance(entry, dict) for entry in manifest):
         raise ManifestImportError("Every manifest record must be a JSON object.")
     problems = validate_manifest_data(manifest)
     if problems:
         return {"ok": False, "problems": problems}
     if prune_orphans and not confirm_prune:
-        raise ManifestImportError(
-            "confirm_prune must be true when prune_orphans is true"
-        )
+        raise ManifestImportError("confirm_prune must be true when prune_orphans is true")
 
     with operation_context(
         interface=principal.interface,

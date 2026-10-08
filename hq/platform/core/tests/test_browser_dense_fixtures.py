@@ -260,8 +260,18 @@ def _hardening():
                 "security_opt": ["seccomp=unconfined"],
                 "port_bindings": [{"container_port": "8080/tcp", "host_ip": "0.0.0.0", "host_port": "8080"}],
                 "mounts": [
-                    {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True},
-                    {"type": "bind", "source": "/etc/example-configuration-directory", "destination": "/host-etc", "read_only": False},
+                    {
+                        "type": "bind",
+                        "source": "/var/run/docker.sock",
+                        "destination": "/var/run/docker.sock",
+                        "read_only": True,
+                    },
+                    {
+                        "type": "bind",
+                        "source": "/etc/example-configuration-directory",
+                        "destination": "/host-etc",
+                        "read_only": False,
+                    },
                     {"type": "bind", "source": source, "destination": "/srv/configuration", "read_only": False},
                 ],
             },
@@ -293,9 +303,7 @@ def _glance():
         defaults={"weather_point": "41.0000,-87.0000", "weather_label": "Weather"},
     )
     for position, key in enumerate(("example-primary-host", "example-edge-host")):
-        DashboardMachine.objects.create(
-            machine=ManagedResource.objects.get(key=key), position=position
-        )
+        DashboardMachine.objects.create(machine=ManagedResource.objects.get(key=key), position=position)
         readings.record(
             readings.machine_telemetry(key),
             {

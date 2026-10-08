@@ -69,10 +69,7 @@ def decide(spec, principal: Principal, payload, target) -> Decision:
 
     rules = dict(
         CapabilityRule.objects.filter(capability=spec.name)
-        .filter(
-            Q(scope=Scope.SURFACE, subject=principal.interface)
-            | Q(scope=Scope.AGENT, subject=principal.actor)
-        )
+        .filter(Q(scope=Scope.SURFACE, subject=principal.interface) | Q(scope=Scope.AGENT, subject=principal.actor))
         .values_list("scope", "rule")
     )
     decision = (
@@ -85,18 +82,14 @@ def decide(spec, principal: Principal, payload, target) -> Decision:
         # An explicit rule for this agent beats the default outright (it is
         # how one agent is allowed what the rest still wait for) and against
         # an explicit surface rule, only the stricter of the two survives.
-        decision.source == "default"
-        or _RESTRICTIVENESS[agent_rule] > _RESTRICTIVENESS[decision.rule]
+        decision.source == "default" or _RESTRICTIVENESS[agent_rule] > _RESTRICTIVENESS[decision.rule]
     ):
         decision = Decision(agent_rule, f"{principal.actor} policy", default)
     return decision
 
 
 def rules() -> dict[tuple[str, str, str], str]:
-    return {
-        (row.scope, row.subject, row.capability): row.rule
-        for row in CapabilityRule.objects.all()
-    }
+    return {(row.scope, row.subject, row.capability): row.rule for row in CapabilityRule.objects.all()}
 
 
 def set_rule(
@@ -125,24 +118,20 @@ def set_rule(
     if rule is not None and rule not in Rule.values:
         raise ValueError(f"{rule!r} is not a rule.")
     if rule == Rule.APPROVE and spec.effect == READ_EFFECT:
-        raise ValueError(
-            f"{spec.title} only reads. It can be allowed or blocked, not held for approval."
-        )
+        raise ValueError(f"{spec.title} only reads. It can be allowed or blocked, not held for approval.")
     if scope == Scope.AGENT and rule is not None:
-        granted = (
-            AgentIdentity.objects.filter(client_id=subject)
-            .values_list("granted", flat=True)
-            .first()
-        )
+        granted = AgentIdentity.objects.filter(client_id=subject).values_list("granted", flat=True).first()
         if granted is None:
             raise ValueError(f"No agent named {subject} has connected yet.")
         if not _held_by_grant(spec, granted):
             raise ValueError(f"Pocket ID does not allow {subject} to use {spec.title}.")
 
     with transaction.atomic():
-        existing = CapabilityRule.objects.select_for_update().filter(
-            scope=scope, subject=subject, capability=spec.name
-        ).first()
+        existing = (
+            CapabilityRule.objects.select_for_update()
+            .filter(scope=scope, subject=subject, capability=spec.name)
+            .first()
+        )
         before = existing.rule if existing else None
         if before == rule:
             return False
@@ -177,9 +166,7 @@ def set_rule(
 def _held_by_grant(spec, granted) -> bool:
     """Asked through Principal.permits, the one definition of holding a capability."""
 
-    return Principal("grant", "internal", frozenset(granted)).permits(
-        *spec.required_capabilities
-    )
+    return Principal("grant", "internal", frozenset(granted)).permits(*spec.required_capabilities)
 
 
 # What a rule is called on the page. The stored values keep their names.
@@ -309,9 +296,7 @@ def matrix() -> tuple[tuple[Column, ...], tuple[Group, ...]]:
             grouped.setdefault(_subject_label(_subject(spec)), []).append(spec)
     groups = []
     for label in sorted(grouped):
-        specs = sorted(
-            grouped[label], key=lambda spec: (_EFFECT_ORDER.index(spec.effect), spec.name)
-        )
+        specs = sorted(grouped[label], key=lambda spec: (_EFFECT_ORDER.index(spec.effect), spec.name))
         rows = tuple(
             Row(
                 spec.name,
@@ -363,9 +348,7 @@ def _approved_types() -> str:
 
     from .entity_links import kind_label
 
-    names = sorted(
-        kind_label(kind).lower() for kind, provider in PROVIDERS.items() if provider.requires_approval
-    )
+    names = sorted(kind_label(kind).lower() for kind, provider in PROVIDERS.items() if provider.requires_approval)
     if not names:
         return "types that need approval"
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
@@ -411,9 +394,7 @@ def apply_changes(submitted, *, principal: Principal, user) -> tuple[int, list[s
         if current.get((scope, subject, capability)) == wanted:
             continue
         try:
-            if set_rule(
-                scope=scope, subject=subject, spec=spec, rule=wanted, principal=principal, user=user
-            ):
+            if set_rule(scope=scope, subject=subject, spec=spec, rule=wanted, principal=principal, user=user):
                 changed += 1
         except ValueError as exc:
             problems.append(str(exc))

@@ -101,18 +101,14 @@ def _stored(kind: _Kind, instance) -> dict[str, Any]:
     values = {}
     for item in fields(kind.command):
         if item.name == "related_projects":
-            values[item.name] = tuple(
-                sorted(instance.related_projects.values_list("slug", flat=True))
-            )
+            values[item.name] = tuple(sorted(instance.related_projects.values_list("slug", flat=True)))
         else:
             values[item.name] = getattr(instance, item.name)
     return values
 
 
 def _existing(kind: _Kind, records: list[Any]) -> dict[str, Any]:
-    slugs = [
-        str(record.get("slug", "")).strip() for record in records if isinstance(record, dict)
-    ]
+    slugs = [str(record.get("slug", "")).strip() for record in records if isinstance(record, dict)]
     query = kind.model.objects.filter(slug__in=slugs)
     if kind is _ASSET:
         query = query.prefetch_related("related_projects")
@@ -154,8 +150,7 @@ def _command(kind: _Kind, values: dict[str, Any]) -> tuple[Any, list[str]]:
         return TypeAdapter(kind.command).validate_python(values), []
     except PydanticValidationError as exc:
         return None, [
-            f"{'.'.join(str(part) for part in error['loc']) or 'record'}: {error['msg']}"
-            for error in exc.errors()
+            f"{'.'.join(str(part) for part in error['loc']) or 'record'}: {error['msg']}" for error in exc.errors()
         ]
 
 
@@ -205,9 +200,7 @@ def _plan_kind(
         slug = str(record.get("slug", "")).strip()
         errors = _shape_errors(record, slug, seen, names)
         if not errors:
-            plan, errors = _plan_record(
-                kind, index, record, slug, existing.get(slug), known_projects
-            )
+            plan, errors = _plan_record(kind, index, record, slug, existing.get(slug), known_projects)
         if errors:
             problems.append(_problem(kind.name, index, slug, *errors))
             continue
@@ -224,17 +217,12 @@ def _model_errors(kind: _Kind, command: Any, known_projects: set[str]) -> list[s
     missing = sorted(set(related) - known_projects)
     if missing:
         errors.append(
-            f"{counted(len(missing), 'related project not found', 'related projects not found')}: "
-            f"{', '.join(missing)}."
+            f"{counted(len(missing), 'related project not found', 'related projects not found')}: {', '.join(missing)}."
         )
     try:
         kind.model(**values).full_clean(validate_unique=False)
     except DjangoValidationError as exc:
-        errors.extend(
-            f"{name}: {message}"
-            for name, messages in exc.message_dict.items()
-            for message in messages
-        )
+        errors.extend(f"{name}: {message}" for name, messages in exc.message_dict.items() for message in messages)
     return errors
 
 
@@ -247,13 +235,9 @@ def _apply(planned: _Planned, principal: Principal) -> None:
     try:
         result = planned.kind.upsert(planned.command, principal=principal)
     except DjangoValidationError as exc:
-        raise _Refused(
-            _problem(planned.kind.name, planned.index, planned.slug, *exc.messages)
-        ) from exc
+        raise _Refused(_problem(planned.kind.name, planned.index, planned.slug, *exc.messages)) from exc
     except planned.kind.use_case_errors as exc:
-        raise _Refused(
-            _problem(planned.kind.name, planned.index, planned.slug, str(exc))
-        ) from exc
+        raise _Refused(_problem(planned.kind.name, planned.index, planned.slug, str(exc))) from exc
     _audit(planned, result[planned.kind.name]["slug"])
 
 
@@ -269,14 +253,10 @@ def _audit(planned: _Planned, slug: str) -> None:
 
 
 def _report(planned: list[_Planned]) -> list[dict[str, Any]]:
-    return [
-        {"slug": item.slug, "outcome": item.outcome, "kept": item.kept} for item in planned
-    ]
+    return [{"slug": item.slug, "outcome": item.outcome, "kept": item.kept} for item in planned]
 
 
-def import_registry(
-    command: HQImportCommand, *, principal: Principal
-) -> dict[str, Any]:
+def import_registry(command: HQImportCommand, *, principal: Principal) -> dict[str, Any]:
     """Validate the whole document, then upsert every record or none."""
 
     require_all(principal, REQUIRED_CAPABILITIES)
@@ -289,17 +269,14 @@ def import_registry(
                     "document",
                     0,
                     "",
-                    f"The document holds {counted(total, 'record')}; "
-                    f"the limit is {MAX_IMPORT_RECORDS}.",
+                    f"The document holds {counted(total, 'record')}; the limit is {MAX_IMPORT_RECORDS}.",
                 )
             ],
         }
 
     problems: list[dict[str, Any]] = []
     projects = _plan_kind(_PROJECT, command.projects, problems, set())
-    known = {item.slug for item in projects} | set(
-        Project.objects.values_list("slug", flat=True)
-    )
+    known = {item.slug for item in projects} | set(Project.objects.values_list("slug", flat=True))
     assets = _plan_kind(_ASSET, command.assets, problems, known)
     if problems:
         return {"ok": False, "problems": problems}
@@ -317,18 +294,16 @@ def import_registry(
         "summary": summary,
     }
     try:
-        with transaction.atomic(), operation_context(
-            interface=principal.interface, actor=principal.actor, operation="hq.import"
+        with (
+            transaction.atomic(),
+            operation_context(interface=principal.interface, actor=principal.actor, operation="hq.import"),
         ):
             for planned in (*projects, *assets):
                 _apply(planned, principal)
             record_event(
                 action=AuditLog.Action.IMPORTED,
                 type_label="Registry",
-                message=(
-                    f"Imported {counted(len(projects), 'project')} and "
-                    f"{counted(len(assets), 'asset')}."
-                ),
+                message=(f"Imported {counted(len(projects), 'project')} and {counted(len(assets), 'asset')}."),
                 metadata={"summary": summary},
                 required=True,
             )

@@ -27,17 +27,14 @@ class Channel:
 TAILNET_CHANNEL = Channel(
     "tailnet",
     "Tailnet",
-    "This request came from an address only Tailscale issues, so it came "
-    "over the tailnet.",
+    "This request came from an address only Tailscale issues, so it came over the tailnet.",
 )
 NETWORK_CHANNEL = Channel(
     "network",
     "Local network",
     "This request came from a private address on the network HQ is on.",
 )
-LOOPBACK_CHANNEL = Channel(
-    "loopback", "Loopback", "This request never left the machine HQ runs on."
-)
+LOOPBACK_CHANNEL = Channel("loopback", "Loopback", "This request never left the machine HQ runs on.")
 OPAQUE_CHANNEL = Channel(
     "opaque",
     "Address not passed through",
@@ -100,11 +97,7 @@ def socket_peer(request) -> str:
 def forwarded_chain(request) -> list[str]:
     """The X-Forwarded-For entries, in the order the hops occurred."""
 
-    return [
-        hop.strip()
-        for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",")
-        if hop.strip()
-    ]
+    return [hop.strip() for hop in str(request.META.get("HTTP_X_FORWARDED_FOR", "")).split(",") if hop.strip()]
 
 
 def _chain_is_all_proxies(request) -> bool:
@@ -112,8 +105,4 @@ def _chain_is_all_proxies(request) -> bool:
 
     peer = socket_peer(request)
     forwarded = [split_host_port(hop)[0] for hop in forwarded_chain(request)]
-    return (
-        bool(forwarded)
-        and is_trusted_proxy(peer)
-        and all(is_trusted_proxy(hop) for hop in forwarded)
-    )
+    return bool(forwarded) and is_trusted_proxy(peer) and all(is_trusted_proxy(hop) for hop in forwarded)

@@ -80,18 +80,12 @@ class AnalyticsCoverage(models.Model):
     Cloudflare again merely to find out.
     """
 
-    site = models.ForeignKey(
-        AnalyticsSite, on_delete=models.CASCADE, related_name="coverage"
-    )
+    site = models.ForeignKey(AnalyticsSite, on_delete=models.CASCADE, related_name="coverage")
     date = models.DateField()
 
     class Meta:
         ordering = ("-date",)
-        constraints = (
-            models.UniqueConstraint(
-                fields=("site", "date"), name="analytics_coverage_unique_day"
-            ),
-        )
+        constraints = (models.UniqueConstraint(fields=("site", "date"), name="analytics_coverage_unique_day"),)
         indexes = (models.Index(fields=("date",)),)
 
     @override
@@ -123,9 +117,7 @@ class RumDaily(models.Model):
         BROWSER = "browser", "Browser"
         OS = "os", "Operating system"
 
-    site = models.ForeignKey(
-        AnalyticsSite, on_delete=models.CASCADE, related_name="daily"
-    )
+    site = models.ForeignKey(AnalyticsSite, on_delete=models.CASCADE, related_name="daily")
     date = models.DateField()
     dimension = models.CharField(max_length=16, choices=Dimension.choices)
     # A path keeps its leading slash and trailing slash exactly as the browser
@@ -184,9 +176,7 @@ class VitalsDaily(models.Model):
     load time.
     """
 
-    site = models.ForeignKey(
-        AnalyticsSite, on_delete=models.CASCADE, related_name="vitals"
-    )
+    site = models.ForeignKey(AnalyticsSite, on_delete=models.CASCADE, related_name="vitals")
     date = models.DateField()
 
     largest_contentful_paint_ms = models.PositiveIntegerField(null=True, blank=True)
@@ -194,9 +184,7 @@ class VitalsDaily(models.Model):
     first_contentful_paint_ms = models.PositiveIntegerField(null=True, blank=True)
     time_to_first_byte_ms = models.PositiveIntegerField(null=True, blank=True)
     # Unitless, and small. Four decimal places is more than the metric resolves.
-    cumulative_layout_shift = models.DecimalField(
-        max_digits=6, decimal_places=4, null=True, blank=True
-    )
+    cumulative_layout_shift = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True)
 
     # The pass-rate buckets, which are what "Core Web Vitals" actually means:
     # a metric passes when 75% of samples are good. Stored as counts rather than
@@ -219,9 +207,7 @@ class VitalsDaily(models.Model):
     class Meta:
         ordering = ("-date",)
         constraints = (
-            models.UniqueConstraint(
-                fields=("site", "date"), name="analytics_vitalsdaily_unique_day"
-            ),
+            models.UniqueConstraint(fields=("site", "date"), name="analytics_vitalsdaily_unique_day"),
             _sampled("analytics_vitalsdaily_sample_interval"),
         )
 

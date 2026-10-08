@@ -9,9 +9,7 @@ from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, Workf
 def claim_identity(namespace: str, rule: str, subject: str, scope: str = "") -> str:
     """Stable identity for any domain claim across repeated derivations."""
 
-    digest = sha256(
-        f"{namespace}\0{rule}\0{subject}\0{scope}".encode()
-    ).hexdigest()[:16]
+    digest = sha256(f"{namespace}\0{rule}\0{subject}\0{scope}".encode()).hexdigest()[:16]
     return f"claim:{digest}"
 
 

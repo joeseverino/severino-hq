@@ -42,12 +42,8 @@ class Lockout:
 
 
 def _recent_failures(username: str, ip: str):
-    window_start = timezone.now() - timezone.timedelta(
-        seconds=settings.SEVERINO_LOGIN_WINDOW_SECONDS
-    )
-    failures = AuditLog.objects.filter(
-        action=AuditLog.Action.LOGIN_FAILED, created_at__gte=window_start
-    )
+    window_start = timezone.now() - timezone.timedelta(seconds=settings.SEVERINO_LOGIN_WINDOW_SECONDS)
+    failures = AuditLog.objects.filter(action=AuditLog.Action.LOGIN_FAILED, created_at__gte=window_start)
     # Counted per account *and* per source, not per pair. Keying on the two
     # together would leave both halves open: an attacker rotating usernames
     # from one address never trips an account counter, and a password sprayed
@@ -57,9 +53,7 @@ def _recent_failures(username: str, ip: str):
     if subject and ip:
         from django.db.models import Q
 
-        failures = failures.filter(
-            Q(metadata__username__iexact=subject) | Q(metadata__ip=ip)
-        )
+        failures = failures.filter(Q(metadata__username__iexact=subject) | Q(metadata__ip=ip))
     elif subject:
         failures = failures.filter(metadata__username__iexact=subject)
     elif ip:

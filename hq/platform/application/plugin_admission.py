@@ -38,6 +38,7 @@ class AdmittedPlugin(Protocol):
     def source_workflow(self) -> str:
         """The workflow that built and signed it."""
 
+
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 SIGNER_ISSUER = "https://token.actions.githubusercontent.com"
@@ -109,9 +110,7 @@ def _expected_policy() -> str:
     """The Cordon policy digest every approval must have been signed under."""
 
     digest = os.environ.get("SEVERINO_HQ_PLUGIN_POLICY_SHA256", "").strip()
-    _require(
-        digest, SHA256, "SEVERINO_HQ_PLUGIN_POLICY_SHA256 must be a lowercase SHA-256"
-    )
+    _require(digest, SHA256, "SEVERINO_HQ_PLUGIN_POLICY_SHA256 must be a lowercase SHA-256")
     return digest
 
 
@@ -136,8 +135,7 @@ def _admitted_id(approval: dict[str, Any], *, expected_policy: str, seen: set) -
     # cannot widen who may sign for it by editing its own repository, because
     # the identity it must match is derived from the fields being checked.
     expected_identity = (
-        f"https://github.com/{approval['source_repository']}/"
-        f"{approval['source_workflow']}@refs/heads/main"
+        f"https://github.com/{approval['source_repository']}/{approval['source_workflow']}@refs/heads/main"
     )
     if approval["signer_identity"] != expected_identity:
         _fail(f"{plugin_id!r} used an unexpected signer identity")
@@ -147,9 +145,7 @@ def _admitted_id(approval: dict[str, Any], *, expected_policy: str, seen: set) -
         _fail(f"{plugin_id!r} used an unexpected Cordon policy")
     for field in ("artifact_sha256", "policy_sha256"):
         _require(approval[field], SHA256, f"{plugin_id!r} has an invalid {field}")
-    _require(
-        approval["source_commit"], COMMIT, f"{plugin_id!r} has an invalid source commit"
-    )
+    _require(approval["source_commit"], COMMIT, f"{plugin_id!r} has an invalid source commit")
     return plugin_id
 
 
@@ -183,9 +179,7 @@ def enforce_plugin_admission(manifests: tuple[AdmittedPlugin, ...]) -> None:
 
     by_id: dict[str, dict[str, Any]] = {}
     for approval in _load_lock():
-        plugin_id = _admitted_id(
-            approval, expected_policy=expected_policy, seen=set(by_id)
-        )
+        plugin_id = _admitted_id(approval, expected_policy=expected_policy, seen=set(by_id))
         by_id[plugin_id] = approval
 
     # Exactly, in both directions. An approval without a plugin is a stale lock;
@@ -206,7 +200,4 @@ def admitted_sources() -> tuple[dict[str, str], ...]:
     if not os.environ.get("SEVERINO_HQ_PLUGIN_LOCK", "").strip():
         return ()
     fields = ("plugin", "source_repository", "source_workflow", "source_commit")
-    return tuple(
-        {field: str(approval.get(field, "")) for field in fields}
-        for approval in _load_lock()
-    )
+    return tuple({field: str(approval.get(field, "")) for field in fields} for approval in _load_lock())

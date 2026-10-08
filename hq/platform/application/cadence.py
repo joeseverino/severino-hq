@@ -22,7 +22,6 @@ which pulls the work through its usual path. Forged, deleted or
 replayed, the worst it can cause is a controller run that finds nothing to do.
 """
 
-
 import os
 import tempfile
 import time
@@ -59,7 +58,7 @@ class ControllerSweepCommand:
 def _seconds(name: str, fallback: int) -> int:
     try:
         return max(0, int(getattr(settings, name, fallback)))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return fallback
 
 
@@ -157,9 +156,7 @@ def controller_standing(now: datetime | None = None) -> ControllerStanding:
         seen_at = datetime.fromtimestamp(marker.stat().st_mtime, tz=timezone.get_current_timezone())
     except OSError:
         return ControllerStanding(seen_at=None, silent=False)
-    return ControllerStanding(
-        seen_at=seen_at, silent=(now or timezone.now()) - seen_at > CONTROLLER_SILENT_AFTER
-    )
+    return ControllerStanding(seen_at=seen_at, silent=(now or timezone.now()) - seen_at > CONTROLLER_SILENT_AFTER)
 
 
 def sweep_interval() -> timedelta:
@@ -271,11 +268,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
 
     forced = forced_reads()
     forced_refs = {read.connection_ref for read in forced if read.connection_ref}
-    carry = (
-        [ref for ref in carried_connections(controller_id) if ref not in forced_refs]
-        if controller_id
-        else []
-    )
+    carry = [ref for ref in carried_connections(controller_id) if ref not in forced_refs] if controller_id else []
     interval = sweep_interval()
     # Of what the sweep reads, the kind it tried longest ago. A kind HQ reads
     # itself (a public registry) is stored beside these and is not the
@@ -313,14 +306,10 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
             # Due only because somebody asked: SSH is left as it was last
             # found, working or not, unless it is what they asked for.
             verdict["carry"] = [
-                ref
-                for ref in carried_connections(controller_id, failing=True)
-                if ref not in forced_refs
+                ref for ref in carried_connections(controller_id, failing=True) if ref not in forced_refs
             ]
         if all(read.kinds is not None for read in forced):
-            verdict["only_kinds"] = sorted(
-                {kind for read in forced for kind in read.kinds or ()}
-            )
+            verdict["only_kinds"] = sorted({kind for read in forced for kind in read.kinds or ()})
     return {
         **verdict,
         "due": due or bool(forced),
@@ -383,18 +372,12 @@ def forced_kinds(connection_ref: str, kind: str) -> tuple[str, ...] | None:
         return (kind,)
     if connection_ref:
         return tuple(
-            dict.fromkeys(
-                found
-                for provider in connection_providers(connection_ref)
-                for found in fed_kinds(provider)
-            )
+            dict.fromkeys(found for provider in connection_providers(connection_ref) for found in fed_kinds(provider))
         )
     return None
 
 
-def _answered(
-    read: ForcedRead, stored: dict[str, datetime], probed: dict[str, datetime]
-) -> bool:
+def _answered(read: ForcedRead, stored: dict[str, datetime], probed: dict[str, datetime]) -> bool:
     """Whether everything ``read`` forces was stored after it was asked for."""
 
     asked = read.requested_at
@@ -411,16 +394,12 @@ def forced_reads() -> tuple[ForcedRead, ...]:
     """Read requests not yet answered and not yet expired, oldest first."""
 
     since = timezone.now() - read_request_lifetime()
-    requests = tuple(
-        ReadRequest.objects.filter(requested_at__gte=since).order_by("requested_at")
-    )
+    requests = tuple(ReadRequest.objects.filter(requested_at__gte=since).order_by("requested_at"))
     if not requests:
         return ()
     stored = dict(ProviderInventory.objects.values_list("kind", "updated_at"))
     probed: dict[str, datetime] = {}
-    for ref, observed_at in ProviderConnection.objects.values_list(
-        "connection_ref", "observed_at"
-    ):
+    for ref, observed_at in ProviderConnection.objects.values_list("connection_ref", "observed_at"):
         probed[ref] = max(observed_at, probed.get(ref, observed_at))
     reads = (
         ForcedRead(
@@ -439,9 +418,7 @@ def settle_read_requests() -> int:
 
     pending = {(read.connection_ref, read.kind) for read in forced_reads()}
     settled = [
-        request
-        for request in ReadRequest.objects.all()
-        if (request.connection_ref, request.kind) not in pending
+        request for request in ReadRequest.objects.all() if (request.connection_ref, request.kind) not in pending
     ]
     for request in settled:
         request.audit_gone = f"Read of {request.connection_ref or request.kind or 'every connection'} answered"
@@ -464,13 +441,9 @@ def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
     if command.every_connection:
         named.append("every_connection")
     if len(named) > 1:
-        raise ValidationError(
-            dict.fromkeys(named, "Name one of connection_ref, kind or every_connection.")
-        )
+        raise ValidationError(dict.fromkeys(named, "Name one of connection_ref, kind or every_connection."))
     if ref and not connection_providers(ref):
-        raise ValidationError(
-            {"connection_ref": ValidationError("No such connection.", code="invalid_choice")}
-        )
+        raise ValidationError({"connection_ref": ValidationError("No such connection.", code="invalid_choice")})
     if kind and kind not in OBSERVATIONS and kind not in PROVIDERS:
         raise ValidationError({"kind": ValidationError("No such type.", code="invalid_choice")})
     return (ref, kind) if named else None
@@ -505,10 +478,7 @@ def request_delivery_read() -> bool:
     from hq.domains.control_plane.models import ManagedResource
     from hq.domains.control_plane.provider_adapters.github import KIND as kind
 
-    if not (
-        ProviderInventory.objects.filter(kind=kind).exists()
-        or ManagedResource.objects.filter(kind=kind).exists()
-    ):
+    if not (ProviderInventory.objects.filter(kind=kind).exists() or ManagedResource.objects.filter(kind=kind).exists()):
         return False
     return request_reading(kind)
 
@@ -523,9 +493,7 @@ def request_reading(kind: str) -> bool:
     floor. The answer is whether it was rung.
     """
 
-    ReadRequest.objects.update_or_create(
-        connection_ref="", kind=kind, defaults={"requested_at": timezone.now()}
-    )
+    ReadRequest.objects.update_or_create(connection_ref="", kind=kind, defaults={"requested_at": timezone.now()})
     return ring_doorbell()
 
 
@@ -545,9 +513,7 @@ def request_controller_sweep(
     note_activity()
     if subject is not None:
         ref, kind = subject
-        ReadRequest.objects.update_or_create(
-            connection_ref=ref, kind=kind, defaults={"requested_at": timezone.now()}
-        )
+        ReadRequest.objects.update_or_create(connection_ref=ref, kind=kind, defaults={"requested_at": timezone.now()})
     verdict = sweep_due()
     if not ring_doorbell():
         raise ValueError("HQ could not reach the controller to start it.")
@@ -582,9 +548,7 @@ def request_reads(kinds: Iterable[str], *, principal: Principal) -> tuple[str, .
     note_activity()
     now = timezone.now()
     for kind in wanted:
-        ReadRequest.objects.update_or_create(
-            connection_ref="", kind=kind, defaults={"requested_at": now}
-        )
+        ReadRequest.objects.update_or_create(connection_ref="", kind=kind, defaults={"requested_at": now})
     transaction.on_commit(ring_doorbell)
     return tuple(wanted)
 
@@ -598,10 +562,7 @@ def _read_label(subject: tuple[str, str] | None) -> str:
 
 def _sweep_message(subject: tuple[str, str] | None, due: bool) -> str:
     if subject is not None:
-        return (
-            f"Asked the controller to read {_read_label(subject)} now; "
-            "this page updates when it reports."
-        )
+        return f"Asked the controller to read {_read_label(subject)} now; this page updates when it reports."
     if due:
         return "The controller was asked and will start now."
     return "The controller was asked. What HQ shows is already up to date."

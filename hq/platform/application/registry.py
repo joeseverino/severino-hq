@@ -12,14 +12,10 @@ def audit_registry() -> dict[str, Any]:
     """Return registry rows that no documentation record references."""
 
     orphan_projects = sorted(
-        Project.objects.annotate(_docs=Count("documentation_records"))
-        .filter(_docs=0)
-        .values_list("slug", flat=True)
+        Project.objects.annotate(_docs=Count("documentation_records")).filter(_docs=0).values_list("slug", flat=True)
     )
     orphan_assets = sorted(
-        Asset.objects.annotate(_docs=Count("documentation_records"))
-        .filter(_docs=0)
-        .values_list("slug", flat=True)
+        Asset.objects.annotate(_docs=Count("documentation_records")).filter(_docs=0).values_list("slug", flat=True)
     )
     return {
         "ok": True,

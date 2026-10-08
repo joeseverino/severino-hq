@@ -198,13 +198,9 @@ def _routes() -> list[Route]:
     by_name = {action.name: action for action in ACTIONS}
     if len(by_name) != len(ACTIONS) or set(by_name) != set(declared):
         raise RuntimeError(
-            "Bridge actions and the contract's paths differ: "
-            + ", ".join(sorted(set(by_name) ^ set(declared)))
+            "Bridge actions and the contract's paths differ: " + ", ".join(sorted(set(by_name) ^ set(declared)))
         )
-    return [
-        Route(f"/{name}", endpoint(by_name[name], declared[name]), methods=["POST"])
-        for name in sorted(declared)
-    ]
+    return [Route(f"/{name}", endpoint(by_name[name], declared[name]), methods=["POST"]) for name in sorted(declared)]
 
 
 application = UnixSocketOnly(Starlette(routes=_routes(), exception_handlers={HTTPException: _http_error}))

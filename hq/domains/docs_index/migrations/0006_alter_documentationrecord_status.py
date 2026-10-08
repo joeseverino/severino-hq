@@ -4,15 +4,27 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('docs_index', '0005_alter_documentationrecord_doc_type'),
+        ("docs_index", "0005_alter_documentationrecord_doc_type"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='documentationrecord',
-            name='status',
-            field=models.CharField(choices=[('draft', 'Draft'), ('active', 'Active'), ('deprecated', 'Deprecated'), ('archived', 'Archived'), ('open', 'Open'), ('parked', 'Parked'), ('done', 'Done'), ('wontfix', "Won't fix")], default='draft', max_length=20),
+            model_name="documentationrecord",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("draft", "Draft"),
+                    ("active", "Active"),
+                    ("deprecated", "Deprecated"),
+                    ("archived", "Archived"),
+                    ("open", "Open"),
+                    ("parked", "Parked"),
+                    ("done", "Done"),
+                    ("wontfix", "Won't fix"),
+                ],
+                default="draft",
+                max_length=20,
+            ),
         ),
     ]

@@ -69,9 +69,7 @@ class TopologyView(PageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        topology = derive_topology(
-            principal=web_principal(self.request.user), request=self.request
-        )
+        topology = derive_topology(principal=web_principal(self.request.user), request=self.request)
         active_lens = lens_for(self.request.GET.get("lens", "").strip())
         if active_lens is not None:
             topology = apply_lens(topology, active_lens)
@@ -141,9 +139,7 @@ class TopologyView(PageMixin, TemplateView):
                 "active_lens": active_lens,
                 "topology_trace": trace,
                 "topology_trace_focus": by_id.get(trace.focus) if trace else None,
-                "topology_trace_label": (
-                    dict(_TRACE_DIRECTIONS).get(trace.direction, "") if trace else ""
-                ),
+                "topology_trace_label": (dict(_TRACE_DIRECTIONS).get(trace.direction, "") if trace else ""),
                 "trace_direction_links": tuple(
                     {
                         "name": name,
@@ -174,8 +170,7 @@ class TopologyView(PageMixin, TemplateView):
                 if trace
                 else (),
                 "trace_reset_url": (
-                    f"{reverse('control_plane:topology')}?"
-                    f"{urlencode({'lens': active_lens.name})}#map"
+                    f"{reverse('control_plane:topology')}?{urlencode({'lens': active_lens.name})}#map"
                     if active_lens
                     else f"{reverse('control_plane:topology')}#map"
                 ),
@@ -206,9 +201,7 @@ class TopologyView(PageMixin, TemplateView):
         # "which way", which is the only part an operator is actually reading.
         # Both ends get a row so a node can state its relationships from where
         # it stands, without the reader re-deriving the arrow.
-        relations: dict[str, list[dict[str, Any]]] = {
-            node.id: [] for node in topology.nodes
-        }
+        relations: dict[str, list[dict[str, Any]]] = {node.id: [] for node in topology.nodes}
         for edge in topology.edges:
             if edge.source not in neighbors or edge.target not in neighbors:
                 continue
@@ -273,9 +266,7 @@ class TopologyView(PageMixin, TemplateView):
                     "focus_url": cls._focus_link(node.id, lens_name),
                     "body_url": (
                         f"{reverse('control_plane:topology_node')}?"
-                        + urlencode(
-                            {"node": node.id, **({"lens": lens_name} if lens_name else {})}
-                        )
+                        + urlencode({"node": node.id, **({"lens": lens_name} if lens_name else {})})
                     ),
                     "inbound_url": cls._trace_url(node.id, "inbound", lens_name),
                     "outbound_url": cls._trace_url(node.id, "outbound", lens_name),
@@ -319,9 +310,7 @@ class TopologyNodeView(TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        topology = derive_topology(
-            principal=web_principal(self.request.user), request=self.request
-        )
+        topology = derive_topology(principal=web_principal(self.request.user), request=self.request)
         active_lens = lens_for(self.request.GET.get("lens", "").strip())
         if active_lens is not None:
             topology = apply_lens(topology, active_lens)

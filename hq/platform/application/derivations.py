@@ -66,6 +66,7 @@ from .projection import projection_scope, read_once, seeded
 
 logger = logging.getLogger("severino.derivations")
 
+
 # A read-only mapping has no pickle of its own. A stored value carries it as a
 # dict and loads it read-only again.
 def _read_only(mapping: dict[Any, Any]) -> MappingProxyType[Any, Any]:
@@ -246,9 +247,7 @@ class Derivation:
         if not self._tables:
             from django.apps import apps
 
-            self._tables.append(
-                frozenset(apps.get_model(label)._meta.db_table for label in self.reads)
-            )
+            self._tables.append(frozenset(apps.get_model(label)._meta.db_table for label in self.reads))
         return self._tables[0]
 
     @property
@@ -363,9 +362,7 @@ def _may_ask(declared: Derivation) -> None:
     if parent is None or parent.learns or declared.declared <= parent.tables:
         return
     missing = ", ".join(sorted(declared.declared - parent.tables))
-    raise ImproperlyConfigured(
-        f"A derivation calls {declared.name!r} without declaring what it reads: {missing}."
-    )
+    raise ImproperlyConfigured(f"A derivation calls {declared.name!r} without declaring what it reads: {missing}.")
 
 
 def _tell(declared: Derivation, until: datetime | None) -> None:
@@ -379,9 +376,7 @@ def _tell(declared: Derivation, until: datetime | None) -> None:
         parent.hold_until(until)
 
 
-def _answer(
-    declared: Derivation, variant: str, args: tuple, kwargs: dict
-) -> tuple[Any, datetime | None]:
+def _answer(declared: Derivation, variant: str, args: tuple, kwargs: dict) -> tuple[Any, datetime | None]:
     """The answer and the moment it stops standing."""
 
     key = None if _UNCACHED.get() else _key(declared, variant)
@@ -694,7 +689,11 @@ def _answered_until(declared: Derivation, variant: str) -> datetime | None:
 
 
 def _remember(
-    declared: Derivation, variant: str, answer: Callable[..., Any], args: tuple, kwargs: dict,
+    declared: Derivation,
+    variant: str,
+    answer: Callable[..., Any],
+    args: tuple,
+    kwargs: dict,
     until: datetime | None,
 ) -> None:
     now = monotonic_time.monotonic()
@@ -786,9 +785,7 @@ def _again(ask: _Ask) -> tuple[bool, str]:
     try:
         with projection_scope(ask.seed, apart=True):
             variant = repr(
-                declared.vary(*ask.args, **ask.kwargs)
-                if declared.vary
-                else (ask.args, sorted(ask.kwargs.items()))
+                declared.vary(*ask.args, **ask.kwargs) if declared.vary else (ask.args, sorted(ask.kwargs.items()))
             )
             key = _key(declared, variant)
             if key is None:
@@ -823,10 +820,7 @@ def asked_of(table: str) -> bool:
 
     with _ASKS_LOCK:
         asked = [name for name, asks in _ASKS.items() if asks]
-    return any(
-        (declared := DERIVATIONS.get(name)) is not None and declared.reads_table(table)
-        for name in asked
-    )
+    return any((declared := DERIVATIONS.get(name)) is not None and declared.reads_table(table) for name in asked)
 
 
 def next_due() -> datetime | None:

@@ -57,15 +57,23 @@ RETIRED_NAMES: tuple[tuple[str, str], ...] = (
 # "Findings" is the name of a page, and stays one.
 _PAGE_NAMES = re.compile(r"\bFindings\b")
 _NEVER = tuple(
-    (re.compile(rf"(?<![\w-])(?:{forms})(?![\w-])", re.IGNORECASE), instead)
-    for forms, instead in NEVER_SHOWN
+    (re.compile(rf"(?<![\w-])(?:{forms})(?![\w-])", re.IGNORECASE), instead) for forms, instead in NEVER_SHOWN
 )
 _TEMPLATE_TAG = re.compile(r"\{%.*?%\}|\{\{.*?\}\}", re.DOTALL)
 _TAG_LITERAL = re.compile(r"""(["'])((?:(?!\1).)*)\1""", re.DOTALL)
 # What a browser shows or reads out from an element, besides its text.
 _SHOWN_ATTRIBUTES = frozenset(
-    {"title", "aria-label", "placeholder", "alt", "data-fragment-failure",
-     "data-fragment-busy", "data-submit-label", "data-empty", "data-tip"}
+    {
+        "title",
+        "aria-label",
+        "placeholder",
+        "alt",
+        "data-fragment-failure",
+        "data-fragment-busy",
+        "data-submit-label",
+        "data-empty",
+        "data-tip",
+    }
 )
 # An identifier, a route, a path or a class list: lower case, no sentence in it.
 _IDENTIFIER = re.compile(r"[a-z0-9_.:/#?&=%\- ]*\Z")
@@ -151,9 +159,7 @@ def template_text(source: str) -> list[tuple[int, str]]:
     for tag in _TEMPLATE_TAG.finditer(uncommented):
         line = uncommented.count("\n", 0, tag.start()) + 1
         shown.extend(
-            (line, literal.group(2))
-            for literal in _TAG_LITERAL.finditer(tag.group())
-            if _is_prose(literal.group(2))
+            (line, literal.group(2)) for literal in _TAG_LITERAL.finditer(tag.group()) if _is_prose(literal.group(2))
         )
     parser = _Shown()
     parser.feed(_TEMPLATE_TAG.sub(_blank, uncommented))
@@ -164,10 +170,31 @@ def template_text(source: str) -> list[tuple[int, str]]:
 
 # Calls whose words go to a log or to whoever is writing the code, never to a page.
 _UNSEEN_CALLS = frozenset(
-    {"debug", "info", "warning", "error", "exception", "critical", "log", "getLogger",
-     "ImproperlyConfigured", "RuntimeError", "TypeError", "AssertionError",
-     "NotImplementedError", "KeyError", "LookupError", "compile", "CheckMessage", "Error",
-     "Warning", "add_argument", "CommandError", "SuspiciousOperation", "Http404"}
+    {
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "exception",
+        "critical",
+        "log",
+        "getLogger",
+        "ImproperlyConfigured",
+        "RuntimeError",
+        "TypeError",
+        "AssertionError",
+        "NotImplementedError",
+        "KeyError",
+        "LookupError",
+        "compile",
+        "CheckMessage",
+        "Error",
+        "Warning",
+        "add_argument",
+        "CommandError",
+        "SuspiciousOperation",
+        "Http404",
+    }
 )
 
 
@@ -187,7 +214,7 @@ def python_text(source: str) -> list[tuple[int, str]]:
 
     try:
         tree = ast.parse(source)
-    except (SyntaxError, ValueError):
+    except SyntaxError, ValueError:
         return []
     unseen = _unseen_strings(tree)
     return sorted(
@@ -237,7 +264,5 @@ def read(paths: Iterable[Path], *, root: Path) -> tuple[list[Found], int]:
         shown = template_text(source) if path.suffix == ".html" else python_text(source)
         for line, text in shown:
             for word, instead in words_in(text):
-                found.append(
-                    Found(path.relative_to(root), line, word, instead, " ".join(text.split())[:90])
-                )
+                found.append(Found(path.relative_to(root), line, word, instead, " ".join(text.split())[:90]))
     return found, files

@@ -110,9 +110,7 @@ class CarriedConnectionTests(TestCase):
 
 class OldestReadingTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(user)
         now = timezone.now()
         for ref, age in (("example-fresh", 1), ("example-old", 300)):
@@ -128,5 +126,5 @@ class OldestReadingTests(TestCase):
     def test_the_oldest_reading_is_named_and_linked(self):
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Oldest reading <a href=\"#")
+        self.assertContains(response, 'Oldest reading <a href="#')
         self.assertContains(response, ">example-old</a>, 5")

@@ -154,8 +154,9 @@ class SignInTests(TestCase):
         self.backend._userinfo = {"picture": PICTURE}
 
     def test_the_session_is_told_which_picture(self):
-        with self.settings(OIDC_ISSUER=ISSUER), mock.patch.object(
-            avatars, "fetch_picture", return_value=("image/png", PNG)
+        with (
+            self.settings(OIDC_ISSUER=ISSUER),
+            mock.patch.object(avatars, "fetch_picture", return_value=("image/png", PNG)),
         ):
             self.backend._remember_picture(self.user, "token")
 
@@ -163,8 +164,9 @@ class SignInTests(TestCase):
 
     def test_a_picture_that_breaks_does_not_break_the_sign_in(self):
         self.backend.request.session[SESSION_KEY] = "kept"
-        with self.settings(OIDC_ISSUER=ISSUER), mock.patch.object(
-            avatars, "fetch_picture", side_effect=RuntimeError("anything")
+        with (
+            self.settings(OIDC_ISSUER=ISSUER),
+            mock.patch.object(avatars, "fetch_picture", side_effect=RuntimeError("anything")),
         ):
             self.backend._remember_picture(self.user, "token")
 

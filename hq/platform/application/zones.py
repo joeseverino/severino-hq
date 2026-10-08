@@ -62,9 +62,7 @@ RECORD_KIND = DNS_RECORD_KIND
 # work. They are also not listed among a zone's records, because a record that
 # exists for seconds is not something an operator browses; the only interesting
 # case is one that outlived its issuance, and that has an insight of its own.
-EPHEMERAL_PREFIXES: tuple[tuple[str, str], ...] = (
-    ("_acme-challenge.", "certificate issuance"),
-)
+EPHEMERAL_PREFIXES: tuple[tuple[str, str], ...] = (("_acme-challenge.", "certificate issuance"),)
 
 
 def ephemeral_operation(name: str) -> str:
@@ -145,19 +143,11 @@ class ZoneRecord:
 
     @property
     def edit_url(self) -> str:
-        return (
-            reverse("control_plane:edit", kwargs={"key": self.resource_key})
-            if self.resource_key
-            else ""
-        )
+        return reverse("control_plane:edit", kwargs={"key": self.resource_key}) if self.resource_key else ""
 
     @property
     def remove_url(self) -> str:
-        return (
-            reverse("control_plane:remove", kwargs={"key": self.resource_key})
-            if self.resource_key
-            else ""
-        )
+        return reverse("control_plane:remove", kwargs={"key": self.resource_key}) if self.resource_key else ""
 
     @property
     def service_url(self) -> str:
@@ -213,9 +203,7 @@ class ZoneInsight:
     def modal_id(self) -> str:
         """A dialog id derived from the label, so no caller invents one."""
 
-        return "zone-" + "".join(
-            char if char.isalnum() else "-" for char in self.label.lower()
-        ).strip("-")
+        return "zone-" + "".join(char if char.isalnum() else "-" for char in self.label.lower()).strip("-")
 
 
 # Each entry is a ``module:attribute`` taking a Zone and returning a
@@ -278,11 +266,9 @@ class Zone:
         """
 
         return tuple(
-            record for record in self.records
-            if not record.managed
-            and not record.ephemeral
-            and record.manageable
-            and not record.observed_only
+            record
+            for record in self.records
+            if not record.managed and not record.ephemeral and record.manageable and not record.observed_only
         )
 
     @property
@@ -375,9 +361,7 @@ def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
 
     from .projection import read_once
 
-    return read_once(
-        f"zones.catalog:{','.join(sorted(pinned))}", lambda: _zone_catalog(pinned)
-    )
+    return read_once(f"zones.catalog:{','.join(sorted(pinned))}", lambda: _zone_catalog(pinned))
 
 
 def _zone_catalog(pinned: frozenset[str]) -> tuple[Zone, ...]:
@@ -389,10 +373,7 @@ def _zone_catalog(pinned: frozenset[str]) -> tuple[Zone, ...]:
     }
 
     snapshots = {
-        snapshot.kind: snapshot
-        for snapshot in ProviderInventory.objects.filter(
-            kind__in=(ZONE_KIND, RECORD_KIND)
-        )
+        snapshot.kind: snapshot for snapshot in ProviderInventory.objects.filter(kind__in=(ZONE_KIND, RECORD_KIND))
     }
     zone_snapshot = snapshots.get(ZONE_KIND)
     seen: dict[str, dict[str, Any]] = {}
@@ -429,9 +410,7 @@ def _zone_catalog(pinned: frozenset[str]) -> tuple[Zone, ...]:
         zone = normalized_hostname(str(item.spec.get("zone", "")))
         if not zone:
             continue
-        by_zone.setdefault(zone, []).append(
-            _record_of(item.spec, token=item.token, observed_only=item.observed_only)
-        )
+        by_zone.setdefault(zone, []).append(_record_of(item.spec, token=item.token, observed_only=item.observed_only))
 
     record_snapshot = snapshots.get(RECORD_KIND)
     zones = []
@@ -491,11 +470,8 @@ def _swept_zones(names: set[str]) -> dict[str, list[Any]]:
     for snapshot in snapshots_of(ZONE_KIND):
         for record in snapshot.records:
             try:
-                found = tuple(
-                    normalized_hostname(name)
-                    for name in zones.identity(zones.from_record(record))
-                )
-            except (KeyError, TypeError, ValueError):
+                found = tuple(normalized_hostname(name) for name in zones.identity(zones.from_record(record)))
+            except KeyError, TypeError, ValueError:
                 continue
             names.update(found)
             if snapshot.reachable:
@@ -517,7 +493,7 @@ def _swept_record_zones() -> set[str]:
         for record in snapshot.records:
             try:
                 found.add(normalized_hostname(records.from_record(record).get("zone")))
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 continue
     return found
 
@@ -581,7 +557,7 @@ def adopt_discovered_records(*, principal) -> dict[str, Any]:
             continue
         try:
             adopted.extend(adopt_zone_records(zone.zone, principal=principal)["adopted"])
-        except (NotFoundError, PolicyError, ValidationError, ValueError):
+        except NotFoundError, PolicyError, ValidationError, ValueError:
             # Recording what a provider holds must not depend on being allowed
             # to declare it. A deployment with public DNS switched off, or a
             # record whose live shape HQ's model cannot express, leaves the
@@ -619,13 +595,9 @@ def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
         raise NotFoundError(f"No domain named {zone!r}.")
     pending = list(found.adoptable)
     if not pending:
-        raise NotFoundError(
-            f"All records in {found.zone} are already managed."
-        )
+        raise NotFoundError(f"All records in {found.zone} are already managed.")
     adopted = [
-        adopt(
-            AdoptCommand(kind=RECORD_KIND, token=record.token), principal=principal
-        )["resource"]["key"]
+        adopt(AdoptCommand(kind=RECORD_KIND, token=record.token), principal=principal)["resource"]["key"]
         for record in pending
     ]
     return {"ok": True, "zone": found.zone, "adopted": adopted}

@@ -12,9 +12,19 @@ def store(**record):
     ProviderInventory.objects.update_or_create(
         kind="github.repository",
         defaults={
-            "records": [{"connection_ref": "github", "repository": "example/alpha", "url": "https://github.com/example/alpha",
-                         "default_branch": "main", "head": {"sha": "abc"}, **record}],
-            "reachable": True, "connected": True, "observed_at": timezone.now(),
+            "records": [
+                {
+                    "connection_ref": "github",
+                    "repository": "example/alpha",
+                    "url": "https://github.com/example/alpha",
+                    "default_branch": "main",
+                    "head": {"sha": "abc"},
+                    **record,
+                }
+            ],
+            "reachable": True,
+            "connected": True,
+            "observed_at": timezone.now(),
             "refused_parts": [{"part": "dependabot", "scope": "example/alpha"}],
         },
     )
@@ -41,12 +51,15 @@ class EstateTests(TestCase):
 
         items = {item.key: item for item in attention()}
 
-        self.assertEqual(set(items), {
-            "github-waiting:example/alpha:9",
-            "github-failing:example/alpha",
-            "github-alerts:example/alpha",
-            "github-artifact:example/alpha:alpha-admission-abc",
-        })
+        self.assertEqual(
+            set(items),
+            {
+                "github-waiting:example/alpha:9",
+                "github-failing:example/alpha",
+                "github-alerts:example/alpha",
+                "github-artifact:example/alpha:alpha-admission-abc",
+            },
+        )
         self.assertEqual(items["github-waiting:example/alpha:9"].status, "serious")  # held for hours
         self.assertEqual(items["github-alerts:example/alpha"].title, "1 serious alert in alpha")
         self.assertEqual(items["github-artifact:example/alpha:alpha-admission-abc"].status, "attention")
@@ -59,7 +72,15 @@ class EstateTests(TestCase):
 
 class VerificationTests(TestCase):
     def test_a_deploy_that_failed_its_own_verification_is_serious(self):
-        store(deployments=[{"environment": "production", "url": "u", "verified": [{"name": "Verify the image was signed", "conclusion": "failure"}]}])
+        store(
+            deployments=[
+                {
+                    "environment": "production",
+                    "url": "u",
+                    "verified": [{"name": "Verify the image was signed", "conclusion": "failure"}],
+                }
+            ]
+        )
 
         (item,) = attention()
 

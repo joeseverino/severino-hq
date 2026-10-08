@@ -52,16 +52,12 @@ class Sightings:
         )
         if routed:
             return routed
-        return next(
-            (host for host in hosts if len(self.networks.get(_network(host), ())) > 1), ""
-        )
+        return next((host for host in hosts if len(self.networks.get(_network(host), ())) > 1), "")
 
     def public_addresses(self, presence) -> tuple[str, ...]:
         if self.lan_address(presence):
             return ()
-        return tuple(
-            host for host in presence.public_addresses if self.public[public_label(host)] <= 1
-        )
+        return tuple(host for host in presence.public_addresses if self.public[public_label(host)] <= 1)
 
 
 def _network(host: str) -> str:
@@ -94,7 +90,5 @@ def tailnet_sightings() -> Sightings:
 
     return read_once(
         "machines.sightings",
-        lambda: sightings(
-            machine.presence for machine in machines_once() if machine.presence is not None
-        ),
+        lambda: sightings(machine.presence for machine in machines_once() if machine.presence is not None),
     )

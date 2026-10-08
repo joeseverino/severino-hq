@@ -36,9 +36,7 @@ from hq.platform.core.errors import UpstreamUnavailable
 def connection_specs():
     """Emit the keyless public registries used by lookup capabilities."""
 
-    def configured_instance(
-        *, identifier: str, label: str, kind: str, setting: str, abilities: tuple[str, ...]
-    ):
+    def configured_instance(*, identifier: str, label: str, kind: str, setting: str, abilities: tuple[str, ...]):
         endpoint = str(getattr(settings, setting, "") or "").strip()
         parsed = urlsplit(endpoint)
         if parsed.scheme != "https" or not parsed.hostname:
@@ -180,9 +178,7 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     """
 
     seconds = timeout or int(getattr(settings, "SEVERINO_LOOKUP_TIMEOUT_SECONDS", 6))
-    request = urllib.request.Request(
-        url, headers={"Accept": accept, "User-Agent": "severino-hq"}
-    )
+    request = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "severino-hq"})
     try:
         with _opener.open(request, timeout=seconds) as response:
             payload = _answer(response)

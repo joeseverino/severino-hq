@@ -65,8 +65,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
     known = devices()
     asked = {
         "source": request.GET.get("source", "") or default,
-        "target": request.GET.get("target", "")
-        or (default if target_default is None else target_default),
+        "target": request.GET.get("target", "") or (default if target_default is None else target_default),
         "port": request.GET.get("port", ""),
     }
     context = {
@@ -86,9 +85,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
         # exercise. Shown, never applied: what to do about a denial is the
         # operator's call and the editor is where it is made.
         if verdict.known and not verdict.allowed:
-            context["proposal"] = proposed_grant(
-                asked["source"], asked["target"], int(asked["port"])
-            )
+            context["proposal"] = proposed_grant(asked["source"], asked["target"], int(asked["port"]))
     return context
 
 
@@ -200,18 +197,12 @@ class MachineDetailView(PageMixin, TemplateView):
         found = self.found
         context["machine"] = found
         device = (
-            ManagedResource.objects.filter(key=found.route_approval_key).first()
-            if found.route_approval_key
-            else None
+            ManagedResource.objects.filter(key=found.route_approval_key).first() if found.route_approval_key else None
         )
         context["route_approval"] = (
-            resource_capabilities(device, running=()).actions.get("approve-routes")
-            if device is not None
-            else None
+            resource_capabilities(device, running=()).actions.get("approve-routes") if device is not None else None
         )
-        context["route_approval_off"] = bool(
-            context["route_approval"] and not context["route_approval"].enabled
-        )
+        context["route_approval_off"] = bool(context["route_approval"] and not context["route_approval"].enabled)
         # What else HQ can say about this machine, from a registry rather than
         # from this view. A band appears because a resolver produced one, so
         # what HQ learns next reaches the page without either being edited.
@@ -219,16 +210,12 @@ class MachineDetailView(PageMixin, TemplateView):
         from hq.platform.application.docker_sections import docker_line
         from hq.platform.application.page_relations import for_machine
 
-        whole, context["relationships"] = for_machine(
-            found, sections, principal=web_principal(self.request.user)
-        )
+        whole, context["relationships"] = for_machine(found, sections, principal=web_principal(self.request.user))
         # One Docker environment is a line under the containers heading. Its
         # table is left for a machine that has several.
         context["docker"] = docker_line(found) if found.containers else None
         context["sections"] = tuple(
-            section
-            for section in sections
-            if not (context["docker"] and section.id == "docker-environment")
+            section for section in sections if not (context["docker"] and section.id == "docker-environment")
         )
         # The load reading counts running containers at its own moment. The
         # page states one count, the container list's, so the two cannot differ.

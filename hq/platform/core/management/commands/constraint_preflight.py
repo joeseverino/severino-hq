@@ -145,9 +145,7 @@ class Command(BaseCommand):
             pending = (check.app, check.migration) not in applied
             if heading != (check.app, check.migration):
                 heading = (check.app, check.migration)
-                self.stdout.write(
-                    f"{check.app}.{check.migration} ({'pending' if pending else 'applied'})"
-                )
+                self.stdout.write(f"{check.app}.{check.migration} ({'pending' if pending else 'applied'})")
             count, sample = _count(database, check)
             if count is None:
                 self.stdout.write(f"  #{check.position} {check.name}: no table {check.table}")

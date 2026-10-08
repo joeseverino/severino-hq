@@ -45,6 +45,4 @@ class ApprovalDecisionView(View):
             # the same treatment either way: an approval that cannot be applied
             # says why, on the page, with the request left as it was.
             messages.error(request, str(exc) or "Could not record that decision.")
-        return redirect(
-            safe_next(request, fallback=f"{reverse('core:audit_list')}?awaiting=1")
-        )
+        return redirect(safe_next(request, fallback=f"{reverse('core:audit_list')}?awaiting=1"))

@@ -354,9 +354,7 @@ def resource_search_definitions() -> tuple[SearchDefinition, ...]:
 
 def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
     return {
-        spec.search.scope: spec.required_capabilities
-        for spec in integration_graph().resources.values()
-        if spec.search
+        spec.search.scope: spec.required_capabilities for spec in integration_graph().resources.values() if spec.search
     }
 
 
@@ -398,11 +396,7 @@ def describe_resources() -> dict[str, Any]:
             "web_route": spec.web_route or None,
             "required_capabilities": list(required_capability_names(spec)),
             "operations": {
-                "list": (
-                    {"query_schema": spec.list_query_type.model_json_schema()}
-                    if spec.list_query_type
-                    else None
-                ),
+                "list": ({"query_schema": spec.list_query_type.model_json_schema()} if spec.list_query_type else None),
                 "get": ({"identifier": spec.identifier} if spec.identifier else None),
                 "search": ({"scope": spec.search.scope} if spec.search else None),
             },
@@ -449,23 +443,17 @@ def list_resource(
         or not isinstance(result.get("count"), int)
         or result["count"] != len(result["items"])
     ):
-        raise RuntimeError(
-            f"Resource {name!r} list handler returned an invalid collection."
-        )
+        raise RuntimeError(f"Resource {name!r} list handler returned an invalid collection.")
     return result
 
 
-def get_resource(
-    name: str, identifier: Any, *, principal: Principal, strict: bool = True
-) -> dict[str, Any]:
+def get_resource(name: str, identifier: Any, *, principal: Principal, strict: bool = True) -> dict[str, Any]:
     spec = _resource(name)
     _authorize(spec, principal)
     if not spec.detail_handler or not spec.identifier:
         raise UnsupportedResourceOperation(f"Resource {name!r} has no detail view.")
     try:
-        parsed: Any = TypeAdapter(spec.identifier_type).validate_python(
-            identifier, strict=strict
-        )
+        parsed: Any = TypeAdapter(spec.identifier_type).validate_python(identifier, strict=strict)
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
     try:
@@ -473,9 +461,7 @@ def get_resource(
     except spec.not_found_errors as exc:
         # A provider declares these types; their text is written for the
         # provider, not for a caller, so answer with this module's own.
-        raise ResourceNotFound(
-            f"No {name!r} record matches the requested identifier."
-        ) from exc
+        raise ResourceNotFound(f"No {name!r} record matches the requested identifier.") from exc
     if not isinstance(result, dict):
         raise RuntimeError(f"Resource {name!r} detail handler returned a non-object.")
     return result

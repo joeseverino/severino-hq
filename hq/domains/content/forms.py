@@ -32,9 +32,7 @@ class ContentItemForm(forms.ModelForm):
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 4}),
             "published_at": forms.DateInput(attrs={"type": "date"}),
-            "slug": forms.TextInput(
-                attrs={"placeholder": "Leave blank to use the title"}
-            ),
+            "slug": forms.TextInput(attrs={"placeholder": "Leave blank to use the title"}),
             "related_projects": forms.SelectMultiple(attrs={"size": 6}),
             "related_assets": forms.SelectMultiple(attrs={"size": 6}),
             "related_expenses": forms.SelectMultiple(attrs={"size": 6}),

@@ -47,9 +47,7 @@ def where_it_runs(public_url: str) -> RunsOn | None:
     return RunsOn(
         service=entity_link("service", service.hostname),
         machine=entity_link("machine", machine) if machine else None,
-        container=(
-            container_link(container.host, container.name, container.watcher) if container else None
-        ),
+        container=(container_link(container.host, container.name, container.watcher) if container else None),
     )
 
 

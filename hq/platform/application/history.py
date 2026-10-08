@@ -159,9 +159,7 @@ def near(at: datetime, *, window: timedelta = NEAR, limit: int = 5) -> tuple[Mom
     return tuple(sorted(around, key=lambda item: abs(item.at - at))[:limit])
 
 
-def external(
-    sources: Iterable[str], *, since: datetime | None = None, until: datetime | None = None
-) -> list[Moment]:
+def external(sources: Iterable[str], *, since: datetime | None = None, until: datetime | None = None) -> list[Moment]:
     """The deploys and container starts HQ's readings hold, within the bounds."""
 
     wanted = set(sources)
@@ -277,9 +275,7 @@ def _starts(since: datetime | None, until: datetime | None) -> list[Moment]:
                     detail="created, recreated or restarted",
                     # Its row on its machine's page: a start is dated for every
                     # container, tracked or not.
-                    url=container_link(
-                        str(record.get("host") or ""), str(record.get("container") or "")
-                    ).url,
+                    url=container_link(str(record.get("host") or ""), str(record.get("container") or "")).url,
                     actor="Docker",
                 )
             )

@@ -86,9 +86,7 @@ class NewDomainDeclarationTests(TransactionTestCase):
     def test_its_resource_and_commands_are_registered(self):
         graph = integration_graph()
         self.assertIn("widgets", graph.resources)
-        self.assertLessEqual(
-            {"widget.create", "widget.update", "widget.delete"}, set(graph.capabilities)
-        )
+        self.assertLessEqual({"widget.create", "widget.update", "widget.delete"}, set(graph.capabilities))
         self.assertEqual(graph.capabilities["widget.delete"].target_label, "Widget slug")
 
     def test_its_permissions_are_granted_where_record_permissions_are(self):
@@ -100,15 +98,11 @@ class NewDomainDeclarationTests(TransactionTestCase):
     def test_it_is_created_counted_and_deleted_through_its_commands(self):
         operator = web_principal(self.user)
 
-        created = execute_capability(
-            "widget.create", {"slug": "first", "name": "First"}, principal=operator
-        )
+        created = execute_capability("widget.create", {"slug": "first", "name": "First"}, principal=operator)
         self.assertTrue(created["ok"], created)
         self.assertEqual(counts()["widgets"], 1)
 
-        deleted = execute_capability(
-            "widget.delete", {"confirm": "first"}, principal=operator, target="first"
-        )
+        deleted = execute_capability("widget.delete", {"confirm": "first"}, principal=operator, target="first")
         self.assertEqual(deleted["deleted"]["type"], "widget", deleted)
         self.assertFalse(self.model.objects.exists())
 

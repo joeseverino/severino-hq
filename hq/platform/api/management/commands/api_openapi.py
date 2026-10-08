@@ -25,12 +25,14 @@ class Command(BaseCommand):
             committed = DOCUMENT_PATH.read_text(encoding="utf-8") if DOCUMENT_PATH.exists() else ""
             if committed != current:
                 self.stderr.write(
-                    "".join(difflib.unified_diff(
-                        committed.splitlines(keepends=True),
-                        current.splitlines(keepends=True),
-                        f"committed/{DOCUMENT_PATH.name}",
-                        f"derived/{DOCUMENT_PATH.name}",
-                    )),
+                    "".join(
+                        difflib.unified_diff(
+                            committed.splitlines(keepends=True),
+                            current.splitlines(keepends=True),
+                            f"committed/{DOCUMENT_PATH.name}",
+                            f"derived/{DOCUMENT_PATH.name}",
+                        )
+                    ),
                     ending="",
                 )
                 raise CommandError(

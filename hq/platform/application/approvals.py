@@ -87,6 +87,8 @@ def deletes(spec, payload: Any) -> bool:
     if spec.effect == DESTRUCTIVE_EFFECT:
         return True
     return isinstance(payload, dict) and any(payload.get(flag) is True for flag in DELETING_FLAGS)
+
+
 DECLARATIONS = "infrastructure.resources"
 
 # Existing audit rows may carry either label; both are read as approvals.
@@ -147,9 +149,7 @@ def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
-def fingerprint(
-    capability: str, target: Any, payload: dict[str, Any], baseline: dict[str, Any]
-) -> str:
+def fingerprint(capability: str, target: Any, payload: dict[str, Any], baseline: dict[str, Any]) -> str:
     """One digest over the requested call and the state it was read against.
 
     Both halves matter and for different reasons. The call is what would run, so
@@ -186,9 +186,7 @@ def _baseline_of(resource: ManagedResource) -> dict[str, Any]:
     }
 
 
-def approval_subject(
-    spec, payload: dict[str, Any], target: Any
-) -> ApprovalSubject | None:
+def approval_subject(spec, payload: dict[str, Any], target: Any) -> ApprovalSubject | None:
     """What a held call is about, and its baseline. Shared by hold and approve,
     whose fingerprints must match. None for a read or a missing target.
     """
@@ -235,7 +233,7 @@ def _record_subject(spec, target: Any) -> ApprovalSubject | None:
         )
     except ResourceNotFound:
         return None
-    except (UnsupportedResourceOperation, InvalidResourceInput):
+    except UnsupportedResourceOperation, InvalidResourceInput:
         # No canonical read: still holdable, but staleness cannot be detected.
         baseline = {}
     return ApprovalSubject(kind, str(target), baseline)
@@ -253,13 +251,10 @@ def held_by_default(spec, payload: dict[str, Any], target: Any) -> bool:
     if not may_be_held_by_default(spec):
         return False
     if target is not None:
-        kind = (
-            ManagedResource.objects.filter(key=str(target))
-            .values_list("kind", flat=True)
-            .first()
-        )
+        kind = ManagedResource.objects.filter(key=str(target)).values_list("kind", flat=True).first()
         return kind is not None and _gated(kind)
     return _gated(str(payload.get("kind", "")))
+
 
 def _gated(kind: str) -> bool:
     provider = PROVIDERS.get(kind)
@@ -292,9 +287,7 @@ def consent_gap(kind: str, *, principal: Principal) -> str:
     )
 
 
-def hold_for_approval(
-    spec, payload: dict[str, Any], target: Any, *, principal: Principal
-) -> dict[str, Any] | None:
+def hold_for_approval(spec, payload: dict[str, Any], target: Any, *, principal: Principal) -> dict[str, Any] | None:
     """Hold this call for a person, or return nothing if it needs no holding.
 
     The one call site is the capability runner, immediately after authority and
@@ -403,9 +396,7 @@ def serialize_approval(held: ApprovalRequest) -> dict[str, Any]:
 def lapse_unanswered(ids: tuple[Any, ...]) -> int:
     """Mark these requests lapsed, and say how many moved."""
 
-    return ApprovalRequest.objects.filter(
-        pk__in=ids, state=ApprovalRequest.State.PENDING
-    ).update(
+    return ApprovalRequest.objects.filter(pk__in=ids, state=ApprovalRequest.State.PENDING).update(
         state=ApprovalRequest.State.EXPIRED,
         decided_at=timezone.now(),
         decision_note="It expired without an answer.",
@@ -427,11 +418,7 @@ def pending(*, limit: int | None = 50) -> tuple[ApprovalRequest, ...]:
     for a queue that is almost always empty.
     """
 
-    waiting = tuple(
-        ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).order_by(
-            "created_at"
-        )[:limit]
-    )
+    waiting = tuple(ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).order_by("created_at")[:limit])
     lapsed = tuple(held.pk for held in waiting if reached(held.expires_at))
     if lapsed:
         lapse_unanswered(lapsed)
@@ -451,9 +438,7 @@ def _settle(held: ApprovalRequest, state: str, note: str = "") -> None:
         held.state = state
         held.decided_at = timezone.now()
         held.decision_note = note
-        held.save(
-            update_fields=("state", "decided_at", "decision_note", "updated_at")
-        )
+        held.save(update_fields=("state", "decided_at", "decision_note", "updated_at"))
 
 
 def _decidable(approval_id: str) -> ApprovalRequest:
@@ -462,19 +447,14 @@ def _decidable(approval_id: str) -> ApprovalRequest:
     except (ApprovalRequest.DoesNotExist, ValueError) as exc:
         raise ApprovalError("That approval request was not found.") from exc
     if held.state != ApprovalRequest.State.PENDING:
-        raise ApprovalError(
-            f"That request is already {held.get_state_display().lower()}."
-        )
+        raise ApprovalError(f"That request is already {held.get_state_display().lower()}.")
     if held.expires_at <= timezone.now():
         _settle(
             held,
             ApprovalRequest.State.EXPIRED,
             "It expired without an answer.",
         )
-        raise ApprovalError(
-            "That request expired before it was answered. Ask for it again if it "
-            "is still wanted."
-        )
+        raise ApprovalError("That request expired before it was answered. Ask for it again if it is still wanted.")
     return held
 
 
@@ -489,9 +469,7 @@ def _require_person(principal: Principal, held: ApprovalRequest) -> None:
     """
 
     if not is_interactive(principal):
-        raise AuthorizationError(
-            "Approve this in the browser, signed in. An agent cannot approve a change."
-        )
+        raise AuthorizationError("Approve this in the browser, signed in. An agent cannot approve a change.")
     if principal.actor == held.requested_actor:
         raise AuthorizationError("A request cannot be approved by whoever asked for it.")
 
@@ -508,8 +486,7 @@ def _require_agents_running(held) -> None:
 
     if held.requested_interface in AGENT_SURFACES and agents_paused():
         raise ApprovalError(
-            "Agents are paused, and an agent asked for this. Resume agents to "
-            "approve it, or decline it."
+            "Agents are paused, and an agent asked for this. Resume agents to approve it, or decline it."
         )
 
 
@@ -534,10 +511,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     held = _decidable(approval_id)
     spec = capability_registry().get(held.capability)
     if spec is None:
-        raise ApprovalError(
-            f"{held.capability!r} is no longer something HQ can do, so this "
-            "request cannot be applied."
-        )
+        raise ApprovalError(f"{held.capability!r} is no longer something HQ can do, so this request cannot be applied.")
     _require_person(principal, held)
     _require_agents_running(held)
     # The approver has to be allowed to do the thing themselves. Otherwise this
@@ -545,9 +519,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     authorize_capability(spec, principal)
     current = approval_subject(spec, held.payload, held.target or None)
     baseline = current.baseline if current is not None else {}
-    if fingerprint(held.capability, held.target or None, held.payload, baseline) != (
-        held.content_fingerprint
-    ):
+    if fingerprint(held.capability, held.target or None, held.payload, baseline) != (held.content_fingerprint):
         _settle(
             held,
             ApprovalRequest.State.STALE,
@@ -569,12 +541,8 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
         # operation is caught by its idempotency key and for a declaration is not.
         locked = ApprovalRequest.objects.select_for_update().get(pk=held.pk)
         if locked.state != ApprovalRequest.State.PENDING:
-            raise ApprovalError(
-                f"That request is already {locked.get_state_display().lower()}."
-            )
-        result = execute_approved(
-            spec, locked.payload, locked.target or None, principal=acting
-        )
+            raise ApprovalError(f"That request is already {locked.get_state_display().lower()}.")
+        result = execute_approved(spec, locked.payload, locked.target or None, principal=acting)
         locked.state = ApprovalRequest.State.APPROVED
         locked.decided_actor = principal.actor
         locked.decided_interface = principal.interface
@@ -705,9 +673,7 @@ def compare(before: dict[str, Any], after: dict[str, Any], *, label: str) -> Cha
     """The paths that differ between two specs, and a line diff where they cannot."""
 
     text = _text_fields(before, after)
-    structural_before = {
-        key: value for key, value in before.items() if key not in text
-    }
+    structural_before = {key: value for key, value in before.items() if key not in text}
     structural_after = {key: value for key, value in after.items() if key not in text}
     flat_before = _flatten(structural_before)
     flat_after = _flatten(structural_after)
@@ -727,9 +693,7 @@ def compare(before: dict[str, Any], after: dict[str, Any], *, label: str) -> Cha
                 path=path,
                 before="" if was is None else was,
                 after="" if now is None else now,
-                change=(
-                    "added" if was is None else "removed" if now is None else "changed"
-                ),
+                change=("added" if was is None else "removed" if now is None else "changed"),
             )
         )
     lines: list[str] = []
@@ -773,7 +737,7 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     if provider is not None and provider.from_record is not None and observed:
         try:
             live = provider.from_record(observed)
-        except (AttributeError, KeyError, TypeError, ValueError):
+        except AttributeError, KeyError, TypeError, ValueError:
             live = {}
         if live:
             return compare(live, declared, label="The live record would change")
@@ -799,9 +763,7 @@ def _record_preview(spec, held: ApprovalRequest) -> ChangePreview:
     if not held.target:
         return _field_rows({}, fields, label="Would be created")
     if fields:
-        return _field_rows(
-            {key: held.baseline.get(key) for key in fields}, fields, label="Would change"
-        )
+        return _field_rows({key: held.baseline.get(key) for key in fields}, fields, label="Would change")
     return ChangePreview(label=f"Would run on {held.target}", rows=(), lines=())
 
 
@@ -837,8 +799,7 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
         "warnings": _warnings(held),
         "resource_url": (
             entity_link("resource", held.resource_key).url
-            if held.resource_kind
-            and ManagedResource.objects.filter(key=held.resource_key).exists()
+            if held.resource_kind and ManagedResource.objects.filter(key=held.resource_key).exists()
             else ""
         ),
     }
@@ -861,7 +822,7 @@ def for_audit_event(event) -> ApprovalRequest | None:
         return None
     try:
         return ApprovalRequest.objects.filter(pk=event.object_id).first()
-    except (ValueError, DjangoValidationError):
+    except ValueError, DjangoValidationError:
         return None
 
 

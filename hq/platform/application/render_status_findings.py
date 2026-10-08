@@ -218,9 +218,7 @@ def failed_units(node: TopologyNode) -> frozenset[str]:
     """
 
     return frozenset(
-        unit
-        for rendering in stated_on(node)
-        if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
+        unit for rendering in stated_on(node) if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
     )
 
 
@@ -246,9 +244,7 @@ def _run_again(
         step
         for rendering in renderings
         if (unit := RENDERER_UNITS.get(rendering.renderer))
-        for step in machine_step(
-            label + _job(rendering, renderings), node.label, f"systemctl start {unit}", notes
-        )
+        for step in machine_step(label + _job(rendering, renderings), node.label, f"systemctl start {unit}", notes)
     )
 
 
@@ -261,10 +257,7 @@ def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[Ope
             "See why" + _job(rendering, renderings),
             node.label,
             unit,
-            (
-                "Look for the line with event=secrets.render.failed. "
-                "The lines above it say what was refused.",
-            ),
+            ("Look for the line with event=secrets.render.failed. The lines above it say what was refused.",),
         )
     )
 
@@ -385,9 +378,7 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                     f"1Password in full every {duration(FULL_READ_EVERY)}. The job is "
                     "either not running or failing before it starts."
                 ),
-                evidence=tuple(
-                    item for rendering in stale for item in _stale_evidence(rendering, estate.now)
-                ),
+                evidence=tuple(item for rendering in stale for item in _stale_evidence(rendering, estate.now)),
                 steps=tuple(
                     step
                     for rendering in stale
@@ -444,8 +435,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 steps=(
                     OperatorStep(
-                        label=f"Restart 1Password Connect on {node.label} and read its "
-                        "sync container's log",
+                        label=f"Restart 1Password Connect on {node.label} and read its sync container's log",
                         notes=("TOKEN_NEEDED means it has not been given its credentials file.",),
                     ),
                     *_run_again(node, stalled, "Then run the refresh again"),
@@ -491,9 +481,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                         ),
                     )
                 ),
-                steps=_run_again(
-                    node, unread, "Run it once", ("If this stays, deploy HQ.",)
-                ),
+                steps=_run_again(node, unread, "Run it once", ("If this stays, deploy HQ.",)),
                 no_help_reason=cannot_run_commands(node.label),
             )
         )
@@ -508,8 +496,7 @@ RULES: tuple[FindingRule, ...] = (
         "serious",
         _failing,
         operator_action=(
-            "On the machine, read the refresh job's log for why it failed, "
-            "fix that, then start the job again."
+            "On the machine, read the refresh job's log for why it failed, fix that, then start the job again."
         ),
         no_help_reason=cannot_run_commands(),
     ),
@@ -518,9 +505,7 @@ RULES: tuple[FindingRule, ...] = (
         "Credentials not refreshed lately",
         "serious",
         _stale,
-        operator_action=(
-            "On the machine, check that the refresh job's timer is on, then start the job."
-        ),
+        operator_action=("On the machine, check that the refresh job's timer is on, then start the job."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -528,9 +513,7 @@ RULES: tuple[FindingRule, ...] = (
         "1Password Connect has stopped syncing",
         "attention",
         _sync_stalled,
-        operator_action=(
-            "Restart 1Password Connect on the machine, then start the refresh job."
-        ),
+        operator_action=("Restart 1Password Connect on the machine, then start the refresh job."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -538,9 +521,7 @@ RULES: tuple[FindingRule, ...] = (
         "Cannot tell whether credentials are fresh",
         "attention",
         _unread,
-        operator_action=(
-            "Start the refresh job on the machine. If this stays, deploy HQ."
-        ),
+        operator_action=("Start the refresh job on the machine. If this stays, deploy HQ."),
         no_help_reason=cannot_run_commands(),
     ),
 )

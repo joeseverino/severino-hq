@@ -81,9 +81,7 @@ def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict
         if not isinstance(value, list) or not value:
             continue
         flat = all(
-            isinstance(item, dict)
-            and item
-            and all(isinstance(field, _SCALAR) for field in item.values())
+            isinstance(item, dict) and item and all(isinstance(field, _SCALAR) for field in item.values())
             for item in value
         )
         if not flat:
@@ -92,9 +90,7 @@ def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict
         return facts, {
             "label": key.replace("_", " "),
             "columns": tuple(column.replace("_", " ") for column in columns),
-            "rows": tuple(
-                tuple(_cell(item.get(column)) for column in columns) for item in value
-            ),
+            "rows": tuple(tuple(_cell(item.get(column)) for column in columns) for item in value),
         }
     return facts, None
 
@@ -117,9 +113,7 @@ def _apply_execution_error(form, result: dict) -> None:
         for item in details:
             location = item.get("loc", ()) if isinstance(item, dict) else ()
             field = str(location[0]) if location else ""
-            message = (
-                item.get("msg", "Invalid value.") if isinstance(item, dict) else ""
-            )
+            message = item.get("msg", "Invalid value.") if isinstance(item, dict) else ""
             form.add_error(field if field in form.fields else None, message)
             placed = True
     if not placed:
@@ -153,9 +147,7 @@ class CommandView(View):
                 request.GET.get("target") or request.POST.get("__target", ""),
                 principal=self.principal,
             )
-        self.form_class = command_form_class(
-            self.spec, target_options=self.target_options
-        )
+        self.form_class = command_form_class(self.spec, target_options=self.target_options)
         return super().dispatch(request, name, *args, **kwargs)
 
     def _result(self):
@@ -187,21 +179,14 @@ class CommandView(View):
             "result": result,
             "result_facts": facts,
             "result_table": table,
-            "result_json": (
-                json.dumps(result["payload"], indent=2, sort_keys=True)
-                if result
-                else ""
-            ),
+            "result_json": (json.dumps(result["payload"], indent=2, sort_keys=True) if result else ""),
             "return_url": safe_next(self.request),
             "resource_url": resource_url,
             "resource_label": resource.label if resource else "",
             "hydrates_target": bool(self.spec.target_initial_fields),
             # Only a command that writes a record's fields can blank them; one
             # that takes just a target and a reason has no record to replace.
-            "writes_record": bool(
-                set(schema.get("properties", {}))
-                - {"idempotency_key", "reason"}
-            ),
+            "writes_record": bool(set(schema.get("properties", {})) - {"idempotency_key", "reason"}),
         }
 
     def _chosen_target(self, form):
@@ -213,9 +198,7 @@ class CommandView(View):
         """
 
         asked = self.request.GET.get("target", "") if self.spec.target_kind else ""
-        chosen = next(
-            (option for option in self.target_options or () if option.value == asked), None
-        )
+        chosen = next((option for option in self.target_options or () if option.value == asked), None)
         if chosen is None or form["__target"].value() != asked:
             return None
         field = form.fields["__target"]
@@ -233,9 +216,7 @@ class CommandView(View):
         known_targets = {option.value for option in self.target_options or ()}
         if target and (self.target_options is None or target in known_targets):
             initial["__target"] = target
-            initial.update(
-                capability_target_initial(self.spec, target, principal=self.principal)
-            )
+            initial.update(capability_target_initial(self.spec, target, principal=self.principal))
         form = self.form_class(initial=initial)
         context = self._context(form, result=self._result())
         # A link that named a target the form cannot offer says so, rather than
@@ -246,9 +227,7 @@ class CommandView(View):
     def post(self, request, name: str):
         form = self.form_class(request.POST)
         if not form.is_valid():
-            return TemplateResponse(
-                request, self.template_name, self._context(form), status=400
-            )
+            return TemplateResponse(request, self.template_name, self._context(form), status=400)
 
         payload = _json_value(form.command_payload)
         target = form.cleaned_data.get("__target")
@@ -277,24 +256,18 @@ class CommandView(View):
                 result, status, replayed = execute_once(
                     actor=self.principal.actor,
                     key=validate_key(form.cleaned_data["__execution_key"]),
-                    request_sha256=request_fingerprint(
-                        self.spec.name, envelope, api_version=2
-                    ),
+                    request_sha256=request_fingerprint(self.spec.name, envelope, api_version=2),
                     operation=run,
                 )
         except IdempotencyConflict as exc:
             form.add_error(None, exc.reason)
             _renew_key(form)
-            return TemplateResponse(
-                request, self.template_name, self._context(form), status=409
-            )
+            return TemplateResponse(request, self.template_name, self._context(form), status=409)
 
         if not result.get("ok", False):
             _apply_execution_error(form, result)
             _renew_key(form)
-            return TemplateResponse(
-                request, self.template_name, self._context(form), status=status
-            )
+            return TemplateResponse(request, self.template_name, self._context(form), status=status)
 
         token = secrets.token_urlsafe(18)
         request.session["command_center_result"] = {

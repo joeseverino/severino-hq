@@ -98,11 +98,7 @@ def wanted_addresses() -> tuple[str, ...]:
     from .services import service_catalog
     from .tailnet_presence import tailnet_presence
 
-    found = {
-        public_address(service.origin.address)
-        for service in service_catalog()
-        if service.origin is not None
-    }
+    found = {public_address(service.origin.address) for service in service_catalog() if service.origin is not None}
     for machine in declared_machines():
         found.update(public_address(str(item)) for item in machine.get("addresses") or ())
     # Already filtered to public addresses by the reach ranges.
@@ -120,11 +116,7 @@ def holders(addresses) -> dict[str, str]:
     found = {}
     for address in addresses:
         holder = next(
-            (
-                item.title
-                for item in index.about(Subject.of(addresses=(address,)), kinds=(ADDRESS_KIND,))
-                if item.title
-            ),
+            (item.title for item in index.about(Subject.of(addresses=(address,)), kinds=(ADDRESS_KIND,)) if item.title),
             "",
         )
         found[address] = holder
@@ -313,7 +305,12 @@ def read_digest(key: str) -> dict[str, Any]:
         raise LookupNotFound(str(exc)) from exc
     except RegistryReadError as exc:
         raise LookupUnavailable(str(exc)) from exc
-    return {"digest": key, "image": image.name, "platform_digest": attached["platform_digest"], **reduce(attached["statements"])}
+    return {
+        "digest": key,
+        "image": image.name,
+        "platform_digest": attached["platform_digest"],
+        **reduce(attached["statements"]),
+    }
 
 
 def vulnerability_reader(
@@ -452,10 +449,7 @@ def _report(
     from hq.domains.control_plane.models import ProviderInventory
 
     stored = ProviderInventory.objects.filter(kind=kind).first()
-    kept = {
-        str(record.get(key, "")): record
-        for record in (stored.records if stored is not None else ())
-    }
+    kept = {str(record.get(key, "")): record for record in (stored.records if stored is not None else ())}
     wanted = tuple(dict.fromkeys(subjects))
     every = READ_EVERY.get(kind, REFRESH_AFTER)
     due = [subject for subject in wanted if _due(kept.get(subject), every, now, force)]

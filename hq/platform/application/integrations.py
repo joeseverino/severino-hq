@@ -35,10 +35,7 @@ class IntegrationGraphError(ImproperlyConfigured):
 
     def __init__(self, violations: Iterable[IntegrationViolation]):
         self.violations = tuple(violations)
-        rendered = "\n".join(
-            f"- [{violation.code}] {violation.message}"
-            for violation in self.violations
-        )
+        rendered = "\n".join(f"- [{violation.code}] {violation.message}" for violation in self.violations)
         super().__init__(f"Invalid integration graph:\n{rendered}")
 
 
@@ -50,13 +47,9 @@ class IntegrationGraph:
     search: Mapping[str, SearchDefinition]
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "capabilities", MappingProxyType(dict(self.capabilities))
-        )
+        object.__setattr__(self, "capabilities", MappingProxyType(dict(self.capabilities)))
         object.__setattr__(self, "resources", MappingProxyType(dict(self.resources)))
-        object.__setattr__(
-            self, "connections", MappingProxyType(dict(self.connections))
-        )
+        object.__setattr__(self, "connections", MappingProxyType(dict(self.connections)))
         object.__setattr__(self, "search", MappingProxyType(dict(self.search)))
 
 
@@ -67,9 +60,7 @@ def _index[Spec](
 ) -> Mapping[str, Spec]:
     items = tuple(specs)
     indexed = {spec.name: spec for spec in items}
-    duplicates = tuple(
-        sorted(name for name, count in Counter(spec.name for spec in items).items() if count > 1)
-    )
+    duplicates = tuple(sorted(name for name, count in Counter(spec.name for spec in items).items() if count > 1))
     if duplicates:
         violations.append(
             IntegrationViolation(
@@ -103,11 +94,7 @@ def _validated_index[Spec](
         try:
             validate(candidate)
         except ImproperlyConfigured as exc:
-            violations.append(
-                IntegrationViolation(
-                    f"invalid.{label}", str(exc), (candidate.name,)
-                )
-            )
+            violations.append(IntegrationViolation(f"invalid.{label}", str(exc), (candidate.name,)))
             continue
         valid.append(candidate)
     return _index(label, valid, violations)
@@ -144,22 +131,18 @@ def _validate_capability_resources(
             violations.append(
                 IntegrationViolation(
                     "capability.unlistable_target_resource",
-                    f"Capability {capability.name!r} cannot derive targets from "
-                    f"unlistable resource {resource.name!r}.",
+                    f"Capability {capability.name!r} cannot derive targets from unlistable resource {resource.name!r}.",
                     (capability.name, resource.name),
                 )
             )
             continue
         try:
-            resource.list_query_type.model_validate(
-                dict(capability.target_query), strict=True
-            )
+            resource.list_query_type.model_validate(dict(capability.target_query), strict=True)
         except ValidationError as exc:
             violations.append(
                 IntegrationViolation(
                     "capability.invalid_target_query",
-                    f"Capability {capability.name!r} has an invalid target query "
-                    f"for {resource.name!r}: {exc}",
+                    f"Capability {capability.name!r} has an invalid target query for {resource.name!r}: {exc}",
                     (capability.name, resource.name),
                 )
             )
@@ -183,8 +166,7 @@ def _validate_connection_edges(
         violations.append(
             IntegrationViolation(
                 "connection.unknown_capability",
-                "Connection abilities reference unknown capabilities: "
-                f"{', '.join(unknown_capabilities)}.",
+                f"Connection abilities reference unknown capabilities: {', '.join(unknown_capabilities)}.",
                 tuple(unknown_capabilities),
             )
         )
@@ -201,8 +183,7 @@ def _validate_connection_edges(
         violations.append(
             IntegrationViolation(
                 "connection.unknown_resource",
-                "Connection abilities reference unknown resources: "
-                f"{', '.join(unknown_resources)}.",
+                f"Connection abilities reference unknown resources: {', '.join(unknown_resources)}.",
                 tuple(unknown_resources),
             )
         )
@@ -214,15 +195,8 @@ def _index_search(
     violations: list[IntegrationViolation],
 ) -> Mapping[str, SearchDefinition]:
     candidates = (
-        *(
-            (f"resource {spec.name!r}", spec.search)
-            for spec in resources.values()
-            if spec.search is not None
-        ),
-        *(
-            (f"standalone contribution {index}", definition)
-            for index, definition in enumerate(standalone)
-        ),
+        *((f"resource {spec.name!r}", spec.search) for spec in resources.values() if spec.search is not None),
+        *((f"standalone contribution {index}", definition) for index, definition in enumerate(standalone)),
     )
     invalid = tuple(
         f"{source} returned {type(definition).__name__}"
@@ -233,24 +207,13 @@ def _index_search(
         violations.append(
             IntegrationViolation(
                 "search.invalid_definition",
-                "Search contributions must be SearchDefinition instances: "
-                f"{', '.join(invalid)}.",
+                f"Search contributions must be SearchDefinition instances: {', '.join(invalid)}.",
                 invalid,
             )
         )
-    definitions = tuple(
-        definition
-        for _, definition in candidates
-        if isinstance(definition, SearchDefinition)
-    )
+    definitions = tuple(definition for _, definition in candidates if isinstance(definition, SearchDefinition))
     invalid_scopes = tuple(
-        sorted(
-            {
-                definition.scope
-                for definition in definitions
-                if not DOTTED_NAME.fullmatch(definition.scope)
-            }
-        )
+        sorted({definition.scope for definition in definitions if not DOTTED_NAME.fullmatch(definition.scope)})
     )
     if invalid_scopes:
         violations.append(
@@ -261,13 +224,7 @@ def _index_search(
             )
         )
     duplicates = tuple(
-        sorted(
-            scope
-            for scope, count in Counter(
-                definition.scope for definition in definitions
-            ).items()
-            if count > 1
-        )
+        sorted(scope for scope, count in Counter(definition.scope for definition in definitions).items() if count > 1)
     )
     if duplicates:
         violations.append(
@@ -295,9 +252,7 @@ def compile_integration_graph(
         validate_capability_spec,
         violations,
     )
-    resource_index = _validated_index(
-        "resource", resources, ResourceSpec, validate_resource_spec, violations
-    )
+    resource_index = _validated_index("resource", resources, ResourceSpec, validate_resource_spec, violations)
     connection_index = _validated_index(
         "connection",
         connections,
@@ -307,14 +262,10 @@ def compile_integration_graph(
     )
     search_index = _index_search(resource_index, search, violations)
     _validate_capability_resources(capability_index, resource_index, violations)
-    _validate_connection_edges(
-        connection_index, capability_index, resource_index, violations
-    )
+    _validate_connection_edges(connection_index, capability_index, resource_index, violations)
     if violations:
         raise IntegrationGraphError(violations)
-    return IntegrationGraph(
-        capability_index, resource_index, connection_index, search_index
-    )
+    return IntegrationGraph(capability_index, resource_index, connection_index, search_index)
 
 
 @cache
@@ -343,9 +294,7 @@ def _compiled_integration_graph() -> IntegrationGraph:
     )
 
 
-_GRAPH_OVERRIDE: ContextVar[IntegrationGraph | None] = ContextVar(
-    "integration_graph_override", default=None
-)
+_GRAPH_OVERRIDE: ContextVar[IntegrationGraph | None] = ContextVar("integration_graph_override", default=None)
 
 
 def integration_graph() -> IntegrationGraph:

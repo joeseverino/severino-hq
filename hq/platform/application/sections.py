@@ -38,9 +38,7 @@ Card = dict[str, Any]
 ZERO_MONEY = Decimal("0.00")
 
 
-def _card(
-    *, id: str, label: str, value: str, url: str, detail: str = ""
-) -> tuple[Card, ...]:
+def _card(*, id: str, label: str, value: str, url: str, detail: str = "") -> tuple[Card, ...]:
     """One card, or none at all when the section has nothing to report."""
 
     card: Card = {"id": id, "label": label, "value": value, "url": url}
@@ -176,9 +174,7 @@ def fiscal_year_start(today=None):
 
 def _expenses_reading() -> dict[str, Any]:
     today = local_today()
-    totals = Expense.objects.filter(
-        date__range=(fiscal_year_start(today), today)
-    ).aggregate(
+    totals = Expense.objects.filter(date__range=(fiscal_year_start(today), today)).aggregate(
         total=Sum("total_cost"),
         deductible=Sum("estimated_deductible_amount"),
         count=Count("id"),
@@ -248,36 +244,20 @@ def _documentation(record: DocumentationRecord) -> dict[str, Any]:
     }
 
 
-
-
 def recent_active_projects() -> list[dict[str, Any]]:
-    return [
-        _project(project)
-        for project in active_projects().order_by("-updated_at")[:ROW_LIMIT]
-    ]
+    return [_project(project) for project in active_projects().order_by("-updated_at")[:ROW_LIMIT]]
 
 
 def recent_draft_content() -> list[dict[str, Any]]:
-    return [
-        _content(item)
-        for item in draft_content().order_by("-updated_at")[:ROW_LIMIT]
-    ]
+    return [_content(item) for item in draft_content().order_by("-updated_at")[:ROW_LIMIT]]
 
 
 def recently_published() -> list[dict[str, Any]]:
-    return [
-        _content(item)
-        for item in published_content().order_by("-published_at", "-updated_at")[
-            :ROW_LIMIT
-        ]
-    ]
+    return [_content(item) for item in published_content().order_by("-published_at", "-updated_at")[:ROW_LIMIT]]
 
 
 def docs_awaiting_review() -> list[dict[str, Any]]:
-    return [
-        _documentation(record)
-        for record in docs_needing_review().order_by("last_reviewed")[:ROW_LIMIT]
-    ]
+    return [_documentation(record) for record in docs_needing_review().order_by("last_reviewed")[:ROW_LIMIT]]
 
 
 # ----- Watching --------------------------------------------------------------
@@ -307,9 +287,7 @@ def watching() -> tuple[Card, ...]:
         when = moment(stamp) if stamp else None
         return when is not None and not passed(when + month)
 
-    advisories = sum(
-        1 for repo in found["watched"] for item in repo["advisories"] if recent(item["published_at"])
-    )
+    advisories = sum(1 for repo in found["watched"] for item in repo["advisories"] if recent(item["published_at"]))
     releases = sum(1 for repo in found["watched"] if repo["release"] and recent(repo["release"]["published_at"]))
     # A number and what it counts, like the cards beside it; the rest is the page.
     if advisories:

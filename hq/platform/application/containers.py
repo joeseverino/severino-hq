@@ -54,7 +54,12 @@ DECLARED = "declared"
 LABEL = "label"
 PROVENANCE = "provenance"
 REGISTRY = "registry"
-_KNOWN_BY = {DECLARED: "as set in HQ", LABEL: "by its label", PROVENANCE: "by its provenance", REGISTRY: "by its registry"}
+_KNOWN_BY = {
+    DECLARED: "as set in HQ",
+    LABEL: "by its label",
+    PROVENANCE: "by its provenance",
+    REGISTRY: "by its registry",
+}
 
 
 # Docker's status ends with its health check's verdict: "Up 11 hours (healthy)".
@@ -128,9 +133,7 @@ class Running:
             image=str(record.get("image", "")),
             state=str(record.get("state", "")),
             status=str(record.get("status", "")),
-            ports=tuple(
-                int(port) for port in record.get("ports") or () if str(port).isdigit()
-            ),
+            ports=tuple(int(port) for port in record.get("ports") or () if str(port).isdigit()),
             network_mode=str(record.get("network_mode", "")),
             host_address=str(record.get("host_address", "")),
             portainer_managed=bool(record.get("portainer_managed")),
@@ -480,9 +483,7 @@ class Container:
         mounts = self.mounts or ()
         wanted = {str(mount.get("source", "")) for mount in mounts}
         users = {
-            source: names
-            for source, names in _mount_users().get(self.machine.name, {}).items()
-            if source in wanted
+            source: names for source, names in _mount_users().get(self.machine.name, {}).items() if source in wanted
         }
         if not any(name != self.running.name for names in users.values() for name in names):
             return {}
@@ -547,7 +548,12 @@ def _containers() -> list[Container]:
     order = (VULNERABLE, BEHIND, UNKNOWN, CURRENT)
     return sorted(
         found,
-        key=lambda item: (order.index(item.standing.state), not item.standing.serious, item.machine.name, item.running.name),
+        key=lambda item: (
+            order.index(item.standing.state),
+            not item.standing.serious,
+            item.machine.name,
+            item.running.name,
+        ),
     )
 
 
@@ -842,7 +848,11 @@ def _declared_sources() -> dict[tuple[str, str], str]:
 
         found = {}
         for resource in enabled_resources():
-            named = github_repository(str(resource.spec.get("source", "") or "")) if resource.kind == CONTAINER_KIND else None
+            named = (
+                github_repository(str(resource.spec.get("source", "") or ""))
+                if resource.kind == CONTAINER_KIND
+                else None
+            )
             if named:
                 host = str(resource.spec.get("host", ""))
                 on = machine(host)

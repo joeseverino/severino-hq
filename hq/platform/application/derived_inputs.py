@@ -50,7 +50,6 @@ DASHBOARD_READS: tuple[str, ...] = (
 )
 
 
-
 def composed_variant() -> tuple[Any, ...]:
     """What a composition of every domain depends on besides rows and the clock.
 

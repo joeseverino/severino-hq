@@ -27,11 +27,7 @@ def _option(item: dict[str, Any], value: str) -> CommandTargetOption:
     for field in ("name", "title", "label"):
         candidate = item.get(field)
         if isinstance(candidate, str) and candidate.strip():
-            label = (
-                f"{candidate.strip()} · {value}"
-                if candidate.strip() != value
-                else value
-            )
+            label = f"{candidate.strip()} · {value}" if candidate.strip() != value else value
             break
     kind = item.get("kind")
     group = kind_label(kind) if isinstance(kind, str) and kind.strip() else ""
@@ -77,11 +73,7 @@ def capability_target_options(
     for item in collection["items"]:
         if not isinstance(item, dict):
             continue
-        if (
-            governed_kinds
-            and not kinds_applied
-            and item.get("kind") not in governed_kinds
-        ):
+        if governed_kinds and not kinds_applied and item.get("kind") not in governed_kinds:
             continue
         raw_value = item.get(resource.identifier)
         if raw_value is None:
@@ -122,9 +114,7 @@ def with_requested_target(
     return (_option(item, target), *options)
 
 
-def capability_target_initial(
-    spec: CapabilitySpec, target: str, *, principal: Principal
-) -> dict[str, Any]:
+def capability_target_initial(spec: CapabilitySpec, target: str, *, principal: Principal) -> dict[str, Any]:
     """Hydrate declared command fields from one authorized local target."""
 
     if not spec.subject_resource or not spec.target_initial_fields:
@@ -133,9 +123,7 @@ def capability_target_initial(
     source = detail.get("resource", detail)
     if not isinstance(source, dict):
         return {}
-    initial = {
-        field: source[field] for field in spec.target_initial_fields if field in source
-    }
+    initial = {field: source[field] for field in spec.target_initial_fields if field in source}
     updated_at = source.get("updated_at")
     if isinstance(updated_at, str):
         initial["__expected_updated_at"] = updated_at

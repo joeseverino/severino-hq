@@ -71,9 +71,7 @@ class PhrasingTests(SimpleTestCase):
         """Django's own formats are the owner's, so a template that forgot the filter agrees."""
 
         self.assertEqual(formats.date_format(date(2019, 10, 3)), "Oct 3, 2019")
-        self.assertEqual(
-            formats.date_format(datetime(2019, 10, 3, 9, 29), "DATETIME_FORMAT"), "Oct 3, 2019, 9:29 AM"
-        )
+        self.assertEqual(formats.date_format(datetime(2019, 10, 3, 9, 29), "DATETIME_FORMAT"), "Oct 3, 2019, 9:29 AM")
 
 
 @override_settings(TIME_ZONE="America/Chicago")

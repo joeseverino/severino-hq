@@ -164,7 +164,9 @@ def attestations(image: ImageRef, digest: str) -> dict[str, Any]:
     host = _API_HOST.get(image.registry, image.registry)
     index, _headers, token = _get(host, f"/v2/{image.repository}/manifests/{digest}", image, "", _MANIFESTS)
     manifests = [item for item in index.get("manifests") or () if isinstance(item, dict)]
-    runnable = [item for item in manifests if (item.get("annotations") or {}).get("vnd.docker.reference.type") != _ATTESTATION]
+    runnable = [
+        item for item in manifests if (item.get("annotations") or {}).get("vnd.docker.reference.type") != _ATTESTATION
+    ]
     if not runnable:
         return {"platform_digest": digest, "statements": []}
     platform = str(_platform(runnable).get("digest", ""))

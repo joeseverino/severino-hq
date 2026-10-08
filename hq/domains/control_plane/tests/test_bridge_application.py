@@ -56,13 +56,17 @@ class RefusalTests(TestCase):
     def test_a_lease_outside_the_contracts_range(self):
         for lease in ("29", "3601", "-1", "soon", "1.5"):
             with self.subTest(lease=lease):
-                self.refused(400, "lease-seconds must be", "/claim", query={"controller-id": "x", "lease-seconds": lease})
+                self.refused(
+                    400, "lease-seconds must be", "/claim", query={"controller-id": "x", "lease-seconds": lease}
+                )
 
     def test_a_lease_inside_the_range_and_the_contracts_default(self):
         with patch("hq.domains.control_plane.bridge_actions.claim_next_operation", return_value={"ok": True}) as claim:
             bridge_client.call("claim", controller_id="x", lease_seconds="45", capability=["a:b", "c:d"])
             bridge_client.call("claim", controller_id="x")
-        self.assertEqual(claim.call_args_list[0].kwargs, {"lease_seconds": 45, "capabilities": (("a", "b"), ("c", "d"))})
+        self.assertEqual(
+            claim.call_args_list[0].kwargs, {"lease_seconds": 45, "capabilities": (("a", "b"), ("c", "d"))}
+        )
         self.assertEqual(claim.call_args_list[1].kwargs, {"lease_seconds": 300, "capabilities": ()})
 
     def test_a_malformed_capability(self):
@@ -79,7 +83,6 @@ class RefusalTests(TestCase):
     def test_input_an_action_will_not_take(self):
         self.refused(400, "Managed resource was not found", "/export", query={"resource": "absent"})
 
-
     def test_a_payload_over_the_limit_is_refused_before_it_is_read_or_run(self):
         ran = []
         with (
@@ -87,9 +90,21 @@ class RefusalTests(TestCase):
             patch.object(bridge_application, "_run", side_effect=lambda *args: ran.append(args)),
         ):
             # Declared too large, and too large without declaring it.
-            self.refused(413, "larger than the bridge accepts", "/steps", query={"controller-id": "x"},
-                         body=b"[]", headers=((b"content-length", b"9"),))
-            self.refused(413, "larger than the bridge accepts", "/steps", query={"controller-id": "x"}, body=b"[" + b" " * 8 + b"]")
+            self.refused(
+                413,
+                "larger than the bridge accepts",
+                "/steps",
+                query={"controller-id": "x"},
+                body=b"[]",
+                headers=((b"content-length", b"9"),),
+            )
+            self.refused(
+                413,
+                "larger than the bridge accepts",
+                "/steps",
+                query={"controller-id": "x"},
+                body=b"[" + b" " * 8 + b"]",
+            )
         self.assertEqual(ran, [])
 
     def test_an_answer_over_the_limit_is_not_sent(self):
@@ -166,7 +181,12 @@ class PayloadContractTests(TestCase):
             "/adguard.rewrite/refused_parts/0",
             "object",
         ),
-        ("inventory", {"adguard.rewrite": {"ok": True, "records": ["a record"]}}, "/adguard.rewrite/records/0", "object"),
+        (
+            "inventory",
+            {"adguard.rewrite": {"ok": True, "records": ["a record"]}},
+            "/adguard.rewrite/records/0",
+            "object",
+        ),
         ("connections", [{**A_CONNECTION, "manages": "1"}], "/0/manages", "boolean"),
         ("connections", [{**A_CONNECTION, "ok": "false"}], "/0/ok", "boolean"),
         ("connections", [{**A_CONNECTION, "reaches": [7]}], "/0/reaches/0", "string"),
@@ -234,11 +254,18 @@ class PayloadContractTests(TestCase):
         bridge_client.call("connections", [A_CONNECTION], controller_id="x")
         bridge_client.call(
             "inventory",
-            {"adguard.rewrite": {"ok": True, "records": [{"domain": "app.example.com", "answer": "192.0.2.10", "enabled": True}]}},
+            {
+                "adguard.rewrite": {
+                    "ok": True,
+                    "records": [{"domain": "app.example.com", "answer": "192.0.2.10", "enabled": True}],
+                }
+            },
             controller_id="x",
         )
         bridge_client.call(
-            "steps", [{"subject": "example-npm", "step": "npm.proxy_host:reconcile", "reason": "refused"}], controller_id="x"
+            "steps",
+            [{"subject": "example-npm", "step": "npm.proxy_host:reconcile", "reason": "refused"}],
+            controller_id="x",
         )
         bridge_client.call("analytics", _analytics(), controller_id="x")
 
@@ -338,7 +365,9 @@ class ReachabilityTests(TestCase):
         )
         self.assertEqual(holders, ["hq/config/asgi.py"])
         source = (ROOT / "hq/config/asgi.py").read_text(encoding="utf-8")
-        uses = [line.strip() for line in source.splitlines() if mention.search(line) and not line.lstrip().startswith("#")]
+        uses = [
+            line.strip() for line in source.splitlines() if mention.search(line) and not line.lstrip().startswith("#")
+        ]
         self.assertEqual(
             uses,
             [

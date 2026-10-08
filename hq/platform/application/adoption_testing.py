@@ -6,9 +6,7 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
 from hq.domains.control_plane.models import ProviderConnection
 
 
-def connection(
-    provider: str, connection_ref: str = "", *, manages: bool = True
-) -> ProviderConnection:
+def connection(provider: str, connection_ref: str = "", *, manages: bool = True) -> ProviderConnection:
     """One reported connection of ``provider``; managing unless told otherwise."""
 
     found, _ = ProviderConnection.objects.update_or_create(

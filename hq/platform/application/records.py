@@ -120,15 +120,50 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
     command = load(records.command)
     # verb, declared, effect, permission, command, handler, summary, label, targeted
     verbs = (
-        ("create", records.create, "remote_write", records.write, command, records.save,
-         f"Add a new {title}.", f"Create {title}", False),
-        ("upsert", bool(records.upsert), "remote_write", records.write, command, records.upsert,
-         f"Add a new {title}, or update it if it already exists.",
-         f"Create or update {title}", False),
-        ("update", True, "remote_write", records.write, command, records.save,
-         f"Change one {title}.", f"Update {title}", True),
-        ("delete", True, "destructive", records.delete, DeleteCommand, deleter(records.resource),
-         f"Delete one {title}.", f"Delete {title}", True),
+        (
+            "create",
+            records.create,
+            "remote_write",
+            records.write,
+            command,
+            records.save,
+            f"Add a new {title}.",
+            f"Create {title}",
+            False,
+        ),
+        (
+            "upsert",
+            bool(records.upsert),
+            "remote_write",
+            records.write,
+            command,
+            records.upsert,
+            f"Add a new {title}, or update it if it already exists.",
+            f"Create or update {title}",
+            False,
+        ),
+        (
+            "update",
+            True,
+            "remote_write",
+            records.write,
+            command,
+            records.save,
+            f"Change one {title}.",
+            f"Update {title}",
+            True,
+        ),
+        (
+            "delete",
+            True,
+            "destructive",
+            records.delete,
+            DeleteCommand,
+            deleter(records.resource),
+            f"Delete one {title}.",
+            f"Delete {title}",
+            True,
+        ),
     )
     wording = {verb: (summary, label) for verb, summary, label in records.wording}
     target_label = f"{title[0].upper()}{title[1:]} {_TARGET_NAMES[records.target]}"
@@ -146,8 +181,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             target_help=f"The {title} to {verb}." if targeted else "",
             label=wording.get(verb, ("", ""))[1] or label,
         )
-        for verb, declared, effect, permission, command_type, handler, summary, label, targeted
-        in verbs
+        for verb, declared, effect, permission, command_type, handler, summary, label, targeted in verbs
         if declared
     )
 
@@ -160,8 +194,6 @@ def counts() -> dict[str, int]:
     """How many records each domain holds, counting only what any reader may see."""
 
     return {
-        records.resource: (
-            load(records.visible)() if records.visible else load(records.model).objects.all()
-        ).count()
+        records.resource: (load(records.visible)() if records.visible else load(records.model).objects.all()).count()
         for records in host_records()
     }

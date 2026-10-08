@@ -133,8 +133,14 @@ class ArrivalTests(TestCase):
             kind=ARRIVAL_KIND,
             observed_at=timezone.now(),
             records=[
-                {"address": LAPTOP, "device": "a-laptop", "last_seen": recent,
-                 "window_start": old, "first_seen": old, "count": 40}
+                {
+                    "address": LAPTOP,
+                    "device": "a-laptop",
+                    "last_seen": recent,
+                    "window_start": old,
+                    "first_seen": old,
+                    "count": 40,
+                }
             ],
         )
 
@@ -169,7 +175,11 @@ class ArrivalTests(TestCase):
 
         self.assertEqual(stored(), [])
         self.assertFalse(
-            [q for q in queries.captured_queries if q["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))]
+            [
+                q
+                for q in queries.captured_queries
+                if q["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+            ]
         )
         arrivals.note(a_request())
         self.assertEqual(stored()[0]["count"], 3)
@@ -186,17 +196,13 @@ class ArrivalTests(TestCase):
         self.assertEqual(stored()[0]["count"], 2)
 
     def test_the_machine_page_says_when_the_device_last_reached_hq(self):
-        ManagedResource.objects.create(
-            key="a-laptop", kind="machine", spec={"name": "a-laptop", "addresses": [LAPTOP]}
-        )
+        ManagedResource.objects.create(key="a-laptop", kind="machine", spec={"name": "a-laptop", "addresses": [LAPTOP]})
         arrivals.note(a_request())
         user = get_user_model().objects.create_user("someone", password="not-used-here")
         self.client.force_login(user)
 
         with override_settings(SEVERINO_REQUEST_PATH_SECONDS=0):
-            response = self.client.get(
-                reverse("control_plane:machine", kwargs={"name": "a-laptop"})
-            )
+            response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop"}))
 
         self.assertContains(response, "Last reached HQ")
         self.assertContains(response, "relayed over the tailnet, through the proxy at 172.18.0.2")
@@ -206,9 +212,7 @@ class ArrivalTests(TestCase):
 
         from hq.domains.control_plane.models import ProviderInventory
 
-        ManagedResource.objects.create(
-            key="a-laptop", kind="machine", spec={"name": "a-laptop", "addresses": [LAPTOP]}
-        )
+        ManagedResource.objects.create(key="a-laptop", kind="machine", spec={"name": "a-laptop", "addresses": [LAPTOP]})
         arrivals.note(a_request())
         for row in ProviderInventory.objects.filter(kind="tailscale.device"):
             row.records = [{**record, "self": True} for record in row.records]
@@ -217,9 +221,7 @@ class ArrivalTests(TestCase):
         self.client.force_login(user)
 
         with override_settings(SEVERINO_REQUEST_PATH_SECONDS=0):
-            response = self.client.get(
-                reverse("control_plane:machine", kwargs={"name": "a-laptop"})
-            )
+            response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop"}))
 
         self.assertContains(response, "This is HQ's own machine.")
         self.assertNotContains(response, "over the tailnet")

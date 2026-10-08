@@ -15,10 +15,7 @@ from .rules import singleton
 def _model_labels() -> dict[str, str]:
     from django.apps import apps
 
-    return {
-        model.__name__: _sentence(str(model._meta.verbose_name))
-        for model in reversed(apps.get_models())
-    }
+    return {model.__name__: _sentence(str(model._meta.verbose_name)) for model in reversed(apps.get_models())}
 
 
 @functools.cache
@@ -221,9 +218,7 @@ class Pin(models.Model):
     than growing a second one shaped identically.
     """
 
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pins"
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pins")
     target_kind = models.CharField(max_length=64)
     target_key = models.CharField(max_length=255)
     # Where the operator wants it, among the others they pinned. Alphabetical
@@ -234,11 +229,7 @@ class Pin(models.Model):
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=("user", "target_kind", "target_key"), name="unique_pin"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=("user", "target_kind", "target_key"), name="unique_pin")]
         indexes = [models.Index(fields=("user", "target_kind"))]
         # Position first, then the key, so pins that predate an ordering (all
         # of them share position 0) still come out stable rather than shuffling
@@ -314,9 +305,7 @@ class LinkedAccount(models.Model):
     updated_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=("user", "provider"), name="unique_linked_account_per_provider")
-        ]
+        constraints = [models.UniqueConstraint(fields=("user", "provider"), name="unique_linked_account_per_provider")]
 
     @override
     def __str__(self) -> str:
@@ -359,9 +348,7 @@ class Appearance(models.Model):
         LIGHT = "light", "Light"
         DARK = "dark", "Dark"
 
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="appearance"
-    )
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="appearance")
     theme = models.CharField(max_length=8, choices=Theme.choices, default=Theme.SYSTEM)
     changed_at = models.DateTimeField(default=timezone.now)
 
@@ -379,9 +366,7 @@ class Avatar(models.Model):
     provider every time somebody looked at a page.
     """
 
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar"
-    )
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar")
     content_type = models.CharField(max_length=32)
     image = models.BinaryField()
     # What a page puts in the image's address, so a new picture is a new address

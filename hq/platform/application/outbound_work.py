@@ -93,9 +93,7 @@ def validate(work: object) -> OutboundWork:
     if not work.label or work.label != work.label.strip() or len(work.label) > LABEL_LIMIT:
         raise ImproperlyConfigured(f"Outbound work {work.name!r} needs a short label.")
     if work.effect not in EFFECTS:
-        raise ImproperlyConfigured(
-            f"Outbound work {work.name!r} has invalid effect {work.effect!r}."
-        )
+        raise ImproperlyConfigured(f"Outbound work {work.name!r} has invalid effect {work.effect!r}.")
     if work.refuse is not None and not callable(work.refuse):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} refuse is not callable.")
     try:
@@ -135,7 +133,9 @@ def capability_for(work: OutboundWork) -> CapabilitySpec:
 
     validate(work)
 
-    def about(command: Any, *, principal: Principal, expected_updated_at: Any = None, current_key: str = "") -> dict[str, Any]:
+    def about(
+        command: Any, *, principal: Principal, expected_updated_at: Any = None, current_key: str = ""
+    ) -> dict[str, Any]:
         return request_work(work, current_key, principal=principal)
 
     def whole(command: Any, *, principal: Principal, expected_updated_at: Any = None) -> dict[str, Any]:

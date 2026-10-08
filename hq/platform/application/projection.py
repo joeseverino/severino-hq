@@ -26,17 +26,13 @@ from django.db.models import FETCH_PEERS, FETCH_RAISE, Q, QuerySet
 MAX_PAGE_SIZE = 100
 
 _MISSING = object()
-_READ_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar(
-    "hq_projection_read_scope", default=None
-)
+_READ_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar("hq_projection_read_scope", default=None)
 # Where a scope keeps what it was seeded with, apart from what it read since.
 _SEED = "projection.seed"
 
 
 @contextmanager
-def projection_scope(
-    seed: Mapping[str, Any] | None = None, *, apart: bool = False
-) -> Iterator[None]:
+def projection_scope(seed: Mapping[str, Any] | None = None, *, apart: bool = False) -> Iterator[None]:
     """Share exact read results for one assembled projection, then forget them.
 
     This is request/use-case memoisation, not a process cache. Nested composers
@@ -121,9 +117,7 @@ def years_of(model, field: str) -> list[int]:
     row to answer with a handful of years.
     """
 
-    days = (
-        model.objects.exclude(**{field: None}).order_by().values_list(field, flat=True).distinct()
-    )
+    days = model.objects.exclude(**{field: None}).order_by().values_list(field, flat=True).distinct()
     return sorted({day.year for day in days})
 
 
@@ -167,8 +161,7 @@ def guarded(queryset: QuerySet) -> QuerySet:
     return queryset.fetch_mode(FETCH_RAISE if settings.SEVERINO_STRICT_FETCH else FETCH_PEERS)
 
 
-def listing(model, serialize, *, search: tuple[str, ...], status=None, query=None,
-            limit: int = 50) -> dict[str, Any]:
+def listing(model, serialize, *, search: tuple[str, ...], status=None, query=None, limit: int = 50) -> dict[str, Any]:
     """One list read: an optional status, an optional text match, one page.
 
     Domains differ only in the model, the serializer and which fields a search

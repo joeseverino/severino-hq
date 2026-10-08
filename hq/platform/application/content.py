@@ -72,8 +72,6 @@ class ContentCommand:
     related_documentation: tuple[str, ...] = ()
 
 
-
-
 def serialize_content(item: ContentItem) -> dict[str, Any]:
     return {
         "slug": item.slug,
@@ -89,15 +87,9 @@ def serialize_content(item: ContentItem) -> dict[str, Any]:
         "notes": item.notes,
         "updated_at": iso(item.updated_at),
         "relationships": {
-            "projects": list(
-                item.related_projects.order_by("slug").values_list("slug", flat=True)
-            ),
-            "assets": list(
-                item.related_assets.order_by("slug").values_list("slug", flat=True)
-            ),
-            "expense_ids": list(
-                item.related_expenses.order_by("id").values_list("id", flat=True)
-            ),
+            "projects": list(item.related_projects.order_by("slug").values_list("slug", flat=True)),
+            "assets": list(item.related_assets.order_by("slug").values_list("slug", flat=True)),
+            "expense_ids": list(item.related_expenses.order_by("id").values_list("id", flat=True)),
             "documentation": safe_doc_ids(item.related_documentation),
         },
     }
@@ -108,9 +100,7 @@ def _resolve(model, field: str, values: tuple, label: str):
     found = {getattr(record, field) for record in records}
     missing = sorted(set(values) - found)
     if missing:
-        found_none = counted(
-            len(missing), f"related {label} not found", f"related {plural(label)} not found"
-        )
+        found_none = counted(len(missing), f"related {label} not found", f"related {plural(label)} not found")
         raise NotFoundError(f"{found_none}: {', '.join(map(str, missing))}")
     return records
 
@@ -125,9 +115,7 @@ def save_content(
 ) -> dict[str, Any]:
     principal.require(records_of("content").write)
     operation = "content.create" if current_slug is None else "content.update"
-    with operation_context(
-        interface=principal.interface, actor=principal.actor, operation=operation
-    ):
+    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
         if current_slug is None:
             item = ContentItem()
             created = True
@@ -135,19 +123,13 @@ def save_content(
             try:
                 item = ContentItem.objects.select_for_update().get(slug=current_slug)
             except ContentItem.DoesNotExist as exc:
-                raise NotFoundError(
-                    f"The writeup or page {current_slug!r} was not found."
-                ) from exc
+                raise NotFoundError(f"The writeup or page {current_slug!r} was not found.") from exc
             created = False
             if expected_updated_at and item.updated_at.isoformat() != expected_updated_at:
-                raise ConflictError(
-                    f"The writeup or page {current_slug!r} changed after it was read."
-                )
+                raise ConflictError(f"The writeup or page {current_slug!r} changed after it was read.")
 
         values = asdict(command)
-        projects = _resolve(
-            Project, "slug", values.pop("related_projects"), "project"
-        )
+        projects = _resolve(Project, "slug", values.pop("related_projects"), "project")
         assets = _resolve(Asset, "slug", values.pop("related_assets"), "asset")
         expenses = _resolve(Expense, "id", values.pop("related_expenses"), "expense")
         docs = _resolve(

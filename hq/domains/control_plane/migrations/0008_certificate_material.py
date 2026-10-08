@@ -6,27 +6,33 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0007_provider_inventory'),
+        ("control_plane", "0007_provider_inventory"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='CertificateMaterial',
+            name="CertificateMaterial",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('sealed_fullchain', models.TextField()),
-                ('sealed_private_key', models.TextField()),
-                ('fingerprint_sha256', models.CharField(blank=True, max_length=95)),
-                ('not_after', models.DateTimeField(blank=True, null=True)),
-                ('subject', models.CharField(blank=True, max_length=500)),
-                ('resource', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='material', to='control_plane.managedresource')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("sealed_fullchain", models.TextField()),
+                ("sealed_private_key", models.TextField()),
+                ("fingerprint_sha256", models.CharField(blank=True, max_length=95)),
+                ("not_after", models.DateTimeField(blank=True, null=True)),
+                ("subject", models.CharField(blank=True, max_length=500)),
+                (
+                    "resource",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="material",
+                        to="control_plane.managedresource",
+                    ),
+                ),
             ],
             options={
-                'abstract': False,
+                "abstract": False,
             },
         ),
     ]

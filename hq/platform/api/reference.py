@@ -15,6 +15,4 @@ from django.views.decorators.http import require_safe
 @require_safe
 @csp_override(settings.SEVERINO_API_REFERENCE_CSP)
 def reference(request: HttpRequest) -> HttpResponse:
-    return TemplateResponse(
-        request, "hq_api/reference.html", {"document_url": reverse("hq_api:openapi")}
-    )
+    return TemplateResponse(request, "hq_api/reference.html", {"document_url": reverse("hq_api:openapi")})

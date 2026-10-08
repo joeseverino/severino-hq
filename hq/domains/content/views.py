@@ -50,9 +50,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     new_label = "New writeup or page"
     new_type = ""
     empty_message = "No writeups or pages yet."
-    table_filters = (
-        TableFilter("status", "Status", "status", ContentItem.Status.choices),
-    )
+    table_filters = (TableFilter("status", "Status", "status", ContentItem.Status.choices),)
     table_selectable = True
     table_toggles = (TableToggle("no_docs", "No source document"),)
     table_default_sort = "-updated_at"
@@ -88,7 +86,6 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     def types_held(self) -> frozenset[str]:
         return frozenset(content_type for content_type, _url in self._held)
 
-
     @cached_property
     def table_columns(self) -> tuple[TableColumn, ...]:
         typed = (TableColumn("Type", "content_type"),) if len(self.types_held) > 1 else ()
@@ -121,9 +118,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     def get_queryset(self):
         qs = ContentItem.objects.filter(content_type__in=self.content_types)
         if self.request.GET.get("no_docs"):
-            qs = qs.annotate(doc_count=Count("related_documentation")).filter(
-                doc_count=0
-            )
+            qs = qs.annotate(doc_count=Count("related_documentation")).filter(doc_count=0)
         return self.apply_table_query(qs)
 
     @override

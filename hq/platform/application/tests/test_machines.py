@@ -142,9 +142,7 @@ class TieTests(TestCase):
 
 class MachinePageTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
         a_connection(
             "a-portainer",
@@ -169,25 +167,19 @@ class MachinePageTests(TestCase):
         self.assertContains(response, "1 of 1 running")
 
     def test_the_page_gathers_what_ties_to_one(self):
-        response = self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "a-docker-host"})
-        )
+        response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-docker-host"}))
 
         self.assertContains(response, "a-portainer")
         self.assertContains(response, "nginx:alpine")
         self.assertContains(response, "8081")
 
     def test_a_name_nothing_reported_is_not_a_page(self):
-        response = self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "nowhere"})
-        )
+        response = self.client.get(reverse("control_plane:machine", kwargs={"name": "nowhere"}))
 
         self.assertEqual(response.status_code, 404)
 
     def test_the_page_never_carries_a_credential(self):
-        response = self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "a-docker-host"})
-        )
+        response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-docker-host"}))
 
         self.assertNotContains(response, "API_TOKEN")
         self.assertNotContains(response, "PASSWORD")
@@ -442,9 +434,7 @@ class TailnetPresenceTests(TestCase):
 
         from ..machines import machine
 
-        ManagedResource.objects.create(
-            key="a-printer", kind="machine", spec={"name": "a-printer"}
-        )
+        ManagedResource.objects.create(key="a-printer", kind="machine", spec={"name": "a-printer"})
 
         self.assertIsNone(machine("a-printer").presence)
 
@@ -466,9 +456,7 @@ class KeyExpiryTests(TestCase):
                     {
                         "name": name,
                         "online": True,
-                        "key_expires": (
-                            timezone.now() + timedelta(days=days)
-                        ).isoformat(),
+                        "key_expires": (timezone.now() + timedelta(days=days)).isoformat(),
                     }
                 ],
                 "observed_at": timezone.now(),
@@ -608,9 +596,7 @@ class WhoeverSweptTests(TestCase):
         self.assertEqual([item.name for item in found.containers], ["a-service"])
 
     def test_the_machine_that_swept_does_not_become_a_second_row(self):
-        self.assertNotIn(
-            "a-laptop-that-swept", [found.name for found in machine_catalog()]
-        )
+        self.assertNotIn("a-laptop-that-swept", [found.name for found in machine_catalog()])
 
     def test_the_declared_name_is_the_one_kept(self):
         self.assertIn("a-docker-host", [found.name for found in machine_catalog()])
@@ -627,9 +613,7 @@ class WhoeverSweptTests(TestCase):
         self.assertEqual(machine("a-laptop-that-swept").name, "a-docker-host")
         self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
 
-        response = self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "a-laptop-that-swept"})
-        )
+        response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop-that-swept"}))
 
         self.assertRedirects(
             response,
@@ -640,9 +624,7 @@ class WhoeverSweptTests(TestCase):
     def test_the_key_it_was_declared_under_finds_it_too(self):
         from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="a-laptop", kind="machine", spec={"name": "A Laptop"}
-        )
+        ManagedResource.objects.create(key="a-laptop", kind="machine", spec={"name": "A Laptop"})
 
         self.assertEqual(machine("a-laptop").name, "A Laptop")
 
@@ -652,14 +634,10 @@ class WhoeverSweptTests(TestCase):
 
         from hq.domains.control_plane.models import ManagedResource
 
-        ManagedResource.objects.create(
-            key="a-laptop", kind="machine", spec={"name": "a-laptop"}
-        )
+        ManagedResource.objects.create(key="a-laptop", kind="machine", spec={"name": "a-laptop"})
         self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
 
-        response = self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "a-laptop"})
-        )
+        response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop"}))
 
         self.assertContains(response, "no connection reads it")
         self.assertNotContains(response, "reported by something else")
@@ -675,9 +653,7 @@ class ReadingThisOnTheMachineTests(TestCase):
     def setUp(self):
         from hq.domains.control_plane.models import ManagedResource
 
-        self.user = get_user_model().objects.create_user(
-            username="an-operator", password="not-used-here"
-        )
+        self.user = get_user_model().objects.create_user(username="an-operator", password="not-used-here")
         self.client.force_login(self.user)
         ManagedResource.objects.create(
             key="a-laptop",
@@ -769,9 +745,7 @@ class ObservedAddressAnnotationTests(TestCase):
 
         from hq.platform.application.provider_forms import spec_form_class
 
-        form = spec_form_class("machine")(
-            data={"name": "laserjet", "addresses": ["192.0.2.137"]}
-        )
+        form = spec_form_class("machine")(data={"name": "laserjet", "addresses": ["192.0.2.137"]})
 
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.spec["addresses"], ["192.0.2.137"])
@@ -785,9 +759,7 @@ class ObservedAddressAnnotationTests(TestCase):
 
         from hq.platform.application.provider_forms import spec_form_class
 
-        form = spec_form_class("machine")(
-            initial={"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]}
-        )
+        form = spec_form_class("machine")(initial={"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]})
         rendered = str(form["addresses"])
 
         self.assertIn('value="100.101.102.103"', rendered)
@@ -839,9 +811,7 @@ class IdentifierIsFixedTests(TestCase):
         self.resource = ManagedResource.objects.create(
             key="a-box", kind="machine", spec={"name": "a-box", "addresses": []}
         )
-        user = get_user_model().objects.create_user(
-            username="op", password="pw", is_staff=True, is_superuser=True
-        )
+        user = get_user_model().objects.create_user(username="op", password="pw", is_staff=True, is_superuser=True)
         self.client.force_login(user)
 
     def test_the_form_does_not_ask_for_it(self):
@@ -850,9 +820,7 @@ class IdentifierIsFixedTests(TestCase):
         self.assertNotIn("key", ResourceIdentityForm().fields)
 
     def test_it_is_shown_at_the_top_instead(self):
-        response = self.client.get(
-            reverse("control_plane:edit", kwargs={"key": "a-box"})
-        )
+        response = self.client.get(reverse("control_plane:edit", kwargs={"key": "a-box"}))
 
         self.assertContains(response, "Identifier")
 
@@ -872,9 +840,7 @@ class OneStateTests(TestCase):
     """An offline device reads as offline; the connection is named elsewhere."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="state-operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="state-operator", password="not-a-real-password")
         self.client.force_login(self.user)
         a_connection("example-tailnet", "tailscale")
 
@@ -905,9 +871,7 @@ class OneStateTests(TestCase):
 
         found = machine("example-host")
         listing = self.client.get(reverse("control_plane:machines"))
-        page = self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "example-host"})
-        )
+        page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
 
         self.assertEqual(found.state, ("offline", "unreachable"))
         for response in (listing, page):
@@ -935,7 +899,7 @@ class OneStateTests(TestCase):
 
         listing = self.client.get(reverse("control_plane:machines"))
 
-        self.assertContains(listing, "<code>example-ssh</code></a> <span class=\"muted\">not answering</span>")
+        self.assertContains(listing, '<code>example-ssh</code></a> <span class="muted">not answering</span>')
 
     def test_nothing_reaching_it_says_so(self):
         containers({"name": "probe", "host": "somewhere", "state": "running"})
@@ -944,12 +908,10 @@ class OneStateTests(TestCase):
 
 
 class DeclareFromWhatHQKnowsTests(TestCase):
-    """"Add this machine to HQ" opens a form holding the name and addresses HQ has."""
+    """ "Add this machine to HQ" opens a form holding the name and addresses HQ has."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="declare-operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="declare-operator", password="not-a-real-password")
         self.client.force_login(self.user)
         ProviderInventory.objects.update_or_create(
             kind="tailscale.device",
@@ -966,16 +928,12 @@ class DeclareFromWhatHQKnowsTests(TestCase):
         )
 
     def page(self):
-        return self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "example-host"})
-        )
+        return self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
 
     def action(self, response, label):
         from urllib.parse import parse_qs, urlsplit
 
-        (found,) = [
-            action for action in response.context["page"].actions if action.label == label
-        ]
+        (found,) = [action for action in response.context["page"].actions if action.label == label]
         return parse_qs(urlsplit(found.url).query)
 
     def test_the_action_is_seeded(self):

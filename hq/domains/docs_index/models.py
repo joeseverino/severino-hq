@@ -108,14 +108,10 @@ class DocumentationRecord(TimestampedModel):
     doc_id = models.SlugField(
         max_length=80,
         unique=True,
-        help_text=(
-            "Stable identifier, e.g. 'rb-adguard-001'. Never rename it."
-        ),
+        help_text=("Stable identifier, e.g. 'rb-adguard-001'. Never rename it."),
     )
     title = models.CharField(max_length=200)
-    doc_type = models.CharField(
-        max_length=32, choices=DocType.choices, default=DocType.RUNBOOK
-    )
+    doc_type = models.CharField(max_length=32, choices=DocType.choices, default=DocType.RUNBOOK)
     system_service = models.CharField(
         max_length=120,
         blank=True,
@@ -126,17 +122,12 @@ class DocumentationRecord(TimestampedModel):
         choices=Environment.choices,
         default=Environment.OTHER,
     )
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default=Status.DRAFT
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=Status.DRAFT)
     sensitivity = models.CharField(
         max_length=20,
         choices=Sensitivity.choices,
         default=Sensitivity.INTERNAL,
-        help_text=(
-            "Public and internal docs are safe for AI export. Sensitive and "
-            "restricted are not."
-        ),
+        help_text=("Public and internal docs are safe for AI export. Sensitive and restricted are not."),
     )
 
     obsidian_path = models.CharField(
@@ -162,15 +153,9 @@ class DocumentationRecord(TimestampedModel):
         help_text="Index-level notes only. Do not paste runbook contents here.",
     )
 
-    related_projects = models.ManyToManyField(
-        "projects.Project", blank=True, related_name="documentation_records"
-    )
-    related_assets = models.ManyToManyField(
-        "assets.Asset", blank=True, related_name="documentation_records"
-    )
-    related_expenses = models.ManyToManyField(
-        "expenses.Expense", blank=True, related_name="documentation_records"
-    )
+    related_projects = models.ManyToManyField("projects.Project", blank=True, related_name="documentation_records")
+    related_assets = models.ManyToManyField("assets.Asset", blank=True, related_name="documentation_records")
+    related_expenses = models.ManyToManyField("expenses.Expense", blank=True, related_name="documentation_records")
 
     objects = DocumentationQuerySet.as_manager()
 

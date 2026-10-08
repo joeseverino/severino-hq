@@ -42,7 +42,7 @@ def origin_machine(resource, machines=None, at=None, targets=None):
         return None
     try:
         origin = provider.origin(resolved_spec(resource, targets))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     return machine_link(origin, machines, at) if origin else None
 
@@ -80,7 +80,7 @@ def service_links(resource) -> tuple[tuple[str, str], ...]:
         return ()
     try:
         names = provider.hostnames(resolved_spec(resource))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return ()
     links = ((name, entity_link("service", name).url) for name in names)
     return tuple((name, url) for name, url in links if url)
@@ -94,7 +94,7 @@ def readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
         return ()
     try:
         return tuple(provider.readout(resource.spec, resource.status or {}))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return ()
 
 
@@ -142,9 +142,7 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
 
     read_at = resource.last_observed_at
     if not resource.enabled:
-        return RecordStatus(
-            "off", "declared", "Switched off in HQ", "HQ does not apply or check it.", None, read_at
-        )
+        return RecordStatus("off", "declared", "Switched off in HQ", "HQ does not apply or check it.", None, read_at)
     if health["state"] == "drifted":
         return RecordStatus(
             "drifted",
@@ -175,9 +173,7 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
     return None
 
 
-def record_status(
-    resource, *, health: dict[str, str] | None = None, newest: datetime | None = None
-) -> RecordStatus:
+def record_status(resource, *, health: dict[str, str] | None = None, newest: datetime | None = None) -> RecordStatus:
     """``newest`` is the latest reading of any record of this type: a record
     read long before it was not found the last time HQ looked."""
 
@@ -192,9 +188,7 @@ def record_status(
             "pending",
             "pending",
             "Change waiting to apply",
-            "The controller applies it within a few minutes."
-            if automatically
-            else "Press Apply again to apply it.",
+            "The controller applies it within a few minutes." if automatically else "Press Apply again to apply it.",
             None,
             read_at,
         )
@@ -268,9 +262,7 @@ def _consumers(resource) -> tuple[dict[str, Any] | None, tuple[dict[str, Any], .
         return resource.spec, (), str(exc)
     observed: dict[str, set[str]] = {}
     for observation in resource.status.get("consumers", []):
-        observed.setdefault(observation.get("consumer", ""), set()).add(
-            observation.get("domain", "")
-        )
+        observed.setdefault(observation.get("consumer", ""), set()).add(observation.get("domain", ""))
     targets = {
         target.spec.get("connection_ref"): target.key
         for target in ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND, enabled=True)
@@ -283,9 +275,7 @@ def _consumers(resource) -> tuple[dict[str, Any] | None, tuple[dict[str, Any], .
                 if consumer.get("connection_ref") in targets
                 else ""
             ),
-            "display_domains": sorted(
-                domain for domain in observed.get(consumer["name"], set()) if domain
-            )
+            "display_domains": sorted(domain for domain in observed.get(consumer["name"], set()) if domain)
             or consumer.get("verify_domains", []),
         }
         for consumer in resolved.get("consumers", ())
@@ -334,9 +324,7 @@ class ResourceContext:
                 "reason": self.capabilities.removal_reason,
                 "pending": self.capabilities.removal_pending,
             },
-            "origin_machine": (
-                {"name": origin.name, "url": origin.url} if origin is not None else None
-            ),
+            "origin_machine": ({"name": origin.name, "url": origin.url} if origin is not None else None),
             "provider_machine": (
                 {
                     "name": self.provider_machine["name"],
@@ -345,9 +333,7 @@ class ResourceContext:
                 if self.provider_machine
                 else None
             ),
-            "services": [
-                {"hostname": hostname, "url": url} for hostname, url in self.service_links
-            ],
+            "services": [{"hostname": hostname, "url": url} for hostname, url in self.service_links],
             "readout": [
                 {"label": label, "desired": desired, "observed": observed}
                 for label, desired, observed in self.readout_rows
@@ -405,9 +391,7 @@ def resource_context(resource: ManagedResource) -> ResourceContext:
         service_links=service_links(resource),
         readout_rows=readout_rows(resource),
         expiry=expiry_of(resource),
-        awaiting_approval=tuple(
-            held for held in pending() if held.resource_key == resource.key
-        ),
+        awaiting_approval=tuple(held for held in pending() if held.resource_key == resource.key),
         resolved_spec=resolved,
         display_consumers=consumers,
         resolution_error=error,
@@ -513,9 +497,7 @@ def _grouped(rows: list[Any]) -> tuple[RecordGroup, ...]:
     for kind, members in found.items():
         unsettled = [row for row in members if row.record_status.tone not in SETTLED_TONES]
         settled = [row for row in members if row.record_status.tone in SETTLED_TONES]
-        groups.append(
-            RecordGroup(kind, members[0].kind_label, tuple(unsettled + settled), len(unsettled))
-        )
+        groups.append(RecordGroup(kind, members[0].kind_label, tuple(unsettled + settled), len(unsettled)))
     # A type with something to look at leads; the rest by name.
     return tuple(sorted(groups, key=lambda group: (not group.unsettled, group.label.casefold())))
 
@@ -536,9 +518,7 @@ def record_list(resources, *, query: str = "", kind: str = "") -> RecordList:
         and (
             not wanted
             or wanted
-            in " ".join(
-                (row.key, row.shown_name, row.summary, row.kind_label, row.record_status.label)
-            ).casefold()
+            in " ".join((row.key, row.shown_name, row.summary, row.kind_label, row.record_status.label)).casefold()
         )
     ]
     return RecordList(_grouped(kept), types, query.strip(), kind)

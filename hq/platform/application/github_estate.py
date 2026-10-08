@@ -62,11 +62,7 @@ class Repository:
 
     @property
     def serious_alerts(self) -> int:
-        return sum(
-            counts.get(level, 0)
-            for counts in (self.record.get("alerts") or {}).values()
-            for level in SERIOUS
-        )
+        return sum(counts.get(level, 0) for counts in (self.record.get("alerts") or {}).values() for level in SERIOUS)
 
     @property
     def severities(self) -> list[tuple[int, str]]:
@@ -77,7 +73,10 @@ class Repository:
         for counts in (self.record.get("alerts") or {}).values():
             for level, n in counts.items():
                 totals[level] = totals.get(level, 0) + n
-        return sorted(((n, level) for level, n in totals.items()), key=lambda item: order.index(item[1]) if item[1] in order else len(order))
+        return sorted(
+            ((n, level) for level, n in totals.items()),
+            key=lambda item: order.index(item[1]) if item[1] in order else len(order),
+        )
 
     @property
     def open_alerts(self) -> int:
@@ -145,9 +144,7 @@ def _load() -> dict[str, Repository]:
         for record in snapshot.records or ():
             if isinstance(record, Mapping) and record.get("repository"):
                 name = str(record["repository"])
-                found[name] = Repository(
-                    name, record, snapshot.observed_at, tuple(refused_by_repo.get(name, ()))
-                )
+                found[name] = Repository(name, record, snapshot.observed_at, tuple(refused_by_repo.get(name, ())))
     return found
 
 
@@ -212,8 +209,7 @@ def attention() -> tuple[Insight, ...]:
                     url=f"{repo.url}/security",
                     workflow=cannot_help(
                         f"github-alerts:{repo.name}",
-                        "An alert closes with an upgrade in the repository's code, which HQ reads "
-                        "and never writes.",
+                        "An alert closes with an upgrade in the repository's code, which HQ reads and never writes.",
                     ),
                 )
             )
@@ -274,8 +270,7 @@ def _waiting(repo: Repository) -> list[Insight]:
                 url=str(run.get("url") or repo.url),
                 workflow=cannot_help(
                     f"github-waiting:{repo.name}:{run.get('id')}",
-                    "Only a required reviewer can approve a deployment, and HQ reads GitHub "
-                    "with read-only tokens.",
+                    "Only a required reviewer can approve a deployment, and HQ reads GitHub with read-only tokens.",
                 ),
             )
         )
@@ -303,5 +298,10 @@ def build_of(image: str) -> dict[str, Any] | None:
     for repo in repositories().values():
         for item in repo.images or ():
             if item.get("name") == name:
-                return {"repository": repo.name, "url": repo.url, "image": name, "signed": digest in (item.get("signed") or ())}
+                return {
+                    "repository": repo.name,
+                    "url": repo.url,
+                    "image": name,
+                    "signed": digest in (item.get("signed") or ()),
+                }
     return None

@@ -39,9 +39,7 @@ TAILNET_KINDS = (TAILNET_KIND, TAILNET_POLICY_KIND)
 def tailnet_providers() -> frozenset[str]:
     """The connection providers whose credentials read the tailnet."""
 
-    return frozenset(
-        provider for kind in TAILNET_KINDS for provider in PROVIDERS[kind].connection_providers
-    )
+    return frozenset(provider for kind in TAILNET_KINDS for provider in PROVIDERS[kind].connection_providers)
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,8 +111,7 @@ class TailnetContext:
             "grants": [_rule(item, ports=True) for item in self.grants],
             "ssh_rules": [_rule(item) for item in self.ssh_rules],
             "groups": [
-                {"name": group.get("name", ""), "members": list(group.get("members") or ())}
-                for group in found.groups
+                {"name": group.get("name", ""), "members": list(group.get("members") or ())} for group in found.groups
             ],
             "tags": [
                 {
@@ -135,19 +132,13 @@ class TailnetContext:
 
 
 def _names(names: tuple[PolicyName, ...]) -> list[dict[str, Any]]:
-    return [
-        {"text": name.text, "link": asdict(name.link) if name.link else None} for name in names
-    ]
+    return [{"text": name.text, "link": asdict(name.link) if name.link else None} for name in names]
 
 
 def _rule(item: NamedRule, *, ports: bool = False) -> dict[str, Any]:
-    shown = {
-        key: value for key, value in item.rule.items() if key not in ("src", "dst", "ports")
-    }
+    shown = {key: value for key, value in item.rule.items() if key not in ("src", "dst", "ports")}
     if ports:
-        shown["ports"] = [
-            {"entry": entry, "name": name} for entry, name in item.rule.get("ports") or ()
-        ]
+        shown["ports"] = [{"entry": entry, "name": name} for entry, name in item.rule.get("ports") or ()]
     return {
         **shown,
         "src": list(item.rule.get("src") or ()),
@@ -178,8 +169,7 @@ def _findings(principal: Principal) -> tuple[Finding, ...]:
     subjects = {
         node.id
         for node in topology.nodes
-        if (node.kind == "connection" and node.provider in providers)
-        or node.kind_key in TAILNET_KINDS
+        if (node.kind == "connection" and node.provider in providers) or node.kind_key in TAILNET_KINDS
     }
     return tuple(
         finding

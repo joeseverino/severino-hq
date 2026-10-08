@@ -10,13 +10,10 @@ from django.test import TestCase
 
 
 class ServiceFavoriteTests(TestCase):
-
     def setUp(self):
         from django.contrib.auth import get_user_model
 
-        self.user = get_user_model().objects.create_user(
-            username="an-operator", password="not-used-here"
-        )
+        self.user = get_user_model().objects.create_user(username="an-operator", password="not-used-here")
 
     def order(self):
         from hq.platform.application.pins import SERVICE, ordered
@@ -64,9 +61,7 @@ class ServiceFavoriteTests(TestCase):
         self.pin("one.example.test", "two.example.test", "three.example.test")
         toggle(self.user, SERVICE, "two.example.test")
 
-        self.assertEqual(
-            self.order(), ["one.example.test", "three.example.test"]
-        )
+        self.assertEqual(self.order(), ["one.example.test", "three.example.test"])
 
     def test_reordering_cannot_pin_something_new(self):
         """An order says what comes first, not what belongs in the list."""

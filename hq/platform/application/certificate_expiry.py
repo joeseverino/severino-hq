@@ -141,9 +141,7 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                     "rule": "certificate-expiring",
                     "subject": node.id,
                     "title": (
-                        f"{label} {title} has expired"
-                        if days < 0
-                        else f"{label} {title} expires in {span(days)}"
+                        f"{label} {title} has expired" if days < 0 else f"{label} {title} expires in {span(days)}"
                     ),
                     # One that serves no name breaks nothing when it lapses: it
                     # is left over, and the advice is to remove it, not renew it.
@@ -153,8 +151,7 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                         "once it expires. Renew it where it is held, or find why "
                         "the automatic renewal failed."
                         if names
-                        else "It serves no name, so nothing breaks when it expires. "
-                        "Delete it where it is held."
+                        else "It serves no name, so nothing breaks when it expires. Delete it where it is held."
                     ),
                     "evidence": (
                         ("Certificate", title),
@@ -174,11 +171,7 @@ RULES: tuple[FindingRule, ...] = (
         "Certificate expiring",
         "attention",
         lambda estate: built_findings(expiring(estate)),
-        operator_action=(
-            f"Renew the certificate where it is held, or fix its automatic renewal. {THEN_CHECK_AGAIN}"
-        ),
-        no_help_reason=(
-            "HQ cannot renew this certificate."
-        ),
+        operator_action=(f"Renew the certificate where it is held, or fix its automatic renewal. {THEN_CHECK_AGAIN}"),
+        no_help_reason=("HQ cannot renew this certificate."),
     ),
 )

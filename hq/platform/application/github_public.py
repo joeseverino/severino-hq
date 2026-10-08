@@ -53,11 +53,7 @@ def github_repository(repository_url: str) -> tuple[str, str] | None:
 
     parsed = urlparse(str(repository_url or ""))
     parts = [part for part in parsed.path.split("/") if part]
-    if (
-        parsed.scheme != "https"
-        or parsed.hostname not in {"github.com", "www.github.com"}
-        or len(parts) != 2
-    ):
+    if parsed.scheme != "https" or parsed.hostname not in {"github.com", "www.github.com"} or len(parts) != 2:
         return None
     owner, repository = parts[0], parts[1].removesuffix(".git")
     return (owner, repository) if owner and repository else None

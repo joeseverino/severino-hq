@@ -105,24 +105,12 @@ class Command(BaseCommand):
                 slug=slug,
                 vendor=opts["vendor"],
                 category=opts["category"],
-                purchase_date=(
-                    _parse_date(opts["purchase_date"])
-                    if opts["purchase_date"]
-                    else None
-                ),
-                total_cost=(
-                    _parse_money(opts["total_cost"])
-                    if opts["total_cost"] is not None
-                    else Decimal("0.00")
-                ),
+                purchase_date=(_parse_date(opts["purchase_date"]) if opts["purchase_date"] else None),
+                total_cost=(_parse_money(opts["total_cost"]) if opts["total_cost"] is not None else Decimal("0.00")),
                 business_use_percentage=opts["business_use_percentage"],
                 payment_method=opts["payment_method"],
                 serial_number=opts["serial_number"],
-                warranty_date=(
-                    _parse_date(opts["warranty_date"])
-                    if opts["warranty_date"]
-                    else None
-                ),
+                warranty_date=(_parse_date(opts["warranty_date"]) if opts["warranty_date"] else None),
                 status=opts["status"],
                 notes=opts["notes"],
             ),

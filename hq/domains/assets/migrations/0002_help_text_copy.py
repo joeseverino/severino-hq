@@ -6,15 +6,20 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('assets', '0001_initial'),
+        ("assets", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='asset',
-            name='estimated_deductible_amount',
-            field=models.DecimalField(decimal_places=2, default=Decimal('0.00'), editable=False, help_text='total_cost × business_use_percentage / 100. Estimate, not tax advice.', max_digits=12),
+            model_name="asset",
+            name="estimated_deductible_amount",
+            field=models.DecimalField(
+                decimal_places=2,
+                default=Decimal("0.00"),
+                editable=False,
+                help_text="total_cost × business_use_percentage / 100. Estimate, not tax advice.",
+                max_digits=12,
+            ),
         ),
     ]

@@ -167,9 +167,7 @@ class Preference(TimestampedModel):
     a new source arrives in its own default state.
     """
 
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="calendar_preference"
-    )
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="calendar_preference")
     choices = models.JSONField(default=dict, blank=True)
 
     @override

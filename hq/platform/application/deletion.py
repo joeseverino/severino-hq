@@ -40,17 +40,15 @@ def delete_record(
     principal.require(capability)
     if command.confirm != target:
         raise ValueError(f"confirm must exactly match target {target!r}")
-    with transaction.atomic(), operation_context(
-        interface=principal.interface, actor=principal.actor, operation=operation
+    with (
+        transaction.atomic(),
+        operation_context(interface=principal.interface, actor=principal.actor, operation=operation),
     ):
         try:
             obj = model.objects.select_for_update().get(**lookup)
         except model.DoesNotExist as exc:
             raise ValueError(f"{type_name} {target!r} was not found.") from exc
-        if (
-            expected_updated_at
-            and obj.updated_at.isoformat() != expected_updated_at
-        ):
+        if expected_updated_at and obj.updated_at.isoformat() != expected_updated_at:
             raise ConflictError(f"{type_name.title()} {target!r} changed after it was read.")
         label = str(obj)
         cleanup = after_commit(obj) if after_commit else None

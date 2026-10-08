@@ -52,7 +52,7 @@ class Speculative(RuntimeError):
 
 
 def purpose(request: HttpRequest) -> str:
-    """"prefetch", "prerender", or "" for a request somebody actually made."""
+    """ "prefetch", "prerender", or "" for a request somebody actually made."""
 
     sent = request.headers.get("Sec-Purpose", "").lower()
     if "prerender" in sent:

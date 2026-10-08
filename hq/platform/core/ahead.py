@@ -134,9 +134,7 @@ class _Keeper:
 KEEPER = _Keeper()
 
 
-def note_write(
-    execute: Callable[..., Any], sql: str, params: Any, many: bool, context: dict[str, Any]
-) -> Any:
+def note_write(execute: Callable[..., Any], sql: str, params: Any, many: bool, context: dict[str, Any]) -> Any:
     """Run the statement; if it wrote a table a remembered question reads, say
     so when its transaction commits."""
 

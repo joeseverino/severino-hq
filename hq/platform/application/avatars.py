@@ -87,7 +87,7 @@ def fetch_picture(url: str, *, access_token: str = "") -> tuple[str, bytes] | No
         if response.status_code != 200:
             return None
         image = response.raw.read(MAX_BYTES + 1, decode_content=True)
-    except (requests.RequestException, OSError, ValueError):
+    except requests.RequestException, OSError, ValueError:
         return None
     if not image or len(image) > MAX_BYTES:
         return None
@@ -95,9 +95,7 @@ def fetch_picture(url: str, *, access_token: str = "") -> tuple[str, bytes] | No
     return (kind, image) if kind else None
 
 
-def remember_avatar(
-    user: Any, url: str, *, issuer: str, access_token: str = "", now: datetime | None = None
-) -> str:
+def remember_avatar(user: Any, url: str, *, issuer: str, access_token: str = "", now: datetime | None = None) -> str:
     """Keep ``user``'s picture current, and return its digest ("" for none).
 
     A provider that names no picture has none to show: one HQ kept earlier is

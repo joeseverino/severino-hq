@@ -42,9 +42,7 @@ _LEDGER = "SEVERINO_TEST_LEAK_LEDGER"
 def enforce(base_dir: Path) -> None:
     # The repository's packages, read from the tree rather than listed, so a new
     # app is covered the day it is added.
-    packages = sorted(
-        path.name for path in base_dir.iterdir() if (path / "__init__.py").is_file()
-    )
+    packages = sorted(path.name for path in base_dir.iterdir() if (path / "__init__.py").is_file())
     warnings.filterwarnings("error", module=rf"({'|'.join(packages)})(\.|$)")
     if tracemalloc.is_tracing():
         warnings.simplefilter("always", ResourceWarning)

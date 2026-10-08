@@ -29,9 +29,7 @@ def set_theme(theme: str, *, principal: Principal, user) -> str:
     """Set, not cycle, so a repeated request cannot undo itself. People only."""
 
     if not is_interactive(principal):
-        raise AuthorizationError(
-            f"{principal.interface} principal {principal.actor!r} cannot choose a theme."
-        )
+        raise AuthorizationError(f"{principal.interface} principal {principal.actor!r} cannot choose a theme.")
     if theme not in Theme.values:
         raise ValueError(f"theme must be one of {', '.join(Theme.values)}")
 

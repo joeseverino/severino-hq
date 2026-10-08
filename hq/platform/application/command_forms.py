@@ -59,9 +59,7 @@ def _one_type(schema: dict[str, Any]) -> dict[str, Any]:
     return {**schema, **concrete[0], "anyOf": choices}
 
 
-def _field_for_schema(
-    name: str, schema: dict[str, Any], *, required: bool
-) -> forms.Field:
+def _field_for_schema(name: str, schema: dict[str, Any], *, required: bool) -> forms.Field:
     effective = _one_type(schema)
     kind = effective.get("type")
     options: dict[str, Any] = {
@@ -74,9 +72,7 @@ def _field_for_schema(
 
     choices = effective.get("enum")
     if choices:
-        return forms.ChoiceField(
-            choices=[(value, str(value)) for value in choices], **options
-        )
+        return forms.ChoiceField(choices=[(value, str(value)) for value in choices], **options)
     if kind == "boolean":
         return forms.BooleanField(**{**options, "required": False})
     if kind == "integer":
@@ -97,24 +93,18 @@ def _field_for_schema(
         if item_type in {"string", "integer", "number", "boolean"}:
             return PrimitiveListField(item_type=item_type, **options)
         return forms.JSONField(
-            widget=forms.Textarea(
-                attrs={"rows": 10, "spellcheck": "false", "class": "code"}
-            ),
+            widget=forms.Textarea(attrs={"rows": 10, "spellcheck": "false", "class": "code"}),
             **options,
         )
     if kind == "object":
         return forms.JSONField(
-            widget=forms.Textarea(
-                attrs={"rows": 10, "spellcheck": "false", "class": "code"}
-            ),
+            widget=forms.Textarea(attrs={"rows": 10, "spellcheck": "false", "class": "code"}),
             **options,
         )
     if effective.get("format") == "date":
         return forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), **options)
     if effective.get("format") == "date-time":
-        return forms.DateTimeField(
-            widget=forms.DateTimeInput(attrs={"type": "datetime-local"}), **options
-        )
+        return forms.DateTimeField(widget=forms.DateTimeInput(attrs={"type": "datetime-local"}), **options)
 
     validators = []
     if effective.get("pattern"):
@@ -136,19 +126,11 @@ class CapabilityCommandForm(forms.Form):
 
     @property
     def primary_fields(self):
-        return tuple(
-            field
-            for field in self.visible_fields()
-            if field.name not in {"__confirm_effect", "next"}
-        )
+        return tuple(field for field in self.visible_fields() if field.name not in {"__confirm_effect", "next"})
 
     @property
     def confirmation_fields(self):
-        return tuple(
-            field
-            for field in self.visible_fields()
-            if field.name == "__confirm_effect"
-        )
+        return tuple(field for field in self.visible_fields() if field.name == "__confirm_effect")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -161,9 +143,7 @@ class CapabilityCommandForm(forms.Form):
         repeated = sorted(
             name
             for name in self.data
-            if name in allowed
-            and name != "csrfmiddlewaretoken"
-            and len(self.data.getlist(name)) > 1
+            if name in allowed and name != "csrfmiddlewaretoken" and len(self.data.getlist(name)) > 1
         )
         self.submission_errors = (
             *(f"Unknown field: {name}." for name in unknown),
@@ -210,20 +190,13 @@ def command_form_class(
     schema = command_schema(spec.command_type)
     properties = schema.get("properties", {})
     required = frozenset(schema.get("required", ()))
-    fields = {
-        name: _field_for_schema(name, field, required=name in required)
-        for name, field in properties.items()
-    }
+    fields = {name: _field_for_schema(name, field, required=name in required) for name, field in properties.items()}
     if "idempotency_key" in fields:
         fields["idempotency_key"].widget = forms.HiddenInput()
     if spec.target_kind:
         options = {"label": spec.target_label or "Which one", "help_text": spec.target_help}
         if target_options is None:
-            target_field = (
-                forms.IntegerField
-                if spec.target_kind == "integer"
-                else forms.CharField
-            )
+            target_field = forms.IntegerField if spec.target_kind == "integer" else forms.CharField
             fields["__target"] = target_field(**options)
         else:
             empty_label = "Choose one…" if target_options else "Nothing to choose from yet"
@@ -234,9 +207,7 @@ def command_form_class(
         fields = {"__target": fields.pop("__target"), **fields}
         # Filled from the record a chosen target loads, never typed: a save
         # made against a record that changed since is refused.
-        fields["__expected_updated_at"] = forms.CharField(
-            required=False, widget=forms.HiddenInput()
-        )
+        fields["__expected_updated_at"] = forms.CharField(required=False, widget=forms.HiddenInput())
     fields["__execution_key"] = forms.CharField(
         max_length=128,
         validators=[

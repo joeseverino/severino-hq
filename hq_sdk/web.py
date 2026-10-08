@@ -50,9 +50,7 @@ class CapabilityRequiredMixin(LoginRequiredMixin):
 
     def get_required_capability(self) -> str:
         if not self.required_capability:
-            raise ImproperlyConfigured(
-                f"{type(self).__name__} must define required_capability."
-            )
+            raise ImproperlyConfigured(f"{type(self).__name__} must define required_capability.")
         return self.required_capability
 
     @override

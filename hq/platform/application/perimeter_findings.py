@@ -53,18 +53,11 @@ def _reached_but_unmeasured(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             title=f"{node.label} has no visitor counts",
             severity="attention",
-            explanation=(
-                "Other names read through the same connection have them. "
-                "Turn on analytics for this one."
-            ),
+            explanation=("Other names read through the same connection have them. Turn on analytics for this one."),
             evidence=(
                 (
                     "Read through",
-                    (
-                        by_id.get(reached_by[node.id]).label
-                        if by_id.get(reached_by[node.id])
-                        else "a connection"
-                    ),
+                    (by_id.get(reached_by[node.id]).label if by_id.get(reached_by[node.id]) else "a connection"),
                 ),
                 ("Visitor counts", "None"),
             ),
@@ -196,33 +189,23 @@ RULES: tuple[FindingRule, ...] = (
         "Ports open to the internet",
         "serious",
         _perimeter_open,
-        operator_action=(
-            f"Close them in the machine's firewall. {THEN_CHECK_AGAIN}"
-        ),
-        no_help_reason=(
-            "HQ cannot change the firewall."
-        ),
+        operator_action=(f"Close them in the machine's firewall. {THEN_CHECK_AGAIN}"),
+        no_help_reason=("HQ cannot change the firewall."),
     ),
     FindingRule(
         "perimeter-unchecked",
         "Could not test for ports open to the internet",
         "attention",
         _perimeter_unchecked,
-        operator_action=(
-            f"Make the machine report its public addresses and published ports. {THEN_CHECK_AGAIN}"
-        ),
-        no_help_reason=(
-            "HQ cannot change what the machine reports."
-        ),
+        operator_action=(f"Make the machine report its public addresses and published ports. {THEN_CHECK_AGAIN}"),
+        no_help_reason=("HQ cannot change what the machine reports."),
     ),
     FindingRule(
         "firewall-stopped",
         "A firewall is not running",
         "serious",
         _firewall_stopped,
-        operator_action=(
-            "Start the firewall on the machine and check it stays running."
-        ),
+        operator_action=("Start the firewall on the machine and check it stays running."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -230,11 +213,7 @@ RULES: tuple[FindingRule, ...] = (
         "A name has no visitor counts",
         "attention",
         _reached_but_unmeasured,
-        operator_action=(
-            "Turn on analytics for the name where the other names on its domain are measured."
-        ),
-        no_help_reason=(
-            "HQ cannot turn analytics on."
-        ),
+        operator_action=("Turn on analytics for the name where the other names on its domain are measured."),
+        no_help_reason=("HQ cannot turn analytics on."),
     ),
 )

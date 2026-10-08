@@ -17,9 +17,7 @@ def _hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     return (spec["domain"],)
 
 
-def _readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     return (("Answers with", spec.get("answer", ""), status.get("answer", "")),)
 
 
@@ -50,10 +48,10 @@ class AdGuardRewriteSpec(ProviderModel):
         description="The IP address this hostname resolves to.",
     )
 
+
 DEFINITION = ProviderSpec(
     "adguard.rewrite",
-    "Resolves a hostname to an IP on your network. HQ creates it in "
-    "AdGuard if it does not exist.",
+    "Resolves a hostname to an IP on your network. HQ creates it in AdGuard if it does not exist.",
     AdGuardRewriteSpec,
     actions={"reconcile": applies(automatic=True), "delete": applies()},
     label="Internal DNS record",

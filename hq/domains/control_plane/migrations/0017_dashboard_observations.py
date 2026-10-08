@@ -3,9 +3,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("control_plane", "0016_machines_stop_authoring_the_tailnet_reading")
-    ]
+    dependencies = [("control_plane", "0016_machines_stop_authoring_the_tailnet_reading")]
 
     operations = [
         migrations.CreateModel(
@@ -13,15 +11,11 @@ class Migration(migrations.Migration):
             fields=[
                 (
                     "id",
-                    models.PositiveSmallIntegerField(
-                        default=1, editable=False, primary_key=True, serialize=False
-                    ),
+                    models.PositiveSmallIntegerField(default=1, editable=False, primary_key=True, serialize=False),
                 ),
                 (
                     "created_at",
-                    models.DateTimeField(
-                        default=django.utils.timezone.now, editable=False
-                    ),
+                    models.DateTimeField(default=django.utils.timezone.now, editable=False),
                 ),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
@@ -59,9 +53,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "created_at",
-                    models.DateTimeField(
-                        default=django.utils.timezone.now, editable=False
-                    ),
+                    models.DateTimeField(default=django.utils.timezone.now, editable=False),
                 ),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 ("panel_id", models.SlugField(max_length=80, unique=True)),
@@ -86,9 +78,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "created_at",
-                    models.DateTimeField(
-                        default=django.utils.timezone.now, editable=False
-                    ),
+                    models.DateTimeField(default=django.utils.timezone.now, editable=False),
                 ),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 ("point", models.CharField(max_length=64, unique=True)),

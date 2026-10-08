@@ -32,19 +32,14 @@ def access(service, project) -> ServiceSection | None:
     rows = []
     for joined in readings().about(subject, kinds=(ACCESS_LIST_KIND,)):
         record = joined.record
-        rules = [
-            f"{rule.get('directive', '')} {rule.get('address', '')}"
-            for rule in record.get("clients") or ()
-        ]
+        rules = [f"{rule.get('directive', '')} {rule.get('address', '')}" for rule in record.get("clients") or ()]
         logins = record.get("logins") or ()
         rows.append(
             (
                 Cell(joined.title or str(record.get("id", ""))),
                 Cell(_satisfy(record)),
                 Cell("; ".join(rules)) if rules else Cell("any address", muted=True),
-                Cell(f"{counted(len(logins), 'login')}: {', '.join(logins)}")
-                if logins
-                else Cell("none", muted=True),
+                Cell(f"{counted(len(logins), 'login')}: {', '.join(logins)}") if logins else Cell("none", muted=True),
             )
         )
     if not rows:

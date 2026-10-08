@@ -38,24 +38,14 @@ class Command(BaseCommand):
             self.stdout.write(json.dumps(stats, default=str))
             return
 
-        self.stdout.write(
-            f"Projects  {stats['projects_total']} total, {len(orphan_projects)} with zero docs"
-        )
+        self.stdout.write(f"Projects  {stats['projects_total']} total, {len(orphan_projects)} with zero docs")
         for slug in orphan_projects:
             self.stdout.write(f"          orphan: {slug}")
-        self.stdout.write(
-            f"Assets    {stats['assets_total']} total, {len(orphan_assets)} with zero docs"
-        )
+        self.stdout.write(f"Assets    {stats['assets_total']} total, {len(orphan_assets)} with zero docs")
         for slug in orphan_assets:
             self.stdout.write(f"          orphan: {slug}")
 
         if orphan_projects or orphan_assets:
-            self.stdout.write(
-                "Registry  review orphans above: a stale slug from a rename, "
-                "or a duplicate row"
-            )
+            self.stdout.write("Registry  review orphans above: a stale slug from a rename, or a duplicate row")
         else:
-            self.stdout.write(
-                "Registry  ok: every Project and Asset is referenced by at "
-                "least one doc"
-            )
+            self.stdout.write("Registry  ok: every Project and Asset is referenced by at least one doc")

@@ -31,14 +31,10 @@ logger = logging.getLogger("severino.sweep")
 
 
 @transaction.atomic
-def record_sweep(
-    payload: dict[str, Any], *, principal, controller_id: str = ""
-) -> dict[str, Any]:
+def record_sweep(payload: dict[str, Any], *, principal, controller_id: str = "") -> dict[str, Any]:
     """Store a controller sweep, then adopt what it revealed."""
 
-    result = record_inventory(
-        payload, principal=principal, controller_id=controller_id
-    )
+    result = record_inventory(payload, principal=principal, controller_id=controller_id)
     # After the sweep is stored: adoption reads each spec back out of the
     # records just recorded, so every declaration it writes starts equal to
     # what the controller found and the first reconcile is a no-op.

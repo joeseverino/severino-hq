@@ -29,9 +29,7 @@ class FindingsView(PageMixin, TemplateView):
         principal = web_principal(self.request.user)
         requested_rule = self.request.GET.get("rule", "").strip()
         active_rule = rule_for(requested_rule)
-        raised = estate_findings(
-            principal=principal, rule=active_rule.name if active_rule else ""
-        )
+        raised = estate_findings(principal=principal, rule=active_rule.name if active_rule else "")
         entries = [
             {
                 "finding": finding,

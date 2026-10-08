@@ -21,6 +21,4 @@ def csrf_failure(request, reason=""):
     past its session. The same page as any other refusal, saying so; the
     reason Django gives is for the log and is not shown."""
 
-    return HttpResponseForbidden(
-        loader.get_template("403.html").render({"stale": True}, request)
-    )
+    return HttpResponseForbidden(loader.get_template("403.html").render({"stale": True}, request))

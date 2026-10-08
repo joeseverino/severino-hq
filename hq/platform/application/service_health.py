@@ -100,9 +100,7 @@ def _in_place(service: Any) -> Health:
             "Nothing on that port",
             f"{checked}. The proxy forwards to {address}, and no container on {machine} publishes that port.",
         )
-    return Health(
-        GOOD, "Set up", f"{checked}. The proxy forwards to {address}. HQ does not read what runs there."
-    )
+    return Health(GOOD, "Set up", f"{checked}. The proxy forwards to {address}. HQ does not read what runs there.")
 
 
 def _and(names: list[str]) -> str:

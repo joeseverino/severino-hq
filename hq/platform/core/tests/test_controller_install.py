@@ -47,8 +47,12 @@ class ControllerInstallTests(unittest.TestCase):
         self.op_state = self.runtime / "severino-hq-op"
         self.op_state.mkdir()
         self.log = self.root / "calls"
-        self.env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}",
-                    "TEST_ROOT": str(self.root), "TEST_FAIL": ""}
+        self.env = {
+            **os.environ,
+            "PATH": f"{self.bin}:{os.environ['PATH']}",
+            "TEST_ROOT": str(self.root),
+            "TEST_FAIL": "",
+        }
         # Relocate fixed host paths in the test copy, not in the production API.
         source = (ROOT / "scripts/install-controller.sh").read_text()
         for original, target in (
@@ -70,12 +74,17 @@ class ControllerInstallTests(unittest.TestCase):
         self.stub(self.bin / "id", "echo 0")
         self.stub(self.bin / "chown", "exit 0")
         self.stub(self.bin / "severino-hq-sync-scripts", 'echo sync >>"$TEST_ROOT/calls"')
-        self.stub(self.bin / "systemd-analyze", '''
+        self.stub(
+            self.bin / "systemd-analyze",
+            """
 echo verify >>"$TEST_ROOT/calls"
 shift
 printf '%s\\n' "$@" >"$TEST_ROOT/verified"
-''')
-        self.stub(self.bin / "install", '''
+""",
+        )
+        self.stub(
+            self.bin / "install",
+            """
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -d) shift; while [ "$#" -gt 1 ]; do shift; done; mkdir -p "$1"; exit ;;
@@ -84,8 +93,11 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 cp "$1" "$2"
-''')
-        self.stub(self.bin / "systemctl", '''
+""",
+        )
+        self.stub(
+            self.bin / "systemctl",
+            """
 echo "$*" >>"$TEST_ROOT/calls"
 case "$1" in
     enable) [ "$TEST_FAIL" != activation ] ;;
@@ -101,21 +113,24 @@ case "$1" in
         [ "$TEST_FAIL" != render ] || exit 1
         touch "$TEST_ROOT/rendered" ;;
 esac
-''')
+""",
+        )
         for name in ("install-cosign",):
             self.stub(self.lib / f"scripts/{name}.sh", f'echo {name} >>"$TEST_ROOT/calls"')
-        self.stub(self.lib / "scripts/run-private.sh", '''
+        self.stub(
+            self.lib / "scripts/run-private.sh",
+            """
 echo preflight >>"$TEST_ROOT/calls"
 [ "$TEST_FAIL" != preflight ]
-''')
+""",
+        )
 
     def stub(self, path, body):
         path.write_text("#!/bin/sh\nset -eu\n" + body + "\n")
         path.chmod(0o700)
 
     def run_installer(self):
-        return subprocess.run(["sh", str(self.installer)], env=self.env,
-                              capture_output=True, text=True, timeout=15)
+        return subprocess.run(["sh", str(self.installer)], env=self.env, capture_output=True, text=True, timeout=15)
 
     def test_unit_is_installed_and_reloaded_before_render_and_preflight(self):
         result = self.run_installer()
@@ -125,8 +140,7 @@ echo preflight >>"$TEST_ROOT/calls"
         self.assertLess(calls.index("verify"), calls.index("daemon-reload"))
         self.assertLess(calls.index("daemon-reload"), render)
         self.assertLess(render, calls.index("preflight"))
-        self.assertEqual(self.unit.read_bytes(),
-                         (self.lib / "deploy/systemd/severino-hq-secrets.service").read_bytes())
+        self.assertEqual(self.unit.read_bytes(), (self.lib / "deploy/systemd/severino-hq-secrets.service").read_bytes())
         self.assertEqual(list(self.runtime.glob("severino-hq-unit.*")), [])
         self.assertFalse(self.legacy.exists())
         self.assertFalse(self.shell_env.exists())
@@ -165,13 +179,17 @@ echo preflight >>"$TEST_ROOT/calls"
         next_release.write_text(
             '#!/bin/sh\necho "next release $SEVERINO_HQ_INSTALLER_SYNCED $*" >>"$TEST_ROOT/calls"\n'
         )
-        self.stub(self.bin / "severino-hq-sync-scripts", f"""
+        self.stub(
+            self.bin / "severino-hq-sync-scripts",
+            f"""
 echo sync >>"$TEST_ROOT/calls"
 cp "{next_release}" "{self.installer}"
 rm -f "{self.lib}/scripts/install-cosign.sh"
-""")
-        result = subprocess.run(["sh", str(self.installer), "--example"], env=self.env,
-                                capture_output=True, text=True, timeout=15)
+""",
+        )
+        result = subprocess.run(
+            ["sh", str(self.installer), "--example"], env=self.env, capture_output=True, text=True, timeout=15
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.log.read_text().splitlines(), ["sync", "next release 1 --example"])
 
@@ -179,9 +197,13 @@ rm -f "{self.lib}/scripts/install-cosign.sh"
         stray = self.root / "checkout/scripts/install-controller.sh"
         stray.parent.mkdir(parents=True)
         shutil.copy(self.installer, stray)
-        result = subprocess.run(["sh", str(stray)],
-                                env={**self.env, "SEVERINO_HQ_INSTALLER_SYNCED": "1"},
-                                capture_output=True, text=True, timeout=15)
+        result = subprocess.run(
+            ["sh", str(stray)],
+            env={**self.env, "SEVERINO_HQ_INSTALLER_SYNCED": "1"},
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("A synced install runs from", result.stderr)
         self.assertFalse(self.log.exists())
@@ -197,7 +219,8 @@ rm -f "{self.lib}/scripts/install-cosign.sh"
         """What systemd would read from the shipped tree, walked independently."""
         tree = self.lib / "deploy/systemd"
         return sorted(
-            str(path.relative_to(tree)) for path in tree.rglob("*")
+            str(path.relative_to(tree))
+            for path in tree.rglob("*")
             if path.is_file() and not path.name.endswith(".example")
         )
 
@@ -216,12 +239,9 @@ rm -f "{self.lib}/scripts/install-cosign.sh"
             with self.subTest(name=name):
                 self.assertEqual((self.units / name).read_bytes(), (tree / name).read_bytes())
         top_level = [name for name in self.shipped() if "/" not in name]
-        self.assertEqual((self.root / "verified").read_text().split(),
-                         [str(tree / name) for name in top_level])
-        enabled = [call.split()[2:] for call in self.log.read_text().splitlines()
-                   if call.startswith("enable --now ")]
-        self.assertEqual(enabled, [[name for name in top_level
-                                    if name.endswith((".timer", ".path"))]])
+        self.assertEqual((self.root / "verified").read_text().split(), [str(tree / name) for name in top_level])
+        enabled = [call.split()[2:] for call in self.log.read_text().splitlines() if call.startswith("enable --now ")]
+        self.assertEqual(enabled, [[name for name in top_level if name.endswith((".timer", ".path"))]])
         self.assertIn("severino-hq-example.timer", enabled[0])
 
     def test_templates_and_host_owned_drop_ins_are_left_alone(self):

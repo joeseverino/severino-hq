@@ -95,9 +95,7 @@ class FindingRule:
         if not self.operator_action.strip():
             raise ValueError(f"Finding rule {self.name!r} must say how it is resolved.")
         if not self.no_help_reason.strip():
-            raise ValueError(
-                f"Finding rule {self.name!r} must say why HQ cannot resolve it itself."
-            )
+            raise ValueError(f"Finding rule {self.name!r} must say why HQ cannot resolve it itself.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,9 +216,7 @@ def on_machine(machine: str, command: str) -> str:
     return f'ssh {machine} "sudo {escaped}"'
 
 
-def machine_step(
-    label: str, machine: str, command: str, notes: tuple[str, ...] = ()
-) -> tuple[OperatorStep, ...]:
+def machine_step(label: str, machine: str, command: str, notes: tuple[str, ...] = ()) -> tuple[OperatorStep, ...]:
     """One step that is a command on ``machine``, or none when the command
     cannot be written for it: a step with no command says nothing to run."""
 

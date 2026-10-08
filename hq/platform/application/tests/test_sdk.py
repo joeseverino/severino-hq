@@ -78,8 +78,7 @@ class SdkContractTests(SimpleTestCase):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "invalid.py").write_text(
-                "from application.capabilities import CapabilitySpec\n"
-                "import core.audit\n",
+                "from application.capabilities import CapabilitySpec\nimport core.audit\n",
                 encoding="utf-8",
             )
             self.assertEqual(
@@ -91,9 +90,7 @@ class SdkContractTests(SimpleTestCase):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "plugin.py").write_text(
-                "from .calendars import sources\n"
-                "from ..core import helpers\n"
-                "from calendars.models import Entry\n",
+                "from .calendars import sources\nfrom ..core import helpers\nfrom calendars.models import Entry\n",
                 encoding="utf-8",
             )
             self.assertEqual(unsupported_hq_imports(root), ["plugin.py:3: calendars.models"])
@@ -185,9 +182,7 @@ class AuditSdkTests(TestCase):
             principal=principal,
             operation_id="operation-123",
         ):
-            event = record_operation(
-                "example.import", "Imported records.", metadata={"changed": 2}
-            )
+            event = record_operation("example.import", "Imported records.", metadata={"changed": 2})
         event.refresh_from_db()
         self.assertEqual(event.action, AuditLog.Action.UPDATED)
         self.assertEqual(event.operation_id, "operation-123")
@@ -245,9 +240,7 @@ class SdkShapeTests(SimpleTestCase):
         self.assertEqual(tuple(sorted(contract["modules"])), module_names())
         for name in module_names():
             module = importlib.import_module(f"hq_sdk.{name}")
-            self.assertEqual(
-                tuple(sorted(contract["modules"][name])), tuple(sorted(exports(module)))
-            )
+            self.assertEqual(tuple(sorted(contract["modules"][name])), tuple(sorted(exports(module))))
 
     def test_a_shape_change_is_named_precisely(self):
         import copy
@@ -256,9 +249,7 @@ class SdkShapeTests(SimpleTestCase):
 
         committed = describe()
         current = copy.deepcopy(committed)
-        current["modules"]["capabilities"]["execute_capability"]["parameters"].append(
-            "surprise"
-        )
+        current["modules"]["capabilities"]["execute_capability"]["parameters"].append("surprise")
         del current["modules"]["web"]["safe_next"]
         current["modules"]["ui"]["Brand"] = {"kind": "value", "type": "str"}
 

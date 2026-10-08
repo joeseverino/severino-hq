@@ -5,8 +5,8 @@ from django.apps import AppConfig
 
 class ContentConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = 'hq.domains.content'
-    label = 'content'
+    name = "hq.domains.content"
+    label = "content"
     verbose_name = "Content Pipeline"
 
     @override

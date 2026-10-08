@@ -49,7 +49,8 @@ class PipelineReportTests(SimpleTestCase):
 
         workflows = Path(__file__).resolve().parents[5] / ".github" / "workflows"
         hosting = sorted(
-            path.name for path in workflows.glob("*.yml")
+            path.name
+            for path in workflows.glob("*.yml")
             if re.search(r"^\s*runs-on:.*self-hosted", path.read_text(), re.MULTILINE)
         )
         deploy = self.read(".github", "workflows", "deploy.yml")
@@ -65,7 +66,7 @@ class PipelineReportTests(SimpleTestCase):
         # workflow_run fires for any run of the workflow it watches, a pull
         # request's included, so it can start a deploy of the wrong commit.
         self.assertEqual([path.name for path in workflows.glob("*.yml") if "workflow_run:" in path.read_text()], [])
-        self.assertIn('gh workflow run compose.yml', self.read(".github", "workflows", "ci.yml"))
+        self.assertIn("gh workflow run compose.yml", self.read(".github", "workflows", "ci.yml"))
         self.assertIn('-f commit="$COMMIT"', self.read(".github", "workflows", "ci.yml"))
-        self.assertIn('gh workflow run deploy.yml', self.read(".github", "workflows", "compose.yml"))
+        self.assertIn("gh workflow run deploy.yml", self.read(".github", "workflows", "compose.yml"))
         self.assertIn('-f commit="$COMMIT"', self.read(".github", "workflows", "compose.yml"))

@@ -27,6 +27,7 @@ def integration():
         health=ready,
     )
 
+
 plugin = PluginManifest(
     id="example.notes",
     name="Notes",
@@ -455,7 +456,7 @@ from hq_sdk.outbound import Failed, OutboundWork, ask
 
 def look_up(progress, *, subject, principal):
     progress("Asking the registry.")
-    listed = registry.read(subject)            # the network call
+    listed = registry.read(subject)  # the network call
     if listed is None:
         raise Failed("The registry lists nothing for this note.")
     Note.objects.filter(slug=subject).update(listed=listed)
@@ -572,6 +573,7 @@ extension's own across requests, by the same rules:
 
 ```python
 from hq_sdk.reads import derivation, today
+
 
 @derivation("example.overview", reads=("example.Session", "example.Goal"))
 def overview():

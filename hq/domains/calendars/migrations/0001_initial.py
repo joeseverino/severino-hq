@@ -9,7 +9,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -18,40 +17,64 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Entry',
+            name="Entry",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('uid', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
-                ('title', models.CharField(max_length=160)),
-                ('starts_on', models.DateField()),
-                ('ends_on', models.DateField(blank=True, null=True)),
-                ('starts_at', models.TimeField(blank=True, null=True)),
-                ('ends_at', models.TimeField(blank=True, null=True)),
-                ('location', models.CharField(blank=True, max_length=200)),
-                ('notes', models.TextField(blank=True)),
-                ('repeat', models.CharField(blank=True, choices=[('', 'Does not repeat'), ('daily', 'Every day'), ('weekly', 'Every week'), ('monthly', 'Every month'), ('yearly', 'Every year')], default='', max_length=10)),
-                ('interval', models.PositiveSmallIntegerField(default=1)),
-                ('weekdays', models.CharField(blank=True, max_length=20)),
-                ('repeat_until', models.DateField(blank=True, null=True)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("uid", models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ("title", models.CharField(max_length=160)),
+                ("starts_on", models.DateField()),
+                ("ends_on", models.DateField(blank=True, null=True)),
+                ("starts_at", models.TimeField(blank=True, null=True)),
+                ("ends_at", models.TimeField(blank=True, null=True)),
+                ("location", models.CharField(blank=True, max_length=200)),
+                ("notes", models.TextField(blank=True)),
+                (
+                    "repeat",
+                    models.CharField(
+                        blank=True,
+                        choices=[
+                            ("", "Does not repeat"),
+                            ("daily", "Every day"),
+                            ("weekly", "Every week"),
+                            ("monthly", "Every month"),
+                            ("yearly", "Every year"),
+                        ],
+                        default="",
+                        max_length=10,
+                    ),
+                ),
+                ("interval", models.PositiveSmallIntegerField(default=1)),
+                ("weekdays", models.CharField(blank=True, max_length=20)),
+                ("repeat_until", models.DateField(blank=True, null=True)),
             ],
             options={
-                'ordering': ('starts_on', 'starts_at', 'title'),
-                'indexes': [models.Index(fields=['starts_on'], name='calendars_e_starts__65d9e3_idx'), models.Index(fields=['repeat'], name='calendars_e_repeat_df6b1d_idx')],
+                "ordering": ("starts_on", "starts_at", "title"),
+                "indexes": [
+                    models.Index(fields=["starts_on"], name="calendars_e_starts__65d9e3_idx"),
+                    models.Index(fields=["repeat"], name="calendars_e_repeat_df6b1d_idx"),
+                ],
             },
         ),
         migrations.CreateModel(
-            name='Preference',
+            name="Preference",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('choices', models.JSONField(blank=True, default=dict)),
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='calendar_preference', to=settings.AUTH_USER_MODEL)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("choices", models.JSONField(blank=True, default=dict)),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="calendar_preference",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'abstract': False,
+                "abstract": False,
             },
         ),
     ]

@@ -59,10 +59,7 @@ def contact_list(request):
     except D1Error as exc:
         error = str(exc)
 
-    status_tabs = [
-        {"value": value, "label": label, "count": counts.get(value, 0)}
-        for value, label in STATUS_CHOICES
-    ]
+    status_tabs = [{"value": value, "label": label, "count": counts.get(value, 0)} for value, label in STATUS_CHOICES]
 
     return render(
         request,

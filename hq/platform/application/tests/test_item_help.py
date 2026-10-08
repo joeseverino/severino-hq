@@ -96,8 +96,9 @@ class EveryItemComesWithHelpTests(SimpleTestCase):
 
 
 def _finding(**fields) -> Finding:
-    return Finding(rule=RULES[0].name, subject="example", title="Example", severity="attention",
-                   explanation="Example.", **fields)
+    return Finding(
+        rule=RULES[0].name, subject="example", title="Example", severity="attention", explanation="Example.", **fields
+    )
 
 
 class FindingHelpTests(SimpleTestCase):
@@ -132,8 +133,10 @@ class FindingHelpTests(SimpleTestCase):
         told = _finding(steps=(OperatorStep("Renew it at the registrar."),), no_help_reason="Only they can.")
         plan = finding_plan(told, "k")
 
-        self.assertEqual([(step.phase, step.summary) for step in plan.steps],
-                         [("do", "Renew it at the registrar."), ("cannot", "Only they can.")])
+        self.assertEqual(
+            [(step.phase, step.summary) for step in plan.steps],
+            [("do", "Renew it at the registrar."), ("cannot", "Only they can.")],
+        )
         self.assertEqual(item_help(_item(workflow=plan)), INSTRUCTION)
 
 
@@ -174,17 +177,27 @@ class ComposedQueueTests(TestCase):
         from ..domains import all_domains, domain_attention_items
         from .test_github_estate import store
 
-        Expense.objects.create(date=timezone.localdate(), vendor="Vendor", item="Hosting",
-                               category="hosting", total_cost=Decimal("12.00"))
+        Expense.objects.create(
+            date=timezone.localdate(), vendor="Vendor", item="Hosting", category="hosting", total_cost=Decimal("12.00")
+        )
         Receipt.objects.create(file="receipts/example.pdf", original_filename="example.pdf")
         Asset.objects.create(item_name="Unpriced", slug="unpriced", total_cost=Decimal(0), category="tools")
         ContentItem.objects.create(title="Draft", slug="draft", status=ContentItem.Status.DRAFT)
         soon = (timezone.now() + timedelta(days=5)).isoformat()
         store(
-            private=True, variables=["HQ_APP_CLIENT_ID"], checks={"state": "failure", "failing": ["lint"]},
-            alerts={"code_scanning": {"critical": 1}}, artifacts=[{"name": "alpha-admission", "expires_at": soon}],
-            access={"collaborators": [{"login": "example", "role": "admin"}], "deploy_keys": [], "token": "write",
-                    "token_approves_reviews": True, "pinning_required": False, "security_fixes": False},
+            private=True,
+            variables=["HQ_APP_CLIENT_ID"],
+            checks={"state": "failure", "failing": ["lint"]},
+            alerts={"code_scanning": {"critical": 1}},
+            artifacts=[{"name": "alpha-admission", "expires_at": soon}],
+            access={
+                "collaborators": [{"login": "example", "role": "admin"}],
+                "deploy_keys": [],
+                "token": "write",
+                "token_approves_reviews": True,
+                "pinning_required": False,
+                "security_fixes": False,
+            },
         )
 
         # The host's own domains: an extension's items are its own suite's to hold.

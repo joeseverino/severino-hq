@@ -32,6 +32,7 @@ def _whatever_window(first: date, last: date) -> tuple[Any, ...]:
 
     return estate_variant()
 
+
 # How long before a registration's expiry renewing it by hand belongs on the
 # calendar, when the registrar does not renew it on its own.
 REGISTRATION_NOTICE_DAYS = 30

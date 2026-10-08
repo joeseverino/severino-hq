@@ -5,8 +5,8 @@ from django.apps import AppConfig
 
 class CoreConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = 'hq.platform.core'
-    label = 'core'
+    name = "hq.platform.core"
+    label = "core"
 
     @override
     def ready(self):

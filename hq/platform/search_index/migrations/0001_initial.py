@@ -6,7 +6,13 @@ DEFINITIONS = (
     ("projects", "Project", "projects", "slug", ("name", "slug", "description", "technologies_used", "notes")),
     ("assets", "Asset", "assets", "slug", ("item_name", "slug", "vendor", "serial_number", "category", "notes")),
     ("content", "ContentItem", "content", "slug", ("title", "slug", "topic", "tags", "notes")),
-    ("docs_index", "DocumentationRecord", "documentation", "doc_id", ("doc_id", "title", "system_service", "obsidian_path", "github_path", "notes")),
+    (
+        "docs_index",
+        "DocumentationRecord",
+        "documentation",
+        "doc_id",
+        ("doc_id", "title", "system_service", "obsidian_path", "github_path", "notes"),
+    ),
     ("expenses", "Expense", "expenses", "pk", ("vendor", "item", "category", "business_purpose", "notes")),
     ("receipts", "Receipt", "receipts", "pk", ("original_filename", "vendor", "notes")),
     ("core", "AuditLog", "audit", "pk", ("action", "object_type", "object_id", "object_repr", "message")),
@@ -20,9 +26,7 @@ def populate_search_documents(apps, schema_editor):
         model = apps.get_model(app_label, model_name)
         for instance in model.objects.all().iterator(chunk_size=500):
             body = "\n".join(
-                str(value)
-                for field in fields
-                if (value := getattr(instance, field, "")) not in (None, "")
+                str(value) for field in fields if (value := getattr(instance, field, "")) not in (None, "")
             )
             documents.append(
                 SearchDocument(
@@ -49,9 +53,7 @@ def create_fts5(schema_editor):
     # (SQLite >= 3.42). The flag persists in the table's FTS config, so
     # setting it once at creation covers the table's lifetime.
     if sqlite3.sqlite_version_info >= (3, 42, 0):
-        statements += (
-            "INSERT INTO search_index_fts(search_index_fts, rank) VALUES ('secure-delete', 1)",
-        )
+        statements += ("INSERT INTO search_index_fts(search_index_fts, rank) VALUES ('secure-delete', 1)",)
     with schema_editor.connection.cursor() as cursor:
         for statement in statements:
             cursor.execute(statement)
@@ -99,7 +101,9 @@ class Migration(migrations.Migration):
             ],
             options={
                 "indexes": [models.Index(fields=["scope", "object_id"], name="search_idx_scope_obj")],
-                "constraints": [models.UniqueConstraint(fields=("scope", "object_id"), name="search_document_scope_object_unique")],
+                "constraints": [
+                    models.UniqueConstraint(fields=("scope", "object_id"), name="search_document_scope_object_unique")
+                ],
             },
         ),
         migrations.RunPython(create_fts5_migration, drop_fts5_migration),

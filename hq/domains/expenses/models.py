@@ -30,12 +30,8 @@ class Expense(TimestampedModel):
     date = models.DateField()
     vendor = models.CharField(max_length=160)
     item = models.CharField(max_length=200)
-    category = models.CharField(
-        max_length=32, choices=EXPENSE_CATEGORY_CHOICES, default="miscellaneous"
-    )
-    total_cost = models.DecimalField(
-        max_digits=12, decimal_places=2, default=Decimal("0.00")
-    )
+    category = models.CharField(max_length=32, choices=EXPENSE_CATEGORY_CHOICES, default="miscellaneous")
+    total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     business_use_percentage = models.PositiveSmallIntegerField(
         default=100,
         validators=business_use.VALIDATORS,
@@ -48,9 +44,7 @@ class Expense(TimestampedModel):
         editable=False,
         help_text="Calculated on save. Estimate, not tax advice.",
     )
-    payment_method = models.CharField(
-        max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True
-    )
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
     business_purpose = models.CharField(
         max_length=300,
         blank=True,
@@ -139,9 +133,7 @@ class Expense(TimestampedModel):
     @override
     def save(self, *args, **kwargs):
         cost = self.total_cost or Decimal("0.00")
-        self.estimated_deductible_amount = quantize_money(
-            cost * Decimal(self.business_use_percentage) / Decimal(100)
-        )
+        self.estimated_deductible_amount = quantize_money(cost * Decimal(self.business_use_percentage) / Decimal(100))
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):

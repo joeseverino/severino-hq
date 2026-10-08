@@ -82,9 +82,7 @@ def _web_operation(request, resource, action):
     # Everything else is a lifecycle verb: asked for once, about something
     # already as declared. One entry point rather than one function per verb,
     # because they differ only in the word.
-    return request_lifecycle(
-        command, principal=principal, current_key=resource.key, action=action
-    )
+    return request_lifecycle(command, principal=principal, current_key=resource.key, action=action)
 
 
 def _json(value: Any) -> str:
@@ -136,11 +134,7 @@ def _spec_rows(resource, *, beside_readout: bool = False) -> dict[str, tuple[tup
         # A reported field's setting is the fixed goal its readout already states.
         if value is None or name in provider.reported_fields:
             continue
-        label = (
-            fields[name].title or name.replace("_", " ").capitalize()
-            if name in fields
-            else name
-        )
+        label = fields[name].title or name.replace("_", " ").capitalize() if name in fields else name
         if label.strip().casefold() in shown:
             continue
         rendered = _spec_value(value)
@@ -165,16 +159,9 @@ def _linked_readout(resource, relationships) -> tuple[tuple[str, str, str, tuple
     says use this declaration.
     """
 
-    related = {
-        item.entity.label: item.entity
-        for group in relationships.groups
-        for item in group.items
-    }
+    related = {item.entity.label: item.entity for group in relationships.groups for item in group.items}
     connections = tuple(
-        item.entity
-        for group in relationships.groups
-        for item in group.items
-        if item.entity.kind == "connection"
+        item.entity for group in relationships.groups for item in group.items if item.entity.kind == "connection"
     )
     field = PROVIDERS[resource.kind].spec_type.model_fields.get("connection_ref")
     connection_label = (field.title or "") if field is not None else ""
@@ -199,7 +186,7 @@ def _removal_note(resource) -> str:
         return ""
     try:
         return note(resource.spec)
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         # A confirmation page that cannot render is worse than one missing a
         # sentence, and this is the page an operator uses to stop.
         return ""
@@ -277,8 +264,7 @@ class ResourceRemoveView(View):
         verb = "Queued" if result["queued"] else "Already queued"
         messages.success(
             request,
-            f"{verb} removal of “{resource.key}”. HQ forgets it once it is "
-            "confirmed gone.",
+            f"{verb} removal of “{resource.key}”. HQ forgets it once it is confirmed gone.",
         )
         return redirect("control_plane:detail", key=key)
 
@@ -329,9 +315,7 @@ class InfrastructureListView(PageMixin, ListView):
                 "by": requested_by(operation),
                 "at": operation.created_at,
             }
-            for operation in changes(
-                OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12
-            )
+            for operation in changes(OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12)
         ]
         context["provider_catalog"] = describe_providers()
         context["records"] = record_list(
@@ -401,9 +385,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
     def all_relationships(self):
         """Every relation, for what the page derives from them (its home)."""
 
-        return relationships_for(
-            f"resource:{self.object.key}", principal=web_principal(self.request.user)
-        )
+        return relationships_for(f"resource:{self.object.key}", principal=web_principal(self.request.user))
 
     @cached_property
     def relationships(self):
@@ -495,9 +477,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         if PROVIDERS[self.object.kind].material_form:
             actions.append(
                 PageAction(
-                    "Replace certificate"
-                    if getattr(self.object, "material", None)
-                    else "Upload certificate",
+                    "Replace certificate" if getattr(self.object, "material", None) else "Upload certificate",
                     reverse("control_plane:upload_certificate", args=[key]),
                     primary=True,
                 )
@@ -521,24 +501,18 @@ class InfrastructureDetailView(PageMixin, DetailView):
             capabilities.actions, lambda verb: VERB_LABELS.get(verb, verb.replace("-", " ").capitalize())
         )
         derived = self.derived
-        context["status"] = record_status(
-            self.object, health=derived.health, newest=newest_reading(self.object.kind)
-        )
+        context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))
         # What this resource does, said by its own provider.
         context["label"] = kind_label(self.object.kind)
         # Relationships names the service it is for; the head says it only when
         # that section does not.
         relations = {group.phrase for group in self.relationships.groups}
-        context["service_links"] = (
-            () if RELATIONS["declared_by"].inverse in relations else derived.service_links
-        )
+        context["service_links"] = () if RELATIONS["declared_by"].inverse in relations else derived.service_links
         # Where this resource sends traffic, when it sends it anywhere, and the
         # machine running the provider that manages it.
         context["origin_machine"] = derived.origin_machine
         # A DNS record answers with an address; a proxy sends requests on.
-        context["origin_phrase"] = (
-            "Points to" if PROVIDERS[self.object.kind].answers else "Forwards to"
-        )
+        context["origin_phrase"] = "Points to" if PROVIDERS[self.object.kind].answers else "Forwards to"
         context["provider_machine"] = derived.provider_machine
         context["managing_connections"] = tuple(
             item.entity
@@ -555,9 +529,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.
         context["readout_rows"] = (
-            ()
-            if self.object.kind == CONTAINER_KIND
-            else _linked_readout(self.object, self.relationships)
+            () if self.object.kind == CONTAINER_KIND else _linked_readout(self.object, self.relationships)
         )
         context["relationships"] = self.relationships
         context["spec_rows"] = _spec_rows(self.object, beside_readout=True)
@@ -605,9 +577,7 @@ class OperationView(View):
         # the fact the verb answers (a machine's routes, a service's
         # container) and send `next`. Validated through the shared helper, so
         # the field cannot become an open redirect.
-        destination = safe_next(
-            request, fallback=reverse("control_plane:detail", kwargs={"key": key})
-        )
+        destination = safe_next(request, fallback=reverse("control_plane:detail", kwargs={"key": key}))
         try:
             result = _web_operation(request, resource, self.action)
         except PolicyError as exc:
@@ -634,9 +604,7 @@ class CertificateDownloadView(View):
                 status=500,
             )
         response = HttpResponse(certificate_pem, content_type="application/x-pem-file")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{resource.key}-public.pem"'
-        )
+        response["Content-Disposition"] = f'attachment; filename="{resource.key}-public.pem"'
         return response
 
 
@@ -658,9 +626,7 @@ class ResourceReportDownloadView(View):
             ],
         }
         response = JsonResponse(payload, json_dumps_params={"indent": 2})
-        response["Content-Disposition"] = (
-            f'attachment; filename="{resource.key}-status.json"'
-        )
+        response["Content-Disposition"] = f'attachment; filename="{resource.key}-status.json"'
         return response
 
 

@@ -26,9 +26,7 @@ def own(*addresses):
 
 
 def declare(name, *addresses):
-    ManagedResource.objects.create(
-        key=name, kind="machine", spec={"name": name, "addresses": list(addresses)}
-    )
+    ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": list(addresses)})
 
 
 class LabelTests(TestCase):
@@ -98,9 +96,7 @@ class PageTests(TestCase):
 
     def test_the_machine_page_serves_hq(self):
         with own("192.0.2.44"):
-            response = self.client.get(
-                reverse("control_plane:machine", kwargs={"name": "example-host"})
-            )
+            response = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
 
         self.assertContains(response, LABEL)
         self.assertContains(
@@ -119,15 +115,13 @@ class PageTests(TestCase):
         self.assertNotContains(response, "<th>Hostname</th><th>Runs on</th><th>State</th>", html=False)
         self.assertNotContains(response, '<span class="pill">HQ</span>', html=False)
         # Its state is HQ's health, never its mode.
-        self.assertContains(response, '<span class="pill pill-good" title="Answering this request.">Up</span>', html=False)
+        self.assertContains(
+            response, '<span class="pill pill-good" title="Answering this request.">Up</span>', html=False
+        )
         self.assertNotContains(response, ">Read-only<")
         self.assertContains(response, "hq.example.com")
-        self.assertContains(
-            response, reverse("control_plane:machine", kwargs={"name": "example-host"})
-        )
-        self.assertEqual(
-            list(ManagedResource.objects.values_list("kind", flat=True)), ["machine"]
-        )
+        self.assertContains(response, reverse("control_plane:machine", kwargs={"name": "example-host"}))
+        self.assertEqual(list(ManagedResource.objects.values_list("kind", flat=True)), ["machine"])
         self.assertFalse(OperationRequest.objects.exists())
 
 
@@ -189,10 +183,8 @@ class TailnetMachineTests(TestCase):
     def test_an_endpoint_two_devices_report_names_neither(self):
         ProviderInventory.objects.filter(kind="tailscale.device").update(
             records=[
-                {"name": "example-laptop", "addresses": ["100.64.0.5"],
-                 "endpoints": ["192.0.2.10:41641"]},
-                {"name": "example-desk", "addresses": ["100.64.0.6"],
-                 "endpoints": ["192.0.2.10:41642"]},
+                {"name": "example-laptop", "addresses": ["100.64.0.5"], "endpoints": ["192.0.2.10:41641"]},
+                {"name": "example-desk", "addresses": ["100.64.0.6"], "endpoints": ["192.0.2.10:41642"]},
             ]
         )
 
@@ -219,9 +211,7 @@ class TopologyTests(TestCase):
         declare("example-host", "192.0.2.44")
         reader = Principal("reader", "test", frozenset({Capability.READ}))
 
-        with own("192.0.2.44"), mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with own("192.0.2.44"), mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             topology = derive_topology(principal=reader)
 
         nodes = {node.id: node for node in topology.nodes}
@@ -240,9 +230,7 @@ class TopologyTests(TestCase):
         tailnet_device("example-laptop", ("100.64.0.5",))
         reader = Principal("reader", "test", frozenset({Capability.READ}))
 
-        with own(), mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with own(), mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             topology = derive_topology(principal=reader, request=_Request("100.64.0.5"))
 
         self.assertIn(

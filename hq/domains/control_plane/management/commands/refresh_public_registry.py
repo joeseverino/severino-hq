@@ -14,7 +14,11 @@ class Command(BaseCommand):
 
     @override
     def add_arguments(self, parser):
-        parser.add_argument("--force", action="store_true", help="Read every subject again, whatever its age, except what a digest carries.")
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Read every subject again, whatever its age, except what a digest carries.",
+        )
 
     @override
     def handle(self, *args, **options):

@@ -112,9 +112,7 @@ def _image_facts(nodes, machine) -> None:
         added = tuple(
             (
                 fact,
-                "|".join(
-                    (f"{container}@{host}", reference, short_id(running), short_id(tagged), service)
-                ),
+                "|".join((f"{container}@{host}", reference, short_id(running), short_id(tagged), service)),
             )
             for fact, container, reference, running, tagged, service in image_verdicts(records)
         )
@@ -283,21 +281,15 @@ RULES: tuple[FindingRule, ...] = (
         "A container no compose project started",
         "serious",
         lambda estate: built_findings(unrecognised_containers(estate)),
-        operator_action=(
-            "Adopt it if you started it. Otherwise remove it on its machine."
-        ),
-        no_help_reason=(
-            "HQ cannot remove a container it did not start."
-        ),
+        operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
+        no_help_reason=("HQ cannot remove a container it did not start."),
     ),
     FindingRule(
         "container-image-behind",
         "Container runs an older image than its tag",
         "attention",
         lambda estate: built_findings(images_behind(estate)),
-        operator_action=(
-            "Recreate the container from its compose project so it runs the image its tag names now."
-        ),
+        operator_action=("Recreate the container from its compose project so it runs the image its tag names now."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -305,9 +297,7 @@ RULES: tuple[FindingRule, ...] = (
         "Container runs an untagged image",
         "attention",
         lambda estate: built_findings(images_untagged(estate)),
-        operator_action=(
-            "Pin a tag for the image in the container's compose file and recreate it."
-        ),
+        operator_action=("Pin a tag for the image in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
     ),
 )

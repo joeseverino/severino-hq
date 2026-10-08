@@ -176,6 +176,7 @@ class TopologyTrace:
     depth: int
     hops: tuple[tuple[str, int], ...]
 
+
 # Node kinds whose ``observed_at`` is the newest of the readings joined to
 # them rather than one sweep's stamp, so siblings are not compared by it.
 JOINED_KINDS = frozenset({"machine", "service", "zone", "registry", "controller"})
@@ -208,9 +209,7 @@ def derived_id(kind: str, *parts: str) -> str:
     return f"{kind}:{digest}"
 
 
-def edge_between(
-    source: str, target: str, kind: str, label: str = "", status: str = "neutral"
-) -> TopologyEdge:
+def edge_between(source: str, target: str, kind: str, label: str = "", status: str = "neutral") -> TopologyEdge:
     """The edge of one relation kind from ``source`` to ``target``, with a stable id."""
 
     return TopologyEdge(

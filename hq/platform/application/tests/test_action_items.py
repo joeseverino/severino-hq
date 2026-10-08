@@ -42,8 +42,7 @@ OTHER = {**ITEM, "key": "example:gadget", "label": "A gadget is stale", "count":
 
 class IdentityTests(TestCase):
     def insight(self, **fields):
-        return Insight(**{"status": "attention", "eyebrow": "Finding", "title": "t",
-                          "value": "", "body": "", **fields})
+        return Insight(**{"status": "attention", "eyebrow": "Finding", "title": "t", "value": "", "body": "", **fields})
 
     def test_an_item_is_what_it_is_about_not_what_it_says(self):
         first = self.insight(key="finding:rule:a", title="Expires in 5 days", body="x")
@@ -56,9 +55,7 @@ class IdentityTests(TestCase):
         base = self.insight(key="k", magnitude=2)
 
         self.assertNotEqual(item_revision(base), item_revision(self.insight(key="k", magnitude=3)))
-        self.assertNotEqual(
-            item_revision(base), item_revision(self.insight(key="k", magnitude=2, status="serious"))
-        )
+        self.assertNotEqual(item_revision(base), item_revision(self.insight(key="k", magnitude=2, status="serious")))
 
     def test_a_notice_comes_back_only_when_it_reports_something_else(self):
         told = self.insight(key="k", notice=True, body="Rose 19 bpm on the Sep 21 run", value="1 day ago")
@@ -67,8 +64,16 @@ class IdentityTests(TestCase):
         # own is not news.
         self.assertEqual(
             item_revision(told),
-            item_revision(self.insight(key="k", notice=True, status="serious", magnitude=4,
-                                       body="Rose 19 bpm on the Sep 21 run", value="2 days ago")),
+            item_revision(
+                self.insight(
+                    key="k",
+                    notice=True,
+                    status="serious",
+                    magnitude=4,
+                    body="Rose 19 bpm on the Sep 21 run",
+                    value="2 days ago",
+                )
+            ),
         )
         self.assertNotEqual(
             item_revision(told),
@@ -154,7 +159,9 @@ class AsideStateTests(TestCase):
 
         groups = by_source([ITEM, elsewhere, OTHER])
 
-        self.assertEqual([(group["id"], group["label"]) for group in groups], [("example", "Example"), ("other", "Other")])
+        self.assertEqual(
+            [(group["id"], group["label"]) for group in groups], [("example", "Example"), ("other", "Other")]
+        )
         self.assertEqual([item["key"] for item in groups[0]["items"]], [ITEM["key"], OTHER["key"]])
 
 
@@ -248,7 +255,7 @@ class PageTests(TestCase):
             self.assertContains(page, "data-queue-family", count=1)
             self.assertContains(page, "<strong>Image advisories</strong>")
 
-            self.client.post(f'{page.context["aside_all_url"]}&family={group["entries"][0]["id"]}')
+            self.client.post(f"{page.context['aside_all_url']}&family={group['entries'][0]['id']}")
             page = self.client.get(reverse("action_items"))
 
         self.assertEqual(self.shown(page), [OTHER["label"]])
@@ -265,7 +272,7 @@ class PageTests(TestCase):
         page = self.client.get(reverse("action_items"), {"q": "gadget"})
         self.assertFalse(page.context["page"].actions)
         url = page.context["aside_all_url"]
-        self.assertEqual(url, f'{reverse("action_items_set_aside")}?q=gadget&part=doing')
+        self.assertEqual(url, f"{reverse('action_items_set_aside')}?q=gadget&part=doing")
 
         self.client.post(url)
 

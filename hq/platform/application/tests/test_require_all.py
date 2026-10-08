@@ -32,9 +32,7 @@ class RequireAllTests(SimpleTestCase):
                 for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
                 if isinstance(node, ast.For)
                 and any(
-                    isinstance(call, ast.Call)
-                    and isinstance(call.func, ast.Attribute)
-                    and call.func.attr == "require"
+                    isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "require"
                     for statement in node.body
                     for call in ast.walk(statement)
                 )

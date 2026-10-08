@@ -72,9 +72,7 @@ def entry_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
         .filter(starts_on__lte=last)
         .filter(once | repeating)
     )
-    return tuple(
-        occurrence(entry, day) for entry in entries for day in occurrences(entry, first, last)
-    )
+    return tuple(occurrence(entry, day) for entry in entries for day in occurrences(entry, first, last))
 
 
 def _span_days(entry: Entry) -> int:
@@ -121,9 +119,7 @@ def _weekly(entry: Entry) -> Iterator[date]:
     days = entry.weekday_numbers or (start.weekday(),)
     week = start - timedelta(days=start.weekday())
     while True:
-        yield from (
-            day for day in (week + timedelta(days=weekday) for weekday in days) if day >= start
-        )
+        yield from (day for day in (week + timedelta(days=weekday) for weekday in days) if day >= start)
         week += timedelta(weeks=entry.interval)
 
 

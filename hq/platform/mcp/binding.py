@@ -22,11 +22,25 @@ def _signature_shape(schema: Any) -> Any:
     if not isinstance(schema, dict):
         return schema
     return {
-        key: ({name: _signature_shape(value) for name, value in item.items()}
-              if key in {"properties", "$defs"} else _signature_shape(item))
+        key: (
+            {name: _signature_shape(value) for name, value in item.items()}
+            if key in {"properties", "$defs"}
+            else _signature_shape(item)
+        )
         for key, item in schema.items()
-        if key in {"type", "anyOf", "oneOf", "items", "properties", "required",
-                   "additionalProperties", "$ref", "$defs", "default"}
+        if key
+        in {
+            "type",
+            "anyOf",
+            "oneOf",
+            "items",
+            "properties",
+            "required",
+            "additionalProperties",
+            "$ref",
+            "$defs",
+            "default",
+        }
     }
 
 

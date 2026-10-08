@@ -38,9 +38,7 @@ UNOFFERED = "cannot be used here"
 
 
 def an_operator():
-    return get_user_model().objects.create_user(
-        "example-operator", password="x" * 20, is_staff=True, is_superuser=True
-    )
+    return get_user_model().objects.create_user("example-operator", password="x" * 20, is_staff=True, is_superuser=True)
 
 
 def _kind_for(spec) -> str:
@@ -60,12 +58,16 @@ class EveryTargetedCommandPreselectsTests(TestCase):
         # More than the largest page of declarations, all sorting before the
         # target, so only a form that fetches the linked one can offer it.
         ManagedResource.objects.bulk_create(
-            ManagedResource(key=f"a-{index:03}", kind="adguard.rewrite",
-                            spec={"domain": f"h{index}.example.com", "answer": "192.0.2.1"})
+            ManagedResource(
+                key=f"a-{index:03}",
+                kind="adguard.rewrite",
+                spec={"domain": f"h{index}.example.com", "answer": "192.0.2.1"},
+            )
             for index in range(MAX_PAGE_SIZE + 1)
         )
         commands = [
-            spec for spec in capability_registry().values()
+            spec
+            for spec in capability_registry().values()
             if spec.subject_resource == "infrastructure.resources" and spec.target_kind
         ]
         self.assertTrue(commands)
@@ -123,13 +125,20 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
             {"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
         )
         ManagedResource.objects.create(
-            key="example-db-rewrite", kind="adguard.rewrite",
+            key="example-db-rewrite",
+            kind="adguard.rewrite",
             spec={"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
         )
         ManagedResource.objects.create(
-            key="example-shop-proxy", kind="npm.proxy_host",
-            spec={"domain_names": ["shop.example.com"], "forward_scheme": "http",
-                  "forward_host": "198.51.100.20", "forward_port": 8080, "connection_ref": "example-npm"},
+            key="example-shop-proxy",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["shop.example.com"],
+                "forward_scheme": "http",
+                "forward_host": "198.51.100.20",
+                "forward_port": 8080,
+                "connection_ref": "example-npm",
+            },
         )
         # A drifted tailnet policy with empty groups: keep-live and amend remedies.
         declare_policy(document())
@@ -143,8 +152,15 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
             groups=[{"name": "group:empty", "members": []}],
             grants=[{"src": ["group:empty"], "dst": ["tag:gone:443"]}],
         )
-        store("tailscale.device", {"name": "example-device", "tags": ["tag:server"],
-                                   "addresses": ["100.64.0.20"], "connection_ref": "example-tailnet"})
+        store(
+            "tailscale.device",
+            {
+                "name": "example-device",
+                "tags": ["tag:server"],
+                "addresses": ["100.64.0.20"],
+                "connection_ref": "example-tailnet",
+            },
+        )
         self.user = an_operator()
         self.client.force_login(self.user)
 
@@ -166,7 +182,8 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         """Every command link the pages themselves render, as a person meets them."""
 
         pages = [
-            reverse("control_plane:findings"), reverse("action_items"),
+            reverse("control_plane:findings"),
+            reverse("action_items"),
             *(reverse("control_plane:service", args=[name]) for name in routed_names()),
             *(resource.get_absolute_url() for resource in ManagedResource.objects.all()),
         ]

@@ -32,48 +32,99 @@ def in_days(days):
 
 
 def certificate(expires_on, *serves):
-    return {"connection_ref": NPM, "id": 1, "name": "example wildcard", "provider": "letsencrypt",
-            "domains": ["*.example.com"], "expires_on": expires_on, "serves": list(serves)}
+    return {
+        "connection_ref": NPM,
+        "id": 1,
+        "name": "example wildcard",
+        "provider": "letsencrypt",
+        "domains": ["*.example.com"],
+        "expires_on": expires_on,
+        "serves": list(serves),
+    }
 
 
 def estate():
-    ManagedResource.objects.create(
-        key="lab-1", kind="machine", spec={"name": "lab-1", "addresses": ["100.64.0.10"]}
-    )
+    ManagedResource.objects.create(key="lab-1", kind="machine", spec={"name": "lab-1", "addresses": ["100.64.0.10"]})
     ManagedResource.objects.create(
         key="edge-1", kind="machine", spec={"name": "edge-1", "addresses": ["198.51.100.20"]}
     )
     ManagedResource.objects.create(
-        key="app-proxy", kind="npm.proxy_host",
-        spec={"domain_names": ["app.example.com"], "forward_scheme": "http",
-              "forward_host": "127.0.0.1", "forward_port": 8000},
+        key="app-proxy",
+        kind="npm.proxy_host",
+        spec={
+            "domain_names": ["app.example.com"],
+            "forward_scheme": "http",
+            "forward_host": "127.0.0.1",
+            "forward_port": 8000,
+        },
     )
     store(
         "adguard.rewrite",
-        *({"domain": name, "answer": "100.64.0.10", "connection_ref": "example-adguard"}
-          for name in ("app.example.com", "www.example.com", "gone.example.com")),
+        *(
+            {"domain": name, "answer": "100.64.0.10", "connection_ref": "example-adguard"}
+            for name in ("app.example.com", "www.example.com", "gone.example.com")
+        ),
     )
-    store("cloudflare.dns_record", {"zone": "example.com", "name": "shop.example.com",
-                                    "record_type": "A", "content": "198.51.100.20",
-                                    "proxied": True, "ttl": 1})
-    store("npm.proxy_host", {"domain_names": ["app.example.com"], "forward_scheme": "http",
-                             "forward_host": "127.0.0.1", "forward_port": 8000,
-                             "connection_ref": NPM, "access_list_id": 7})
-    store("npm.redirect",
-          {"connection_ref": NPM, "id": 20, "hostnames": ["www.example.com", "shop.example.com"],
-           "target": "https://example.com", "target_host": "example.com", "status_code": 301,
-           "enabled": True})
-    store("npm.dead_host", {"connection_ref": NPM, "id": 30, "hostnames": ["gone.example.com"],
-                            "enabled": True})
-    store("npm.stream", {"connection_ref": NPM, "id": 40, "incoming_port": 2222,
-                         "forwarding_host": "198.51.100.20", "forwarding_port": 22, "tcp": True,
-                         "enabled": True})
+    store(
+        "cloudflare.dns_record",
+        {
+            "zone": "example.com",
+            "name": "shop.example.com",
+            "record_type": "A",
+            "content": "198.51.100.20",
+            "proxied": True,
+            "ttl": 1,
+        },
+    )
+    store(
+        "npm.proxy_host",
+        {
+            "domain_names": ["app.example.com"],
+            "forward_scheme": "http",
+            "forward_host": "127.0.0.1",
+            "forward_port": 8000,
+            "connection_ref": NPM,
+            "access_list_id": 7,
+        },
+    )
+    store(
+        "npm.redirect",
+        {
+            "connection_ref": NPM,
+            "id": 20,
+            "hostnames": ["www.example.com", "shop.example.com"],
+            "target": "https://example.com",
+            "target_host": "example.com",
+            "status_code": 301,
+            "enabled": True,
+        },
+    )
+    store("npm.dead_host", {"connection_ref": NPM, "id": 30, "hostnames": ["gone.example.com"], "enabled": True})
+    store(
+        "npm.stream",
+        {
+            "connection_ref": NPM,
+            "id": 40,
+            "incoming_port": 2222,
+            "forwarding_host": "198.51.100.20",
+            "forwarding_port": 22,
+            "tcp": True,
+            "enabled": True,
+        },
+    )
     store("npm.certificate", certificate(in_days(60), "app.example.com", "www.example.com"))
-    store("npm.access_list",
-          {"connection_ref": NPM, "id": 7, "name": "staff", "satisfy_any": True,
-           "clients": [{"directive": "allow", "address": "100.64.0.0/10"},
-                       {"directive": "deny", "address": "all"}],
-           "logins": ["operator"], "protects": ["app.example.com"]})
+    store(
+        "npm.access_list",
+        {
+            "connection_ref": NPM,
+            "id": 7,
+            "name": "staff",
+            "satisfy_any": True,
+            "clients": [{"directive": "allow", "address": "100.64.0.0/10"}, {"directive": "deny", "address": "all"}],
+            "logins": ["operator"],
+            "protects": ["app.example.com"],
+        },
+    )
 
 
 def walk(name):
@@ -97,8 +148,10 @@ class PathTests(TestCase):
         self.assertEqual(path.redirects_to, "example.com")
         hop = path.primary.hops[-1]
         self.assertEqual(hop.source.kind, "npm.redirect")
-        self.assertEqual((hop.certificate.role, hop.certificate.name, hop.certificate.issuer),
-                         ("Served", "example wildcard", "Let's Encrypt"))
+        self.assertEqual(
+            (hop.certificate.role, hop.certificate.name, hop.certificate.issuer),
+            ("Served", "example wildcard", "Let's Encrypt"),
+        )
 
     def test_behind_the_edge_an_npm_redirect_is_the_origins_not_the_edges(self):
         path = walk("shop.example.com")
@@ -111,8 +164,7 @@ class PathTests(TestCase):
     def test_a_404_host_ends_the_path(self):
         end = walk("gone.example.com").ends_at
 
-        self.assertEqual((end.step, end.label, end.source.kind),
-                         ("origin", "Answers 404", "npm.dead_host"))
+        self.assertEqual((end.step, end.label, end.source.kind), ("origin", "Answers 404", "npm.dead_host"))
 
     def test_a_stream_is_another_route_into_the_ingress_and_not_a_dependency(self):
         path = walk("app.example.com")
@@ -126,9 +178,18 @@ class PathTests(TestCase):
         self.assertEqual(serialize_path(path)["routes"][1]["port"], 2222)
 
     def test_a_stream_from_another_npm_is_not_on_this_ingress(self):
-        store("npm.stream", {"connection_ref": "other-npm", "id": 41, "incoming_port": 2223,
-                             "forwarding_host": "198.51.100.20", "forwarding_port": 22,
-                             "tcp": True, "enabled": True})
+        store(
+            "npm.stream",
+            {
+                "connection_ref": "other-npm",
+                "id": 41,
+                "incoming_port": 2223,
+                "forwarding_host": "198.51.100.20",
+                "forwarding_port": 22,
+                "tcp": True,
+                "enabled": True,
+            },
+        )
 
         self.assertEqual([route.port for route in walk("app.example.com").routes if route.port], [])
 
@@ -148,8 +209,7 @@ class RelationTests(TestCase):
         with projection_scope():
             found = relationships_for("machine:edge-1", principal=READER)
 
-        self.assertEqual(found.labels("Receives a forward through"),
-                         ("TCP 2222 to 198.51.100.20:22",))
+        self.assertEqual(found.labels("Receives a forward through"), ("TCP 2222 to 198.51.100.20:22",))
 
 
 class CertificateFindingTests(TestCase):
@@ -187,11 +247,17 @@ class CertificateFindingTests(TestCase):
     def test_one_a_proxy_host_also_names_is_raised_once(self):
         expires = in_days(5)
         store("npm.certificate", certificate(expires, "app.example.com"))
-        store("npm.proxy_host", {"domain_names": ["app.example.com"], "forward_scheme": "http",
-                                 "forward_host": "127.0.0.1", "forward_port": 8000,
-                                 "connection_ref": NPM,
-                                 "certificate": {"name": "example wildcard",
-                                                 "expires_on": expires}})
+        store(
+            "npm.proxy_host",
+            {
+                "domain_names": ["app.example.com"],
+                "forward_scheme": "http",
+                "forward_host": "127.0.0.1",
+                "forward_port": 8000,
+                "connection_ref": NPM,
+                "certificate": {"name": "example wildcard", "expires_on": expires},
+            },
+        )
 
         (finding,) = self.found()
 
@@ -208,9 +274,7 @@ class DeliveryTests(TestCase):
         estate()
 
     def test_the_service_page_says_who_is_allowed(self):
-        self.client.force_login(
-            get_user_model().objects.create_superuser("operator", password="x" * 20)
-        )
+        self.client.force_login(get_user_model().objects.create_superuser("operator", password="x" * 20))
 
         response = self.client.get(reverse("control_plane:service", args=["app.example.com"]))
 
@@ -220,9 +284,12 @@ class DeliveryTests(TestCase):
 
     def test_key_material_never_reaches_the_api(self):
         record_inventory(
-            {"npm.certificate": {"ok": True, "records": [
-                {**certificate(in_days(60)), "meta": {"certificate_key": "PRIVATE"}}
-            ]}},
+            {
+                "npm.certificate": {
+                    "ok": True,
+                    "records": [{**certificate(in_days(60)), "meta": {"certificate_key": "PRIVATE"}}],
+                }
+            },
             principal=cli_principal(),
         )
 
@@ -232,4 +299,3 @@ class DeliveryTests(TestCase):
         self.assertIn("certificates: view", found["requires"])
         self.assertNotIn("PRIVATE", str(found))
         self.assertEqual(found["items"][0]["name"], "example wildcard")
-

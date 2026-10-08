@@ -54,9 +54,7 @@ class RuleTests(TestCase):
     def test_the_table_refuses_a_row_written_around_validation(self):
         for create in (
             lambda: Asset.objects.create(item_name="Example asset", business_use_percentage=150),
-            lambda: Expense.objects.create(
-                date=date(2026, 7, 25), vendor="V", item="I", business_use_percentage=150
-            ),
+            lambda: Expense.objects.create(date=date(2026, 7, 25), vendor="V", item="I", business_use_percentage=150),
         ):
             with self.subTest(create=create), self.assertRaises(IntegrityError), transaction.atomic():
                 create()
@@ -189,16 +187,12 @@ class APITests(TestCase):
                 expense = self._post("expense.create", _expense(value), f"e{value}")
                 self.assertEqual(asset.status_code, 200, asset.content)
                 self.assertEqual(expense.status_code, 200, expense.content)
-                self.assertEqual(
-                    asset.json()["data"]["asset"]["business_use_percentage"], value
-                )
+                self.assertEqual(asset.json()["data"]["asset"]["business_use_percentage"], value)
 
 
 class WebFormTests(TestCase):
     def test_the_form_still_refuses_on_the_field(self):
-        user = get_user_model().objects.create_user(
-            username="example-operator", password="example-password"
-        )
+        user = get_user_model().objects.create_user(username="example-operator", password="example-password")
         self.client.force_login(user)
         for value in OUT_OF_RANGE:
             with self.subTest(value=value):
@@ -214,7 +208,5 @@ class WebFormTests(TestCase):
                     },
                 )
                 self.assertEqual(response.status_code, 200)
-                self.assertIn(
-                    "business_use_percentage", response.context["form"].errors
-                )
+                self.assertIn("business_use_percentage", response.context["form"].errors)
         self.assertFalse(Asset.objects.exists())

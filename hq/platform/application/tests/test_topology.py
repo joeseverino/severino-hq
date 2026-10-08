@@ -77,38 +77,25 @@ class DerivedTopologyTests(TestCase):
         )
 
     def project(self, principal=READ):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             return derive_topology(principal=principal)
 
     def test_declarations_observations_and_registries_form_one_graph(self):
         topology = self.project()
         nodes = {node.id: node for node in topology.nodes}
         edges = {(edge.source, edge.target, edge.kind) for edge in topology.edges}
-        connection_id = (
-            "connection:infrastructure.controllers:"
-            "example-controller:example-cloudflare"
-        )
+        connection_id = "connection:infrastructure.controllers:example-controller:example-cloudflare"
         ability_id = "ability:infrastructure.controllers:cloudflare.zone"
 
         self.assertIn(connection_id, nodes)
         self.assertIn(ability_id, nodes)
         self.assertIn("resource:example-zone", nodes)
-        controller = next(
-            node for node in topology.nodes if node.kind == "controller"
-        )
-        target_id = next(
-            target
-            for source, target, kind in edges
-            if source == connection_id and kind == "reaches"
-        )
+        controller = next(node for node in topology.nodes if node.kind == "controller")
+        target_id = next(target for source, target, kind in edges if source == connection_id and kind == "reaches")
         target = nodes[target_id]
         self.assertEqual(target.label, "example.com")
         self.assertIn((controller.id, connection_id, "carries"), edges)
-        self.assertIn(
-            (connection_id, ability_id, "enables"), edges
-        )
+        self.assertIn((connection_id, ability_id, "enables"), edges)
         self.assertIn(
             (ability_id, "resource:example-zone", "governs"),
             edges,
@@ -118,20 +105,24 @@ class DerivedTopologyTests(TestCase):
 
     def test_a_controller_retains_every_distinct_connection_workflow(self):
         second = ConnectionSpec(
-            "example.second", "Second connections",
-            "Another family carried by the same controller.", Capability.READ,
+            "example.second",
+            "Second connections",
+            "Another family carried by the same controller.",
+            Capability.READ,
             lambda: (
                 ConnectionInstance(
-                    "second", "Second", "example", "good", "Healthy",
+                    "second",
+                    "Second",
+                    "example",
+                    "good",
+                    "Healthy",
                     controller_id="example-controller",
                 ),
             ),
             web_route="control_plane:list",
         )
 
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(second,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(second,)):
             topology = derive_topology(principal=READ)
 
         controller = next(node for node in topology.nodes if node.kind == "controller")
@@ -175,15 +166,11 @@ class DerivedTopologyTests(TestCase):
                     "example",
                     "good",
                     "Healthy",
-                    dependencies=(
-                        ConnectionLink("example-zone", "https://example.test/elsewhere"),
-                    ),
+                    dependencies=(ConnectionLink("example-zone", "https://example.test/elsewhere"),),
                 ),
             ),
         )
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
             topology = derive_topology(principal=READ)
 
         self.assertNotIn(
@@ -196,14 +183,8 @@ class DerivedTopologyTests(TestCase):
         )
 
     def test_actions_are_existing_use_cases_and_follow_authorization(self):
-        reader = next(
-            node for node in self.project().nodes if node.id == "resource:example-zone"
-        )
-        operator = next(
-            node
-            for node in self.project(MANAGE).nodes
-            if node.id == "resource:example-zone"
-        )
+        reader = next(node for node in self.project().nodes if node.id == "resource:example-zone")
+        operator = next(node for node in self.project(MANAGE).nodes if node.id == "resource:example-zone")
 
         self.assertEqual([action.name for action in reader.actions], ["open"])
         self.assertEqual(
@@ -225,11 +206,7 @@ class DerivedTopologyTests(TestCase):
             spec={"domain": "app.example.test", "answer": "192.0.2.10"},
         )
 
-        node = next(
-            node
-            for node in self.project(MANAGE).nodes
-            if node.id == f"resource:{resource.key}"
-        )
+        node = next(node for node in self.project(MANAGE).nodes if node.id == f"resource:{resource.key}")
 
         reconcile = next(action for action in node.actions if action.name == "reconcile")
         self.assertEqual(reconcile.method, "POST")
@@ -243,11 +220,7 @@ class DerivedTopologyTests(TestCase):
             enabled=False,
         )
 
-        node = next(
-            node
-            for node in self.project(MANAGE).nodes
-            if node.id == f"resource:{resource.key}"
-        )
+        node = next(node for node in self.project(MANAGE).nodes if node.id == f"resource:{resource.key}")
 
         self.assertEqual(node.status, "neutral")
         self.assertEqual(node.status_label, "Switched off in HQ")
@@ -317,9 +290,7 @@ class TopologyTraceTests(TestCase):
         )
 
     def test_outbound_trace_is_bounded_and_records_shortest_hops(self):
-        narrowed, trace = apply_trace(
-            self.graph, "a", direction="outbound", depth=2
-        )
+        narrowed, trace = apply_trace(self.graph, "a", direction="outbound", depth=2)
 
         self.assertEqual({node.id for node in narrowed.nodes}, {"a", "b", "c"})
         self.assertEqual(dict(trace.hops), {"a": 0, "b": 1, "c": 2})
@@ -330,15 +301,11 @@ class TopologyTraceTests(TestCase):
         outbound, _ = apply_trace(self.graph, "a", direction="outbound", depth=3)
 
         self.assertEqual({node.id for node in inbound.nodes}, {"a", "aside"})
-        self.assertEqual(
-            {node.id for node in outbound.nodes}, {"a", "b", "c", "d"}
-        )
+        self.assertEqual({node.id for node in outbound.nodes}, {"a", "b", "c", "d"})
 
     def test_invalid_inputs_are_safe_and_depth_is_capped(self):
         unchanged, trace = apply_trace(self.graph, "missing", depth="many")
-        capped, capped_trace = apply_trace(
-            self.graph, "a", direction="sideways", depth=999
-        )
+        capped, capped_trace = apply_trace(self.graph, "a", direction="sideways", depth=999)
 
         self.assertIs(unchanged, self.graph)
         self.assertIsNone(trace)
@@ -365,9 +332,7 @@ class TopologyTraceTests(TestCase):
 
 class TopologyPageTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
         ManagedResource.objects.create(
             key="internal-name",
@@ -379,9 +344,7 @@ class TopologyPageTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             response = self.client.get(reverse("control_plane:topology"))
 
         self.assertEqual(response.status_code, 200)
@@ -442,19 +405,13 @@ class TopologyPageTests(TestCase):
         self.assertEqual(self.body("resource:internal-name").status_code, 302)
 
     def test_focus_accepts_only_a_node_that_exists(self):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
-            response = self.client.get(
-                reverse("control_plane:topology"), {"focus": "not-a-node"}
-            )
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+            response = self.client.get(reverse("control_plane:topology"), {"focus": "not-a-node"})
 
         self.assertEqual(response.context["focus_node"], "")
 
     def test_focus_becomes_a_shareable_bounded_trace(self):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             response = self.client.get(
                 reverse("control_plane:topology"),
                 {
@@ -473,15 +430,11 @@ class TopologyPageTests(TestCase):
         self.assertContains(response, ">Clear</a>")
 
     def page(self, **params):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             return self.client.get(reverse("control_plane:topology"), params)
 
     def body(self, node_id):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             return self.client.get(reverse("control_plane:topology_node"), {"node": node_id})
 
     def test_a_node_title_links_to_the_thing_it_names(self):
@@ -517,8 +470,7 @@ class TopologyPageTests(TestCase):
             for item in group["items"]
         }
         self.assertEqual(
-            [(row["direction"], row["label"], row["other"].id)
-             for row in relations["resource:internal-name"]],
+            [(row["direction"], row["label"], row["other"].id) for row in relations["resource:internal-name"]],
             # Incoming rows say the edge from this end.
             [
                 ("in", "For", "service:app.example.test"),
@@ -526,33 +478,24 @@ class TopologyPageTests(TestCase):
             ],
         )
         self.assertEqual(
-            [(row["direction"], row["label"], row["other"].id)
-             for row in relations[ability_id]],
+            [(row["direction"], row["label"], row["other"].id) for row in relations[ability_id]],
             [("out", "Can change", "resource:internal-name")],
         )
 
         # The same edge renders once as incoming and once as outgoing, and each
         # row walks to the other end.
         resource, ability = self.body("resource:internal-name"), self.body(ability_id)
-        self.assertContains(
-            resource, '<span class="eyebrow topology-relation-heading">Used by</span>'
-        )
-        self.assertContains(
-            ability, '<span class="eyebrow topology-relation-heading">Uses</span>'
-        )
+        self.assertContains(resource, '<span class="eyebrow topology-relation-heading">Used by</span>')
+        self.assertContains(ability, '<span class="eyebrow topology-relation-heading">Uses</span>')
         self.assertContains(resource, '<span class="topology-relation-verb">Changed through</span>')
         self.assertContains(resource, f'href="{TopologyView._focus_link(ability_id)}"')
         self.assertContains(
             ability,
             f'href="{TopologyView._focus_link("resource:internal-name")}"',
         )
-        self.assertContains(
-            ability, '<span class="topology-relation-other">internal-name</span>'
-        )
+        self.assertContains(ability, '<span class="topology-relation-other">internal-name</span>')
         # The kind by its label, never its identifier.
-        self.assertContains(
-            ability, '<span class="topology-relation-kind">Internal DNS record</span>'
-        )
+        self.assertContains(ability, '<span class="topology-relation-kind">Internal DNS record</span>')
 
     def test_a_node_body_carries_the_triage_the_projection_already_derived(self):
         """Declared versus observed is the whole of triage, so the node body
@@ -643,9 +586,7 @@ class FocusedPageTests(TestCase):
         login(self.client)
 
     def page(self, focus):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             return self.client.get(reverse("control_plane:topology"), {"focus": focus})
 
     def test_the_details_render_once_in_the_panel_not_in_a_lane(self):
@@ -654,9 +595,9 @@ class FocusedPageTests(TestCase):
 
         self.assertEqual(body.count('class="topology-node-body"'), 1)
         self.assertEqual(body.count('data-topology-body-of="zone:example.com"'), 1)
-        panel = body[body.index('id="topology-detail"'):]
+        panel = body[body.index('id="topology-detail"') :]
         self.assertIn('data-topology-body-of="zone:example.com"', panel)
-        lanes = body[body.index('id="map"'):body.index('id="topology-detail"')]
+        lanes = body[body.index('id="map"') : body.index('id="topology-detail"')]
         self.assertNotIn("topology-node-body", lanes)
         self.assertNotIn("Last read", lanes)
 
@@ -664,9 +605,7 @@ class FocusedPageTests(TestCase):
         body = self.page("zone:example.com").content.decode()
 
         self.assertIn('<ul class="topology-relation-values">', body)
-        values = re.findall(
-            r'<ul class="topology-relation-values">(.*?)</ul>', body, flags=re.DOTALL
-        )
+        values = re.findall(r'<ul class="topology-relation-values">(.*?)</ul>', body, flags=re.DOTALL)
         self.assertTrue(values)
         for block in values:
             for line in re.findall(r"<li>(.*?)</li>", block, flags=re.DOTALL):
@@ -688,9 +627,7 @@ class FocusedPageTests(TestCase):
         self.assertContains(related, "data-topology-edge=")
         self.assertNotContains(related, "All relationships")
 
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             unfocused = self.client.get(reverse("control_plane:topology"), {"all": 1})
         lonely = next(
             item["node"].id
@@ -711,9 +648,7 @@ class FocusedPageTests(TestCase):
         read = timezone.now() - timedelta(hours=2)
         ProviderInventory.objects.filter(kind="cloudflare.zone").update(observed_at=read)
 
-        node = next(
-            node for node in self.project().nodes if node.id == "zone:example.com"
-        )
+        node = next(node for node in self.project().nodes if node.id == "zone:example.com")
         self.assertEqual(datetime.fromisoformat(node.observed_at), read)
 
         response = self.page("zone:example.com")
@@ -732,15 +667,11 @@ class FocusedPageTests(TestCase):
         )
 
         noun = "link" if degree == 1 else "links"
-        self.assertContains(
-            response, f'aria-label="Details for example.com, {degree} {noun}"'
-        )
+        self.assertContains(response, f'aria-label="Details for example.com, {degree} {noun}"')
         self.assertContains(response, f'title="Details · {degree} {noun}"')
 
     def project(self):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=()
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             return derive_topology(principal=READ)
 
 
@@ -749,7 +680,8 @@ class ConnectionActionTests(TestCase):
 
     def spec(self, **overrides) -> ConnectionSpec:
         return ConnectionSpec(
-            "example.declared", "Declared routes",
+            "example.declared",
+            "Declared routes",
             "A synthetic connection family that declares where it can be reached.",
             Capability.READ,
             lambda: (ConnectionInstance("one", "One", "example", "good", "Healthy"),),
@@ -761,8 +693,7 @@ class ConnectionActionTests(TestCase):
             return derive_topology(principal=principal)
 
     def node(self, spec):
-        return next(n for n in self.project(spec).nodes
-                    if n.id == "connection:example.declared:one")
+        return next(n for n in self.project(spec).nodes if n.id == "connection:example.declared:one")
 
     def test_topology_investigations_share_one_addressing_contract(self):
         node_id = "connection:example.declared:one"
@@ -781,21 +712,25 @@ class ConnectionActionTests(TestCase):
         )
         self.assertEqual(
             topology_url(node_id, lens="operations"),
-            f"{reverse('control_plane:topology')}?"
-            "focus=connection%3Aexample.declared%3Aone&lens=operations#trace",
+            f"{reverse('control_plane:topology')}?focus=connection%3Aexample.declared%3Aone&lens=operations#trace",
         )
 
     def test_every_declared_route_becomes_its_own_action(self):
-        node = self.node(self.spec(
-            management_route="control_plane:list", setup_route="control_plane:create",
-            documentation_url="https://docs.example.test/connections",
-        ))
+        node = self.node(
+            self.spec(
+                management_route="control_plane:list",
+                setup_route="control_plane:create",
+                documentation_url="https://docs.example.test/connections",
+            )
+        )
         self.assertEqual(
             [(a.name, a.url) for a in node.actions],
-            [("open", reverse("control_plane:connections")),
-             ("manage", reverse("control_plane:list")),
-             ("set_up", reverse("control_plane:create")),
-             ("documentation", "https://docs.example.test/connections")],
+            [
+                ("open", reverse("control_plane:connections")),
+                ("manage", reverse("control_plane:list")),
+                ("set_up", reverse("control_plane:create")),
+                ("documentation", "https://docs.example.test/connections"),
+            ],
         )
 
     def test_the_same_route_twice_is_offered_once(self):
@@ -807,29 +742,43 @@ class ConnectionActionTests(TestCase):
         self.assertEqual(node.url, reverse("control_plane:list"))
 
     def test_an_ability_naming_a_capability_reports_the_canonical_contract(self):
-        spec = self.spec(abilities=(ConnectionAbility(
-            "example.rotate", "Rotate", "Rotate the credential this connection carries.",
-            effect="infrastructure_change", capability="infrastructure.reconcile"),))
-        ability = next(n for n in self.project(spec, MANAGE).nodes
-                       if n.id == "ability:example.declared:example.rotate")
+        spec = self.spec(
+            abilities=(
+                ConnectionAbility(
+                    "example.rotate",
+                    "Rotate",
+                    "Rotate the credential this connection carries.",
+                    effect="infrastructure_change",
+                    capability="infrastructure.reconcile",
+                ),
+            )
+        )
+        ability = next(n for n in self.project(spec, MANAGE).nodes if n.id == "ability:example.declared:example.rotate")
         command = next(a for a in ability.actions if a.name == "command")
         self.assertEqual(command.capability, "infrastructure.reconcile")
         self.assertEqual(command.effect, "infrastructure_change")
 
     def test_an_ability_never_advertises_a_command_the_principal_cannot_run(self):
-        spec = self.spec(abilities=(ConnectionAbility(
-            "example.rotate", "Rotate", "Rotate the credential this connection carries.",
-            effect="infrastructure_change", capability="infrastructure.reconcile"),))
-        ability = next(n for n in self.project(spec, READ).nodes
-                       if n.id == "ability:example.declared:example.rotate")
+        spec = self.spec(
+            abilities=(
+                ConnectionAbility(
+                    "example.rotate",
+                    "Rotate",
+                    "Rotate the credential this connection carries.",
+                    effect="infrastructure_change",
+                    capability="infrastructure.reconcile",
+                ),
+            )
+        )
+        ability = next(n for n in self.project(spec, READ).nodes if n.id == "ability:example.declared:example.rotate")
 
         self.assertEqual([a.name for a in ability.actions], ["focus"])
 
     def test_an_ability_without_a_capability_only_relates(self):
-        spec = self.spec(abilities=(ConnectionAbility(
-            "example.inspect", "Inspect", "Read what this connection sees."),))
-        ability = next(n for n in self.project(spec).nodes
-                       if n.id == "ability:example.declared:example.inspect")
+        spec = self.spec(
+            abilities=(ConnectionAbility("example.inspect", "Inspect", "Read what this connection sees."),)
+        )
+        ability = next(n for n in self.project(spec).nodes if n.id == "ability:example.declared:example.inspect")
         self.assertEqual([a.name for a in ability.actions], ["focus"])
 
 
@@ -838,16 +787,23 @@ class TopologyLensTests(TestCase):
 
     def setUp(self):
         ManagedResource.objects.create(
-            key="observed-zone", kind="cloudflare.zone",
-            spec={"zone": "example.com", "connection_ref": "example-cloudflare"})
+            key="observed-zone",
+            kind="cloudflare.zone",
+            spec={"zone": "example.com", "connection_ref": "example-cloudflare"},
+        )
         self.unobserved = ManagedResource.objects.create(
-            key="lonely-record", kind="adguard.rewrite",
-            spec={"domain": "app.example.test", "answer": "192.0.2.10"})
+            key="lonely-record", kind="adguard.rewrite", spec={"domain": "app.example.test", "answer": "192.0.2.10"}
+        )
         ProviderConnection.objects.create(
-            controller_id="example-controller", connection_ref="example-cloudflare",
-            provider="cloudflare_dns", endpoint="https://api.example.test/client/v4",
-            reaches=["example.com"], reachable=True, probed=True,
-            observed_at=timezone.now())
+            controller_id="example-controller",
+            connection_ref="example-cloudflare",
+            provider="cloudflare_dns",
+            endpoint="https://api.example.test/client/v4",
+            reaches=["example.com"],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
 
     def project(self):
         with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
@@ -878,14 +834,15 @@ class TopologyLensTests(TestCase):
         """Health describes the last observation's content, never its age."""
         now = timezone.now()
         fresh = ManagedResource.objects.create(
-            key="swept-record", kind="adguard.rewrite",
-            spec={"domain": "fresh.example.test", "answer": "192.0.2.20"})
+            key="swept-record", kind="adguard.rewrite", spec={"domain": "fresh.example.test", "answer": "192.0.2.20"}
+        )
         skipped = ManagedResource.objects.create(
-            key="skipped-record", kind="adguard.rewrite",
-            spec={"domain": "skipped.example.test", "answer": "192.0.2.21"})
+            key="skipped-record",
+            kind="adguard.rewrite",
+            spec={"domain": "skipped.example.test", "answer": "192.0.2.21"},
+        )
         ManagedResource.objects.filter(pk=fresh.pk).update(last_observed_at=now)
-        ManagedResource.objects.filter(pk=skipped.pk).update(
-            last_observed_at=now - timedelta(days=4))
+        ManagedResource.objects.filter(pk=skipped.pk).update(last_observed_at=now - timedelta(days=4))
         selected = {n.id for n in self.narrowed("stale-observations").nodes}
         self.assertIn("resource:skipped-record", selected)
         self.assertNotIn("resource:swept-record", selected)
@@ -914,8 +871,7 @@ class TopologyLensTests(TestCase):
             unknown = serialized_topology(principal=READ, lens="not-a-lens")
             whole = serialized_topology(principal=READ)
         self.assertEqual(applied["lens"], "unobserved-resources")
-        self.assertEqual([i["name"] for i in applied["lenses"]],
-                         [lens.name for lens in topology_lenses()])
+        self.assertEqual([i["name"] for i in applied["lenses"]], [lens.name for lens in topology_lenses()])
         self.assertLess(applied["summary"]["nodes"], whole["summary"]["nodes"])
         # An unrecognized lens is the whole graph, said out loud.
         self.assertIsNone(unknown["lens"])
@@ -961,21 +917,24 @@ class MeasuredNodeTests(TestCase):
 
     def _spec(self, *hosts):
         return ConnectionSpec(
-            "example.measured", "Measured routes",
+            "example.measured",
+            "Measured routes",
             "A synthetic connection family that reaches named hosts.",
             Capability.READ,
             lambda: (
                 ConnectionInstance(
-                    "one", "One", "example", "good", "Healthy",
+                    "one",
+                    "One",
+                    "example",
+                    "good",
+                    "Healthy",
                     targets=tuple(ConnectionLink(host) for host in hosts),
                 ),
             ),
         )
 
     def _nodes(self, *hosts):
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(self._spec(*hosts),)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(self._spec(*hosts),)):
             return {n.label: n for n in derive_topology(principal=READ).nodes}
 
     def test_a_target_named_like_a_measured_host_carries_its_traffic(self):
@@ -1013,9 +972,7 @@ class MeasuredNodeTests(TestCase):
             with CaptureQueriesContext(database_connection) as queries:
                 derive_topology(principal=READ)
 
-        self.assertEqual(
-            [q for q in queries.captured_queries if "analytics_rumdaily" in q["sql"]], []
-        )
+        self.assertEqual([q for q in queries.captured_queries if "analytics_rumdaily" in q["sql"]], [])
 
     def test_the_measurement_reaches_every_adapter_not_just_the_page(self):
         self._measure("measured.example.com")
@@ -1059,11 +1016,17 @@ class OneNodePerMachineTests(TestCase):
 
     def _project(self, *targets):
         spec = ConnectionSpec(
-            "example.carried", "Carried connections",
-            "A synthetic family carried by a declared machine.", Capability.READ,
+            "example.carried",
+            "Carried connections",
+            "A synthetic family carried by a declared machine.",
+            Capability.READ,
             lambda: (
                 ConnectionInstance(
-                    "one", "One", "example", "good", "Healthy",
+                    "one",
+                    "One",
+                    "example",
+                    "good",
+                    "Healthy",
                     controller_id="a-docker-host",
                     targets=tuple(ConnectionLink(target) for target in targets),
                 ),
@@ -1083,21 +1046,15 @@ class OneNodePerMachineTests(TestCase):
         machine = nodes["machine:a-docker-host"]
         self.assertEqual(machine.kind, "machine")
         self.assertIn(("Runs the controller", "a-docker-host"), machine.facts)
-        self.assertTrue(
-            any(source == "machine:a-docker-host" and kind == "carries" for source, _, kind in edges)
-        )
-        self.assertIn(
-            ("machine:a-docker-host", "resource:a-docker-host", "declared_by"), edges
-        )
+        self.assertTrue(any(source == "machine:a-docker-host" and kind == "carries" for source, _, kind in edges))
+        self.assertIn(("machine:a-docker-host", "resource:a-docker-host", "declared_by"), edges)
 
     def test_a_target_at_its_address_is_the_machine(self):
         nodes, edges = self._project("10.0.0.9")
 
         self.assertNotIn("10.0.0.9", {node.label for node in nodes.values()})
         self.assertIn(("Reached as", "10.0.0.9"), nodes["machine:a-docker-host"].facts)
-        self.assertTrue(
-            any(target == "machine:a-docker-host" and kind == "reaches" for _, target, kind in edges)
-        )
+        self.assertTrue(any(target == "machine:a-docker-host" and kind == "reaches" for _, target, kind in edges))
 
     def test_a_target_no_machine_answers_for_stays_its_own_node(self):
         nodes, _ = self._project("elsewhere.example.com")
@@ -1112,9 +1069,7 @@ class OneNodePerMachineTests(TestCase):
     def test_its_tailnet_device_is_joined_by_the_address_they_share(self):
         _, edges = self._project()
 
-        self.assertIn(
-            ("machine:a-docker-host", "resource:a-docker-host-tailnet", "on_tailnet"), edges
-        )
+        self.assertIn(("machine:a-docker-host", "resource:a-docker-host-tailnet", "on_tailnet"), edges)
 
     def test_no_edge_is_left_pointing_at_a_folded_node(self):
         nodes, edges = self._project("10.0.0.9")
@@ -1141,10 +1096,13 @@ class AnUnrecognisedContainerIsCarriedByItsMachineTests(TestCase):
                 "portainer.container": {
                     "ok": True,
                     "records": [
-                        {"name": "a-web", "host": "a-docker-host",
-                         "connection_ref": "a-portainer", "stack": "a-project"},
-                        {"name": "a-stray", "host": "a-docker-host",
-                         "connection_ref": "a-portainer", "stack": ""},
+                        {
+                            "name": "a-web",
+                            "host": "a-docker-host",
+                            "connection_ref": "a-portainer",
+                            "stack": "a-project",
+                        },
+                        {"name": "a-stray", "host": "a-docker-host", "connection_ref": "a-portainer", "stack": ""},
                     ],
                 }
             },
@@ -1216,9 +1174,7 @@ class HolderEdgeTests(TestCase):
                 self.assertIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)
 
     def test_a_record_naming_no_connection_is_held_by_its_providers_connections(self):
-        kind, provider = next(
-            (kind, provider) for kind, provider in self.mirrored() if provider.connection_providers
-        )
+        kind, provider = next((kind, provider) for kind, provider in self.mirrored() if provider.connection_providers)
         record = dict(provider.sample_record)
         edges = self._edges(kind, declared=provider.from_record(record), record=record)
 
@@ -1238,8 +1194,7 @@ class HolderEdgeTests(TestCase):
         statuses = {
             edge.status
             for edge in topology.edges
-            if (edge.source, edge.target, edge.kind)
-            == (self.CONNECTION, "resource:example-declared", "used_by")
+            if (edge.source, edge.target, edge.kind) == (self.CONNECTION, "resource:example-declared", "used_by")
         }
         self.assertEqual(statuses, {"serious"})
 

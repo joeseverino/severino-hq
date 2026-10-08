@@ -32,7 +32,8 @@ def observe(principal: Principal | None) -> None:
         _observe(principal)
     except Exception:  # noqa: BLE001 - observation never blocks a request
         logger.warning(
-            "Agent identity not recorded: %s", principal.actor,
+            "Agent identity not recorded: %s",
+            principal.actor,
             extra={"event": "agents.identity.unrecorded"},
         )
 

@@ -55,11 +55,7 @@ def operator(hostname: str) -> str:
     """What a person calls whoever runs this name, or its domain if unknown."""
 
     candidate = normalized_hostname(hostname)
-    matches = [
-        (len(suffix), name)
-        for suffix, name in OPERATORS
-        if in_zone(candidate, suffix)
-    ]
+    matches = [(len(suffix), name) for suffix, name in OPERATORS if in_zone(candidate, suffix)]
     if matches:
         return max(matches)[1]
     return registrable(candidate)

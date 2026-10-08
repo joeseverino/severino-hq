@@ -40,8 +40,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-created_at"
     table_search_placeholder = "Search what changed, ids and messages…"
     page_lede = (
-        "Everything that changed, and who or what changed it. How background work "
-        "went is under Background jobs."
+        "Everything that changed, and who or what changed it. How background work went is under Background jobs."
     )
 
     @override
@@ -217,11 +216,7 @@ class AuditLogDetailView(PageMixin, DetailView):
             if isinstance(pair, list) and len(pair) == 2
         ]
         # Everything else in the metadata, minus what is already rendered.
-        context["extra"] = {
-            key: value
-            for key, value in sorted(event.metadata.items())
-            if key != "changes"
-        }
+        context["extra"] = {key: value for key, value in sorted(event.metadata.items()) if key != "changes"}
 
         # The rest of the same operation: what `operation_id` is for. One
         # action can touch many rows, and matching them up by timestamp alone
@@ -235,9 +230,7 @@ class AuditLogDetailView(PageMixin, DetailView):
         # Everything else that ever happened to this object.
         if event.object_type and event.object_id:
             context["history"] = (
-                AuditLog.objects.filter(
-                    object_type=event.object_type, object_id=event.object_id
-                )
+                AuditLog.objects.filter(object_type=event.object_type, object_id=event.object_id)
                 .exclude(pk=event.pk)
                 .select_related("user")[:20]
             )

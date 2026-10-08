@@ -81,8 +81,6 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
         return self.apply_table_query(qs)
 
 
-
-
 class ReceiptPage(PageMixin):
     """A page about one receipt, or a new one: its trail runs back to the list."""
 
@@ -128,9 +126,7 @@ class ReceiptDetailView(PageMixin, DetailView):
         actions += [
             PageAction("Download file", reverse("receipts:file", args=[receipt.pk])),
             PageAction("Edit", reverse("receipts:edit", args=[receipt.pk])),
-            PageAction(
-                "Delete", reverse("receipts:delete", args=[receipt.pk]), danger=True
-            ),
+            PageAction("Delete", reverse("receipts:delete", args=[receipt.pk]), danger=True),
         ]
         return tuple(actions)
 
@@ -172,9 +168,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
             return ctx
 
         # Find potential expenses with the same vendor or same amount.
-        potential_expenses = Expense.objects.annotate(
-            receipt_count=Count("receipts")
-        ).filter(receipt_count=0)
+        potential_expenses = Expense.objects.annotate(receipt_count=Count("receipts")).filter(receipt_count=0)
 
         # Refine matches: same amount is a strong signal, same vendor is a decent signal.
         matches = []
@@ -203,9 +197,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
                     amount=receipt.amount,
                     notes=receipt.notes,
                     related_expense=expense.id,
-                    related_asset=(
-                        receipt.related_asset.slug if receipt.related_asset else None
-                    ),
+                    related_asset=(receipt.related_asset.slug if receipt.related_asset else None),
                 ),
                 principal=web_principal(request.user),
                 current_id=receipt.id,

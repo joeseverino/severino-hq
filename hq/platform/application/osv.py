@@ -75,12 +75,14 @@ def query_of(purl: str) -> dict[str, Any] | None:
 
 
 def _post(path: str, payload: Mapping[str, Any]) -> Any:
-    return _read(urllib.request.Request(
-        f"{API}{path}",
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "User-Agent": "Severino-HQ"},
-        method="POST",
-    ))
+    return _read(
+        urllib.request.Request(
+            f"{API}{path}",
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json", "User-Agent": "Severino-HQ"},
+            method="POST",
+        )
+    )
 
 
 def _get(path: str) -> Any:
@@ -110,7 +112,7 @@ def matches(purls: Iterable[str]) -> tuple[int, dict[str, list[tuple[str, str]]]
     asked = [(purl, query) for purl in purls if (query := query_of(purl)) is not None]
     found: dict[str, list[tuple[str, str]]] = {}
     for start in range(0, len(asked), BATCH):
-        chunk = asked[start:start + BATCH]
+        chunk = asked[start : start + BATCH]
         answer = _post("/querybatch", {"queries": [query for _purl, query in chunk]})
         for (purl, _query), result in zip(chunk, answer.get("results") or (), strict=False):
             ids = [
@@ -138,7 +140,10 @@ def finding(vulnerability: Mapping[str, Any], purl: str, modified: str = "") -> 
     severity = str((vulnerability.get("database_specific") or {}).get("severity") or "")
     for entry in vulnerability.get("affected") or ():
         package = entry.get("package") or {}
-        if str(package.get("name", "")).rpartition("/")[2] not in names and package.get("purl", "").partition("@")[0] != purl.partition("@")[0]:
+        if (
+            str(package.get("name", "")).rpartition("/")[2] not in names
+            and package.get("purl", "").partition("@")[0] != purl.partition("@")[0]
+        ):
             continue
         severity = severity or str((entry.get("ecosystem_specific") or {}).get("severity") or "")
         fixed.extend(

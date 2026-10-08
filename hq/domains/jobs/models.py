@@ -51,9 +51,7 @@ class Job(models.Model):
     # readable with several extensions running work.
     kind = models.CharField(max_length=64, db_index=True)
     label = models.CharField(max_length=200)
-    state = models.CharField(
-        max_length=16, choices=State, default=State.QUEUED, db_index=True
-    )
+    state = models.CharField(max_length=16, choices=State, default=State.QUEUED, db_index=True)
     # 0 to 100 (``job_percent_at_most_100``), or null where the work cannot
     # say: better than a number that stops moving.
     percent = models.PositiveSmallIntegerField(null=True, blank=True)

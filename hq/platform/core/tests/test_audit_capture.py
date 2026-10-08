@@ -73,9 +73,7 @@ def register_eager(model, type_label, *, redact=(), observation=(), connection=N
     def on_save(sender, instance, created, **kwargs):
         changes = {}
         if not created:
-            changes = _changes(
-                getattr(instance, "_audit_snapshot", None), _eager_snapshot(instance), secret
-            )
+            changes = _changes(getattr(instance, "_audit_snapshot", None), _eager_snapshot(instance), secret)
             if looked and changes and set(changes) <= looked:
                 instance._audit_snapshot = _eager_snapshot(instance)
                 return
@@ -343,9 +341,7 @@ def update_fields():
 
 
 def no_signal_paths():
-    Expense.objects.bulk_create(
-        [Expense(date=date(2026, 1, day), vendor="Bulk", item=str(day)) for day in (1, 2, 3)]
-    )
+    Expense.objects.bulk_create([Expense(date=date(2026, 1, day), vendor="Bulk", item=str(day)) for day in (1, 2, 3)])
     rows = list(Expense.objects.order_by("pk"))
     for row in rows:
         row.vendor = "Bulk updated"

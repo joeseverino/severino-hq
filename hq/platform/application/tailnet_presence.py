@@ -153,11 +153,7 @@ class Presence:
         estate disagreeing.
         """
 
-        return tuple(
-            route
-            for route in self.advertised_routes
-            if route not in set(self.enabled_routes)
-        )
+        return tuple(route for route in self.advertised_routes if route not in set(self.enabled_routes))
 
     @property
     def tailnet_address(self) -> str:
@@ -165,9 +161,7 @@ class Presence:
 
         from .reach import network_of
 
-        return next(
-            (a for a in self.addresses if ":" not in a and network_of(a) == "tailnet"), ""
-        )
+        return next((a for a in self.addresses if ":" not in a and network_of(a) == "tailnet"), "")
 
     @property
     def public_addresses(self) -> tuple[str, ...]:
@@ -177,10 +171,7 @@ class Presence:
         from .reach import is_public
 
         return tuple(
-            dict.fromkeys(
-                host for host in (host_of(endpoint) for endpoint in self.endpoints)
-                if is_public(host)
-            )
+            dict.fromkeys(host for host in (host_of(endpoint) for endpoint in self.endpoints) if is_public(host))
         )
 
     @property
@@ -226,12 +217,8 @@ def tailnet_presence() -> dict[str, Presence]:
                 os=str(record.get("os", "")),
                 offers_exit_node=bool(record.get("offers_exit_node")),
                 exit_node_approved=bool(record.get("exit_node_approved")),
-                advertised_routes=tuple(
-                    str(r) for r in record.get("advertised_routes") or ()
-                ),
-                enabled_routes=tuple(
-                    str(r) for r in record.get("enabled_routes") or ()
-                ),
+                advertised_routes=tuple(str(r) for r in record.get("advertised_routes") or ()),
+                enabled_routes=tuple(str(r) for r in record.get("enabled_routes") or ()),
                 authorized=bool(record.get("authorized", True)),
                 lock_error=str(record.get("lock_error", "")),
                 update_available=bool(record.get("update_available")),

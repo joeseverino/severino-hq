@@ -4,15 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0010_providerconnection'),
+        ("control_plane", "0010_providerconnection"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='operationrequest',
-            name='action',
-            field=models.CharField(choices=[('reconcile', 'Reconcile'), ('renew', 'Renew certificate'), ('delete', 'Delete'), ('restart', 'Restart'), ('start', 'Start'), ('stop', 'Stop')], max_length=20),
+            model_name="operationrequest",
+            name="action",
+            field=models.CharField(
+                choices=[
+                    ("reconcile", "Reconcile"),
+                    ("renew", "Renew certificate"),
+                    ("delete", "Delete"),
+                    ("restart", "Restart"),
+                    ("start", "Start"),
+                    ("stop", "Stop"),
+                ],
+                max_length=20,
+            ),
         ),
     ]

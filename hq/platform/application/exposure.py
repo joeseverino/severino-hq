@@ -49,7 +49,11 @@ LABELS = {
 SHORT = {OPEN: "Internet", GATED: "Behind a login", PRIVATE: "Private", UNKNOWN: "Unknown", UNROUTED: "Not reachable"}
 # What a serious problem becomes at each exposure. Unknown keeps it serious.
 _SERIOUS_AT = {
-    OPEN: "serious", GATED: "attention", PRIVATE: "attention", UNKNOWN: "serious", UNROUTED: "neutral",
+    OPEN: "serious",
+    GATED: "attention",
+    PRIVATE: "attention",
+    UNKNOWN: "serious",
+    UNROUTED: "neutral",
 }
 # The ports a machine's front door answers on: a request routed to the machine
 # lands on whichever container publishes one of them.
@@ -104,7 +108,7 @@ class Exposure:
 
     @property
     def sentence(self) -> str:
-        """"Open to the internet as shop.example.com", or why it is not."""
+        """ "Open to the internet as shop.example.com", or why it is not."""
 
         worst = self.worst
         if worst is None:

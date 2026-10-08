@@ -83,9 +83,7 @@ def an_estate():
 
 def a_request(*, peer=PROXY, forwarded=LAPTOP, **headers):
     extra = {"HTTP_X_FORWARDED_FOR": forwarded} if forwarded else {}
-    request = RequestFactory().get(
-        "/connection/", secure=True, HTTP_HOST=HQ, REMOTE_ADDR=peer, **extra, **headers
-    )
+    request = RequestFactory().get("/connection/", secure=True, HTTP_HOST=HQ, REMOTE_ADDR=peer, **extra, **headers)
     request.user = get_user_model()(username="someone", email="someone@example.test")
     return request
 
@@ -101,9 +99,7 @@ NPM_HEADERS = {"HTTP_X_REAL_IP": LAPTOP, "HTTP_X_FORWARDED_SCHEME": "https"}
 class RequestPathTests(TestCase):
     def setUp(self):
         an_estate()
-        own = mock.patch(
-            "hq.platform.application.hq_self.host_addresses", return_value=frozenset({HQ_LAN})
-        )
+        own = mock.patch("hq.platform.application.hq_self.host_addresses", return_value=frozenset({HQ_LAN}))
         own.start()
         self.addCleanup(own.stop)
 
@@ -176,9 +172,7 @@ class RequestPathTests(TestCase):
         self.assertEqual(states["ingress"], CONTRADICTED)
 
     def test_disagreeing_proxy_headers_contradict_the_proxy(self):
-        states = self.checks(
-            a_request(HTTP_X_REAL_IP="100.64.0.77", HTTP_X_FORWARDED_SCHEME="https")
-        )
+        states = self.checks(a_request(HTTP_X_REAL_IP="100.64.0.77", HTTP_X_FORWARDED_SCHEME="https"))
 
         self.assertEqual(states["ingress"], CONTRADICTED)
 
@@ -359,9 +353,7 @@ class ReadParityTests(TestCase):
 
         found = response.context["request_path"]
         self.assertContains(response, "data-connection-hop=", count=len(found.hops))
-        self.assertContains(
-            response, "data-connection-layer=", count=len(found.connection.layers)
-        )
+        self.assertContains(response, "data-connection-layer=", count=len(found.connection.layers))
         self.assertContains(response, "Path to HQ")
         self.assertContains(response, found.proof)
         # The link's facts come from the caller's presence, and still show.
@@ -381,8 +373,10 @@ class ContainerHopTests(TestCase):
         machine = SimpleNamespace(
             containers=[SimpleNamespace(name="example-hq", id=listed)] if listed is not None else []
         )
-        with mock.patch("hq.platform.application.connections.machines_once", return_value=(machine,)), \
-                mock.patch("hq.platform.application.request_path.own_container_id", return_value=here):
+        with (
+            mock.patch("hq.platform.application.connections.machines_once", return_value=(machine,)),
+            mock.patch("hq.platform.application.request_path.own_container_id", return_value=here),
+        ):
             # Built as paths.py builds it: step, kind label, then the name.
             return module._container(Hop("container", "Container", "example-hq"), None)
 

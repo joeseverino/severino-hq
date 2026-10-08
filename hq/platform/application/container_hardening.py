@@ -141,7 +141,9 @@ def _listed(key: str, values) -> str:
 def _privileged(container, runtime, unmet):
     if "not-privileged" in unmet:
         yield Change(
-            ("not-privileged",), "privileged", "privileged: false",
+            ("not-privileged",),
+            "privileged",
+            "privileged: false",
             "Anything it used privileged mode for, a device or a capability, then needs a line of its own.",
         )
 
@@ -162,7 +164,8 @@ def _security_options(container, runtime, unmet):
     unconfined = [option for option in options if option.endswith(("=unconfined", ":unconfined"))]
     # Never empty: no-new-privileges is either kept, being met, or added.
     kept = [
-        option for option in options
+        option
+        for option in options
         if option not in unconfined and not ("no-new-privileges" in wanted and option.startswith("no-new-privileges"))
     ]
     if "no-new-privileges" in wanted:
@@ -187,7 +190,9 @@ def _system_paths(container, runtime, unmet):
         for mount in mounts
     ]
     yield Change(
-        ("no-system-path-writable",), "volumes", _listed("volumes", lines),
+        ("no-system-path-writable",),
+        "volumes",
+        _listed("volumes", lines),
         "Read-only refuses every write there, and docker cp into it fails too: a deploy that copies a file into "
         "that path stops working. This list replaces its volumes, so every other mount is written as it is.",
     )
@@ -201,7 +206,9 @@ def _capabilities(container, runtime, unmet):
     powerful = [cap for cap in added if cap in POWERFUL_CAPABILITIES]
     yaml = 'cap_drop:\n  - "ALL"\n' + (_listed("cap_add", kept) if kept else "cap_add: []")
     yield Change(
-        ("no-powerful-capability",), "cap_drop", yaml,
+        ("no-powerful-capability",),
+        "cap_drop",
+        yaml,
         f"Drops {', '.join(powerful)}, and Docker's defaults with it: if it changes file owners, binds a port under 1024 "
         "or switches user, add CHOWN, NET_BIND_SERVICE or SETUID and SETGID back.",
     )
@@ -210,7 +217,8 @@ def _capabilities(container, runtime, unmet):
 def _devices(container, runtime, unmet):
     if "no-devices" in unmet:
         yield Removal(
-            "no-devices", tuple(f"devices: {device}" for device in runtime.get("devices") or ()),
+            "no-devices",
+            tuple(f"devices: {device}" for device in runtime.get("devices") or ()),
             "The hardware is no longer reachable from inside it.",
         )
 
@@ -218,7 +226,8 @@ def _devices(container, runtime, unmet):
 def _network(container, runtime, unmet):
     if "own-network" in unmet:
         yield Removal(
-            "own-network", ("network_mode: host",),
+            "own-network",
+            ("network_mode: host",),
             "Docker reports no ports for a container on the host network, so which it serves is not known here: "
             "publish each under ports:, or nothing reaches it.",
         )
@@ -235,7 +244,9 @@ def _ports(container, runtime, unmet):
         if line not in lines:
             lines.append(line)
     yield Change(
-        ("ports-bound",), "ports", _listed("ports", lines),
+        ("ports-bound",),
+        "ports",
+        _listed("ports", lines),
         "Only this machine can reach it on 127.0.0.1. If another machine reaches it directly, put the address it "
         "reaches it at in its place.",
     )
@@ -257,8 +268,10 @@ def _memory(container, runtime, unmet):
         caution = f"Twice the {used // MEBIBYTE}m it was using when read, rounded up."
     else:
         limit = DEFAULT_MEMORY
-        caution = (f"HQ has no reading of what it uses, so {DEFAULT_MEMORY} is a starting point: if it is killed "
-                   "for running out of memory, increase it.")
+        caution = (
+            f"HQ has no reading of what it uses, so {DEFAULT_MEMORY} is a starting point: if it is killed "
+            "for running out of memory, increase it."
+        )
     yield Change(("memory-limited",), "mem_limit", f"mem_limit: {limit}", caution)
 
 
@@ -281,7 +294,8 @@ def _health(container, runtime, unmet):
         return
     url = f"http://127.0.0.1:{port}{path}"
     yield Change(
-        ("health-checked",), "healthcheck",
+        ("health-checked",),
+        "healthcheck",
         "healthcheck:\n"
         f'  test: ["CMD-SHELL", "wget -q --spider {url} || exit 1"]\n'
         "  interval: 30s\n  timeout: 5s\n  retries: 3",
@@ -304,10 +318,17 @@ def _user(container, runtime, unmet):
     from .upgrades import data_of
 
     data = [str(mount.get("source")) for mount in data_of(container.mounts) if mount.get("type") == "bind"]
-    low = sorted({port for binding in runtime.get("port_bindings") or () if (port := _port(binding)).isdigit() and int(port) < 1024})
+    low = sorted(
+        {
+            port
+            for binding in runtime.get("port_bindings") or ()
+            if (port := _port(binding)).isdigit() and int(port) < 1024
+        }
+    )
     caution = (
         f"Its files must be readable by {NON_ROOT} and its data writable: chown -R {NON_ROOT} {' '.join(data)} first."
-        if data else "An image that expects root (installing or changing owners as it starts) refuses to run."
+        if data
+        else "An image that expects root (installing or changing owners as it starts) refuses to run."
     )
     if low:
         caution += f" It listens on {', '.join(low)}, which only root binds without NET_BIND_SERVICE."
@@ -324,6 +345,16 @@ def _socket(container, runtime, unmet):
 
 
 _BUILDERS = (
-    _privileged, _socket, _process_namespace, _security_options, _system_paths, _capabilities,
-    _user, _devices, _network, _ports, _memory, _health,
+    _privileged,
+    _socket,
+    _process_namespace,
+    _security_options,
+    _system_paths,
+    _capabilities,
+    _user,
+    _devices,
+    _network,
+    _ports,
+    _memory,
+    _health,
 )

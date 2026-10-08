@@ -43,9 +43,7 @@ class ManagedResourceCommand:
     enabled: bool = True
 
 
-def list_managed_resources(
-    *, limit: int = 50, kind: str | None = None, kinds: str | None = None
-) -> dict[str, Any]:
+def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: str | None = None) -> dict[str, Any]:
     """List canonical public infrastructure state without provider credentials."""
     # The shared bound, so this module follows it when it moves.
     resources = ManagedResource.objects.all()
@@ -83,9 +81,7 @@ def _declared(*kinds: str) -> dict[str, tuple[dict[str, Any], ...]]:
     return {kind: tuple(specs) for kind, specs in found.items()}
 
 
-def context_for_resolution() -> tuple[
-    tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]
-]:
+def context_for_resolution() -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
     """``(machines, delivery targets)``: everything resolution reads, once."""
 
     declared = _declared(MACHINE_KIND, DELIVERY_TARGET_KIND)
@@ -137,9 +133,7 @@ def declared_machines() -> tuple[dict[str, Any], ...]:
     return _declared(MACHINE_KIND)[MACHINE_KIND]
 
 
-def resolved_spec(
-    resource: ManagedResource, targets: tuple[dict[str, Any], ...] | None = None
-) -> dict[str, Any]:
+def resolved_spec(resource: ManagedResource, targets: tuple[dict[str, Any], ...] | None = None) -> dict[str, Any]:
     """The spec as a controller would see it, falling back to the authored one.
 
     A certificate names where it installs; the settings each of those places
@@ -165,7 +159,7 @@ def resolved_spec(
                 caddy_routes=caddy_routes,
             ),
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return resource.spec
 
 
@@ -220,18 +214,14 @@ def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
         "spec": resource.spec,
         "status": serialize_public_status(resource.status),
         "conditions": resource.conditions,
-        "last_observed_at": (
-            resource.last_observed_at.isoformat() if resource.last_observed_at else None
-        ),
+        "last_observed_at": (resource.last_observed_at.isoformat() if resource.last_observed_at else None),
         "updated_at": resource.updated_at.isoformat(),
     }
 
 
 def serialize_public_status(status: dict[str, Any]) -> dict[str, Any]:
     """Return public observations without embedding downloadable artifacts."""
-    public_status = {
-        key: value for key, value in status.items() if key != "certificate_pem"
-    }
+    public_status = {key: value for key, value in status.items() if key != "certificate_pem"}
     if status.get("certificate_pem"):
         public_status["certificate_available"] = True
     return public_status
@@ -264,11 +254,7 @@ def is_drifted(resource: ManagedResource) -> bool:
 
 
 def resource_health(resource: ManagedResource) -> dict[str, str]:
-    active = {
-        condition.get("type"): condition
-        for condition in resource.conditions
-        if condition.get("status") is True
-    }
+    active = {condition.get("type"): condition for condition in resource.conditions if condition.get("status") is True}
     for condition_type, state, label in (
         ("Drifted", "drifted", DRIFT_LABEL),
         ("Degraded", "degraded", "Has a problem"),
@@ -321,11 +307,7 @@ def controller_contract(resource: ManagedResource) -> dict[str, Any]:
     from hq.domains.control_plane.providers import resolve_provider_spec
 
     def resource_status(key: str, kinds: tuple[str, ...]) -> dict[str, Any] | None:
-        return (
-            ManagedResource.objects.filter(key=key, kind__in=kinds)
-            .values_list("status", flat=True)
-            .first()
-        )
+        return ManagedResource.objects.filter(key=key, kind__in=kinds).values_list("status", flat=True).first()
 
     spec = resolve_provider_spec(
         resource.kind,
@@ -422,33 +404,18 @@ def save_managed_resource(
     if command.enabled and not copied_from_live and observes_only(command.kind, validated_spec):
         raise PolicyError(OBSERVES_ONLY)
 
-    operation = (
-        "infrastructure.resource.create"
-        if current_key is None
-        else "infrastructure.resource.update"
-    )
-    with operation_context(
-        interface=principal.interface, actor=principal.actor, operation=operation
-    ):
+    operation = "infrastructure.resource.create" if current_key is None else "infrastructure.resource.update"
+    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
         if current_key is None:
             resource = ManagedResource()
             created = True
         else:
             try:
-                resource = ManagedResource.objects.select_for_update().get(
-                    key=current_key
-                )
+                resource = ManagedResource.objects.select_for_update().get(key=current_key)
             except ManagedResource.DoesNotExist as exc:
-                raise NotFoundError(
-                    f"No record named {current_key!r}."
-                ) from exc
-            if (
-                expected_updated_at
-                and resource.updated_at.isoformat() != expected_updated_at
-            ):
-                raise PolicyError(
-                    f"The record {current_key!r} changed after it was read."
-                )
+                raise NotFoundError(f"No record named {current_key!r}.") from exc
+            if expected_updated_at and resource.updated_at.isoformat() != expected_updated_at:
+                raise PolicyError(f"The record {current_key!r} changed after it was read.")
             created = False
 
         changed = (

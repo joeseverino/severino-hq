@@ -43,7 +43,9 @@ class FactRow:
         return cls(**dict(zip(names, parts, strict=True)))
 
 
-def rows_of(snapshot: Any, row: Callable[[dict[str, Any]], FactRow], unread: Callable[[str], FactRow]) -> Iterator[FactRow]:
+def rows_of(
+    snapshot: Any, row: Callable[[dict[str, Any]], FactRow], unread: Callable[[str], FactRow]
+) -> Iterator[FactRow]:
     """What one stored reading says: a row per record, and the reading's own
     failure as a row ``unread`` makes from ``UNREAD`` or ``REFUSED``."""
 

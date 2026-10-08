@@ -136,8 +136,13 @@ class RecordStatusTests(TestCase):
         since = (self.now - timedelta(minutes=4)).isoformat()
         drifted = rewrite(
             conditions=[
-                {"type": "Drifted", "status": True, "reason": "Drifted", "since": since,
-                 "message": "Points at is now 192.0.2.99. HQ set it to 192.0.2.10."}
+                {
+                    "type": "Drifted",
+                    "status": True,
+                    "reason": "Drifted",
+                    "since": since,
+                    "message": "Points at is now 192.0.2.99. HQ set it to 192.0.2.10.",
+                }
             ]
         )
 
@@ -160,10 +165,20 @@ class ReportedFieldTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        self.spec = {"repository": "example/host", "workflow": COMPOSE_WORKFLOW, "branch": "main", "production": CURRENT}
+        self.spec = {
+            "repository": "example/host",
+            "workflow": COMPOSE_WORKFLOW,
+            "branch": "main",
+            "production": CURRENT,
+        }
         self.resource = ManagedResource.objects.create(
-            key="delivery", kind=KIND, spec=self.spec, generation=1, observed_generation=1,
-            last_observed_at=timezone.now(), status={**self.spec, "extensions": []},
+            key="delivery",
+            kind=KIND,
+            spec=self.spec,
+            generation=1,
+            observed_generation=1,
+            last_observed_at=timezone.now(),
+            status={**self.spec, "extensions": []},
         )
         self.behind = (
             "example.alpha: bbbbbbb is approved, production still runs aaaaaaa. "
@@ -173,9 +188,7 @@ class ReportedFieldTests(TestCase):
         self.client.force_login(user)
 
     def read(self, production: str) -> None:
-        confirm_observed(
-            {KIND: {"ok": True, "records": [{**self.spec, "production": production, "extensions": []}]}}
-        )
+        confirm_observed({KIND: {"ok": True, "records": [{**self.spec, "production": production, "extensions": []}]}})
         self.resource.refresh_from_db()
 
     def test_what_it_reports_is_the_problem_in_its_own_words(self):
@@ -194,7 +207,13 @@ class ReportedFieldTests(TestCase):
         self.assertEqual(page.count("data-record-status="), 1)
         self.assertContains(response, 'data-record-status="degraded"')
         self.assertContains(response, "Deploy run 9 finished without deploying it.")
-        for dead_end in ("Keep the live version", "Restore HQ's version", "In sync", "Drift detected", "Changed outside HQ"):
+        for dead_end in (
+            "Keep the live version",
+            "Restore HQ's version",
+            "In sync",
+            "Drift detected",
+            "Changed outside HQ",
+        ):
             self.assertNotContains(response, dead_end)
         self.assertContains(response, "Open the deploy on GitHub")
         self.assertContains(response, "https://github.com/example/host/actions")
@@ -207,9 +226,7 @@ class ReportedFieldTests(TestCase):
         manager = Principal("operator", "test", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
         with projection_scope():
-            (finding,) = [
-                item for item in estate_findings(principal=manager) if item.subject == "resource:delivery"
-            ]
+            (finding,) = [item for item in estate_findings(principal=manager) if item.subject == "resource:delivery"]
 
         self.assertEqual(finding.remedies, ())
         self.assertEqual(finding.no_help_reason, "HQ cannot fix what HQ deploys reports.")
@@ -229,8 +246,15 @@ class HistoryShowsChangesTests(TestCase):
         self.at = timezone.now() - timedelta(hours=1)
         self.count = 0
 
-    def ran(self, message: str, *, condition: str = "Ready", reason: str = "Reconciled", by: str = "controller",
-            state: str = OperationRequest.State.SUCCEEDED) -> OperationRequest:
+    def ran(
+        self,
+        message: str,
+        *,
+        condition: str = "Ready",
+        reason: str = "Reconciled",
+        by: str = "controller",
+        state: str = OperationRequest.State.SUCCEEDED,
+    ) -> OperationRequest:
         self.count += 1
         operation = OperationRequest.objects.create(
             resource=self.resource,
@@ -250,8 +274,7 @@ class HistoryShowsChangesTests(TestCase):
 
     def listed(self, limit: int = 20) -> list[str]:
         return [
-            operation_summary(operation)["headline"]
-            for operation in changes(self.resource.operations.all(), limit)
+            operation_summary(operation)["headline"] for operation in changes(self.resource.operations.all(), limit)
         ]
 
     def test_a_check_that_keeps_finding_the_same_thing_is_one_row(self):

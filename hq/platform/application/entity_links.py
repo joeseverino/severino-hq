@@ -77,9 +77,7 @@ NODE_KINDS: Mapping[str, NodeKind] = {
         lambda name: reverse("control_plane:machine", kwargs={"name": name}),
     ),
     "service": NodeKind("service", "services", _service_page),
-    "zone": NodeKind(
-        "domain", "domains", lambda zone: reverse("zones:detail", kwargs={"zone": zone})
-    ),
+    "zone": NodeKind("domain", "domains", lambda zone: reverse("zones:detail", kwargs={"zone": zone})),
     "ability": NodeKind("reading", "readings"),
     "resource": NodeKind(
         "record",
@@ -88,9 +86,7 @@ NODE_KINDS: Mapping[str, NodeKind] = {
     ),
     "registry": NodeKind("lookup", "lookups"),
     # Not a topology node; named on pages all the same.
-    "project": NodeKind(
-        "project", "projects", lambda slug: reverse("projects:detail", kwargs={"slug": slug})
-    ),
+    "project": NodeKind("project", "projects", lambda slug: reverse("projects:detail", kwargs={"slug": slug})),
     # The records: each names its own page, so a record's name is a link wherever it is said.
     "asset": NodeKind("asset", "assets", lambda slug: reverse("assets:detail", kwargs={"slug": slug})),
     "writeup": NodeKind(
@@ -125,7 +121,7 @@ def record_name(kind: str, spec: Mapping[str, Any], key: str = "") -> str:
         if names:
             leads_to = provider.origin(dict(spec)) if provider.origin else ""
             return f"{names[0]} → {leads_to}" if leads_to else str(names[0])
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return key
     return key if provider.covers else str(spec.get("name") or key)
 

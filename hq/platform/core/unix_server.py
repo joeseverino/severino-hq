@@ -62,7 +62,7 @@ def peer_uid(connection: Any) -> int | None:
         if sys.platform == "darwin":
             raw = connection.getsockopt(_DARWIN_SOL_LOCAL, _DARWIN_LOCAL_PEERCRED, _DARWIN_XUCRED.size)
             return int(_DARWIN_XUCRED.unpack(raw)[1])
-    except (OSError, struct.error):
+    except OSError, struct.error:
         return None
     return None
 
@@ -149,9 +149,7 @@ async def serving(application: Any, path: str) -> AsyncIterator[None]:
         limit_concurrency=CONCURRENT_CALLS,
     )
     server = uvicorn.Server(config)
-    thread = threading.Thread(
-        target=server.run, kwargs={"sockets": [listener]}, name="unix-server", daemon=True
-    )
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, name="unix-server", daemon=True)
     thread.start()
     try:
         waited = 0.0

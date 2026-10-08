@@ -23,11 +23,19 @@ REFERENCE = "sentinel-connection"
 
 # Every variable the launcher may set: a path, a name, an image or a nonce.
 LAUNCH_VARIABLES = {
-    "HQ_CONTROLLER_RUN", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
-    "HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_CONTROLLER_IMAGE",
-    "SEVERINO_HQ_SOURCE_REPOSITORY", "HQ_CONTROLLER_CA_FILE",
-    "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK", "SEVERINO_HOST_FIREWALL",
-    "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS",
+    "HQ_CONTROLLER_RUN",
+    "SEVERINO_BRIDGE_SOCKET",
+    "HQ_CONTROLLER_CONNECTIONS",
+    "HQ_CONTROLLER_SSH_DIR",
+    "HQ_ACME_DIR",
+    "HQ_CONTROLLER_IMAGE",
+    "SEVERINO_HQ_SOURCE_REPOSITORY",
+    "HQ_CONTROLLER_CA_FILE",
+    "SEVERINO_TAILNET_STATUS",
+    "SEVERINO_TAILNET_LOCK",
+    "SEVERINO_HOST_FIREWALL",
+    "SEVERINO_RENDER_STATUS",
+    "SEVERINO_HOST_UNITS",
 }
 
 
@@ -51,7 +59,9 @@ class Host(unittest.TestCase):
         self.env.pop("SEVERINO_CONTROLLER_ENV", None)
         # Simulate Linux ownership and mount metadata; use real file modes. The
         # web environment on the tmpfs belongs to the web user, all else to root.
-        self.stub("stat", f'''exec '{sys.executable}' -c '
+        self.stub(
+            "stat",
+            f"""exec '{sys.executable}' -c '
 import os, sys
 path, fmt = sys.argv[-1], sys.argv[-2]
 st = os.stat(path)
@@ -66,13 +76,17 @@ elif fmt == "%u %a":
 else:
     print("0:" + mode)
 ' "$@"
-''')
-        self.stub("findmnt", '''
+""",
+        )
+        self.stub(
+            "findmnt",
+            """
 case "$*" in
     *OPTIONS*) printf '/ rw\\n%s %s\\n' "$SEVERINO_CONTROLLER_SECRET_DIR" "${TEST_OPTIONS:-rw,noswap}" ;;
     *) printf "%s\\n" "${TEST_FILESYSTEM:-tmpfs}" ;;
 esac
-''')
+""",
+        )
         self.stub("flock", "exit 0\n")
         self.document = self.runtime / "controller-connections.json"
         self.write_document()
@@ -91,29 +105,51 @@ esac
 
     @staticmethod
     def transport(**settings):
-        return {"host": "example.test", "host_key": "ssh-ed25519 example", "identity": "example",
-                "port": "22", "user": "reader", **settings}
+        return {
+            "host": "example.test",
+            "host_key": "ssh-ed25519 example",
+            "identity": "example",
+            "port": "22",
+            "user": "reader",
+            **settings,
+        }
 
     def write_document(self, connections=None):
         if self.document.exists():
             self.document.chmod(0o600)
-        self.document.write_text(json.dumps({"schema_version": 2, "connections": connections or [
-            self.connection(REFERENCE, ssh_transport=self.transport()),
-            self.connection("sentinel-api", api_token={"api_token": SENTINEL, "url": "https://api.example.test"}),
-        ]}))
+        self.document.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "connections": connections
+                    or [
+                        self.connection(REFERENCE, ssh_transport=self.transport()),
+                        self.connection(
+                            "sentinel-api", api_token={"api_token": SENTINEL, "url": "https://api.example.test"}
+                        ),
+                    ],
+                }
+            )
+        )
         self.document.chmod(0o400)
 
     def run_script(self, name, *args):
         return subprocess.run(
             ["sh", str(ROOT / "scripts" / name), *args],
-            env=self.env, capture_output=True, text=True, timeout=30,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=30,
             stdin=subprocess.DEVNULL,
         )
 
     def contract(self, command):
         return subprocess.run(
             ["sh", "-c", '. "$1"; ' + command, "sh", str(ROOT / "scripts/lib/controller-env.sh")],
-            env=self.env, capture_output=True, text=True, timeout=15,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
 
 
@@ -154,8 +190,10 @@ class ConnectionsContractTests(Host):
         self.assertNotEqual(self.contract("controller_require_connections").returncode, 0)
 
     def test_disk_backed_or_swappable_runtime_is_refused(self):
-        for change, message in (({"TEST_FILESYSTEM": "ext4"}, "tmpfs"),
-                                ({"TEST_OPTIONS": "rw,nosuid,noswapfile"}, "noswap")):
+        for change, message in (
+            ({"TEST_FILESYSTEM": "ext4"}, "tmpfs"),
+            ({"TEST_OPTIONS": "rw,nosuid,noswapfile"}, "noswap"),
+        ):
             with self.subTest(change=change):
                 original = self.env.copy()
                 self.env.update(change)
@@ -176,7 +214,9 @@ class ControllerSSHTests(Host):
         (identities / "known_hosts").write_text("example.test ssh-ed25519 example\n")
         # Prints its arguments, what it was given to read, and whether the
         # caller still holds the identity lock (fd 8).
-        self.stub("ssh", '''printf "%s\\n" "$@"
+        self.stub(
+            "ssh",
+            """printf "%s\\n" "$@"
 previous=""
 for argument; do
     [ "$previous" != -i ] || printf "identity: %s\\n" "$(cat "$argument")"
@@ -184,7 +224,8 @@ for argument; do
     previous="$argument"
 done
 if ( : >&8 ) 2>/dev/null; then echo "lock: held"; else echo "lock: released"; fi
-''')
+""",
+        )
 
     def test_the_connection_is_read_from_the_document_as_data(self):
         result = self.run_script("controller-ssh.sh", REFERENCE, "preflight")
@@ -202,17 +243,27 @@ if ( : >&8 ) 2>/dev/null; then echo "lock: held"; else echo "lock: released"; fi
         self.assertNotIn(SENTINEL, result.stdout + result.stderr)
 
     def test_unknown_references_and_operations_are_refused(self):
-        for reference, operation in [(".*", "preflight"), ("", "preflight"), ("other", "preflight"),
-                                     ('" or true or "', "preflight"), (REFERENCE, "shell"),
-                                     ("../" + REFERENCE, "preflight")]:
+        for reference, operation in [
+            (".*", "preflight"),
+            ("", "preflight"),
+            ("other", "preflight"),
+            ('" or true or "', "preflight"),
+            (REFERENCE, "shell"),
+            ("../" + REFERENCE, "preflight"),
+        ]:
             with self.subTest(reference=reference, operation=operation):
                 denied = self.run_script("controller-ssh.sh", reference, operation)
                 self.assertNotEqual(denied.returncode, 0)
                 self.assertEqual(denied.stdout, "")
 
     def test_a_destination_that_reads_as_an_option_is_refused(self):
-        for values in ({"host": "-oProxyCommand=x"}, {"user": "root@other"}, {"port": "22 -oProxyCommand=x"},
-                       {"host": ""}, {"user": "-l"}):
+        for values in (
+            {"host": "-oProxyCommand=x"},
+            {"user": "root@other"},
+            {"port": "22 -oProxyCommand=x"},
+            {"host": ""},
+            {"user": "-l"},
+        ):
             with self.subTest(values=values):
                 self.write_document([self.connection(REFERENCE, ssh_transport=self.transport(**values))])
                 denied = self.run_script("controller-ssh.sh", REFERENCE, "preflight")
@@ -220,8 +271,9 @@ if ( : >&8 ) 2>/dev/null; then echo "lock: held"; else echo "lock: released"; fi
                 self.assertEqual(denied.stdout, "")
 
     def test_a_connection_that_is_not_ssh_is_refused(self):
-        self.write_document([self.connection(
-            REFERENCE, api_token={"api_token": SENTINEL, "url": "https://api.example.test"})])
+        self.write_document(
+            [self.connection(REFERENCE, api_token={"api_token": SENTINEL, "url": "https://api.example.test"})]
+        )
         denied = self.run_script("controller-ssh.sh", REFERENCE, "preflight")
         self.assertNotEqual(denied.returncode, 0)
         self.assertNotIn(SENTINEL, denied.stdout + denied.stderr)
@@ -247,7 +299,9 @@ class LauncherTests(Host):
         self.stub("nft", "exit 1\n")
         self.stub("systemctl", "exit 1\n")
         # install -d makes a directory; otherwise it copies with the mode given.
-        self.stub("install", '''
+        self.stub(
+            "install",
+            """
 mode=""; directory=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -263,10 +317,13 @@ if [ "$directory" -eq 1 ]; then
 else
     cp "$1" "$2"; [ -z "$mode" ] || chmod "$mode" "$2"
 fi
-''')
+""",
+        )
         # Records the launch and keeps a copy of the mounted document, which
         # is gone once the launcher's trap has run.
-        self.stub("docker", '''
+        self.stub(
+            "docker",
+            """
 case "$1" in
     inspect)
         case "$*" in
@@ -293,7 +350,8 @@ case "$1" in
             esac
         done ;;
 esac
-''')
+""",
+        )
 
     def launch(self, *args):
         return self.run_script("run-controller.sh", *args)
@@ -338,18 +396,25 @@ esac
         # The renderer replaces it under the exclusive lock: a copy taken
         # outside the shared one could mix two generations.
         self.stub("flock", 'echo lock >>"$FIXTURES/order"\n')
-        install = (self.bin / "install").read_text().replace(
-            "set -eu\n", 'set -eu\necho "install $*" >>"$FIXTURES/order"\n', 1)
+        install = (
+            (self.bin / "install")
+            .read_text()
+            .replace("set -eu\n", 'set -eu\necho "install $*" >>"$FIXTURES/order"\n', 1)
+        )
         (self.bin / "install").write_text(install)
         result = self.launch()
         self.assertEqual(result.returncode, 0, result.stderr)
         order = (self.root / "order").read_text().splitlines()
-        copies = [i for i, line in enumerate(order)
-                  if line.startswith("install ") and line.endswith("/connections.json")]
+        copies = [
+            i for i, line in enumerate(order) if line.startswith("install ") and line.endswith("/connections.json")
+        ]
         self.assertEqual(len(copies), 1, order)
         self.assertLess(order.index("lock"), copies[0])
         script = LAUNCHER.read_text()
-        self.assertLess(script.index("controller_ssh_lock shared"), script.index('"${controller_connections}" "${runtime_connections}"'))
+        self.assertLess(
+            script.index("controller_ssh_lock shared"),
+            script.index('"${controller_connections}" "${runtime_connections}"'),
+        )
         self.assertLess(script.index('"${controller_connections}" "${runtime_connections}"'), script.index("exec 8>&-"))
 
     def test_nothing_of_hqs_own_is_given_to_the_container(self):
@@ -360,8 +425,15 @@ esac
         self.assertEqual(result.returncode, 0, result.stderr)
         launched = "\n".join(self.arguments())
         # Nor the doorbells: HQ rings them itself, from the process that records the sweep.
-        for absent in ("target=/data", "severino_hq_env", "example-volume", "sentinel-application-secret",
-                       "doorbell", "source=/run/severino-hq,", str(self.app)):
+        for absent in (
+            "target=/data",
+            "severino_hq_env",
+            "example-volume",
+            "sentinel-application-secret",
+            "doorbell",
+            "source=/run/severino-hq,",
+            str(self.app),
+        ):
             with self.subTest(absent=absent):
                 self.assertNotIn(absent, launched.replace(f"{self.app}/secrets/acme", ""))
         self.assertEqual(list(self.runtime.glob("run.*")), [])
@@ -373,10 +445,13 @@ esac
         self.assertIn("SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock", arguments)
         self.assertIn("type=volume,source=example-bridge,target=/run/hq-bridge,readonly", arguments)
         # One way to HQ: nothing else names a bridge, a socket or a container to exec into.
-        self.assertEqual([a for a in arguments if "bridge" in a.lower()], [
-            "type=volume,source=example-bridge,target=/run/hq-bridge,readonly",
-            "SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock",
-        ])
+        self.assertEqual(
+            [a for a in arguments if "bridge" in a.lower()],
+            [
+                "type=volume,source=example-bridge,target=/run/hq-bridge,readonly",
+                "SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/bridge.sock",
+            ],
+        )
         self.assertFalse([a for a in arguments if "docker.sock" in a])
 
     def test_a_web_container_that_serves_no_bridge_stops_the_launch(self):
@@ -384,8 +459,16 @@ esac
             ("no socket named", {"BRIDGE_ENV": "PATH=/usr/bin"}, "names no socket"),
             ("an empty setting", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET="}, "names no socket"),
             ("a relative path", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=bridge.sock"}, "names no socket"),
-            ("a path that climbs", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/../x/bridge.sock"}, "not a plain path"),
-            ("a path with an option in it", {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=/run/x,readonly=false/b.sock"}, "not a plain path"),
+            (
+                "a path that climbs",
+                {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=/run/hq-bridge/../x/bridge.sock"},
+                "not a plain path",
+            ),
+            (
+                "a path with an option in it",
+                {"BRIDGE_ENV": "SEVERINO_BRIDGE_SOCKET=/run/x,readonly=false/b.sock"},
+                "not a plain path",
+            ),
             ("a directory that is no volume", {"BRIDGE_MOUNT": "/run/elsewhere example-bridge"}, "not a volume"),
             ("no volume at all", {"BRIDGE_MOUNT": ""}, "not a volume"),
         ):
@@ -440,7 +523,9 @@ esac
         (properties,) = [o.removeprefix("--property=") for o in options if o.startswith("--property=")]
         for name in properties.split(","):
             with self.subTest(property=name):
-                self.assertNotRegex(name, r"(?i)environment|exec(?!Main(Code|Status)$)|credential|path|directory|file(?!State$)")
+                self.assertNotRegex(
+                    name, r"(?i)environment|exec(?!Main(Code|Status)$)|credential|path|directory|file(?!State$)"
+                )
         self.assertEqual(options[options.index("--") + 1 :], sorted(asked))
 
     def test_a_machine_where_systemd_does_not_answer_is_still_named(self):
@@ -473,7 +558,9 @@ esac
         mounted = self.root / "mounted-render-status"
         self.assertEqual(mounted.read_text(), status.read_text())
         self.assertEqual(mounted.stat().st_mode & 0o777, 0o400)
-        self.assertFalse([a for a in arguments if a.endswith(f"source={self.runtime},target") or f"source={self.runtime}," in a])
+        self.assertFalse(
+            [a for a in arguments if a.endswith(f"source={self.runtime},target") or f"source={self.runtime}," in a]
+        )
 
     def test_a_renderer_with_no_status_is_still_named(self):
         # Named without a mount: the controller reports the document missing,
@@ -555,15 +642,36 @@ class RendererDeliveryTests(unittest.TestCase):
     def test_the_unit_keeps_its_hardening(self):
         unit = UNIT.read_text()
         for directive in (
-            "NoNewPrivileges=yes", "PrivateDevices=yes", "PrivateTmp=yes", "ProtectClock=yes",
-            "ProtectControlGroups=yes", "ProtectHome=yes", "ProtectHostname=yes", "ProtectKernelLogs=yes",
-            "ProtectKernelModules=yes", "ProtectKernelTunables=yes", "ProtectSystem=strict",
-            "RestrictNamespaces=yes", "RestrictRealtime=yes", "RestrictSUIDSGID=yes", "LockPersonality=yes",
-            "MemoryDenyWriteExecute=yes", "UMask=0077", "RequiresMountsFor=/run/severino-hq-secrets",
+            "NoNewPrivileges=yes",
+            "PrivateDevices=yes",
+            "PrivateTmp=yes",
+            "ProtectClock=yes",
+            "ProtectControlGroups=yes",
+            "ProtectHome=yes",
+            "ProtectHostname=yes",
+            "ProtectKernelLogs=yes",
+            "ProtectKernelModules=yes",
+            "ProtectKernelTunables=yes",
+            "ProtectSystem=strict",
+            "RestrictNamespaces=yes",
+            "RestrictRealtime=yes",
+            "RestrictSUIDSGID=yes",
+            "LockPersonality=yes",
+            "MemoryDenyWriteExecute=yes",
+            "UMask=0077",
+            "RequiresMountsFor=/run/severino-hq-secrets",
             # Narrower than the shell renderer's.
-            "RestrictAddressFamilies=AF_UNIX AF_INET", "IPAddressDeny=any", "IPAddressAllow=127.0.0.1", "SocketBindDeny=any",
-            "PrivateIPC=yes", "MemorySwapMax=0", "MemoryMax=512M", "TasksMax=128", "LimitCORE=0",
-            "CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE", "SystemCallFilter=@system-service",
+            "RestrictAddressFamilies=AF_UNIX AF_INET",
+            "IPAddressDeny=any",
+            "IPAddressAllow=127.0.0.1",
+            "SocketBindDeny=any",
+            "PrivateIPC=yes",
+            "MemorySwapMax=0",
+            "MemoryMax=512M",
+            "TasksMax=128",
+            "LimitCORE=0",
+            "CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE",
+            "SystemCallFilter=@system-service",
         ):
             with self.subTest(directive=directive):
                 self.assertIn(directive, unit.splitlines())

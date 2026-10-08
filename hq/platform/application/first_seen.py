@@ -30,6 +30,7 @@ LOOK_EVERY = timedelta(minutes=15)
 # by this one. Past it the item began somewhere in a gap.
 KNOWN_WITHIN = timedelta(hours=1)
 
+
 def about(item: Any) -> str:
     """What an item is about, for as long as it is the same matter."""
 

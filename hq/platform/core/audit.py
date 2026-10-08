@@ -27,9 +27,7 @@ from .models import AuditLog
 logger = logging.getLogger("severino.audit")
 
 _AUDITED_MODELS: dict[type, str] = {}
-_operation_context: ContextVar[OperationContext | None] = ContextVar(
-    "hq_operation_context", default=None
-)
+_operation_context: ContextVar[OperationContext | None] = ContextVar("hq_operation_context", default=None)
 _connection_context: ContextVar[str] = ContextVar("hq_audit_connection", default="")
 
 # The object type of an event about one connection.
@@ -37,9 +35,7 @@ CONNECTION_AUDIT_TYPE = "Connection"
 
 # Machine records of HQ looking, as (action, object type). The only events
 # `prune_routine` removes, after SEVERINO_AUDIT_ROUTINE_DAYS.
-ROUTINE_EVENTS: frozenset[tuple[str, str]] = frozenset(
-    {(AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE)}
-)
+ROUTINE_EVENTS: frozenset[tuple[str, str]] = frozenset({(AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE)})
 # The security record: people, access and change. Never pruned.
 SECURITY_ACTIONS: frozenset[str] = frozenset(
     {
@@ -60,7 +56,6 @@ SECURITY_ACTIONS: frozenset[str] = frozenset(
 )
 if {action for action, _ in ROUTINE_EVENTS} & SECURITY_ACTIONS:
     raise ValueError("A security action is listed as routine.")
-
 
 
 # What a value looks like in the log. Audit rows are JSON, so a Decimal, date
@@ -94,11 +89,7 @@ def _tracked(model) -> tuple[str, ...]:
     would mean no save is ever a no-op and every diff carries a line saying
     the clock advanced.
     """
-    return tuple(
-        field.attname
-        for field in model._meta.concrete_fields
-        if not getattr(field, "auto_now", False)
-    )
+    return tuple(field.attname for field in model._meta.concrete_fields if not getattr(field, "auto_now", False))
 
 
 def _capture(instance, names: tuple[str, ...]) -> dict:
@@ -164,9 +155,7 @@ class OperationContext:
 
 
 @contextmanager
-def operation_context(
-    *, interface: str, actor: str, operation: str, operation_id: str = ""
-):
+def operation_context(*, interface: str, actor: str, operation: str, operation_id: str = ""):
     """Attach adapter-neutral attribution to audit events in this operation."""
 
     token = _operation_context.set(
@@ -336,9 +325,7 @@ def record_event(
     if user is not None and not getattr(user, "is_authenticated", False):
         user = None
 
-    object_type = type_label or (
-        obj.__class__.__name__ if obj is not None else ""
-    )
+    object_type = type_label or (obj.__class__.__name__ if obj is not None else "")
     object_id = str(getattr(obj, "pk", "")) if obj is not None else ""
     object_repr = ""
     if obj is not None:
@@ -412,12 +399,7 @@ def last_activity(connections: Iterable[str]) -> dict[str, AuditLog]:
     refs = {ref for ref in connections if ref}
     if not refs:
         return {}
-    latest = (
-        AuditLog.objects.filter(connection__in=refs)
-        .values("connection")
-        .annotate(last=Max("pk"))
-        .values("last")
-    )
+    latest = AuditLog.objects.filter(connection__in=refs).values("connection").annotate(last=Max("pk")).values("last")
     return {
         event.connection: event
         for event in AuditLog.objects.filter(pk__in=latest).only(

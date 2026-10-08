@@ -19,18 +19,37 @@ APP_TARGET = f"ghcr.io/example/app@{TARGET}"
 
 
 def attested(key, *, packages=("pkg:npm/a@1",), source="", revision="abc1234", unread=""):
-    record = {"digest": key, "image": key.partition("@")[0], "packages": list(packages), "sbom": "SPDX" if packages else ""}
+    record = {
+        "digest": key,
+        "image": key.partition("@")[0],
+        "packages": list(packages),
+        "sbom": "SPDX" if packages else "",
+    }
     if source or revision:
-        record["provenance"] = {"format": "SLSA 1.0", "source": source, "revision": revision,
-                                "builder": "", "finished_at": "2026-09-20T00:00:00+00:00", "materials": ["pkg:docker/alpine@3.23"]}
+        record["provenance"] = {
+            "format": "SLSA 1.0",
+            "source": source,
+            "revision": revision,
+            "builder": "",
+            "finished_at": "2026-09-20T00:00:00+00:00",
+            "materials": ["pkg:docker/alpine@3.23"],
+        }
     if unread:
         record = {"digest": key, "unread": unread}
     return {**record, "read_at": timezone.now().isoformat()}
 
 
 def found(id_, *, severity="high", fixed=("1.2.1",), package="a"):
-    return {"id": id_, "package": package, "installed": "1", "fixed": list(fixed), "severity": severity,
-            "summary": "", "url": f"https://osv.dev/vulnerability/{id_}", "modified": "m"}
+    return {
+        "id": id_,
+        "package": package,
+        "installed": "1",
+        "fixed": list(fixed),
+        "severity": severity,
+        "summary": "",
+        "url": f"https://osv.dev/vulnerability/{id_}",
+        "modified": "m",
+    }
 
 
 def checked(key, findings):
@@ -50,19 +69,37 @@ class SourceTests(TestCase):
         self.assertEqual((item("app").standing.upstream, item("app").standing.source_from), ("example/app", LABEL))
 
         ManagedResource.objects.create(
-            key="example-box-app", kind="portainer.container",
-            spec={"connection_ref": "example-portainer", "host": "example-box", "name": "app", "source": "https://github.com/example/declared"},
+            key="example-box-app",
+            kind="portainer.container",
+            spec={
+                "connection_ref": "example-portainer",
+                "host": "example-box",
+                "name": "app",
+                "source": "https://github.com/example/declared",
+            },
         )
-        self.assertEqual((item("app").standing.upstream, item("app").standing.source_from), ("example/declared", DECLARED))
+        self.assertEqual(
+            (item("app").standing.upstream, item("app").standing.source_from), ("example/declared", DECLARED)
+        )
 
     def test_provenance_names_the_source_of_an_image_that_does_not(self):
         estate()
-        inventory("portainer.image", [
-            {"connection_ref": "example-portainer", "host": "example-box", "id": "sha256:w",
-             "tags": ["example/web:1.0.0"], "digests": ["example/web@sha256:web"],
-             "containers": [{"container": "web", "reference": "example/web:1.0.0"}]},
-        ])
-        inventory("registry.digest", [attested("docker.io/example/web@sha256:web", source="git@github.com:example/web.git")])
+        inventory(
+            "portainer.image",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "id": "sha256:w",
+                    "tags": ["example/web:1.0.0"],
+                    "digests": ["example/web@sha256:web"],
+                    "containers": [{"container": "web", "reference": "example/web:1.0.0"}],
+                },
+            ],
+        )
+        inventory(
+            "registry.digest", [attested("docker.io/example/web@sha256:web", source="git@github.com:example/web.git")]
+        )
 
         standing = item("web").standing
         self.assertEqual((standing.upstream, standing.source_from), ("example/web", PROVENANCE))
@@ -71,7 +108,10 @@ class SourceTests(TestCase):
 
     def test_an_image_in_githubs_registry_is_known_by_its_registry_last(self):
         estate()
-        inventory("registry.image", [{"image": "ghcr.io/example/app", "tags": ["v1.2.0"], "read_at": timezone.now().isoformat()}])
+        inventory(
+            "registry.image",
+            [{"image": "ghcr.io/example/app", "tags": ["v1.2.0"], "read_at": timezone.now().isoformat()}],
+        )
 
         self.assertEqual(item("app").standing.source_from, REGISTRY)
 
@@ -81,7 +121,10 @@ class SourceTests(TestCase):
         from hq.domains.control_plane.provider_adapters.portainer import PortainerContainerSpec
 
         base = {"connection_ref": "p", "host": "h", "name": "n"}
-        self.assertEqual(PortainerContainerSpec(**base, source="https://github.com/example/app/").source, "https://github.com/example/app")
+        self.assertEqual(
+            PortainerContainerSpec(**base, source="https://github.com/example/app/").source,
+            "https://github.com/example/app",
+        )
         with self.assertRaises(ValidationError):
             PortainerContainerSpec(**base, source="https://gitlab.example/owner/repo")
 
@@ -90,7 +133,9 @@ class VulnerabilityTests(TestCase):
     def test_only_a_serious_vulnerability_with_a_fix_makes_an_image_vulnerable(self):
         estate()
         inventory("registry.digest", [attested(APP)])
-        inventory("registry.vulnerabilities", [checked(APP, [found("LOW", severity="low"), found("UNFIXED", fixed=())])])
+        inventory(
+            "registry.vulnerabilities", [checked(APP, [found("LOW", severity="low"), found("UNFIXED", fixed=())])]
+        )
 
         standing = item("app").standing
         self.assertNotEqual(standing.state, VULNERABLE)
@@ -98,7 +143,9 @@ class VulnerabilityTests(TestCase):
 
         inventory("registry.vulnerabilities", [checked(APP, [found("HIGH")])])
         standing = item("app").standing
-        self.assertEqual((standing.state, standing.summary, standing.worst), (VULNERABLE, "1 serious vulnerability", "high"))
+        self.assertEqual(
+            (standing.state, standing.summary, standing.worst), (VULNERABLE, "1 serious vulnerability", "high")
+        )
 
 
 class StandardTests(TestCase):
@@ -138,10 +185,13 @@ class UpgradeTests(TestCase):
         published()
         declare("app")
         inventory("registry.digest", [attested(APP), attested(APP_TARGET)])
-        inventory("registry.vulnerabilities", [
-            checked(APP, [found("CLEARED"), found("KEPT", severity="low")]),
-            checked(APP_TARGET, [found("KEPT", severity="low"), found("BROUGHT", severity="critical")]),
-        ])
+        inventory(
+            "registry.vulnerabilities",
+            [
+                checked(APP, [found("CLEARED"), found("KEPT", severity="low")]),
+                checked(APP_TARGET, [found("KEPT", severity="low"), found("BROUGHT", severity="critical")]),
+            ],
+        )
 
         plan = self.plan("app")
 
@@ -180,8 +230,10 @@ class CadenceTests(TestCase):
         estate()
         inventory("registry.digest", [attested(APP)])
         held = {("GHSA-1", "a", "1"): found("GHSA-1")}
-        with mock.patch("hq.platform.application.osv.matches", return_value=(1, {"pkg:npm/a@1": [("GHSA-1", "m")]})), \
-                mock.patch("hq.platform.application.osv.detail", side_effect=AssertionError("read again")):
+        with (
+            mock.patch("hq.platform.application.osv.matches", return_value=(1, {"pkg:npm/a@1": [("GHSA-1", "m")]})),
+            mock.patch("hq.platform.application.osv.detail", side_effect=AssertionError("read again")),
+        ):
             record = vulnerability_reader(held)(APP)
 
         self.assertEqual([each["id"] for each in record["findings"]], ["GHSA-1"])
@@ -192,8 +244,12 @@ class CadenceTests(TestCase):
 
         estate()
         inventory("registry.digest", [attested(APP)])
-        with mock.patch("hq.platform.application.osv.matches", return_value=(1, {"pkg:npm/a@1": [("A", "m"), ("B", "m")]})), \
-                mock.patch("hq.platform.application.osv.detail", return_value={"id": "A"}):
+        with (
+            mock.patch(
+                "hq.platform.application.osv.matches", return_value=(1, {"pkg:npm/a@1": [("A", "m"), ("B", "m")]})
+            ),
+            mock.patch("hq.platform.application.osv.detail", return_value={"id": "A"}),
+        ):
             record = vulnerability_reader({}, budget=1)(APP)
 
         self.assertEqual(record["unresolved"], ["B"])
@@ -204,8 +260,15 @@ class RegistryReadTests(TestCase):
         from ..sweep import record_sweep
 
         with self.captureOnCommitCallbacks(execute=True):
-            record_sweep({"portainer.container": {"ok": True, "records": list(ProviderInventory.objects.get(kind="portainer.container").records)}},
-                         principal=cli_principal())
+            record_sweep(
+                {
+                    "portainer.container": {
+                        "ok": True,
+                        "records": list(ProviderInventory.objects.get(kind="portainer.container").records),
+                    }
+                },
+                principal=cli_principal(),
+            )
 
     def test_a_sweep_that_finds_a_digest_hq_has_not_read_starts_the_read(self):
         estate()
@@ -231,10 +294,19 @@ class ContainerJoinTests(TestCase):
         estate()
         declare("web")
         declare("app")
-        inventory("portainer.network", [
-            {"connection_ref": "example-portainer", "host": "example-box", "name": "shop_default", "driver": "bridge",
-             "subnets": ["172.20.0.0/16"], "containers": ["web", "app"]},
-        ])
+        inventory(
+            "portainer.network",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "name": "shop_default",
+                    "driver": "bridge",
+                    "subnets": ["172.20.0.0/16"],
+                    "containers": ["web", "app"],
+                },
+            ],
+        )
 
         found = relationships_for("resource:example-box-web", principal=cli_principal())
 
@@ -245,13 +317,30 @@ class ContainerJoinTests(TestCase):
     def test_the_container_page_shows_what_it_does_not_say_elsewhere(self):
         estate()
         declare("web")
-        inventory("portainer.network", [
-            {"connection_ref": "example-portainer", "host": "example-box", "name": "shop_default", "driver": "bridge", "containers": ["web"]},
-        ])
-        inventory("portainer.volume", [
-            {"connection_ref": "example-portainer", "host": "example-box", "type": "bind", "source": "/opt/apps/web/data",
-             "used_by": [{"container": "web", "destination": "/data"}]},
-        ])
+        inventory(
+            "portainer.network",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "name": "shop_default",
+                    "driver": "bridge",
+                    "containers": ["web"],
+                },
+            ],
+        )
+        inventory(
+            "portainer.volume",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "type": "bind",
+                    "source": "/opt/apps/web/data",
+                    "used_by": [{"container": "web", "destination": "/data"}],
+                },
+            ],
+        )
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
 
         page = self.client.get(reverse("control_plane:detail", args=["example-box-web"]))

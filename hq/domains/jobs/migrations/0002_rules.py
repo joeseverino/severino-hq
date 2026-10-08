@@ -7,19 +7,28 @@ import hq.platform.core.rules
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('jobs', '0001_initial'),
+        ("jobs", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddConstraint(
-            model_name='job',
-            constraint=hq.platform.core.rules.Rule(condition=models.Q(('percent__isnull', True), ('percent__lte', 100), _connector='OR'), field='percent', name='job_percent_at_most_100', violation_error_message='Progress is 0 to 100.'),
+            model_name="job",
+            constraint=hq.platform.core.rules.Rule(
+                condition=models.Q(("percent__isnull", True), ("percent__lte", 100), _connector="OR"),
+                field="percent",
+                name="job_percent_at_most_100",
+                violation_error_message="Progress is 0 to 100.",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='job',
-            constraint=hq.platform.core.rules.Rule(condition=models.Q(('state__in', ['queued', 'running', 'succeeded', 'failed', 'lost'])), field='state', name='job_state_is_declared', violation_error_message='Must be one of: queued, running, succeeded, failed, lost.'),
+            model_name="job",
+            constraint=hq.platform.core.rules.Rule(
+                condition=models.Q(("state__in", ["queued", "running", "succeeded", "failed", "lost"])),
+                field="state",
+                name="job_state_is_declared",
+                violation_error_message="Must be one of: queued, running, succeeded, failed, lost.",
+            ),
         ),
     ]

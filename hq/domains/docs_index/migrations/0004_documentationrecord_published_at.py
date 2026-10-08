@@ -2,7 +2,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("docs_index", "0003_rename_secret_adjacent_to_restricted"),
     ]
@@ -14,10 +13,7 @@ class Migration(migrations.Migration):
             field=models.DateField(
                 blank=True,
                 null=True,
-                help_text=(
-                    "Publication date for public articles. "
-                    "Empty for operational docs."
-                ),
+                help_text=("Publication date for public articles. Empty for operational docs."),
             ),
         ),
     ]

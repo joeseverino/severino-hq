@@ -33,7 +33,6 @@ EXAMPLE = "tests.fixtures.example_hq_plugin"
 SCRIPT = {"X-Requested-With": "XMLHttpRequest"}
 
 
-
 def calls_out(request):
     """What the rule exists to stop: a view asking the registry itself."""
 
@@ -75,9 +74,7 @@ class ComposedExample(TestCase):
         composed = mock.patch.dict(
             os.environ,
             {
-                "SEVERINO_HQ_PLUGINS": ",".join(
-                    part for part in (installed, f"{EXAMPLE}.plugin:plugin") if part
-                ),
+                "SEVERINO_HQ_PLUGINS": ",".join(part for part in (installed, f"{EXAMPLE}.plugin:plugin") if part),
                 # A fixture has no signed approval to be admitted by.
                 "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
             },

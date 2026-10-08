@@ -179,8 +179,7 @@ class TrustedNetworkASGI:
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and settings.SEVERINO_ENFORCE_TRUSTED_NETWORK:
             headers = {
-                key.decode("latin-1").lower(): value.decode("latin-1")
-                for key, value in scope.get("headers", [])
+                key.decode("latin-1").lower(): value.decode("latin-1") for key, value in scope.get("headers", [])
             }
             peer = (scope.get("client") or ("", 0))[0]
             request = _FakeScopeRequest(peer, headers.get("x-forwarded-for", ""))

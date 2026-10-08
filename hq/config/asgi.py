@@ -24,9 +24,7 @@ django_application = get_asgi_application()
 # the middleware that refuses untrusted callers everywhere else.
 # No compressor: the image build compressed each asset once and the mount sends
 # that copy.
-static_application = TrustedNetworkASGI(
-    CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False)
-)
+static_application = TrustedNetworkASGI(CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False))
 # LowercaseHeaders inside the compressor, not outside it: the compressor has to
 # see names it can match, and by the time the response leaves it the damage
 # would already be two Content-Lengths.

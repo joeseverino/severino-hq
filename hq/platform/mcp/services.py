@@ -115,23 +115,17 @@ def get_topology(
     )
 
 
-def list_resource(
-    name: str, filters: dict[str, Any] | None = None
-) -> dict[str, Any]:
+def list_resource(name: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
     """List any registered resource with schema-validated filters."""
 
-    return list_application_resource(
-        name, filters, principal=current_principal(), strict=True
-    )
+    return list_application_resource(name, filters, principal=current_principal(), strict=True)
 
 
 def get_resource(name: str, identifier: str | int) -> dict[str, Any]:
     """Get one record from any registered addressable resource."""
 
     try:
-        return get_application_resource(
-            name, identifier, principal=current_principal(), strict=True
-        )
+        return get_application_resource(name, identifier, principal=current_principal(), strict=True)
     except ResourceNotFound as exc:
         raise NotFoundError(exc.reason) from exc
 

@@ -43,8 +43,7 @@ def prune_audit(progress: Any = None) -> dict[str, Any]:
     if deleted:
         record_operation(
             "audit.prune",
-            f"Deleted {counted(deleted, 'routine event', 'routine events')} older than "
-            f"{counted(days, 'day')}.",
+            f"Deleted {counted(deleted, 'routine event', 'routine events')} older than {counted(days, 'day')}.",
             action=AuditLog.Action.DELETED,
             metadata={"deleted": deleted, "days": days},
         )

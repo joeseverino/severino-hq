@@ -47,10 +47,7 @@ class RelationGroup:
         """
 
         return all(
-            item.source is None
-            and item.observed_at is None
-            and not item.stale
-            and not item.entity.detail
+            item.source is None and item.observed_at is None and not item.stale and not item.entity.detail
             for item in self.items
         )
 
@@ -168,9 +165,7 @@ def relationships_for(node_id: str, *, principal: Principal) -> Relationships:
             rank,
             tuple(sorted(items, key=lambda row: row.entity.label.casefold())),
         )
-        for phrase, (rank, items) in sorted(
-            grouped.items(), key=lambda pair: (pair[1][0], pair[0])
-        )
+        for phrase, (rank, items) in sorted(grouped.items(), key=lambda pair: (pair[1][0], pair[0]))
     )
     return Relationships(
         node_id=node_id,
@@ -202,9 +197,7 @@ def readout_records(subject) -> tuple[tuple[str, str, str, tuple[dict[str, Any],
         record = joined.spec.admitted(joined.record)
         if record not in records:
             records.append(record)
-    return tuple(
-        (kind, label, ref, tuple(records)) for (kind, label, ref), records in found.items()
-    )
+    return tuple((kind, label, ref, tuple(records)) for (kind, label, ref), records in found.items())
 
 
 def _readouts(subject) -> tuple[tuple[str, EntityLink | None, str], ...]:

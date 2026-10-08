@@ -53,20 +53,14 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 severity="serious" if days <= 30 else "attention",
                 explanation=(
-                    f"On {when_day(expires.date())} its "
-                    "records, certificate and every name under it stop working."
+                    f"On {when_day(expires.date())} its records, certificate and every name under it stop working."
                 ),
                 evidence=(
                     ("Expires", when_day(expires.date())),
                     ("Auto-renew", "Off"),
                     ("Registrar", registrar or "Unknown"),
                 ),
-                steps=(
-                    OperatorStep(
-                        label=f"Renew {domain} or turn on auto-renew at "
-                        f"{registrar or 'its registrar'}."
-                    ),
-                ),
+                steps=(OperatorStep(label=f"Renew {domain} or turn on auto-renew at {registrar or 'its registrar'}."),),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
@@ -79,11 +73,7 @@ RULES: tuple[FindingRule, ...] = (
         "Domain registration expiring",
         "serious",
         _registration_lapsing,
-        operator_action=(
-            "Renew the domain or turn on auto-renew at its registrar."
-        ),
-        no_help_reason=(
-            "HQ cannot renew a domain."
-        ),
+        operator_action=("Renew the domain or turn on auto-renew at its registrar."),
+        no_help_reason=("HQ cannot renew a domain."),
     ),
 )

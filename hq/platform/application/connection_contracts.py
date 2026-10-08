@@ -129,9 +129,7 @@ class ConnectionSpec:
     # What this family's emptiness means, in its own words. The default suits a
     # family that emits from configuration; one fed by controller reports
     # overrides it to say so.
-    empty_message: str = (
-        "Not set up here yet. Its connections appear once a credential is added."
-    )
+    empty_message: str = "Not set up here yet. Its connections appear once a credential is added."
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:

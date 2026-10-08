@@ -28,8 +28,4 @@ def debug_toolbar_enabled(*, debug: bool, requested: bool, testing: bool) -> boo
 def without_trusted_types(policy: dict[str, list[str]]) -> dict[str, list[str]]:
     """The policy minus the Trusted Types directives."""
 
-    return {
-        key: value
-        for key, value in policy.items()
-        if key not in TRUSTED_TYPES_DIRECTIVES
-    }
+    return {key: value for key, value in policy.items() if key not in TRUSTED_TYPES_DIRECTIVES}

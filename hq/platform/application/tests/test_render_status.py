@@ -146,8 +146,14 @@ class RecordTests(SimpleTestCase):
             {"renderer": "Example Renderer", "state": "unreadable", "reason": "missing"},
             {"renderer": "hq", "state": "fine"},
             {"renderer": "hq", "state": "unreadable", "reason": "the file was not there"},
-            {"renderer": "hq", "state": "read", "status": {"last_attempt": {"at": stamp(timedelta(0))}, "connect": {
-                "dependencies": [{"service": "sync", "status": "ACTIVE"}] * 17}}},
+            {
+                "renderer": "hq",
+                "state": "read",
+                "status": {
+                    "last_attempt": {"at": stamp(timedelta(0))},
+                    "connect": {"dependencies": [{"service": "sync", "status": "ACTIVE"}] * 17},
+                },
+            },
         ):
             with self.subTest(record=record):
                 self.assertEqual(SPEC.clean([record]), ([], 1))
@@ -260,7 +266,10 @@ class FailingTests(TestCase):
 
         (finding,) = raised("render-failing")
 
-        self.assertEqual(finding["title"], "example-controller could not refresh its credentials from 1Password: 1Password Connect refused the token")
+        self.assertEqual(
+            finding["title"],
+            "example-controller could not refresh its credentials from 1Password: 1Password Connect refused the token",
+        )
         # One failed run on files still inside the allowance.
         self.assertEqual(finding["severity"], "attention")
         self.assertIn({"label": "Reason", "value": "1Password Connect refused the token"}, finding["evidence"])
@@ -277,7 +286,11 @@ class FailingTests(TestCase):
         self.assertEqual(raised("render-stale"), [])
 
     def test_a_failure_that_outlasts_the_allowance_is_serious(self):
-        sweep(read(outcome="failed", failure="connect_unavailable", confirmed=timedelta(days=8), rendered=timedelta(days=8)))
+        sweep(
+            read(
+                outcome="failed", failure="connect_unavailable", confirmed=timedelta(days=8), rendered=timedelta(days=8)
+            )
+        )
 
         (finding,) = raised("render-failing")
 
@@ -390,7 +403,10 @@ class SyncTests(TestCase):
         self.assertEqual(finding["severity"], "attention")
         self.assertEqual(finding["title"], "1Password Connect on example-controller has stopped syncing")
         self.assertIn({"label": "Sync", "value": "TOKEN_NEEDED"}, finding["evidence"])
-        self.assertEqual(finding["operator_steps"][-1]["command"], 'ssh example-controller "sudo systemctl start severino-hq-secrets.service"')
+        self.assertEqual(
+            finding["operator_steps"][-1]["command"],
+            'ssh example-controller "sudo systemctl start severino-hq-secrets.service"',
+        )
         # The render itself succeeded, from Connect's cache.
         self.assertEqual(raised("render-failing"), [])
         self.assertEqual(raised("render-stale"), [])
@@ -426,7 +442,8 @@ class UnreadTests(TestCase):
             [{"label": "Job", "value": "hq"}, {"label": "Report", "value": "No report found"}],
         )
         self.assertEqual(
-            [step["command"] for step in finding["operator_steps"]], ['ssh example-controller "sudo systemctl start severino-hq-secrets.service"']
+            [step["command"] for step in finding["operator_steps"]],
+            ['ssh example-controller "sudo systemctl start severino-hq-secrets.service"'],
         )
         for name in RULES:
             if name != "render-status-unread":
@@ -457,18 +474,14 @@ class UnreadTests(TestCase):
 
         (finding,) = raised("render-status-unread")
 
-        self.assertIn(
-            {"label": "Report", "value": "Report could not be understood"}, finding["evidence"]
-        )
+        self.assertIn({"label": "Report", "value": "Report could not be understood"}, finding["evidence"])
 
     def test_a_reading_the_controller_could_not_take_is_a_finding(self):
         store(RENDER_STATUS_KIND, reachable=False, error="the render status list is not name=path pairs")
 
         (finding,) = raised("render-status-unread")
 
-        self.assertIn(
-            {"label": "Report", "value": "The controller could not read it"}, finding["evidence"]
-        )
+        self.assertIn({"label": "Report", "value": "The controller could not read it"}, finding["evidence"])
 
 
 class SubjectTests(TestCase):
@@ -482,7 +495,8 @@ class SubjectTests(TestCase):
 
     def test_a_controller_that_is_a_machine_carries_it_on_the_machine(self):
         ManagedResource.objects.create(
-            key="example-controller", kind="machine",
+            key="example-controller",
+            kind="machine",
             spec={"name": "example-controller", "addresses": ["192.0.2.10"]},
         )
         tailnet_connection()
@@ -542,8 +556,7 @@ class PageTests(TestCase):
             self.assertIn("could not refresh its credentials from 1Password", body)
             self.assertIn("sudo systemctl start severino-hq-secrets.service", body)
             emitted += [
-                (unescape(match.group(1)), "GET")
-                for match in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"', body)
+                (unescape(match.group(1)), "GET") for match in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"', body)
             ]
         principal = web_principal(self.user)
         with projection_scope():
@@ -551,9 +564,7 @@ class PageTests(TestCase):
                 if finding.rule not in RULES:
                     continue
                 emitted += [(remedy.url, remedy.method) for remedy in finding.remedies]
-                emitted += [
-                    (action.url, action.method) for step in finding.workflow.steps for action in step.actions
-                ]
+                emitted += [(action.url, action.method) for step in finding.workflow.steps for action in step.actions]
         self.assertTrue(emitted)
         for label_url in _command_links([("", url, method) for url, method in emitted]):
             with self.subTest(url=label_url[1]):
@@ -566,8 +577,16 @@ class PageTests(TestCase):
 class FactTests(SimpleTestCase):
     def test_a_fact_carries_a_rendering_whole(self):
         rendering = rules.Rendering(
-            "hq", "read", "", "failed", "connect_denied", "2026-01-02T00:00:00Z", "2026-01-01T00:00:00Z",
-            "2025-12-31T23:00:00Z", "TOKEN_NEEDED", "2026-01-02T00:00:00Z",
+            "hq",
+            "read",
+            "",
+            "failed",
+            "connect_denied",
+            "2026-01-02T00:00:00Z",
+            "2026-01-01T00:00:00Z",
+            "2025-12-31T23:00:00Z",
+            "TOKEN_NEEDED",
+            "2026-01-02T00:00:00Z",
         )
 
         key, value = rendering.fact

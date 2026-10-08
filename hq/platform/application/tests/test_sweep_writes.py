@@ -29,10 +29,7 @@ DECLARATIONS = ManagedResource._meta.db_table
 
 
 def _records(count: int) -> list[dict]:
-    return [
-        {"domain": f"app{index}.example.com", "answer": "192.0.2.10", "enabled": True}
-        for index in range(count)
-    ]
+    return [{"domain": f"app{index}.example.com", "answer": "192.0.2.10", "enabled": True} for index in range(count)]
 
 
 def _sweep(records):
@@ -46,11 +43,7 @@ def _measured(records):
     with CaptureQueriesContext(connection) as captured:
         result = _sweep(records)
     after = revisions.read().counts
-    moved = {
-        name: after[name] - before.get(name, 0)
-        for name in after
-        if after[name] != before.get(name, 0)
-    }
+    moved = {name: after[name] - before.get(name, 0) for name in after if after[name] != before.get(name, 0)}
     verbs = Counter(query["sql"].split(None, 1)[0].upper() for query in captured.captured_queries)
     return result, verbs, moved
 
@@ -132,22 +125,15 @@ class ChangedSweepTests(TestCase):
         self.assertEqual(moved, {INVENTORY: 1, DECLARATIONS: 1})
 
     def test_an_observation_that_changed_is_saved_audited_and_indexed(self):
-        ManagedResource.objects.filter(pk=self.first.pk).update(
-            spec={**self.records[0], "answer": "192.0.2.99"}
-        )
+        ManagedResource.objects.filter(pk=self.first.pk).update(spec={**self.records[0], "answer": "192.0.2.99"})
         AuditLog.objects.all().delete()
 
         _sweep([{**self.records[0], "answer": "192.0.2.99"}, self.records[1]])
 
         self.first.refresh_from_db()
         self.assertEqual(self.first.status["answer"], "192.0.2.99")
-        updates = AuditLog.objects.filter(
-            object_type="Managed resource", action=AuditLog.Action.UPDATED
-        )
+        updates = AuditLog.objects.filter(object_type="Managed resource", action=AuditLog.Action.UPDATED)
         self.assertEqual(updates.count(), 1)
         self.assertIn("status", updates.get().metadata["changes"])
-        body = SearchDocument.objects.get(
-            scope="infrastructure.resources", object_id="app0"
-        ).body
+        body = SearchDocument.objects.get(scope="infrastructure.resources", object_id="app0").body
         self.assertEqual(body.count("192.0.2.99"), 2)
-

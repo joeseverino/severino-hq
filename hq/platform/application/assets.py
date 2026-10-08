@@ -62,7 +62,6 @@ class AssetCommand:
     infrastructure: str = ""
 
 
-
 def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, Any]:
     result = {
         "slug": asset.slug,
@@ -83,23 +82,15 @@ def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, A
     }
     if relationships:
         result["relationships"] = {
-            "projects": list(
-                asset.related_projects.order_by("slug").values_list("slug", flat=True)
-            ),
+            "projects": list(asset.related_projects.order_by("slug").values_list("slug", flat=True)),
             "documentation": safe_doc_ids(asset.documentation_records),
-            "content": list(
-                asset.content_items.order_by("slug").values_list("slug", flat=True)
-            ),
-            "expense_ids": list(
-                asset.expenses.order_by("-date", "-id").values_list("id", flat=True)
-            ),
+            "content": list(asset.content_items.order_by("slug").values_list("slug", flat=True)),
+            "expense_ids": list(asset.expenses.order_by("-date", "-id").values_list("id", flat=True)),
         }
     return result
 
 
-def list_assets(
-    *, status: str | None = None, query: str | None = None, limit: int = 50
-) -> dict[str, Any]:
+def list_assets(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:
     return listing(
         Asset,
         serialize_asset,
@@ -111,9 +102,7 @@ def list_assets(
 
 
 def get_asset(slug: str) -> dict[str, Any]:
-    return addressable(
-        Asset, serialize_asset, slug, label="Asset", missing=NotFoundError
-    )
+    return addressable(Asset, serialize_asset, slug, label="Asset", missing=NotFoundError)
 
 
 @transaction.atomic
@@ -126,9 +115,7 @@ def save_asset(
 ) -> dict[str, Any]:
     principal.require(records_of("assets").write)
     operation = "asset.create" if current_slug is None else "asset.update"
-    with operation_context(
-        interface=principal.interface, actor=principal.actor, operation=operation
-    ):
+    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
         if current_slug is None:
             asset = Asset()
             created = True
@@ -139,9 +126,7 @@ def save_asset(
                 raise NotFoundError(f"Asset {current_slug!r} was not found.") from exc
             created = False
             if expected_updated_at and asset.updated_at.isoformat() != expected_updated_at:
-                raise ConflictError(
-                    f"Asset {current_slug!r} changed after it was read."
-                )
+                raise ConflictError(f"Asset {current_slug!r} changed after it was read.")
 
         values = asdict(command)
         project_slugs = values.pop("related_projects")

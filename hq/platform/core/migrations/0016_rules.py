@@ -7,15 +7,18 @@ import hq.platform.core.rules
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0015_revision'),
+        ("core", "0015_revision"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddConstraint(
-            model_name='agentaccess',
-            constraint=hq.platform.core.rules.Rule(condition=models.Q(('id', 1)), name='agent_access_is_one_row', violation_error_message='There is one of these, with id 1.'),
+            model_name="agentaccess",
+            constraint=hq.platform.core.rules.Rule(
+                condition=models.Q(("id", 1)),
+                name="agent_access_is_one_row",
+                violation_error_message="There is one of these, with id 1.",
+            ),
         ),
     ]

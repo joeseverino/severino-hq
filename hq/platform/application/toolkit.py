@@ -40,11 +40,7 @@ class ToolTab:
         """
 
         specs = integration_graph().capabilities
-        return any(
-            principal.permits(*specs[name].required_capabilities)
-            for name in self.capabilities
-            if name in specs
-        )
+        return any(principal.permits(*specs[name].required_capabilities) for name in self.capabilities if name in specs)
 
 
 TOOL_TABS: tuple[ToolTab, ...] = (

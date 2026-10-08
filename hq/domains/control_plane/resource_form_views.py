@@ -80,9 +80,7 @@ class ResourceFormView(View):
                     # a surface of its own is created from there, where the
                     # context it needs is already established.
                     "providers": [
-                        provider
-                        for provider in describe_providers()["providers"]
-                        if not provider["created_from"]
+                        provider for provider in describe_providers()["providers"] if not provider["created_from"]
                     ],
                     **page_context(
                         "What do you want to add?",
@@ -110,11 +108,7 @@ class ResourceFormView(View):
                 # Only when editing. Creating something asks what HQ cannot
                 # know and nothing else: a name it can derive, and a pause
                 # switch for a thing that does not exist yet, are not questions.
-                "identity": (
-                    ResourceIdentityForm(initial={"enabled": resource.enabled})
-                    if resource
-                    else None
-                ),
+                "identity": (ResourceIdentityForm(initial={"enabled": resource.enabled}) if resource else None),
                 # The form is built knowing which name it is about, so its
                 # menus can offer what suits that name rather than everything
                 # that exists. A certificate menu with one entry is right by
@@ -133,9 +127,7 @@ class ResourceFormView(View):
                 # which is the whole of what a person comes to check.
                 "facts": _form_facts(resource, spec) if resource else (),
                 "show_on_dashboard": bool(
-                    resource
-                    and kind == MACHINE_KIND
-                    and dashboard_machine_selected(resource.key)
+                    resource and kind == MACHINE_KIND and dashboard_machine_selected(resource.key)
                 ),
                 **_form_page(kind, resource),
             },
@@ -154,11 +146,7 @@ class ResourceFormView(View):
         )(request.POST, initial=resource.spec if resource else None)
         material_class = _material_form(kind) if not resource else None
         material = material_class(request.POST) if material_class else None
-        if (
-            (identity is None or identity.is_valid())
-            and spec.is_valid()
-            and (material is None or material.is_valid())
-        ):
+        if (identity is None or identity.is_valid()) and spec.is_valid() and (material is None or material.is_valid()):
             response = self._declare(request, kind, resource, identity, spec, material)
             if response is not None:
                 return response
@@ -174,9 +162,7 @@ class ResourceFormView(View):
                 "spec": spec,
                 "material": material,
                 "show_on_dashboard": bool(
-                    resource
-                    and kind == MACHINE_KIND
-                    and dashboard_machine_selected(resource.key)
+                    resource and kind == MACHINE_KIND and dashboard_machine_selected(resource.key)
                 ),
                 **_form_page(kind, resource),
             },
@@ -248,9 +234,7 @@ def _apply_note(kind: str) -> str:
     is the honest answer, and it is written once, there.
     """
 
-    applies, explanation = controller_action_policy(
-        kind, OperationRequest.Action.RECONCILE
-    )
+    applies, explanation = controller_action_policy(kind, OperationRequest.Action.RECONCILE)
     if applies:
         return "The controller applies it within about a minute."
     return explanation
@@ -354,11 +338,7 @@ def _derived_spec(resource) -> dict:
     if not isinstance(resolved, dict):
         return {}
     fields = PROVIDERS[resource.kind].spec_type.model_fields
-    return {
-        name: value
-        for name, value in resolved.items()
-        if name in fields and value not in (None, "", [], ())
-    }
+    return {name: value for name, value in resolved.items() if name in fields and value not in (None, "", [], ())}
 
 
 def _initial_spec(request, kind: str, resource) -> dict | None:
@@ -413,7 +393,7 @@ def _form_context(request, resource) -> NameContext:
         if provider is not None and provider.hostnames is not None:
             try:
                 hostname = next(iter(provider.hostnames(resource.spec)), "")
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 hostname = ""
     return name_context(hostname)
 
@@ -424,9 +404,7 @@ def _material_form(kind: str):
 
 
 def _store_material(kind: str, key: str, cleaned: dict, request) -> None:
-    _import(PROVIDERS[kind].material_handler)(
-        key, cleaned, principal=web_principal(request.user)
-    )
+    _import(PROVIDERS[kind].material_handler)(key, cleaned, principal=web_principal(request.user))
 
 
 def _derived_key(kind: str, spec: dict) -> str:

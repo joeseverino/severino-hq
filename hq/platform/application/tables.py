@@ -149,9 +149,7 @@ class TableListMixin:
             None,
         )
         if sort:
-            ordering = (
-                sort.ordering if isinstance(sort.ordering, tuple) else (sort.ordering,)
-            )
+            ordering = sort.ordering if isinstance(sort.ordering, tuple) else (sort.ordering,)
             # Stable pagination: equal values must not drift between pages.
             if not any(field.lstrip("-") == "pk" for field in ordering):
                 ordering = (*ordering, "pk")
@@ -191,9 +189,7 @@ class TableListMixin:
         for toggle in self.table_toggles:
             selected = bool(self.request.GET.get(toggle.name))
             active_count += int(selected)
-            toggles.append(
-                {"name": toggle.name, "label": toggle.label, "selected": selected}
-            )
+            toggles.append({"name": toggle.name, "label": toggle.label, "selected": selected})
         query = self.request.GET.get("q", "")
         active_count += int(bool(query.strip()))
         query_params = self.request.GET.copy()
@@ -226,8 +222,7 @@ class TableListMixin:
         if not self.table_totals or queryset is None:
             return {}
         sums = queryset.aggregate(
-            **{f"total_{index}": Sum(spec.column)
-               for index, spec in enumerate(self.table_totals)}
+            **{f"total_{index}": Sum(spec.column) for index, spec in enumerate(self.table_totals)}
         )
         return {
             spec.column: {
@@ -242,7 +237,5 @@ class TableListMixin:
         context["table"] = self.table_context()
         # `object_list` is the filtered, ordered queryset before the paginator
         # slices it, which is exactly the set a total should describe.
-        context["table_totals"] = self.table_totals_for(
-            getattr(self, "object_list", None)
-        )
+        context["table_totals"] = self.table_totals_for(getattr(self, "object_list", None))
         return context

@@ -31,11 +31,7 @@ VALIDATOR = importlib.util.find_spec("openapi_spec_validator") is not None
 
 
 def _operations(value: dict) -> list[tuple[str, str, dict]]:
-    return [
-        (path, method, operation)
-        for path, item in value["paths"].items()
-        for method, operation in item.items()
-    ]
+    return [(path, method, operation) for path, item in value["paths"].items() for method, operation in item.items()]
 
 
 class DocumentTests(SimpleTestCase):
@@ -127,11 +123,7 @@ class DocumentTests(SimpleTestCase):
             self.assertEqual(refs, ["#/components/parameters/IdempotencyKey"], path)
 
     def test_the_request_body_is_the_one_the_view_validates(self):
-        spec = next(
-            spec
-            for spec in describe_capabilities()["capabilities"]
-            if spec["name"] == "project.update"
-        )
+        spec = next(spec for spec in describe_capabilities()["capabilities"] if spec["name"] == "project.update")
         self.assertEqual(
             self.document["components"]["schemas"]["ProjectUpdateRequest"],
             views._request_schema(spec),
@@ -210,8 +202,7 @@ class DocumentTests(SimpleTestCase):
     def test_recorded_examples_conform_to_their_operations(self):
         contract = Contract(self.document)
         operations = {
-            operation["operationId"]: (path, method)
-            for path, method, operation in _operations(self.document)
+            operation["operationId"]: (path, method) for path, method, operation in _operations(self.document)
         }
         examples = json.loads(openapi.EXAMPLES_PATH.read_text(encoding="utf-8"))
         self.assertTrue(examples)
@@ -238,9 +229,7 @@ class ServedDocumentTests(TestCase):
 
     def test_the_served_document_is_the_derived_one(self):
         with _serving():
-            response = self.client.get(
-                reverse("hq_api:openapi"), HTTP_AUTHORIZATION=f"Bearer {_token()}"
-            )
+            response = self.client.get(reverse("hq_api:openapi"), HTTP_AUTHORIZATION=f"Bearer {_token()}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), openapi.document())
         self.assertEqual(response["Cache-Control"], "private, no-store")
@@ -312,7 +301,8 @@ class ContractClientTests(SimpleTestCase):
 
     def test_resource_collections_accept_projection_metadata(self):
         self._answer(
-            "/api/v2/resources/projects/", 200,
+            "/api/v2/resources/projects/",
+            200,
             {"ok": True, "data": {"items": [], "count": 0, "filters": {"query": "example"}}},
         )
 

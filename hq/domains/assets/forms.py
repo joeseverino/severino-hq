@@ -26,9 +26,7 @@ class AssetForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 4}),
             "purchase_date": forms.DateInput(attrs={"type": "date"}),
             "warranty_date": forms.DateInput(attrs={"type": "date"}),
-            "slug": forms.TextInput(
-                attrs={"placeholder": "Leave blank to use the name"}
-            ),
+            "slug": forms.TextInput(attrs={"placeholder": "Leave blank to use the name"}),
             "related_projects": forms.SelectMultiple(attrs={"size": 6}),
         }
         labels = {"infrastructure": "This is"}

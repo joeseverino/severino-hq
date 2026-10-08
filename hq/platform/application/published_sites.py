@@ -78,15 +78,13 @@ def public_sites() -> tuple[tuple[str, str, str], ...]:
         try:
             names = tuple(provider.hostnames(resource.spec))
             origin = provider.origin(resource.spec) if provider.origin else ""
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
         for name in names:
             hostname = normalized_hostname(name)
             # A wildcard is a rule about names, not a name anything answers at.
             if hostname and names_a_host(hostname) and "*" not in hostname:
-                found.setdefault(
-                    hostname, projects.get(hostname, {}).get("name", "")
-                )
+                found.setdefault(hostname, projects.get(hostname, {}).get("name", ""))
                 targets.setdefault(hostname, normalized_hostname(origin))
     # A name whose target is another name here is the same site reached a
     # second way. The board folds those in, and a list that unfolds them shows
@@ -98,7 +96,5 @@ def public_sites() -> tuple[tuple[str, str, str], ...]:
         if target and ":" not in target and target != hostname and target in found
     }
     return tuple(
-        (hostname, sub, f"https://{hostname}")
-        for hostname, sub in sorted(found.items())
-        if hostname not in aliases
+        (hostname, sub, f"https://{hostname}") for hostname, sub in sorted(found.items()) if hostname not in aliases
     )

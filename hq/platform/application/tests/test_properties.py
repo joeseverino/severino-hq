@@ -74,9 +74,7 @@ class ImageRefProperties(SimpleTestCase):
             repository = "/".join(path)
             parsed = ImageRef.parse(f"{registry}/{repository}:{tag}")
 
-            self.assertEqual(
-                (parsed.registry, parsed.repository, parsed.tag), (registry, repository, tag)
-            )
+            self.assertEqual((parsed.registry, parsed.repository, parsed.tag), (registry, repository, tag))
 
 
 @skipUnless(HYPOTHESIS, "hypothesis is a development tool")
@@ -110,7 +108,11 @@ class ProvenanceSourceProperties(SimpleTestCase):
             self.assertTrue(found == "" or found.count("/") == 1)
 
         @FAST
-        @given(OWNER, REPOSITORY, st.sampled_from(["https://github.com/{}/{}", "https://github.com/{}/{}.git", "git@github.com:{}/{}.git"]))
+        @given(
+            OWNER,
+            REPOSITORY,
+            st.sampled_from(["https://github.com/{}/{}", "https://github.com/{}/{}.git", "git@github.com:{}/{}.git"]),
+        )
         def test_every_way_of_writing_a_repository_names_it(self, owner, repository, form):
             self.assertEqual(github_source(form.format(owner, repository)), f"{owner}/{repository}")
 
@@ -129,6 +131,4 @@ class DiagnosisProperties(SimpleTestCase):
             allowed = [module.UNKNOWN, *module.diagnoses()]
             found = module.diagnose(log)
 
-            self.assertIn(
-                found, [{key: entry[key] for key in ("id", "title", "fix")} for entry in allowed]
-            )
+            self.assertIn(found, [{key: entry[key] for key in ("id", "title", "fix")} for entry in allowed])

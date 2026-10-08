@@ -10,9 +10,7 @@ from .locate import Machines, points_at_host
 from .tailnet_presence import Presence
 
 
-def _connection_aliases(
-    index: Machines, connections: tuple[ProviderConnection, ...]
-) -> dict[str, str]:
+def _connection_aliases(index: Machines, connections: tuple[ProviderConnection, ...]) -> dict[str, str]:
     aliases = {}
     for connection in connections:
         if not points_at_host(connection.endpoint):
@@ -32,17 +30,11 @@ def _located_aliases(index: Machines, located: dict[str, str]) -> dict[str, str]
     return aliases
 
 
-def _presence_address_aliases(
-    index: Machines, present: dict[str, Presence]
-) -> dict[str, str]:
+def _presence_address_aliases(index: Machines, present: dict[str, Presence]) -> dict[str, str]:
     aliases = {}
     for name, presence in present.items():
         owner = next(
-            (
-                owner
-                for address in presence.addresses
-                if (owner := index.at(address)) and owner != name
-            ),
+            (owner for address in presence.addresses if (owner := index.at(address)) and owner != name),
             None,
         )
         if owner:
@@ -50,9 +42,7 @@ def _presence_address_aliases(
     return aliases
 
 
-def _presence_name_aliases(
-    index: Machines, present: dict[str, Presence], claimed: dict[str, str]
-) -> dict[str, str]:
+def _presence_name_aliases(index: Machines, present: dict[str, Presence], claimed: dict[str, str]) -> dict[str, str]:
     aliases = {}
     known = {_folded(existing): existing for existing in index.names}
     for name, presence in present.items():

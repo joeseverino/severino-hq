@@ -32,16 +32,11 @@ from .test_control_plane import certificate_spec, declare_targets
 
 CONTRACT_URI = "urn:hq:controller-bridge"
 CONTRACT = contract()
-REGISTRY = Registry().with_resource(
-    CONTRACT_URI, Resource.from_contents(CONTRACT, default_specification=DRAFT202012)
-)
+REGISTRY = Registry().with_resource(CONTRACT_URI, Resource.from_contents(CONTRACT, default_specification=DRAFT202012))
 
 
 def _pointer(action: str, *parts: str) -> str:
-    escaped = [
-        part.replace("~", "~0").replace("/", "~1")
-        for part in ("paths", f"/{action}", "post", *parts)
-    ]
+    escaped = [part.replace("~", "~0").replace("/", "~1") for part in ("paths", f"/{action}", "post", *parts)]
     return f"{CONTRACT_URI}#/" + "/".join(escaped)
 
 
@@ -72,9 +67,7 @@ class ControllerContractTests(TestCase):
         managing_everything()
         declare_targets()
         save_managed_resource(
-            ManagedResourceCommand(
-                key="example-wildcard", kind="tls.certificate", spec=certificate_spec()
-            ),
+            ManagedResourceCommand(key="example-wildcard", kind="tls.certificate", spec=certificate_spec()),
             principal=cli_principal(),
         )
         self.resource = ManagedResource.objects.get(key="example-wildcard")
@@ -119,9 +112,7 @@ class ControllerContractTests(TestCase):
 
     def test_an_empty_queue(self):
         self.assertIsNone(bridge("peek")["operation"])
-        self.assertIsNone(
-            bridge("claim", controller_id="example-controller")["operation"]
-        )
+        self.assertIsNone(bridge("claim", controller_id="example-controller")["operation"])
 
     @patch(
         "hq.platform.application.resource_operations.controller_action_policy",
@@ -200,9 +191,7 @@ class ControllerContractTests(TestCase):
             {"adguard.rewrite": {"ok": True, "records": []}},
             controller_id="example-controller",
         )
-        self.assertIn(
-            "age_seconds", bridge("sweep-due", controller_id="example-controller")
-        )
+        self.assertIn("age_seconds", bridge("sweep-due", controller_id="example-controller"))
 
     def test_registry(self):
         # The host alone: a composition admits extensions of its own.
@@ -215,8 +204,10 @@ class ControllerContractTests(TestCase):
 
     def test_the_registry_names_the_extensions_the_image_composes(self):
         source = {
-            "plugin": "example", "source_repository": "example/ext",
-            "source_workflow": ".github/workflows/admit.yml", "source_commit": "0" * 40,
+            "plugin": "example",
+            "source_repository": "example/ext",
+            "source_workflow": ".github/workflows/admit.yml",
+            "source_commit": "0" * 40,
         }
         with patch("hq.platform.application.controller.admitted_sources", return_value=(source,)):
             registry = bridge("registry")
@@ -226,26 +217,46 @@ class ControllerContractTests(TestCase):
         bridge("glance-plan", controller_id="example-controller")
 
     def test_analytics_plan(self):
-        plan = bridge(
-            "analytics-plan", [{"connection_ref": "cloudflare", "site_tag": "site"}]
-        )
+        plan = bridge("analytics-plan", [{"connection_ref": "cloudflare", "site_tag": "site"}])
         self.assertEqual(len(plan["windows"]), 1)
 
     def test_analytics_readings_are_held_to_the_contract(self):
         vitals = {
-            "date": "2026-01-01", "sample_interval": 1, "cumulative_layout_shift": 0.05,
-            "largest_contentful_paint_ms": 1800, "interaction_to_next_paint_ms": None,
-            "first_contentful_paint_ms": 900, "time_to_first_byte_ms": 120,
-            **{f"{metric}_{band}": 0 for metric in ("lcp", "inp", "cls")
-               for band in ("good", "needs_improvement", "poor")},
+            "date": "2026-01-01",
+            "sample_interval": 1,
+            "cumulative_layout_shift": 0.05,
+            "largest_contentful_paint_ms": 1800,
+            "interaction_to_next_paint_ms": None,
+            "first_contentful_paint_ms": 900,
+            "time_to_first_byte_ms": 120,
+            **{
+                f"{metric}_{band}": 0
+                for metric in ("lcp", "inp", "cls")
+                for band in ("good", "needs_improvement", "poor")
+            },
         }
-        readings = {"sites": [{
-            "site_tag": "site", "host": "example.com", "connection_ref": "cloudflare",
-            "start": "2026-01-01", "end": "2026-01-01",
-            "rows": [{"dimension": "path", "value": "/", "date": "2026-01-01",
-                      "pageviews": 12, "visits": 9, "sample_interval": 1}],
-            "vitals": [vitals],
-        }]}
+        readings = {
+            "sites": [
+                {
+                    "site_tag": "site",
+                    "host": "example.com",
+                    "connection_ref": "cloudflare",
+                    "start": "2026-01-01",
+                    "end": "2026-01-01",
+                    "rows": [
+                        {
+                            "dimension": "path",
+                            "value": "/",
+                            "date": "2026-01-01",
+                            "pageviews": 12,
+                            "visits": 9,
+                            "sample_interval": 1,
+                        }
+                    ],
+                    "vitals": [vitals],
+                }
+            ]
+        }
         bridge("analytics", readings, controller_id="example-controller")
 
     def test_reports_are_acknowledged(self):

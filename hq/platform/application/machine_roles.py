@@ -34,9 +34,7 @@ def _exit_node(machine, context: RoleContext) -> bool:
         return False
     # Offered and approved: the machine advertises both default routes and the
     # tailnet hands them out.
-    routed = set(presence.advertised_routes) >= EXIT_ROUTES and set(
-        presence.enabled_routes
-    ) >= EXIT_ROUTES
+    routed = set(presence.advertised_routes) >= EXIT_ROUTES and set(presence.enabled_routes) >= EXIT_ROUTES
     return routed or (presence.offers_exit_node and presence.exit_node_approved)
 
 
@@ -67,9 +65,7 @@ def role_context() -> RoleContext:
     from .tailnet import policy
 
     return RoleContext(
-        nameservers=frozenset(
-            host_of(str(server)) for server in policy().dns.get("dns") or () if server
-        )
+        nameservers=frozenset(host_of(str(server)) for server in policy().dns.get("dns") or () if server)
     )
 
 

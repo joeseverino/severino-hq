@@ -157,20 +157,26 @@ class MailPageTests(TestCase):
         for key, name, content, priority in (
             ("mx1", "example.com", "mx01.mail.example.net", 10),
             ("spf", "example.com", '"v=spf1 include:example.net -all"', None),
-            ("dmarc", "_dmarc.example.com",
-             '"v=DMARC1; p=none; rua=mailto:box@example.com; fo=1"', None),
+            ("dmarc", "_dmarc.example.com", '"v=DMARC1; p=none; rua=mailto:box@example.com; fo=1"', None),
         ):
             ManagedResource.objects.create(
-                key=key, kind="cloudflare.dns_record", enabled=True,
+                key=key,
+                kind="cloudflare.dns_record",
+                enabled=True,
                 spec={
-                    "zone": "example.com", "name": name,
+                    "zone": "example.com",
+                    "name": name,
                     "record_type": "MX" if priority else "TXT",
-                    "content": content, "priority": priority,
-                    "proxied": False, "ttl": 1,
+                    "content": content,
+                    "priority": priority,
+                    "proxied": False,
+                    "ttl": 1,
                 },
             )
         ManagedResource.objects.create(
-            key="zone", kind="cloudflare.zone", enabled=True,
+            key="zone",
+            kind="cloudflare.zone",
+            enabled=True,
             spec={"zone": "example.com", "connection_ref": "cf"},
         )
         self.user = get_user_model().objects.create_user("op", password="x" * 12)
@@ -184,8 +190,9 @@ class MailPageTests(TestCase):
         self.assertContains(response, "Senders (SPF)")
 
     def test_tightening_the_policy_publishes_it(self):
-        self.client.post(self.url, {"section": "dmarc", "p": "reject", "sp": "",
-                                    "rua": "mailto:box@example.com", "pct": "100"})
+        self.client.post(
+            self.url, {"section": "dmarc", "p": "reject", "sp": "", "rua": "mailto:box@example.com", "pct": "100"}
+        )
         content = ManagedResource.objects.get(key="dmarc").spec["content"]
 
         self.assertIn("p=reject", content)
@@ -193,15 +200,16 @@ class MailPageTests(TestCase):
     def test_a_tag_the_editor_does_not_model_survives_publishing(self):
         """`fo` is not on the form. Saving must not delete it."""
 
-        self.client.post(self.url, {"section": "dmarc", "p": "reject", "sp": "",
-                                    "rua": "mailto:box@example.com", "pct": "100"})
+        self.client.post(
+            self.url, {"section": "dmarc", "p": "reject", "sp": "", "rua": "mailto:box@example.com", "pct": "100"}
+        )
 
         self.assertIn("fo=1", ManagedResource.objects.get(key="dmarc").spec["content"])
 
     def test_senders_are_composed_rather_than_typed(self):
-        self.client.post(self.url, {"section": "spf",
-                                    "rule": ["include:example.net", "include:other.example"],
-                                    "default": "~"})
+        self.client.post(
+            self.url, {"section": "spf", "rule": ["include:example.net", "include:other.example"], "default": "~"}
+        )
         content = ManagedResource.objects.get(key="spf").spec["content"]
 
         self.assertIn("include:other.example", content)
@@ -210,7 +218,6 @@ class MailPageTests(TestCase):
     def test_the_sender_policy_always_ends_with_a_decision(self):
         """Without a final `all`, unlisted senders are simply unhandled."""
 
-        self.client.post(self.url, {"section": "spf", "rule": ["include:example.net"],
-                                    "default": "-"})
+        self.client.post(self.url, {"section": "spf", "rule": ["include:example.net"], "default": "-"})
 
         self.assertIn("-all", ManagedResource.objects.get(key="spf").spec["content"])

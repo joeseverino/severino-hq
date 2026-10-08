@@ -59,9 +59,7 @@ class PartTests(SimpleTestCase):
     """A part needs no more than its reading declares, and is named once."""
 
     def spec(self, *parts, requires=("Read (zone)",), provider="example"):
-        return ObservationSpec(
-            "example.thing", provider, "Thing", Named, requires=requires, parts=parts
-        )
+        return ObservationSpec("example.thing", provider, "Thing", Named, requires=requires, parts=parts)
 
     def test_a_part_within_the_readings_permissions_registers(self):
         found = registry((self.spec(ReadingPart("half", "Half", ("Read (zone)",))),))
@@ -100,10 +98,16 @@ class IngestTests(TestCase):
         return ProviderInventory.objects.get(kind="host.perimeter")
 
     def test_a_stored_reading_keeps_only_its_schema(self):
-        stored = self._sweep([
-            {"record": "perimeter", "connection_ref": "example-edge",
-             "answered_publicly": [443], "token": "never stored"},
-        ])
+        stored = self._sweep(
+            [
+                {
+                    "record": "perimeter",
+                    "connection_ref": "example-edge",
+                    "answered_publicly": [443],
+                    "token": "never stored",
+                },
+            ]
+        )
 
         self.assertNotIn("token", stored.records[0])
         self.assertEqual(stored.records[0]["answered_publicly"], [443])

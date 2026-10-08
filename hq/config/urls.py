@@ -77,9 +77,7 @@ urlpatterns = [
     path("speculation-rules.json", rules_document, name="speculation_rules"),
     path("", DashboardView.as_view(), name="dashboard"),
     path("action-items/", ActionItemsView.as_view(), name="action_items"),
-    path(
-        "action-items/count/", ActionItemCountView.as_view(), name="action_item_count"
-    ),
+    path("action-items/count/", ActionItemCountView.as_view(), name="action_item_count"),
     path(
         "action-items/set-aside/",
         ActionItemAsideView.as_view(aside=True),

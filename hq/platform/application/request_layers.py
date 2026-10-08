@@ -284,8 +284,7 @@ def _policy_layer(
             layer_id,
             label,
             False,
-            f"HQ could not find {missing} on the tailnet, so it cannot check "
-            "the policy for this step.",
+            f"HQ could not find {missing} on the tailnet, so it cannot check the policy for this step.",
             evidence=f"port {port} · {missing} not found",
             boundary="Zero trust policy",
             mechanism="The tailnet policy",
@@ -371,8 +370,7 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
             "device",
             "The tailnet knows this device",
             False,
-            f"{device.label} is not signed for tailnet lock, so other devices "
-            f"ignore it. {device.lock_error}",
+            f"{device.label} is not signed for tailnet lock, so other devices ignore it. {device.lock_error}",
             evidence=device.dns_name or device.name,
             boundary="Device identity",
             mechanism="Tailnet lock signature",
@@ -386,9 +384,7 @@ def _device_layer(device: tailnet.Device | None) -> Layer:
         "device",
         "The tailnet knows this device",
         True,
-        f"{device.label} is on the tailnet, owned by "
-        f"{device.user or 'no reported owner'}, and approved."
-        f"{expiry}",
+        f"{device.label} is on the tailnet, owned by {device.user or 'no reported owner'}, and approved.{expiry}",
         evidence=device.dns_name or device.name,
         boundary="Device identity",
         mechanism="The tailnet device list",
@@ -434,8 +430,7 @@ def _lock_layer(device: tailnet.Device | None) -> Layer | None:
             "tailnet-lock",
             "Node key signed by tailnet lock",
             False,
-            f"{device.label} has no valid tailnet lock signature, so other "
-            f"devices ignore it. {device.lock_error}",
+            f"{device.label} has no valid tailnet lock signature, so other devices ignore it. {device.lock_error}",
             evidence="Unsigned",
             boundary="Device identity",
             mechanism="Tailnet lock signature",
@@ -459,8 +454,7 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
             "identity-agreement",
             "The device's owner is the person signed in",
             False,
-            "The tailnet reports no owner for this device, so HQ cannot compare "
-            "it with the person signed in.",
+            "The tailnet reports no owner for this device, so HQ cannot compare it with the person signed in.",
             evidence="No device owner reported",
             boundary="Identity correlation",
             mechanism="The session and the tailnet device owner",
@@ -487,8 +481,7 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
             "Single sign-on put your Tailscale account in this session, and "
             "Tailscale reports the same account as this device's owner."
             if identity.agreement_basis == "SSO-signed principal link"
-            else "The tailnet account that owns this device is the account "
-            "signed in to HQ."
+            else "The tailnet account that owns this device is the account signed in to HQ."
             if identity.corroborated
             else "The tailnet account that owns this device is a different "
             "account from the one signed in. Check who owns the device and "
@@ -499,8 +492,7 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
             f"{identity.provider_principal} · signed in as "
             f"{session_principal or 'unnamed session'}"
             if identity.agreement_basis == "SSO-signed principal link"
-            else f"{identity.tailnet_user} ↔ "
-            f"{session_principal or 'unnamed session'}"
+            else f"{identity.tailnet_user} ↔ {session_principal or 'unnamed session'}"
         ),
         boundary="Identity correlation",
         mechanism=(
@@ -511,16 +503,13 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
     )
 
 
-def _forwarder_layer(
-    device: tailnet.Device | None, *, trusted: bool, peer: str
-) -> Layer:
+def _forwarder_layer(device: tailnet.Device | None, *, trusted: bool, peer: str) -> Layer:
     if not trusted:
         return Layer(
             "forwarder",
             "HQ trusts the proxy that forwarded this",
             False,
-            "This address is not on HQ's list of trusted proxies, so HQ ignores "
-            "the address it forwarded.",
+            "This address is not on HQ's list of trusted proxies, so HQ ignores the address it forwarded.",
             evidence=peer,
             boundary="Forwarding identity",
             mechanism="HQ's list of trusted proxies",
@@ -539,8 +528,7 @@ def _forwarder_layer(
         "forwarder",
         "HQ trusts the proxy that forwarded this",
         True,
-        f"{device.label} holds this address, which is on HQ's list of trusted "
-        "proxies.",
+        f"{device.label} holds this address, which is on HQ's list of trusted proxies.",
         evidence=device.dns_name or device.name,
         boundary="Forwarding identity",
         mechanism="HQ's list of trusted proxies and the tailnet device list",
@@ -558,18 +546,12 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
     from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
     from hq.domains.control_plane.providers import PROVIDERS
 
-    declared = next(
-        (spec for spec in PROVIDERS.values() if spec.forwarding_headers), None
-    )
+    declared = next((spec for spec in PROVIDERS.values() if spec.forwarding_headers), None)
     if declared is None:
         return None
     client_header, scheme_header = declared.forwarding_headers
     proxy = next(
-        (
-            CONNECTION_LABELS[name]
-            for name in declared.connection_providers
-            if name in CONNECTION_LABELS
-        ),
+        (CONNECTION_LABELS[name] for name in declared.connection_providers if name in CONNECTION_LABELS),
         declared.label,
     )
     mechanism = f"{proxy} forwarding headers"
@@ -584,8 +566,7 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
             "proxy-evidence",
             "The proxy's headers agree",
             False,
-            f"The proxy did not send both {client_header} and {scheme_header}, "
-            "so HQ cannot compare them.",
+            f"The proxy did not send both {client_header} and {scheme_header}, so HQ cannot compare them.",
             evidence="Headers incomplete",
             boundary="Forwarding evidence",
             mechanism=mechanism,
@@ -599,25 +580,19 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
         "The proxy's headers agree",
         agrees,
         (
-            f"{proxy}'s {client_header} and {scheme_header} headers match the "
-            "address and scheme HQ used."
+            f"{proxy}'s {client_header} and {scheme_header} headers match the address and scheme HQ used."
             if agrees
             else f"{proxy}'s {client_header} or {scheme_header} header differs "
             "from the address or scheme HQ used. Check the proxy's forwarding "
             "settings."
         ),
-        evidence=(
-            f"{client_header}={real_host or 'missing'} · "
-            f"{scheme_header}={scheme or 'missing'}"
-        ),
+        evidence=(f"{client_header}={real_host or 'missing'} · {scheme_header}={scheme or 'missing'}"),
         boundary="Forwarding evidence",
         mechanism=mechanism,
     )
 
 
-def _tailnet_observation_layer(
-    observer: tailnet.Device | None, serving: ServingDeviceResolution
-) -> Layer:
+def _tailnet_observation_layer(observer: tailnet.Device | None, serving: ServingDeviceResolution) -> Layer:
     """Say exactly whether observer-relative link data is evidence about HQ."""
 
     if observer is None:
@@ -635,8 +610,7 @@ def _tailnet_observation_layer(
             "tailnet-observer",
             "HQ's own machine measured this link",
             False,
-            "HQ could not tell which tailnet machine it runs on, so it cannot "
-            "say these measurements are its own.",
+            "HQ could not tell which tailnet machine it runs on, so it cannot say these measurements are its own.",
             evidence=f"Measured by {observer.label} · HQ's machine not found",
             boundary="Transport attestation",
             mechanism="Tailscale on the machine that read the tailnet",
@@ -650,8 +624,7 @@ def _tailnet_observation_layer(
         (
             "The machine that measured this link is the machine HQ runs on."
             if same
-            else "A different machine measured this link, so the measurements "
-            "do not describe your connection to HQ."
+            else "A different machine measured this link, so the measurements do not describe your connection to HQ."
         ),
         evidence=(
             f"{observer.label} · {serving.basis}"
@@ -717,14 +690,11 @@ def _sign_in_layer(identity: Identity) -> Layer:
         "Sign-in is single sign-on only",
         identity.sso_only,
         (
-            "Signing in goes through single sign-on, and no password sign-in "
-            "is installed."
+            "Signing in goes through single sign-on, and no password sign-in is installed."
             if identity.sso_only
             else "Password sign-in is installed."
         ),
-        evidence=(
-            "Single sign-on only" if identity.sso_only else "Password sign-in installed"
-        ),
+        evidence=("Single sign-on only" if identity.sso_only else "Password sign-in installed"),
         boundary="Human identity",
         mechanism="HQ's sign-in settings",
     )
@@ -757,8 +727,7 @@ def _session_layer(request, identity: Identity) -> Layer:
             "scripts, is not sent with requests other sites start, and can "
             "only be set by this exact host."
             if holds
-            else "The session cookie is missing a protection. Check Secure, "
-            "HttpOnly, SameSite and the __Host- prefix."
+            else "The session cookie is missing a protection. Check Secure, HttpOnly, SameSite and the __Host- prefix."
         ),
         evidence=" · ".join(stated),
         boundary="Session",
@@ -798,8 +767,7 @@ def _browser_layer() -> Layer:
             "Scripts run only from HQ or with a one-time code for this page, "
             "the page cannot be framed, and Trusted Types is on."
             if holds
-            else "The content security policy is missing a rule that stops "
-            "scripts HQ did not send."
+            else "The content security policy is missing a rule that stops scripts HQ did not send."
         ),
         evidence=" · ".join(stated),
         boundary="Browser boundary",
@@ -831,8 +799,7 @@ def _canonical_layer() -> Layer:
         "HTTPS only",
         holds,
         (
-            "HQ redirects plain HTTP to HTTPS and tells the browser to use "
-            "HTTPS only for this name."
+            "HQ redirects plain HTTP to HTTPS and tells the browser to use HTTPS only for this name."
             if holds
             else "HQ serves plain HTTP on its port."
             if not redirected
@@ -849,10 +816,7 @@ def _transport_layer(request, channel: Channel) -> Layer:
     tls = bool(request.is_secure())
     tailnet = channel.id == "tailnet"
     if tailnet and tls:
-        detail = (
-            "WireGuard encrypts the link between the two machines, and TLS "
-            "encrypts this request inside it."
-        )
+        detail = "WireGuard encrypts the link between the two machines, and TLS encrypts this request inside it."
         evidence = "WireGuard + TLS"
     elif tailnet:
         detail = "WireGuard encrypts this request. There is no TLS inside it."

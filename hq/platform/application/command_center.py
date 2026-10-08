@@ -57,10 +57,7 @@ def _contains_all(values: tuple[str, ...], query: str) -> bool:
     # Two-letter input is a person beginning a word, not permission to match
     # the same two characters in the middle of everything. `sp` should find
     # splits and spending; it should never find infrastructure.
-    return all(
-        any(word.startswith(term) if len(term) <= 2 else term in word for word in words)
-        for term in terms
-    )
+    return all(any(word.startswith(term) if len(term) <= 2 else term in word for word in words) for term in terms)
 
 
 def _term_score(value: str, term: str) -> int:
@@ -82,11 +79,7 @@ def _match_score(item: DiscoveryItem, query: str) -> int:
     # is context rather than the connection's own name. Searching `example`
     # should rank `example-npm` above every unrelated credential observed by a
     # controller named `example-host`.
-    primary_name = (
-        item.name.rpartition(":")[2]
-        if item.kind == "connection" and ":" in item.name
-        else item.name
-    )
+    primary_name = item.name.rpartition(":")[2] if item.kind == "connection" and ":" in item.name else item.name
     return sum(
         max(
             *(_term_score(value, term) * 4 for value in (item.label, primary_name)),
@@ -137,11 +130,7 @@ def _matching_ability_labels(spec: ConnectionSpec, query: str) -> tuple[str, ...
     terms = query.casefold().split()
     if not terms:
         return ()
-    labels = tuple(
-        ability.label
-        for ability in spec.abilities
-        if _ability_contains_any(ability, query)
-    )
+    labels = tuple(ability.label for ability in spec.abilities if _ability_contains_any(ability, query))
     visible = labels[:_MATCHING_ABILITY_BADGE_LIMIT]
     hidden = len(labels) - len(visible)
     if not hidden:
@@ -149,20 +138,13 @@ def _matching_ability_labels(spec: ConnectionSpec, query: str) -> tuple[str, ...
     return (*visible, f"+{hidden} more")
 
 
-def _command_matches_ability(
-    command: CapabilitySpec, ability: ConnectionAbility
-) -> bool:
+def _command_matches_ability(command: CapabilitySpec, ability: ConnectionAbility) -> bool:
     if ability.capability == command.name:
         return True
-    if (
-        not ability.subject_resource
-        or command.subject_resource != ability.subject_resource
-    ):
+    if not ability.subject_resource or command.subject_resource != ability.subject_resource:
         return False
     governed = set(ability.governs_kinds)
-    constrained_kinds = {
-        str(value) for key, value in command.target_query if key == "kind"
-    }
+    constrained_kinds = {str(value) for key, value in command.target_query if key == "kind"}
     return not constrained_kinds or bool(governed & constrained_kinds)
 
 
@@ -198,10 +180,7 @@ def _candidate_commands(
     by_name: dict[str, CapabilitySpec],
     by_resource: dict[str, tuple[CapabilitySpec, ...]],
 ) -> tuple[CapabilitySpec, ...]:
-    candidates = {
-        command.name: command
-        for command in by_resource.get(ability.subject_resource, ())
-    }
+    candidates = {command.name: command for command in by_resource.get(ability.subject_resource, ())}
     if explicit := by_name.get(ability.capability):
         candidates.setdefault(explicit.name, explicit)
     return tuple(candidates.values())
@@ -234,13 +213,9 @@ def _related_command_labels(
         for ability in connection.abilities:
             if not _ability_contains_any(ability, query):
                 continue
-            for command in _candidate_commands(
-                ability, by_name=by_name, by_resource=by_resource
-            ):
+            for command in _candidate_commands(ability, by_name=by_name, by_resource=by_resource):
                 if _command_matches_ability(command, ability):
-                    _record_command_relation(
-                        related_labels, related_kinds, command, ability
-                    )
+                    _record_command_relation(related_labels, related_kinds, command, ability)
     return {
         name: CommandRelation(tuple(labels), tuple(related_kinds.get(name, ())))
         for name, labels in related_labels.items()
@@ -335,11 +310,7 @@ def _estate_items() -> tuple[DiscoveryItem, ...]:
                 for term in (
                     *machine.aliases,
                     machine.declaration,
-                    *(
-                        (machine.presence.tailnet_name, machine.presence.dns_name)
-                        if machine.presence
-                        else ()
-                    ),
+                    *((machine.presence.tailnet_name, machine.presence.dns_name) if machine.presence else ()),
                     *machine.addresses,
                     *machine.public_addresses,
                 )
@@ -378,9 +349,7 @@ def _estate_items() -> tuple[DiscoveryItem, ...]:
 
 def _exact(item: DiscoveryItem, query: str) -> bool:
     wanted = normalized_hostname(query)
-    return wanted in {
-        normalized_hostname(value) for value in (item.name, item.label, *item.search_terms)
-    }
+    return wanted in {normalized_hostname(value) for value in (item.name, item.label, *item.search_terms)}
 
 
 def _holds_name(item: DiscoveryItem, query: str) -> bool:
@@ -401,10 +370,7 @@ def _matching_estate(items: tuple[DiscoveryItem, ...], query: str) -> tuple[Disc
         if _matches(item, query) or _holds_name(item, query)
     ]
     return tuple(
-        item
-        for _score, item in sorted(
-            scored, key=lambda pair: (-pair[0], _ESTATE_ORDER.get(pair[1].kind, 9))
-        )
+        item for _score, item in sorted(scored, key=lambda pair: (-pair[0], _ESTATE_ORDER.get(pair[1].kind, 9)))
     )
 
 
@@ -416,31 +382,23 @@ def estate_search(query: str, *, principal: Principal) -> tuple[DiscoveryItem, .
     return _matching_estate(_estate_items(), query)
 
 
-def command_center(
-    query: str, *, principal: Principal, include_live_connections: bool = False
-) -> dict:
+def command_center(query: str, *, principal: Principal, include_live_connections: bool = False) -> dict:
     """Return every permitted resource and capability matching ``query``."""
 
     from .projection import projection_scope
 
     with projection_scope():
-        return _command_center(
-            query, principal=principal, include_live_connections=include_live_connections
-        )
+        return _command_center(query, principal=principal, include_live_connections=include_live_connections)
 
 
-def _command_center(
-    query: str, *, principal: Principal, include_live_connections: bool
-) -> dict:
+def _command_center(query: str, *, principal: Principal, include_live_connections: bool) -> dict:
 
     graph = integration_graph()
     registered_resources = tuple(graph.resources.values())
     registered_commands = tuple(graph.capabilities.values())
     registered_connections = tuple(graph.connections.values())
     permitted_connections = tuple(
-        spec
-        for spec in registered_connections
-        if principal.permits(*spec.required_capabilities)
+        spec for spec in registered_connections if principal.permits(*spec.required_capabilities)
     )
     # Registry discovery is a zero-query application primitive used by CLI,
     # MCP and contract checks. The web palette explicitly opts into cached live
@@ -499,9 +457,7 @@ def _command_center(
             destination_label="",
             badges=_matching_ability_labels(spec, query),
             search_terms=tuple(
-                term
-                for ability in spec.abilities
-                for term in (ability.name, ability.label, ability.summary)
+                term for ability in spec.abilities for term in (ability.name, ability.label, ability.summary)
             ),
         )
         for spec in permitted_connections

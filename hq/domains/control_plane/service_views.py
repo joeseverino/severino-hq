@@ -75,9 +75,7 @@ class ServiceListView(PageMixin, TemplateView):
         pinned = [item for item in found if item.pinned]
         rest = [item for item in found if not item.pinned]
         context["service_groups"] = tuple(
-            group
-            for group in (("Favorites", pinned, True), ("Other services", rest, False))
-            if group[1]
+            group for group in (("Favorites", pinned, True), ("Other services", rest, False)) if group[1]
         )
         # One answer for both groups, which share the table's columns.
         context["service_projects"] = any(item.project for item in found)
@@ -88,9 +86,7 @@ class ServiceListView(PageMixin, TemplateView):
         # The column headers come from the providers, so a provider that
         # declares a new facet gets a column without this template being
         # touched, and a facet no provider supplies yet gets none.
-        context["facets"] = [
-            facet for facet in service_facets() if facet[0] != RUNTIME_FACET
-        ]
+        context["facets"] = [facet for facet in service_facets() if facet[0] != RUNTIME_FACET]
         # Everything the providers hold that no declaration accounts for. Shown
         # beside the managed services rather than on a page of its own: a
         # hostname HQ does not manage is still a hostname that is serving, and
@@ -173,16 +169,8 @@ class ServiceDetailView(PageMixin, TemplateView):
                 PageSection("path", "Path"),
                 *((PageSection("parts", "Not set up"),) if self.missing_facets else ()),
                 *(PageSection(section.id, section.label) for section in self.sections),
-                *(
-                    (PageSection("relationships", "Relationships"),)
-                    if self.relationships.groups
-                    else ()
-                ),
-                *(
-                    (PageSection("resources", "Other names"),)
-                    if self.service.alias_claims
-                    else ()
-                ),
+                *((PageSection("relationships", "Relationships"),) if self.relationships.groups else ()),
+                *((PageSection("resources", "Other names"),) if self.service.alias_claims else ()),
             )
         )
 
@@ -201,9 +189,7 @@ class ServiceDetailView(PageMixin, TemplateView):
         container = self.service.container
         actions = []
         watcher = (
-            ManagedResource.objects.filter(key=container.watcher).first()
-            if container and container.watcher
-            else None
+            ManagedResource.objects.filter(key=container.watcher).first() if container and container.watcher else None
         )
         if watcher is not None:
             capabilities = resource_capabilities(watcher, running=container.verbs)
@@ -231,9 +217,7 @@ class ServiceDetailView(PageMixin, TemplateView):
                 )
             )
         if self.service.zone_key:
-            actions.append(
-                PageAction("Domain", reverse("zones:detail", args=[self.service.zone_key]))
-            )
+            actions.append(PageAction("Domain", reverse("zones:detail", args=[self.service.zone_key])))
         return tuple(actions)
 
     @override
@@ -257,9 +241,7 @@ class ServiceDetailView(PageMixin, TemplateView):
         context["gate_fixes"] = gate_links(self.service) if exposure.level == OPEN else ()
         context["hq_label"] = HQ_LABEL
         context["runtime_facet"] = RUNTIME_FACET
-        context["hq_machine"] = (
-            entity_link("machine", self.own.machine) if self.own and self.own.machine else None
-        )
+        context["hq_machine"] = entity_link("machine", self.own.machine) if self.own and self.own.machine else None
         return context
 
 

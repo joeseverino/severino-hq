@@ -40,7 +40,9 @@ def argument_metadata(handler: Callable[..., Any]) -> FuncMetadata:
 
     metadata = func_metadata(handler)
     model = metadata.arg_model
-    model.model_config = ConfigDict(**{**model.model_config, "extra": "forbid", "strict": True, "hide_input_in_errors": True})
+    model.model_config = ConfigDict(
+        **{**model.model_config, "extra": "forbid", "strict": True, "hide_input_in_errors": True}
+    )
     model.model_rebuild(force=True)
     return StrictMetadata(
         arg_model=model,

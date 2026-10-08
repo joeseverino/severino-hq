@@ -83,9 +83,7 @@ def _backlog(
         return ()
     first = named[:MOST_NAMED]
     more = count - len(first)
-    names = ", ".join(link.label for link in first) + (
-        f" and {counted(more, 'other')}" if first and more > 0 else ""
-    )
+    names = ", ".join(link.label for link in first) + (f" and {counted(more, 'other')}" if first and more > 0 else "")
     body = " ".join(part for part in (f"{names}." if names else "", body) if part)
     return (
         Insight(
@@ -99,9 +97,7 @@ def _backlog(
             magnitude=count,
             key=key,
             notice=notice,
-            actions=tuple(
-                ActionLink("open", link.label, "read", link.url) for link in first if link.url
-            ),
+            actions=tuple(ActionLink("open", link.label, "read", link.url) for link in first if link.url),
         ),
     )
 
@@ -206,9 +202,7 @@ def expenses() -> tuple[Insight, ...]:
 @dated
 def receipts() -> tuple[Insight, ...]:
     return _backlog(
-        count=Receipt.objects.filter(
-            related_expense__isnull=True, related_asset__isnull=True
-        ).count(),
+        count=Receipt.objects.filter(related_expense__isnull=True, related_asset__isnull=True).count(),
         key="receipts-unlinked",
         eyebrow="Receipts",
         one="receipt is not attached to an expense or asset",
@@ -342,11 +336,7 @@ def tailnet() -> tuple[Insight, ...]:
                     else f"{name} has left the tailnet"
                 ),
                 value=str(max(days, 0)),
-                body=(
-                    f"Its Tailscale key expires{on}."
-                    if days > 0
-                    else f"Its Tailscale key expired{on}."
-                ),
+                body=(f"Its Tailscale key expires{on}." if days > 0 else f"Its Tailscale key expired{on}."),
                 url=entity_link("machine", name).url,
                 subject=subject_link("machine", name),
                 since=expires if days <= 0 else None,
@@ -374,10 +364,7 @@ def tailnet() -> tuple[Insight, ...]:
             key=f"tailnet-locked-out:{name}",
             title=f"{name} is locked out of the tailnet",
             value="1",
-            body=(
-                f"Other machines ignore {name} because its key is not signed. "
-                "Its own status still shows healthy."
-            ),
+            body=(f"Other machines ignore {name} because its key is not signed. Its own status still shows healthy."),
             url=reverse("control_plane:tailnet"),
             subject=subject_link("machine", name),
             workflow=_sign_key(f"tailnet-locked-out:{name}", name),
@@ -464,8 +451,7 @@ def tailnet() -> tuple[Insight, ...]:
                         # The swept fact, not a second reading of the route
                         # list: what makes a route an exit route is Tailscale's
                         # to say, and the sweep already asked.
-                        if presence.offers_exit_node
-                        and not presence.exit_node_approved
+                        if presence.offers_exit_node and not presence.exit_node_approved
                         else ""
                     )
                     + "Approve the ones you want and stop offering the rest."
@@ -491,9 +477,7 @@ def _sign_key(key: str, name: str) -> WorkflowPlan:
 def _approve_routes(name: str) -> tuple[ActionLink, ...]:
     """The route approval the machine's own page offers, as a remedy."""
 
-    link = remedy_link(
-        "tailnet.routes.approve", "Approve routes", name, url=entity_link("machine", name).url
-    )
+    link = remedy_link("tailnet.routes.approve", "Approve routes", name, url=entity_link("machine", name).url)
     return (link,) if link else ()
 
 
@@ -527,13 +511,9 @@ def infrastructure() -> tuple[Insight, ...]:
     resources = enabled_resources()
     health_by_key = {resource.key: resource_health(resource) for resource in resources}
     actionable_keys = {
-        resource.key
-        for resource in resources
-        if health_by_key[resource.key]["state"] not in {"pending", "declared"}
+        resource.key for resource in resources if health_by_key[resource.key]["state"] not in {"pending", "declared"}
     }
-    actionable_kinds = {
-        resource.kind for resource in resources if resource.key in actionable_keys
-    }
+    actionable_kinds = {resource.kind for resource in resources if resource.key in actionable_keys}
     # A resource subject waits until HQ has confirmed it; any other subject (a
     # connection, a domain, a machine) is a fact already observed.
     findings = tuple(
@@ -568,9 +548,7 @@ def infrastructure() -> tuple[Insight, ...]:
         for finding in findings
     ]
     covered_resources = {
-        finding.subject.removeprefix("resource:")
-        for finding in findings
-        if finding.subject.startswith("resource:")
+        finding.subject.removeprefix("resource:") for finding in findings if finding.subject.startswith("resource:")
     }
     covered_kinds = {finding.scope for finding in findings if finding.scope}
     for resource in resources:

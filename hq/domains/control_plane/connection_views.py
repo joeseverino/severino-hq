@@ -1,6 +1,5 @@
 """The connections page and asking the controller to read now."""
 
-
 from typing import ClassVar, override
 
 from django.views import View
@@ -27,9 +26,7 @@ class ConnectionListView(PageMixin, TemplateView):
 
     def _connections(self):
         if not hasattr(self, "_context"):
-            self._context = connections_context(
-                principal=web_principal(self.request.user), request=self.request
-            )
+            self._context = connections_context(principal=web_principal(self.request.user), request=self.request)
         return self._context
 
     @override

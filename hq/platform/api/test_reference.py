@@ -74,10 +74,7 @@ class ReferencePageTests(TestCase):
         self.assertContains(self.client.get(reverse("dashboard")), f'href="{self.url}"')
 
     def test_the_vendored_bundle_is_the_recorded_one(self):
-        recorded = dict(
-            line.split(": ", 1)
-            for line in (VENDOR / "UPSTREAM").read_text(encoding="utf-8").splitlines()
-        )
+        recorded = dict(line.split(": ", 1) for line in (VENDOR / "UPSTREAM").read_text(encoding="utf-8").splitlines())
         digest = hashlib.sha256((VENDOR / "standalone.js").read_bytes()).hexdigest()
         self.assertEqual(digest, recorded["sha256"])
 
@@ -110,7 +107,9 @@ class ReferenceStyleTests(SimpleTestCase):
     def test_both_modes_take_the_same_tokens(self):
         """One block for the two mode classes: `color-scheme` picks the half."""
 
-        self.assertEqual(re.findall(r"^([^{}\n]*-mode[^{}\n]*)\{", self.sheet, flags=re.MULTILINE), [".light-mode, .dark-mode "])
+        self.assertEqual(
+            re.findall(r"^([^{}\n]*-mode[^{}\n]*)\{", self.sheet, flags=re.MULTILINE), [".light-mode, .dark-mode "]
+        )
 
 
 class ReferenceConfigurationTests(SimpleTestCase):

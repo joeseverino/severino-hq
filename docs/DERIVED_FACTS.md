@@ -24,6 +24,7 @@ class PagesProjectRecord(ObservationRecord):
     subdomain: str = ""
     domains: tuple[str, ...] = ()
 
+
 ObservationSpec(
     "cloudflare.pages_project",
     "cloudflare_api",
@@ -228,14 +229,14 @@ a subject calls it; nothing else parses a record to join it.
 ```python
 from hq.platform.application.facts import Subject, readings, inventory_about
 
-subject = Subject.of(hostnames=("app.example.com",))      # a service
-subject = Subject.of(hostnames=names, addresses=addrs)     # a machine
-subject = Subject.of(zones=("example.com",))               # a domain: every name under it
+subject = Subject.of(hostnames=("app.example.com",))  # a service
+subject = Subject.of(hostnames=names, addresses=addrs)  # a machine
+subject = Subject.of(zones=("example.com",))  # a domain: every name under it
 
-index = readings()                        # every connected reading, indexed once per projection
-index.about(subject, facets=("certificate",))   # Joined records: relation, title, expires, issuer, age
-index.unread(facets=("certificate",))           # refused kinds, with the reason and requires
-inventory_about("cloudflare.zone", subject)     # resource inventory records joined the same way
+index = readings()  # every connected reading, indexed once per projection
+index.about(subject, facets=("certificate",))  # Joined records: relation, title, expires, issuer, age
+index.unread(facets=("certificate",))  # refused kinds, with the reason and requires
+inventory_about("cloudflare.zone", subject)  # resource inventory records joined the same way
 ```
 
 A hostname key joins exactly, a wildcard key joins one label below it, and a

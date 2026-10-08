@@ -37,7 +37,9 @@ class MoneyTests(SimpleTestCase):
             Context({"a": Decimal("-1234.5"), "nothing": None})
         )
 
-        self.assertEqual(drawn, f"{MINUS}$1,234.50 {MINUS}$1,234 " + '<span class="empty-value" title="None">' + MISSING + "</span>")
+        self.assertEqual(
+            drawn, f"{MINUS}$1,234.50 {MINUS}$1,234 " + '<span class="empty-value" title="None">' + MISSING + "</span>"
+        )
 
     def test_the_filter_refuses_a_form_it_does_not_have(self):
         with self.assertRaises(TemplateSyntaxError):

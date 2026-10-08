@@ -175,11 +175,7 @@ def _connections() -> tuple[ConnectionState, ...]:
     from .connections import connection_rows
     from .credential_sight import credential_sight
 
-    refused = {
-        found.provider: found.credential_refusal
-        for found in credential_sight()
-        if found.credential_refusal
-    }
+    refused = {found.provider: found.credential_refusal for found in credential_sight() if found.credential_refusal}
     found = []
     for row in connection_rows():
         if row.provider in refused:
@@ -206,17 +202,11 @@ def _registrations(domains: tuple[str, ...]) -> tuple[Expiry, ...]:
         auto_renew = bool(registration.get("auto_renew")) if expires else None
         if expires is None:
             expires = min(
-                (
-                    when
-                    for item in index.about(subject, facets=("registration",))
-                    if (when := moment(item.expires))
-                ),
+                (when for item in index.about(subject, facets=("registration",)) if (when := moment(item.expires))),
                 default=None,
             )
         if expires is not None:
-            found.append(
-                Expiry(name, "Registration", expires, subject_link("zone", name), auto_renew)
-            )
+            found.append(Expiry(name, "Registration", expires, subject_link("zone", name), auto_renew))
     return tuple(sorted(found, key=lambda item: item.expires))
 
 
@@ -236,11 +226,7 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
                 continue
             name = next(iter(item.hostnames), "") or item.title
             zone = next((domain for domain in domains if in_zone(name, domain)), "")
-            link = (
-                subject_link("service", name)
-                if name in hostnames
-                else subject_link("zone", zone)
-            )
+            link = subject_link("service", name) if name in hostnames else subject_link("zone", zone)
             found.append(Expiry(name, item.spec.short or item.label, when, link))
     for resource in enabled_resources():
         if resource.kind not in MANAGED_CERTIFICATE_KINDS:
@@ -280,11 +266,7 @@ def cards() -> tuple[dict[str, Any], ...]:
             "label": "Machines online",
             "value": str(len(estate.online)),
             "url": reverse("control_plane:machines"),
-            "detail": (
-                f"{len(estate.offline)} offline"
-                if estate.offline
-                else f"of {len(estate.watched)}"
-            ),
+            "detail": (f"{len(estate.offline)} offline" if estate.offline else f"of {len(estate.watched)}"),
             **({"status": "attention"} if estate.offline else {}),
         },
         {
@@ -292,11 +274,7 @@ def cards() -> tuple[dict[str, Any], ...]:
             "label": "Services",
             "value": str(services["total"]),
             "url": reverse("control_plane:services"),
-            **(
-                {"detail": f"{services['incomplete']} not fully set up"}
-                if services["incomplete"]
-                else {}
-            ),
+            **({"detail": f"{services['incomplete']} not fully set up"} if services["incomplete"] else {}),
         },
         {
             "id": "hq.estate.domains",
@@ -378,9 +356,7 @@ def overview():
             tuple(
                 Dot(
                     filled=machine.state[0] == "online",
-                    tip=" · ".join(
-                        part for part in (machine.name, _answers_at(machine), machine.state[0]) if part
-                    ),
+                    tip=" · ".join(part for part in (machine.name, _answers_at(machine), machine.state[0]) if part),
                     url=entity_link("machine", machine.name).url,
                 )
                 for machine in estate.watched
@@ -454,10 +430,7 @@ def attention() -> tuple[Insight, ...]:
 
 
 def _holds_something(machine) -> bool:
-    return bool(
-        machine.declaration or machine.hostnames or machine.containers or machine.roles
-        or machine.runs_hq
-    )
+    return bool(machine.declaration or machine.hostnames or machine.containers or machine.roles or machine.runs_hq)
 
 
 def _offline(estate: Estate) -> tuple[Insight, ...]:
@@ -482,11 +455,7 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                 body=(
                     f"Last seen {ago(seen)}."
                     + (f" It is the {what}." if what else "")
-                    + (
-                        f" It serves {counted(len(machine.hostnames), 'name')}."
-                        if machine.hostnames
-                        else ""
-                    )
+                    + (f" It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "")
                 ),
                 action="Open machine",
                 url=machine.url,
@@ -494,8 +463,7 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                 since=seen,
                 workflow=cannot_help(
                     f"estate-offline:{machine.name}",
-                    "HQ has no power or console access to a machine, so it is brought back "
-                    "where it runs.",
+                    "HQ has no power or console access to a machine, so it is brought back where it runs.",
                 ),
             )
         )
@@ -517,9 +485,11 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
             )
             action = "Open certificate"
             renew = remedy_link("certificate.renew", "Renew certificate", expiry.resource_key)
-            offered: dict[str, Any] = {"actions": (renew,)} if renew else {
-                "workflow": cannot_help(key, "The renewal command is not mounted on this HQ.")
-            }
+            offered: dict[str, Any] = (
+                {"actions": (renew,)}
+                if renew
+                else {"workflow": cannot_help(key, "The renewal command is not mounted on this HQ.")}
+            )
         else:
             key = f"estate-certificate:{expiry.source}:{expiry.subject}"
             body = (
@@ -531,8 +501,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
             offered = {
                 "workflow": cannot_help(
                     key,
-                    f"{expiry.source} holds and renews it. HQ only reads it and cannot change "
-                    "its settings.",
+                    f"{expiry.source} holds and renews it. HQ only reads it and cannot change its settings.",
                 )
             }
         items.append(
@@ -554,5 +523,3 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
             )
         )
     return tuple(items)
-
-

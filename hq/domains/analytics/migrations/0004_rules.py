@@ -6,18 +6,27 @@ import hq.platform.core.rules
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('analytics', '0003_analyticscoverage'),
+        ("analytics", "0003_analyticscoverage"),
     ]
 
     operations = [
         migrations.AddConstraint(
-            model_name='rumdaily',
-            constraint=hq.platform.core.rules.Rule(condition=models.Q(('sample_interval__gte', 1)), field='sample_interval', name='analytics_rumdaily_sample_interval', violation_error_message='A sample interval is at least 1.'),
+            model_name="rumdaily",
+            constraint=hq.platform.core.rules.Rule(
+                condition=models.Q(("sample_interval__gte", 1)),
+                field="sample_interval",
+                name="analytics_rumdaily_sample_interval",
+                violation_error_message="A sample interval is at least 1.",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='vitalsdaily',
-            constraint=hq.platform.core.rules.Rule(condition=models.Q(('sample_interval__gte', 1)), field='sample_interval', name='analytics_vitalsdaily_sample_interval', violation_error_message='A sample interval is at least 1.'),
+            model_name="vitalsdaily",
+            constraint=hq.platform.core.rules.Rule(
+                condition=models.Q(("sample_interval__gte", 1)),
+                field="sample_interval",
+                name="analytics_vitalsdaily_sample_interval",
+                violation_error_message="A sample interval is at least 1.",
+            ),
         ),
     ]

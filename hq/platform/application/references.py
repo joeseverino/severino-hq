@@ -356,9 +356,7 @@ def _hydrate(model: type[models.Model], columns: tuple[str, ...], values: Sequen
     return model(**held)
 
 
-def _found(
-    references: Iterable[Reference], *, principal: Principal
-) -> dict[Reference, EntityLink]:
+def _found(references: Iterable[Reference], *, principal: Principal) -> dict[Reference, EntityLink]:
     """The link for each reference that names something this principal may see.
 
     One read of the topology for every infrastructure kind, and one statement
@@ -428,9 +426,7 @@ def _noun(kind: str) -> str:
     return target.noun.capitalize() if target is not None else kind_label(kind)
 
 
-def resolve_many(
-    stored: Sequence[tuple[str, str]], *, principal: Principal
-) -> list[EntityLink | None]:
+def resolve_many(stored: Sequence[tuple[str, str]], *, principal: Principal) -> list[EntityLink | None]:
     """A link for each ``(reference, stored name)``, in order.
 
     None for no reference, and for one of a kind this principal may not be
@@ -476,9 +472,7 @@ def resolve(value: str, name: str = "", *, principal: Principal) -> EntityLink |
 def reference_of(row: models.Model, field: str, *, principal: Principal) -> EntityLink | None:
     """The link for the reference a row holds in ``field``."""
 
-    return resolve(
-        getattr(row, field, ""), getattr(row, f"{field}{NAME_SUFFIX}", ""), principal=principal
-    )
+    return resolve(getattr(row, field, ""), getattr(row, f"{field}{NAME_SUFFIX}", ""), principal=principal)
 
 
 def stored_name(value: str, *, principal: Principal) -> str:
@@ -523,7 +517,6 @@ def as_stored(value: Any) -> tuple[str, str]:
     was not chosen from a list, so a reference that names nothing is stored
     all the same and reported by ``dangling``.
     """
-
 
     principal = _reader()
     reference = authored(value, principal=principal)
@@ -576,9 +569,7 @@ class ReferencePickerMixin:
         return form
 
 
-def choices(
-    field: ReferenceField, *, principal: Principal, held: tuple[str, str] = ("", "")
-) -> list[tuple[Any, Any]]:
+def choices(field: ReferenceField, *, principal: Principal, held: tuple[str, str] = ("", "")) -> list[tuple[Any, Any]]:
     """The grouped options for one reference column.
 
     Infrastructure comes from the topology and every model kind from one
@@ -590,9 +581,7 @@ def choices(
 
     known = targets()
     estate_kinds = [
-        kind
-        for kind in (*ESTATE_KINDS, *_certificate_kinds())
-        if kind not in known and field.accepts(kind)
+        kind for kind in (*ESTATE_KINDS, *_certificate_kinds()) if kind not in known and field.accepts(kind)
     ]
     picked = [
         target
@@ -663,9 +652,7 @@ def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Me
         for field in reference_fields()
         if field.accepts(kind) and (field.model not in known or _may_name(known[field.model], principal))
     ]
-    rows = _rows(
-        [(field.model, _unique(("pk", *field.shows)), Q(**{field.attname: value})) for field in fields]
-    )
+    rows = _rows([(field.model, _unique(("pk", *field.shows)), Q(**{field.attname: value})) for field in fields])
     groups: dict[str, list[Mention]] = defaultdict(list)
     for field, found in zip(fields, rows, strict=True):
         for row in found:
@@ -728,7 +715,11 @@ def dangling(
 
     gone = [{value for value in values if names_nothing(value)} for values in held]
     parts = [
-        (field.model, _unique(("pk", field.attname, field.name_attname, *field.shows)), Q(**{f"{field.attname}__in": values}))
+        (
+            field.model,
+            _unique(("pk", field.attname, field.name_attname, *field.shows)),
+            Q(**{f"{field.attname}__in": values}),
+        )
         for field, values in zip(fields, gone, strict=False)
         if values
     ]

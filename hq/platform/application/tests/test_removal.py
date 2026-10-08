@@ -107,19 +107,17 @@ class RemovalRequestTests(TestCase):
                 current_key=resource.key,
             )
 
-        self.assertEqual(
-            OperationRequest.objects.filter(action="delete").count(), 1
-        )
+        self.assertEqual(OperationRequest.objects.filter(action="delete").count(), 1)
 
 
 class RemovalReportTests(TestCase):
     """HQ forgets the declaration only once the provider is confirmed clear."""
+
     def setUp(self):
         super().setUp()
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-
 
     def _claimed_removal(self) -> tuple[ManagedResource, dict]:
         resource = a_rewrite()
@@ -128,9 +126,7 @@ class RemovalReportTests(TestCase):
             principal=cli_principal(),
             current_key=resource.key,
         )
-        claim = claim_next_operation(
-            "test-controller", capabilities=(("adguard.rewrite", "delete"),)
-        )
+        claim = claim_next_operation("test-controller", capabilities=(("adguard.rewrite", "delete"),))
         return resource, claim["operation"]
 
     def _report(self, operation, *, success: bool) -> dict:
@@ -172,9 +168,7 @@ class RemovalReportTests(TestCase):
         self._report(operation, success=False)
 
         self.assertTrue(ManagedResource.objects.filter(key="app-dns").exists())
-        self.assertEqual(
-            OperationRequest.objects.get().state, OperationRequest.State.FAILED
-        )
+        self.assertEqual(OperationRequest.objects.get().state, OperationRequest.State.FAILED)
 
     def test_a_successful_reconcile_never_forgets_anything(self):
         """Only the delete action removes. Guarded because the cost is total."""
@@ -188,9 +182,7 @@ class RemovalReportTests(TestCase):
             principal=cli_principal(),
             current_key=resource.key,
         )
-        claim = claim_next_operation(
-            "test-controller", capabilities=(("adguard.rewrite", "reconcile"),)
-        )
+        claim = claim_next_operation("test-controller", capabilities=(("adguard.rewrite", "reconcile"),))
 
         result = self._report(claim["operation"], success=True)
 
@@ -200,9 +192,7 @@ class RemovalReportTests(TestCase):
 
 class RemovalWebTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="test-only-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="test-only-password")
         self.client.force_login(self.user)
         a_rewrite()
 
@@ -223,9 +213,7 @@ class RemovalWebTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        response = self.client.get(
-            reverse("control_plane:remove", kwargs={"key": "app-dns"})
-        )
+        response = self.client.get(reverse("control_plane:remove", kwargs={"key": "app-dns"}))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "deletes the live record")
@@ -240,9 +228,7 @@ class RemovalWebTests(TestCase):
             {"reason": "Retired."},
         )
 
-        self.assertRedirects(
-            response, reverse("control_plane:detail", kwargs={"key": "app-dns"})
-        )
+        self.assertRedirects(response, reverse("control_plane:detail", kwargs={"key": "app-dns"}))
         operation = OperationRequest.objects.get()
         self.assertEqual(operation.action, "delete")
         self.assertEqual(operation.reason, "Retired.")
@@ -251,9 +237,7 @@ class RemovalWebTests(TestCase):
     def test_removal_requires_a_signed_in_operator(self):
         self.client.logout()
 
-        response = self.client.post(
-            reverse("control_plane:remove", kwargs={"key": "app-dns"})
-        )
+        response = self.client.post(reverse("control_plane:remove", kwargs={"key": "app-dns"}))
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response["Location"])

@@ -116,9 +116,7 @@ class _Ledger:
             self.covering.append((provider.facet, frozenset(hostnames), claim))
             return
         for hostname in hostnames:
-            self.declared.setdefault(hostname, {}).setdefault(provider.facet, []).append(
-                claim
-            )
+            self.declared.setdefault(hostname, {}).setdefault(provider.facet, []).append(claim)
             if origin:
                 rank = self.routed if origin_is_authoritative(provider) else self.resolved
                 rank.setdefault(hostname, origin)
@@ -138,14 +136,12 @@ def _read_declaration(provider, spec) -> tuple | None:
         # Filtered once here: whether a name can be answered at is a property
         # of the name, not of the provider that published it.
         hostnames = tuple(
-            name
-            for name in (normalized_hostname(n) for n in provider.hostnames(spec))
-            if names_a_host(name)
+            name for name in (normalized_hostname(n) for n in provider.hostnames(spec)) if names_a_host(name)
         )
         origin = provider.origin(spec) if provider.origin else ""
         resolves_to = provider.answers(spec) if provider.answers else ()
         certificate = provider.certificate(spec) if provider.certificate else ""
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
     return hostnames, origin, resolves_to, certificate
 
@@ -271,9 +267,7 @@ def _aliases(declared, origins) -> dict[str, str]:
     return found
 
 
-def runtime_claim(
-    origin: Origin | None, containers: dict[tuple[str, str], Any]
-) -> Claim | None:
+def runtime_claim(origin: Origin | None, containers: dict[tuple[str, str], Any]) -> Claim | None:
     """The declaration for the container this name is served from, if there is one.
 
     Matched on what the origin already resolved: a machine and a container on
@@ -303,7 +297,7 @@ def _fronted(provider: Any, resource: ManagedResource) -> bool:
         return False
     try:
         return bool(provider.fronts(resource.spec))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return False
 
 
@@ -320,7 +314,7 @@ def _readings(provider: Any, resource: ManagedResource) -> tuple[Reading, ...]:
         return ()
     try:
         rows = provider.readout(resource.spec, resource.status or {})
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return ()
     return tuple(
         Reading(label=label, desired=str(desired or ""), observed=str(observed or ""))

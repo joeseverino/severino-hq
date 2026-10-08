@@ -28,12 +28,8 @@ _ID = re.compile(r"#(-?[A-Za-z_][\w-]*)")
 _ATTRIBUTE = re.compile(r"\[\s*([A-Za-z_][\w-]*)")
 PLAYWRIGHT_QUERIES = {"locator", "query_selector", "query_selector_all", "wait_for_selector"}
 # A literal handed to a DOM query, and a class handed to classList.
-_QUERY = re.compile(
-    r"\b(?:querySelector|querySelectorAll|closest|matches)\(\s*(['\"`])(.*?)\1", re.DOTALL
-)
-_CLASS_LIST = re.compile(
-    r"classList\.(?:contains|add|remove|toggle)\(\s*(['\"`])([\w-]+)\1"
-)
+_QUERY = re.compile(r"\b(?:querySelector|querySelectorAll|closest|matches)\(\s*(['\"`])(.*?)\1", re.DOTALL)
+_CLASS_LIST = re.compile(r"classList\.(?:contains|add|remove|toggle)\(\s*(['\"`])([\w-]+)\1")
 
 
 def tokens(selector: str) -> set[tuple[str, str]]:
@@ -136,8 +132,7 @@ class BrowserGateSelectorTests(SimpleTestCase):
         registry = next(
             node.value
             for node in tree.body
-            if isinstance(node, ast.Assign)
-            and any(getattr(t, "id", "") == "SELECTORS" for t in node.targets)
+            if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "SELECTORS" for t in node.targets)
         )
         allowed = {id(node) for node in ast.walk(registry)}
         queried = {
@@ -179,7 +174,6 @@ class LayoutAuditSelectorTests(SimpleTestCase):
             f"{kind} {name} in {selector!r}"
             for selector in audit_selectors(AUDIT.read_text(encoding="utf-8"))
             for kind, name in tokens(selector)
-            if not rendered(kind, name)
-            and not (kind == "class" and name in stylesheet_classes())
+            if not rendered(kind, name) and not (kind == "class" and name in stylesheet_classes())
         )
         self.assertEqual(missing, [])

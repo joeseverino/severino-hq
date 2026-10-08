@@ -31,17 +31,11 @@ class ResourceExecutionTests(TestCase):
         project = Project.objects.create(name="Resource registry")
 
         described = describe_resources()
-        spec = next(
-            item for item in described["resources"] if item["name"] == "projects"
-        )
-        listed = list_resource(
-            "projects", {"query": "registry", "limit": 10}, principal=READ
-        )
+        spec = next(item for item in described["resources"] if item["name"] == "projects")
+        listed = list_resource("projects", {"query": "registry", "limit": 10}, principal=READ)
 
         self.assertEqual(spec["operations"]["get"]["identifier"], "slug")
-        self.assertFalse(
-            spec["operations"]["list"]["query_schema"]["additionalProperties"]
-        )
+        self.assertFalse(spec["operations"]["list"]["query_schema"]["additionalProperties"])
         self.assertEqual(listed["items"][0]["slug"], project.slug)
         self.assertEqual(
             get_resource("projects", project.slug, principal=READ)["slug"],
@@ -51,9 +45,7 @@ class ResourceExecutionTests(TestCase):
     def test_command_center_derives_links_and_operations_from_the_registries(self):
         with self.assertNumQueries(0):
             outcome = command_center("certificate.renew", principal=OPERATOR)
-        renewal = next(
-            item for item in outcome["commands"] if item.name == "certificate.renew"
-        )
+        renewal = next(item for item in outcome["commands"] if item.name == "certificate.renew")
 
         self.assertEqual(renewal.url, "/commands/certificate.renew/")
         self.assertEqual(renewal.destination_label, "")
@@ -111,16 +103,12 @@ class ResourceExecutionTests(TestCase):
                 principal=READ,
             )
 
-        self.assertEqual(
-            {item["key"] for item in listed["items"]}, {"device", "policy"}
-        )
+        self.assertEqual({item["key"] for item in listed["items"]}, {"device", "policy"})
 
     def test_infrastructure_kinds_filter_rejects_invalid_or_repeated_kinds(self):
         for value in ("not a kind", "tailscale.device,tailscale.device"):
             with self.subTest(value=value), self.assertRaises(InvalidResourceInput):
-                list_resource(
-                    "infrastructure.resources", {"kinds": value}, principal=READ
-                )
+                list_resource("infrastructure.resources", {"kinds": value}, principal=READ)
 
     def test_every_operation_authorizes_before_reading(self):
         with self.assertRaises(AuthorizationError):
@@ -155,9 +143,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             list_handler=lambda: {},
         )
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_resource_specs", return_value=(invalid,)
-            ),
+            mock.patch("hq.platform.application.plugins.plugin_resource_specs", return_value=(invalid,)),
             self.assertRaisesRegex(ImproperlyConfigured, "handler and query together"),
         ):
             integration_graph()
@@ -190,9 +176,7 @@ class TailnetDeviceKeyTests(TestCase):
     def test_a_tailnet_device_key_says_what_it_is(self):
         from hq.platform.application.infrastructure import suggest_key
 
-        self.assertEqual(
-            suggest_key("tailscale.device", {"name": "box"}), "box-tailnet"
-        )
+        self.assertEqual(suggest_key("tailscale.device", {"name": "box"}), "box-tailnet")
 
     def test_it_does_not_collide_with_the_machine_of_the_same_name(self):
         from hq.platform.application.infrastructure import suggest_key
@@ -200,9 +184,7 @@ class TailnetDeviceKeyTests(TestCase):
         ManagedResource.objects.create(key="box", kind="machine", spec={"name": "box"})
 
         # No suffix: the collision is gone, so nothing has to be invented.
-        self.assertEqual(
-            suggest_key("tailscale.device", {"name": "box"}), "box-tailnet"
-        )
+        self.assertEqual(suggest_key("tailscale.device", {"name": "box"}), "box-tailnet")
 
     def test_the_machine_still_keys_on_its_plain_name(self):
         from hq.platform.application.infrastructure import suggest_key

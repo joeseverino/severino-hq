@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('assets', '0003_business_use_in_range'),
+        ("assets", "0003_business_use_in_range"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='asset',
-            name='infrastructure',
-            field=models.CharField(blank=True, db_index=True, default='', max_length=300, verbose_name='this is'),
+            model_name="asset",
+            name="infrastructure",
+            field=models.CharField(blank=True, db_index=True, default="", max_length=300, verbose_name="this is"),
         ),
         migrations.AddField(
-            model_name='asset',
-            name='infrastructure_name',
-            field=models.CharField(blank=True, default='', editable=False, max_length=200),
+            model_name="asset",
+            name="infrastructure_name",
+            field=models.CharField(blank=True, default="", editable=False, max_length=200),
         ),
     ]

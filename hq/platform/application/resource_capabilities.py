@@ -86,9 +86,7 @@ def resource_capabilities(
     asking about many resources; left as None it is built here."""
     provider = PROVIDERS.get(resource.kind)
     if removal_pending is None:
-        removal_pending = resource.pk is not None and resource.key in removals_pending(
-            (resource.pk,)
-        )
+        removal_pending = resource.pk is not None and resource.key in removals_pending((resource.pk,))
     capability = controller_capability_registry().capabilities.get(resource.kind)
     policies = dict(capability.actions) if capability else {}
     if running is None:
@@ -102,9 +100,7 @@ def resource_capabilities(
     actions = {
         verb: _allowed(verb, policy, resource, provider, removal_pending, observes_only)
         for verb, policy in policies.items()
-        if verb != "delete"
-        and policy.mode == "apply"
-        and (verb not in LIFECYCLE_VERBS or verb in running)
+        if verb != "delete" and policy.mode == "apply" and (verb not in LIFECYCLE_VERBS or verb in running)
     }
     removal, removal_reason = _removal(provider, policies, removal_pending, observes_only)
 
@@ -128,12 +124,7 @@ def _allowed(verb, policy, resource, provider, removal_pending, observes_only) -
         return Allowed(False, "It is switched off in HQ.", policy.automatic)
     if observes_only:
         return Allowed(False, OBSERVES_ONLY, policy.automatic)
-    if (
-        verb == "reconcile"
-        and provider is not None
-        and provider.public_effect
-        and not public_dns_enabled()
-    ):
+    if verb == "reconcile" and provider is not None and provider.public_effect and not public_dns_enabled():
         return Allowed(False, "Public DNS changes are off on this server.")
     if verb == "renew":
         renewable, why = certificate_renewal_allowed(resource)
@@ -176,7 +167,5 @@ def _running_verbs(resource: ManagedResource) -> tuple[str, ...]:
     from .machines import container_context
 
     spec = resource.spec or {}
-    running = (container_context(spec.get("host", ""), spec.get("name", "")) or {}).get(
-        "running"
-    )
+    running = (container_context(spec.get("host", ""), spec.get("name", "")) or {}).get("running")
     return tuple(running.verbs) if running else ()

@@ -253,9 +253,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                     if len(absent) == 1
                     else "So their work is not happening. Deploying HQ sets them up."
                 ),
-                evidence=tuple(
-                    item for unit in absent for item in (("Job", unit.unit), ("State", unit.absent))
-                ),
+                evidence=tuple(item for unit in absent for item in (("Job", unit.unit), ("State", unit.absent))),
                 steps=tuple(
                     step
                     for unit in absent
@@ -387,9 +385,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=f"HQ cannot check the background jobs on {node.label}",
                 severity="attention",
                 explanation="If one of them failed, HQ would not know.",
-                evidence=tuple(
-                    ("Why", UNREAD_REASONS.get(reason, "Could not be read")) for reason in reasons
-                ),
+                evidence=tuple(("Why", UNREAD_REASONS.get(reason, "Could not be read")) for reason in reasons),
                 steps=machine_step(
                     "See whether systemd answers for HQ's jobs",
                     node.label,
@@ -409,10 +405,7 @@ RULES: tuple[FindingRule, ...] = (
         "A background job failed",
         "serious",
         _failed,
-        operator_action=(
-            "On the machine, read the job's log for why it failed, fix that, "
-            "then start it again."
-        ),
+        operator_action=("On the machine, read the job's log for why it failed, fix that, then start it again."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -420,10 +413,7 @@ RULES: tuple[FindingRule, ...] = (
         "A background job is not set up",
         "serious",
         _absent,
-        operator_action=(
-            "Deploy HQ, which sets up every background job, or turn the job on "
-            "on the machine."
-        ),
+        operator_action=("Deploy HQ, which sets up every background job, or turn the job on on the machine."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -431,10 +421,7 @@ RULES: tuple[FindingRule, ...] = (
         "A scheduled job is not running",
         "serious",
         _stalled,
-        operator_action=(
-            "On the machine, see when the timer last ran and read its job's log, "
-            "then start the job."
-        ),
+        operator_action=("On the machine, see when the timer last ran and read its job's log, then start the job."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -443,8 +430,7 @@ RULES: tuple[FindingRule, ...] = (
         "attention",
         _unread,
         operator_action=(
-            "Check that systemd answers on the controller's machine. If it does "
-            "and this stays, deploy HQ."
+            "Check that systemd answers on the controller's machine. If it does and this stays, deploy HQ."
         ),
         no_help_reason=cannot_run_commands(),
     ),

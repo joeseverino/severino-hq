@@ -135,22 +135,14 @@ def serialize_project(project: Project, *, relationships: bool = False) -> dict[
     if relationships:
         result["relationships"] = {
             "documentation": safe_doc_ids(project.documentation_records),
-            "content": list(
-                project.content_items.order_by("slug").values_list("slug", flat=True)
-            ),
-            "assets": list(
-                project.assets.order_by("slug").values_list("slug", flat=True)
-            ),
-            "expense_ids": list(
-                project.expenses.order_by("-date", "-id").values_list("id", flat=True)
-            ),
+            "content": list(project.content_items.order_by("slug").values_list("slug", flat=True)),
+            "assets": list(project.assets.order_by("slug").values_list("slug", flat=True)),
+            "expense_ids": list(project.expenses.order_by("-date", "-id").values_list("id", flat=True)),
         }
     return result
 
 
-def list_projects(
-    *, status: str | None = None, query: str | None = None, limit: int = 50
-) -> dict[str, Any]:
+def list_projects(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:
     return listing(
         Project,
         serialize_project,
@@ -162,9 +154,7 @@ def list_projects(
 
 
 def get_project(slug: str) -> dict[str, Any]:
-    return addressable(
-        Project, serialize_project, slug, label="Project", missing=NotFoundError
-    )
+    return addressable(Project, serialize_project, slug, label="Project", missing=NotFoundError)
 
 
 def refresh_project(
@@ -250,9 +240,7 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
     connection_ref = str(repository.record.get("connection_ref") or "") if repository else ""
     if not connection_ref:
         return None
-    answer = execute_capability(
-        READ_NOW_CAPABILITY, {"connection_ref": connection_ref}, principal=principal
-    )
+    answer = execute_capability(READ_NOW_CAPABILITY, {"connection_ref": connection_ref}, principal=principal)
     if answer.get("ok") and answer.get("requested"):
         return {
             "ok": True,
@@ -276,17 +264,18 @@ def _pushed_at(stamp: Any) -> datetime | None:
     return moment(stamp)
 
 
-def _record_push(
-    project: Project, pushed_at: datetime | None, principal: Principal
-) -> dict[str, Any]:
+def _record_push(project: Project, pushed_at: datetime | None, principal: Principal) -> dict[str, Any]:
     """Persist when the repository last moved, where a source said."""
 
     if pushed_at is None:
         return {"ok": True, "last_push_at": iso(project.last_push_at) or None}
-    with transaction.atomic(), operation_context(
-        interface=principal.interface,
-        actor=principal.actor,
-        operation="project.refresh",
+    with (
+        transaction.atomic(),
+        operation_context(
+            interface=principal.interface,
+            actor=principal.actor,
+            operation="project.refresh",
+        ),
     ):
         project = Project.objects.select_for_update().get(pk=project.pk)
         project.last_push_at = pushed_at
@@ -395,9 +384,7 @@ def save_project(
 
     principal.require(records_of("projects").write)
     operation = "project.create" if current_slug is None else "project.update"
-    with operation_context(
-        interface=principal.interface, actor=principal.actor, operation=operation
-    ):
+    with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
         if current_slug is None:
             project = Project()
             created = True
@@ -405,17 +392,10 @@ def save_project(
             try:
                 project = Project.objects.select_for_update().get(slug=current_slug)
             except Project.DoesNotExist as exc:
-                raise NotFoundError(
-                    f"Project {current_slug!r} was not found."
-                ) from exc
+                raise NotFoundError(f"Project {current_slug!r} was not found.") from exc
             created = False
-            if (
-                expected_updated_at
-                and project.updated_at.isoformat() != expected_updated_at
-            ):
-                raise ConflictError(
-                    f"Project {current_slug!r} changed after it was read."
-                )
+            if expected_updated_at and project.updated_at.isoformat() != expected_updated_at:
+                raise ConflictError(f"Project {current_slug!r} changed after it was read.")
 
         for field, value in asdict(command).items():
             setattr(project, field, value)

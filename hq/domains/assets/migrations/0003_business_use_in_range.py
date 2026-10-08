@@ -5,20 +5,30 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('assets', '0002_help_text_copy'),
-        ('projects', '0002_project_last_push_at'),
+        ("assets", "0002_help_text_copy"),
+        ("projects", "0002_project_last_push_at"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='asset',
-            name='business_use_percentage',
-            field=models.PositiveSmallIntegerField(default=100, help_text='0-100. Multiplied into total_cost to estimate deductible amount.', validators=[django.core.validators.MinValueValidator(0, message='Must be between 0 and 100.'), django.core.validators.MaxValueValidator(100, message='Must be between 0 and 100.')]),
+            model_name="asset",
+            name="business_use_percentage",
+            field=models.PositiveSmallIntegerField(
+                default=100,
+                help_text="0-100. Multiplied into total_cost to estimate deductible amount.",
+                validators=[
+                    django.core.validators.MinValueValidator(0, message="Must be between 0 and 100."),
+                    django.core.validators.MaxValueValidator(100, message="Must be between 0 and 100."),
+                ],
+            ),
         ),
         migrations.AddConstraint(
-            model_name='asset',
-            constraint=models.CheckConstraint(condition=models.Q(('business_use_percentage__gte', 0), ('business_use_percentage__lte', 100)), name='asset_business_use_in_range', violation_error_message='Must be between 0 and 100.'),
+            model_name="asset",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("business_use_percentage__gte", 0), ("business_use_percentage__lte", 100)),
+                name="asset_business_use_in_range",
+                violation_error_message="Must be between 0 and 100.",
+            ),
         ),
     ]

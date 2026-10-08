@@ -43,8 +43,7 @@ _IDEMPOTENCY_SCHEMA: dict[str, Any] = {
     "type": "string",
     "title": "Idempotency Key",
     "description": (
-        "Optional. A repeat carrying the same key returns the first result "
-        "instead of acting a second time."
+        "Optional. A repeat carrying the same key returns the first result instead of acting a second time."
     ),
     "minLength": 1,
     "maxLength": 128,

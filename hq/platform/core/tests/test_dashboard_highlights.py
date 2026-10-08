@@ -97,9 +97,7 @@ class DashboardHighlightTests(SimpleTestCase):
     def test_one_metric_stays_compact_and_does_not_invoke_an_overview(self):
         overview = Mock()
         domain = contributor(1, overview=overview)
-        domain.integration.dashboard.return_value = (
-            domain.integration.dashboard.return_value[:1]
-        )
+        domain.integration.dashboard.return_value = domain.integration.dashboard.return_value[:1]
         with (
             patch("hq.platform.application.domains.all_domains", return_value=(domain,)),
             patch("hq.platform.application.dashboard.all_domains", return_value=(domain,)),

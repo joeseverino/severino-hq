@@ -1,7 +1,5 @@
 """Operator tools: lookups HQ runs on request."""
 
-
-
 from typing import override
 
 from django.shortcuts import redirect
@@ -50,15 +48,10 @@ class ToolsView(PageMixin, TemplateView):
 
         # Only what this tab offers, and only what was actually asked. An empty
         # field is not a lookup of the empty string.
-        asked = {
-            name: self.request.GET.get(name.rpartition(".")[2], "").strip()
-            for name in current.capabilities
-        }
+        asked = {name: self.request.GET.get(name.rpartition(".")[2], "").strip() for name in current.capabilities}
         context["asked"] = asked
         context["results"] = {
-            name: execute_capability(
-                name, {name.rpartition(".")[2]: value}, principal=principal
-            )
+            name: execute_capability(name, {name.rpartition(".")[2]: value}, principal=principal)
             for name, value in asked.items()
             if value
         }

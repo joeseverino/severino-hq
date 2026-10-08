@@ -4,17 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0014_avatar'),
+        ("core", "0014_avatar"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Revision',
+            name="Revision",
             fields=[
-                ('name', models.CharField(max_length=160, primary_key=True, serialize=False)),
-                ('value', models.PositiveBigIntegerField(default=0)),
+                ("name", models.CharField(max_length=160, primary_key=True, serialize=False)),
+                ("value", models.PositiveBigIntegerField(default=0)),
             ],
         ),
     ]

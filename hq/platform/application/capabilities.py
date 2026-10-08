@@ -107,9 +107,7 @@ def describe_capabilities() -> dict[str, Any]:
             "summary": spec.summary,
             "effect": spec.effect,
             "required_capabilities": [
-                capability.value
-                if isinstance(capability, Capability)
-                else capability
+                capability.value if isinstance(capability, Capability) else capability
                 for capability in spec.required_capabilities
             ],
             "target": spec.target_kind,
@@ -192,7 +190,7 @@ def execute_capability(
         return _invalid(pydantic_refusal(name, exc.errors()))
     except DjangoValidationError as exc:
         return _invalid(django_refusal(name, exc))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         # Neither handler nor dependency exception text crosses an adapter.
         # It can contain argument names, provider responses, paths, or values
         # from the request. The capability name is registry-owned and safe.
@@ -264,9 +262,7 @@ def _retry_key(spec: CapabilitySpec, payload: dict[str, Any]) -> tuple[str, dict
         key = "" if sent is None else validate_key(sent)
     except (InvalidIdempotencyKey, TypeError) as exc:
         # Answered as any other field of the wrong shape is.
-        raise DjangoValidationError(
-            {IDEMPOTENCY_FIELD: "Must be 1-128 URL-safe characters."}
-        ) from exc
+        raise DjangoValidationError({IDEMPOTENCY_FIELD: "Must be 1-128 URL-safe characters."}) from exc
     rest = {name: value for name, value in payload.items() if name != IDEMPOTENCY_FIELD}
     if declares_idempotency_key(spec.command_type):
         rest[IDEMPOTENCY_FIELD] = key or f"command:{secrets.token_urlsafe(18)}"
@@ -298,9 +294,7 @@ def _once(
     return result
 
 
-def _target_refusal(
-    spec: CapabilitySpec, name: str, target: str | int | None
-) -> dict[str, Any] | None:
+def _target_refusal(spec: CapabilitySpec, name: str, target: str | int | None) -> dict[str, Any] | None:
     """The error for a target the capability requires and lacks, or refuses."""
 
     if spec.target_kind and target is None:
@@ -377,9 +371,7 @@ def execute_approved(
     """
 
     command: Any = TypeAdapter(spec.command_type).validate_python(payload)
-    return _run(
-        spec, command, principal=principal, target=target, expected_updated_at=None
-    )
+    return _run(spec, command, principal=principal, target=target, expected_updated_at=None)
 
 
 def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> None:

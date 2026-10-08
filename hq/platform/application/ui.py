@@ -192,10 +192,7 @@ class Insight:
 
     def __post_init__(self) -> None:
         if self.status not in STATUS_VALUES:
-            raise ValueError(
-                f"Insight status must be one of {', '.join(sorted(STATUS_VALUES))}; "
-                f"got {self.status!r}."
-            )
+            raise ValueError(f"Insight status must be one of {', '.join(sorted(STATUS_VALUES))}; got {self.status!r}.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,14 +224,10 @@ class ListRow:
     def __post_init__(self) -> None:
         if self.status and self.status not in STATUS_VALUES:
             raise ValueError(
-                f"ListRow status must be one of {', '.join(sorted(STATUS_VALUES))} "
-                f"or empty; got {self.status!r}."
+                f"ListRow status must be one of {', '.join(sorted(STATUS_VALUES))} or empty; got {self.status!r}."
             )
         if self.status and not self.badge:
-            raise ValueError(
-                "ListRow status needs a badge: state is never carried by colour "
-                "alone."
-            )
+            raise ValueError("ListRow status needs a badge: state is never carried by colour alone.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,8 +249,7 @@ class TimelineItem:
     def __post_init__(self) -> None:
         if self.status not in STATUS_VALUES:
             raise ValueError(
-                f"TimelineItem status must be one of "
-                f"{', '.join(sorted(STATUS_VALUES))}; got {self.status!r}."
+                f"TimelineItem status must be one of {', '.join(sorted(STATUS_VALUES))}; got {self.status!r}."
             )
 
 
@@ -273,7 +265,6 @@ class Timeline:
         ordered = tuple(sorted(self.items, key=lambda item: (item.when, item.title)))
         if ordered != self.items:
             raise ValueError("Timeline items must be sorted chronologically.")
-
 
 
 # The plot rectangle every chart in HQ draws inside. Stated once so a line and
@@ -441,10 +432,7 @@ class Chart:
     @property
     def table_headings(self) -> tuple[str, ...]:
         """The data table's value columns, one per series."""
-        return tuple(
-            _table_heading(series.label, self.unit)
-            for series in getattr(self, "series", ())
-        )
+        return tuple(_table_heading(series.label, self.unit) for series in getattr(self, "series", ()))
 
     @property
     def table_rows(self) -> tuple[ChartTableRow, ...]:
@@ -459,17 +447,11 @@ class Chart:
 
     @property
     def axis_x(self) -> tuple:
-        return tuple(
-            PlacedLabel(item.x / self.width * 100, item.label)
-            for item in self.categories
-        )
+        return tuple(PlacedLabel(item.x / self.width * 100, item.label) for item in self.categories)
 
     @property
     def axis_y(self) -> tuple:
-        return tuple(
-            PlacedLabel(item.y / self.height * 100, item.label)
-            for item in self.ticks
-        )
+        return tuple(PlacedLabel(item.y / self.height * 100, item.label) for item in self.ticks)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -478,8 +460,6 @@ class StackedBarChart(Chart):
 
     series: tuple[ChartSeries, ...]
     bars: tuple[ChartBar, ...]
-
-
 
 
 @dataclass(frozen=True, slots=True)
@@ -547,8 +527,6 @@ class LineChart(Chart):
     marks: tuple[LineMark, ...]
 
 
-
-
 # How much room a date label needs beside its neighbour. "Aug 14" is about
 # forty pixels at the axis size, and two of them closer than this print over
 # one another rather than beside each other.
@@ -572,11 +550,7 @@ def line_chart(
     positions: readings are not evenly spaced, and plotting against index
     silently restates a month's gap as one step.
     """
-    cleaned = [
-        (label, tuple(sorted(points)), slot)
-        for label, points, slot in series
-        if points
-    ]
+    cleaned = [(label, tuple(sorted(points)), slot) for label, points, slot in series if points]
     if any(item[2] not in range(1, 6) for item in cleaned):
         raise ValueError("Chart series slots must be between 1 and 5.")
     slots = [item[2] for item in cleaned]
@@ -585,9 +559,7 @@ def line_chart(
         # the same swatch twice and two indistinguishable lines under it,
         # a chart that looks finished and cannot be read. Caught here because
         # it is invisible in the data and only shows up on the rendered page.
-        raise ValueError(
-            f"Chart series must not share a colour slot: {sorted(slots)}."
-        )
+        raise ValueError(f"Chart series must not share a colour slot: {sorted(slots)}.")
     every = [value for _, points, _ in cleaned for _, value in points]
     if not every or len(every) < 2:
         return LineChart(
@@ -644,10 +616,7 @@ def line_chart(
             )
             for day, value in points
         )
-        path = " ".join(
-            f"{'M' if index == 0 else 'L'} {p.x:.1f} {p.y:.1f}"
-            for index, p in enumerate(placed)
-        )
+        path = " ".join(f"{'M' if index == 0 else 'L'} {p.x:.1f} {p.y:.1f}" for index, p in enumerate(placed))
         lines.append(
             LineSeries(
                 label=label,
@@ -659,8 +628,7 @@ def line_chart(
         )
 
     ticks = tuple(
-        ChartTick(place_y(value), _format_fitted_value(value, high - low))
-        for value in (low, (low + high) / 2, high)
+        ChartTick(place_y(value), _format_fitted_value(value, high - low)) for value in (low, (low + high) / 2, high)
     )
     # Six labels at most: a date every few pixels is a smear, not an axis.
     step = max(1, (span + 1) // 5)
@@ -674,9 +642,7 @@ def line_chart(
     # fall a couple of days short and the two labels print on top of each
     # other. Whichever of the pair is not the last day gives way.
     if stamps[-1] != last_day:
-        while len(stamps) > 1 and place_x(last_day) - place_x(stamps[-1]) < (
-            LABEL_GAP
-        ):
+        while len(stamps) > 1 and place_x(last_day) - place_x(stamps[-1]) < (LABEL_GAP):
             stamps.pop()
         stamps.append(last_day)
     # Day and month where the chart covers less than a year, month and year
@@ -684,9 +650,7 @@ def line_chart(
     # single year, which hides the thing the chart is for.
     span_days = (last_day - first_day).days
     stamp = "%b %Y" if span_days > 400 else "%b %-d"
-    categories = tuple(
-        ChartCategory(place_x(day), f"{day:{stamp}}") for day in stamps
-    )
+    categories = tuple(ChartCategory(place_x(day), f"{day:{stamp}}") for day in stamps)
 
     dated: dict = {}
     for label, points, _ in cleaned:
@@ -707,11 +671,7 @@ def line_chart(
         series=tuple(lines),
         ticks=ticks,
         categories=categories,
-        marks=tuple(
-            LineMark(place_x(day), label)
-            for day, label in marks
-            if first_day <= day <= last_day
-        ),
+        marks=tuple(LineMark(place_x(day), label) for day, label in marks if first_day <= day <= last_day),
         rows=rows,
         empty=False,
     )
@@ -768,13 +728,10 @@ class CalendarDay:
     def __post_init__(self) -> None:
         if self.state not in CALENDAR_STATES:
             raise ValueError(
-                f"CalendarDay state must be one of "
-                f"{', '.join(sorted(CALENDAR_STATES))}; got {self.state!r}."
+                f"CalendarDay state must be one of {', '.join(sorted(CALENDAR_STATES))}; got {self.state!r}."
             )
         if self.state in ("missed", "planned") and not self.planned:
-            raise ValueError(
-                f"A {self.state!r} day is by definition planned; set planned=True."
-            )
+            raise ValueError(f"A {self.state!r} day is by definition planned; set planned=True.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -831,12 +788,7 @@ class ActivityCalendar:
         would let extra sessions paper over a schedule that is not being kept;
         counting days still ahead would make every Monday look like a failure.
         """
-        kept = sum(
-            1
-            for week in self.weeks
-            for day in week
-            if day.planned and day.state == "done"
-        )
+        kept = sum(1 for week in self.weeks for day in week if day.planned and day.state == "done")
         due = kept + self.missed
         return f"{kept}/{due}" if due else ""
 
@@ -930,11 +882,7 @@ def stacked_bar_chart(
         raise ValueError("Chart series slots must be between 1 and 5.")
     if any(len(item.values) != len(labels) for item in series):
         raise ValueError("Every chart series must align with the category labels.")
-    if any(
-        value < 0 or not math.isfinite(value)
-        for item in series
-        for value in item.values
-    ):
+    if any(value < 0 or not math.isfinite(value) for item in series for value in item.values):
         raise ValueError("Chart values must be finite and non-negative.")
 
     plot_left, plot_top, plot_width, plot_height = (
@@ -944,9 +892,7 @@ def stacked_bar_chart(
         PLOT_HEIGHT,
     )
     svg_width = STANDARD_SVG
-    totals = tuple(
-        sum(item.values[index] for item in series) for index in range(len(labels))
-    )
+    totals = tuple(sum(item.values[index] for item in series) for index in range(len(labels)))
     # A caller that knows the scale says so. Shares of a whole always run to
     # 100, and letting the axis round up to 150 leaves a third of the plot
     # permanently empty and makes a full bar look like a partial one.
@@ -972,9 +918,7 @@ def stacked_bar_chart(
                     value=value,
                     label=item.label,
                     slot=item.slot,
-                    tooltip=(
-                        f"{label} · {item.label}: {_format_reading(value, unit)}"
-                    ),
+                    tooltip=(f"{label} · {item.label}: {_format_reading(value, unit)}"),
                 )
             )
     ticks = tuple(
@@ -985,8 +929,7 @@ def stacked_bar_chart(
         for value in (0.0, scale_max / 2, scale_max)
     )
     rows = tuple(
-        ChartRow(label, tuple(float(item.values[index]) for item in series))
-        for index, label in enumerate(labels)
+        ChartRow(label, tuple(float(item.values[index]) for item in series)) for index, label in enumerate(labels)
     )
     return StackedBarChart(
         title=title,

@@ -11,9 +11,7 @@ INTERFACE = "mcp"
 
 logger = logging.getLogger("severino.mcp")
 
-_current_principal: contextvars.ContextVar[Principal | None] = contextvars.ContextVar(
-    "hq_mcp_principal", default=None
-)
+_current_principal: contextvars.ContextVar[Principal | None] = contextvars.ContextVar("hq_mcp_principal", default=None)
 
 
 def set_principal(principal: Principal | None) -> contextvars.Token[Principal | None]:

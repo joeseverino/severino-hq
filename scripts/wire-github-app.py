@@ -43,7 +43,9 @@ def run(command: list[str], *, stdin: str | None = None) -> str:
 def private_key(vault: str, item: str) -> str:
     """The key from a Document item, or an SSH Key item's private key."""
 
-    found = subprocess.run(["op", "document", "get", item, "--vault", vault], capture_output=True, text=True, check=False)
+    found = subprocess.run(
+        ["op", "document", "get", item, "--vault", vault], capture_output=True, text=True, check=False
+    )
     key = found.stdout if found.returncode == 0 else run(["op", "read", f"op://{vault}/{item}/private key"])
     if "PRIVATE KEY-----" not in key:
         sys.exit(f"{item} in {vault} holds no private key.")
@@ -57,17 +59,36 @@ def host_repository() -> str:
 def environment(repository: str) -> None:
     """``admission``, deployable from main alone, so no branch reads its secret."""
 
-    run([
-        "gh", "api", "-X", "PUT", f"repos/{repository}/environments/{ENVIRONMENT}",
-        "-F", "deployment_branch_policy[protected_branches]=false",
-        "-F", "deployment_branch_policy[custom_branch_policies]=true",
-    ])
-    policies = json.loads(run(["gh", "api", f"repos/{repository}/environments/{ENVIRONMENT}/deployment-branch-policies"]))
+    run(
+        [
+            "gh",
+            "api",
+            "-X",
+            "PUT",
+            f"repos/{repository}/environments/{ENVIRONMENT}",
+            "-F",
+            "deployment_branch_policy[protected_branches]=false",
+            "-F",
+            "deployment_branch_policy[custom_branch_policies]=true",
+        ]
+    )
+    policies = json.loads(
+        run(["gh", "api", f"repos/{repository}/environments/{ENVIRONMENT}/deployment-branch-policies"])
+    )
     if not any(policy.get("name") == "main" for policy in policies.get("branch_policies") or ()):
-        run([
-            "gh", "api", "-X", "POST", f"repos/{repository}/environments/{ENVIRONMENT}/deployment-branch-policies",
-            "-f", "name=main", "-f", "type=branch",
-        ])
+        run(
+            [
+                "gh",
+                "api",
+                "-X",
+                "POST",
+                f"repos/{repository}/environments/{ENVIRONMENT}/deployment-branch-policies",
+                "-f",
+                "name=main",
+                "-f",
+                "type=branch",
+            ]
+        )
 
 
 def main() -> None:

@@ -61,7 +61,7 @@ def public_host(host: str) -> bool:
 
     try:
         found = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
-    except (OSError, UnicodeError):
+    except OSError, UnicodeError:
         return False
     return bool(found) and all(is_public(str(item[4][0])) for item in found)
 
@@ -108,8 +108,7 @@ TAILNET_ONLY = Reach(
 LOCAL_NETWORK = Reach(
     "network",
     "Home network and tailnet",
-    "It answers with a private address, so anything on your home network can "
-    "reach it, on the tailnet or not.",
+    "It answers with a private address, so anything on your home network can reach it, on the tailnet or not.",
 )
 PUBLIC = Reach(
     "public",

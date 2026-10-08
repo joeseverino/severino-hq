@@ -108,9 +108,8 @@ KEYLESS_LABEL = EVIDENCE_LABELS["not_applicable"]
 # and nothing to act on.
 QUIET_AUTHORITY = frozenset({"whole_account"})
 
-def grant_evidence(
-    ability: ConnectionAbility, instance: ConnectionInstance
-) -> tuple[str, tuple[str, ...]]:
+
+def grant_evidence(ability: ConnectionAbility, instance: ConnectionInstance) -> tuple[str, tuple[str, ...]]:
     """What proves this connection may perform this ability, and what is absent.
 
     Two declarations meet here: the ability's grant model, which says what proof
@@ -133,11 +132,7 @@ def grant_evidence(
     if ability.required_scopes:
         if not instance.scopes_known:
             return "unknown", ()
-        missing = tuple(
-            scope
-            for scope in ability.required_scopes
-            if scope not in instance.granted_scopes
-        )
+        missing = tuple(scope for scope in ability.required_scopes if scope not in instance.granted_scopes)
         return ("missing", missing) if missing else ("verified", ())
     if instance.credential_model == "scoped":
         return "unverified", ()
@@ -234,9 +229,7 @@ class ConnectionView:
 
     @property
     def authority_label(self) -> str:
-        if self.abilities and all(
-            state.evidence == "not_applicable" for state in self.abilities
-        ):
+        if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
             return KEYLESS_LABEL
         return AUTHORITY_LABELS[self.authority]
 
@@ -257,16 +250,10 @@ class ConnectionView:
         if self.lifecycle == "unreachable":
             return f"Last tried {ago(observed)}" if observed else ""
         if self.lifecycle == "unauthorized":
-            missing = tuple(
-                dict.fromkeys(
-                    scope for state in self.abilities for scope in state.missing_scopes
-                )
-            )
+            missing = tuple(dict.fromkeys(scope for state in self.abilities for scope in state.missing_scopes))
             return f"Needs {', '.join(missing)}" if missing else ""
         label = self.authority_label
-        if self.lifecycle == "configured" and (
-            label != KEYLESS_LABEL and self.authority != "none"
-        ):
+        if self.lifecycle == "configured" and (label != KEYLESS_LABEL and self.authority != "none"):
             return "Not tested"
         return label
 
@@ -274,10 +261,7 @@ class ConnectionView:
     def state_line_quiet(self) -> bool:
         """Whether ``state_line`` is shown only in the expanded row."""
 
-        return (
-            self.lifecycle in ("ready", "reachable")
-            and self.authority in QUIET_AUTHORITY
-        )
+        return self.lifecycle in ("ready", "reachable") and self.authority in QUIET_AUTHORITY
 
     @property
     def name_link(self):
@@ -293,9 +277,7 @@ class ConnectionView:
         from .entity_links import entity_link
 
         link = entity_link("connection", self.instance.label)
-        relationships = next(
-            (action for action in self.actions if action.name == "relationships"), None
-        )
+        relationships = next((action for action in self.actions if action.name == "relationships"), None)
         return replace(link, url=relationships.url) if relationships else link
 
     @property
@@ -316,11 +298,7 @@ class ConnectionView:
     def other_actions(self) -> tuple[ActionLink, ...]:
         """Useful row actions, excluding this page and the promoted next move."""
 
-        return tuple(
-            action
-            for action in self.actions
-            if action.name != "open" and not action.recommended
-        )
+        return tuple(action for action in self.actions if action.name != "open" and not action.recommended)
 
     @property
     def row_actions(self) -> tuple[ActionLink, ...]:
@@ -337,68 +315,37 @@ class ConnectionView:
         )
 
 
-def _validate_instance(
-    spec: ConnectionSpec, instance: ConnectionInstance
-) -> ConnectionInstance:
+def _validate_instance(spec: ConnectionSpec, instance: ConnectionInstance) -> ConnectionInstance:
     if not isinstance(instance, ConnectionInstance):
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} emitted a non-ConnectionInstance."
-        )
-    if (
-        not instance.id.strip()
-        or not instance.label.strip()
-        or not instance.kind.strip()
-    ):
-        raise ImproperlyConfigured(
-            f"Connection {spec.name!r} emitted an incomplete instance."
-        )
+        raise ImproperlyConfigured(f"Connection {spec.name!r} emitted a non-ConnectionInstance.")
+    if not instance.id.strip() or not instance.label.strip() or not instance.kind.strip():
+        raise ImproperlyConfigured(f"Connection {spec.name!r} emitted an incomplete instance.")
     if instance.status not in {"good", "attention", "serious", "neutral"}:
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} has invalid status {instance.status!r}."
-        )
+        raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid status {instance.status!r}.")
     if not instance.status_label.strip():
         raise ImproperlyConfigured(f"Connection {instance.id!r} has no status label.")
-    if instance.observed_at is not None and not isinstance(
-        instance.observed_at, datetime
-    ):
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} has an invalid observation time."
-        )
+    if instance.observed_at is not None and not isinstance(instance.observed_at, datetime):
+        raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid observation time.")
     if instance.endpoint and endpoint_has_private_parts(instance.endpoint):
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} endpoint contains private URL parts."
-        )
+        raise ImproperlyConfigured(f"Connection {instance.id!r} endpoint contains private URL parts.")
     if not isinstance(instance.controller_id, str) or (
-        instance.controller_id
-        and instance.controller_id != instance.controller_id.strip()
+        instance.controller_id and instance.controller_id != instance.controller_id.strip()
     ):
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} has an invalid controller id."
-        )
+        raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid controller id.")
     if len(instance.granted_scopes) != len(set(instance.granted_scopes)) or any(
         not SCOPE_NAME.fullmatch(scope) for scope in instance.granted_scopes
     ):
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} has invalid granted scopes."
-        )
+        raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid granted scopes.")
     if instance.credential_model not in ("", *CREDENTIAL_MODELS):
         raise ImproperlyConfigured(
-            f"Connection {instance.id!r} has invalid credential model "
-            f"{instance.credential_model!r}."
+            f"Connection {instance.id!r} has invalid credential model {instance.credential_model!r}."
         )
-    if instance.credential_model == "none" and (
-        instance.granted_scopes or instance.scopes_known
-    ):
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} is keyless but reports grants."
-        )
+    if instance.credential_model == "none" and (instance.granted_scopes or instance.scopes_known):
+        raise ImproperlyConfigured(f"Connection {instance.id!r} is keyless but reports grants.")
     known = {ability.name for ability in spec.abilities}
     unknown = sorted(set(instance.ability_names) - known)
     if unknown:
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} references unknown abilities: "
-            f"{', '.join(unknown)}."
-        )
+        raise ImproperlyConfigured(f"Connection {instance.id!r} references unknown abilities: {', '.join(unknown)}.")
     for collection in (instance.targets, instance.dependencies):
         if any(
             not isinstance(link, ConnectionLink)
@@ -408,13 +355,9 @@ def _validate_instance(
             or (link.resource_key and link.resource_key != link.resource_key.strip())
             for link in collection
         ):
-            raise ImproperlyConfigured(
-                f"Connection {instance.id!r} has an invalid relationship."
-            )
+            raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid relationship.")
     if any(
-        not isinstance(fact, ConnectionFact)
-        or not fact.label.strip()
-        or not fact.value.strip()
+        not isinstance(fact, ConnectionFact) or not fact.label.strip() or not fact.value.strip()
         for fact in instance.facts
     ):
         raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid fact.")
@@ -433,10 +376,7 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
         groups.append(
             ConnectionGroup(
                 spec,
-                tuple(
-                    _connection_view(spec, instance, abilities, principal)
-                    for instance in instances
-                ),
+                tuple(_connection_view(spec, instance, abilities, principal) for instance in instances),
             )
         )
     # Composition order is domain order, which puts the Connections domain
@@ -450,14 +390,10 @@ def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...
     """One family's instances, asked of its provider once per request."""
 
     def load() -> tuple[ConnectionInstance, ...]:
-        instances = tuple(
-            _validate_instance(spec, instance) for instance in spec.instance_provider()
-        )
+        instances = tuple(_validate_instance(spec, instance) for instance in spec.instance_provider())
         ids = [instance.id for instance in instances]
         if len(ids) != len(set(ids)):
-            raise ImproperlyConfigured(
-                f"Connection {spec.name!r} emitted duplicate instance ids."
-            )
+            raise ImproperlyConfigured(f"Connection {spec.name!r} emitted duplicate instance ids.")
         return instances
 
     return read_once(f"connections.instances:{spec.name}", load)
@@ -501,10 +437,7 @@ def _connection_view(
     abilities: dict[str, ConnectionAbility],
     principal: Principal,
 ) -> ConnectionView:
-    states = tuple(
-        _ability_state(abilities[name], instance, principal)
-        for name in instance.ability_names
-    )
+    states = tuple(_ability_state(abilities[name], instance, principal) for name in instance.ability_names)
     actions = connection_action_links(spec)
     relationship = connection_relationship_link(spec.name, instance.id)
     if relationship is not None:
@@ -547,9 +480,7 @@ def serialize_connection(connection: ConnectionView) -> dict:
         "status_label": instance.status_label,
         "detail": instance.detail,
         "endpoint": instance.endpoint or None,
-        "observed_at": (
-            instance.observed_at.isoformat() if instance.observed_at else None
-        ),
+        "observed_at": (instance.observed_at.isoformat() if instance.observed_at else None),
         "scopes_known": instance.scopes_known,
         "granted_scopes": list(instance.granted_scopes),
         "credential_model": instance.credential_model or None,

@@ -18,9 +18,7 @@ SCRIPTS = Path(settings.BASE_DIR) / "scripts"
 
 def listed(name: str) -> tuple[str, ...]:
     lines = (SCRIPTS / name).read_text(encoding="utf-8").splitlines()
-    return tuple(
-        line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")
-    )
+    return tuple(line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#"))
 
 
 class ObserverPermissionFileTests(SimpleTestCase):

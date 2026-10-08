@@ -23,9 +23,7 @@ def upsert_by_slug[Command: SlugCommand](
 ) -> dict[str, Any]:
     """Lock an existing command slug, then delegate the domain-specific write."""
 
-    exists = (
-        model._default_manager.select_for_update().filter(slug=command.slug).exists()
-    )
+    exists = model._default_manager.select_for_update().filter(slug=command.slug).exists()
     return save(
         command,
         principal=principal,

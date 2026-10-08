@@ -78,9 +78,7 @@ def workflow_parts(plan: Any) -> dict[str, Any]:
     return {
         "steps": real,
         "reason": " ".join(
-            step["summary"].strip()
-            for step in steps
-            if step["phase"] == "cannot" and step["summary"].strip()
+            step["summary"].strip() for step in steps if step["phase"] == "cannot" and step["summary"].strip()
         ),
         "fold": _fold(real),
     }
@@ -98,8 +96,15 @@ def _next_step(item: dict[str, Any], taken: set[tuple[str, str]]) -> tuple[list[
     if ("GET", url) in taken:
         return [], ""
     link = {
-        "name": "open", "label": said, "effect": "read", "url": url, "method": "GET",
-        "capability": "", "target": "", "reason": "", "recommended": False,
+        "name": "open",
+        "label": said,
+        "effect": "read",
+        "url": url,
+        "method": "GET",
+        "capability": "",
+        "target": "",
+        "reason": "",
+        "recommended": False,
     }
     return [link], ""
 

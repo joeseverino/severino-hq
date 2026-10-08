@@ -30,9 +30,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 "ordering": ("-date",),
-                "indexes": [
-                    models.Index(fields=["date"], name="analytics_a_date_5615ed_idx")
-                ],
+                "indexes": [models.Index(fields=["date"], name="analytics_a_date_5615ed_idx")],
                 "constraints": [
                     models.UniqueConstraint(
                         fields=("site", "date"),

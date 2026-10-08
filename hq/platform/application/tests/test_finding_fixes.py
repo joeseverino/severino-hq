@@ -24,10 +24,7 @@ READER = Principal("reader", "test", frozenset({Capability.READ}))
 def steps_text(finding) -> str:
     """Every word of a serialized finding's operator steps."""
 
-    return " ".join(
-        " ".join((step["label"], step["command"], *step["notes"]))
-        for step in finding["operator_steps"]
-    )
+    return " ".join(" ".join((step["label"], step["command"], *step["notes"])) for step in finding["operator_steps"])
 
 
 def document(**parts) -> str:
@@ -39,8 +36,7 @@ def document(**parts) -> str:
                 {"src": ["group:empty"], "dst": ["tag:server"], "ip": ["tcp:443"]},
             ],
             "ssh": [
-                {"action": "check", "src": ["group:empty"], "dst": ["tag:server"],
-                 "users": ["root"]},
+                {"action": "check", "src": ["group:empty"], "dst": ["tag:server"], "users": ["root"]},
             ],
             **parts,
         }
@@ -89,14 +85,10 @@ class PolicyAmendmentTests(TestCase):
 
     def test_a_group_named_elsewhere_is_refused(self):
         with self.assertRaisesRegex(ValueError, "tagOwners"):
-            policy_without_empty_groups(
-                document(tagOwners={"tag:server": ["group:empty"]})
-            )
+            policy_without_empty_groups(document(tagOwners={"tag:server": ["group:empty"]}))
 
     def test_a_prefix_of_another_name_is_not_a_reference(self):
-        amended, _ = policy_without_empty_groups(
-            document(tagOwners={"tag:server": ["group:empty-but-other"]})
-        )
+        amended, _ = policy_without_empty_groups(document(tagOwners={"tag:server": ["group:empty-but-other"]}))
 
         self.assertTrue(amended)
 
@@ -123,9 +115,7 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
         self.assertIn("group:empty", stored["groups"])
 
     def test_a_signed_in_operator_amends_the_declaration(self):
-        result = request_empty_groups_removal(
-            None, principal=an_operator(), current_key=POLICY_KEY
-        )
+        result = request_empty_groups_removal(None, principal=an_operator(), current_key=POLICY_KEY)
 
         stored = json.loads(ManagedResource.objects.get(key=POLICY_KEY).spec["document"])
         self.assertNotIn("group:empty", stored["groups"])
@@ -157,7 +147,8 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
 
     def test_an_unknown_or_other_kind_of_key_is_not_found(self):
         ManagedResource.objects.create(
-            key="example-rewrite", kind="adguard.rewrite",
+            key="example-rewrite",
+            kind="adguard.rewrite",
             spec={"domain": "a.example.com", "answer": "192.0.2.1"},
         )
         for key in ("missing", "example-rewrite"):
@@ -188,8 +179,7 @@ class ProductionFindingsTests(TestCase):
         tailnet_connection()
         store(
             "tailscale.device",
-            {"name": "example-host", "addresses": ["100.64.0.9"],
-             "enabled_routes": ["192.0.2.0/24"]},
+            {"name": "example-host", "addresses": ["100.64.0.9"], "enabled_routes": ["192.0.2.0/24"]},
         )
 
         (finding,) = raised("trusted-wider-than-tailnet")
@@ -205,13 +195,21 @@ class ProductionFindingsTests(TestCase):
         from hq.domains.control_plane.models import ProviderConnection
 
         ProviderConnection.objects.create(
-            connection_ref="example-portainer", controller_id="example-controller",
-            provider="portainer", endpoint="", observed_at=timezone.now(),
+            connection_ref="example-portainer",
+            controller_id="example-controller",
+            provider="portainer",
+            endpoint="",
+            observed_at=timezone.now(),
         )
         store(
             CONTAINER_KIND,
-            {"name": "example-leftover", "host": "example-host", "stack": "",
-             "state": "running", "connection_ref": "example-portainer"},
+            {
+                "name": "example-leftover",
+                "host": "example-host",
+                "stack": "",
+                "state": "running",
+                "connection_ref": "example-portainer",
+            },
         )
 
         (finding,) = raised("unrecognised-container")
@@ -244,8 +242,12 @@ class DriftOffersBothWaysTests(TestCase):
         from ..topology_model import TopologyNode
 
         return TopologyNode(
-            id=f"resource:{POLICY_KEY}", kind="resource", label=POLICY_KEY,
-            subtitle="", status="serious", status_label=status_label,
+            id=f"resource:{POLICY_KEY}",
+            kind="resource",
+            label=POLICY_KEY,
+            subtitle="",
+            status="serious",
+            status_label=status_label,
             kind_key="tailscale.policy",
         )
 
@@ -267,9 +269,7 @@ class DriftOffersBothWaysTests(TestCase):
 
         remedies = _fault_remedies(self.node("Needs attention"))
 
-        self.assertNotIn(
-            "infrastructure.resource.accept_observed", [r.capability for r in remedies]
-        )
+        self.assertNotIn("infrastructure.resource.accept_observed", [r.capability for r in remedies])
 
 
 class KeepTheLiveVersionPageTests(TestCase):
@@ -282,9 +282,7 @@ class KeepTheLiveVersionPageTests(TestCase):
 
         managing_everything()
         declare_policy(document())
-        user = get_user_model().objects.create_user(
-            "keep-op", password="x" * 20, is_staff=True, is_superuser=True
-        )
+        user = get_user_model().objects.create_user("keep-op", password="x" * 20, is_staff=True, is_superuser=True)
         self.client.force_login(user)
 
     def drift(self):
@@ -298,7 +296,8 @@ class KeepTheLiveVersionPageTests(TestCase):
         # Keys that sort before the policy's, more than one default page of them.
         ManagedResource.objects.bulk_create(
             ManagedResource(
-                key=f"a-{index:03}", kind="adguard.rewrite",
+                key=f"a-{index:03}",
+                kind="adguard.rewrite",
                 spec={"domain": f"h{index}.example.com", "answer": "192.0.2.1"},
             )
             for index in range(60)
@@ -324,9 +323,7 @@ class KeepTheLiveVersionPageTests(TestCase):
         content = response.content.decode()
         self.assertIn("Keep the live version", content)
         self.assertIn("Restore HQ&#x27;s version", content)
-        self.assertLess(
-            content.index("Keep the live version"), content.index("Restore HQ&#x27;s version")
-        )
+        self.assertLess(content.index("Keep the live version"), content.index("Restore HQ&#x27;s version"))
 
     def test_a_resource_in_step_offers_neither(self):
         from django.urls import reverse

@@ -6,15 +6,18 @@ from hq.domains.receipts import storage
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('receipts', '0001_initial'),
+        ("receipts", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='receipt',
-            name='file',
-            field=models.FileField(help_text='PDF or image. Private to signed-in users.', storage=storage.PrivateReceiptStorage(), upload_to=storage.receipt_upload_path),
+            model_name="receipt",
+            name="file",
+            field=models.FileField(
+                help_text="PDF or image. Private to signed-in users.",
+                storage=storage.PrivateReceiptStorage(),
+                upload_to=storage.receipt_upload_path,
+            ),
         ),
     ]

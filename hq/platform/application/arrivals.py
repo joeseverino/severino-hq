@@ -229,7 +229,7 @@ class Arrival:
 
     @property
     def phrase(self) -> str:
-        """"3 hours ago, directly over the tailnet"."""
+        """ "3 hours ago, directly over the tailnet"."""
 
         from .moments import ago
 

@@ -85,7 +85,7 @@ def _flatten(data: Any) -> str:
         # tag is matched, so `issuewild` renders as readably as `issue`.
         for tag in ("issue", "issuewild", "iodef", "contactemail"):
             if tag in data:
-                return f"{data.get('critical', 0)} {tag} \"{data[tag]}\""
+                return f'{data.get("critical", 0)} {tag} "{data[tag]}"'
         if "nsname" in data:
             return f"{data.get('nsname', '')} {data.get('hostmaster', '')}".strip()
         return json.dumps(data, sort_keys=True)
@@ -186,9 +186,7 @@ def look_up_name(
     }
 
 
-def _address_answer(
-    command: AddressCommand, *, principal: Principal
-) -> tuple[Any, dict[str, Any] | None]:
+def _address_answer(command: AddressCommand, *, principal: Principal) -> tuple[Any, dict[str, Any] | None]:
     """The parsed address and what HQ can say about it without asking anyone.
 
     A stored reading, or for a non-routable address the local answer; None
@@ -265,17 +263,11 @@ def look_up_address(
         reading["note"] = "Reverse DNS could not be read."
     else:
         hostnames = answer.get("hostnames")
-        found = [
-            str(item)
-            for item in (hostnames if isinstance(hostnames, list) else ())
-            if item
-        ]
+        found = [str(item) for item in (hostnames if isinstance(hostnames, list) else ()) if item]
         server = answer.get("server")
         reading["hostnames"] = found
         reading["arpa"] = str(answer.get("arpaName") or "")
-        reading["resolver"] = (
-            str(server.get("name", "")) if isinstance(server, dict) else ""
-        )
+        reading["resolver"] = str(server.get("name", "")) if isinstance(server, dict) else ""
         # A 200 carrying an `error` key is this resolver reporting "resolved
         # fine, found nothing". Carried as a note rather than raised: no PTR
         # record is a fact about the address, not a failed lookup.

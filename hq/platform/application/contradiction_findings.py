@@ -63,12 +63,7 @@ def _claims(hostname: str, facet_ids: Iterable[str] = ()) -> tuple[Any, ...]:
     if service is None:
         return ()
     wanted = set(facet_ids)
-    return tuple(
-        claim
-        for facet in service.facets
-        if not wanted or facet.id in wanted
-        for claim in facet.claims
-    )
+    return tuple(claim for facet in service.facets if not wanted or facet.id in wanted for claim in facet.claims)
 
 
 def _declared(hostname: str, kinds: Iterable[str]) -> tuple[str, ...]:
@@ -102,8 +97,12 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
         for route in path_to(name).routes:
             last = route.hops[-1] if route.hops else None
             if (
-                not public_name(route) or last is None or last.step != "machine"
-                or last.unread or route.unread or last.name not in known
+                not public_name(route)
+                or last is None
+                or last.step != "machine"
+                or last.unread
+                or route.unread
+                or last.name not in known
                 or last.name in serving
             ):
                 continue
@@ -262,13 +261,16 @@ def _split_horizon() -> tuple[Finding, ...]:
         internal = {route.machine for route in routes if not public_name(route) and route.machine}
         # Every machine a public request crosses: an edge that proxies on to
         # the machine the internal record names is a front, and deliberate.
-        crossed = {
-            hop.name for route in routes if public_name(route) for hop in route.hops if hop.step == "machine"
-        }
+        crossed = {hop.name for route in routes if public_name(route) for hop in route.hops if hop.step == "machine"}
         if not public or not internal or public & internal or internal <= crossed:
             continue
-        rewrites = _declared(name, (kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and not provider.public_effect))
-        records = _declared(name, (kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and provider.public_effect))
+        rewrites = _declared(
+            name,
+            (kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and not provider.public_effect),
+        )
+        records = _declared(
+            name, (kind for kind, provider in PROVIDERS.items() if provider.facet == "dns" and provider.public_effect)
+        )
         found.append(
             Finding(
                 rule="split-horizon-disagrees",
@@ -363,15 +365,10 @@ def _served_not_held() -> tuple[Finding, ...]:
     found = []
     for resource in enabled_resources():
         consumers = (resource.status or {}).get("consumers") or []
-        wrong = [
-            item for item in consumers
-            if isinstance(item, dict) and item.get("matches_expected") is False
-        ]
+        wrong = [item for item in consumers if isinstance(item, dict) and item.get("matches_expected") is False]
         if not wrong:
             continue
-        names = ", ".join(
-            str(item.get("domain") or item.get("consumer") or "") for item in wrong
-        )
+        names = ", ".join(str(item.get("domain") or item.get("consumer") or "") for item in wrong)
         found.append(
             Finding(
                 rule="served-certificate-not-held",
@@ -461,8 +458,7 @@ def _decoded(value: str) -> Finding:
             for capability, target, label, url in item["remedies"]
         ),
         steps=tuple(
-            OperatorStep(label=label, command=command, notes=tuple(notes))
-            for label, command, notes in item["steps"]
+            OperatorStep(label=label, command=command, notes=tuple(notes)) for label, command, notes in item["steps"]
         ),
     )
 

@@ -51,16 +51,12 @@ def _without_inbound(topology: Topology, kind: str, edge_kind: str) -> frozenset
 
     incoming = _incoming_kinds(topology)
     return frozenset(
-        node.id
-        for node in topology.nodes
-        if node.kind == kind and edge_kind not in incoming.get(node.id, frozenset())
+        node.id for node in topology.nodes if node.kind == kind and edge_kind not in incoming.get(node.id, frozenset())
     )
 
 
 def _needs_attention(topology: Topology) -> frozenset[str]:
-    return frozenset(
-        node.id for node in topology.nodes if node.status in _ATTENTION_STATES
-    )
+    return frozenset(node.id for node in topology.nodes if node.status in _ATTENTION_STATES)
 
 
 def _unobserved_resources(topology: Topology) -> frozenset[str]:
@@ -100,9 +96,7 @@ def _stale_observations(topology: Topology) -> frozenset[str]:
         if newest is None or observed > newest:
             latest[node.kind_key] = observed
     return frozenset(
-        node.id
-        for node in topology.nodes
-        if node.id in seen and latest[node.kind_key] - seen[node.id] > _STALE_AFTER
+        node.id for node in topology.nodes if node.id in seen and latest[node.kind_key] - seen[node.id] > _STALE_AFTER
     )
 
 
@@ -118,27 +112,38 @@ def _isolated(topology: Topology) -> frozenset[str]:
 # resource or an ability answers them without knowing they exist. Nothing here
 # names a domain, a provider, or an installed package.
 TOPOLOGY_LENSES: tuple[TopologyLens, ...] = (
-    TopologyLens("attention", "Has a problem",
-        "Everything with a problem right now.",
-        _needs_attention),
-    TopologyLens("unobserved-resources", "In HQ but not found by any connection",
+    TopologyLens("attention", "Has a problem", "Everything with a problem right now.", _needs_attention),
+    TopologyLens(
+        "unobserved-resources",
+        "In HQ but not found by any connection",
         "Records HQ keeps that no connection reports using.",
-        _unobserved_resources),
-    TopologyLens("ungoverned-resources", "In HQ but no connection can change it",
+        _unobserved_resources,
+    ),
+    TopologyLens(
+        "ungoverned-resources",
+        "In HQ but no connection can change it",
         "Records HQ keeps that none of its connections can change.",
-        _ungoverned_resources),
-    TopologyLens("unobserved-abilities", "Things HQ could read but currently cannot",
+        _ungoverned_resources,
+    ),
+    TopologyLens(
+        "unobserved-abilities",
+        "Things HQ could read but currently cannot",
         "What a connection type offers that no working connection gives HQ now.",
-        _unobserved_abilities),
-    TopologyLens("unresolved-dependencies", "Reached by a connection but not in HQ",
+        _unobserved_abilities,
+    ),
+    TopologyLens(
+        "unresolved-dependencies",
+        "Reached by a connection but not in HQ",
         "Things a connection uses that HQ keeps no record of.",
-        _unresolved_dependencies),
-    TopologyLens("stale-observations", "Not read as recently as the rest",
+        _unresolved_dependencies,
+    ),
+    TopologyLens(
+        "stale-observations",
+        "Not read as recently as the rest",
         "Things last read well before others of the same type.",
-        _stale_observations),
-    TopologyLens("isolated", "Connected to nothing",
-        "Things with no link to anything else.",
-        _isolated),
+        _stale_observations,
+    ),
+    TopologyLens("isolated", "Connected to nothing", "Things with no link to anything else.", _isolated),
 )
 
 _LENS_BY_NAME = {lens.name: lens for lens in TOPOLOGY_LENSES}
@@ -166,11 +171,7 @@ def apply_lens(topology: Topology, lens: TopologyLens) -> Topology:
     selected = lens.select(topology)
     return Topology(
         tuple(node for node in topology.nodes if node.id in selected),
-        tuple(
-            edge
-            for edge in topology.edges
-            if edge.source in selected and edge.target in selected
-        ),
+        tuple(edge for edge in topology.edges if edge.source in selected and edge.target in selected),
     )
 
 
@@ -195,7 +196,7 @@ def apply_trace(
     selected_direction = direction if direction in TRACE_DIRECTIONS else "both"
     try:
         selected_depth = int(depth)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         selected_depth = 2
     selected_depth = min(max(selected_depth, 1), MAX_TRACE_DEPTH)
 
@@ -209,23 +210,14 @@ def apply_trace(
     hops = {focus: 0}
     frontier = {focus}
     for hop in range(1, selected_depth + 1):
-        frontier = {
-            neighbor
-            for node_id in frontier
-            for neighbor in adjacent[node_id]
-            if neighbor not in hops
-        }
+        frontier = {neighbor for node_id in frontier for neighbor in adjacent[node_id] if neighbor not in hops}
         if not frontier:
             break
         hops.update(dict.fromkeys(frontier, hop))
 
     narrowed = Topology(
         tuple(node for node in topology.nodes if node.id in hops),
-        tuple(
-            edge
-            for edge in topology.edges
-            if edge.source in hops and edge.target in hops
-        ),
+        tuple(edge for edge in topology.edges if edge.source in hops and edge.target in hops),
     )
     trace = TopologyTrace(
         focus=focus,

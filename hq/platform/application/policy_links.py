@@ -32,9 +32,7 @@ class PolicyNames:
         from .tailnet import policy
 
         catalog = tuple(machines_once() if machines is None else machines)
-        self._owners = {
-            host_of(str(address)): item.name for item in catalog for address in item.addresses
-        }
+        self._owners = {host_of(str(address)): item.name for item in catalog for address in item.addresses}
         self._hosts = dict(policy().hosts if hosts is None else hosts)
 
     def machine_at(self, address: str) -> str:

@@ -44,9 +44,7 @@ class _SameOriginRedirects(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         asked, told = urlsplit(req.full_url), urlsplit(newurl)
         if (told.scheme, told.netloc) != (asked.scheme, asked.netloc):
-            raise urllib.error.HTTPError(
-                newurl, code, "Redirect to another origin refused", headers, fp
-            )
+            raise urllib.error.HTTPError(newurl, code, "Redirect to another origin refused", headers, fp)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -98,9 +96,7 @@ def index_project() -> Project | None:
     if not host:
         return None
     matches = [
-        project
-        for project in Project.objects.exclude(public_url="")
-        if urlsplit(project.public_url).hostname == host
+        project for project in Project.objects.exclude(public_url="") if urlsplit(project.public_url).hostname == host
     ]
     return matches[0] if len(matches) == 1 else None
 

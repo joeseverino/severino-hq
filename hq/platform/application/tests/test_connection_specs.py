@@ -88,9 +88,7 @@ class ConnectionExecutionTests(TestCase):
             management_route="example:connection-list",
         )
 
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
             self.assertIn(spec, integration_graph().connections.values())
 
     def test_core_spec_derives_controller_abilities_and_safe_state(self):
@@ -109,11 +107,7 @@ class ConnectionExecutionTests(TestCase):
         )
 
         outcome = list_connections(principal=READ)
-        core = next(
-            group
-            for group in outcome["groups"]
-            if group["name"] == "infrastructure.controllers"
-        )
+        core = next(group for group in outcome["groups"] if group["name"] == "infrastructure.controllers")
         connection = core["instances"][0]
 
         self.assertEqual(connection["label"], "example-cloudflare")
@@ -132,12 +126,8 @@ class ConnectionExecutionTests(TestCase):
         ):
             groups = connection_catalog(principal=FINANCE)
 
-        finance = next(
-            group for group in groups if group.spec.name == "example.finance"
-        )
-        states = {
-            state.ability.name: state for state in finance.connections[0].abilities
-        }
+        finance = next(group for group in groups if group.spec.name == "example.finance")
+        states = {state.ability.name: state for state in finance.connections[0].abilities}
         self.assertTrue(states["accounts.read"].available)
         self.assertFalse(states["transactions.sync"].available)
         self.assertEqual(
@@ -167,9 +157,7 @@ class ConnectionExecutionTests(TestCase):
         spec = _finance_spec()
         instance = replace(spec.instance_provider()[0], scopes_known=False)
         spec = replace(spec, instance_provider=lambda: (instance,))
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
             groups = connection_catalog(principal=FINANCE)
 
         states = groups[0].connections[0].abilities
@@ -190,9 +178,7 @@ class ConnectionExecutionTests(TestCase):
             abilities=(ability,),
             instance_provider=lambda: (instance,),
         )
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
             state = connection_catalog(principal=FINANCE)[0].connections[0].abilities[0]
 
         self.assertTrue(state.available)
@@ -227,9 +213,7 @@ class ConnectionExecutionTests(TestCase):
             abilities=(ability,),
             instance_provider=lambda: (instance,),
         )
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
             reader = connection_catalog(principal=FINANCE)[0].connections[0]
             operator = connection_catalog(principal=FINANCE_OPERATOR)[0].connections[0]
 
@@ -251,13 +235,7 @@ class ConnectionExecutionTests(TestCase):
             [action["name"] for action in instance["actions"]],
             ["open", "manage", "relationships"],
         )
-        self.assertTrue(
-            next(
-                action["recommended"]
-                for action in instance["actions"]
-                if action["name"] == "manage"
-            )
-        )
+        self.assertTrue(next(action["recommended"] for action in instance["actions"] if action["name"] == "manage"))
         self.assertNotIn("secret", str(instance["actions"]).casefold())
 
     def test_connection_families_authorize_before_calling_their_provider(self):
@@ -269,9 +247,7 @@ class ConnectionExecutionTests(TestCase):
             "example.private.read",
             provider,
         )
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
             groups = connection_catalog(principal=NONE)
 
         self.assertEqual(groups, ())
@@ -286,11 +262,7 @@ class ConnectionRegistrationTests(TestCase):
         ):
             described = describe_connections()
 
-        finance = next(
-            item
-            for item in described["connections"]
-            if item["name"] == "example.finance"
-        )
+        finance = next(item for item in described["connections"] if item["name"] == "example.finance")
         self.assertEqual(finance["secret_store"], "Example Vault")
         self.assertEqual(
             finance["abilities"][1]["required_scopes"],
@@ -300,29 +272,21 @@ class ConnectionRegistrationTests(TestCase):
 
     def test_a_connection_is_listed_without_a_count_of_what_it_can_do(self):
         spec = _finance_spec()
-        instance = replace(
-            spec.instance_provider()[0], ability_names=(spec.abilities[0].name,)
-        )
+        instance = replace(spec.instance_provider()[0], ability_names=(spec.abilities[0].name,))
         spec = replace(
             spec,
             abilities=spec.abilities[:1],
             instance_provider=lambda: (instance,),
         )
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-        ):
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
             discovered = command_center("finance", principal=FINANCE)
 
         self.assertEqual(discovered["connections"][0].badges, ())
 
     def test_command_center_finds_the_live_instance_not_only_its_family(self):
         spec = _finance_spec()
-        with mock.patch(
-            "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-        ):
-            discovered = command_center(
-                "capital", principal=FINANCE, include_live_connections=True
-            )
+        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+            discovered = command_center("capital", principal=FINANCE, include_live_connections=True)
 
         self.assertEqual(discovered["connections"][0].label, "Capital One")
         self.assertEqual(discovered["connections"][0].badges, ("healthy",))
@@ -371,13 +335,10 @@ class ConnectionRegistrationTests(TestCase):
             },
         )
         self.assertIn("via Tailnet device", commands["infrastructure.reconcile"].badges)
-        self.assertIn(
-            "via Tailnet device", commands["tailnet.routes.approve"].badges
-        )
+        self.assertIn("via Tailnet device", commands["tailnet.routes.approve"].badges)
         self.assertEqual(
             commands["infrastructure.reconcile"].url,
-            "/commands/infrastructure.reconcile/"
-            "?kind=tailscale.device&kind=tailscale.policy",
+            "/commands/infrastructure.reconcile/?kind=tailscale.device&kind=tailscale.policy",
         )
         self.assertNotIn("certificate.renew", commands)
 
@@ -385,11 +346,7 @@ class ConnectionRegistrationTests(TestCase):
         with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
             discovered = command_center("e", principal=READ)
 
-        core = next(
-            item
-            for item in discovered["connections"]
-            if item.name == "infrastructure.controllers"
-        )
+        core = next(item for item in discovered["connections"] if item.name == "infrastructure.controllers")
         self.assertEqual(len(core.badges), 4)
         self.assertRegex(core.badges[-1], r"^\+\d+ more$")
 
@@ -411,27 +368,16 @@ class ConnectionRegistrationTests(TestCase):
         from hq.domains.control_plane.observations import OBSERVATIONS
 
         core = next(
-            item
-            for item in describe_connections()["connections"]
-            if item["name"] == "infrastructure.controllers"
+            item for item in describe_connections()["connections"] if item["name"] == "infrastructure.controllers"
         )
-        tailscale = [
-            ability
-            for ability in core["abilities"]
-            if ability["name"].startswith("tailscale.")
-        ]
+        tailscale = [ability for ability in core["abilities"] if ability["name"].startswith("tailscale.")]
         changes = [ability for ability in tailscale if ability["effect"] != "read"]
 
         self.assertEqual(
             {ability["name"] for ability in changes},
             {"tailscale.device", "tailscale.policy"},
         )
-        self.assertTrue(
-            all(
-                ability["subject_resource"] == "infrastructure.resources"
-                for ability in changes
-            )
-        )
+        self.assertTrue(all(ability["subject_resource"] == "infrastructure.resources" for ability in changes))
         self.assertEqual(
             {ability["name"]: ability["governs_kinds"] for ability in changes},
             {
@@ -455,9 +401,7 @@ class ConnectionRegistrationTests(TestCase):
             ),
         )
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=(broken,)
-            ),
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(broken,)),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid governed kinds"),
         ):
             integration_graph()
@@ -539,9 +483,7 @@ class ConnectionRegistrationTests(TestCase):
         )
         spec = replace(spec, instance_provider=lambda: (instance,))
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-            ),
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
             self.assertRaisesRegex(ImproperlyConfigured, "private URL parts"),
         ):
             list_connections(principal=FINANCE)
@@ -554,9 +496,7 @@ class ConnectionRegistrationTests(TestCase):
         )
         spec = replace(spec, instance_provider=lambda: (instance,))
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-            ),
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
             self.assertRaisesRegex(ImproperlyConfigured, "private URL parts"),
         ):
             list_connections(principal=FINANCE)
@@ -566,9 +506,7 @@ class ConnectionRegistrationTests(TestCase):
         instance = replace(spec.instance_provider()[0], controller_id=" ")
         spec = replace(spec, instance_provider=lambda: (instance,))
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-            ),
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid controller id"),
         ):
             list_connections(principal=FINANCE)
@@ -578,9 +516,7 @@ class ConnectionRegistrationTests(TestCase):
         instance = replace(spec.instance_provider()[0], observed_at=object())
         spec = replace(spec, instance_provider=lambda: (instance,))
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-            ),
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
             self.assertRaisesRegex(ImproperlyConfigured, "observation time"),
         ):
             list_connections(principal=FINANCE)
@@ -588,9 +524,7 @@ class ConnectionRegistrationTests(TestCase):
     def test_documentation_urls_are_restricted_to_safe_destinations(self):
         spec = replace(_finance_spec(), documentation_url="javascript:alert(1)")
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-            ),
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
             self.assertRaisesRegex(ImproperlyConfigured, "documentation URL"),
         ):
             describe_connections()
@@ -598,9 +532,7 @@ class ConnectionRegistrationTests(TestCase):
 
 class ConnectionWorkspaceTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
 
     def test_a_plugin_spec_renders_without_a_host_template_change(self):
@@ -626,9 +558,7 @@ class ConnectionWorkspaceTests(TestCase):
         instance = replace(spec.instance_provider()[0], kind="unclassified")
         spec = replace(spec, instance_provider=lambda: (instance,))
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-            ),
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
             mock.patch("hq.domains.control_plane.connection_views.web_principal", return_value=FINANCE),
         ):
             response = self.client.get(reverse("control_plane:connections"))
@@ -640,9 +570,7 @@ class GrantEvidenceTests(TestCase):
     """Permission is an evidence-backed relationship, derived from two declarations."""
 
     def ability(self, **overrides):
-        base = {
-            "name": "example.read", "label": "Read", "summary": "Read one example."
-        }
+        base = {"name": "example.read", "label": "Read", "summary": "Read one example."}
         return ConnectionAbility(**{**base, **overrides})
 
     def instance(self, **overrides):
@@ -658,7 +586,10 @@ class GrantEvidenceTests(TestCase):
         scoped = self.ability(required_scopes=("a:read",), grant="scoped")
         cases = {
             # A rejected credential proves nothing, whatever the ability asked.
-            (scoped, self.instance(credential_model="rejected", scopes_known=True, granted_scopes=("a:read",))): "revoked",
+            (
+                scoped,
+                self.instance(credential_model="rejected", scopes_known=True, granted_scopes=("a:read",)),
+            ): "revoked",
             # Keyless on either side: nothing to prove.
             (self.ability(grant="none"), self.instance(credential_model="coarse")): "not_applicable",
             (self.ability(), self.instance(credential_model="none")): "not_applicable",
@@ -666,7 +597,10 @@ class GrantEvidenceTests(TestCase):
             (self.ability(grant="coarse"), self.instance()): "coarse",
             (scoped, self.instance(credential_model="coarse")): "coarse",
             # A scoped requirement is checked scope by scope, when it can be.
-            (scoped, self.instance(credential_model="scoped", scopes_known=True, granted_scopes=("a:read",))): "verified",
+            (
+                scoped,
+                self.instance(credential_model="scoped", scopes_known=True, granted_scopes=("a:read",)),
+            ): "verified",
             (scoped, self.instance(credential_model="scoped", scopes_known=True, granted_scopes=())): "missing",
             (scoped, self.instance(credential_model="scoped")): "unknown",
             # Nothing required: the provider could have been asked, or nothing is known.
@@ -679,9 +613,7 @@ class GrantEvidenceTests(TestCase):
 
     def test_only_missing_names_what_is_missing(self):
         scoped = self.ability(required_scopes=("a:read", "b:write"), grant="scoped")
-        state, missing = self.evidence(
-            scoped, self.instance(scopes_known=True, granted_scopes=("a:read",))
-        )
+        state, missing = self.evidence(scoped, self.instance(scopes_known=True, granted_scopes=("a:read",)))
         self.assertEqual((state, missing), ("missing", ("b:write",)))
 
     def test_authority_and_lifecycle_follow_the_evidence(self):
@@ -696,10 +628,7 @@ class GrantEvidenceTests(TestCase):
         )
 
         def states(*evidence):
-            return tuple(
-                ConnectionAbilityState(self.ability(), True, (), None, item)
-                for item in evidence
-            )
+            return tuple(ConnectionAbilityState(self.ability(), True, (), None, item) for item in evidence)
 
         self.assertEqual(connection_authority(()), "none")
         self.assertEqual(connection_authority(states("verified")), "proven")
@@ -730,8 +659,12 @@ class GrantEvidenceTests(TestCase):
 
         def spec(ability):
             return ConnectionSpec(
-                "example.grants", "Grants", "Grant contract.", Capability.READ,
-                lambda: (), (ability,),
+                "example.grants",
+                "Grants",
+                "Grant contract.",
+                Capability.READ,
+                lambda: (),
+                (ability,),
             )
 
         with self.assertRaisesRegex(ImproperlyConfigured, "invalid grant model"):
@@ -739,24 +672,22 @@ class GrantEvidenceTests(TestCase):
         with self.assertRaisesRegex(ImproperlyConfigured, "requires no scopes"):
             validate_connection_spec(spec(self.ability(grant="scoped")))
         with self.assertRaisesRegex(ImproperlyConfigured, "lists required scopes"):
-            validate_connection_spec(
-                spec(self.ability(grant="none", required_scopes=("a:read",)))
-            )
+            validate_connection_spec(spec(self.ability(grant="none", required_scopes=("a:read",))))
         with self.assertRaisesRegex(ImproperlyConfigured, "staleness window"):
-            validate_connection_spec(
-                replace(spec(self.ability(grant="none")), stale_after_hours=0)
-            )
+            validate_connection_spec(replace(spec(self.ability(grant="none")), stale_after_hours=0))
         validate_connection_spec(spec(self.ability(grant="scoped", required_scopes=("a:read",))))
 
     def test_a_credential_model_is_validated_when_the_instance_is_read(self):
         def catalog(instance):
             spec = ConnectionSpec(
-                "example.credentials", "Credentials", "Credential contract.",
-                Capability.READ, lambda: (instance,), (self.ability(),),
+                "example.credentials",
+                "Credentials",
+                "Credential contract.",
+                Capability.READ,
+                lambda: (instance,),
+                (self.ability(),),
             )
-            with mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)
-            ):
+            with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
                 return connection_catalog(principal=READ)
 
         with self.assertRaisesRegex(ImproperlyConfigured, "invalid credential model"):
@@ -764,7 +695,9 @@ class GrantEvidenceTests(TestCase):
 
     def test_a_keyless_instance_cannot_also_report_grants(self):
         spec = ConnectionSpec(
-            "example.credentials", "Credentials", "Credential contract.",
+            "example.credentials",
+            "Credentials",
+            "Credential contract.",
             Capability.READ,
             lambda: (self.instance(credential_model="none", scopes_known=True, ability_names=("example.read",)),),
             (self.ability(),),
@@ -816,13 +749,9 @@ class GrantEvidenceTests(TestCase):
         self.assertLessEqual(set(CONNECTION_CREDENTIALS.values()), {"scoped", "coarse", "none"})
 
     def test_keyless_gateways_prove_themselves_without_a_credential(self):
-        lookup = Principal(
-            "lookup", "test", frozenset({Capability.READ, Capability.LOOK_UP_PUBLIC_RECORDS})
-        )
+        lookup = Principal("lookup", "test", frozenset({Capability.READ, Capability.LOOK_UP_PUBLIC_RECORDS}))
         outcome = list_connections(principal=lookup)
-        registries = next(
-            g for g in outcome["groups"] if g["name"] == "hq.public_registries"
-        )
+        registries = next(g for g in outcome["groups"] if g["name"] == "hq.public_registries")
         for instance in registries["instances"]:
             self.assertEqual(instance["credential_model"], "none")
             self.assertEqual(instance["authority"], "proven")

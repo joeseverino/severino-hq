@@ -120,7 +120,9 @@ class CalendarEvent:
         if not self.timed:
             return ""
         start = timezone.localtime(self.starts)
-        return f"{start.hour % 12 or 12}{f':{start.minute:02d}' if start.minute else ''}{'a' if start.hour < 12 else 'p'}"
+        return (
+            f"{start.hour % 12 or 12}{f':{start.minute:02d}' if start.minute else ''}{'a' if start.hour < 12 else 'p'}"
+        )
 
     def covers(self, day: date) -> bool:
         return self.first_day <= day <= self.last_day
@@ -493,9 +495,7 @@ def _cell(
 # ----- Day --------------------------------------------------------------------
 
 
-def calendar_day(
-    day: date, *, choices: Mapping[str, bool] | None = None, today: date | None = None
-) -> CalendarDayView:
+def calendar_day(day: date, *, choices: Mapping[str, bool] | None = None, today: date | None = None) -> CalendarDayView:
     """Everything one day holds, by source, checked or not."""
 
     today = today or timezone.localdate()

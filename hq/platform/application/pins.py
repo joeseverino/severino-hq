@@ -30,9 +30,7 @@ def ordered(user, target_kind: str) -> tuple[str, ...]:
         return ()
     return tuple(
         key.lower()
-        for key in Pin.objects.filter(user=user, target_kind=target_kind).values_list(
-            "target_key", flat=True
-        )
+        for key in Pin.objects.filter(user=user, target_kind=target_kind).values_list("target_key", flat=True)
     )
 
 
@@ -68,9 +66,7 @@ def toggle(user, target_kind: str, target_key: str) -> bool:
 def _next_position(user, target_kind: str) -> int:
     from django.db.models import Max
 
-    highest = Pin.objects.filter(user=user, target_kind=target_kind).aggregate(
-        highest=Max("position")
-    )["highest"]
+    highest = Pin.objects.filter(user=user, target_kind=target_kind).aggregate(highest=Max("position"))["highest"]
     return 0 if highest is None else highest + 1
 
 
@@ -107,15 +103,8 @@ def reorder(user, target_kind: str, keys) -> None:
     if not getattr(user, "is_authenticated", False):
         return
     known = set(ordered(user, target_kind))
-    wanted = [
-        key
-        for key in (str(item).strip().lower() for item in keys)
-        if key in known
-    ]
-    rows = {
-        row.target_key.lower(): row
-        for row in Pin.objects.filter(user=user, target_kind=target_kind)
-    }
+    wanted = [key for key in (str(item).strip().lower() for item in keys) if key in known]
+    rows = {row.target_key.lower(): row for row in Pin.objects.filter(user=user, target_kind=target_kind)}
     changed = []
     for position, key in enumerate(wanted):
         row = rows.get(key)
@@ -136,9 +125,7 @@ def replace(user, target_kind: str, keys) -> None:
     if not getattr(user, "is_authenticated", False):
         return
     wanted = {str(key).strip().lower() for key in keys if str(key).strip()}
-    Pin.objects.filter(user=user, target_kind=target_kind).exclude(
-        target_key__in=wanted
-    ).delete()
+    Pin.objects.filter(user=user, target_kind=target_kind).exclude(target_key__in=wanted).delete()
     existing = pinned(user, target_kind)
     start = _next_position(user, target_kind)
     Pin.objects.bulk_create(

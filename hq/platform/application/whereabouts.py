@@ -179,11 +179,7 @@ def machine_for(origin: Origin | None, machines: tuple[dict[str, Any], ...]):
     if origin is None or not origin.host:
         return None
     role = next(
-        (
-            str(machine.get("role", ""))
-            for machine in machines
-            if str(machine.get("name", "")) == origin.host
-        ),
+        (str(machine.get("role", "")) for machine in machines if str(machine.get("name", "")) == origin.host),
         "",
     )
     return MachineLink(name=origin.host, role=role)
@@ -336,9 +332,7 @@ def reads_containers_on(host: str) -> bool:
     no container publishes there something HQ can say."""
 
     reads, _declared = _container_reads()
-    return bool(host) and any(
-        record.get("host") == host for snapshot in reads for record in snapshot.records or ()
-    )
+    return bool(host) and any(record.get("host") == host for snapshot in reads for record in snapshot.records or ())
 
 
 def _hosting(container: str, at: Whereabouts | None = None) -> list[str]:
@@ -360,11 +354,7 @@ def _container_reads() -> tuple[tuple[Any, ...], tuple[Any, ...]]:
         "whereabouts.container_reads",
         lambda: (
             tuple(ProviderInventory.objects.filter(kind=CONTAINER_KIND)),
-            tuple(
-                ManagedResource.objects.filter(kind=CONTAINER_KIND, enabled=True).values_list(
-                    "spec", flat=True
-                )
-            ),
+            tuple(ManagedResource.objects.filter(kind=CONTAINER_KIND, enabled=True).values_list("spec", flat=True)),
         ),
     )
 
@@ -426,4 +416,3 @@ def _load_answering() -> dict[tuple[str, Any], list[str]]:
     for spec in _container_reads()[1]:
         note(spec.get("host"), spec.get("name"), spec.get("serves_ports"))
     return {key: sorted(names) for key, names in found.items()}
-

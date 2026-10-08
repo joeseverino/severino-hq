@@ -31,10 +31,7 @@ def service_facets() -> tuple[tuple[str, str], ...]:
     """
 
     supplyable = {provider.facet for provider in PROVIDERS.values() if provider.facet}
-    return tuple(
-        (facet, label) for facet, label in SERVICE_FACETS if facet in supplyable
-    )
-
+    return tuple((facet, label) for facet, label in SERVICE_FACETS if facet in supplyable)
 
     # No operating system field: the tailnet reports `os` for every device.
 
@@ -80,7 +77,7 @@ def readout_rows(resource: Any) -> tuple[tuple[str, str, str], ...]:
         return ()
     try:
         return tuple(provider.readout(resource.spec, resource.status or {}))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return ()
 
 
@@ -140,16 +137,12 @@ _unmodelled = sorted(
     - set(CONNECTION_CREDENTIALS)
 )
 if _unmodelled:
-    raise ValueError(
-        "Connection providers without a credential model: "
-        f"{', '.join(_unmodelled)}."
-    )
+    raise ValueError(f"Connection providers without a credential model: {', '.join(_unmodelled)}.")
 
 
 if _unattributed := unattributed_kinds(OBSERVATIONS, PROVIDERS.values()):
     raise ValueError(
-        "Kinds read through a per-connection provider must name connection_ref: "
-        f"{', '.join(_unattributed)}."
+        f"Kinds read through a per-connection provider must name connection_ref: {', '.join(_unattributed)}."
     )
 
 
@@ -162,19 +155,13 @@ def controller_capability_registry() -> ControllerCapabilityRegistry:
     not of a deployment.
     """
 
-    missing = sorted(
-        kind for kind, provider in PROVIDERS.items() if not provider.actions
-    )
+    missing = sorted(kind for kind, provider in PROVIDERS.items() if not provider.actions)
     if missing:
-        raise ValueError(
-            "Every provider must declare what the controller may do to it. "
-            "Missing: " + ", ".join(missing)
-        )
+        raise ValueError("Every provider must declare what the controller may do to it. Missing: " + ", ".join(missing))
     return ControllerCapabilityRegistry(
         schema_version=1,
         capabilities={
-            kind: ControllerProviderCapability(actions=dict(provider.actions))
-            for kind, provider in PROVIDERS.items()
+            kind: ControllerProviderCapability(actions=dict(provider.actions)) for kind, provider in PROVIDERS.items()
         },
     )
 
@@ -203,9 +190,7 @@ def controller_capabilities() -> dict[str, Any]:
     return contract
 
 
-def enabled_controller_actions(
-    *, automatic_only: bool = False
-) -> tuple[tuple[str, str], ...]:
+def enabled_controller_actions(*, automatic_only: bool = False) -> tuple[tuple[str, str], ...]:
     registry = controller_capability_registry()
     return tuple(
         sorted(

@@ -62,7 +62,9 @@ def served_certificate(record: dict[str, Any]) -> ServedCertificate | None:
 # as host:port or scheme://host:port, a plain absolute directory. They are
 # shared values (``SHARED``): the controller (controller/providers/caddy.go)
 # checks the same patterns where it writes the file.
-DOMAIN = r"^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$"
+DOMAIN = (
+    r"^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$"
+)
 UPSTREAM = r"^(?:(?:https?|h2c)://)?[A-Za-z0-9](?:[A-Za-z0-9._-]*|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$"
 DIRECTORY = r"^(?:/[A-Za-z0-9._-]+)+/?$"
 
@@ -71,10 +73,7 @@ def _resolve(authored: dict[str, Any], context: Any) -> dict[str, Any]:
     connection_ref = authored.get("connection_ref", "")
     directory = ""
     for target in context.delivery_targets:
-        if (
-            target.get("connection_ref") == connection_ref
-            and target.get("kind") == "caddy"
-        ):
+        if target.get("connection_ref") == connection_ref and target.get("kind") == "caddy":
             directory = str(target.get("certificate_directory", "") or "")
     return {
         **authored,
@@ -95,9 +94,7 @@ class CaddyRouteSpec(ProviderModel):
         default="",
         max_length=160,
         title="Caddy",
-        description=(
-            "The connection to the host that serves this route."
-        ),
+        description=("The connection to the host that serves this route."),
     )
     domain: str = Field(
         min_length=1,
@@ -111,18 +108,19 @@ class CaddyRouteSpec(ProviderModel):
         max_length=253,
         pattern=rf"^(?:|{UPSTREAM[1:-1]})$",
         title="Hands off to",
-        description=(
-            "Where Caddy sends the request, usually a container and port."
-        ),
+        description=("Where Caddy sends the request, usually a container and port."),
     )
+
 
 class CaddyRouteInFile(ProviderModel):
     domain: str = Field(min_length=1, max_length=253, pattern=DOMAIN)
     upstream: str = Field(min_length=1, max_length=253, pattern=UPSTREAM)
 
+
 class ResolvedCaddyRouteSpec(CaddyRouteSpec):
     certificate_directory: str = Field(default="", max_length=500, pattern=rf"^(?:|{DIRECTORY[1:-1]})$")
     routes: list[CaddyRouteInFile] = Field(default_factory=list)
+
 
 def _origin(spec: dict[str, Any]) -> str:
     """The fixed address a route forwards to, or "" when it has none.
@@ -140,6 +138,7 @@ def _identity(spec: dict[str, Any]) -> tuple[str, ...]:
         str(spec.get("connection_ref", "") or ""),
         normalized_hostname(str(spec.get("domain", "") or "")),
     )
+
 
 DEFINITION = ProviderSpec(
     CADDY_ROUTE_KIND,
@@ -160,9 +159,7 @@ DEFINITION = ProviderSpec(
         "domain": str(record.get("domain", "") or ""),
         "upstream": str(record.get("upstream", "") or ""),
     },
-    key_hint=lambda spec: (
-        f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy"
-    ),
+    key_hint=lambda spec: f"{normalized_hostname(str(spec.get('domain', '') or ''))}-caddy",
     readout=lambda spec, status: (
         (
             "Served by",
@@ -188,10 +185,7 @@ DEFINITION = ProviderSpec(
         "This route is in the edge's own Caddyfile, which HQ reads and never "
         "writes. Declare a route to have HQ serve a name from its own file."
     ),
-    removal_gap=(
-        "The controller cannot delete Caddy routes yet, so the edge would "
-        "keep serving it."
-    ),
+    removal_gap=("The controller cannot delete Caddy routes yet, so the edge would keep serving it."),
 )
 DEFINITIONS = (DEFINITION,)
 
@@ -207,13 +201,11 @@ SHARED = (
     SharedValue(
         "CaddyCertificateDirectory",
         Annotated[str, Field(max_length=500, pattern=DIRECTORY)],
-        "The directory a Caddy edge loads delivered certificates from: one plain "
-        "absolute path.",
+        "The directory a Caddy edge loads delivered certificates from: one plain absolute path.",
     ),
     SharedValue(
         "CaddyRequestedHost",
         Annotated[str, Field(pattern=REQUESTED_HOST)],
-        "An upstream that names the host each request names, with an optional fixed "
-        "port (the captured group).",
+        "An upstream that names the host each request names, with an optional fixed port (the captured group).",
     ),
 )

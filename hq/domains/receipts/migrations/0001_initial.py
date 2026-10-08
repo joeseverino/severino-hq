@@ -10,36 +10,64 @@ from hq.domains.receipts import storage
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('assets', '0001_initial'),
-        ('expenses', '0001_initial'),
+        ("assets", "0001_initial"),
+        ("expenses", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Receipt',
+            name="Receipt",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('file', models.FileField(help_text='PDF / image / screenshot. Stored privately; not exposed publicly.', storage=storage.PrivateReceiptStorage(), upload_to=storage.receipt_upload_path)),
-                ('original_filename', models.CharField(blank=True, max_length=255)),
-                ('content_type', models.CharField(blank=True, max_length=100)),
-                ('size_bytes', models.PositiveIntegerField(default=0)),
-                ('vendor', models.CharField(blank=True, max_length=160)),
-                ('date', models.DateField(blank=True, null=True)),
-                ('amount', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=12)),
-                ('notes', models.TextField(blank=True)),
-                ('uploaded_at', models.DateTimeField(auto_now_add=True)),
-                ('related_asset', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='receipts', to='assets.asset')),
-                ('related_expense', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='receipts', to='expenses.expense')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "file",
+                    models.FileField(
+                        help_text="PDF / image / screenshot. Stored privately; not exposed publicly.",
+                        storage=storage.PrivateReceiptStorage(),
+                        upload_to=storage.receipt_upload_path,
+                    ),
+                ),
+                ("original_filename", models.CharField(blank=True, max_length=255)),
+                ("content_type", models.CharField(blank=True, max_length=100)),
+                ("size_bytes", models.PositiveIntegerField(default=0)),
+                ("vendor", models.CharField(blank=True, max_length=160)),
+                ("date", models.DateField(blank=True, null=True)),
+                ("amount", models.DecimalField(decimal_places=2, default=Decimal("0.00"), max_digits=12)),
+                ("notes", models.TextField(blank=True)),
+                ("uploaded_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "related_asset",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="receipts",
+                        to="assets.asset",
+                    ),
+                ),
+                (
+                    "related_expense",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="receipts",
+                        to="expenses.expense",
+                    ),
+                ),
             ],
             options={
-                'ordering': ('-uploaded_at',),
-                'indexes': [models.Index(fields=['-uploaded_at'], name='receipts_re_uploade_cf224c_idx'), models.Index(fields=['-date'], name='receipts_re_date_f65532_idx'), models.Index(fields=['vendor'], name='receipts_re_vendor_e64069_idx')],
+                "ordering": ("-uploaded_at",),
+                "indexes": [
+                    models.Index(fields=["-uploaded_at"], name="receipts_re_uploade_cf224c_idx"),
+                    models.Index(fields=["-date"], name="receipts_re_date_f65532_idx"),
+                    models.Index(fields=["vendor"], name="receipts_re_vendor_e64069_idx"),
+                ],
             },
         ),
     ]

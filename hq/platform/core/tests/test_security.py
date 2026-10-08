@@ -80,9 +80,7 @@ class ClientAddressTests(SimpleTestCase):
         self.assertIsNone(parse_ip(""))
 
 
-@override_settings(
-    SEVERINO_ENFORCE_TRUSTED_NETWORK=True, SEVERINO_TRUSTED_PROXIES=[PROXY]
-)
+@override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True, SEVERINO_TRUSTED_PROXIES=[PROXY])
 class TrustedNetworkTests(TestCase):
     """Who may reach HQ at all."""
 
@@ -105,15 +103,11 @@ class TrustedNetworkTests(TestCase):
     def test_a_public_client_behind_the_proxy_is_still_refused(self):
         """The realistic exposure: the proxy is trusted, the caller is not."""
 
-        response = self.client.get(
-            "/health/live/", REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_FOR="203.0.113.9"
-        )
+        response = self.client.get("/health/live/", REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_FOR="203.0.113.9")
         self.assertEqual(response.status_code, 403)
 
     def test_a_stranger_cannot_forge_a_tailnet_address(self):
-        response = self.client.get(
-            "/health/live/", REMOTE_ADDR="203.0.113.9", HTTP_X_FORWARDED_FOR="100.64.0.1"
-        )
+        response = self.client.get("/health/live/", REMOTE_ADDR="203.0.113.9", HTTP_X_FORWARDED_FOR="100.64.0.1")
         self.assertEqual(response.status_code, 403)
 
     def test_the_refusal_describes_nothing(self):
@@ -212,9 +206,7 @@ class LoginThrottleTests(TestCase):
         for _ in range(5):
             self._attempt()
         response = self._attempt()
-        message = " ".join(
-            str(error) for error in response.context["form"].non_field_errors()
-        ).lower()
+        message = " ".join(str(error) for error in response.context["form"].non_field_errors()).lower()
         self.assertIn("too many failed", message)
         self.assertNotIn("joe", message)
 
@@ -271,18 +263,14 @@ class SingleSignOnOnlyTests(TestCase):
         self.assertIn("/oidc/", response["Location"])
 
     def test_the_original_destination_survives_the_bounce(self):
-        response = self.client.get(
-            "/accounts/login/?next=/expenses/", REMOTE_ADDR="100.64.0.1"
-        )
+        response = self.client.get("/accounts/login/?next=/expenses/", REMOTE_ADDR="100.64.0.1")
         self.assertIn("next=", response["Location"])
         self.assertIn("expenses", response["Location"])
 
     def test_signing_out_does_not_sign_you_back_in(self):
         """Otherwise the button appears to do nothing at all."""
 
-        response = self.client.get(
-            "/accounts/login/?signed_out=1", REMOTE_ADDR="100.64.0.1"
-        )
+        response = self.client.get("/accounts/login/?signed_out=1", REMOTE_ADDR="100.64.0.1")
         self.assertEqual(response.status_code, 200)
         self.assertIn("signed out", response.content.decode().lower())
 
@@ -426,9 +414,7 @@ class RouteExposureTests(SimpleTestCase):
             and getattr(view, "login_required", True) is False
             and not getattr(view, "__hq_authenticated__", False)
         ]
-        self.assertEqual(
-            unguarded, [], f"API routes served without authentication: {unguarded}"
-        )
+        self.assertEqual(unguarded, [], f"API routes served without authentication: {unguarded}")
 
 
 class AnonymousSweepTests(TestCase):
@@ -521,9 +507,7 @@ class ReceiptUploadHardeningTests(TestCase):
         from hq.domains.receipts.validation import validate_receipt_file
 
         with self.assertRaises(ValidationError):
-            validate_receipt_file(
-                SimpleUploadedFile("note.html", b"x", content_type="text/html")
-            )
+            validate_receipt_file(SimpleUploadedFile("note.html", b"x", content_type="text/html"))
 
     def test_a_real_receipt_still_uploads(self):
         """The gate has to stay usable, or it gets removed instead of fixed."""
@@ -532,9 +516,7 @@ class ReceiptUploadHardeningTests(TestCase):
 
         from hq.domains.receipts.validation import validate_receipt_file
 
-        validate_receipt_file(
-            SimpleUploadedFile("r.pdf", b"%PDF-1.4", content_type="application/pdf")
-        )
+        validate_receipt_file(SimpleUploadedFile("r.pdf", b"%PDF-1.4", content_type="application/pdf"))
 
     def test_the_served_type_never_comes_from_the_filename(self):
         """A stored row with an unaccepted or blank type serves inertly."""
@@ -566,9 +548,7 @@ class ReceiptUploadHardeningTests(TestCase):
 
         user = get_user_model().objects.create_user("op2", password="x")
         self.client.force_login(user)
-        receipt = Receipt.objects.create(
-            vendor="v", amount=1, content_type="application/pdf"
-        )
+        receipt = Receipt.objects.create(vendor="v", amount=1, content_type="application/pdf")
         receipt.file.save("r.pdf", ContentFile(b"%PDF-1.4"))
 
         response = self.client.get(f"/receipts/{receipt.pk}/file/")
@@ -615,9 +595,7 @@ class StaticCachingTests(SimpleTestCase):
         )
 
     def test_an_unhashed_asset_is_cached_briefly(self):
-        self.assertEqual(
-            self._cache_control(live=False, versioned=False), "public, max-age=3600"
-        )
+        self.assertEqual(self._cache_control(live=False, versioned=False), "public, max-age=3600")
 
     def test_serving_live_never_pins_anything(self):
         """Live serving reads the source trees, which change under one name.
@@ -627,9 +605,7 @@ class StaticCachingTests(SimpleTestCase):
 
         for versioned in (True, False):
             with self.subTest(versioned=versioned):
-                self.assertEqual(
-                    self._cache_control(live=True, versioned=versioned), "no-cache"
-                )
+                self.assertEqual(self._cache_control(live=True, versioned=versioned), "no-cache")
 
     def test_serving_live_reads_the_source_tree_not_the_collected_one(self):
         import tempfile
@@ -642,9 +618,7 @@ class StaticCachingTests(SimpleTestCase):
             (Path(source) / "app.css").write_text("edited")
             files = CachedStaticFiles(directory=collected)
             for live, expected in ((True, source), (False, collected)):
-                with self.subTest(live=live), override_settings(
-                    STATIC_LIVE=live, STATICFILES_DIRS=[source]
-                ):
+                with self.subTest(live=live), override_settings(STATIC_LIVE=live, STATICFILES_DIRS=[source]):
                     path, _ = files.lookup_path("app.css")
                     self.assertEqual(Path(path).parent.resolve(), Path(expected).resolve())
 
@@ -723,9 +697,7 @@ class PrecompressedStaticTests(SimpleTestCase):
                 self.assertNotIn("content-encoding", response.headers)
                 # Still varies: the same name has a compressed representation.
                 self.assertEqual(response.headers["vary"], "Accept-Encoding")
-                self.assertEqual(
-                    response.headers["cache-control"], "public, max-age=31536000, immutable"
-                )
+                self.assertEqual(response.headers["cache-control"], "public, max-age=31536000, immutable")
 
     def test_an_asset_with_no_copy_is_sent_as_it_is(self):
         response = self._get("/app.0123456789ab.css", copy=False, **{"Accept-Encoding": "gzip"})
@@ -854,15 +826,9 @@ class ResponseHeaderTests(TestCase):
         from hq.platform.core.network import TrustedNetworkMiddleware
 
         observed = []
-        middleware = TrustedNetworkMiddleware(
-            lambda request: observed.append(request.is_secure()) or HttpResponse()
-        )
-        stranger = RequestFactory().get(
-            "/", REMOTE_ADDR="100.64.0.77", HTTP_X_FORWARDED_PROTO="https"
-        )
-        proxy = RequestFactory().get(
-            "/", REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_PROTO="https"
-        )
+        middleware = TrustedNetworkMiddleware(lambda request: observed.append(request.is_secure()) or HttpResponse())
+        stranger = RequestFactory().get("/", REMOTE_ADDR="100.64.0.77", HTTP_X_FORWARDED_PROTO="https")
+        proxy = RequestFactory().get("/", REMOTE_ADDR=PROXY, HTTP_X_FORWARDED_PROTO="https")
 
         middleware(stranger)
         middleware(proxy)
@@ -879,37 +845,33 @@ class ResponseHeaderTests(TestCase):
 
 
 class ReturnDestinationTests(TestCase):
-    """"Go back where I came from" must not mean "go anywhere you name"."""
+    """ "Go back where I came from" must not mean "go anywhere you name"."""
 
     def setUp(self):
         from hq.domains.control_plane.models import ManagedResource
 
         ManagedResource.objects.create(
-            key="z", kind="cloudflare.zone", enabled=True,
+            key="z",
+            kind="cloudflare.zone",
+            enabled=True,
             spec={"zone": "example.com", "connection_ref": "cf"},
         )
         user = get_user_model().objects.create_user("op", password="x" * 12)
         self.client.force_login(user)
 
     def test_a_destination_on_another_host_is_refused(self):
-        response = self.client.post(
-            "/domains/example.com/pin/", {"next": "https://example.net/phish"}
-        )
+        response = self.client.post("/domains/example.com/pin/", {"next": "https://example.net/phish"})
         self.assertEqual(response.status_code, 302)
         self.assertNotIn("example.net", response["Location"])
 
     def test_a_protocol_relative_destination_is_refused(self):
         """`//host` is a full URL wearing the costume of a path."""
 
-        response = self.client.post(
-            "/domains/example.com/pin/", {"next": "//example.net/phish"}
-        )
+        response = self.client.post("/domains/example.com/pin/", {"next": "//example.net/phish"})
         self.assertNotIn("example.net", response["Location"])
 
     def test_a_local_destination_is_honoured(self):
-        response = self.client.post(
-            "/domains/example.com/pin/", {"next": "/domains/example.com/"}
-        )
+        response = self.client.post("/domains/example.com/pin/", {"next": "/domains/example.com/"})
         self.assertEqual(response["Location"], "/domains/example.com/")
 
 
@@ -1021,9 +983,7 @@ class PolicyReportTests(TestCase):
         self.client = Client(REMOTE_ADDR="100.64.0.1")
 
     def report(self, payload, content_type="application/csp-report"):
-        return self.client.post(
-            "/csp-report/", data=payload, content_type=content_type
-        )
+        return self.client.post("/csp-report/", data=payload, content_type=content_type)
 
     def test_a_violation_is_recorded_without_a_session(self):
         response = self.report(
@@ -1044,20 +1004,13 @@ class PolicyReportTests(TestCase):
             content_type="application/reports+json",
         )
 
-        self.assertEqual(
-            AuditLog.objects.filter(object_type="ContentSecurityPolicy").count(), 1
-        )
+        self.assertEqual(AuditLog.objects.filter(object_type="ContentSecurityPolicy").count(), 1)
 
     def test_the_same_complaint_does_not_write_a_row_per_page_load(self):
         for _ in range(5):
-            self.report(
-                '{"csp-report": {"effective-directive": "script-src",'
-                ' "blocked-uri": "inline"}}'
-            )
+            self.report('{"csp-report": {"effective-directive": "script-src", "blocked-uri": "inline"}}')
 
-        self.assertEqual(
-            AuditLog.objects.filter(object_type="ContentSecurityPolicy").count(), 1
-        )
+        self.assertEqual(AuditLog.objects.filter(object_type="ContentSecurityPolicy").count(), 1)
 
     def test_nonsense_is_discarded_without_comment(self):
         for payload in ("not json", "[]", "{}", '{"csp-report": {}}', '"a"'):
@@ -1065,18 +1018,12 @@ class PolicyReportTests(TestCase):
                 response = self.report(payload)
                 self.assertEqual(response.status_code, 204)
 
-        self.assertFalse(
-            AuditLog.objects.filter(object_type="ContentSecurityPolicy").exists()
-        )
+        self.assertFalse(AuditLog.objects.filter(object_type="ContentSecurityPolicy").exists())
 
     def test_a_flood_cannot_be_used_to_write_a_large_row(self):
-        self.report(
-            '{"csp-report": {"effective-directive": "%s"}}' % ("a" * 32_000)
-        )
+        self.report('{"csp-report": {"effective-directive": "%s"}}' % ("a" * 32_000))
 
-        self.assertFalse(
-            AuditLog.objects.filter(object_type="ContentSecurityPolicy").exists()
-        )
+        self.assertFalse(AuditLog.objects.filter(object_type="ContentSecurityPolicy").exists())
 
     def test_a_long_field_is_kept_but_bounded(self):
         self.report(
@@ -1111,9 +1058,7 @@ class CanonicalEntryTests(TestCase):
         response = self.client.get("/accounts/login/", REMOTE_ADDR="100.64.0.1")
 
         self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response["Location"], "https://hq.example.com/accounts/login/"
-        )
+        self.assertEqual(response["Location"], "https://hq.example.com/accounts/login/")
 
     @override_settings(
         SECURE_SSL_REDIRECT=True,

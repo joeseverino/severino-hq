@@ -34,10 +34,7 @@ def protection_off(estate: Any) -> tuple[dict[str, Any], ...]:
             "subject": node.id,
             "title": f"AdGuard protection is off on {node.label}",
             "severity": "attention",
-            "explanation": (
-                "AdGuard is answering every lookup without blocklists, "
-                "safe browsing or client rules."
-            ),
+            "explanation": ("AdGuard is answering every lookup without blocklists, safe browsing or client rules."),
             "evidence": (("Protection", "Off"),),
         }
         for node in _connections(estate)
@@ -77,8 +74,7 @@ def plain_upstream(estate: Any) -> tuple[dict[str, Any], ...]:
                 ),
                 "severity": "neutral",
                 "explanation": (
-                    "Your internet provider, and anyone else on the way, can see "
-                    "every name your devices look up."
+                    "Your internet provider, and anyone else on the way, can see every name your devices look up."
                 ),
                 "evidence": tuple(("Unencrypted server", host) for host in hosts),
             }
@@ -138,8 +134,7 @@ RULES: tuple[FindingRule, ...] = (
         severity="neutral",
         detect=lambda estate, detect=plain_upstream: built_findings(detect(estate)),
         operator_action=(
-            "Replace each one with its DNS-over-TLS or DNS-over-HTTPS address "
-            "under Settings, DNS settings in AdGuard."
+            "Replace each one with its DNS-over-TLS or DNS-over-HTTPS address under Settings, DNS settings in AdGuard."
         ),
         no_help_reason="HQ cannot change AdGuard's upstream servers.",
     ),
@@ -149,8 +144,7 @@ RULES: tuple[FindingRule, ...] = (
         severity="neutral",
         detect=lambda estate, detect=unused_names: built_findings(detect(estate)),
         operator_action=(
-            "If nothing uses it, remove the service. If something should, check "
-            "that device uses AdGuard for DNS."
+            "If nothing uses it, remove the service. If something should, check that device uses AdGuard for DNS."
         ),
         no_help_reason="HQ cannot tell whether anything still needs it.",
     ),

@@ -104,11 +104,7 @@ def newer(tag: str, tags) -> list[str]:
     if not running:
         return []
     form = shape(tag)
-    found = {
-        other
-        for other in tags or ()
-        if shape(other) == form and compare(version(other), running) > 0
-    }
+    found = {other for other in tags or () if shape(other) == form and compare(version(other), running) > 0}
     return sorted(found, key=lambda item: _padded(version(item), running)[0], reverse=True)
 
 

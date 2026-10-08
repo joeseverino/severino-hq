@@ -27,18 +27,12 @@ STORED = {
 
 class PublicAddressViewTests(TestCase):
     def setUp(self):
-        self.client.force_login(
-            get_user_model().objects.create_user("op", password="x" * 20)
-        )
+        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
         self.url = reverse("tool_public_address")
 
     def test_a_get_serves_the_stored_reading_and_asks_nobody(self):
-        AddressReading.objects.create(
-            address=ADDRESS, reading=STORED, observed_at=timezone.now()
-        )
-        with patch(
-            "hq.platform.application.lookup.look_up_address", side_effect=AssertionError("a GET looked up")
-        ):
+        AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
+        with patch("hq.platform.application.lookup.look_up_address", side_effect=AssertionError("a GET looked up")):
             response = self.client.get(self.url, {"address": ADDRESS})
 
         self.assertContains(response, "host.example.net")
@@ -46,13 +40,11 @@ class PublicAddressViewTests(TestCase):
         self.assertContains(response, "csrfmiddlewaretoken")
 
     def test_a_get_with_nothing_stored_writes_nothing_and_offers_the_lookup(self):
-        with patch(
-            "hq.platform.application.lookup.look_up_address", side_effect=AssertionError("a GET looked up")
-        ):
+        with patch("hq.platform.application.lookup.look_up_address", side_effect=AssertionError("a GET looked up")):
             response = self.client.get(self.url, {"address": ADDRESS})
 
         self.assertContains(response, "Not looked up yet")
-        self.assertContains(response, 'data-public-address-lookup')
+        self.assertContains(response, "data-public-address-lookup")
         self.assertFalse(AddressReading.objects.exists())
 
     def test_a_non_routable_address_is_answered_locally_with_no_lookup_offered(self):
@@ -89,6 +81,6 @@ class PublicAddressViewTests(TestCase):
         from django.template.loader import get_template
 
         source = get_template("core/_connection_panel.html").template.source
-        self.assertIn('data-fragment="{% url \'tool_public_address\' %}?address=', source)
+        self.assertIn("data-fragment=\"{% url 'tool_public_address' %}?address=", source)
         self.assertIn("data-fragment-load", source)
         self.assertIn("data-fragment-failure=", source)

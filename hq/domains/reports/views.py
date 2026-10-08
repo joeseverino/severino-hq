@@ -156,22 +156,29 @@ class Export:
 
 
 EXPORTS = (
-    Export("expenses_csv", "export/expenses.csv", exporters.expenses_csv, CSV,
-           "expenses", "csv", year="optional"),
-    Export("assets_csv", "export/assets.csv", exporters.assets_csv, CSV,
-           "assets", "csv", year="optional"),
-    Export("content_csv", "export/content.csv", exporters.content_csv, CSV,
-           "content", "csv"),
-    Export("projects_csv", "export/projects.csv", exporters.projects_csv, CSV,
-           "projects", "csv"),
-    Export("documentation_csv", "export/documentation.csv",
-           exporters.documentation_csv, CSV, "documentation", "csv"),
-    Export("year_summary_json", "export/year-summary.json",
-           exporters.year_summary_json, "application/json; charset=utf-8",
-           "year-summary", "json", year="required"),
-    Export("year_summary_md", "export/year-summary.md",
-           exporters.year_summary_markdown, "text/markdown; charset=utf-8",
-           "year-summary", "md", year="required"),
+    Export("expenses_csv", "export/expenses.csv", exporters.expenses_csv, CSV, "expenses", "csv", year="optional"),
+    Export("assets_csv", "export/assets.csv", exporters.assets_csv, CSV, "assets", "csv", year="optional"),
+    Export("content_csv", "export/content.csv", exporters.content_csv, CSV, "content", "csv"),
+    Export("projects_csv", "export/projects.csv", exporters.projects_csv, CSV, "projects", "csv"),
+    Export("documentation_csv", "export/documentation.csv", exporters.documentation_csv, CSV, "documentation", "csv"),
+    Export(
+        "year_summary_json",
+        "export/year-summary.json",
+        exporters.year_summary_json,
+        "application/json; charset=utf-8",
+        "year-summary",
+        "json",
+        year="required",
+    ),
+    Export(
+        "year_summary_md",
+        "export/year-summary.md",
+        exporters.year_summary_markdown,
+        "text/markdown; charset=utf-8",
+        "year-summary",
+        "md",
+        year="required",
+    ),
 )
 
 

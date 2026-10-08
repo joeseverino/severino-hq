@@ -61,11 +61,7 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
 
     if resource.kind not in (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND):
         return
-    verified = {
-        str(item.get("consumer", ""))
-        for item in (status or {}).get("consumers", ())
-        if item.get("consumer")
-    }
+    verified = {str(item.get("consumer", "")) for item in (status or {}).get("consumers", ()) if item.get("consumer")}
     if not verified:
         return
     from .infrastructure import resolved_spec
@@ -78,9 +74,9 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     if not reached:
         return
     now = timezone.now()
-    ManagedResource.objects.filter(
-        kind=DELIVERY_TARGET_KIND, spec__connection_ref__in=reached
-    ).update(last_observed_at=now, updated_at=now)
+    ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND, spec__connection_ref__in=reached).update(
+        last_observed_at=now, updated_at=now
+    )
 
 
 def _assert_public_status(value: Any, path: str = "status") -> None:
@@ -133,9 +129,7 @@ def _pending(operation: OperationRequest) -> dict[str, Any]:
     return pending
 
 
-def peek_next_operation(
-    *, capabilities: tuple[tuple[str, str], ...] = ()
-) -> dict[str, Any]:
+def peek_next_operation(*, capabilities: tuple[tuple[str, str], ...] = ()) -> dict[str, Any]:
     """Read the next compatible queued operation without leasing it."""
     operations = (
         OperationRequest.objects.select_related("resource")
@@ -176,17 +170,13 @@ def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
     if resource.generation != resource.observed_generation:
         return True, "Automatic: HQ's settings for it changed.", "generation"
     drifted = any(
-        item.get("status") is True
-        and item.get("type") in {"Drifted", "Degraded"}
-        for item in resource.conditions
+        item.get("status") is True and item.get("type") in {"Drifted", "Degraded"} for item in resource.conditions
     )
     if drifted:
         # Keyed on what drifted, so a new difference is new work the same day
         # and the same one is acted on once.
         said = "|".join(
-            str(item.get("message", ""))
-            for item in resource.conditions
-            if item.get("type") in {"Drifted", "Degraded"}
+            str(item.get("message", "")) for item in resource.conditions if item.get("type") in {"Drifted", "Degraded"}
         )
         digest = hashlib.sha256(said.encode()).hexdigest()[:16]
         return True, "Automatic: it was changed outside HQ.", f"drift-{digest}"
@@ -240,16 +230,11 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
     queued: list[str] = []
     manages = manages_through()
     for repair in auto_remediable(principal=cli_principal()):
-        resource = ManagedResource.objects.select_for_update().filter(
-            key=repair.resource_key, enabled=True
-        ).first()
+        resource = ManagedResource.objects.select_for_update().filter(key=repair.resource_key, enabled=True).first()
         if resource is None or observes_only(resource.kind, resource.spec, manages):
             continue
         # Keyed on the evidence, not the attempt.
-        idempotency_key = (
-            f"finding:{repair.rule}:{resource.pk}:g{resource.generation}:"
-            f"{now.date().isoformat()}"
-        )[:200]
+        idempotency_key = (f"finding:{repair.rule}:{resource.pk}:g{resource.generation}:{now.date().isoformat()}")[:200]
         if OperationRequest.objects.filter(idempotency_key=idempotency_key).exists():
             continue
         if OperationRequest.objects.filter(
@@ -281,9 +266,7 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
         by_kind.setdefault(kind, []).append(action)
     for actions in by_kind.values():
         actions.sort(key=lambda action: action != OperationRequest.Action.RENEW)
-    resources = ManagedResource.objects.select_for_update().filter(
-        enabled=True, kind__in=by_kind
-    )
+    resources = ManagedResource.objects.select_for_update().filter(enabled=True, kind__in=by_kind)
     manages = manages_through()
     for resource in resources:
         if observes_only(resource.kind, resource.spec, manages):
@@ -301,8 +284,7 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
             continue
         action, reason, identity = selected
         idempotency_key = (
-            f"controller:{action}:{resource.pk}:g{resource.generation}:"
-            f"{identity}:{now.date().isoformat()}"
+            f"controller:{action}:{resource.pk}:g{resource.generation}:{identity}:{now.date().isoformat()}"
         )[:200]
         if OperationRequest.objects.filter(idempotency_key=idempotency_key).exists():
             continue
@@ -404,9 +386,7 @@ def _next_resolvable(operations, now):
                 "message": str(exc),
                 "reason": "Unresolvable",
             }
-            operation.save(
-                update_fields=("state", "completed_at", "result", "updated_at")
-            )
+            operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
     return None, {}
 
 
@@ -420,11 +400,7 @@ def report_operation(
     _assert_public_status(report.status)
     _assert_public_status(report.conditions, "conditions")
     try:
-        operation = (
-            OperationRequest.objects.select_for_update()
-            .select_related("resource")
-            .get(pk=operation_id)
-        )
+        operation = OperationRequest.objects.select_for_update().select_related("resource").get(pk=operation_id)
     except (OperationRequest.DoesNotExist, ValueError) as exc:
         raise ValueError(f"Operation {operation_id!r} was not found.") from exc
     if operation.state != OperationRequest.State.CLAIMED:
@@ -437,9 +413,7 @@ def report_operation(
     resource = operation.resource
     requested_generation = operation.input.get("generation")
     if report.observed_generation != requested_generation:
-        raise ValueError(
-            "Report generation does not match the operation's requested generation."
-        )
+        raise ValueError("Report generation does not match the operation's requested generation.")
 
     operation.result = {
         "message": report.message,
@@ -448,11 +422,7 @@ def report_operation(
     }
     operation.completed_at = timezone.now()
     operation.lease_expires_at = None
-    operation.state = (
-        OperationRequest.State.SUCCEEDED
-        if report.success
-        else OperationRequest.State.FAILED
-    )
+    operation.state = OperationRequest.State.SUCCEEDED if report.success else OperationRequest.State.FAILED
     operation.save(
         update_fields=(
             "result",
@@ -523,26 +493,18 @@ def controller_registry() -> dict[str, Any]:
     registry = controller_capability_registry()
     return {
         "ok": True,
-        "capabilities": [
-            {"kind": kind, "action": action}
-            for kind, action in enabled_controller_actions()
-        ],
+        "capabilities": [{"kind": kind, "action": action} for kind, action in enabled_controller_actions()],
         "locked": [
             {"kind": kind, "action": action, "reason": policy.reason}
             for kind, capability in sorted(registry.capabilities.items())
             for action, policy in sorted(capability.actions.items())
             if policy.mode == "locked"
         ],
-        "material_kinds": sorted(
-            kind for kind, provider in PROVIDERS.items() if provider.material_handler
-        ),
+        "material_kinds": sorted(kind for kind, provider in PROVIDERS.items() if provider.material_handler),
         "connection_providers": {
-            kind: list(provider.connection_providers)
-            for kind, provider in sorted(PROVIDERS.items())
+            kind: list(provider.connection_providers) for kind, provider in sorted(PROVIDERS.items())
         },
-        "observations": {
-            kind: reading.provider for kind, reading in sorted(OBSERVATIONS.items())
-        },
+        "observations": {kind: reading.provider for kind, reading in sorted(OBSERVATIONS.items())},
         "connection_credentials": sorted(CONNECTION_CREDENTIALS),
         "extensions": [dict(source) for source in admitted_sources()],
         "github_profiles": github_profiles(),
