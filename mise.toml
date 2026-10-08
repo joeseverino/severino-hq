@@ -159,7 +159,7 @@ run = "git diff --check"
 
 [tasks."checks:ruff"]
 description = "ruff"
-run = "uv run --locked ruff check ."
+run = ["uv run --locked ruff check .", "uv run --locked ruff format --check ."]
 
 [tasks."checks:mypy"]
 description = "mypy: the typed seams pyproject.toml names"
