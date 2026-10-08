@@ -70,11 +70,7 @@ def with_first_seen[Item](items: Iterable[Item]) -> tuple[Item, ...]:
 def dated[Item](provider: Callable[[], Iterable[Item]]) -> Callable[[], tuple[Item, ...]]:
     """A queue provider whose items say since when."""
 
-    @wraps(provider)
-    def provide() -> tuple[Item, ...]:
-        return with_first_seen(provider())
-
-    return provide
+    return wraps(provider)(lambda: with_first_seen(provider()))
 
 
 # When this process last knew of a look, so a report that follows one closely

@@ -9,7 +9,6 @@ from django.test import SimpleTestCase
 
 from ..timestamps import moment
 
-UTC = UTC
 PLUS_TWO = timezone(timedelta(hours=2))
 ROOT = Path(__file__).resolve().parents[4]
 
