@@ -16,7 +16,7 @@ from .entity_links import EntityLink, entity_link
 from .locate import host_of
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PolicyName:
     """One name as a policy writes it, and the entity it stands for if any."""
 

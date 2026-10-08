@@ -21,7 +21,7 @@ from django.conf import settings
 from .ui import counted
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ScheduledWork:
     """``name`` is the job's kind and what a timer asks for; ``run`` is called
     with the job's ``Progress`` and returns what the job stores."""

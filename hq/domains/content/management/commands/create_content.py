@@ -2,6 +2,7 @@
 
 import json
 from datetime import date
+from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -13,6 +14,7 @@ from hq.platform.application.security import cli_principal
 class Command(BaseCommand):
     help = "Create or update a ContentItem by slug."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument("slug")
         parser.add_argument("--title", required=True)
@@ -38,6 +40,7 @@ class Command(BaseCommand):
         parser.add_argument("--doc", action="append", default=[])
         parser.add_argument("--json", action="store_true")
 
+    @override
     def handle(self, *args, **options):
         try:
             published_at = (

@@ -30,7 +30,7 @@ from .tailnet import TAILNET_KIND
 from .tailnet_presence import Presence, tailnet_presence
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Machine:
     """One machine, and everything HQ can say about it without being told."""
 
@@ -521,7 +521,7 @@ def _address(name: str, connections: tuple[ProviderConnection, ...]) -> str:
     return ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Declared:
     """What HQ was told about a machine, as opposed to what it found."""
 

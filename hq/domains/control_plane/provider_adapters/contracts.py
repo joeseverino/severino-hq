@@ -20,7 +20,7 @@ NETWORK_FAILURE = "network"
 FAILURES = (*REFUSALS, ADDRESS_FAILURE, NETWORK_FAILURE)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class IngressPolicy:
     """The source policy an observed proxy record applies to its names.
 
@@ -37,7 +37,7 @@ class IngressPolicy:
     authorizations: int | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServedCertificate:
     """The certificate an observed record serves its names with.
 

@@ -125,7 +125,7 @@ def _report(parameters: Parameters, payload: Any) -> Any:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Action:
     name: str
     run: Run

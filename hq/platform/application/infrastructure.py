@@ -35,7 +35,7 @@ class PolicyError(ValueError):
     """An operation is valid in shape but disallowed by current policy."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ManagedResourceCommand:
     key: str
     kind: str

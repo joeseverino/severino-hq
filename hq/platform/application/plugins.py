@@ -54,7 +54,7 @@ PYTHON_REFERENCE = re.compile(
 URL_PREFIX = re.compile(r"^(?:[A-Za-z0-9_-]+/)+$")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NavigationItem:
     label: str
     route: str
@@ -66,7 +66,7 @@ class NavigationItem:
     group: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PluginIntegration:
     """One extension's complete, lazy executable contribution to HQ."""
 
@@ -86,7 +86,7 @@ class PluginIntegration:
     outbound: Callable[[], Iterable[Any]] | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PluginManifest:
     id: str
     name: str

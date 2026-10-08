@@ -1,3 +1,5 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
@@ -6,6 +8,7 @@ class CoreConfig(AppConfig):
     name = 'hq.platform.core'
     label = 'core'
 
+    @override
     def ready(self):
         from django.db.models.signals import post_migrate
 

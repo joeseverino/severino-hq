@@ -94,7 +94,7 @@ def host_capabilities() -> frozenset[Capability | str]:
 OPERATOR_CAPABILITIES = host_capabilities()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Principal:
     actor: str
     interface: str

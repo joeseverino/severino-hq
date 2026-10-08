@@ -16,6 +16,7 @@ extension owns the work while the host owns the running of it.
 
 import uuid
 from datetime import timedelta
+from typing import override
 
 from django.conf import settings
 from django.db import models
@@ -95,6 +96,7 @@ class Job(models.Model):
             one_of("state", JobState, "job_state_is_declared"),
         ]
 
+    @override
     def __str__(self):
         return f"{self.kind}: {self.get_state_display()}"
 

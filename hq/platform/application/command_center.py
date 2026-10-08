@@ -26,7 +26,7 @@ _MATCHING_ABILITY_BADGE_LIMIT = 3
 _SEARCH_WORD = re.compile(r"[a-z0-9]+")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DiscoveryItem:
     kind: str
     name: str
@@ -38,7 +38,7 @@ class DiscoveryItem:
     search_terms: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CommandRelation:
     labels: tuple[str, ...] = ()
     kinds: tuple[str, ...] = ()

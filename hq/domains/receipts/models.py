@@ -1,6 +1,7 @@
 """Receipts."""
 
 from decimal import Decimal
+from typing import override
 
 from django.db import models
 from django.urls import reverse
@@ -54,6 +55,7 @@ class Receipt(TimestampedModel):
             models.Index(fields=("vendor",)),
         ]
 
+    @override
     def __str__(self) -> str:
         label = self.original_filename or (self.file.name if self.file else "receipt")
         return f"{self.vendor or 'Receipt'} · {label}"

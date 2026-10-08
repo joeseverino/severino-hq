@@ -19,7 +19,7 @@ from .topology_model import Topology, TopologyNode
 from .workflows import WorkflowPlan
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Remedy:
     """An existing capability, named: never a new way to change anything."""
 
@@ -35,7 +35,7 @@ class Remedy:
     auto: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Finding:
     """One claim, the evidence for it, and what could be done about it."""
 
@@ -68,7 +68,7 @@ class Finding:
     since: datetime | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FindingRule:
     """A named claim, and how to decide and explain it.
 
@@ -100,7 +100,7 @@ class FindingRule:
             )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FindingEstate:
     """The projection plus the two indices every rule wants, built once."""
 
@@ -189,7 +189,7 @@ def built_findings(fields: tuple[dict[str, Any], ...]) -> tuple[Finding, ...]:
     return tuple(Finding(**item) for item in fields)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OperatorStep:
     """A command an operator runs on their own machine. HQ never runs it."""
 

@@ -190,7 +190,7 @@ def repeat_label(entry: Entry) -> str:
 # ----- Writing ----------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EntryCommand:
     """One entry, as every surface states it."""
 

@@ -12,6 +12,7 @@ The manifest is the same JSON shape the web import accepts. See
 import json
 import sys
 from pathlib import Path
+from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -27,6 +28,7 @@ from hq.platform.application.ui import counted
 class Command(BaseCommand):
     help = "Import a documentation manifest JSON file into the docs index."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument(
             "path",
@@ -179,6 +181,7 @@ class Command(BaseCommand):
                 )
             )
 
+    @override
     def handle(self, *args, **options):
         data = self._manifest(options["path"])
         if options["check_only"]:

@@ -1,6 +1,7 @@
 """Action items: the queue under its domains, and setting items aside."""
 
 import hashlib
+from typing import override
 
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
@@ -51,6 +52,7 @@ class ActionItemsView(PageMixin, TemplateView):
         shown["part"] = part
         return f'{reverse("action_items_set_aside")}?{shown.urlencode()}'
 
+    @override
     def get_context_data(self, **kwargs):
         all_items, items = _action_items(self.request)
         context = super().get_context_data(**kwargs)

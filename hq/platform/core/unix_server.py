@@ -23,7 +23,7 @@ import sys
 import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import uvicorn
 from uvicorn.protocols.http.h11_impl import H11Protocol
@@ -114,6 +114,7 @@ def private_listener(path: str, *, backlog: int = 64) -> socket.socket:
 class PeerCheckedProtocol(H11Protocol):
     """HTTP/1.1 for peers that are this account; anyone else is disconnected unheard."""
 
+    @override
     def connection_made(self, transport: asyncio.Transport) -> None:  # type: ignore[override]
         super().connection_made(transport)
         peer = peer_uid(transport.get_extra_info("socket"))

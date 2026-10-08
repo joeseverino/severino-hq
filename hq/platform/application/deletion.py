@@ -15,7 +15,7 @@ from hq.platform.core.audit import operation_context
 from .security import Capability, Principal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DeleteCommand:
     confirm: str
 

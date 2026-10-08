@@ -107,7 +107,7 @@ def _left_behind(read_at: datetime | None, newest: datetime | None) -> bool:
     return read_at is not None and newest is not None and newest - read_at > _STALE_AFTER
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RecordStatus:
     """One record's state as one line: what it is, since when, what happens next.
 
@@ -239,7 +239,7 @@ def newest_reading(kind: str) -> datetime | None:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Expiry:
     not_after: datetime
     days_left: int
@@ -293,7 +293,7 @@ def _consumers(resource) -> tuple[dict[str, Any] | None, tuple[dict[str, Any], .
     return resolved, consumers, ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ResourceContext:
     resource: ManagedResource
     capabilities: ResourceCapabilities
@@ -426,7 +426,7 @@ def _certificate_use(resource, resolved: dict[str, Any] | None):
     return certificate_use(resource.key, provider.hostnames(resolved or resource.spec) or ())
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ControllerSummary:
     """What the controller will do for a resource, said once."""
 
@@ -465,7 +465,7 @@ def controller_summary(actions, labels) -> ControllerSummary | None:
 SETTLED_TONES = frozenset({"healthy", "declared"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RecordGroup:
     """The records of one type, those needing a look first."""
 
@@ -475,7 +475,7 @@ class RecordGroup:
     unsettled: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RecordList:
     """The infrastructure list under its types, and what the filter offers.
 

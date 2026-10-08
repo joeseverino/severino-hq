@@ -8,7 +8,7 @@ from .connection import Connection
 from .request_channel import channel_of
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Address:
     """One address, what kind it is, and how HQ came to know it."""
 

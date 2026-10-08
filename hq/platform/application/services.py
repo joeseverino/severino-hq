@@ -440,7 +440,7 @@ def certificates_serving(hostname: str) -> tuple[str, ...]:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CertificateUse:
     """A certificate from the side of what it serves: the services served
     with it, and the names on it that no service is served under."""
@@ -548,7 +548,7 @@ class _ContainersRunning:
         return self._found.get((host, name))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Estate:
     """One reading of the world, shared by every service assembled from it.
 

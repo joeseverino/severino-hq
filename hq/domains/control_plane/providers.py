@@ -89,7 +89,7 @@ def readout_rows(resource: Any) -> tuple[tuple[str, str, str], ...]:
 OBSERVATION_KINDS = frozenset(OBSERVATIONS)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ObserverAbility:
     """What a connection is carried for when it reconciles nothing.
 

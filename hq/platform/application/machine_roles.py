@@ -13,14 +13,14 @@ from hq.domains.control_plane.observations.tailscale import EXIT_ROUTES
 from .locate import host_of
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoleContext:
     """Tailnet-wide facts a rule compares a machine against."""
 
     nameservers: frozenset[str] = frozenset()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MachineRole:
     id: str
     label: str

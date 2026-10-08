@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Concatenate
+from typing import TYPE_CHECKING, Any, Concatenate, override
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -55,6 +55,7 @@ class CapabilityRequiredMixin(LoginRequiredMixin):
             )
         return self.required_capability
 
+    @override
     def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponseBase:
         if request.user.is_authenticated:
             _require(request.user, self.get_required_capability())

@@ -13,7 +13,7 @@ from .documentation import sync_documentation
 from .security import Principal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HQSyncCommand:
     manifest: list[dict[str, Any]]
     update_existing: bool = True

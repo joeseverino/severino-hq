@@ -1,6 +1,7 @@
 """Expenses."""
 
 from decimal import Decimal
+from typing import override
 
 from django.db import models
 
@@ -116,6 +117,7 @@ class Expense(TimestampedModel):
         ]
         constraints = [business_use.in_range("expense_business_use_in_range")]
 
+    @override
     def __str__(self) -> str:
         return f"{self.date} {self.vendor} · {self.item}"
 
@@ -134,6 +136,7 @@ class Expense(TimestampedModel):
 
         return f"{when_day(self.date)} · {money(self.total_cost)}"
 
+    @override
     def save(self, *args, **kwargs):
         cost = self.total_cost or Decimal("0.00")
         self.estimated_deductible_amount = quantize_money(

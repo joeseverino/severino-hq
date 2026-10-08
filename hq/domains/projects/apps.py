@@ -1,3 +1,5 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
@@ -7,6 +9,7 @@ class ProjectsConfig(AppConfig):
     label = 'projects'
     verbose_name = "Projects & Labs"
 
+    @override
     def ready(self):
         from hq.platform.core.audit import register_audit
 

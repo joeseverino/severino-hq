@@ -30,7 +30,7 @@ RESOLVES_THROUGH = "Resolves through"
 NEW_DEVICES = "New devices"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Device:
     """One machine as the policy names it: an owner, some tags, some ports."""
 
@@ -102,7 +102,7 @@ class Device:
         return tuple((port, self.reach[port]) for port in self.ports)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Verdict:
     """One answer, and the reason it is that answer."""
 
@@ -326,7 +326,7 @@ def may_reach(
 POLICY_KIND = TAILNET_POLICY_KIND
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Policy:
     """The policy as HQ last read it, in the shape a page renders."""
 
@@ -646,7 +646,7 @@ def _ssh_ports() -> dict[str, set[int]]:
     return found
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _ServicePort:
     """A port a connection to a service names, and where that connection points."""
 

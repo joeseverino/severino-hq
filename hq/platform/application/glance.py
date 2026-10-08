@@ -92,7 +92,7 @@ def connection_specs():
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DashboardPanelSpec:
     """What a glance panel is and how its readings are shown.
 

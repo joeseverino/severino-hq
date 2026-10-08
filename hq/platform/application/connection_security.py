@@ -44,7 +44,7 @@ ANSWERS = {
 # failed probe, a rejected credential.
 ATTENTION_LIFECYCLES = ("stale", "unauthorized", "unreachable", "revoked")
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SecurityControl:
     """One independently checkable part of the connection boundary."""
 
@@ -59,7 +59,7 @@ class SecurityControl:
         return ANSWERS.get(self.state, ANSWERS["neutral"])
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionSecurityPosture:
     """The current request and cached connection estate, without secret data."""
 
@@ -365,7 +365,7 @@ def observed_connection_controls(
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Admission:
     """How the request being answered reached HQ: the three controls it decides."""
 

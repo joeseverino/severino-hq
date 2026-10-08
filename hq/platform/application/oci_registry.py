@@ -18,7 +18,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, override
 
 from .images import DOCKER_HUB, ImageRef
 from .reach import public_host
@@ -64,6 +64,7 @@ class _CheckedRedirects(urllib.request.HTTPRedirectHandler):
     """Follow a registry to its CDN, checked like the first request, and
     without the registry's token."""
 
+    @override
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         _checked(newurl)
         found = super().redirect_request(req, fp, code, msg, headers, newurl)

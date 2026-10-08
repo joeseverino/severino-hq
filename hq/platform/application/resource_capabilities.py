@@ -31,14 +31,14 @@ VERB_LABELS = {
 LIFECYCLE_VERBS = frozenset({"start", "stop", "restart"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Allowed:
     enabled: bool
     reason: str = ""
     automatic: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ResourceCapabilities:
     # Every verb the controller implements for this kind, except delete.
     actions: Mapping[str, Allowed]

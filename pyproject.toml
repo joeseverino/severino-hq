@@ -109,7 +109,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 strict_equality = true
 check_untyped_defs = true
-enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool", "explicit-override"]
 
 [tool.django-stubs]
 django_settings_module = "hq.config.settings_typecheck"

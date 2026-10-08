@@ -19,7 +19,7 @@ import os
 import re
 from collections.abc import Mapping
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 from urllib.parse import urlsplit
 
 from django.http import HttpResponse
@@ -83,6 +83,7 @@ class ContractClient(Client):
     def contract(self) -> Contract:
         return Contract(document())
 
+    @override
     def generic(
         self,
         method: str,

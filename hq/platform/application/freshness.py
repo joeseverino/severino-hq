@@ -34,7 +34,7 @@ GLANCE_EVERY = timedelta(minutes=5)
 VISIT_EVERY = timedelta(minutes=2)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Cadence:
     """How often a kind is read, and how many of those may pass unread."""
 
@@ -74,7 +74,7 @@ def stale_after(kind: str = "") -> timedelta:
     return cadence(kind).stale_after
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Freshness:
     state: str
     observed_at: datetime | None

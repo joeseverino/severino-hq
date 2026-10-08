@@ -46,7 +46,7 @@ EDGE_ADDRESS = "198.51.100.20"
 CONTROLLER = "example-controller"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Seeded:
     """One of each record, for the pages that show a single one."""
 

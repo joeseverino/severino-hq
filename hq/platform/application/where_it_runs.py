@@ -20,7 +20,7 @@ from .entity_links import EntityLink, container_link, entity_link
 from .projection import read_once
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RunsOn:
     """The service a project is published as, and what answers for it."""
 

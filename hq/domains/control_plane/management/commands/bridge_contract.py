@@ -1,6 +1,6 @@
 import difflib
 from argparse import ArgumentParser
-from typing import Any
+from typing import Any, override
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -13,6 +13,7 @@ class Command(BaseCommand):
         "--check exits 1 on drift."
     )
 
+    @override
     def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
             "--check",
@@ -20,6 +21,7 @@ class Command(BaseCommand):
             help="Exit 1 when a committed file differs from the derived one.",
         )
 
+    @override
     def handle(self, *args: Any, **options: Any) -> None:
         from hq.domains.control_plane.bridge_contract import emitted
 

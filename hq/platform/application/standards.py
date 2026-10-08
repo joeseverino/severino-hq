@@ -18,7 +18,7 @@ UNAVAILABLE = "unavailable"
 INTENDED = "intended"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Check:
     id: str
     label: str
@@ -33,7 +33,7 @@ class Check:
     applies: Callable[[Any], bool] | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Result:
     check: Check
     state: str
@@ -41,7 +41,7 @@ class Result:
     reason: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Posture:
     subject: Any
     results: tuple[Result, ...]

@@ -39,7 +39,7 @@ def search_lines(value: Any) -> Iterator[str]:
             yield text
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SearchDefinition:
     scope: str
     model: type

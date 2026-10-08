@@ -43,7 +43,7 @@ class ConflictError(ValueError):
     """The caller tried to write over a newer version of an asset."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AssetCommand:
     item_name: str
     slug: str = ""

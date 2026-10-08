@@ -20,7 +20,7 @@ class ObservationRecord(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ReadingPart:
     """One part a reading is read in, and the permissions that part needs.
 
@@ -64,7 +64,7 @@ READING_FACETS = frozenset(
 READERS = ("controller", "hq", "request")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ObservationSpec:
     kind: str
     # The connection provider whose credential reads it.

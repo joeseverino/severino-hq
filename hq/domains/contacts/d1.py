@@ -135,7 +135,7 @@ def connection_specs():
 D1_KIND = "cloudflare.d1_database"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class D1Target:
     account: str
     database: str

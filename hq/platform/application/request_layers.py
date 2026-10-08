@@ -14,7 +14,7 @@ from .timestamps import moment
 from .ui import counted
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Layer:
     """One thing that had to hold, and what HQ can point at to say it did.
 
@@ -47,7 +47,7 @@ class Layer:
         return "holds" if self.holds else "does-not"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServingDeviceResolution:
     """The node serving HQ and how strongly that placement was established."""
 

@@ -90,7 +90,7 @@ def points_at_host(endpoint: Any) -> bool:
     return bool(text) and "://" not in text
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Machines:
     """Every way HQ has of naming a machine, with the two kinds kept apart.
 

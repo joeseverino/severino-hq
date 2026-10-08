@@ -1,3 +1,5 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
@@ -7,6 +9,7 @@ class HQAPIConfig(AppConfig):
     label = 'hq_api'
     verbose_name = "HQ machine API"
 
+    @override
     def ready(self) -> None:
         # Register the composed capability-contract check after every model has
         # loaded. ``migrate`` and deployment checks then reject a bad extension

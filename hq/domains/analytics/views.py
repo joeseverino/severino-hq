@@ -4,6 +4,8 @@ Every number here is computed in ``application.analytics``; this chooses the
 window, asks once, and renders. Nothing is joined or summed in a template.
 """
 
+from typing import override
+
 from django.views.generic import TemplateView
 
 from hq.platform.application.analytics import DEFAULT_WINDOW_DAYS, overview
@@ -14,6 +16,7 @@ class AnalyticsOverviewView(PageMixin, TemplateView):
     template_name = "analytics/overview.html"
     page_title = "Analytics"
 
+    @override
     def get_context_data(self, **kwargs):
         try:
             days = int(self.request.GET.get("days", DEFAULT_WINDOW_DAYS))

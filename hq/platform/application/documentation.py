@@ -41,7 +41,7 @@ def document_link(record: DocumentationRecord, *, label: str = "") -> EntityLink
     return replace(entity_link("document", record.doc_id, label=label or record.title), title=record.doc_id)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DocumentGroup:
     """Documents of one type, under the heading a page gives them."""
 
@@ -51,7 +51,7 @@ class DocumentGroup:
     folded: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RelatedDocuments:
     """A record's documents as its page lists them."""
 
@@ -130,7 +130,7 @@ def related_documents(
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DocumentationSyncCommand:
     manifest: list[dict[str, Any]]
     update_existing: bool = True
@@ -139,7 +139,7 @@ class DocumentationSyncCommand:
     confirm_prune: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DocumentationCommand:
     doc_id: str
     title: str

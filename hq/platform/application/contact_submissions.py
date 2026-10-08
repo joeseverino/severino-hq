@@ -21,21 +21,21 @@ class ContactSubmissionNotFound(ValueError):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ContactListCommand:
     status: str = ""
     query: str = ""
     limit: int = 100
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ContactReviewCommand:
     status: str
     assigned_to: str = ""
     admin_notes: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ContactDeleteCommand:
     confirm: str
 

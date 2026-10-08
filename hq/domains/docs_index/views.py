@@ -1,4 +1,5 @@
 import json
+from typing import override
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
@@ -90,12 +91,14 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search IDs, titles, systems, paths, and notes…"
 
+    @override
     def get_page_actions(self):
         return (
             PageAction("Import manifest", reverse("docs_index:import")),
             PageAction("New document", reverse("docs_index:create"), primary=True),
         )
 
+    @override
     def get_queryset(self):
         qs = DocumentationRecord.objects.all()
         q = self.request.GET.get("q", "").strip()
@@ -115,6 +118,7 @@ class DocsListView(PageMixin, TableListMixin, ListView):
 class DocsPage(PageMixin):
     """A page about one doc record, or a new one: its trail runs back to the list."""
 
+    @override
     def get_page_trail(self):
         return record_trail(DOCS_TRAIL, getattr(self, "object", None), lambda record: record.doc_id)
 
@@ -132,9 +136,11 @@ class DocsDetailView(PageMixin, DetailView):
         "content_items",
     )
 
+    @override
     def get_page_title(self):
         return self.object.title
 
+    @override
     def get_page_lede(self):
         record = self.object
         return format_html(
@@ -148,9 +154,11 @@ class DocsDetailView(PageMixin, DetailView):
             record.get_sensitivity_display(),
         )
 
+    @override
     def get_page_trail(self):
         return (DOCS_TRAIL,)
 
+    @override
     def get_page_actions(self):
         doc_id = self.object.doc_id
         return (

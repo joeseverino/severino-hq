@@ -129,7 +129,7 @@ class UnreadableSubject(RefusedHold):
     code = "approval_subject_unreadable"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ApprovalSubject:
     """What a held request is about, and what it would be measured against."""
 
@@ -620,7 +620,7 @@ def reject(approval_id: str, *, principal: Principal, note: str = "") -> dict[st
 # ----- What a person is shown -------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChangeRow:
     """One field that would move, and what it would move between."""
 
@@ -630,7 +630,7 @@ class ChangeRow:
     change: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChangePreview:
     """The comparison a decision is taken on.
 

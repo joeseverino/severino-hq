@@ -6,6 +6,7 @@ Idempotent: re-running with the same slug updates the existing record.
 import json
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -35,6 +36,7 @@ def _parse_money(value: str) -> Decimal:
 class Command(BaseCommand):
     help = "Create or update an Asset record by slug."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument("slug", help="URL slug (e.g. home-server).")
         parser.add_argument(
@@ -93,6 +95,7 @@ class Command(BaseCommand):
             help="Print the canonical service result as JSON.",
         )
 
+    @override
     def handle(self, *args, **opts):
         slug = opts["slug"]
         exists = Asset.objects.filter(slug=slug).exists()

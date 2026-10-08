@@ -87,7 +87,7 @@ def is_documentation(address: str) -> bool:
     return any(found in network for network in DOCUMENTATION)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Reach:
     """Who can open a connection to a name, and what said so."""
 

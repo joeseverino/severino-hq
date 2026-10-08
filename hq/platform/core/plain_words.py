@@ -21,6 +21,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import override
 
 from .interface_text import TEMPLATE_COMMENT, docstrings
 
@@ -73,7 +74,7 @@ _ANNOTATION = re.compile(r"[A-Z]\w*(?: \| [A-Za-z]\w*)+")
 _UNSEEN_ELEMENTS = frozenset({"script", "style", "code", "pre", "kbd"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Found:
     path: Path
     line: int
@@ -117,6 +118,7 @@ class _Shown(HTMLParser):
         self.found: list[tuple[int, str]] = []
         self._unseen = 0
 
+    @override
     def handle_starttag(self, tag, attrs):
         if tag in _UNSEEN_ELEMENTS:
             self._unseen += 1
@@ -124,10 +126,12 @@ class _Shown(HTMLParser):
             if name in _SHOWN_ATTRIBUTES and value:
                 self.found.append((self.getpos()[0], value))
 
+    @override
     def handle_endtag(self, tag):
         if tag in _UNSEEN_ELEMENTS and self._unseen:
             self._unseen -= 1
 
+    @override
     def handle_data(self, data):
         if not self._unseen and data.strip():
             self.found.append((self.getpos()[0], data))

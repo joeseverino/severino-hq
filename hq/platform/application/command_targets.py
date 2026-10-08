@@ -13,7 +13,7 @@ from .resources import ResourceError, get_resource, list_resource
 from .security import Principal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CommandTargetOption:
     value: str
     label: str

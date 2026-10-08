@@ -17,6 +17,7 @@ which is what makes the call acceptable here rather than controller work.
 
 import json
 import urllib.request
+from typing import override
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 
@@ -127,6 +128,7 @@ class _HTTPSOnlyRedirects(urllib.request.HTTPRedirectHandler):
     answer a question about privacy.
     """
 
+    @override
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         target = urlsplit(newurl)
         if target.scheme != "https":

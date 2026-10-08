@@ -10,6 +10,7 @@ Read-only.
 """
 
 import json
+from typing import override
 
 from django.core.management.base import BaseCommand
 
@@ -19,6 +20,7 @@ from hq.platform.application.registry import audit_registry
 class Command(BaseCommand):
     help = "Report Project/Asset registry rows that no documentation references."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument(
             "--json",
@@ -26,6 +28,7 @@ class Command(BaseCommand):
             help="Emit raw JSON for wrapper CLIs instead of the human report.",
         )
 
+    @override
     def handle(self, *args, **options):
         stats = audit_registry()
         orphan_projects = stats["orphan_projects"]

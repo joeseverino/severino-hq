@@ -16,7 +16,7 @@ from .integrations import integration_graph
 from .security import Principal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ToolTab:
     """One tool: what it is called, and which capabilities it runs."""
 

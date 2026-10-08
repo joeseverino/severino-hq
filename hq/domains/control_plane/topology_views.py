@@ -1,7 +1,7 @@
 """The topology workspace and the drill-in for one node."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, override
 from urllib.parse import urlencode
 
 from django.http import Http404
@@ -58,6 +58,7 @@ class TopologyView(PageMixin, TemplateView):
     template_name = "control_plane/topology.html"
     page_title = "Map"
 
+    @override
     def get_page_actions(self):
         return (
             PageAction("Add a record", reverse("control_plane:create"), primary=True),
@@ -65,6 +66,7 @@ class TopologyView(PageMixin, TemplateView):
             PageAction("Connections", reverse("control_plane:connections")),
         )
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         topology = derive_topology(
@@ -314,6 +316,7 @@ class TopologyNodeView(TemplateView):
 
     template_name = "control_plane/_topology_node_body.html"
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         topology = derive_topology(

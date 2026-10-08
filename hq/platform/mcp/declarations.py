@@ -1,7 +1,7 @@
 """The MCP handler set and signature metadata, without a server dependency."""
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, override
 
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from pydantic import ConfigDict
@@ -29,6 +29,7 @@ HANDLERS: tuple[Callable[..., Any], ...] = (
 
 
 class StrictMetadata(FuncMetadata):
+    @override
     def pre_parse_json(self, data: dict[str, Any]) -> dict[str, Any]:
         # The canonical schema describes JSON objects, not JSON inside strings.
         return data

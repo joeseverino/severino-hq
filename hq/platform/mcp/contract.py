@@ -4,14 +4,14 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Resource:
     name: str
     summary: str
     identifier: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ResourceContract:
     listable: tuple[Resource, ...]
     addressable: tuple[Resource, ...]

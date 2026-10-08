@@ -24,7 +24,7 @@ from .projection import read_once
 from .whereabouts import Origin
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Reading:
     """One fact about a resource: what HQ asked for, and what was found.
 
@@ -54,7 +54,7 @@ class Reading:
         return self.observed or self.desired
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Claim:
     """One resource's participation in one service, already resolved."""
 

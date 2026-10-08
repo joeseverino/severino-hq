@@ -10,7 +10,7 @@ from django.db.models import Q, QuerySet, Sum
 from .projection import guarded
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TableFilter:
     name: str
     label: str
@@ -18,14 +18,14 @@ class TableFilter:
     choices: Iterable[tuple[Any, str]]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TableSort:
     value: str
     label: str
     ordering: str | tuple[str, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TableColumn:
     """One column: its heading, and the field it sorts by if it sorts.
 
@@ -59,13 +59,13 @@ class TableColumn:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TableToggle:
     name: str
     label: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TableTotal:
     """A column to sum, and where the sum belongs.
 

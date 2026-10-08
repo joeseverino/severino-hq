@@ -2,7 +2,7 @@
 
 import re
 import secrets
-from typing import Any, ClassVar
+from typing import Any, ClassVar, override
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -25,6 +25,7 @@ class PrimitiveListField(LinesField):
         self.item_type = item_type
         super().__init__(*args, **kwargs)
 
+    @override
     def to_python(self, value):
         lines = [line.strip() for line in str(value or "").splitlines() if line.strip()]
         if self.item_type == "integer":
@@ -169,6 +170,7 @@ class CapabilityCommandForm(forms.Form):
             *(f"Repeated field: {name}." for name in repeated),
         )
 
+    @override
     def clean(self):
         cleaned = super().clean()
         for message in getattr(self, "submission_errors", ()):

@@ -1,7 +1,7 @@
 import json
 import uuid
 from functools import cached_property
-from typing import Any
+from typing import Any, override
 
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
@@ -289,6 +289,7 @@ class InfrastructureListView(PageMixin, ListView):
     context_object_name = "resources"
     page_title = "All records"
 
+    @override
     def get_page_actions(self):
         return (
             PageAction("Add a record", reverse("control_plane:create"), primary=True),
@@ -296,6 +297,7 @@ class InfrastructureListView(PageMixin, ListView):
             PageAction("Setting reference", reverse("control_plane:providers")),
         )
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # Read once for the whole page. Every row that forwards somewhere asks
@@ -347,6 +349,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
     template_name = "control_plane/resource_detail.html"
     context_object_name = "resource"
 
+    @override
     def get_object(self, queryset=None):
         # Read once: ``get`` asks before deciding where the record lives, and
         # the detail view asks again to draw it.
@@ -354,6 +357,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
             self._record = super().get_object(queryset)
         return self._record
 
+    @override
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         home = self.object.get_absolute_url()
@@ -380,12 +384,14 @@ class InfrastructureDetailView(PageMixin, DetailView):
 
         return container_detail(self.object, self.request)
 
+    @override
     def get_page_title(self):
         # A container by its own name: its machine is the trail above it.
         if self.object.kind == CONTAINER_KIND and self.object.spec.get("name"):
             return self.object.spec["name"]
         return record_name(self.object.kind, self.object.spec, self.object.key)
 
+    @override
     def get_page_lede(self):
         # A record whose name is its type says what it does instead.
         label = kind_label(self.object.kind)
@@ -424,12 +430,14 @@ class InfrastructureDetailView(PageMixin, DetailView):
             None,
         )
 
+    @override
     def get_page_trail(self):
         crumbs = []
         if self.home and self.home.url:
             crumbs.append((self.home.label, self.home.url))
         return tuple(crumbs)
 
+    @override
     def get_page_actions(self):
         if self.capabilities.removal_pending:
             return ()
@@ -504,6 +512,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
             )
         return tuple(actions)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         capabilities = self.capabilities

@@ -54,7 +54,7 @@ from .ui import counted
 from .workflow_contracts import ActionLink
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionRow:
     """One connection, and everything the page says beside it."""
 
@@ -183,7 +183,7 @@ def _control(control: Any) -> dict[str, str]:
     return asdict(control)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionsContext:
     groups: tuple[ConnectionGroup, ...]
     rows: tuple[ConnectionRow, ...]

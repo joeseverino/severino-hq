@@ -43,7 +43,7 @@ from .security import Principal
 CONTROLLER_CONNECTIONS = "infrastructure.controllers"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionGroup:
     """A permitted spec beside the instances it produced."""
 
@@ -195,7 +195,7 @@ def connection_lifecycle(
     return "ready" if authority in {"proven", "whole_account"} else "reachable"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionAbilityState:
     ability: ConnectionAbility
     available: bool | None
@@ -220,7 +220,7 @@ class ConnectionAbilityState:
 FAMILY_ACTIONS = frozenset({"open", "manage", "set_up", "documentation"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionView:
     instance: ConnectionInstance
     abilities: tuple[ConnectionAbilityState, ...]

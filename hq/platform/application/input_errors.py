@@ -60,7 +60,7 @@ _DJANGO_REASONS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Refusal:
     """What an ``invalid_input`` error says: one sentence and its evidence."""
 

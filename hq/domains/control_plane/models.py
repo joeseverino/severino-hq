@@ -1,6 +1,7 @@
 """Desired state and operation queue; credentials live only in the controller."""
 
 import uuid
+from typing import override
 
 from django.conf import settings
 from django.db import models
@@ -99,6 +100,7 @@ class ManagedResource(TimestampedModel):
             ),
         ]
 
+    @override
     def __str__(self) -> str:
         return self.key
 
@@ -161,6 +163,7 @@ class ProviderInventory(TimestampedModel):
         ordering = ("kind",)
         verbose_name_plural = "provider inventories"
 
+    @override
     def __str__(self) -> str:
         return f"{self.kind} ({len(self.records)} records)"
 
@@ -238,6 +241,7 @@ class ProviderConnection(TimestampedModel):
             )
         ]
 
+    @override
     def __str__(self) -> str:
         return self.connection_ref
 
@@ -263,6 +267,7 @@ class NotManaged(TimestampedModel):
             )
         ]
 
+    @override
     def __str__(self) -> str:
         return f"{self.kind} {self.label or self.token}"
 
@@ -294,6 +299,7 @@ class ReadRequest(TimestampedModel):
             )
         ]
 
+    @override
     def __str__(self) -> str:
         return f"Read {self.connection_ref or self.kind or 'every connection'} now"
 
@@ -363,6 +369,7 @@ class CertificateMaterial(TimestampedModel):
     not_after = models.DateTimeField(null=True, blank=True)
     subject = models.CharField(max_length=500, blank=True)
 
+    @override
     def __str__(self) -> str:
         return f"material for {self.resource_id}"
 
@@ -460,6 +467,7 @@ class OperationRequest(TimestampedModel):
             ),
         ]
 
+    @override
     def __str__(self) -> str:
         return f"{self.resource.key}: {self.action} ({self.state})"
 
@@ -573,6 +581,7 @@ class ApprovalRequest(TimestampedModel):
             ),
         ]
 
+    @override
     def __str__(self) -> str:
         subject = self.target or self.resource_key
         return f"{self.capability}{f' on {subject}' if subject else ''} by {self.requested_actor}"
@@ -600,6 +609,7 @@ class AddressReading(models.Model):
     class Meta:
         ordering = ("-observed_at",)
 
+    @override
     def __str__(self) -> str:
         return f"{self.address} ({self.observed_at:%Y-%m-%d})"
 
@@ -640,5 +650,6 @@ class CapabilityRule(models.Model):
         ]
         ordering = ("scope", "subject", "capability")
 
+    @override
     def __str__(self) -> str:
         return f"{self.scope}:{self.subject}:{self.capability}={self.rule}"

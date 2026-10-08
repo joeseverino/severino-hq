@@ -33,7 +33,7 @@ from .request_layers import Layer, ServingDeviceResolution, admission_layers
 from .ui import MISSING
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Peering:
     """Which network the tailnet link itself is running over.
 
@@ -141,7 +141,7 @@ def _peering(presence) -> Peering:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Connection:
     """One request, described from the outside in."""
 

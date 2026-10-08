@@ -34,7 +34,7 @@ from .published_sites import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, counted
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Cell:
     """One value in a section's table, and where it goes if anywhere."""
 
@@ -54,7 +54,7 @@ class Cell:
         return cls(link.label, link.url, external=link.external, muted=muted, link=link)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServiceSection:
     """One band under a service: a heading, columns, and rows of cells.
 
@@ -192,7 +192,7 @@ def _traffic(service) -> SummaryItem | None:
 # ----- Summary ---------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SummaryItem:
     """One line of a service's summary: a label, a value, and what backs it."""
 
@@ -365,7 +365,7 @@ def _repository_detail(repo) -> str:
     return " · ".join(parts)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PartRow:
     """One part of a service, with everything the page knows about it.
 

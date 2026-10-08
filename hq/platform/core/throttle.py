@@ -29,7 +29,7 @@ from django.utils import timezone
 from .models import AuditLog
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Lockout:
     """Whether sign-in is barred right now, and for how much longer."""
 

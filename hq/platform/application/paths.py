@@ -45,7 +45,7 @@ MAX_ALIASES = 3
 # ----- What was read ---------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Row:
     kind: str
     record: Mapping[str, Any]

@@ -1,3 +1,5 @@
+from typing import override
+
 from django.db.models import Count
 from django.urls import reverse, reverse_lazy
 from django.views.generic import (
@@ -42,9 +44,11 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-date"
     table_search_placeholder = "Search vendors, items, purpose, and notes…"
 
+    @override
     def get_page_actions(self):
         return (PageAction("New expense", reverse("expenses:create"), primary=True),)
 
+    @override
     def get_table_filters(self):
         years = [(year, str(year)) for year in years_of(Expense, "date")]
         filters = [TableFilter("category", "Category", "category", EXPENSE_CATEGORY_CHOICES)]
@@ -53,12 +57,14 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
             filters.append(TableFilter("year", "Year", "date__year", years))
         return tuple(filters)
 
+    @override
     def get_queryset(self):
         qs = Expense.objects.all()
         if self.request.GET.get("no_receipts"):
             qs = qs.annotate(receipt_count=Count("receipts")).filter(receipt_count=0)
         return self.apply_table_query(qs)
 
+    @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["totals"], ctx["by_category"] = costs_by_category(
@@ -76,6 +82,7 @@ EXPENSES_TRAIL = ("Expenses", reverse_lazy("expenses:list"))
 class ExpensePage(PageMixin):
     """A page about one expense, or a new one: its trail runs back to the list."""
 
+    @override
     def get_page_trail(self):
         return record_trail(EXPENSES_TRAIL, getattr(self, "object", None), str)
 
@@ -91,6 +98,7 @@ class ExpenseDetailView(PageMixin, DetailView):
         "related_documentation",
     ).prefetch_related("receipts")
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         record = self.object.related_documentation
@@ -103,15 +111,19 @@ class ExpenseDetailView(PageMixin, DetailView):
         context["mentions"] = referenced_by_row(expense, principal=principal)
         return context
 
+    @override
     def get_page_title(self):
         return self.object.label
 
+    @override
     def get_page_lede(self):
         return f"{when_day(self.object.date)} · {self.object.get_category_display()}"
 
+    @override
     def get_page_trail(self):
         return (EXPENSES_TRAIL,)
 
+    @override
     def get_page_actions(self):
         pk = self.object.pk
         return (
@@ -126,6 +138,7 @@ class ExpenseCreateView(ExpensePage, ReferencePickerMixin, RecordFormMixin, Crea
     template_name = "expenses/expense_form.html"
     created_message = "Expense saved: {target}."
 
+    @override
     def get_initial(self):
         """Opened from a receipt with no expense, the form starts with what the receipt says."""
 

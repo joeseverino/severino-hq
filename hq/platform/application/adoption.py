@@ -138,7 +138,7 @@ def let_in(kind: str, token: str) -> None:
         row.delete()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Unmanaged:
     """One record a provider holds that no HQ declaration accounts for.
 
@@ -255,7 +255,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
     return tuple(sorted(found, key=lambda item: (item.identity, item.kind)))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UnmanagedService:
     """Every unmanaged record sharing one hostname, seen as one thing.
 
@@ -340,7 +340,7 @@ def find_unmanaged(
     return next((item for item in candidates if wanted in item.hostnames), None)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AdoptServiceCommand:
     hostname: str
 
@@ -397,7 +397,7 @@ def adopt_service(
     return {"ok": True, "hostname": found.hostname, "adopted": adopted}
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AdoptCommand:
     kind: str
     hostname: str = ""

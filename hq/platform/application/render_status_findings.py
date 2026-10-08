@@ -101,7 +101,7 @@ SYNC_ACTIVE = "ACTIVE"
 SYNC_UNREPORTED = "not reported"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Rendering(FactRow):
     """One renderer as its fact carries it: words and instants, in field order."""
 

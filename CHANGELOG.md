@@ -26,10 +26,12 @@ contracts are the public surface.
 
 - HQ runs on Python 3.14 only: `requires-python`, `.python-version`, the test
   matrix, the plugin-check default and the lint and type targets agree. Modules
-  use deferred annotations and `type` parameter syntax.
+  use deferred annotations, `type` parameter syntax and `typing.override`.
 - Ruff also enforces import order, pyupgrade, bugbear, simplify, pathlib,
   comprehension, performance, Ruff-specific, refurb, Django and blind-except
-  rules.
+  rules, and mypy requires `@override` in the typed modules.
+- Frozen dataclasses declare `slots=True`, except where a cached property needs
+  the instance dictionary.
 - A Cloudflare "Authentication error" under HTTP 401 is a missing permission
   when the token still verifies, and a credential that read any kind is never
   reported as refused outright. Tailscale 403/404 on a scoped read is a missing

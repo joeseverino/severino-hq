@@ -81,7 +81,7 @@ def check_of(status: str) -> str:
     return f"health check {verdict.removeprefix('health: ')}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Running:
     """A container a controller last saw, described as a person would read it.
 
@@ -257,7 +257,7 @@ def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
     }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Standing(StandingWords):
     """What is known about one image at one version, wherever it runs."""
 
@@ -416,7 +416,7 @@ class Standing(StandingWords):
         return "Update status unknown"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Container:
     running: Any
     machine: Any

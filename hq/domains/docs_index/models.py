@@ -9,6 +9,7 @@ No secrets should be stored here.
 """
 
 from datetime import timedelta
+from typing import override
 
 from django.conf import settings
 from django.db import models
@@ -199,6 +200,7 @@ class DocumentationRecord(TimestampedModel):
         ]
         verbose_name = "Documentation record"
 
+    @override
     def __str__(self) -> str:
         return f"{self.doc_id} · {self.title}"
 

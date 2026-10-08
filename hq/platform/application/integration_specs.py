@@ -80,7 +80,7 @@ def capability_schema(spec: CapabilitySpec) -> dict[str, Any]:
     return derived
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CapabilitySpec:
     name: str
     summary: str
@@ -114,7 +114,7 @@ class CapabilitySpec:
         return self.label or human_label(self.name)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ResourceSpec:
     """One declaration of a readable domain and every operation it supports."""
 

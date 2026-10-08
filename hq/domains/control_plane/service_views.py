@@ -1,6 +1,7 @@
 """Services: the catalogue, one service's page, publishing a new one, and the favourites order."""
 
 from functools import cached_property
+from typing import override
 
 from django.contrib import messages
 from django.http import Http404
@@ -47,6 +48,7 @@ class ServiceListView(PageMixin, TemplateView):
     template_name = "control_plane/service_list.html"
     page_title = "Services"
 
+    @override
     def get_page_actions(self):
         # "Add" on the services board starts a service, not the resource picker.
         return (
@@ -57,6 +59,7 @@ class ServiceListView(PageMixin, TemplateView):
             ),
         )
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.pins import SERVICE, ordered
         from hq.platform.application.service_facets import RUNTIME_FACET
@@ -109,6 +112,7 @@ class ServiceDetailView(PageMixin, TemplateView):
 
     template_name = "control_plane/service_detail.html"
 
+    @override
     def get(self, request, *args, **kwargs):
         """An alias goes to the service it is an alias of.
 
@@ -153,12 +157,15 @@ class ServiceDetailView(PageMixin, TemplateView):
         # here: the board builds every service and needs none of it.
         return sections_for(self.service)
 
+    @override
     def get_page_title(self):
         return self.service.hostname
 
+    @override
     def get_page_trail(self):
         return (("Services", reverse("control_plane:services")),)
 
+    @override
     def get_page_navigation(self):
         return PageNavigation(
             (
@@ -179,6 +186,7 @@ class ServiceDetailView(PageMixin, TemplateView):
             )
         )
 
+    @override
     def get_page_actions(self):
         """The container's verbs, then the way to the domain.
 
@@ -228,6 +236,7 @@ class ServiceDetailView(PageMixin, TemplateView):
             )
         return tuple(actions)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["service"] = self.service

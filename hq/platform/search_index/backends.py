@@ -2,7 +2,7 @@
 
 import shlex
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Protocol, override
 
 from django.db import connection
 from django.db.models import Func, IntegerField
@@ -124,6 +124,7 @@ class IndexPosition(Func):
         self.scope = scope
         self.limit = limit
 
+    @override
     def as_sql(self, compiler, connection, **extra_context):
         (source,) = self.get_source_expressions()
         identifier, identifier_params = compiler.compile(source)

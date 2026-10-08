@@ -1,5 +1,7 @@
 """Password hashers HQ uses, where Django's defaults need a stricter edge."""
 
+from typing import override
+
 from argon2.exceptions import InvalidHashError
 from django.contrib.auth import hashers
 
@@ -11,12 +13,14 @@ class Argon2PasswordHasher(hashers.Argon2PasswordHasher):
     answers 500. It is a password that does not match.
     """
 
+    @override
     def verify(self, password: str, encoded: str) -> bool:
         try:
             return super().verify(password, encoded)
         except InvalidHashError:
             return False
 
+    @override
     def must_update(self, encoded: str) -> bool:
         # Asked whether or not the password matched, so it decodes too.
         try:

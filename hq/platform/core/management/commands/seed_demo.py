@@ -8,6 +8,7 @@ or doc_id). Safe to run on a fresh DB or one with existing data.
 
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import override
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -22,6 +23,7 @@ from hq.domains.projects.models import Project
 class Command(BaseCommand):
     help = "Populate the database with demo projects, content, docs, assets, expenses."
 
+    @override
     def handle(self, *args, **options):
         today = timezone.localdate()
         year = today.year

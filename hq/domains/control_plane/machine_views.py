@@ -1,5 +1,6 @@
 """Machines and the tailnet: the list, one machine's page, and what a change to either would reach."""
 
+from typing import override
 from urllib.parse import urlencode
 
 from django.http import Http404
@@ -32,6 +33,7 @@ class MachineListView(PageMixin, TemplateView):
     template_name = "control_plane/machine_list.html"
     page_title = "Machines"
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         machines = machines_once()
@@ -101,6 +103,7 @@ class TailnetView(PageMixin, TemplateView):
     template_name = "control_plane/tailnet.html"
     page_title = "Tailnet"
 
+    @override
     def get_page_actions(self):
         policy_declaration = self.tailnet.declaration
         return (
@@ -123,10 +126,12 @@ class TailnetView(PageMixin, TemplateView):
             PageAction("All machines", reverse("control_plane:machines")),
         )
 
+    @override
     def get(self, request, *args, **kwargs):
         self.tailnet = tailnet_context(principal=web_principal(request.user))
         return super().get(request, *args, **kwargs)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(whatif_context(self.request))
@@ -144,6 +149,7 @@ class MachineDetailView(PageMixin, TemplateView):
 
     template_name = "control_plane/machine_detail.html"
 
+    @override
     def get(self, request, *args, **kwargs):
         self.found = machine(kwargs["name"])
         if self.found is None:
@@ -153,12 +159,15 @@ class MachineDetailView(PageMixin, TemplateView):
             return redirect("control_plane:machine", name=self.found.name)
         return super().get(request, *args, **kwargs)
 
+    @override
     def get_page_title(self):
         return self.found.name
 
+    @override
     def get_page_trail(self):
         return (("Machines", reverse("control_plane:machines")),)
 
+    @override
     def get_page_actions(self):
         # The machine's declaration is edited from its own page.
         if self.found.declaration:
@@ -185,6 +194,7 @@ class MachineDetailView(PageMixin, TemplateView):
             ),
         )
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         found = self.found

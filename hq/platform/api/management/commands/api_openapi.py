@@ -1,6 +1,6 @@
 import difflib
 from argparse import ArgumentParser
-from typing import Any
+from typing import Any, override
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 class Command(BaseCommand):
     help = "Write hq_api/hq-api.openapi.json from the API's routes and registries, or --check it for drift."
 
+    @override
     def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
             "--check",
@@ -15,6 +16,7 @@ class Command(BaseCommand):
             help="Exit 1 when the committed document differs from the derived one.",
         )
 
+    @override
     def handle(self, *args: Any, **options: Any) -> None:
         from hq.platform.api.openapi import DOCUMENT_PATH, document, render
 

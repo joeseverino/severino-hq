@@ -44,14 +44,14 @@ HOSTNAME = re.compile(
 RECORD_TYPES = ("A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "CAA")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NameCommand:
     """A name to ask a public resolver about."""
 
     name: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AddressCommand:
     """An address to ask the public registries about.
 

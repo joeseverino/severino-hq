@@ -24,6 +24,8 @@ the view to rebuild the URL itself, which duplicates knowledge the model
 already owns. One query at the boundary is the cheaper trade.
 """
 
+from typing import override
+
 from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.shortcuts import redirect
@@ -227,6 +229,7 @@ class RecordDeleteMixin(ServiceDeleteMixin):
     and target come from the declaration.
     """
 
+    @override
     def form_valid(self, form):
         noun = display_noun(records_for(type(self.object)))
         result = delete_instance(self.object, principal=web_principal(self.request.user))

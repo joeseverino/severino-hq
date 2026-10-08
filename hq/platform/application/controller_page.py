@@ -28,7 +28,7 @@ from .moments import duration
 from .resource_operations import ACTION_LABELS
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class KindReading:
     """One kind the sweep reads: when it was last tried, and what came of it."""
 
@@ -42,7 +42,7 @@ class KindReading:
     ok: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class QueuedWork:
     resource: str
     action: str
@@ -50,7 +50,7 @@ class QueuedWork:
     created_at: datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ControllerPage:
     standing: ControllerStanding
     swept_at: datetime | None

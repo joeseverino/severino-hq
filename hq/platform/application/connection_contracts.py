@@ -34,7 +34,7 @@ GRANT_MODELS = ("scoped", "coarse", "none")
 CREDENTIAL_MODELS = (*GRANT_MODELS, "rejected")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionAbility:
     """One thing a connection permits HQ to do, without credential material."""
 
@@ -57,7 +57,7 @@ class ConnectionAbility:
     subject_resource: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionLink:
     """A safe relationship from a connection to something HQ can name."""
 
@@ -68,7 +68,7 @@ class ConnectionLink:
     resource_key: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionFact:
     """A small provider-owned fact that is useful in a generic connection row."""
 
@@ -76,7 +76,7 @@ class ConnectionFact:
     value: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionInstance:
     """One configured connection as its owning domain last observed it."""
 
@@ -107,7 +107,7 @@ class ConnectionInstance:
     connection_ref: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionSpec:
     """One declaration of a connection family and its cached instance provider."""
 

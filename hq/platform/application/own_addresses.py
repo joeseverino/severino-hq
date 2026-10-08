@@ -34,7 +34,7 @@ def _private_hosts(presence) -> tuple[str, ...]:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Sightings:
     """What every device on the tailnet reports, counted once."""
 

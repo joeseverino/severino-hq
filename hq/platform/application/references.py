@@ -20,7 +20,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 from django import forms
 from django.apps import apps
@@ -42,7 +42,7 @@ NAME_SUFFIX = "_name"
 CERTIFICATE = "certificate"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Reference:
     """``kind:identity``, taken apart."""
 
@@ -59,7 +59,7 @@ class Reference:
         return f"{self.kind}:{self.identity}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Referable:
     """Declared on a model as ``referable``: its rows can be referred to.
 
@@ -83,7 +83,7 @@ class Referable:
     pickable: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Target:
     """One referable model, as the resolver reads it."""
 
@@ -144,6 +144,7 @@ class ReferenceField(models.CharField):
         kwargs.setdefault("db_index", True)
         super().__init__(*args, **kwargs)
 
+    @override
     def deconstruct(self) -> Any:
         """A plain text column to a migration: what it may name is not schema."""
 
@@ -154,6 +155,7 @@ class ReferenceField(models.CharField):
     def name_attname(self) -> str:
         return f"{self.attname}{NAME_SUFFIX}"
 
+    @override
     def check(self, **kwargs: Any) -> list[checks.CheckMessage]:
         found = list(super().check(**kwargs))
         names = {field.name for field in self.model._meta.get_fields()}
@@ -184,6 +186,7 @@ class ReferenceField(models.CharField):
             return target is not None and target.declared.role == self.role
         return kind not in self.but
 
+    @override
     def clean(self, value: Any, model_instance: models.Model | None) -> Any:
         value = super().clean(value, model_instance)
         if model_instance is None:
@@ -201,6 +204,7 @@ class ReferenceField(models.CharField):
             raise ValidationError(f"HQ has nothing called {value!r} to link this to.")
         return value
 
+    @override
     def pre_save(self, model_instance: models.Model, add: bool) -> Any:
         """No reference keeps no name. ``clean`` is not asked about an empty value."""
 
@@ -216,6 +220,7 @@ class ReferenceField(models.CharField):
             return False
         return type(row)._default_manager.filter(pk=row.pk, **{self.attname: value}).exists()
 
+    @override
     def formfield(self, **kwargs: Any) -> Any:
         return ReferenceChoiceField(
             reference=self,
@@ -627,7 +632,7 @@ def choices(
 # ----- What names a thing --------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Mention:
     """One row that names a thing: its link, and a few words beside it."""
 
@@ -635,7 +640,7 @@ class Mention:
     note: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Mentions:
     """The rows that name a thing through one kind of reference."""
 

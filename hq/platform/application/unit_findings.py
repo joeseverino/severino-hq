@@ -60,7 +60,7 @@ UNREAD_REASONS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UnitState(FactRow):
     """One unit as its fact carries it: words and instants, in field order."""
 

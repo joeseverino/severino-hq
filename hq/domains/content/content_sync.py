@@ -12,6 +12,7 @@ classification in HQ is never clobbered by a sync.
 import json
 import urllib.error
 import urllib.request
+from typing import override
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -39,6 +40,7 @@ class _SameOriginRedirects(urllib.request.HTTPRedirectHandler):
     redirect to another origin, or down to http, is refused instead.
     """
 
+    @override
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         asked, told = urlsplit(req.full_url), urlsplit(newurl)
         if (told.scheme, told.netloc) != (asked.scheme, asked.netloc):

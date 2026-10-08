@@ -47,7 +47,7 @@ _SERVED_AT = "hq.served_at"
 _SERVED_PORT = "hq.served_port"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SelfService:
     hostnames: tuple[str, ...]
     machine: str = ""

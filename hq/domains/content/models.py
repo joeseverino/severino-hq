@@ -1,5 +1,7 @@
 """Content pipeline."""
 
+from typing import override
+
 from django.db import models
 from django.urls import reverse
 from django.utils.text import slugify
@@ -67,9 +69,11 @@ class ContentItem(TimestampedModel):
             models.Index(fields=("published_at",)),
         ]
 
+    @override
     def __str__(self) -> str:
         return self.title
 
+    @override
     def save(self, *args, **kwargs):
         if not self.slug:
             base = slugify(self.title) or "content-item"

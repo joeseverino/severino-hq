@@ -1,3 +1,5 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
@@ -7,6 +9,7 @@ class ControlPlaneConfig(AppConfig):
     label = 'control_plane'
     verbose_name = "Infrastructure Control Plane"
 
+    @override
     def ready(self):
         from hq.platform.application.approvals import AUDIT_LABEL as APPROVAL_AUDIT_LABEL
         from hq.platform.core.audit import register_audit

@@ -41,7 +41,7 @@ Scope = CapabilityRule.Scope
 _RESTRICTIVENESS = {Rule.ALLOW: 0, Rule.APPROVE: 1, Rule.DENY: 2}
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Decision:
     rule: str
     source: str
@@ -215,7 +215,7 @@ def _parse_field(name: str) -> tuple[str, str, str] | None:
     return parts[1], parts[2], parts[3]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Column:
     scope: str
     subject: str
@@ -224,7 +224,7 @@ class Column:
     identity: AgentIdentity | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Cell:
     field: str
     scope: str
@@ -240,7 +240,7 @@ class Cell:
         return _name(self.rule)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Row:
     name: str
     label: str
@@ -262,7 +262,7 @@ class Row:
         return tuple(cell for cell in self.cells if cell.rule)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Group:
     label: str
     rows: tuple[Row, ...]

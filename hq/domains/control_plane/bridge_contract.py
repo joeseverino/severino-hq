@@ -124,7 +124,7 @@ def limit(schema: str, *path: str | int) -> int:
     return node
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Parameter:
     """One query parameter of a bridge action, as the contract states it."""
 
@@ -150,7 +150,7 @@ _REASONS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Operation:
     """One bridge action: its path, its query parameters, and the payload it takes."""
 

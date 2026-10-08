@@ -26,7 +26,7 @@ NETWORK_LABELS = {
 _SPECIAL_USE = (".local", ".home.arpa", ".internal", ".localhost")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionReach:
     """The network a connection is reached over, its machine, and the peering."""
 

@@ -242,7 +242,8 @@ limit is split into named steps.
 Ruff also holds import order, pyupgrade, bugbear, simplify, pathlib, comprehension,
 performance, Ruff-specific, refurb, Django and blind-except rules. A rule is
 switched off only in `pyproject.toml`, with the reason beside it; a line-level
-`# noqa` names its code and says why.
+`# noqa` names its code and says why. A method that overrides a base-class method
+carries `@override`, and mypy's `explicit-override` holds the typed modules to it.
 
 The architectural seams are type checked. `mise run checks:mypy` (a gate of
 `mise run ci` and CI's Checks job) runs mypy with django-stubs over the modules

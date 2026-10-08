@@ -28,20 +28,20 @@ MEDIUM = "medium"
 HIGH = "high"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Blocker:
     id: str
     reason: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Step:
     id: str
     label: str
     detail: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Plan:
     container: Container
     target_tag: str
@@ -331,7 +331,7 @@ def _steps(item: Container, target: str, digest: str, data, verified_by) -> tupl
     return tuple(steps)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Readiness:
     """What an upgrade of this container would take, before any is published:
     what would verify it, what would be snapshotted, and what keeps it from

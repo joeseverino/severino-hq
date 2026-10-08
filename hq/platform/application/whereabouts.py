@@ -12,7 +12,7 @@ from .locate import Machines, host_of, machines_index, split_endpoint
 from .projection import read_once
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Origin:
     """Where a request for this hostname is finally served."""
 
@@ -131,7 +131,7 @@ class Origin:
         return "" if self.parked or self.external or self.known else "unknown host"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MachineLink:
     """A machine named on a card, and the page for it.
 

@@ -39,7 +39,7 @@ _SENTENCES = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Progress:
     """Where a delivery behind production stands, at its least advanced plugin."""
 

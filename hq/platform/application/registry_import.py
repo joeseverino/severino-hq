@@ -43,14 +43,14 @@ DERIVED_FIELDS: dict[str, tuple[str, ...]] = {
 REQUIRED_CAPABILITIES = (records_of("projects").write, records_of("assets").write)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HQImportCommand:
     projects: list[dict[str, Any]] = field(default_factory=list)
     assets: list[dict[str, Any]] = field(default_factory=list)
     check_only: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Kind:
     name: str
     model: type

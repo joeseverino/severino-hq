@@ -19,7 +19,7 @@ from hq.domains.control_plane.providers import PROVIDERS, registry_label
 from hq.platform.application.routes import reverse
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EntityLink:
     """A name, and the page it opens, when there is one."""
 
@@ -41,7 +41,7 @@ class EntityLink:
         return self.label
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NodeKind:
     """A kind of entity HQ names: what it is called, and its HQ page if it has one."""
 

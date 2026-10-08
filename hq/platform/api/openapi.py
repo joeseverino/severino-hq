@@ -25,7 +25,7 @@ import re
 from collections.abc import Callable, Iterator
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from pydantic import TypeAdapter
@@ -56,6 +56,7 @@ class OpenAPIError(RuntimeError):
 class _Closed(GenerateJsonSchema):
     """A TypedDict's keys are all of its keys, as the strict API reads them."""
 
+    @override
     def typed_dict_schema(self, schema: core_schema.TypedDictSchema) -> JsonSchemaValue:
         value = super().typed_dict_schema(schema)
         value.setdefault("additionalProperties", False)

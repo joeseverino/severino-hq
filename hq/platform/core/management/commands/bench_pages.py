@@ -41,7 +41,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 from unittest import mock
 
 from django.conf import settings
@@ -128,7 +128,7 @@ VARIANTS: dict[str, tuple[str, ...]] = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Action:
     """What one action is posted: its route arguments, its form, and what must
     exist first (made inside the same rolled-back transaction)."""
@@ -428,6 +428,7 @@ def _swept_columns(result: Result) -> str:
 class Command(BaseCommand):
     help = "Time every page and action, with its query count, over a populated scratch database."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument("--scale", type=float, default=1.0, help="Multiplies the seeded counts.")
         parser.add_argument("--rounds", type=int, default=30, help="Timed requests per page.")
@@ -443,6 +444,7 @@ class Command(BaseCommand):
             help="With --sweeps: do not ask again after the sweep, so the request derives.",
         )
 
+    @override
     def handle(self, *args, **options):
         if not settings.STATIC_LIVE:
             # Uncollected, hashed storage hashes each asset on every request.

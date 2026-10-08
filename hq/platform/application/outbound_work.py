@@ -44,7 +44,7 @@ LABEL_LIMIT = 60
 SUBJECT_FIELD = "subject"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OutboundWork:
     """One piece of work a domain does outside the process.
 

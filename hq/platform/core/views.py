@@ -1,6 +1,6 @@
 """Dashboard + audit-log views."""
 
-from typing import ClassVar
+from typing import ClassVar, override
 from urllib.parse import quote
 
 from django.conf import settings
@@ -53,6 +53,7 @@ class ThrottledLoginView(LoginView):
             and not settings.SEVERINO_PASSWORD_LOGIN_ENABLED
         )
 
+    @override
     def get(self, request, *args, **kwargs):
         """Go straight to Pocket ID rather than asking which door to use.
 
@@ -76,6 +77,7 @@ class ThrottledLoginView(LoginView):
             return redirect(target)
         return super().get(request, *args, **kwargs)
 
+    @override
     def get_context_data(self, **kwargs):
         from .oidc import SSO_FAILURE_SESSION_KEY
 
@@ -86,6 +88,7 @@ class ThrottledLoginView(LoginView):
             )
         return context
 
+    @override
     def post(self, request, *args, **kwargs):
         from .network import client_ip
         from .throttle import lockout
@@ -194,6 +197,7 @@ class AgentPolicyView(PageMixin, TemplateView):
     template_name = "core/agent_policy.html"
     page_title = "Agents"
 
+    @override
     def get_context_data(self, **kwargs):
         from datetime import timedelta
 
@@ -314,6 +318,7 @@ class SearchView(PageMixin, TemplateView):
                 break
         return visible
 
+    @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         q = self.request.GET.get("q", "").strip()
@@ -411,6 +416,7 @@ class ConnectionView(PageMixin, TemplateView):
         "behind every admission decision."
     )
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.request_path import request_path
 

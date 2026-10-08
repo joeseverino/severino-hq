@@ -18,7 +18,7 @@ SERIOUS = "serious"
 UNKNOWN = "unknown"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Health:
     state: str
     label: str

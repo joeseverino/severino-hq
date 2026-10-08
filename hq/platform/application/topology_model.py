@@ -14,7 +14,7 @@ from .entity_links import EntityLink
 from .timestamps import moment
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TopologyNode:
     """One addressable thing in the derived topology."""
 
@@ -85,7 +85,7 @@ class TopologyNode:
     actions: tuple[TopologyAction, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TopologyEdge:
     """A relationship derived from a declaration or observation."""
 
@@ -106,7 +106,7 @@ class TopologyEdge:
     facet: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RelationKind:
     """What an edge kind says from each end, and where it ranks on a page.
 
@@ -159,7 +159,7 @@ def relation_rank(edge: TopologyEdge) -> int:
     return relation.rank if relation else 99
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Topology:
     """The complete permitted projection consumed by web, API, and MCP."""
 
@@ -167,7 +167,7 @@ class Topology:
     edges: tuple[TopologyEdge, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TopologyTrace:
     """A bounded traversal applied to an already-authorized topology."""
 

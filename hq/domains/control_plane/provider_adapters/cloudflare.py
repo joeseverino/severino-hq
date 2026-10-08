@@ -26,7 +26,7 @@ DNS_RECORD_KIND = "cloudflare.dns_record"
 ZONE_KIND = "cloudflare.zone"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DNSRecordType:
     """One record type, and everything the rest of HQ needs to know about it.
 

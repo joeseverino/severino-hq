@@ -57,7 +57,7 @@ FRONT_DOOR_PORTS = frozenset({80, 443})
 _STATUS_ORDER = ("serious", "attention", "neutral", "good")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RouteExposure:
     """One route to one name, and who it lets in."""
 
@@ -75,7 +75,7 @@ class RouteExposure:
         return LABELS[self.level]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Exposure:
     """The routes reaching one thing, worst first."""
 

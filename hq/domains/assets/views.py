@@ -1,3 +1,5 @@
+from typing import override
+
 from django.db.models import Q, Sum
 from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
@@ -47,9 +49,11 @@ class AssetListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-purchase_date"
     table_search_placeholder = "Search assets, vendors, serials, and notes…"
 
+    @override
     def get_page_actions(self):
         return (PageAction("New asset", reverse("assets:create"), primary=True),)
 
+    @override
     def get_queryset(self):
         qs = Asset.objects.all()
         if self.request.GET.get("missing_purchase"):
@@ -58,6 +62,7 @@ class AssetListView(PageMixin, TableListMixin, ListView):
             )
         return self.apply_table_query(qs)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         totals = self.object_list.aggregate(
@@ -70,6 +75,7 @@ class AssetListView(PageMixin, TableListMixin, ListView):
 class AssetPage(PageMixin):
     """A page about one asset, or a new one: its trail runs back to the list."""
 
+    @override
     def get_page_trail(self):
         return record_trail(
             ("Assets", reverse("assets:list")),
@@ -92,12 +98,15 @@ class AssetDetailView(PageMixin, DetailView):
         "receipts",
     )
 
+    @override
     def get_page_title(self):
         return self.object.item_name
 
+    @override
     def get_page_trail(self):
         return (("Assets", reverse("assets:list")),)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         asset = self.object
@@ -111,6 +120,7 @@ class AssetDetailView(PageMixin, DetailView):
         context["mentions"] = referenced_by_row(asset, principal=principal)
         return context
 
+    @override
     def get_page_lede(self):
         return format_html(
             '{} · <span class="pill pill-{}">{}</span>',
@@ -119,6 +129,7 @@ class AssetDetailView(PageMixin, DetailView):
             self.object.get_status_display(),
         )
 
+    @override
     def get_page_actions(self):
         slug = self.object.slug
         return (

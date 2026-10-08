@@ -20,6 +20,8 @@ and neither survives into this table. Timings are milliseconds, absence is
 NULL, and no template has to know that Cloudflare ever said otherwise.
 """
 
+from typing import override
+
 from django.db import models
 
 from hq.platform.core.rules import Rule
@@ -63,6 +65,7 @@ class AnalyticsSite(models.Model):
             ),
         )
 
+    @override
     def __str__(self) -> str:
         return self.host or self.site_tag
 
@@ -91,6 +94,7 @@ class AnalyticsCoverage(models.Model):
         )
         indexes = (models.Index(fields=("date",)),)
 
+    @override
     def __str__(self) -> str:
         return f"{self.site_id} covered {self.date}"
 
@@ -160,6 +164,7 @@ class RumDaily(models.Model):
             ),
         )
 
+    @override
     def __str__(self) -> str:
         return f"{self.date} {self.dimension}={self.value}"
 
@@ -220,5 +225,6 @@ class VitalsDaily(models.Model):
             _sampled("analytics_vitalsdaily_sample_interval"),
         )
 
+    @override
     def __str__(self) -> str:
         return f"{self.site_id} vitals {self.date}"

@@ -22,7 +22,7 @@ class NotFoundError(ValueError):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ReceiptMetadataCommand:
     vendor: str = ""
     date: Date | None = None

@@ -1,3 +1,5 @@
+from typing import override
+
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.http import Http404
 from django.urls import reverse, reverse_lazy
@@ -81,9 +83,11 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search projects, technology, and notes…"
 
+    @override
     def get_page_actions(self):
         return (PageAction("New project", reverse("projects:create"), primary=True),)
 
+    @override
     def get_queryset(self):
         qs = Project.objects.all()
         needs_output = self.request.GET.get("needs_output", "").strip()
@@ -111,6 +115,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         )
         return self.apply_table_query(qs)
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.github_estate import repository_for
 
@@ -171,6 +176,7 @@ def refresh_ask(project):
 class ProjectPage(PageMixin):
     """A page about one project, or a new one: its trail runs back to the list."""
 
+    @override
     def get_page_trail(self):
         return record_trail(PROJECTS_TRAIL, getattr(self, "object", None), lambda project: project.name)
 
@@ -193,6 +199,7 @@ class ProjectDetailView(PageMixin, DetailView):
 
         return repository_for(self.object.repository_url)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # The reverse of the tie the service page makes. A project says where it
@@ -214,9 +221,11 @@ class ProjectDetailView(PageMixin, DetailView):
         context["page_badges"] = (PageBadge(self.object.get_status_display(), self.object.status),)
         return context
 
+    @override
     def get_page_title(self):
         return self.object.name
 
+    @override
     def get_page_lede(self):
         """The one line under the name, inside the head beside its actions."""
 
@@ -237,9 +246,11 @@ class ProjectDetailView(PageMixin, DetailView):
             },
         )
 
+    @override
     def get_page_trail(self):
         return (PROJECTS_TRAIL,)
 
+    @override
     def get_page_actions(self):
         project = self.object
         actions = []
@@ -288,9 +299,11 @@ class WatchingView(PageMixin, TemplateView):
 
         return linked_login(self.request.user, GITHUB)
 
+    @override
     def get_page_lede(self) -> str:
         return "What you star on GitHub, with each project's latest release and security advisories."
 
+    @override
     def get_page_actions(self):
         if not self.login:
             return []
@@ -308,6 +321,7 @@ class WatchingView(PageMixin, TemplateView):
             ),
         ]
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.github_profile import profile
 
@@ -392,9 +406,11 @@ class PostureView(PageMixin, TemplateView):
     template_name = "projects/posture.html"
     page_title = "Repo checks"
 
+    @override
     def get_page_lede(self) -> str:
         return "Each repository checked against your repository rules. Public ones have extra checks."
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.github_posture import STANDARD, postures
         from hq.platform.application.standards import MET, UNMET

@@ -32,7 +32,7 @@ class CertificateError(ValueError):
     """The uploaded material is not a usable certificate and key pair."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UploadCertificateCommand:
     key: str
     fullchain: str

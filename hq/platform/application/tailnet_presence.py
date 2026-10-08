@@ -10,7 +10,7 @@ from typing import Any
 from .tailnet import TAILNET_KIND
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Presence:
     """Whether a machine is up, said by the network rather than by a service.
 

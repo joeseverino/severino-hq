@@ -5,6 +5,7 @@ media URL. The ``ReceiptFileView`` streams the file only to authenticated users.
 """
 
 from pathlib import Path
+from typing import override
 
 from django.contrib import messages
 from django.db.models import Count
@@ -68,9 +69,11 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-uploaded_at"
     table_search_placeholder = "Search vendors, filenames, and notes…"
 
+    @override
     def get_page_actions(self):
         return (PageAction("Upload receipt", reverse("receipts:create"), primary=True),)
 
+    @override
     def get_queryset(self):
         qs = Receipt.objects.select_related("related_expense", "related_asset")
         if self.request.GET.get("unlinked"):
@@ -86,6 +89,7 @@ class ReceiptPage(PageMixin):
     def get_receipt(self):
         return getattr(self, "object", None)
 
+    @override
     def get_page_trail(self):
         return record_trail(RECEIPTS_TRAIL, self.get_receipt(), str)
 
@@ -95,17 +99,21 @@ class ReceiptDetailView(PageMixin, DetailView):
     template_name = "receipts/receipt_detail.html"
     context_object_name = "receipt"
 
+    @override
     def get_page_title(self):
         return self.object.label
 
+    @override
     def get_page_lede(self):
         receipt = self.object
         named = f"{receipt.original_filename} · " if receipt.original_filename else ""
         return f"{named}uploaded {when(receipt.uploaded_at)}"
 
+    @override
     def get_page_trail(self):
         return (RECEIPTS_TRAIL,)
 
+    @override
     def get_page_actions(self):
         receipt = self.object
         actions = []
@@ -133,11 +141,13 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
     template_name = "receipts/receipt_match.html"
     page_title = "Link receipt to expense"
 
+    @override
     def get_receipt(self):
         if not hasattr(self, "receipt"):
             self.receipt = get_object_or_404(Receipt, pk=self.kwargs["pk"])
         return self.receipt
 
+    @override
     def get_page_lede(self):
         receipt = self.get_receipt()
         return format_html(
@@ -146,9 +156,11 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
             money(receipt.amount),
         )
 
+    @override
     def get_page_actions(self):
         return (PageAction("Cancel", self.get_receipt().get_absolute_url()),)
 
+    @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         receipt = self.get_receipt()
@@ -209,6 +221,7 @@ class ReceiptCreateView(ReceiptPage, CreateView):
     form_class = ReceiptUploadForm
     template_name = "receipts/receipt_form.html"
 
+    @override
     def get_initial(self):
         """Opened from an expense's page, the form starts on that expense."""
 
@@ -218,6 +231,7 @@ class ReceiptCreateView(ReceiptPage, CreateView):
             initial["related_expense"] = int(asked)
         return initial
 
+    @override
     def form_valid(self, form):
         upload = form.cleaned_data["file"]
         result = upload_receipt(
@@ -236,6 +250,7 @@ class ReceiptUpdateView(ReceiptPage, UpdateView):
     form_class = ReceiptUploadForm
     template_name = "receipts/receipt_form.html"
 
+    @override
     def form_valid(self, form):
         result = update_receipt(
             receipt_command_from_cleaned_data(form.cleaned_data),
@@ -255,6 +270,7 @@ class ReceiptDeleteView(ReceiptPage, DeleteView):
     success_url = reverse_lazy("receipts:list")
     context_object_name = "receipt"
 
+    @override
     def form_valid(self, form):
         receipt_id = self.get_object().pk
         deleter("receipts")(

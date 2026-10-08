@@ -31,7 +31,7 @@ SPF_LOOKUP_LIMIT = 10
 SPF_LOOKUP_MECHANISMS = ("include", "a", "mx", "ptr", "exists", "redirect")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Choice:
     """One selectable answer, and what choosing it actually does."""
 
@@ -40,7 +40,7 @@ class Choice:
     consequence: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PolicyTag:
     """One field of a policy record.
 
@@ -228,7 +228,7 @@ def describe_dmarc(value: str) -> tuple[str, ...]:
     return tuple(said)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SpfTerm:
     qualifier: str
     mechanism: str
@@ -243,7 +243,7 @@ class SpfTerm:
         return f"{prefix}{self.mechanism}" + (f":{self.argument}" if self.argument else "")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SpfPolicy:
     terms: tuple[SpfTerm, ...] = ()
     valid: bool = True
@@ -318,7 +318,7 @@ SPF_DEFAULTS: tuple[Choice, ...] = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MailSection:
     """One stage of a domain's mail, with the records that decide it."""
 
@@ -332,7 +332,7 @@ class MailSection:
     add_type: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MailOverview:
     """Receiving, sending, signing, enforcing: in the order mail flows."""
 

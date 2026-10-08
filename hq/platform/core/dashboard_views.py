@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from datetime import date, timedelta
-from typing import Any, ClassVar
+from typing import Any, ClassVar, override
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
@@ -110,6 +110,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
 
     PARTS: ClassVar[dict[str, Callable[..., Any]]] = {"calendar": _calendar, "links": _links}
 
+    @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         part = self.PARTS.get(fragments.requested(self.request))

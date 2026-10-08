@@ -8,7 +8,7 @@ from django.conf import settings
 from . import tailnet
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Identity:
     """Who is asking, according to each system that independently knows."""
 

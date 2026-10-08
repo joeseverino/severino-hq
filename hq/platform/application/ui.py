@@ -73,7 +73,7 @@ def ended(text: str) -> str:
 PAGE_SECTION_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PageSection:
     """One stable destination in a dense page.
 
@@ -100,7 +100,7 @@ class PageSection:
         return f"#{self.id}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PageNavigation:
     """The ordered map of a single page, rendered by HQ."""
 
@@ -117,7 +117,7 @@ class PageNavigation:
             raise ValueError("PageNavigation section ids must be unique.")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Kpi:
     label: str
     value: str | int
@@ -134,7 +134,7 @@ class Kpi:
     drawing: Dots | Trend | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Insight:
     """A reading, what it means, and the next action.
 
@@ -198,7 +198,7 @@ class Insight:
             )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ListRow:
     """One line of a compact record list: what it is, and when.
 
@@ -237,7 +237,7 @@ class ListRow:
             )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TimelineItem:
     """One dated event in the host-owned planning horizon.
 
@@ -261,7 +261,7 @@ class TimelineItem:
             )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Timeline:
     """A chronological, dependency-free planning surface."""
 
@@ -314,14 +314,14 @@ LABEL_GAP_PX = 8.0
 NARROW_PLOT_PX = 420.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChartSeries:
     label: str
     values: tuple[float, ...]
     slot: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChartBar:
     x: float
     y: float
@@ -337,19 +337,19 @@ class ChartBar:
     tooltip: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChartTick:
     y: float
     label: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChartCategory:
     x: float
     label: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PlacedLabel:
     """An axis label and where it sits, as a share of the drawing.
 
@@ -364,13 +364,13 @@ class PlacedLabel:
     label: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChartRow:
     label: str
     values: tuple[float, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChartTableRow:
     """One row of a chart's data table, as the words it shows."""
 
@@ -482,7 +482,7 @@ class StackedBarChart(Chart):
 
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LinePoint:
     """One reading, placed."""
 
@@ -493,7 +493,7 @@ class LinePoint:
     tooltip: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LineSeries:
     """One line, already projected into the plot's coordinates."""
 
@@ -515,7 +515,7 @@ class LineSeries:
         return len(self.points) <= self.DOT_LIMIT
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LineMark:
     """A vertical rule at a date: the day something began."""
 
@@ -744,7 +744,7 @@ def _trend_path(points, place_x, place_y) -> str:
 CALENDAR_STATES = frozenset({"done", "missed", "planned", "empty"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarDay:
     """One day: what the plan asked for, and what actually happened.
 
@@ -777,7 +777,7 @@ class CalendarDay:
             )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ActivityCalendar:
     """Plan against execution, day by day, laid out as weeks.
 
@@ -841,7 +841,7 @@ class ActivityCalendar:
         return f"{kept}/{due}" if due else ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PlannedDay:
     """One weekday in a recurring plan.
 
@@ -861,13 +861,13 @@ class PlannedDay:
         return bool(self.slots)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PlanNote:
     label: str
     value: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WeekPlan:
     """The recurring shape of a week: what is scheduled, on which days.
 
@@ -887,7 +887,7 @@ class WeekPlan:
             raise ValueError(f"A week plan needs 7 days; got {len(self.days)}.")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DomainOverview:
     """One plugin's useful contribution to a cross-domain surface.
 

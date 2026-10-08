@@ -17,7 +17,7 @@ from .service_declarations import Claim
 from .timestamps import moment
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ReadingLine:
     """The readings of one kind that supply a facet, as one line."""
 
@@ -37,7 +37,7 @@ class ReadingLine:
         return f"{self.relation} · earliest expires {self.expiry}" if self.expiry else self.relation
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Facet:
     """One thing that has to be true for a hostname to answer, and whether it is."""
 

@@ -1,5 +1,7 @@
 """Projects / labs."""
 
+from typing import override
+
 from django.db import models
 from django.urls import reverse
 from django.utils.text import slugify
@@ -64,9 +66,11 @@ class Project(TimestampedModel):
             models.Index(fields=("category",)),
         ]
 
+    @override
     def __str__(self) -> str:
         return self.name
 
+    @override
     def save(self, *args, **kwargs):
         if not self.slug:
             base = slugify(self.name) or "project"

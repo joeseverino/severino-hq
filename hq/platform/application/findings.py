@@ -602,7 +602,7 @@ def findings(*, principal: Principal, rule: str = "") -> dict[str, Any]:
 _AUTO_RULES = ("skipped-by-a-sweep", "never-observed")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Repair:
     """One finding judged safe to queue, and why."""
 

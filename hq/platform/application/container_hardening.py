@@ -34,7 +34,7 @@ KNOWN_HEALTH = {
 NON_ROOT = "1000:1000"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Change:
     """Compose keys to set under its service, and what they can break."""
 
@@ -44,7 +44,7 @@ class Change:
     caution: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Removal:
     """Lines to delete from its service: a setting with no value that undoes it."""
 
@@ -53,7 +53,7 @@ class Removal:
     caution: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Unwritten:
     """A check HQ cannot write the change for, and why."""
 
@@ -61,7 +61,7 @@ class Unwritten:
     reason: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Hardening:
     container: Any
     service: str

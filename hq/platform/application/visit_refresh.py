@@ -45,7 +45,7 @@ from .freshness import PAGE_VISIT, freshness
 from .security import Capability, Principal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Reads:
     """The kinds one page is assembled from."""
 

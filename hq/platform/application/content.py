@@ -53,7 +53,7 @@ class ConflictError(ValueError):
     """A content item changed after the caller read it."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ContentCommand:
     title: str
     slug: str = ""

@@ -1,7 +1,7 @@
 """The connections page and asking the controller to read now."""
 
 
-from typing import ClassVar
+from typing import ClassVar, override
 
 from django.views import View
 from django.views.generic import TemplateView
@@ -32,6 +32,7 @@ class ConnectionListView(PageMixin, TemplateView):
             )
         return self._context
 
+    @override
     def get_page_actions(self):
         # Beside the title with every other page's controls, not on a line of
         # their own halfway down the summary.
@@ -44,6 +45,7 @@ class ConnectionListView(PageMixin, TemplateView):
             actions.append(Ask(read_all.label, read_all.url, title=read_all.reason))
         return tuple(actions)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["connections"] = self._connections()

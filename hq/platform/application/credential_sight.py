@@ -46,7 +46,7 @@ STATE_LABELS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Sight:
     """One reading or resource kind, and whether the credential can read it."""
 
@@ -119,7 +119,7 @@ class Sight:
         return self.state != READABLE or self.records > 0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProviderSight:
     provider: str
     label: str

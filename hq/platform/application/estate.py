@@ -50,7 +50,7 @@ def subject_link(kind: str, name: str) -> ActionLink | None:
     return ActionLink("subject", link.label, "read", link.url) if link.url else None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Expiry:
     """One date something runs out, and whose page says more."""
 
@@ -93,7 +93,7 @@ class Expiry:
         return self.managed or self.overdue
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionState:
     """A connection HQ cannot currently read through."""
 
@@ -102,7 +102,7 @@ class ConnectionState:
     detail: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Estate:
     machines: tuple[Any, ...] = ()
     services: tuple[Any, ...] = ()

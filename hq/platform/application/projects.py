@@ -97,7 +97,7 @@ GitHubFetcher = Callable[..., datetime | None]
 ContentSync = Callable[[], dict[str, Any]]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProjectCommand:
     name: str
     slug: str = ""
@@ -112,7 +112,7 @@ class ProjectCommand:
     notes: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProjectRefreshCommand:
     """A targeted refresh has no free-form payload beyond its project target."""
 

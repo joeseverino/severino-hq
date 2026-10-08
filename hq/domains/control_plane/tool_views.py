@@ -2,6 +2,8 @@
 
 
 
+from typing import override
+
 from django.shortcuts import redirect
 from django.views.generic import TemplateView
 
@@ -31,6 +33,7 @@ class ToolsView(PageMixin, TemplateView):
     page_title = "Tools"
     page_lede = "These look a name up on the public internet, not in AdGuard."
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.capabilities import execute_capability
         from hq.platform.application.security import web_principal

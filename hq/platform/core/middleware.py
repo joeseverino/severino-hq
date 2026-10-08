@@ -10,6 +10,7 @@ Middleware for Severino HQ.
 import logging
 from contextvars import ContextVar
 from time import monotonic
+from typing import override
 from uuid import uuid4
 
 from django.conf import settings
@@ -194,6 +195,7 @@ class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):
     login page a native client cannot use.
     """
 
+    @override
     def process_view(self, request, view_func, view_args, view_kwargs):
         from hq.platform.application.plugins import plugin_token_authenticated_prefixes
 

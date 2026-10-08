@@ -22,7 +22,7 @@ NETWORK_LABELS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Source:
     """Where a hop was read: the kind, the connection, and when; or the declaration."""
 
@@ -50,7 +50,7 @@ class Source:
         return f"{self.label} through {self.connection}" if self.connection else self.label
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Certificate:
     """The certificate one hop presents, or why HQ cannot say."""
 
@@ -127,7 +127,7 @@ _HOP_ICONS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Hop:
     """One thing a request meets on the way to what answers it."""
 
@@ -185,7 +185,7 @@ def last_machine(hops: tuple[Hop, ...]) -> str:
     return next((hop.name for hop in reversed(hops) if hop.step == "machine"), "")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Route:
     """The hops from one DNS answer to what serves the name."""
 
@@ -243,7 +243,7 @@ class Route:
         return tuple(dict.fromkeys(found))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServicePath:
     hostname: str
     routes: tuple[Route, ...] = ()

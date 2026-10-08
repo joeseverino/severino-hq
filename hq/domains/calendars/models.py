@@ -4,6 +4,7 @@ Everything else on the calendar is derived by the domain that holds it.
 """
 
 import uuid
+from typing import override
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -117,6 +118,7 @@ class Entry(TimestampedModel):
             ),
         ]
 
+    @override
     def __str__(self) -> str:
         return self.title
 
@@ -142,6 +144,7 @@ class Entry(TimestampedModel):
     def weekday_numbers(self) -> tuple[int, ...]:
         return tuple(sorted({int(day) for day in self.weekdays.split(",") if day.strip()}))
 
+    @override
     def clean(self) -> None:
         """The one rule a check constraint cannot state: what a weekday is.
 
@@ -169,5 +172,6 @@ class Preference(TimestampedModel):
     )
     choices = models.JSONField(default=dict, blank=True)
 
+    @override
     def __str__(self) -> str:
         return f"Calendar choices of {self.user}"

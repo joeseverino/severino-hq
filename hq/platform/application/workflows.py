@@ -74,7 +74,7 @@ def serialize_workflow(plan: WorkflowPlan | None):
     return asdict(plan) if plan is not None else None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WorkflowLayout:
     """A claim as a card shows it: the remedies lead as the fix, and where to
     look and how to confirm are one line of links."""

@@ -18,7 +18,7 @@ _DIGITS = re.compile(r"\d+")
 _COMPARATOR = re.compile(r"^\s*(<=|>=|<|>|=)?\s*v?([0-9][0-9A-Za-z.\-+]*)\s*$")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ImageRef:
     registry: str
     repository: str

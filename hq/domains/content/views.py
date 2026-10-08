@@ -1,3 +1,5 @@
+from typing import override
+
 from django.db.models import Count
 from django.urls import reverse, reverse_lazy
 from django.utils.functional import cached_property
@@ -56,6 +58,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search titles, topics, tags, and notes…"
 
+    @override
     def get_page_title(self):
         return self.heading
 
@@ -66,6 +69,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
         query = f"?content_type={self.new_type}" if self.new_type else ""
         return f"{reverse('content:create')}{query}"
 
+    @override
     def get_page_actions(self):
         return (PageAction(self.new_label, self.new_url, primary=True),)
 
@@ -99,6 +103,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
             TableColumn("Live page", css="actions-col"),
         )
 
+    @override
     def get_table_filters(self):
         if len(self.types_held) < 2:
             return self.table_filters
@@ -112,6 +117,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
             ),
         )
 
+    @override
     def get_queryset(self):
         qs = ContentItem.objects.filter(content_type__in=self.content_types)
         if self.request.GET.get("no_docs"):
@@ -120,6 +126,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
             )
         return self.apply_table_query(qs)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # Traffic for the rows on this page only. Joined after pagination, so
@@ -175,6 +182,7 @@ CONTENT_TRAIL = ("Content", reverse_lazy("content:list"))
 class ContentPage(PageMixin):
     """A page about one content item, or a new one: its trail runs back to the list."""
 
+    @override
     def get_page_trail(self):
         return record_trail(CONTENT_TRAIL, getattr(self, "object", None), lambda item: item.title)
 
@@ -192,6 +200,7 @@ class ContentDetailView(PageMixin, DetailView):
         "related_expenses",
     )
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         item = context["item"]
@@ -202,9 +211,11 @@ class ContentDetailView(PageMixin, DetailView):
             ),
         }
 
+    @override
     def get_page_title(self):
         return self.object.title
 
+    @override
     def get_page_lede(self):
         return format_html(
             '{} · <span class="pill pill-{}">{}</span>',
@@ -213,9 +224,11 @@ class ContentDetailView(PageMixin, DetailView):
             self.object.get_status_display(),
         )
 
+    @override
     def get_page_trail(self):
         return (CONTENT_TRAIL,)
 
+    @override
     def get_page_actions(self):
         item = self.object
         actions = []
@@ -245,15 +258,18 @@ class ContentCreateView(ContentPage, RecordFormMixin, CreateView):
         asked = self.request.GET.get("content_type", "")
         return asked if asked in ContentItem.Type.values else ""
 
+    @override
     def get_initial(self):
         initial = super().get_initial()
         if self.content_type:
             initial["content_type"] = self.content_type
         return initial
 
+    @override
     def get_page_title(self):
         return f"New {noun_of(self.content_type)}" if self.content_type else "New writeup or page"
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["noun"] = noun_of(self.content_type) if self.content_type else "writeup or page"
@@ -265,6 +281,7 @@ class ContentUpdateView(ContentPage, RecordFormMixin, UpdateView):
     form_class = ContentItemForm
     template_name = "content/content_form.html"
 
+    @override
     def get_page_title(self):
         return f"Edit {noun_of(self.object.content_type)}"
 
@@ -273,6 +290,7 @@ class ContentDeleteView(ContentPage, RecordDeleteMixin, DeleteView):
     model = ContentItem
     template_name = "content/content_confirm_delete.html"
 
+    @override
     def get_page_title(self):
         return f"Delete {noun_of(self.object.content_type)}?"
 

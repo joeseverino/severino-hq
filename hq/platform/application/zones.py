@@ -77,7 +77,7 @@ def ephemeral_operation(name: str) -> str:
     return ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ZoneRecord:
     """One row of a zone, whether or not HQ declares it."""
 
@@ -168,7 +168,7 @@ class ZoneRecord:
         return entity_link("service", normalized_hostname(self.name)).url
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ZoneInsight:
     """One thing worth knowing about a domain, and where to go about it.
 
@@ -528,7 +528,7 @@ def zone_names() -> tuple[str, ...]:
     return zone_reads()[0]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DomainContext:
     """One domain's page: the domain, and every domain for the switcher."""
 

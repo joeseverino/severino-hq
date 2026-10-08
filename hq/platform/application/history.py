@@ -88,7 +88,7 @@ def source_of_event():
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Moment:
     at: datetime
     # Where it was recorded: "HQ", "Reading", "Deploy", "Container".
@@ -104,7 +104,7 @@ class Moment:
         return self.url.startswith("https://")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Entry:
     """One line of the history: an audit event, a run of them, or a moment."""
 

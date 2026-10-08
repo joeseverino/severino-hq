@@ -33,7 +33,7 @@ from .security import Capability, Principal
 from .ui import counted
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OperationCommand:
     idempotency_key: str
     reason: str = ""

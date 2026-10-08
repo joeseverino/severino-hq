@@ -1,6 +1,6 @@
 """Every running container, and whether what it runs is current and safe."""
 
-from typing import Any
+from typing import Any, override
 
 from django.views.generic import TemplateView
 
@@ -49,6 +49,7 @@ class ContainerListView(PageMixin, TemplateView):
     template_name = "control_plane/container_list.html"
     page_title = "Containers"
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.container_attention import needs_you
         from hq.platform.application.containers import (

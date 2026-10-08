@@ -1,6 +1,7 @@
 """Assets / equipment."""
 
 from decimal import Decimal
+from typing import override
 
 from django.db import models
 from django.urls import reverse
@@ -105,9 +106,11 @@ class Asset(TimestampedModel):
         ]
         constraints = [business_use.in_range("asset_business_use_in_range")]
 
+    @override
     def __str__(self) -> str:
         return self.item_name
 
+    @override
     def save(self, *args, **kwargs):
         if not self.slug:
             base = slugify(self.item_name) or "asset"

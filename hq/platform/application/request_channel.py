@@ -7,7 +7,7 @@ from hq.platform.core.network import client_ip, is_trusted_proxy, split_host_por
 from .reach import network_of
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Channel:
     """Which network the caller is on, decided by arithmetic alone.
 

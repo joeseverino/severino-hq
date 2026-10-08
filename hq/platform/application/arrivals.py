@@ -205,7 +205,7 @@ _CHANNELS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Arrival:
     """The last time one source reached HQ, and how."""
 

@@ -43,7 +43,7 @@ from .moments import duration
 from .security import Capability, Principal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ControllerSweepCommand:
     """A wake-up request; with a subject, that subject is read on the next pull.
 
@@ -136,7 +136,7 @@ def note_controller() -> None:
 CONTROLLER_SILENT_AFTER = timedelta(minutes=15)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ControllerStanding:
     """When the controller last reached HQ, and whether that is too long ago."""
 
@@ -338,7 +338,7 @@ def read_request_lifetime() -> timedelta:
     return timedelta(seconds=_seconds("SEVERINO_READ_REQUEST_SECONDS", 15 * 60))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ForcedRead:
     """One pending read request and the kinds it forces; ``None`` is every kind."""
 

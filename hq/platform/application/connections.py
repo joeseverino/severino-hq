@@ -49,7 +49,7 @@ _READING_STATUS_LABELS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionReading:
     """One connection, with what HQ would use it for."""
 

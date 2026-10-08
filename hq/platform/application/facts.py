@@ -45,7 +45,7 @@ _INVENTORY_KEY = "facts.inventory"
 _READINGS_KEY = "facts.readings"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Fact:
     """One thing a source says about a subject."""
 
@@ -68,7 +68,7 @@ class Fact:
         return (self.source_kind, self.connection_ref)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Subject:
     """The join keys of whatever the facts are about, normalized once.
 
@@ -130,7 +130,7 @@ class Subject:
         return any(host_of(address) in self.addresses for address in addresses)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Joined:
     """One reading record joined to a subject, and the keys that joined it."""
 
@@ -201,7 +201,7 @@ class Joined:
         return str(unread or "")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Unread:
     """A reading kind whose last read was refused, and why."""
 
@@ -216,7 +216,7 @@ class Unread:
         return f"{because} Requires: {requires}." if requires else because
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Entry:
     spec: ObservationSpec
     snapshot: Any

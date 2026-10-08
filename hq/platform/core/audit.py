@@ -153,7 +153,7 @@ def _changes(before: dict | None, after: dict, secret: frozenset) -> dict:
     return changed
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OperationContext:
     """Stable attribution shared by web, MCP, and CLI adapters."""
 

@@ -11,7 +11,7 @@ TRACE_DIRECTIONS = ("inbound", "outbound", "both")
 MAX_TRACE_DEPTH = 5
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TopologyLens:
     """A standing question about the graph, answered from the graph itself.
 

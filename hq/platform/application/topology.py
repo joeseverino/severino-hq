@@ -512,7 +512,7 @@ def _resource_node(resource: ManagedResource) -> TopologyNode:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RelationGraph:
     """The estate's nodes and edges, and the join key of each estate node."""
 

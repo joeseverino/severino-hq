@@ -22,7 +22,7 @@ from .topology import relation_graph
 from .topology_model import RELATIONS, TopologyEdge, relation_rank
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Relationship:
     """One thing a node is related to, who says so, and when they last read it."""
 
@@ -32,7 +32,7 @@ class Relationship:
     stale: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RelationGroup:
     phrase: str
     rank: int
@@ -69,7 +69,7 @@ class RelationGroup:
         return Relationship(self.items[0].entity, self.items[0].source, min(read) if read else None)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Relationships:
     node_id: str
     groups: tuple[RelationGroup, ...] = ()

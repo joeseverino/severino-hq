@@ -20,7 +20,7 @@ from .security import Principal
 from .sensitivity import SAFE_SENSITIVITIES
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CostTotals:
     """What a list of costs adds up to, over every row its filters leave."""
 
@@ -40,7 +40,7 @@ def cost_totals(sums: dict[str, Any], *, narrowed: bool) -> CostTotals:
     return CostTotals(sums.get("total") or zero, sums.get("deductible") or zero, narrowed)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CategoryTotal:
     """What one category of a list of costs adds up to, and the list narrowed to it."""
 
@@ -97,7 +97,7 @@ class ConflictError(ValueError):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ExpenseCommand:
     date: date
     vendor: str

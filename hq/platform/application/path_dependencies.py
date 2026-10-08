@@ -29,7 +29,7 @@ def consequence_of(hop: Hop) -> str:
     return _CONSEQUENCES.get(hop.step, "")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Dependency:
     """One part a name depends on, and what changing it does."""
 

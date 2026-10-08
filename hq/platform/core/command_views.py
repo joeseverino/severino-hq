@@ -2,6 +2,7 @@
 
 import json
 import secrets
+from typing import override
 
 from django.core.exceptions import PermissionDenied
 from django.core.serializers.json import DjangoJSONEncoder
@@ -130,6 +131,7 @@ class CommandView(View):
 
     template_name = "command.html"
 
+    @override
     def dispatch(self, request, name: str, *args, **kwargs):
         self.spec = capability_registry().get(name)
         if self.spec is None:

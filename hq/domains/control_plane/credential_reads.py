@@ -63,7 +63,7 @@ def observer_permissions(provider: str) -> tuple[str, ...]:
     return tuple(sorted(found))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Minter:
     """How an observer credential for one provider is minted and stored.
 

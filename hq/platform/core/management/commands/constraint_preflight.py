@@ -17,7 +17,7 @@ import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, override
 
 from django.apps import apps
 from django.core.management.base import BaseCommand, CommandError
@@ -36,7 +36,7 @@ INFORMATIONAL = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Check:
     """One ``AddConstraint`` of a check constraint, as its migration states it."""
 
@@ -101,6 +101,7 @@ class Command(BaseCommand):
     help = "Count, reading only, the rows each added check constraint would refuse."
     requires_system_checks: ClassVar[list[str]] = []
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument(
             "--path",
@@ -112,6 +113,7 @@ class Command(BaseCommand):
             help="Print the counting statements and read nothing.",
         )
 
+    @override
     def handle(self, *args, **options):
         found = list(checks())
         if options["sql"]:

@@ -81,7 +81,7 @@ _CHAIN_DETAIL = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Check:
     """Whether the request agrees with what the readings say about one hop."""
 
@@ -99,7 +99,7 @@ class Check:
         return _CHECK_STATES[self.state]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Evidence:
     """One thing the request itself carried, at the hop it belongs to."""
 
@@ -281,7 +281,7 @@ def _hq_only(host: str) -> Hop:
     return Hop("hq", "HQ", site_label() or host)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Context:
     request: Any
     found: Connection
@@ -682,7 +682,7 @@ _JUDGES = {
 # ----- The projection -----------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RequestPath:
     """Everything the connection page, the API and MCP say about one request."""
 

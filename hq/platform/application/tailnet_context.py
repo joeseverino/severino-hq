@@ -44,7 +44,7 @@ def tailnet_providers() -> frozenset[str]:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NamedRule:
     """A grant or shell rule, and the machines its sources and destinations name."""
 
@@ -53,7 +53,7 @@ class NamedRule:
     destinations: tuple[PolicyName, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Setting:
     """One tailnet setting; ``addresses`` when its value names machines."""
 
@@ -64,7 +64,7 @@ class Setting:
     problem_url: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TagRow:
     tag: dict
     devices: tuple[EntityLink, ...]
@@ -72,7 +72,7 @@ class TagRow:
     unworn: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TailnetContext:
     policy: Policy
     declaration: str

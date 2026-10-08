@@ -47,7 +47,7 @@ SERIES_SLOTS = 10
 CELL_ROWS = 3
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarEvent:
     """One dated thing a source holds.
 
@@ -130,7 +130,7 @@ def _day(value: date) -> date:
     return timezone.localtime(value).date() if isinstance(value, datetime) else value
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarSource:
     """One stream of dated things a domain holds.
 
@@ -161,7 +161,7 @@ class CalendarSource:
             raise ValueError("A calendar source's events must be callable.")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SourceView:
     """A source as the calendar list shows it."""
 
@@ -177,7 +177,7 @@ class SourceView:
     failure: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Placed:
     """An event with the source it came from."""
 
@@ -185,7 +185,7 @@ class Placed:
     source: SourceView
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SpanPiece:
     """One cell's part of a span: titled where it starts or a week begins."""
 
@@ -195,7 +195,7 @@ class SpanPiece:
     titled: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarCell:
     day: date
     in_month: bool
@@ -227,7 +227,7 @@ class CalendarCell:
         return f"{reverse('calendar:month')}?month={self.day:%Y-%m}&day={self.day.isoformat()}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarMonth:
     month: date
     weeks: tuple[tuple[CalendarCell, ...], ...]
@@ -253,7 +253,7 @@ class CalendarMonth:
         return self.month == self.today.replace(day=1)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarDayView:
     day: date
     today: date

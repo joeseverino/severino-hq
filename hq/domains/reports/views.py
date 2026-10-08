@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import override
 
 from django.db.models import Count, Sum
 from django.http import HttpResponse, HttpResponseBadRequest
@@ -55,6 +56,7 @@ class ReportsView(PageMixin, TemplateView):
     template_name = "reports/reports.html"
     page_title = "Reports"
 
+    @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         try:
@@ -127,7 +129,7 @@ class ReportsView(PageMixin, TemplateView):
 CSV = "text/csv; charset=utf-8"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Export:
     """One downloadable report, declared rather than written out.
 

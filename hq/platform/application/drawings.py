@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Dot:
     """One of the things a figure counts: a machine among the machines.
 
@@ -21,7 +21,7 @@ class Dot:
     url: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Dots:
     """A part of a whole, drawn as one dot each beside the value.
 
@@ -59,7 +59,7 @@ class Dots:
         return any(dot.url for dot in self.shown)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Trend:
     """A figure's recent readings, oldest first, drawn as a line beside it.
 

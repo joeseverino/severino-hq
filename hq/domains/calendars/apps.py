@@ -1,3 +1,5 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
@@ -7,6 +9,7 @@ class CalendarsConfig(AppConfig):
     label = 'calendars'
     verbose_name = "Calendar"
 
+    @override
     def ready(self):
         from hq.platform.core.audit import register_audit
 

@@ -120,7 +120,7 @@ def address_fields() -> str:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CredentialFix:
     """One connection's credential: what it lacks, and how it is replaced."""
 

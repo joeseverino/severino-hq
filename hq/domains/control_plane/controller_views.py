@@ -1,5 +1,7 @@
 """The controller's own page."""
 
+from typing import override
+
 from django.views.generic import TemplateView
 
 from hq.platform.application.controller_page import controller_page
@@ -21,9 +23,11 @@ class ControllerView(PageMixin, TemplateView):
         "service and applies the changes you queue."
     )
 
+    @override
     def get_page_actions(self):
         return (PageAction("Connections", reverse("control_plane:connections")),)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["controller"] = controller_page()

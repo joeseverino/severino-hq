@@ -21,7 +21,7 @@ Two rules keep this honest:
 
 import types
 import typing
-from typing import Any, ClassVar
+from typing import Any, ClassVar, override
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -53,11 +53,13 @@ class NameListWidget(forms.Widget):
     adds: only the extra add/remove convenience needs JavaScript.
     """
 
+    @override
     def value_from_datadict(self, data, files, name):
         if hasattr(data, "getlist"):
             return [item for item in data.getlist(name) if str(item).strip()]
         return data.get(name)
 
+    @override
     def format_value(self, value):
         if isinstance(value, (list, tuple)):
             return [str(item) for item in value if str(item).strip()]
@@ -110,6 +112,7 @@ class NameListWidget(forms.Widget):
             item,
         )
 
+    @override
     def render(self, name, value, attrs=None, renderer=None):
         from django.utils.html import format_html, format_html_join
         from django.utils.safestring import mark_safe
@@ -152,6 +155,7 @@ class NameList(LinesField):
 
     widget = NameListWidget
 
+    @override
     def to_python(self, value: Any) -> list[str]:
         if isinstance(value, (list, tuple)):
             return [str(item).strip() for item in value if str(item).strip()]
@@ -161,6 +165,7 @@ class NameList(LinesField):
         text = (value or "").replace(",", "\n")
         return [line.strip() for line in text.splitlines() if line.strip()]
 
+    @override
     def validate(self, value: list[str]) -> None:
         if self.required and not value:
             raise ValidationError(self.error_messages["required"], code="required")
@@ -242,6 +247,7 @@ class ProviderSpecForm(forms.Form):
 
         return [field for field in self if self._is_routine(field)]
 
+    @override
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean()
         if self.errors:
@@ -507,6 +513,7 @@ class SecretTextarea(forms.Textarea):
     into the page: into its HTML, the browser's cache and its history.
     """
 
+    @override
     def format_value(self, value):
         return None
 

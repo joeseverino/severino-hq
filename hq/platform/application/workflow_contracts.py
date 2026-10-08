@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ActionLink:
     """One safe route from observed state to an existing HQ use case."""
 
@@ -18,7 +18,7 @@ class ActionLink:
     recommended: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WorkflowOutcome:
     """The observable fact that completes a workflow."""
 
@@ -27,7 +27,7 @@ class WorkflowOutcome:
     label: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WorkflowStep:
     """One ordered phase; actions still execute through their owning use case."""
 
@@ -38,7 +38,7 @@ class WorkflowStep:
     actions: tuple[ActionLink, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WorkflowPlan:
     """A contextual route from evidence to action to observed resolution."""
 

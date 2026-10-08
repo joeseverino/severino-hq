@@ -621,7 +621,7 @@ class EnvelopeError(Exception):
         self.status = status
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Envelope:
     """The three things a capability call arrives wrapped in."""
 

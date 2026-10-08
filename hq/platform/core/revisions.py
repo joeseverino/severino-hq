@@ -96,7 +96,7 @@ def install(connection=default_connection) -> list[str]:
     return tables
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Revisions:
     """Every table's revision as one statement saw them, and which are kept."""
 

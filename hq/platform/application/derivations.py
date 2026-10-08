@@ -224,7 +224,7 @@ def _midnight_after(local: datetime) -> datetime:
 # ----- Declaring and answering -------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Derivation:
     name: str
     reads: tuple[str, ...]
@@ -604,7 +604,7 @@ def _keep(key: str | None, value: Any, until: datetime | None) -> bool:
     return True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Standing:
     """What an answer was derived at, and the moment it stops holding."""
 

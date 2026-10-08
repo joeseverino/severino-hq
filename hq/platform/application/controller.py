@@ -30,7 +30,7 @@ from .resource_operations import serialize_operation
 _FORBIDDEN_STATUS_KEYS = ("private", "secret", "token", "password", "credential")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ControllerReport:
     success: bool
     observed_generation: int

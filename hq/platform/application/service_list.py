@@ -148,7 +148,7 @@ def get_service(hostname: str) -> dict[str, Any]:
         return {"service": serialize_service(found), "path": serialize_path(found.path)}
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ZoneMember:
     """A service a domain holds: one from the catalogue, or HQ's own."""
 

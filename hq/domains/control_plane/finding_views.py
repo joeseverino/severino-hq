@@ -1,5 +1,7 @@
 """Infrastructure findings."""
 
+from typing import override
+
 from django.views.generic import TemplateView
 
 from hq.platform.application.findings import estate_findings, finding_layout, finding_rules, rule_for
@@ -14,12 +16,14 @@ class FindingsView(PageMixin, TemplateView):
     template_name = "control_plane/findings.html"
     page_title = "Findings"
 
+    @override
     def get_page_actions(self):
         return (
             PageAction("Needs you", reverse("action_items")),
             PageAction("Map", reverse("control_plane:topology")),
         )
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         principal = web_principal(self.request.user)

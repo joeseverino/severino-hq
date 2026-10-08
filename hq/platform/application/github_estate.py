@@ -32,7 +32,7 @@ ARTIFACT_SERIOUS_DAYS = 3
 WAITING_SERIOUS_AFTER = timedelta(hours=1)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Repository:
     name: str
     record: Mapping[str, Any]

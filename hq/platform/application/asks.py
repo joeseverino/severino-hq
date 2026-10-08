@@ -44,7 +44,7 @@ WATCH_SECONDS = 60 * 60
 WATCH_LIMIT = 4000
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Standing:
     """How one piece of asked-for work stands."""
 
@@ -81,7 +81,7 @@ class Standing:
         }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Ask:
     """One "do this now" control: what its button posts, and how the work it
     last asked for stands.

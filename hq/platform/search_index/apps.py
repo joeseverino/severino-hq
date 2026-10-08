@@ -1,3 +1,5 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
@@ -6,5 +8,6 @@ class SearchIndexConfig(AppConfig):
     name = 'hq.platform.search_index'
     label = 'search_index'
 
+    @override
     def ready(self):
         from . import signals  # noqa: F401

@@ -36,7 +36,7 @@ def adapter(spec_type: Any) -> TypeAdapter[Any]:
     return TypeAdapter(spec_type)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SharedValue:
     """One value the controller checks as HQ does: a pattern, a bound, a default.
 
@@ -59,7 +59,7 @@ class SharedValue:
     varnames: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Setting:
     """One setting of a connection, and where its vault item holds it.
 
@@ -82,7 +82,7 @@ class Setting:
             raise ValueError(f"{self.name} comes from exactly one place on its item.")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionShape:
     """The settings one kind of credential arrives as: a login, an API token.
 
@@ -114,7 +114,7 @@ class ConnectionShape:
 ENVELOPE_SETTINGS = frozenset({"CONNECTION_REF", "MANAGES", "PROVIDER"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionKind:
     """One connection provider: its name on the page, and how its credential is held.
 
@@ -244,7 +244,7 @@ SERVICE_FACETS: tuple[tuple[str, str], ...] = (
 )
 SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NameContext:
     """What HQ already knows about a hostname, offered to the next question.
 
@@ -288,7 +288,7 @@ class NameContext:
         return next((zone for zone in self.public_zones if in_zone(self.hostname, zone)), "")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProviderSpec:
     kind: str
     # What this is called in a sentence, and what it does in one line. Both are
@@ -582,7 +582,7 @@ class ProviderSpec:
         return adapter(self.spec_type).validate_python(payload)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProviderResolutionContext:
     # Every place a certificate can be installed, as HQ holds them. Passed in
     # rather than queried here so this module stays free of the database and a

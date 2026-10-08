@@ -57,7 +57,7 @@ class Mount(NamedTuple):
     urlconf: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Records:
     """A plain record domain: one model created, changed and deleted by command.
 
@@ -102,7 +102,7 @@ class Records:
         return f"delete_{self.resource}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DomainDescriptor:
     """A host section's whole declaration.
 
@@ -121,7 +121,7 @@ class DomainDescriptor:
     records: Records | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Domain:
     """A descriptor or a manifest, seen through one lens.
 

@@ -46,7 +46,7 @@ def parts_of(kind: str) -> Mapping[str, ReadingPart]:
     return MappingProxyType({WHOLE: whole, **{part.name: part for part in declared}})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PartRefusal:
     """One part of one kind that a sweep could not read, and on what."""
 

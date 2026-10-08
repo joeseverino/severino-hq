@@ -2,6 +2,7 @@
 
 import functools
 import re
+from typing import override
 
 from django.conf import settings
 from django.db import models
@@ -148,6 +149,7 @@ class AuditLog(models.Model):
             models.Index(fields=("connection", "-created_at")),
         ]
 
+    @override
     def __str__(self) -> str:
         who = self.actor_label
         subject = self.object_repr or self.type_label
@@ -243,6 +245,7 @@ class Pin(models.Model):
         # between requests.
         ordering = ("position", "target_key")
 
+    @override
     def __str__(self) -> str:
         return f"{self.user_id}:{self.target_kind}:{self.target_key}"
 
@@ -263,6 +266,7 @@ class AgentAccess(models.Model):
     class Meta:
         constraints = [singleton("agent_access_is_one_row")]
 
+    @override
     def __str__(self) -> str:
         return "agents paused" if self.paused else "agents allowed"
 
@@ -279,6 +283,7 @@ class AgentIdentity(models.Model):
     class Meta:
         ordering = ("client_id",)
 
+    @override
     def __str__(self) -> str:
         return self.client_id
 
@@ -313,6 +318,7 @@ class LinkedAccount(models.Model):
             models.UniqueConstraint(fields=("user", "provider"), name="unique_linked_account_per_provider")
         ]
 
+    @override
     def __str__(self) -> str:
         return f"{self.provider}:{self.login}"
 
@@ -336,6 +342,7 @@ class Revision(models.Model):
     name = models.CharField(max_length=160, primary_key=True)
     value = models.PositiveBigIntegerField(default=0)
 
+    @override
     def __str__(self) -> str:
         return f"{self.name}@{self.value}"
 
@@ -358,6 +365,7 @@ class Appearance(models.Model):
     theme = models.CharField(max_length=8, choices=Theme.choices, default=Theme.SYSTEM)
     changed_at = models.DateTimeField(default=timezone.now)
 
+    @override
     def __str__(self) -> str:
         return f"{self.user_id}:{self.theme}"
 
@@ -382,5 +390,6 @@ class Avatar(models.Model):
     source = models.CharField(max_length=500)
     fetched_at = models.DateTimeField(default=timezone.now)
 
+    @override
     def __str__(self) -> str:
         return f"{self.user_id}:{self.digest[:12]}"

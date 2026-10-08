@@ -1,7 +1,7 @@
 """Discoverable, authorized read resources shared by every HQ adapter."""
 
 from collections.abc import Iterable, Mapping
-from typing import Any, TypedDict
+from typing import Any, TypedDict, override
 
 from pydantic import (
     BaseModel,
@@ -37,6 +37,7 @@ from .security import Capability, Principal, require_all
 class ResourceSearchDefinition(SearchDefinition):
     """A declaration's result opens the machine, service or domain it belongs to."""
 
+    @override
     def url(self, instance: Any) -> str:
         return services.home_url(instance)
 

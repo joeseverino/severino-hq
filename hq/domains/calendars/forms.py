@@ -1,3 +1,5 @@
+from typing import override
+
 from django import forms
 
 from .models import Entry
@@ -71,6 +73,7 @@ class EntryForm(forms.ModelForm):
     def clean_weekdays(self) -> tuple[int, ...]:
         return tuple(int(day) for day in self.cleaned_data["weekdays"])
 
+    @override
     def _post_clean(self) -> None:
         # The model validates the whole entry; it stores weekdays as text.
         weekdays = self.cleaned_data.get("weekdays", ())
