@@ -356,6 +356,21 @@ class StaleTests(TestCase):
 
         self.assertIn({"label": "Last read in full", "value": "1\xa0day, 3\xa0hours ago"}, finding["evidence"])
 
+    def test_a_reading_taken_hours_ago_while_nobody_looked_raises_nothing(self):
+        # Idle, the controller reads half a day apart. The renderer was current
+        # when this was read, and has had every hour since to run again.
+        age = rules.CONFIRMED_WITHIN + timedelta(hours=2)
+        sweep(read(attempted=age, confirmed=age, rendered=age), age=age)
+
+        self.assertEqual(raised("render-stale"), [])
+
+    def test_a_renderer_behind_when_it_was_read_is_still_behind_hours_later(self):
+        age = timedelta(hours=2)
+        behind = age + rules.CONFIRMED_WITHIN + timedelta(minutes=1)
+        sweep(read(attempted=behind, confirmed=behind, rendered=behind), age=age)
+
+        self.assertEqual(len(raised("render-stale")), 1)
+
     def test_a_reading_the_controller_stopped_taking_goes_stale_against_now(self):
         # The copy the controller last read said "current"; nothing has read
         # one since, and the files it described are a day old.
