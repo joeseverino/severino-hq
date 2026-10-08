@@ -24,7 +24,7 @@ contracts are the public surface.
 
 ### Changed
 
-- HQ runs on Python 3.14 only: `requires-python`, `.python-version`, the test
+- HQ runs on Python 3.14 only: `requires-python`, the test
   matrix, the plugin-check default and the lint and type targets agree. Modules
   use deferred annotations, `type` parameter syntax and `typing.override`.
 - Ruff also enforces import order, pyupgrade, bugbear, simplify, pathlib,
