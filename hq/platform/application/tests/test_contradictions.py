@@ -1,7 +1,5 @@
 """Where two connections disagree, each a finding with the fix HQ can offer."""
 
-from __future__ import annotations
-
 from django.test import TestCase
 from django.utils import timezone
 
@@ -9,14 +7,12 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
 from ..findings import derive_findings
 from ..projection import projection_scope
-from ..tailnet import unworn_tags
-from .test_paths import CLOUDFLARE, PUBLIC_RANGE, estate, record, store
-from ..topology import derive_topology
 from ..security import Capability, Principal
+from ..tailnet import unworn_tags
+from ..topology import derive_topology
+from .test_paths import CLOUDFLARE, PUBLIC_RANGE, estate, record, store
 
-OPERATOR = Principal(
-    "operator", "test", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE})
-)
+OPERATOR = Principal("operator", "test", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
 
 def raised(rule):
@@ -31,8 +27,11 @@ class ContradictionTests(TestCase):
 
     def test_a_consistent_estate_raises_none(self):
         for rule in (
-            "public-name-served-by-nothing", "route-to-stopped-container", "gate-guards-nothing",
-            "split-horizon-disagrees", "published-port-unfronted",
+            "public-name-served-by-nothing",
+            "route-to-stopped-container",
+            "gate-guards-nothing",
+            "split-horizon-disagrees",
+            "published-port-unfronted",
         ):
             with self.subTest(rule=rule):
                 self.assertEqual(raised(rule), ())
@@ -52,8 +51,16 @@ class ContradictionTests(TestCase):
         self.assertEqual(finding.steps[0].command, 'ssh edge-1 "sudo docker start shop"')
 
     def test_a_gate_on_a_name_no_record_answers(self):
-        store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Old admin",
-                                        "domain": "gone.example.com", "type": "self_hosted"})
+        store(
+            "cloudflare.access_app",
+            {
+                "connection_ref": CLOUDFLARE,
+                "id": "a1",
+                "name": "Old admin",
+                "domain": "gone.example.com",
+                "type": "self_hosted",
+            },
+        )
 
         (finding,) = raised("gate-guards-nothing")
 
@@ -71,7 +78,8 @@ class ContradictionTests(TestCase):
             {"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
         )
         ManagedResource.objects.create(
-            key="example-db-rewrite", kind="adguard.rewrite",
+            key="example-db-rewrite",
+            kind="adguard.rewrite",
             spec={"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
         )
 
@@ -118,9 +126,16 @@ class ContradictionTests(TestCase):
             {"host": "edge-1", "name": "shop", "ports": [8080], "state": "running"},
             {"host": "edge-1", "name": "stray", "ports": [9000], "state": "running"},
         )
-        store("host.perimeter", {"record": "perimeter", "connection_ref": "example-ssh",
-                                 "public_addresses": ["198.51.100.20"], "ports_checked": [8080, 9000],
-                                 "answered_publicly": [8080, 9000]})
+        store(
+            "host.perimeter",
+            {
+                "record": "perimeter",
+                "connection_ref": "example-ssh",
+                "public_addresses": ["198.51.100.20"],
+                "ports_checked": [8080, 9000],
+                "answered_publicly": [8080, 9000],
+            },
+        )
 
         (finding,) = raised("published-port-unfronted")
 
@@ -142,22 +157,39 @@ class NotContradictionsTests(TestCase):
             {"host": "edge-1", "name": "shop", "ports": [8080], "state": "running"},
             {"host": "edge-1", "name": "caddy", "ports": [80, 443], "state": "running"},
         )
-        store("host.perimeter", {"record": "perimeter", "connection_ref": "example-ssh",
-                                 "public_addresses": ["198.51.100.20"], "ports_checked": [80, 443],
-                                 "answered_publicly": [80, 443]})
+        store(
+            "host.perimeter",
+            {
+                "record": "perimeter",
+                "connection_ref": "example-ssh",
+                "public_addresses": ["198.51.100.20"],
+                "ports_checked": [80, 443],
+                "answered_publicly": [80, 443],
+            },
+        )
 
         self.assertEqual(raised("published-port-unfronted"), ())
 
     def test_a_gate_on_a_domain_hq_does_not_read_names_nothing_it_could_see(self):
-        store("cloudflare.access_app", {"connection_ref": CLOUDFLARE, "id": "a1", "name": "Login",
-                                        "domain": "team.provider.example/warp", "type": "warp"})
+        store(
+            "cloudflare.access_app",
+            {
+                "connection_ref": CLOUDFLARE,
+                "id": "a1",
+                "name": "Login",
+                "domain": "team.provider.example/warp",
+                "type": "warp",
+            },
+        )
 
         self.assertEqual(raised("gate-guards-nothing"), ())
 
     def test_an_edge_that_proxies_on_to_the_internal_machine_is_a_front(self):
         # Public: through the edge, whose route forwards to lab-1. Inside: lab-1 directly.
-        store("caddy.route", {"connection_ref": "example-edge", "domain": "shop.example.com",
-                              "upstream": "100.64.0.10:8000"})
+        store(
+            "caddy.route",
+            {"connection_ref": "example-edge", "domain": "shop.example.com", "upstream": "100.64.0.10:8000"},
+        )
         store(
             "adguard.rewrite",
             {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
@@ -182,8 +214,16 @@ class NotContradictionsTests(TestCase):
             {"host": "lab-1", "name": "app", "ports": [8000], "state": "running"},
             {"host": "edge-1", "name": "proxy", "ports": [], "network_mode": "host", "state": "running"},
         )
-        store("portainer.runtime", {"host": "edge-1", "container": "proxy", "network_mode": "host",
-                                    "exposed_ports": [80, 443], "connection_ref": "example-portainer"})
+        store(
+            "portainer.runtime",
+            {
+                "host": "edge-1",
+                "container": "proxy",
+                "network_mode": "host",
+                "exposed_ports": [80, 443],
+                "connection_ref": "example-portainer",
+            },
+        )
 
         self.assertEqual(raised("public-name-served-by-nothing"), ())
 
@@ -215,7 +255,8 @@ class ServedCertificateTests(TestCase):
 class UnwornTagTests(TestCase):
     def test_a_tag_no_device_wears_is_named_and_ports_are_not_part_of_it(self):
         ProviderInventory.objects.create(
-            kind="tailscale.device", observed_at=timezone.now(),
+            kind="tailscale.device",
+            observed_at=timezone.now(),
             records=[{"name": "example-device", "tags": ["tag:web"]}],
         )
 

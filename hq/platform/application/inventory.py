@@ -12,8 +12,6 @@ so the first reconciliation after adopting changes nothing. Anything else would
 mean adopting a host quietly reset it to HQ's defaults.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 from datetime import datetime
@@ -27,13 +25,12 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     ProviderInventory,
 )
+from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS, registry_label
+from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.models import AuditLog
-
-from hq.domains.control_plane.names import normalized_hostname
 
 from .conditions import stamped
 from .contracts import endpoint_has_private_parts
@@ -58,9 +55,7 @@ def record_token(kind: str, identity: tuple[str, ...]) -> str:
 
 
 @transaction.atomic
-def record_inventory(
-    payload: dict[str, Any], *, principal: Principal, controller_id: str = ""
-) -> dict[str, Any]:
+def record_inventory(payload: dict[str, Any], *, principal: Principal, controller_id: str = "") -> dict[str, Any]:
     """Store one controller sweep, replacing whatever the last one said.
 
     Replaced rather than merged: this describes a provider at a moment, and
@@ -111,9 +106,7 @@ def record_inventory(
         if observation is not None:
             records, refused = observation.clean(records)
             if refused:
-                error = error or (
-                    f"{counted(refused, 'record')} did not match the {kind} schema."
-                )
+                error = error or (f"{counted(refused, 'record')} did not match the {kind} schema.")
         seen = {"records": records, "observed_at": observed_at}
         # A refused read refuses every part; only a read that answered has some.
         parts = clean_refused_parts(kind, report.get("refused_parts")) if reached else []
@@ -284,14 +277,18 @@ def _observe(resource: ManagedResource, found: dict[str, Any], seen: datetime) -
     """Save what the sweep found when it differs from what is stored; whether it did."""
 
     status = dict(found)
-    conditions = stamped(resource.conditions, [
-        {
-            "type": "Ready",
-            "status": True,
-            "reason": "Observed",
-            "message": MATCHES,
-        }
-    ], seen)
+    conditions = stamped(
+        resource.conditions,
+        [
+            {
+                "type": "Ready",
+                "status": True,
+                "reason": "Observed",
+                "message": MATCHES,
+            }
+        ],
+        seen,
+    )
     if (
         resource.observed_generation == resource.generation
         and resource.status == status
@@ -370,13 +367,11 @@ def _spec_from_record(kind: str, record: dict[str, Any]) -> dict[str, Any] | Non
         return None
     try:
         return provider.from_record(record)
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
 
 
-def _differences(
-    kind: str, declared: dict[str, Any], found: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _differences(kind: str, declared: dict[str, Any], found: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """``(field, asked for, found)`` for every field the live record contradicts.
 
     The comparison rule above, returning what it saw rather than only whether
@@ -388,9 +383,7 @@ def _differences(
     return tuple(
         (field, str(value), str(found.get(field, "")))
         for field, value in declared.items()
-        if field in found
-        and field not in unobservable
-        and _text(found.get(field, "")) != _text(value)
+        if field in found and field not in unobservable and _text(found.get(field, "")) != _text(value)
     )
 
 
@@ -429,9 +422,7 @@ def _canonical_document(text: str) -> str:
     return json.dumps(parsed, sort_keys=True, separators=(",", ":"))
 
 
-def _record_drift(
-    resource: ManagedResource, drift: tuple[tuple[str, str, str], ...]
-) -> None:
+def _record_drift(resource: ManagedResource, drift: tuple[tuple[str, str, str], ...]) -> None:
     """Say what the sweep found instead, rather than leaving the last good word.
 
     A declaration the live record contradicts is described, not left with the
@@ -458,9 +449,7 @@ def _record_drift(
     resource.save(update_fields=["conditions"])
 
 
-def _difference_condition(
-    kind: str, drift: tuple[tuple[str, str, str], ...]
-) -> dict[str, Any]:
+def _difference_condition(kind: str, drift: tuple[tuple[str, str, str], ...]) -> dict[str, Any]:
     """The condition a difference raises: changed outside HQ, or the thing's own report.
 
     A field its kind marks as reported (``ProviderSpec.reported_fields``) holds
@@ -484,8 +473,7 @@ def _difference_condition(
         "status": True,
         "reason": "Drifted",
         "message": " ".join(
-            _difference_phrase(_field_title(titles, field), asked, live)
-            for field, asked, live in drift
+            _difference_phrase(_field_title(titles, field), asked, live) for field, asked, live in drift
         ),
     }
 
@@ -494,9 +482,7 @@ def _field_title(fields: Any, name: str) -> str:
     """A setting by the title its form gives it, never its key."""
 
     field = fields.get(name)
-    return (field.title if field is not None and field.title else "") or name.replace(
-        "_", " "
-    ).capitalize()
+    return (field.title if field is not None and field.title else "") or name.replace("_", " ").capitalize()
 
 
 # Past this, a value is described rather than repeated: a policy document is
@@ -528,9 +514,7 @@ def _difference_phrase(field: str, asked: str, live: str) -> str:
             *(f"{key} changed" for key in changed),
         ]
         return f"{field} differs from HQ's copy: {', '.join(parts) or 'layout only'}."
-    return (
-        f"{field} differs from HQ's copy ({len(live)} characters live, {len(asked)} in HQ)."
-    )
+    return f"{field} differs from HQ's copy ({len(live)} characters live, {len(asked)} in HQ)."
 
 
 @transaction.atomic
@@ -555,9 +539,7 @@ def record_step_failures(
         # A failure naming no connection or no step has no row to stand on.
         if not subject or not step:
             continue
-        by_ref.setdefault(subject, []).append(
-            {"step": step[:200], "reason": item["reason"][:120]}
-        )
+        by_ref.setdefault(subject, []).append({"step": step[:200], "reason": item["reason"][:120]})
     updated = 0
     for connection in ProviderConnection.objects.filter(controller_id=controller_id):
         failing = by_ref.get(connection.connection_ref, [])
@@ -590,9 +572,7 @@ def record_connections(
             continue
         endpoint = connection["endpoint"][:500]
         if endpoint and endpoint_has_private_parts(endpoint):
-            raise ValueError(
-                f"Connection {connection_ref!r} endpoint contains private URL parts."
-            )
+            raise ValueError(f"Connection {connection_ref!r} endpoint contains private URL parts.")
         if connection.get("carried"):
             # Reported without being asked again, because HQ said its last
             # answer was recent and good. The probe's result and time are kept,
@@ -612,9 +592,7 @@ def record_connections(
                 stored.append(connection_ref)
                 continue
         before = (
-            ProviderConnection.objects.filter(
-                controller_id=controller_id, connection_ref=connection_ref
-            )
+            ProviderConnection.objects.filter(controller_id=controller_id, connection_ref=connection_ref)
             .values_list("reachable", "probed", "manages")
             .first()
         )
@@ -643,9 +621,7 @@ def record_connections(
         if (before[2] if before else False) != row.manages:
             _record_manages(row)
         stored.append(connection_ref)
-    ProviderConnection.objects.filter(controller_id=controller_id).exclude(
-        connection_ref__in=stored
-    ).delete()
+    ProviderConnection.objects.filter(controller_id=controller_id).exclude(connection_ref__in=stored).delete()
     return {
         "ok": True,
         "recorded": sorted(stored),
@@ -696,10 +672,8 @@ def service_hostnames(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
     if provider.hostnames is None:
         return ()
     try:
-        return tuple(
-            sorted(normalized_hostname(name) for name in provider.hostnames(spec))
-        )
-    except (KeyError, TypeError, ValueError):
+        return tuple(sorted(normalized_hostname(name) for name in provider.hostnames(spec)))
+    except KeyError, TypeError, ValueError:
         return ()
 
 
@@ -717,7 +691,7 @@ def record_identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
     if provider.identity is not None:
         try:
             return tuple(provider.identity(spec))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             return ()
     return service_hostnames(kind, spec)
 

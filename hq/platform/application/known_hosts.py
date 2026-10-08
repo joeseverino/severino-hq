@@ -18,8 +18,6 @@ one operator's own records, and being wrong here shows a slightly plainer label
 on one card rather than breaking anything.
 """
 
-from __future__ import annotations
-
 from hq.domains.control_plane.names import in_zone, normalized_hostname
 
 # Suffix -> what a person calls it. Longest match wins, so a more specific
@@ -57,11 +55,7 @@ def operator(hostname: str) -> str:
     """What a person calls whoever runs this name, or its domain if unknown."""
 
     candidate = normalized_hostname(hostname)
-    matches = [
-        (len(suffix), name)
-        for suffix, name in OPERATORS
-        if in_zone(candidate, suffix)
-    ]
+    matches = [(len(suffix), name) for suffix, name in OPERATORS if in_zone(candidate, suffix)]
     if matches:
         return max(matches)[1]
     return registrable(candidate)

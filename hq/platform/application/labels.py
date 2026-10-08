@@ -1,10 +1,6 @@
 """Human labels for stable machine names: capabilities, providers, kinds."""
 
-from __future__ import annotations
-
-_ACRONYMS = frozenset(
-    {"acl", "api", "dns", "hq", "id", "mcp", "npm", "nws", "ssh", "tls", "url", "vin", "vm"}
-)
+_ACRONYMS = frozenset({"acl", "api", "dns", "hq", "id", "mcp", "npm", "nws", "ssh", "tls", "url", "vin", "vm"})
 
 
 def human_label(name: str) -> str:

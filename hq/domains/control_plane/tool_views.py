@@ -1,14 +1,12 @@
 """Operator tools: lookups HQ runs on request."""
 
-from __future__ import annotations
-
-
+from typing import override
 
 from django.shortcuts import redirect
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
 from hq.platform.application.pages import PageMixin
+from hq.platform.application.routes import reverse
 from hq.platform.application.timestamps import moment
 
 
@@ -33,6 +31,7 @@ class ToolsView(PageMixin, TemplateView):
     page_title = "Tools"
     page_lede = "These look a name up on the public internet, not in AdGuard."
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.capabilities import execute_capability
         from hq.platform.application.security import web_principal
@@ -49,15 +48,10 @@ class ToolsView(PageMixin, TemplateView):
 
         # Only what this tab offers, and only what was actually asked. An empty
         # field is not a lookup of the empty string.
-        asked = {
-            name: self.request.GET.get(name.rpartition(".")[2], "").strip()
-            for name in current.capabilities
-        }
+        asked = {name: self.request.GET.get(name.rpartition(".")[2], "").strip() for name in current.capabilities}
         context["asked"] = asked
         context["results"] = {
-            name: execute_capability(
-                name, {name.rpartition(".")[2]: value}, principal=principal
-            )
+            name: execute_capability(name, {name.rpartition(".")[2]: value}, principal=principal)
             for name, value in asked.items()
             if value
         }

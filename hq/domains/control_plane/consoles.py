@@ -4,8 +4,6 @@ Nothing here reads a secret or calls a provider. A record that lacks the id a
 page needs gets no link, and its name renders without one.
 """
 
-from __future__ import annotations
-
 import ipaddress
 from collections.abc import Mapping
 from typing import Any

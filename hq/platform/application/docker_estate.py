@@ -7,8 +7,6 @@ declares. Nothing here calls a registry: "behind" means behind the image
 already pulled onto the machine.
 """
 
-from __future__ import annotations
-
 import shlex
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
@@ -40,7 +38,7 @@ def add(nodes, edges, resources, machine: Callable[[Any], str]) -> None:
 def _add_fact(nodes, node_id: str, fact: tuple[str, str]) -> None:
     node = nodes[node_id]
     if fact not in node.facts:
-        nodes[node_id] = replace(node, facts=node.facts + (fact,))
+        nodes[node_id] = replace(node, facts=(*node.facts, fact))
 
 
 def _unrecognised(nodes, machine) -> None:
@@ -114,9 +112,7 @@ def _image_facts(nodes, machine) -> None:
         added = tuple(
             (
                 fact,
-                "|".join(
-                    (f"{container}@{host}", reference, short_id(running), short_id(tagged), service)
-                ),
+                "|".join((f"{container}@{host}", reference, short_id(running), short_id(tagged), service)),
             )
             for fact, container, reference, running, tagged, service in image_verdicts(records)
         )
@@ -168,22 +164,22 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
             except NoReverseMatch:
                 adopt_url = ""
             found.append(
-                dict(
-                    rule="unrecognised-container",
-                    subject=node.id,
-                    title=f"Unrecognised container {name} on {node.label}",
-                    severity="serious",
-                    explanation=(
+                {
+                    "rule": "unrecognised-container",
+                    "subject": node.id,
+                    "title": f"Unrecognised container {name} on {node.label}",
+                    "severity": "serious",
+                    "explanation": (
                         "No compose project started it, so HQ is not tracking it. "
                         "Adopt it if you started it. Otherwise find what did and remove it."
                     ),
-                    steps=machine_step(
+                    "steps": machine_step(
                         f"If nothing needs it, remove it from {host or node.label}",
                         host or node.label,
                         f"docker rm -f {shlex.quote(name)}",
                     ),
-                    evidence=(("Container", name), ("Machine", node.label)),
-                    remedies=(
+                    "evidence": (("Container", name), ("Machine", node.label)),
+                    "remedies": (
                         Remedy(
                             capability="infrastructure.resource.create",
                             target=name,
@@ -193,7 +189,7 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
                             method="POST",
                         ),
                     ),
-                )
+                }
             )
     return tuple(sorted(found, key=lambda finding: finding["title"]))
 
@@ -208,24 +204,24 @@ def images_behind(estate: Any) -> tuple[dict[str, Any], ...]:
                 continue
             container, host, reference, running, tagged, service = _parts(value)
             found.append(
-                dict(
-                    rule="container-image-behind",
-                    subject=node.id,
-                    title=f"{container} on {node.label} runs an older {reference}",
-                    severity="attention",
-                    explanation=(
+                {
+                    "rule": "container-image-behind",
+                    "subject": node.id,
+                    "title": f"{container} on {node.label} runs an older {reference}",
+                    "severity": "attention",
+                    "explanation": (
                         f"{reference} on this machine is now image {tagged}, and the "
                         f"container still runs {running}. Recreate it to run what "
                         "was pulled."
                     ),
-                    evidence=(
+                    "evidence": (
                         ("Container", container),
                         ("Image reference", reference),
                         ("Running", running),
                         ("Tagged now", tagged),
                     ),
-                    steps=_recreate(container, service, host or node.label),
-                )
+                    "steps": _recreate(container, service, host or node.label),
+                }
             )
     return tuple(sorted(found, key=lambda item: item["title"]))
 
@@ -240,23 +236,23 @@ def images_untagged(estate: Any) -> tuple[dict[str, Any], ...]:
                 continue
             container, host, reference, running, _tagged, service = _parts(value)
             found.append(
-                dict(
-                    rule="container-image-untagged",
-                    subject=node.id,
-                    title=f"{container} on {node.label} runs an untagged image",
-                    severity="attention",
-                    explanation=(
+                {
+                    "rule": "container-image-untagged",
+                    "subject": node.id,
+                    "title": f"{container} on {node.label} runs an untagged image",
+                    "severity": "attention",
+                    "explanation": (
                         "No tag on this machine names the image it runs, so its "
                         "version cannot be told or reproduced. Pin a tag in its "
                         "compose file and recreate it."
                     ),
-                    evidence=(
+                    "evidence": (
                         ("Container", container),
                         ("Image", running),
                         *((("Started from", reference),) if reference else ()),
                     ),
-                    steps=_recreate(container, service, host or node.label),
-                )
+                    "steps": _recreate(container, service, host or node.label),
+                }
             )
     return tuple(sorted(found, key=lambda item: item["title"]))
 
@@ -285,21 +281,15 @@ RULES: tuple[FindingRule, ...] = (
         "A container no compose project started",
         "serious",
         lambda estate: built_findings(unrecognised_containers(estate)),
-        operator_action=(
-            "Adopt it if you started it. Otherwise remove it on its machine."
-        ),
-        no_help_reason=(
-            "HQ cannot remove a container it did not start."
-        ),
+        operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
+        no_help_reason=("HQ cannot remove a container it did not start."),
     ),
     FindingRule(
         "container-image-behind",
         "Container runs an older image than its tag",
         "attention",
         lambda estate: built_findings(images_behind(estate)),
-        operator_action=(
-            "Recreate the container from its compose project so it runs the image its tag names now."
-        ),
+        operator_action=("Recreate the container from its compose project so it runs the image its tag names now."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -307,9 +297,7 @@ RULES: tuple[FindingRule, ...] = (
         "Container runs an untagged image",
         "attention",
         lambda estate: built_findings(images_untagged(estate)),
-        operator_action=(
-            "Pin a tag for the image in the container's compose file and recreate it."
-        ),
+        operator_action=("Pin a tag for the image in the container's compose file and recreate it."),
         no_help_reason=CANNOT_EDIT_COMPOSE,
     ),
 )

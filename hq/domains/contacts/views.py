@@ -7,8 +7,6 @@ local model. Review edits (status / assignee / notes) are written back to D1
 and recorded in the HQ audit log.
 """
 
-from __future__ import annotations
-
 from urllib.parse import quote
 
 from django.contrib import messages
@@ -16,13 +14,13 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.contact_submissions import (
     ContactDeleteCommand,
     ContactReviewCommand,
     execute_contact_delete,
     execute_contact_review,
 )
+from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.security import safe_next, web_principal
 
 from .d1 import (
@@ -61,10 +59,7 @@ def contact_list(request):
     except D1Error as exc:
         error = str(exc)
 
-    status_tabs = [
-        {"value": value, "label": label, "count": counts.get(value, 0)}
-        for value, label in STATUS_CHOICES
-    ]
+    status_tabs = [{"value": value, "label": label, "count": counts.get(value, 0)} for value, label in STATUS_CHOICES]
 
     return render(
         request,

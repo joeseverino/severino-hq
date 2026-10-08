@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0022_machine_telemetry_is_a_reading'),
+        ("control_plane", "0022_machine_telemetry_is_a_reading"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='providerinventory',
-            name='connected',
+            model_name="providerinventory",
+            name="connected",
             field=models.BooleanField(default=True),
         ),
     ]

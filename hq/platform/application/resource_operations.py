@@ -5,26 +5,22 @@ each is checked against the provider's policy, queued atomically and audited
 before the controller runs it.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from django.db import transaction
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
-from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.desired_state import advance_dependents
+from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
+from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
 from hq.platform.core.audit import operation_context
 
 from .adoption import OBSERVES_ONLY, observes_only
 from .approvals import consent_gap
 from .cadence import ring_doorbell
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
-from .security import Capability, Principal
-from .ui import counted
 from .infrastructure import (
     ManagedResourceCommand,
     NotFoundError,
@@ -33,9 +29,11 @@ from .infrastructure import (
     is_drifted,
     save_managed_resource,
 )
+from .security import Capability, Principal
+from .ui import counted
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OperationCommand:
     idempotency_key: str
     reason: str = ""
@@ -51,15 +49,9 @@ def serialize_operation(operation: OperationRequest) -> dict[str, Any]:
         "requested_actor": operation.requested_actor,
         "requested_interface": operation.requested_interface,
         "created_at": operation.created_at.isoformat(),
-        "completed_at": (
-            operation.completed_at.isoformat() if operation.completed_at else None
-        ),
+        "completed_at": (operation.completed_at.isoformat() if operation.completed_at else None),
         "claimed_by": operation.claimed_by,
-        "lease_expires_at": (
-            operation.lease_expires_at.isoformat()
-            if operation.lease_expires_at
-            else None
-        ),
+        "lease_expires_at": (operation.lease_expires_at.isoformat() if operation.lease_expires_at else None),
         "attempt_count": operation.attempt_count,
         "result": operation.result,
     }
@@ -89,9 +81,7 @@ def _active(result: dict[str, Any]) -> list[dict[str, Any]]:
 def _problem(result: dict[str, Any]) -> dict[str, Any] | None:
     """The condition saying something is wrong, which a result can carry while succeeding."""
 
-    return next(
-        (item for item in _active(result) if item.get("type") in _PROBLEM_CONDITIONS), None
-    )
+    return next((item for item in _active(result) if item.get("type") in _PROBLEM_CONDITIONS), None)
 
 
 def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
@@ -153,9 +143,7 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
         # person who agreed to a change a credential asked for.
         "approved_by": (operation.input or {}).get("approved_by", ""),
         "created_at": operation.created_at.isoformat(),
-        "completed_at": (
-            operation.completed_at.isoformat() if operation.completed_at else None
-        ),
+        "completed_at": (operation.completed_at.isoformat() if operation.completed_at else None),
         "attempt_count": operation.attempt_count,
         "reason": operation.reason,
         "condition": next(iter(_active(result)), None),
@@ -187,10 +175,7 @@ def changes(operations: Any, limit: int) -> list[OperationRequest]:
         return (
             operation.state,
             result.get("message", ""),
-            tuple(
-                (item.get("type"), item.get("reason"), item.get("message"))
-                for item in _active(result)
-            ),
+            tuple((item.get("type"), item.get("reason"), item.get("message")) for item in _active(result)),
         )
 
     last: dict[tuple[Any, str], tuple[Any, ...]] = {}
@@ -213,10 +198,7 @@ def changes(operations: Any, limit: int) -> list[OperationRequest]:
 def resource_history(resource: ManagedResource, limit: int = 20) -> list[dict[str, Any]]:
     """One record's history: each operation that changed something, newest first."""
 
-    return [
-        operation_summary(operation)
-        for operation in changes(resource.operations.all()[:HISTORY_WINDOW], limit)
-    ]
+    return [operation_summary(operation) for operation in changes(resource.operations.all()[:HISTORY_WINDOW], limit)]
 
 
 def refuse_while_drifted(resource: ManagedResource) -> None:
@@ -265,9 +247,7 @@ def _queue_operation(
     allowed, explanation = controller_action_policy(resource.kind, action)
     if not allowed:
         raise PolicyError(explanation)
-    existing = OperationRequest.objects.filter(
-        idempotency_key=command.idempotency_key
-    ).first()
+    existing = OperationRequest.objects.filter(idempotency_key=command.idempotency_key).first()
     if existing:
         if existing.resource_id != resource.id or existing.action != action:
             raise PolicyError("Idempotency key is already used by another operation.")
@@ -353,9 +333,9 @@ def _contained_keys(resource: ManagedResource) -> list[str]:
     if not value:
         return []
     return list(
-        ManagedResource.objects.filter(
-            kind=kind, **{f"spec__{their_field}__iexact": value}
-        ).values_list("key", flat=True)
+        ManagedResource.objects.filter(kind=kind, **{f"spec__{their_field}__iexact": value}).values_list(
+            "key", flat=True
+        )
     )
 
 
@@ -463,9 +443,7 @@ def accept_observed(
     if found is None:
         raise NotFoundError(f"No live record was last seen for {resource.key!r}, so there is nothing to accept.")
     kept = {
-        field: resource.spec[field]
-        for field in PROVIDERS[resource.kind].unobservable_fields
-        if field in resource.spec
+        field: resource.spec[field] for field in PROVIDERS[resource.kind].unobservable_fields if field in resource.spec
     }
     with operation_context(
         interface=principal.interface,
@@ -473,7 +451,9 @@ def accept_observed(
         operation="infrastructure.resource.accept_observed",
     ):
         result = save_managed_resource(
-            ManagedResourceCommand(key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled),
+            ManagedResourceCommand(
+                key=resource.key, kind=resource.kind, spec={**found, **kept}, enabled=resource.enabled
+            ),
             principal=principal,
             current_key=resource.key,
             copied_from_live=True,
@@ -504,13 +484,9 @@ def request_removal(
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
     # HQ deletes at the provider only through a connection that manages.
-    if PROVIDERS[resource.kind].declaration_only or observes_only(
-        resource.kind, resource.spec
-    ):
+    if PROVIDERS[resource.kind].declaration_only or observes_only(resource.kind, resource.spec):
         return _forget_declaration(resource, command, principal=principal)
-    allowed, explanation = controller_action_policy(
-        resource.kind, OperationRequest.Action.DELETE
-    )
+    allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.DELETE)
     if not allowed:
         raise PolicyError(explanation)
     with operation_context(
@@ -535,14 +511,11 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
         return False, "Only a certificate HQ issues can be renewed."
     if not resource.enabled:
         return False, "The certificate is switched off in HQ."
-    allowed, explanation = controller_action_policy(
-        resource.kind, OperationRequest.Action.RENEW
-    )
+    allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.RENEW)
     if not allowed:
         return False, explanation
     if any(
-        condition.get("status") is True
-        and condition.get("type") in {"Drifted", "Degraded"}
+        condition.get("status") is True and condition.get("type") in {"Drifted", "Degraded"}
         for condition in resource.conditions
     ):
         return True, "A place it is installed is serving a different certificate or has a problem."
@@ -554,7 +527,7 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
         return True, "The expiry HQ read is not a date."
     window = renewal_window(resource.spec)
     left = max(0, days_until(expiry))
-    if datetime.now(timezone.utc) >= renewal_opens_at(expiry, window):
+    if datetime.now(UTC) >= renewal_opens_at(expiry, window):
         return True, f"{counted(left, 'day')} remaining."
     from .moments import when_day
 
@@ -634,8 +607,7 @@ def request_reach_allow(
     watcher = observer(known)
     if watcher is None:
         raise PolicyError(
-            "HQ does not know which tailnet device the controller runs on, so "
-            "there is nothing to allow access from."
+            "HQ does not know which tailnet device the controller runs on, so there is nothing to allow access from."
         )
 
     shut: list[tuple[str, int]] = []
@@ -654,8 +626,7 @@ def request_reach_allow(
             shut.append((target.name, port))
     if not shut:
         raise PolicyError(
-            "The tailnet policy does not block any place that could not be reached. "
-            "Allowing more will not fix this."
+            "The tailnet policy does not block any place that could not be reached. Allowing more will not fix this."
         )
 
     policy = ManagedResource.objects.filter(kind=POLICY_KIND).first()
@@ -666,9 +637,7 @@ def request_reach_allow(
     document = str(policy.spec.get("document", ""))
     moved: list[str] = []
     for target_name, port in sorted(set(shut)):
-        amended, summary = policy_allowing(
-            document, source=watcher.name, target=target_name, port=port
-        )
+        amended, summary = policy_allowing(document, source=watcher.name, target=target_name, port=port)
         if amended:
             document, _ = amended, moved.append(summary)
     if not moved:

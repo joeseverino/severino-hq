@@ -24,9 +24,7 @@ class ProjectForm(forms.ModelForm):
             "deployment_notes": forms.Textarea(attrs={"rows": 4}),
             "security_notes": forms.Textarea(attrs={"rows": 4}),
             "notes": forms.Textarea(attrs={"rows": 4}),
-            "slug": forms.TextInput(
-                attrs={"placeholder": "Leave blank to use the name"}
-            ),
+            "slug": forms.TextInput(attrs={"placeholder": "Leave blank to use the name"}),
         }
 
     def clean_slug(self):

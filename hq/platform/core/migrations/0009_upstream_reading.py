@@ -4,18 +4,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0008_action_item_read'),
+        ("core", "0008_action_item_read"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='UpstreamReading',
+            name="UpstreamReading",
             fields=[
-                ('key', models.CharField(max_length=100, primary_key=True, serialize=False)),
-                ('value', models.JSONField()),
-                ('observed_at', models.DateTimeField()),
+                ("key", models.CharField(max_length=100, primary_key=True, serialize=False)),
+                ("value", models.JSONField()),
+                ("observed_at", models.DateTimeField()),
             ],
         ),
     ]

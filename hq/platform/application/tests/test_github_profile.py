@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -11,16 +9,39 @@ from .. import github_profile
 from ..security import AuthorizationError, Principal
 
 PROFILE = {
-    "login": "example-user", "name": "Example User", "bio": "Builds things", "url": "https://github.com/example-user",
-    "followers": 3, "following": 4, "public_repos": 5, "avatar": "", "starred": 1,
-    "watched": [{
-        "name": "example/tool", "url": "https://github.com/example/tool", "description": "A tool",
-        "language": "Go", "stars": 10, "starred_at": "2026-09-20T00:00:00Z",
-        "release": {"tag": "v1.2.0", "url": "https://github.com/example/tool/releases/v1.2.0",
-                    "published_at": timezone.now().isoformat()},
-        "advisories": [{"id": "CVE-2026-0001", "severity": "high", "summary": "A flaw",
-                        "url": "https://github.com/advisories/GHSA-x", "published_at": timezone.now().isoformat()}],
-    }],
+    "login": "example-user",
+    "name": "Example User",
+    "bio": "Builds things",
+    "url": "https://github.com/example-user",
+    "followers": 3,
+    "following": 4,
+    "public_repos": 5,
+    "avatar": "",
+    "starred": 1,
+    "watched": [
+        {
+            "name": "example/tool",
+            "url": "https://github.com/example/tool",
+            "description": "A tool",
+            "language": "Go",
+            "stars": 10,
+            "starred_at": "2026-09-20T00:00:00Z",
+            "release": {
+                "tag": "v1.2.0",
+                "url": "https://github.com/example/tool/releases/v1.2.0",
+                "published_at": timezone.now().isoformat(),
+            },
+            "advisories": [
+                {
+                    "id": "CVE-2026-0001",
+                    "severity": "high",
+                    "summary": "A flaw",
+                    "url": "https://github.com/advisories/GHSA-x",
+                    "published_at": timezone.now().isoformat(),
+                }
+            ],
+        }
+    ],
 }
 
 
@@ -88,9 +109,7 @@ class PlanTests(TestCase):
     def test_the_controller_registry_carries_the_plan(self):
         from ..controller import controller_registry
 
-        self.assertEqual(
-            controller_registry()["github_profiles"], {"accounts": ["example-user"], "due": True}
-        )
+        self.assertEqual(controller_registry()["github_profiles"], {"accounts": ["example-user"], "due": True})
 
     def test_asking_needs_leave_to_read_public_records(self):
         reader = Principal(actor="reader", interface="web", capabilities=frozenset())
@@ -132,8 +151,13 @@ class IngestTests(TestCase):
 
     def test_a_read_the_allowance_refused_is_an_attempt_that_keeps_the_reading(self):
         before = hold(at=timezone.now() - github_profile.RETRY_AFTER)
-        refusal = {"part": "", "refusal": "", "scope": "", "connection_ref": "",
-                   "reason": "GitHub allows this address 2 more anonymous calls until 18:46 UTC"}
+        refusal = {
+            "part": "",
+            "refusal": "",
+            "scope": "",
+            "connection_ref": "",
+            "reason": "GitHub allows this address 2 more anonymous calls until 18:46 UTC",
+        }
 
         self.record({"ok": True, "records": [], "carried": True, "refused_parts": [refusal]})
 
@@ -211,9 +235,9 @@ class PageTests(TestCase):
     def test_the_status_says_when_the_read_landed_or_was_refused(self):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
         hold()
-        status = self.client.post(
-            reverse("watching_refresh"), headers={"x-requested-with": "XMLHttpRequest"}
-        ).json()["status"]
+        status = self.client.post(reverse("watching_refresh"), headers={"x-requested-with": "XMLHttpRequest"}).json()[
+            "status"
+        ]
 
         hold({**PROFILE, "followers": 4})
         self.assertEqual(self.client.get(status).json()["state"], "done")
@@ -291,9 +315,14 @@ class AppProofTests(TestCase):
         LinkedAccount.objects.create(user=user, provider="github", login="example-user")
         hold()
         ProviderInventory.objects.create(
-            kind="github.repository", reachable=True, connected=True, observed_at=timezone.now(),
-            records=[{"connection_ref": "github", "repository": "example-user/tool", "private": True},
-                     {"connection_ref": "github", "repository": "someone-else/thing"}],
+            kind="github.repository",
+            reachable=True,
+            connected=True,
+            observed_at=timezone.now(),
+            records=[
+                {"connection_ref": "github", "repository": "example-user/tool", "private": True},
+                {"connection_ref": "github", "repository": "someone-else/thing"},
+            ],
         )
 
         response = self.client.get(reverse("watching"))

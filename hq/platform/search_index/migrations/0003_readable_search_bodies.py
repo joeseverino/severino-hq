@@ -34,10 +34,7 @@ def rebuild_bodies(apps, schema_editor):
             continue
         # One query for the scope's rows rather than one per record: a lookup
         # inside the loop is the shape this repository measures for.
-        existing = {
-            document.object_id: document
-            for document in SearchDocument.objects.filter(scope=definition.scope)
-        }
+        existing = {document.object_id: document for document in SearchDocument.objects.filter(scope=definition.scope)}
         updates = []
         for instance in model.objects.all().iterator(chunk_size=500):
             document = existing.get(definition.object_id(instance))

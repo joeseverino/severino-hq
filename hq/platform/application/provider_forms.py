@@ -19,19 +19,16 @@ Two rules keep this honest:
   rendered rather than dropped.
 """
 
-from __future__ import annotations
-
 import types
 import typing
-from typing import Any
+from typing import Any, ClassVar, override
 
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 
-from hq.domains.control_plane.providers import PROVIDERS, validate_spec
-
 from hq.domains.control_plane.provider_spec import NameContext
+from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 
 from .forms import LinesField
 from .plugins import _import
@@ -56,11 +53,13 @@ class NameListWidget(forms.Widget):
     adds: only the extra add/remove convenience needs JavaScript.
     """
 
+    @override
     def value_from_datadict(self, data, files, name):
         if hasattr(data, "getlist"):
             return [item for item in data.getlist(name) if str(item).strip()]
         return data.get(name)
 
+    @override
     def format_value(self, value):
         if isinstance(value, (list, tuple)):
             return [str(item) for item in value if str(item).strip()]
@@ -73,7 +72,7 @@ class NameListWidget(forms.Widget):
     # (nothing reports a printer's address) and half repeat a reading from the
     # tailnet. Presented identically, the field invites somebody to correct HQ
     # about something HQ is watching, and gives no way to tell which is which.
-    notes: dict[str, str] = {}
+    notes: ClassVar[dict[str, str]] = {}
 
     def _row(self, name: str, item: str):
         """One value, editable unless HQ is the one that found it.
@@ -113,6 +112,7 @@ class NameListWidget(forms.Widget):
             item,
         )
 
+    @override
     def render(self, name, value, attrs=None, renderer=None):
         from django.utils.html import format_html, format_html_join
         from django.utils.safestring import mark_safe
@@ -122,12 +122,8 @@ class NameListWidget(forms.Widget):
         # network everything reaches it over; the typed ones are the exceptions
         # nothing reports. Sorted so read-only rows never sit between inputs
         # and the blank row for adding one stays with the rest.
-        values = sorted(
-            self.format_value(value), key=lambda item: item not in self.notes
-        )
-        rows = format_html_join(
-            "", "{}", ((self._row(name, item),) for item in values)
-        )
+        values = sorted(self.format_value(value), key=lambda item: item not in self.notes)
+        rows = format_html_join("", "{}", ((self._row(name, item),) for item in values))
         # Always one empty row, so adding a name needs no script and no
         # thinking about where the cursor goes.
         blank = format_html(
@@ -155,6 +151,7 @@ class NameList(LinesField):
 
     widget = NameListWidget
 
+    @override
     def to_python(self, value: Any) -> list[str]:
         if isinstance(value, (list, tuple)):
             return [str(item).strip() for item in value if str(item).strip()]
@@ -164,6 +161,7 @@ class NameList(LinesField):
         text = (value or "").replace(",", "\n")
         return [line.strip() for line in text.splitlines() if line.strip()]
 
+    @override
     def validate(self, value: list[str]) -> None:
         if self.required and not value:
             raise ValidationError(self.error_messages["required"], code="required")
@@ -193,7 +191,6 @@ class ResourceIdentityForm(forms.Form):
     )
 
 
-
 class ProviderSpecForm(forms.Form):
     """Rendered from a provider model, and validated by that same model."""
 
@@ -202,7 +199,7 @@ class ProviderSpecForm(forms.Form):
     advanced_names: tuple[str, ...] = ()
 
     # The model's own fields, so the form can tell a default from an answer.
-    provider_fields: dict = {}
+    provider_fields: ClassVar[dict] = {}
 
     def _is_routine(self, field) -> bool:
         """Whether this field is still just a default nobody chose.
@@ -215,11 +212,7 @@ class ProviderSpecForm(forms.Form):
         if field.name not in self.advanced_names:
             return False
         model_field = self.provider_fields.get(field.name)
-        default = (
-            model_field.get_default(call_default_factory=True)
-            if model_field is not None
-            else None
-        )
+        default = model_field.get_default(call_default_factory=True) if model_field is not None else None
         value = self.initial.get(field.name, default)
         if value in (None, "", [], ()):
             return True
@@ -245,6 +238,7 @@ class ProviderSpecForm(forms.Form):
 
         return [field for field in self if self._is_routine(field)]
 
+    @override
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean()
         if self.errors:
@@ -253,11 +247,7 @@ class ProviderSpecForm(forms.Form):
         # None, so the model applies its own default. Sending None asks pydantic
         # to accept a value the annotation forbids, and restating the default
         # here would put it in two places that could disagree.
-        payload = {
-            name: cleaned[name]
-            for name in self.fields
-            if cleaned.get(name) is not None
-        }
+        payload = {name: cleaned[name] for name in self.fields if cleaned.get(name) is not None}
         try:
             self.spec = validate_spec(self.provider_kind, payload)
         except (KeyError, TypeError, ValueError) as exc:
@@ -313,10 +303,7 @@ def spec_form_class(
 
     provider = PROVIDERS[kind]
     context = context or NameContext()
-    fields = {
-        name: _field_for(field)
-        for name, field in provider.spec_type.model_fields.items()
-    }
+    fields = {name: _field_for(field) for name, field in provider.spec_type.model_fields.items()}
     for name, options in _live_choices(provider, context).items():
         if name not in fields:
             continue
@@ -332,11 +319,7 @@ def spec_form_class(
             label=original.label,
             widget=forms.CheckboxSelectMultiple if many else None,
             help_text=original.help_text
-            or (
-                ""
-                if options
-                else "Nothing to choose yet. None have been described to HQ."
-            ),
+            or ("" if options else "Nothing to choose yet. None have been described to HQ."),
         )
     for name, effect in provider.change_effects:
         if name in fields:
@@ -360,10 +343,10 @@ def spec_form_class(
             # and updates that one in place: a real rename rather than a
             # second record beside the first. The warning stays because the
             # change reaches a live name on the next pass.
-            fields[name].help_text = (
-                "Changing this renames the live record within about a minute. "
-                "The old name stops resolving."
+            rename_warning = (
+                "Changing this renames the live record within about a minute. The old name stops resolving."
             )
+            fields[name].help_text = rename_warning
     return type(
         f"{provider.spec_type.__name__}Form",
         (ProviderSpecForm,),
@@ -385,11 +368,7 @@ def _optional_inner(annotation: Any) -> Any:
     """
 
     if typing.get_origin(annotation) in (typing.Union, types.UnionType):
-        named = [
-            argument
-            for argument in typing.get_args(annotation)
-            if argument is not type(None)
-        ]
+        named = [argument for argument in typing.get_args(annotation) if argument is not type(None)]
         if len(named) == 1:
             return named[0]
     return annotation
@@ -429,30 +408,24 @@ def _field_for(field: Any) -> forms.Field:
         # Django reads required=True on a BooleanField as "must be ticked".
         return forms.BooleanField(**{**options, "required": False})
     if annotation is int:
-        return forms.IntegerField(
-            min_value=limits.get("ge"), max_value=limits.get("le"), **options
-        )
+        return forms.IntegerField(min_value=limits.get("ge"), max_value=limits.get("le"), **options)
     return forms.CharField(
         min_length=limits.get("min_length"),
         max_length=limits.get("max_length"),
-        validators=(
-            [RegexValidator(limits["pattern"])] if limits.get("pattern") else []
-        ),
+        validators=([RegexValidator(limits["pattern"])] if limits.get("pattern") else []),
         # A string the model puts no ceiling on is one that can be long, and a
         # long value in a one-line box is unreadable and unusable: an access
         # policy or a compose file arrived as three thousand characters scrolling
         # past a slot two inches wide. Where a length is declared, the model is
         # saying it is short, and a single line is right.
-        widget=None if limits.get("max_length") else forms.Textarea(
-            attrs={"rows": 18, "spellcheck": "false", "class": "code"}
-        ),
+        widget=None
+        if limits.get("max_length")
+        else forms.Textarea(attrs={"rows": 18, "spellcheck": "false", "class": "code"}),
         **options,
     )
 
 
-def _live_choices(
-    provider: Any, context: NameContext
-) -> dict[str, tuple[tuple[str, str], ...]]:
+def _live_choices(provider: Any, context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
     """Options a provider says come from live data, resolved late.
 
     A failure here must not take the form down: the page is how an operator
@@ -510,6 +483,7 @@ class SecretTextarea(forms.Textarea):
     into the page: into its HTML, the browser's cache and its history.
     """
 
+    @override
     def format_value(self, value):
         return None
 

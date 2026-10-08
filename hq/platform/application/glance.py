@@ -1,9 +1,6 @@
 """Typed, cached dashboard observations and their explicit refresh queue."""
 
-from __future__ import annotations
-
 import re
-
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -11,7 +8,6 @@ from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 
-from hq.platform.core.audit import operation_context
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -20,18 +16,17 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     WeatherObservation,
 )
+from hq.platform.core.audit import operation_context
 
 from . import readings
 from .cadence import ring_doorbell
-from .freshness import DASHBOARD_GLANCE, freshness
 from .connections import machines_once
+from .freshness import DASHBOARD_GLANCE, freshness
 from .security import Capability, Principal
 
 # The National Weather Service API. The connection shows it and the glance plan
 # hands it to the controller, which states no address of its own.
 NWS_API = "https://api.weather.gov"
-
-
 
 
 def connection_specs():
@@ -95,7 +90,7 @@ def connection_specs():
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DashboardPanelSpec:
     """What a glance panel is and how its readings are shown.
 
@@ -123,9 +118,7 @@ class DashboardPanelSpec:
 
 
 def dashboard_configuration() -> DashboardConfiguration:
-    return (
-        DashboardConfiguration.objects.filter(pk=1).first() or DashboardConfiguration()
-    )
+    return DashboardConfiguration.objects.filter(pk=1).first() or DashboardConfiguration()
 
 
 # The words a forecast uses, most telling first, and the mark each earns. The
@@ -207,11 +200,7 @@ def _machine_routes(
     resources: tuple[ManagedResource, ...],
 ) -> dict[int, tuple[str, ...]]:
     catalog = {item.name.lower(): item for item in machines_once()}
-    controller_ids = set(
-        ProviderConnection.objects.filter(reachable=True).values_list(
-            "controller_id", flat=True
-        )
-    )
+    controller_ids = set(ProviderConnection.objects.filter(reachable=True).values_list("controller_id", flat=True))
     routes = {}
     for resource in resources:
         name = str(resource.spec.get("name") or resource.key).lower()
@@ -224,19 +213,13 @@ def _machine_routes(
 
 
 def dashboard_machine_selected(key: str) -> bool:
-    return DashboardMachine.objects.filter(
-        machine__key=key, machine__kind="machine", machine__enabled=True
-    ).exists()
+    return DashboardMachine.objects.filter(machine__key=key, machine__kind="machine", machine__enabled=True).exists()
 
 
 @transaction.atomic
-def select_dashboard_machine(
-    key: str, *, selected: bool, principal: Principal
-) -> dict[str, Any]:
+def select_dashboard_machine(key: str, *, selected: bool, principal: Principal) -> dict[str, Any]:
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
-    resource = ManagedResource.objects.filter(
-        key=key, kind="machine", enabled=True
-    ).first()
+    resource = ManagedResource.objects.filter(key=key, kind="machine", enabled=True).first()
     if resource is None:
         raise ValueError("Dashboard telemetry requires an enabled machine record.")
     with operation_context(
@@ -285,14 +268,10 @@ def save_dashboard_settings(
         actor=principal.actor,
         operation="dashboard.settings.update",
     ):
-        configuration, _ = (
-            DashboardConfiguration.objects.select_for_update().get_or_create(pk=1)
-        )
+        configuration, _ = DashboardConfiguration.objects.select_for_update().get_or_create(pk=1)
         configuration.weather_point = _clean_point(weather_point)
         configuration.weather_label = weather_label.strip()[:40] or "Weather"
-        configuration.infrastructure_label = (
-            infrastructure_label.strip()[:40] or "Homelab"
-        )
+        configuration.infrastructure_label = infrastructure_label.strip()[:40] or "Homelab"
         configuration.save(
             update_fields=(
                 "weather_point",
@@ -320,8 +299,7 @@ def _panel(
             metric
             for metric in payload["metrics"]
             if not (
-                str(metric.get("label", "")).strip().casefold()
-                == spec.alert_metric.casefold()
+                str(metric.get("label", "")).strip().casefold() == spec.alert_metric.casefold()
                 and str(metric.get("value", "")).strip() == "0"
             )
         ]
@@ -330,9 +308,7 @@ def _panel(
         "id": spec.id,
         "label": spec.label,
         "empty": spec.empty,
-        "icon": condition_icon(
-            next((str(r["value"]) for r in shown if r["label"] == spec.icon_from), ""), spec.icon
-        )
+        "icon": condition_icon(next((str(r["value"]) for r in shown if r["label"] == spec.icon_from), ""), spec.icon)
         if spec.icon_from
         else spec.icon,
         "head_labels": spec.head_labels,
@@ -359,9 +335,7 @@ def _head(shown: tuple[dict[str, Any], ...], spec: DashboardPanelSpec) -> dict[s
     return {
         "lead": lead,
         "caption": tuple(
-            by_label[label]
-            for label in spec.caption
-            if label in by_label and by_label[label] is not lead
+            by_label[label] for label in spec.caption if label in by_label and by_label[label] is not lead
         ),
         "alert": _alert_text(alert) if alert else "",
     }
@@ -383,14 +357,8 @@ def dashboard_panels(
     routes = _machine_routes(machine_resources) if machine_resources else {}
     point = configuration.weather_point
     weather = WeatherObservation.objects.filter(point=point).first() if point else None
-    telemetry = readings.stored_many(
-        readings.machine_telemetry(resource.key) for resource in machine_resources
-    )
-    pending = set(
-        DashboardRefreshRequest.objects.filter(completed_at__isnull=True).values_list(
-            "panel_id", flat=True
-        )
-    )
+    telemetry = readings.stored_many(readings.machine_telemetry(resource.key) for resource in machine_resources)
+    pending = set(DashboardRefreshRequest.objects.filter(completed_at__isnull=True).values_list("panel_id", flat=True))
     panels = []
     for resource in machine_resources:
         panel_id = f"machine-{resource.pk}"
@@ -445,10 +413,7 @@ def dashboard_panels(
             )
         )
     now = timezone.now()
-    shown = tuple(
-        _with_freshness(panel, freshness(DASHBOARD_GLANCE, panel["observed_at"], now))
-        for panel in panels
-    )
+    shown = tuple(_with_freshness(panel, freshness(DASHBOARD_GLANCE, panel["observed_at"], now)) for panel in panels)
     # Current readings lead; an outdated one steps aside.
     return tuple(sorted(shown, key=lambda panel: panel["outdated"]))
 
@@ -482,9 +447,7 @@ def _with_freshness(panel: dict[str, Any], found) -> dict[str, Any]:
     return {**panel, "due": found.due, "outdated": found.stale, "freshness": found}
 
 
-def _glance_reading(
-    metric: dict[str, str], spec: DashboardPanelSpec
-) -> dict[str, Any]:
+def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[str, Any]:
     """Display labels without altering the stored observation."""
 
     reported = metric.get("label", "")
@@ -506,9 +469,8 @@ def request_dashboard_refresh(*, principal: Principal) -> dict[str, Any]:
     machines = _dashboard_machines()
     routes = _machine_routes(machines) if machines else {}
     ids = [f"machine-{machine.pk}" for machine in machines if machine.pk in routes]
-    if ids:
-        if configuration.weather_point:
-            ids.append("weather")
+    if ids and configuration.weather_point:
+        ids.append("weather")
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,
@@ -524,9 +486,7 @@ def request_dashboard_refresh(*, principal: Principal) -> dict[str, Any]:
     return {"ok": True, "requested": ids, "requested_at": now.isoformat()}
 
 
-def request_stale_panel_refresh(
-    panels: list[dict[str, Any]], *, principal: Principal
-) -> tuple[str, ...]:
+def request_stale_panel_refresh(panels: list[dict[str, Any]], *, principal: Principal) -> tuple[str, ...]:
     """Ask for the panels whose reading is due again.
 
     The dashboard posts this when it opens on a due reading. Only panels that
@@ -633,23 +593,14 @@ def _refresh_is_pending(panel_id: str) -> bool:
     return pending.filter(**lookup).exists()
 
 
-def _record_machine_readings(
-    item: dict[str, Any], *, controller_id: str, observed_at: Any
-) -> None:
-    expected = {
-        target["key"]
-        for target in dashboard_refresh_plan(controller_id)["targets"][
-            "infrastructure"
-        ]
-    }
+def _record_machine_readings(item: dict[str, Any], *, controller_id: str, observed_at: Any) -> None:
+    expected = {target["key"] for target in dashboard_refresh_plan(controller_id)["targets"]["infrastructure"]}
     matched = False
     for machine_reading in item.get("machines") or []:
         key = str(machine_reading.get("key", "")).strip()
         if key not in expected:
             continue
-        resource = ManagedResource.objects.filter(
-            kind="machine", key=key, enabled=True
-        ).first()
+        resource = ManagedResource.objects.filter(kind="machine", key=key, enabled=True).first()
         if resource is None:
             continue
         matched = True
@@ -663,16 +614,12 @@ def _record_machine_readings(
         )
         telemetry["controller_id"] = controller_id
         readings.record(reading_key, telemetry, observed_at=since)
-        DashboardRefreshRequest.objects.filter(
-            panel_id=f"machine-{resource.pk}"
-        ).update(completed_at=observed_at)
+        DashboardRefreshRequest.objects.filter(panel_id=f"machine-{resource.pk}").update(completed_at=observed_at)
     if not matched:
         raise ValueError("No machine HQ knows matched the controller's report.")
 
 
-def _record_weather_reading(
-    item: dict[str, Any], *, configuration: DashboardConfiguration, observed_at: Any
-) -> None:
+def _record_weather_reading(item: dict[str, Any], *, configuration: DashboardConfiguration, observed_at: Any) -> None:
     point = str(item.get("point", "")).strip()
     if not point or point != configuration.weather_point:
         raise ValueError("Weather was reported without a configured point.")
@@ -683,12 +630,8 @@ def _record_weather_reading(
         previous_at=stored.observed_at if stored else None,
         now=observed_at,
     )
-    WeatherObservation.objects.update_or_create(
-        point=point, defaults={"payload": payload, "observed_at": since}
-    )
-    DashboardRefreshRequest.objects.filter(panel_id="weather").update(
-        completed_at=observed_at
-    )
+    WeatherObservation.objects.update_or_create(point=point, defaults={"payload": payload, "observed_at": since})
+    DashboardRefreshRequest.objects.filter(panel_id="weather").update(completed_at=observed_at)
 
 
 @transaction.atomic
@@ -709,9 +652,7 @@ def record_dashboard_observations(
         if panel_id == "infrastructure":
             _record_machine_readings(item, controller_id=controller_id, observed_at=now)
         else:
-            _record_weather_reading(
-                item, configuration=configuration, observed_at=now
-            )
+            _record_weather_reading(item, configuration=configuration, observed_at=now)
         stored.append(panel_id)
     return {"ok": True, "recorded": stored, "observed_at": now.isoformat()}
 

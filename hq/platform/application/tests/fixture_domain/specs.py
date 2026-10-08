@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.resources import BoundedQuery
 from hq.platform.application.security import Capability

@@ -9,26 +9,26 @@ The manifest is the same JSON shape the web import accepts. See
 ``docs_index/importer.py`` for the schema.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path
+from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
-from hq.platform.application.documentation import sync_documentation
-from hq.platform.application.security import cli_principal
-from hq.platform.application.ui import counted
 from hq.domains.docs_index.importer import (
     ManifestImportError,
     validate_manifest_data,
 )
+from hq.platform.application.documentation import sync_documentation
+from hq.platform.application.security import cli_principal
+from hq.platform.application.ui import counted
 
 
 class Command(BaseCommand):
     help = "Import a documentation manifest JSON file into the docs index."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument(
             "path",
@@ -96,9 +96,7 @@ class Command(BaseCommand):
             self.stdout.write(json.dumps({"ok": not problems, "problems": problems}))
         elif problems:
             self.stdout.write(
-                self.style.ERROR(
-                    f"{counted(len(problems), 'manifest entry', 'manifest entries')} would be rejected:"
-                )
+                self.style.ERROR(f"{counted(len(problems), 'manifest entry', 'manifest entries')} would be rejected:")
             )
             for problem in problems:
                 label = problem["doc_id"] or "(no doc_id)"
@@ -139,9 +137,7 @@ class Command(BaseCommand):
             return
         verb = "pruned" if pruned else "found"
         self.stdout.write(
-            self.style.WARNING(
-                f"Orphans {verb} ({counted(len(orphans), 'HQ row', 'HQ rows')} with no manifest entry):"
-            )
+            self.style.WARNING(f"Orphans {verb} ({counted(len(orphans), 'HQ row', 'HQ rows')} with no manifest entry):")
         )
         for doc_id in orphans:
             self.stdout.write(self.style.WARNING(f"  orphan: {doc_id}"))
@@ -154,18 +150,10 @@ class Command(BaseCommand):
             )
 
     def _render(self, stats, *, options, report_orphans: bool) -> None:
-        summary = {
-            key: value
-            for key, value in stats.items()
-            if key not in {"missing_relations_detail", "orphans"}
-        }
+        summary = {key: value for key, value in stats.items() if key not in {"missing_relations_detail", "orphans"}}
         self.stdout.write(self.style.SUCCESS(f"Manifest imported: {summary}"))
         for entry in stats.get("missing_relations_detail", []):
-            self.stdout.write(
-                self.style.WARNING(
-                    f"  missing {entry['kind']}: {entry['doc_id']} → {entry['slug']}"
-                )
-            )
+            self.stdout.write(self.style.WARNING(f"  missing {entry['kind']}: {entry['doc_id']} → {entry['slug']}"))
         if report_orphans:
             self._report_orphans(stats, pruned=options["prune"])
         if stats.get("content_items_pruned"):
@@ -181,6 +169,7 @@ class Command(BaseCommand):
                 )
             )
 
+    @override
     def handle(self, *args, **options):
         data = self._manifest(options["path"])
         if options["check_only"]:

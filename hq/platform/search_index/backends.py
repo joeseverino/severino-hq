@@ -1,15 +1,12 @@
 """Swappable indexed-search backend used by the table query engine."""
 
-from __future__ import annotations
-
 import shlex
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Protocol, override
 
 from django.db import connection
 from django.db.models import Func, IntegerField
 from django.db.models.expressions import Expression
-
 
 SnippetParts = list[tuple[str, bool]]
 
@@ -34,9 +31,7 @@ class SearchBackend(Protocol):
         Only the named scopes are read. A scope with no hit has no key.
         """
 
-    def position(
-        self, *, scope: str, query: str, limit: int, identifier: Expression
-    ) -> Expression | None:
+    def position(self, *, scope: str, query: str, limit: int, identifier: Expression) -> Expression | None:
         """Return an expression for a row's 1-based position among the hits.
 
         ``identifier`` is the row's object id as text. The expression is NULL
@@ -127,12 +122,11 @@ class IndexPosition(Func):
         self.scope = scope
         self.limit = limit
 
+    @override
     def as_sql(self, compiler, connection, **extra_context):
         (source,) = self.get_source_expressions()
         identifier, identifier_params = compiler.compile(source)
-        sql = _POSITION_SQL.format(
-            ranked=_ranked_sql([self.scope]), identifier=identifier
-        )
+        sql = _POSITION_SQL.format(ranked=_ranked_sql([self.scope]), identifier=identifier)
         return sql, (self.expression, self.scope, *identifier_params, self.limit)
 
 
@@ -182,15 +176,11 @@ class SQLiteFTS5Backend:
                 hits.setdefault(scope, []).append((object_id, snippet_parts(raw)))
         return hits
 
-    def position(
-        self, *, scope: str, query: str, limit: int, identifier: Expression
-    ) -> Expression | None:
+    def position(self, *, scope: str, query: str, limit: int, identifier: Expression) -> Expression | None:
         expression = _fts_query(query)
         if not expression:
             return None
-        return IndexPosition(
-            identifier, expression=expression, scope=scope, limit=limit
-        )
+        return IndexPosition(identifier, expression=expression, scope=scope, limit=limit)
 
 
 search_backend: SearchBackend = SQLiteFTS5Backend()

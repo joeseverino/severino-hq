@@ -7,8 +7,6 @@ written from the two. These hold the join, the files, and the names the
 controller's constants take.
 """
 
-from __future__ import annotations
-
 import ast
 import json
 from io import StringIO
@@ -46,9 +44,11 @@ class EmittedFilesTests(SimpleTestCase):
     def test_the_command_reports_drift_and_writes_nothing_when_checking(self):
         derived = bridge_contract.emitted()
         stale = {path: text + " " for path, text in derived.items()}
-        with patch.object(bridge_contract, "emitted", return_value=stale):
-            with self.assertRaises(CommandError) as raised:
-                call_command("bridge_contract", "--check", stdout=StringIO(), stderr=StringIO())
+        with (
+            patch.object(bridge_contract, "emitted", return_value=stale),
+            self.assertRaises(CommandError) as raised,
+        ):
+            call_command("bridge_contract", "--check", stdout=StringIO(), stderr=StringIO())
         self.assertIn("behind the registry", str(raised.exception))
         for path, text in derived.items():
             self.assertEqual(path.read_text(encoding="utf-8"), text)
@@ -74,9 +74,11 @@ class JoinTests(SimpleTestCase):
 
     def test_two_declarations_under_one_name_are_refused(self):
         twice = [{"Example": {"type": "string"}}, {"Example": {"type": "integer"}}]
-        with patch.object(bridge_registry, "_declared", return_value=twice):
-            with self.assertRaisesMessage(ValueError, "Two declarations"):
-                bridge_registry.schemas()
+        with (
+            patch.object(bridge_registry, "_declared", return_value=twice),
+            self.assertRaisesMessage(ValueError, "Two declarations"),
+        ):
+            bridge_registry.schemas()
 
     def test_python_reads_no_fact_back_from_a_file_it_writes(self):
         """Only ``bridge_contract`` names the written files, and only to write them."""
@@ -99,9 +101,7 @@ class JoinTests(SimpleTestCase):
             if any(
                 name in node.value
                 for node in ast.walk(tree)
-                if isinstance(node, ast.Constant)
-                and isinstance(node.value, str)
-                and node.value not in docstrings
+                if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value not in docstrings
                 for name in written
             ):
                 naming.append(path.name)
@@ -109,9 +109,7 @@ class JoinTests(SimpleTestCase):
 
         tree = ast.parse((PACKAGE / "bridge_contract.py").read_text(encoding="utf-8"))
         paths = {"CONTRACT_PATH", "CONNECTIONS_PATH", "SHAPES_PATH"}
-        emitted = next(
-            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "emitted"
-        )
+        emitted = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "emitted")
         inside = [node.id for node in ast.walk(emitted) if isinstance(node, ast.Name)]
         read = [
             node.id
@@ -127,9 +125,7 @@ class RegistrySchemaTests(SimpleTestCase):
         self.schemas = bridge_registry.schemas()
 
     def test_the_kinds_are_the_registrys(self):
-        self.assertEqual(
-            self.schemas["ResourceKind"]["enum"], sorted(set(PROVIDERS) | set(OBSERVATION_KINDS))
-        )
+        self.assertEqual(self.schemas["ResourceKind"]["enum"], sorted(set(PROVIDERS) | set(OBSERVATION_KINDS)))
         self.assertEqual(self.schemas["ConnectionProvider"]["enum"], sorted(CONNECTION_KINDS))
 
     def test_a_swept_kind_is_a_controller_reading_or_a_resource_with_no_excuse(self):
@@ -146,9 +142,7 @@ class RegistrySchemaTests(SimpleTestCase):
                 if spec.read_by != "controller":
                     self.assertNotIn(name, self.schemas)
                     continue
-                self.assertEqual(
-                    set(self.schemas[name]["properties"]), set(spec.record.model_fields)
-                )
+                self.assertEqual(set(self.schemas[name]["properties"]), set(spec.record.model_fields))
 
     def test_every_enumeration_names_a_constant_for_each_value(self):
         for name, schema in self.schemas.items():
@@ -201,9 +195,7 @@ class ConnectionShapeTests(SimpleTestCase):
             schema = schemas[bridge_registry.go_name(name)]
             with self.subTest(shape=name):
                 self.assertFalse(schema["additionalProperties"])
-                self.assertEqual(
-                    set(schema["properties"]), {setting.name.lower() for setting in shape.settings}
-                )
+                self.assertEqual(set(schema["properties"]), {setting.name.lower() for setting in shape.settings})
                 self.assertEqual(
                     set(schema["required"]),
                     {setting.name.lower() for setting in shape.settings if not setting.optional},
@@ -223,9 +215,7 @@ class ConnectionShapeTests(SimpleTestCase):
         self.assertEqual(login["URL"], {"source": "url", "index": 0})
         self.assertEqual(login["PASSWORD"], {"source": "field", "id": "password"})
         self.assertEqual(login["CONNECTION_REF"], {"source": "connection_ref"})
-        self.assertEqual(
-            projections()["github_app"]["PROVIDER"], {"source": "constant", "value": "github_app"}
-        )
+        self.assertEqual(projections()["github_app"]["PROVIDER"], {"source": "constant", "value": "github_app"})
         self.assertEqual(
             projections()["ssh_transport"]["ROLE"],
             {"source": "field", "label": "role", "optional": True},

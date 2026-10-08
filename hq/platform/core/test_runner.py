@@ -24,8 +24,6 @@ pickle its traceback and the real error is replaced by ``cannot pickle
 'traceback' object``. Use ``--parallel=1`` instead, or install it.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import sys
@@ -45,7 +43,7 @@ from django.test.runner import (
 class _CompositionIsolation:
     """Make process caches obey the same per-test isolation as the database."""
 
-    def startTest(self, test):  # noqa: N802 - unittest's protocol
+    def startTest(self, test):
         from hq.platform.application.plugins import clear_plugin_composition_cache
 
         clear_plugin_composition_cache()
@@ -98,20 +96,20 @@ _held_logs = _HeldLogs()
 class _LogsOnFailure:
     """Show a test's logs when, and only when, the test fails."""
 
-    def startTest(self, test):  # noqa: N802 - unittest's protocol
+    def startTest(self, test):
         _held_logs.take_over(logging.getLogger())
         _held_logs.records.clear()
         return super().startTest(test)
 
-    def addError(self, test, err):  # noqa: N802
+    def addError(self, test, err):
         _held_logs.replay(test)
         return super().addError(test, err)
 
-    def addFailure(self, test, err):  # noqa: N802
+    def addFailure(self, test, err):
         _held_logs.replay(test)
         return super().addFailure(test, err)
 
-    def addSubTest(self, test, subtest, err):  # noqa: N802
+    def addSubTest(self, test, subtest, err):
         if err is not None:
             _held_logs.replay(subtest)
         return super().addSubTest(test, subtest, err)

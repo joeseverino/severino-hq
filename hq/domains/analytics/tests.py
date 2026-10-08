@@ -6,17 +6,15 @@ tag and its traffic are not things to publish alongside the code that reads
 them.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
+from hq.domains.content.models import ContentItem
 from hq.platform.application import analytics as service
 from hq.platform.application.security import AuthorizationError, Capability, Principal
-from hq.domains.content.models import ContentItem
 
 SITE_TAG = "0" * 32
 HOST = "example.test"
@@ -55,9 +53,7 @@ def _payload(rows=None, vitals=None) -> dict:
     }
 
 
-def _site_payload(
-    *, site_tag=SITE_TAG, host=HOST, connection_ref="example-api", rows=None
-) -> dict:
+def _site_payload(*, site_tag=SITE_TAG, host=HOST, connection_ref="example-api", rows=None) -> dict:
     rows = rows if rows is not None else []
     dates = [item["date"] for item in rows if item.get("date")]
     return {
@@ -89,11 +85,7 @@ A_DAY_OF_VITALS = {
     "interaction_to_next_paint_ms": 120,
     "first_contentful_paint_ms": 900,
     "time_to_first_byte_ms": 200,
-    **{
-        f"{vital}_{bucket}": 1
-        for vital in ("lcp", "inp", "cls")
-        for bucket in ("good", "needs_improvement", "poor")
-    },
+    **{f"{vital}_{bucket}": 1 for vital in ("lcp", "inp", "cls") for bucket in ("good", "needs_improvement", "poor")},
 }
 
 
@@ -216,12 +208,8 @@ class RecordingTests(TestCase):
         the window moved past it.
         """
 
-        service.record_analytics(
-            _payload([_row(offset=90, value="/old/")]), principal=_principal()
-        )
-        service.record_analytics(
-            _payload([_row(offset=1, value="/new/")]), principal=_principal()
-        )
+        service.record_analytics(_payload([_row(offset=90, value="/old/")]), principal=_principal())
+        service.record_analytics(_payload([_row(offset=1, value="/new/")]), principal=_principal())
 
         self.assertEqual(
             sorted(RumDaily.objects.values_list("value", flat=True)),
@@ -234,18 +222,14 @@ class RecordingTests(TestCase):
             principal=_principal(),
         )
 
-        self.assertEqual(
-            list(RumDaily.objects.values_list("value", flat=True)), ["/kept/"]
-        )
+        self.assertEqual(list(RumDaily.objects.values_list("value", flat=True)), ["/kept/"])
 
     def test_the_contract_allows_exactly_the_dimensions_stored(self):
         from hq.domains.control_plane.bridge_contract import contract
 
         row = contract()["components"]["schemas"]["AnalyticsRow"]["properties"]
         self.assertEqual(row["dimension"]["enum"], RumDaily.Dimension.values)
-        self.assertEqual(
-            row["value"]["maxLength"], RumDaily._meta.get_field("value").max_length
-        )
+        self.assertEqual(row["value"]["maxLength"], RumDaily._meta.get_field("value").max_length)
 
     def test_recording_requires_the_controller_capability(self):
         bare = Principal(actor="anon", interface="web", capabilities=frozenset())
@@ -258,12 +242,8 @@ class RecordingTests(TestCase):
     def test_the_same_site_tag_can_exist_in_independent_connections(self):
         payload = {
             "sites": [
-                _site_payload(
-                    host="one.example", connection_ref="account-one", rows=[_row()]
-                ),
-                _site_payload(
-                    host="two.example", connection_ref="account-two", rows=[_row()]
-                ),
+                _site_payload(host="one.example", connection_ref="account-one", rows=[_row()]),
+                _site_payload(host="two.example", connection_ref="account-two", rows=[_row()]),
             ]
         }
 
@@ -292,8 +272,7 @@ class CoveragePlanningTests(TestCase):
 
         self.assertEqual(plan["reason"], "backfill")
         self.assertEqual(
-            service.date.fromisoformat(plan["end"])
-            - service.date.fromisoformat(plan["start"]),
+            service.date.fromisoformat(plan["end"]) - service.date.fromisoformat(plan["start"]),
             timedelta(days=service.BACKFILL_DAYS - 1),
         )
 
@@ -304,16 +283,13 @@ class CoveragePlanningTests(TestCase):
 
         self.assertEqual(plan["reason"], "refresh")
         self.assertEqual(
-            service.date.fromisoformat(plan["end"])
-            - service.date.fromisoformat(plan["start"]),
+            service.date.fromisoformat(plan["end"]) - service.date.fromisoformat(plan["start"]),
             timedelta(days=service.REFRESH_DAYS - 1),
         )
 
     def test_a_hole_reopens_only_the_span_needed_to_fill_it(self):
         self.record_window(service.BACKFILL_DAYS - 1)
-        AnalyticsCoverage.objects.filter(
-            date=service.date.fromisoformat(_day(20))
-        ).delete()
+        AnalyticsCoverage.objects.filter(date=service.date.fromisoformat(_day(20))).delete()
 
         plan = service.analytics_plan(self.identity())["windows"][0]
 
@@ -331,10 +307,7 @@ class CoveragePlanningTests(TestCase):
         )
 
     def test_planning_cost_is_constant_as_sites_grow(self):
-        identities = [
-            {"connection_ref": "example-api", "site_tag": f"site-{index}"}
-            for index in range(30)
-        ]
+        identities = [{"connection_ref": "example-api", "site_tag": f"site-{index}"} for index in range(30)]
 
         with self.assertNumQueries(1):
             plan = service.analytics_plan(identities)
@@ -431,9 +404,7 @@ class JoinTests(TestCase):
             principal=_principal(),
         )
 
-        self.assertEqual(
-            [row["item"] for row in service.writeup_traffic()], [self.writeup]
-        )
+        self.assertEqual([row["item"] for row in service.writeup_traffic()], [self.writeup])
         self.assertEqual([row["item"] for row in service.page_traffic()], [self.page])
 
     def test_the_same_path_on_another_host_is_not_credited(self):
@@ -459,9 +430,7 @@ class JoinTests(TestCase):
     def test_something_published_and_unread_is_kept_and_sorted_last(self):
         """The most actionable row on the page is the one with no number."""
 
-        service.record_analytics(
-            _payload([_row(value="/contact/", pageviews=96)]), principal=_principal()
-        )
+        service.record_analytics(_payload([_row(value="/contact/", pageviews=96)]), principal=_principal())
 
         rows = service.page_traffic()
         self.assertEqual([row["item"].slug for row in rows], ["contact"])
@@ -496,9 +465,7 @@ class WindowTests(TestCase):
         self.assertEqual(rows, [{"value": "/about/", "pageviews": 40, "visits": 20}])
 
     def test_a_day_older_than_the_window_is_left_out_of_the_reading(self):
-        service.record_analytics(
-            _payload([_row(offset=400, pageviews=999)]), principal=_principal()
-        )
+        service.record_analytics(_payload([_row(offset=400, pageviews=999)]), principal=_principal())
 
         self.assertEqual(service.site_totals()["pageviews"], 0)
 
@@ -557,9 +524,7 @@ class OverviewPageTests(TestCase):
     def setUp(self):
         from django.contrib.auth import get_user_model
 
-        user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(user)
 
     def test_it_says_so_plainly_before_the_first_sweep(self):
@@ -571,10 +536,7 @@ class OverviewPageTests(TestCase):
     def test_every_breakdown_the_reader_collects_reaches_the_page(self):
         service.record_analytics(
             _payload(
-                [
-                    _row(dimension=dimension, value=f"value-{dimension}")
-                    for dimension in RumDaily.Dimension.values
-                ]
+                [_row(dimension=dimension, value=f"value-{dimension}") for dimension in RumDaily.Dimension.values]
             ),
             principal=_principal(),
         )
@@ -626,9 +588,7 @@ class ContentSectionTrafficTests(TestCase):
     def setUp(self):
         from django.contrib.auth import get_user_model
 
-        user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(user)
         self.read = ContentItem.objects.create(
             title="Read",
@@ -652,10 +612,7 @@ class ContentSectionTrafficTests(TestCase):
     def test_unmeasured_is_absent_rather_than_zero(self):
         """Nobody visited and nobody looked are different claims."""
 
-        attached = {
-            item.slug: item.pageviews
-            for item in service.attach_traffic([self.read, self.unread])
-        }
+        attached = {item.slug: item.pageviews for item in service.attach_traffic([self.read, self.unread])}
 
         self.assertEqual(attached["read"], 412)
         self.assertIsNone(attached["unread"])
@@ -738,9 +695,7 @@ class RegisteredResourceTests(TestCase):
     def test_a_breakdown_can_be_asked_for_by_name(self):
         from hq.platform.application.resources import list_resource
 
-        result = list_resource(
-            "analytics", {"dimension": "country"}, principal=_principal()
-        )
+        result = list_resource("analytics", {"dimension": "country"}, principal=_principal())
 
         self.assertEqual([row["value"] for row in result["items"]], ["Germany"])
 
@@ -782,6 +737,4 @@ class RecordedDayTests(TestCase):
             principal=_principal(),
         )
 
-        self.assertEqual(
-            service.latest_reading(), timezone.now().date() - timedelta(days=1)
-        )
+        self.assertEqual(service.latest_reading(), timezone.now().date() - timedelta(days=1))

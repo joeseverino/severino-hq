@@ -31,17 +31,17 @@ not run, so the time is the request's own. A route with no entry is reported
 as not exercised, with ``UNSAFE``'s reason where there is one.
 """
 
-from __future__ import annotations
-
 import functools
 import json
 import re
 import statistics
 import time
 from collections import Counter
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Iterator
+from pathlib import Path
+from typing import Any, override
 from unittest import mock
 
 from django.conf import settings
@@ -128,7 +128,7 @@ VARIANTS: dict[str, tuple[str, ...]] = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Action:
     """What one action is posted: its route arguments, its form, and what must
     exist first (made inside the same rolled-back transaction)."""
@@ -332,9 +332,7 @@ def _machine_client() -> Iterator[dict[str, str]]:
 
 # A region that names the part of its page it is: `data-fragment` (its
 # address; empty for the page it is on), then `data-fragment-name`.
-_PART = re.compile(
-    r'\bdata-fragment(?:="([^"]*)")?(?=\s)[^>]*?\bdata-fragment-name="(\w+)"'
-)
+_PART = re.compile(r'\bdata-fragment(?:="([^"]*)")?(?=\s)[^>]*?\bdata-fragment-name="(\w+)"')
 
 
 def _asked_again(client: Client, page: str, url: str) -> list[tuple[str, str, dict[str, str]]]:
@@ -428,6 +426,7 @@ def _swept_columns(result: Result) -> str:
 class Command(BaseCommand):
     help = "Time every page and action, with its query count, over a populated scratch database."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument("--scale", type=float, default=1.0, help="Multiplies the seeded counts.")
         parser.add_argument("--rounds", type=int, default=30, help="Timed requests per page.")
@@ -435,14 +434,17 @@ class Command(BaseCommand):
         parser.add_argument("--sql", action="store_true", help="Print each benched page's queries.")
         parser.add_argument("--json", default="", help="Also write the results to this file.")
         parser.add_argument(
-            "--sweeps", action="store_true",
+            "--sweeps",
+            action="store_true",
             help="Also time the first request after a sweep that changed nothing.",
         )
         parser.add_argument(
-            "--no-ahead", action="store_true",
+            "--no-ahead",
+            action="store_true",
             help="With --sweeps: do not ask again after the sweep, so the request derives.",
         )
 
+    @override
     def handle(self, *args, **options):
         if not settings.STATIC_LIVE:
             # Uncollected, hashed storage hashes each asset on every request.
@@ -454,7 +456,7 @@ class Command(BaseCommand):
             teardown_databases(databases, verbosity=0)
         self._report(results, left, unexercised)
         if options["json"]:
-            with open(options["json"], "w", encoding="utf-8") as out:
+            with Path(options["json"]).open("w", encoding="utf-8") as out:
                 json.dump([asdict(result) for result in results], out, indent=2)
 
     def _run(self, options) -> tuple[list[Result], list[tuple[str, str]], list[tuple[str, str]]]:
@@ -466,11 +468,7 @@ class Command(BaseCommand):
             client = Client(headers=headers, raise_request_exception=False)
             client.force_login(seeded.user)
             wanted = [(page, url, None) for page, url in pages if options["only"] in page]
-            asked = [
-                again
-                for page, url, _ in wanted
-                for again in _asked_again(client, page, url)
-            ]
+            asked = [again for page, url, _ in wanted for again in _asked_again(client, page, url)]
             results = [
                 self._said(options, *_measure(client, page, url, options["rounds"], headers))
                 for page, url, headers in wanted + asked
@@ -479,14 +477,12 @@ class Command(BaseCommand):
                 # The first sweep of the seeded estate adopts what it finds.
                 with _held_outside():
                     unchanged_sweep()
-                for result, (_page, url, headers) in zip(results, wanted + asked):
+                for result, (_page, url, headers) in zip(results, wanted + asked, strict=False):
                     held = client.get(url)
                     if headers and "If-None-Match" in headers and "ETag" in held:
                         # The validator a browser holds now, after that sweep.
                         headers = {**headers, "If-None-Match": held["ETag"]}
-                    for name, value in _swept(
-                        client, url, options["rounds"], headers, not options["no_ahead"]
-                    ).items():
+                    for name, value in _swept(client, url, options["rounds"], headers, not options["no_ahead"]).items():
                         setattr(result, name, value)
             with _held_outside():
                 results += [
@@ -505,12 +501,14 @@ class Command(BaseCommand):
                 self.stdout.write(f"{times:4d}x {statement[:400]}")
         return result
 
-    def _report(
-        self, results: list[Result], left: list[tuple[str, str]], unexercised: list[tuple[str, str]]
-    ) -> None:
+    def _report(self, results: list[Result], left: list[tuple[str, str]], unexercised: list[tuple[str, str]]) -> None:
         self.stdout.write(
             f"\n{'page':58s} {'status':>6s} {'median':>9s} {'p95':>9s} {'queries':>7s} {'repeat':>6s} {'derive':>6s} {'KB':>8s}"
-            + (f" {'swept':>9s} {'derive':>6s} {'status':>7s} {'ahead':>9s}" if any(r.swept_ms is not None for r in results) else "")
+            + (
+                f" {'swept':>9s} {'derive':>6s} {'status':>7s} {'ahead':>9s}"
+                if any(r.swept_ms is not None for r in results)
+                else ""
+            )
         )
         for result in sorted(results, key=lambda result: -result.median_ms):
             self.stdout.write(

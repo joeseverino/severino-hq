@@ -7,8 +7,6 @@ against that and calls the function with the result, so an action never reads
 a request itself.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -127,7 +125,7 @@ def _report(parameters: Parameters, payload: Any) -> Any:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Action:
     name: str
     run: Run

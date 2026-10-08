@@ -9,8 +9,6 @@ come out the same whichever page asks, plus the ones the shared parser exists
 for.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -18,8 +16,8 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 
-from ..locate import index_of, machines_index, split_endpoint
 from ..infrastructure import declared_machines
+from ..locate import index_of, machines_index, split_endpoint
 from ..whereabouts import Origin, locate
 
 
@@ -151,9 +149,7 @@ class ForwardingAddressTests(TestCase):
     def test_a_bracketed_ipv6_forward_is_matched_rather_than_truncated(self):
         a_machine("example-six", "example-six", "2001:db8::5")
 
-        self.assertEqual(
-            locate("[2001:db8::5]:8000", declared_machines()).host, "example-six"
-        )
+        self.assertEqual(locate("[2001:db8::5]:8000", declared_machines()).host, "example-six")
 
     def test_a_bare_ipv6_answer_is_somewhere_else_rather_than_an_ingress(self):
         """No port means a DNS record named it, which counting colons got wrong."""
@@ -168,9 +164,7 @@ class ForwardingAddressTests(TestCase):
 
         a_connection("example-edge", "ssh", endpoint="198.51.100.7:22")
 
-        self.assertEqual(
-            locate("198.51.100.7:8000", declared_machines()).host, "example-edge"
-        )
+        self.assertEqual(locate("198.51.100.7:8000", declared_machines()).host, "example-edge")
 
 
 class OneMachineOneRowTests(TestCase):
@@ -208,9 +202,7 @@ class ConnectionPageTests(TestCase):
     """The page whose subject is what HQ can reach, naming what it reaches."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="an-operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="an-operator", password="not-a-real-password")
         self.client.force_login(self.user)
         a_machine("example-alpha", "example-alpha", "10.0.0.5")
 
@@ -222,16 +214,16 @@ class ConnectionPageTests(TestCase):
 
         response = self.page()
         self.assertContains(response, "example-alpha")
-        self.assertContains(
-            response, reverse("control_plane:machine", kwargs={"name": "example-alpha"})
-        )
+        self.assertContains(response, reverse("control_plane:machine", kwargs={"name": "example-alpha"}))
 
     def test_a_credential_pointing_at_a_declared_machine_names_it(self):
         """A URL endpoint is a service on a machine, and HQ knows whose."""
 
         a_connection(
-            "example-dns", "cloudflare_dns",
-            endpoint="https://10.0.0.5/api", reaches=["example.com"],
+            "example-dns",
+            "cloudflare_dns",
+            endpoint="https://10.0.0.5/api",
+            reaches=["example.com"],
         )
 
         self.assertContains(self.page(), "example-alpha")
@@ -248,9 +240,7 @@ class ProxyPageTests(TestCase):
     """A forwarding address, named where HQ can and printed where it cannot."""
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="an-operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="an-operator", password="not-a-real-password")
         self.client.force_login(self.user)
         a_machine("example-alpha", "example-alpha", "10.0.0.5", role="Workstation")
 
@@ -278,9 +268,7 @@ class ProxyPageTests(TestCase):
     def test_the_resource_page_names_it_too(self):
         a_proxy("example-proxy", "dev.example.com", "10.0.0.5")
 
-        response = self.client.get(
-            reverse("control_plane:detail", kwargs={"key": "example-proxy"})
-        )
+        response = self.client.get(reverse("control_plane:detail", kwargs={"key": "example-proxy"}))
         self.assertContains(response, "example-alpha")
         # Still said out loud, because the address is what nginx was configured
         # with and the name is HQ's reading of it.
@@ -294,8 +282,8 @@ class ProxyPageTests(TestCase):
         to the page.
         """
 
-        from django.test.utils import CaptureQueriesContext
         from django.db import connection
+        from django.test.utils import CaptureQueriesContext
 
         a_proxy("example-proxy-0", "a0.example.com", "10.0.0.5")
         with CaptureQueriesContext(connection) as one_row:
@@ -320,8 +308,7 @@ class EvidenceTests(TestCase):
         declared = ({"name": "example-alpha", "addresses": ["10.0.0.5"]},)
 
         with self.assertNumQueries(0):
-            self.assertEqual(index_of(declared=declared).at("10.0.0.5:8000"),
-                             "example-alpha")
+            self.assertEqual(index_of(declared=declared).at("10.0.0.5:8000"), "example-alpha")
 
     def test_a_declaration_outranks_a_credential_at_the_same_address(self):
         """Most deliberate first, so one machine does not become two rows."""

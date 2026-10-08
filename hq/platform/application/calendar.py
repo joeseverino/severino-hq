@@ -21,8 +21,6 @@ Three shapes cover everything a source emits:
   Spans keep a lane across the week so a bar lines up from cell to cell.
 """
 
-from __future__ import annotations
-
 import logging
 import re
 from collections.abc import Callable, Iterable, Mapping
@@ -49,7 +47,7 @@ SERIES_SLOTS = 10
 CELL_ROWS = 3
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarEvent:
     """One dated thing a source holds.
 
@@ -122,7 +120,9 @@ class CalendarEvent:
         if not self.timed:
             return ""
         start = timezone.localtime(self.starts)
-        return f"{start.hour % 12 or 12}{f':{start.minute:02d}' if start.minute else ''}{'a' if start.hour < 12 else 'p'}"
+        return (
+            f"{start.hour % 12 or 12}{f':{start.minute:02d}' if start.minute else ''}{'a' if start.hour < 12 else 'p'}"
+        )
 
     def covers(self, day: date) -> bool:
         return self.first_day <= day <= self.last_day
@@ -132,7 +132,7 @@ def _day(value: date) -> date:
     return timezone.localtime(value).date() if isinstance(value, datetime) else value
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarSource:
     """One stream of dated things a domain holds.
 
@@ -163,7 +163,7 @@ class CalendarSource:
             raise ValueError("A calendar source's events must be callable.")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SourceView:
     """A source as the calendar list shows it."""
 
@@ -179,7 +179,7 @@ class SourceView:
     failure: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Placed:
     """An event with the source it came from."""
 
@@ -187,7 +187,7 @@ class Placed:
     source: SourceView
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SpanPiece:
     """One cell's part of a span: titled where it starts or a week begins."""
 
@@ -197,7 +197,7 @@ class SpanPiece:
     titled: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarCell:
     day: date
     in_month: bool
@@ -229,7 +229,7 @@ class CalendarCell:
         return f"{reverse('calendar:month')}?month={self.day:%Y-%m}&day={self.day.isoformat()}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarMonth:
     month: date
     weeks: tuple[tuple[CalendarCell, ...], ...]
@@ -255,7 +255,7 @@ class CalendarMonth:
         return self.month == self.today.replace(day=1)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CalendarDayView:
     day: date
     today: date
@@ -281,8 +281,8 @@ def calendar_sources() -> tuple[tuple[str, CalendarSource], ...]:
     make an operator's unchecked choice ambiguous.
     """
 
-    from .domains import all_domains
     from .calendar_entries import own_sources
+    from .domains import all_domains
 
     # The operator's own events lead under no heading: they are one line.
     found: list[tuple[str, CalendarSource]] = [("", source) for source in own_sources()]
@@ -495,9 +495,7 @@ def _cell(
 # ----- Day --------------------------------------------------------------------
 
 
-def calendar_day(
-    day: date, *, choices: Mapping[str, bool] | None = None, today: date | None = None
-) -> CalendarDayView:
+def calendar_day(day: date, *, choices: Mapping[str, bool] | None = None, today: date | None = None) -> CalendarDayView:
     """Everything one day holds, by source, checked or not."""
 
     today = today or timezone.localdate()

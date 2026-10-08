@@ -1,12 +1,12 @@
 """The controller's own page."""
 
-from __future__ import annotations
+from typing import override
 
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
 from hq.platform.application.controller_page import controller_page
 from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.routes import reverse
 
 
 class ControllerView(PageMixin, TemplateView):
@@ -23,9 +23,11 @@ class ControllerView(PageMixin, TemplateView):
         "service and applies the changes you queue."
     )
 
+    @override
     def get_page_actions(self):
         return (PageAction("Connections", reverse("control_plane:connections")),)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["controller"] = controller_page()

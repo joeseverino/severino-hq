@@ -1,13 +1,11 @@
 """The inner-loop gate maps a change to the tests that reach it."""
 
-from __future__ import annotations
-
 import importlib.util
 import shutil
 import tempfile
+from pathlib import Path
 from unittest import skipUnless
 from unittest.mock import patch
-from pathlib import Path
 
 from django.test import SimpleTestCase
 
@@ -75,7 +73,14 @@ class FastGateConfigTests(SimpleTestCase):
             )
             with patch.object(fast_gate, "ROOT", root):
                 self.assertEqual(
-                    fast_gate.mypy_targets(["hq_sdk/capabilities.py", "hq_sdk/tests/test_contract.py", "hq/platform/application/security.py", "application/untyped.py"]),
+                    fast_gate.mypy_targets(
+                        [
+                            "hq_sdk/capabilities.py",
+                            "hq_sdk/tests/test_contract.py",
+                            "hq/platform/application/security.py",
+                            "application/untyped.py",
+                        ]
+                    ),
                     ["hq_sdk/capabilities.py", "hq/platform/application/security.py"],
                 )
 
@@ -86,7 +91,9 @@ class FastGateNestedLayoutTests(SimpleTestCase):
             root = Path(directory)
             path = Path("hq/domains/example/apps.py")
             (root / path).parent.mkdir(parents=True)
-            (root / path).write_text('class ExampleConfig:\n    name = "hq.domains.example"\n    label = "stable_label"\n')
+            (root / path).write_text(
+                'class ExampleConfig:\n    name = "hq.domains.example"\n    label = "stable_label"\n'
+            )
             with patch.object(fast_gate, "ROOT", root), patch.object(fast_gate, "python_files", return_value=[path]):
                 apps = fast_gate.django_apps()
             self.assertEqual(apps, {"hq/domains/example": "stable_label"})
@@ -100,7 +107,10 @@ class FastGateNestedLayoutTests(SimpleTestCase):
             path = Path("hq/domains/example/views.py")
             (root / path).parent.mkdir(parents=True)
             (root / path).write_text("")
-            with patch.object(fast_gate, "ROOT", root), patch.object(fast_gate, "git", return_value=[str(path), "example/views.py"]):
+            with (
+                patch.object(fast_gate, "ROOT", root),
+                patch.object(fast_gate, "git", return_value=[str(path), "example/views.py"]),
+            ):
                 self.assertEqual(fast_gate.python_files(), [path])
 
     def test_fuzz_modules_are_test_labels_but_fixture_modules_are_dependencies(self):

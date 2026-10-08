@@ -1,9 +1,7 @@
 """The endpoint browsers report Content Security Policy violations to."""
 
-from __future__ import annotations
-
-from datetime import timedelta
 import json
+from datetime import timedelta
 
 from django.contrib.auth.decorators import login_not_required
 from django.http import HttpResponse
@@ -14,7 +12,6 @@ from django.views.decorators.http import require_POST
 from .audit import record_event
 from .models import AuditLog
 from .network import client_ip
-
 
 # The browser's own account of a policy it refused to follow. Bounded on every
 # axis a stranger controls: how much it may send, how much of that is kept, and
@@ -37,11 +34,7 @@ def _csp_violations(payload):
         report = payload.get("csp-report")
         return [report] if isinstance(report, dict) else []
     if isinstance(payload, list):
-        return [
-            item["body"]
-            for item in payload
-            if isinstance(item, dict) and isinstance(item.get("body"), dict)
-        ]
+        return [item["body"] for item in payload if isinstance(item, dict) and isinstance(item.get("body"), dict)]
     return []
 
 
@@ -63,12 +56,11 @@ def csp_report(request):
     it answers the same 204 whatever it decides, so nothing here is an oracle.
     """
 
-
     if len(request.body) > _CSP_REPORT_MAX_BYTES:
         return HttpResponse(status=204)
     try:
         payload = json.loads(request.body.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
+    except ValueError, UnicodeDecodeError:
         return HttpResponse(status=204)
 
     for violation in _csp_violations(payload)[:10]:
@@ -78,12 +70,8 @@ def csp_report(request):
             or violation.get("violated-directive")
             or ""
         )[:_CSP_FIELD_LIMIT]
-        blocked = str(
-            violation.get("blocked-uri") or violation.get("blockedURL") or ""
-        )[:_CSP_FIELD_LIMIT]
-        document = str(
-            violation.get("document-uri") or violation.get("documentURL") or ""
-        )[:_CSP_FIELD_LIMIT]
+        blocked = str(violation.get("blocked-uri") or violation.get("blockedURL") or "")[:_CSP_FIELD_LIMIT]
+        document = str(violation.get("document-uri") or violation.get("documentURL") or "")[:_CSP_FIELD_LIMIT]
         if not directive:
             continue
         # One row per distinct complaint per hour. A page that violates the

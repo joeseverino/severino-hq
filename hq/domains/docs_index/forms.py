@@ -47,10 +47,7 @@ class ManifestImportForm(forms.Form):
         # shape. Both spellings, because a vault export written by a script is
         # as likely to arrive typed `application/json` as named `.json`.
         widget=forms.ClearableFileInput(attrs={"accept": ".json,application/json"}),
-        help_text=(
-            "JSON array of doc records from the vault export. Same format as "
-            "the import_docs_manifest command."
-        ),
+        help_text=("JSON array of doc records from the vault export. Same format as the import_docs_manifest command."),
     )
     update_existing = forms.BooleanField(
         required=False,
@@ -61,7 +58,5 @@ class ManifestImportForm(forms.Form):
     def clean_manifest_file(self):
         manifest = self.cleaned_data["manifest_file"]
         if manifest.size > MAX_MANIFEST_BYTES:
-            raise forms.ValidationError(
-                f"A manifest is at most {MAX_MANIFEST_BYTES // (1024 * 1024)} MB."
-            )
+            raise forms.ValidationError(f"A manifest is at most {MAX_MANIFEST_BYTES // (1024 * 1024)} MB.")
         return manifest

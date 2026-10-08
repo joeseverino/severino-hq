@@ -1,12 +1,9 @@
 """What a service depends on along its path, and what losing each dependency would mean."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from .entity_links import EntityLink
 from .path_model import Hop, ServicePath, Source
-
 
 # What changing or losing a hop does to the name, by step.
 _CONSEQUENCES = {
@@ -26,13 +23,13 @@ _CONSEQUENCES = {
 _CERTIFICATE_CONSEQUENCE = "Clients see a certificate error once it expires or stops covering the name."
 
 
-def consequence_of(hop: "Hop") -> str:
+def consequence_of(hop: Hop) -> str:
     """What changing this hop would do, or "" where nothing depends on it."""
 
     return _CONSEQUENCES.get(hop.step, "")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Dependency:
     """One part a name depends on, and what changing it does."""
 

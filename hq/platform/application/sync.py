@@ -4,8 +4,6 @@ Documentation only. HQ derives its picture of the infrastructure from what its
 credentials reach, so no document describes it.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,7 +13,7 @@ from .documentation import sync_documentation
 from .security import Principal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HQSyncCommand:
     manifest: list[dict[str, Any]]
     update_existing: bool = True

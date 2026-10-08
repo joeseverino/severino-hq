@@ -24,17 +24,17 @@ the view to rebuild the URL itself, which duplicates knowledge the model
 already owns. One query at the boundary is the cheaper trade.
 """
 
-from __future__ import annotations
+from typing import override
 
 from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.shortcuts import redirect
+
 from hq.platform.application.routes import reverse
 
 from .deletion import DeleteCommand
 from .records import delete_instance, display_noun, records_for, save_form
 from .security import web_principal
-
 
 # What a write says when the view does not say it differently. Constants rather
 # than attributes on the mixins: a default on one base and an override on
@@ -93,21 +93,14 @@ class ServiceWriteMixin:
         for name in ("service", "command_from_cleaned_data"):
             value = cls.__dict__.get(name)
             if callable(value) and not isinstance(value, staticmethod):
-                raise ImproperlyConfigured(
-                    f"{cls.__name__}.{name} must be wrapped in staticmethod()."
-                )
+                raise ImproperlyConfigured(f"{cls.__name__}.{name} must be wrapped in staticmethod().")
         # Only a class that supplies a service is a view rather than another
         # layer of mixin, so only that class has to be complete.
         if "service" not in cls.__dict__:
             return
-        missing = [
-            name for name in cls.REQUIRED if getattr(cls, name, None) in (None, "")
-        ]
+        missing = [name for name in cls.REQUIRED if getattr(cls, name, None) in (None, "")]
         if missing:
-            raise ImproperlyConfigured(
-                f"{cls.__name__} writes through a service and declares no "
-                f"{', '.join(missing)}."
-            )
+            raise ImproperlyConfigured(f"{cls.__name__} writes through a service and declares no {', '.join(missing)}.")
 
     def write_principal(self):
         return web_principal(self.request.user)
@@ -119,9 +112,7 @@ class ServiceWriteMixin:
         """The saved record, as a model instance the URL can be taken from."""
 
         key = getattr(self, "identity_result_key", "") or self.identity_attr
-        return self.model._default_manager.get(
-            **{self.identity_attr: result[self.result_key][key]}
-        )
+        return self.model._default_manager.get(**{self.identity_attr: result[self.result_key][key]})
 
     def announce(self, template: str, target) -> None:
         messages.success(self.request, template.format(noun=self.noun, target=target))
@@ -184,9 +175,7 @@ class ServiceDeleteMixin(ServiceWriteMixin):
             principal=self.write_principal(),
             **{self.identity_kwarg: identity},
         )
-        self.announce(
-            getattr(self, "deleted_message", DELETED), result["deleted"]["label"]
-        )
+        self.announce(getattr(self, "deleted_message", DELETED), result["deleted"]["label"])
         return redirect(self.success_url)
 
 
@@ -211,11 +200,7 @@ class RecordFormMixin:
         except ValidationError as error:
             _show_on_form(form, error)
             return self.form_invalid(form)
-        template = (
-            getattr(self, "created_message", CREATED)
-            if adding
-            else getattr(self, "updated_message", UPDATED)
-        )
+        template = getattr(self, "created_message", CREATED) if adding else getattr(self, "updated_message", UPDATED)
         noun = display_noun(records_for(type(self.object)))
         messages.success(self.request, template.format(noun=noun, target=self.object))
         return redirect(self.object.get_absolute_url())
@@ -229,13 +214,12 @@ class RecordDeleteMixin(ServiceDeleteMixin):
     and target come from the declaration.
     """
 
+    @override
     def form_valid(self, form):
         noun = display_noun(records_for(type(self.object)))
         result = delete_instance(self.object, principal=web_principal(self.request.user))
         template = getattr(self, "deleted_message", DELETED)
-        messages.success(
-            self.request, template.format(noun=noun, target=result["deleted"]["label"])
-        )
+        messages.success(self.request, template.format(noun=noun, target=result["deleted"]["label"]))
         return redirect(self.success_url)
 
 

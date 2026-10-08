@@ -5,7 +5,7 @@ of Django, not of any one domain. A surface that accepts several files at once
 should not have to rediscover that ``FileField`` binds exactly one upload.
 """
 
-from __future__ import annotations
+from typing import override
 
 from django import forms
 
@@ -35,6 +35,7 @@ class MultipleFileField(forms.FileField):
 
     widget = MultipleFileInput
 
+    @override
     def clean(self, data, initial=None):
         # Bound before the comprehension: a zero-argument ``super()`` inside one
         # resolves against the comprehension's own scope, not this method's.
@@ -54,6 +55,7 @@ class MultipleFileField(forms.FileField):
 class LinesField(forms.Field):
     """A list edited as one item per line."""
 
+    @override
     def prepare_value(self, value):
         if isinstance(value, (list, tuple)):
             return "\n".join(str(item) for item in value)

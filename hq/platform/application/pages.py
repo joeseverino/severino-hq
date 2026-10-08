@@ -10,15 +10,13 @@ Class-based views mix in ``PageMixin``; function views pass ``page_context``
 to ``render``.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 
 from .fragments import FragmentMixin
 from .ui import PageNavigation
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PageAction:
     """One control in a page's head.
 
@@ -57,7 +55,7 @@ class PageAction:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PageBadge:
     """A short fact beside a page's title: its reach, that it is read-only."""
 
@@ -66,7 +64,7 @@ class PageBadge:
     title: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Page:
     title: str
     lede: str = ""

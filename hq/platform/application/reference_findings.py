@@ -13,8 +13,6 @@ on: some controller reports its connections, or a reachable read listed the
 domains. Without that list HQ does not know, and says nothing.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import Any
@@ -43,11 +41,7 @@ def containments() -> tuple[tuple[str, str, str, str], ...]:
     """Every "is inside" relation the registry declares, as the kind that
     holds, the kind held, and the field of each that names the holder."""
 
-    return tuple(
-        (kind, *provider.contains)
-        for kind, provider in PROVIDERS.items()
-        if provider.contains is not None
-    )
+    return tuple((kind, *provider.contains) for kind, provider in PROVIDERS.items() if provider.contains is not None)
 
 
 def _reported_connections(nodes: Mapping[str, TopologyNode]) -> frozenset[str]:
@@ -56,9 +50,7 @@ def _reported_connections(nodes: Mapping[str, TopologyNode]) -> frozenset[str]:
     return frozenset(
         node.connection_ref
         for node in nodes.values()
-        if node.kind == "connection"
-        and node.connection_ref
-        and not node.id.startswith(_UNREPORTED)
+        if node.kind == "connection" and node.connection_ref and not node.id.startswith(_UNREPORTED)
     )
 
 
@@ -77,7 +69,7 @@ def _read_parents(kind: str) -> frozenset[str] | None:
         for record in snapshot.records:
             try:
                 found = provider.identity(provider.from_record(record))
-            except (AttributeError, KeyError, TypeError, ValueError):
+            except AttributeError, KeyError, TypeError, ValueError:
                 continue
             names.update(normalized_hostname(name) for name in found)
     return frozenset(names) if reachable else None
@@ -166,8 +158,7 @@ def _no_parent(node: TopologyNode, kind: str, missing: str) -> Finding:
         title=f"{name} is in {missing}, which HQ does not have",
         severity="attention",
         explanation=(
-            f"HQ expects no {what} called {missing} and no connection reads one, so "
-            f"{name} cannot be applied anywhere."
+            f"HQ expects no {what} called {missing} and no connection reads one, so {name} cannot be applied anywhere."
         ),
         evidence=((f"{what.capitalize()} it names", missing),),
         remedies=_edit(node),
@@ -187,8 +178,7 @@ def _names_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         if node.kind != "resource" or not node.managed:
             continue
-        for ref in fact_values(node, NO_CONNECTION):
-            found.append(_no_connection(node, ref, reported))
+        found.extend(_no_connection(node, ref, reported) for ref in fact_values(node, NO_CONNECTION))
         for fact in fact_values(node, NO_PARENT):
             kind, _, missing = fact.partition(_SEPARATOR)
             if kind in PROVIDERS and missing:
@@ -203,10 +193,7 @@ RULES: tuple[FindingRule, ...] = (
         "A record names something that is not there",
         "attention",
         _names_nothing,
-        operator_action=(
-            "Change the record to name a connection or a domain HQ has, or add the "
-            "one it names."
-        ),
+        operator_action=("Change the record to name a connection or a domain HQ has, or add the one it names."),
         no_help_reason="HQ cannot tell which one was meant.",
     ),
 )

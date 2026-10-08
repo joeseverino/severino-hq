@@ -11,8 +11,6 @@ recorded. An exception on a thread otherwise goes to stderr and the row sits
 at `running` forever.
 """
 
-from __future__ import annotations
-
 import threading
 import traceback
 from collections.abc import Callable
@@ -52,12 +50,7 @@ class Progress:
         # leaves the panel claiming to still be doing the previous step,
         # which is indistinguishable from a hang.
         changed = bool(note) and note != self._note
-        if (
-            not force
-            and not changed
-            and self._last
-            and (now.timestamp() - self._last) < REPORT_SECONDS
-        ):
+        if not force and not changed and self._last and (now.timestamp() - self._last) < REPORT_SECONDS:
             return
         if note:
             self._note = note
@@ -116,9 +109,7 @@ def start(
     job's result.
     """
     job = _record(kind, label, actor=actor, requested_by=requested_by, request=request)
-    thread = threading.Thread(
-        target=_run, args=(job.pk, work), name=f"job:{kind}", daemon=True
-    )
+    thread = threading.Thread(target=_run, args=(job.pk, work), name=f"job:{kind}", daemon=True)
     thread.start()
     return job
 
@@ -142,8 +133,7 @@ def run(
     serving = serving_request()
     if serving:
         raise OutboundInRequest(
-            f"{serving} tried to run the {kind} job itself. A request starts a "
-            "job and answers at once."
+            f"{serving} tried to run the {kind} job itself. A request starts a job and answers at once."
         )
     job = _record(kind, label, actor=actor, requested_by=requested_by, request=request)
     _work(job.pk, work, own_connection=False)
@@ -163,9 +153,7 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=
     if own_connection:
         close_old_connections()
     started = timezone.now()
-    Job.objects.filter(pk=job_id).update(
-        state=Job.State.RUNNING, started_at=started, heartbeat_at=started
-    )
+    Job.objects.filter(pk=job_id).update(state=Job.State.RUNNING, started_at=started, heartbeat_at=started)
     job = Job.objects.get(pk=job_id)
     progress = Progress(job)
 
@@ -209,7 +197,7 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=
         except Failed as said:
             # A stated outcome, not a fault: the sentence is the whole record.
             _fail(job, str(said) or "The job did not finish.", Failure(message=str(said)[:400], kind="Failed"))
-        except Exception:
+        except Exception:  # noqa: BLE001 - a failed job is recorded, never raised
             # The whole traceback, not just the message: nobody can reproduce
             # a background failure by running it again from a terminal.
             detail = traceback.format_exc()
@@ -229,7 +217,6 @@ def _fail(job: Job, error: str, failure: Failure) -> None:
         finished_at=ended,
         heartbeat_at=ended,
     )
-
 
 
 def _counts(result: dict) -> list[Counts]:

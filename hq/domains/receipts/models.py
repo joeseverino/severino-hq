@@ -1,8 +1,7 @@
 """Receipts."""
 
-from __future__ import annotations
-
 from decimal import Decimal
+from typing import override
 
 from django.db import models
 from django.urls import reverse
@@ -26,9 +25,7 @@ class Receipt(TimestampedModel):
 
     vendor = models.CharField(max_length=160, blank=True)
     date = models.DateField(null=True, blank=True)
-    amount = models.DecimalField(
-        max_digits=12, decimal_places=2, default=Decimal("0.00")
-    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     notes = models.TextField(blank=True)
 
     related_expense = models.ForeignKey(
@@ -56,6 +53,7 @@ class Receipt(TimestampedModel):
             models.Index(fields=("vendor",)),
         ]
 
+    @override
     def __str__(self) -> str:
         label = self.original_filename or (self.file.name if self.file else "receipt")
         return f"{self.vendor or 'Receipt'} · {label}"

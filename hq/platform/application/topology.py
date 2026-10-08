@@ -7,21 +7,16 @@ link to an existing application capability or web use case, never a graph-only
 mutation that could drift from the thing it claims to represent.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import asdict, dataclass, replace
 from typing import Any
+
+from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.names import normalized_hostname
+from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.routes import reverse
 
-from hq.domains.control_plane.names import normalized_hostname
-from hq.domains.control_plane.models import ManagedResource
-from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-
-from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
-from .connections import ConnectionLink, ConnectionSpec
-from .connection_catalog import ConnectionGroup, connection_catalog
 from .action_links import (
     ActionLink as TopologyAction,
     capability_action_link,
@@ -29,12 +24,18 @@ from .action_links import (
     connection_action_links,
     topology_url,
 )
+from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
+from .connection_catalog import ConnectionGroup, connection_catalog
+from .connections import ConnectionLink, ConnectionSpec
+from .contradiction_findings import add_contradiction_facts
+from .derivations import derivation
+from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, record_name
 from .infrastructure import is_drifted, resource_health
 from .resource_capabilities import removals_pending, resource_capabilities
-from .derivations import derivation
-from .derived_inputs import ESTATE_READS, estate_variant
 from .security import Capability, Principal
+from .topology_facts import add_connection_facts, add_observed_facts
+from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
 from .topology_model import (
     Topology,
     TopologyEdge,
@@ -44,10 +45,6 @@ from .topology_model import (
     edge_between,
     newest_stamp,
 )
-from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
-from .contradiction_findings import add_contradiction_facts
-from .topology_facts import add_connection_facts, add_observed_facts
-
 
 _KIND_ORDER = {
     "controller": 0,
@@ -101,9 +98,7 @@ def _resource_actions(
             target=key,
         )
     )
-    capabilities = resource_capabilities(
-        resource, running=(), removal_pending=removal_pending, manages=manages
-    )
+    capabilities = resource_capabilities(resource, running=(), removal_pending=removal_pending, manages=manages)
     drifted = is_drifted(resource)
     if drifted:
         # Something changed it outside HQ: keeping that is the choice that
@@ -132,11 +127,7 @@ def _resource_actions(
             )
         )
     renew = capabilities.actions.get("renew")
-    if (
-        renew
-        and renew.enabled
-        and principal.permits(Capability.REQUEST_CERTIFICATE_RENEWAL)
-    ):
+    if renew and renew.enabled and principal.permits(Capability.REQUEST_CERTIFICATE_RENEWAL):
         actions.append(
             TopologyAction(
                 "renew",
@@ -177,9 +168,7 @@ def _link_node(link: ConnectionLink, *, kind: str, through: str = "") -> Topolog
         label=link.label,
         subtitle=reached if kind == "target" else "Not read yet",
         url=link.url,
-        actions=(
-            (TopologyAction("open", "Open", "read", link.url),) if link.url else ()
-        ),
+        actions=((TopologyAction("open", "Open", "read", link.url),) if link.url else ()),
     )
 
 
@@ -194,9 +183,7 @@ def _connection_actions(spec: ConnectionSpec) -> tuple[TopologyAction, ...]:
     return connection_action_links(spec)
 
 
-def _ability_actions(
-    ability, ability_id: str, principal: Principal
-) -> tuple[TopologyAction, ...]:
+def _ability_actions(ability, ability_id: str, principal: Principal) -> tuple[TopologyAction, ...]:
     """Relate an ability to the graph, and to the capability it names.
 
     An ability that declares a capability is describing an executable contract
@@ -204,9 +191,7 @@ def _ability_actions(
     the graph acquiring a way to run it.
     """
 
-    actions = [
-        TopologyAction("focus", "Show links", "read", _focus_url(ability_id))
-    ]
+    actions = [TopologyAction("focus", "Show links", "read", _focus_url(ability_id))]
     command = capability_action_link(
         ability.capability,
         ability.effect,
@@ -261,9 +246,7 @@ def _unconfirmed(resource: ManagedResource, provider) -> tuple[str, ...]:
         sorted(
             field
             for field, value in (resource.spec or {}).items()
-            if field not in resource.status
-            and field not in unobservable
-            and not _asserts_nothing(value)
+            if field not in resource.status and field not in unobservable and not _asserts_nothing(value)
         )
     )
 
@@ -303,11 +286,7 @@ def _merge_controller_node(
             actions=emitted,
         )
     else:
-        additions = tuple(
-            item
-            for item in emitted
-            if all(existing.url != item.url for existing in current.actions)
-        )
+        additions = tuple(item for item in emitted if all(existing.url != item.url for existing in current.actions))
         nodes[node_id] = replace(
             current,
             observed_at=newest_stamp(current.observed_at, observed_at),
@@ -406,9 +385,7 @@ def _target_edges(instance, connection_id, nodes, edges) -> None:
         # A target that is also a declaration using this connection.
         resource_id = f"resource:{target.resource_key}"
         if target.resource_key and resource_id in nodes:
-            relation = edge_between(
-                connection_id, resource_id, "used_by", status=instance.status
-            )
+            relation = edge_between(connection_id, resource_id, "used_by", status=instance.status)
             edges[relation.id] = relation
 
 
@@ -428,11 +405,7 @@ def _dependency_edges(instance, connection_id, nodes, edges) -> None:
 def _ability_edges(group, connection, connection_id, edges) -> None:
     for state in connection.abilities:
         ability_id = f"ability:{group.spec.name}:{state.ability.name}"
-        available = (
-            "good"
-            if state.available is True
-            else "serious" if state.available is False else "neutral"
-        )
+        available = "good" if state.available is True else "serious" if state.available is False else "neutral"
         relation = edge_between(connection_id, ability_id, "enables", status=available)
         edges[relation.id] = relation
 
@@ -515,7 +488,7 @@ def _resource_node(resource: ManagedResource) -> TopologyNode:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RelationGraph:
     """The estate's nodes and edges, and the join key of each estate node."""
 
@@ -544,9 +517,7 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
             nodes[node.id] = node
         _connection_nodes(connection_catalog(principal=principal), nodes, edges, principal)
         subjects = add_estate(nodes, edges, resources)
-        return RelationGraph(
-            Topology(tuple(nodes.values()), tuple(edges.values())), subjects
-        )
+        return RelationGraph(Topology(tuple(nodes.values()), tuple(edges.values())), subjects)
 
     return _relations(principal, build)
 
@@ -587,9 +558,7 @@ def _derive(principal: Principal) -> Topology:
             key=lambda node: (_KIND_ORDER.get(node.kind, 99), node.label.casefold(), node.id),
         )
     )
-    ordered_edges = tuple(
-        sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target))
-    )
+    ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
     return Topology(ordered_nodes, ordered_edges)
 
 
@@ -600,9 +569,7 @@ def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
 
     # Only an operator is offered actions, so only an operator's view reads this.
     pending_removal = (
-        removals_pending()
-        if resources and principal.permits(Capability.MANAGE_INFRASTRUCTURE)
-        else frozenset()
+        removals_pending() if resources and principal.permits(Capability.MANAGE_INFRASTRUCTURE) else frozenset()
     )
     # Read on first use, once for every resource.
     manages = manages_through()
@@ -615,18 +582,14 @@ def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
             status=status,
             status_label=status_label,
             detail=detail,
-            observed_at=(
-                resource.last_observed_at.isoformat() if resource.last_observed_at else ""
-            ),
+            observed_at=(resource.last_observed_at.isoformat() if resource.last_observed_at else ""),
             declared_revision=resource.generation,
             observed_revision=resource.observed_generation,
             reason=str((resource.conditions or [{}])[0].get("reason", "")).strip(),
             managed=resource.enabled,
             on_demand=bool((resource.spec or {}).get("on_demand")),
             unconfirmed_fields=_unconfirmed(resource, provider),
-            actions=_resource_actions(
-                resource, principal, resource.key in pending_removal, manages
-            ),
+            actions=_resource_actions(resource, principal, resource.key in pending_removal, manages),
         )
     return nodes
 
@@ -660,19 +623,13 @@ def serialize_topology(
         "schema_version": 2,
         # Which lens produced this payload, and every lens that could have.
         "lens": lens.name if lens else None,
-        "lenses": [
-            {"name": item.name, "label": item.label, "summary": item.summary}
-            for item in TOPOLOGY_LENSES
-        ],
+        "lenses": [{"name": item.name, "label": item.label, "summary": item.summary} for item in TOPOLOGY_LENSES],
         "trace": (
             {
                 "focus": trace.focus,
                 "direction": trace.direction,
                 "depth": trace.depth,
-                "hops": [
-                    {"node": node_id, "hop": hop}
-                    for node_id, hop in trace.hops
-                ],
+                "hops": [{"node": node_id, "hop": hop} for node_id, hop in trace.hops],
             }
             if trace
             else None
@@ -701,7 +658,5 @@ def topology(
     projection = derive_topology(principal=principal)
     if selected is not None:
         projection = apply_lens(projection, selected)
-    projection, trace = apply_trace(
-        projection, focus, direction=direction, depth=depth
-    )
+    projection, trace = apply_trace(projection, focus, direction=direction, depth=depth)
     return serialize_topology(projection, lens=selected, trace=trace)

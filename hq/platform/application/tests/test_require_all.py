@@ -27,13 +27,14 @@ class RequireAllTests(SimpleTestCase):
         for path in sorted(root.glob("*.py")):
             if path.name.startswith("test") or path.name == "security.py":
                 continue
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-                if isinstance(node, ast.For) and any(
-                    isinstance(call, ast.Call)
-                    and isinstance(call.func, ast.Attribute)
-                    and call.func.attr == "require"
+            found.extend(
+                f"{path.name}:{node.lineno}"
+                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+                if isinstance(node, ast.For)
+                and any(
+                    isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "require"
                     for statement in node.body
                     for call in ast.walk(statement)
-                ):
-                    found.append(f"{path.name}:{node.lineno}")
+                )
+            )
         self.assertEqual(found, [])

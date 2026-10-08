@@ -8,8 +8,6 @@ Cloudflare entries are ``<permission group name> (<account|zone>)``. Tailscale
 entries are bare scope names.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -46,26 +44,20 @@ def observer_permissions(provider: str) -> tuple[str, ...]:
 
     from .providers import PROVIDERS
 
-    found = {
-        name
-        for spec in OBSERVATIONS.values()
-        if spec.provider == provider
-        for name in spec.requires
-    }
+    found = {name for spec in OBSERVATIONS.values() if spec.provider == provider for name in spec.requires}
     found.update(
         name
         for spec in PROVIDERS.values()
         for part in spec.parts
         # A part names its credential when it is not the kind's own.
-        if part.provider == provider
-        or (not part.provider and provider in spec.connection_providers)
+        if part.provider == provider or (not part.provider and provider in spec.connection_providers)
         for name in part.requires
     )
     found.update(name for name, _ in UNREGISTERED_READS.get(provider, ()))
     return tuple(sorted(found))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Minter:
     """How an observer credential for one provider is minted and stored.
 

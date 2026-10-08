@@ -1,7 +1,5 @@
 """One answer to which documentation an AI-facing surface may name."""
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 
@@ -10,7 +8,6 @@ from django.test import SimpleTestCase
 from hq.domains.docs_index.models import DocumentationRecord
 
 from ..sensitivity import SAFE_SENSITIVITIES
-
 
 ROOT = Path(__file__).resolve().parents[4]
 

@@ -4,10 +4,8 @@ Each takes an optional ``idempotency_key``, declared once from its effect; a
 repeat carrying the same key returns the first result. A ``read`` takes none.
 """
 
-from __future__ import annotations
-
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from django.test import TestCase, override_settings
 
@@ -147,9 +145,7 @@ class ReconcileTests(TestCase):
         )
 
     def ask(self, **payload):
-        return execute_capability(
-            RECONCILE, payload, principal=cli_principal(), target=self.KEY
-        )
+        return execute_capability(RECONCILE, payload, principal=cli_principal(), target=self.KEY)
 
     def test_it_queues_without_a_key(self):
         result = self.ask()

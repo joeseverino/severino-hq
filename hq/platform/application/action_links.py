@@ -7,8 +7,6 @@ authorization and mutation; capability links are additionally filtered here so
 a projection never advertises authority its principal does not hold.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import replace
 from typing import Protocol
@@ -20,8 +18,8 @@ from hq.platform.application.routes import reverse
 
 from .contracts import route_url
 from .security import AuthorizationError, Principal
-from .workflow_contracts import ActionLink
 from .ui import counted
+from .workflow_contracts import ActionLink
 
 
 class ConnectionLinkSpec(Protocol):
@@ -52,9 +50,7 @@ def connection_action_links(spec: ConnectionLinkSpec) -> tuple[ActionLink, ...]:
         seen.add(url)
         actions.append(ActionLink(name, label, "read", url))
     if spec.documentation_url:
-        actions.append(
-            ActionLink("documentation", "Documentation", "read", spec.documentation_url)
-        )
+        actions.append(ActionLink("documentation", "Documentation", "read", spec.documentation_url))
     return tuple(actions)
 
 
@@ -168,9 +164,7 @@ def read_now_payload(values) -> dict[str, object]:
     """The command ``read_now_link``'s URL, or a form, asks for: the inverse."""
 
     payload: dict[str, object] = {
-        key: str(values.get(key, "")).strip()
-        for key in ("connection_ref", "kind")
-        if str(values.get(key, "")).strip()
+        key: str(values.get(key, "")).strip() for key in ("connection_ref", "kind") if str(values.get(key, "")).strip()
     }
     if values.get("every_connection") == "1":
         payload["every_connection"] = True
@@ -273,9 +267,7 @@ def recommend_connection_action(
 
     if missing_scope_count:
         label = "Review access"
-        reason = (
-            f"Missing {counted(missing_scope_count, 'permission')} it needs."
-        )
+        reason = f"Missing {counted(missing_scope_count, 'permission')} it needs."
     elif unhealthy:
         label = "See the problem"
         reason = "The last read through this connection failed."
@@ -286,8 +278,5 @@ def recommend_connection_action(
         return actions
 
     return tuple(
-        replace(item, label=label, reason=reason, recommended=True)
-        if item is preferred
-        else item
-        for item in actions
+        replace(item, label=label, reason=reason, recommended=True) if item is preferred else item for item in actions
     )

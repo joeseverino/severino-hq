@@ -6,8 +6,6 @@ field, a command names the field and bound), and ``in_range`` as a check
 constraint, so a row written around both still cannot store one.
 """
 
-from __future__ import annotations
-
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 

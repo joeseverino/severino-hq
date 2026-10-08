@@ -7,7 +7,6 @@ from .validation import (
     validate_receipt_file,
 )
 
-
 # What the picker offers, taken from the policy that decides rather than
 # restated beside it. A phone camera roll narrows on this attribute, so the two
 # disagreeing means being offered a file the server then refuses after upload.

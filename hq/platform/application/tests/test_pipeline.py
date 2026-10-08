@@ -1,14 +1,12 @@
 """The release pipeline's structure: what runs where, and what may publish."""
 
-from __future__ import annotations
-
-from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io
 import json
-from pathlib import Path
 import re
 import tempfile
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
@@ -19,7 +17,7 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 
 def jobs(text: str) -> dict[str, str]:
     """Each job's text, by id, read by indentation under ``jobs:``."""
-    body = text[text.index("\njobs:\n") + len("\njobs:\n"):]
+    body = text[text.index("\njobs:\n") + len("\njobs:\n") :]
     found: dict[str, str] = {}
     name = None
     for line in body.splitlines(keepends=True):
@@ -34,10 +32,7 @@ def jobs(text: str) -> dict[str, str]:
 
 def steps(job: str) -> list[str]:
     """Each step's text, in order, split at its ``- name:`` or ``- uses:``."""
-    return [
-        "- " + part
-        for part in re.split(r"(?m)^      - ", job)[1:]
-    ]
+    return ["- " + part for part in re.split(r"(?m)^      - ", job)[1:]]
 
 
 def condition(step: str) -> str:
@@ -51,7 +46,7 @@ def condition(step: str) -> str:
         if value not in {">-", ">", "|"}:
             return value
         folded = []
-        for rest in lines[index + 1:]:
+        for rest in lines[index + 1 :]:
             if len(rest) - len(rest.lstrip()) <= 8:
                 break
             folded.append(rest.strip())
@@ -95,9 +90,7 @@ class PromotionTests(SimpleTestCase):
     def test_every_gate_runs_unless_the_tree_was_proven(self):
         for job in ("checks", "tests", "browser"):
             with self.subTest(job=job):
-                self.assertIn(
-                    "if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}", self.jobs[job]
-                )
+                self.assertIn("if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}", self.jobs[job])
 
     def test_a_promoted_image_is_never_built_scanned_or_pushed_again_but_is_signed(self):
         image = steps(self.jobs["image"])
@@ -116,8 +109,7 @@ class PromotionTests(SimpleTestCase):
         self.assertIn("steps.promote.outputs.digest", sign)
 
     def test_the_image_records_the_tree_it_was_built_from(self):
-        self.assertIn('--label "dev.severino.hq.tree=$(git rev-parse \'HEAD^{tree}\')"',
-                      self.jobs["image"])
+        self.assertIn("--label \"dev.severino.hq.tree=$(git rev-parse 'HEAD^{tree}')\"", self.jobs["image"])
 
 
 class PublicLogTests(SimpleTestCase):
@@ -146,16 +138,14 @@ class PublicLogTests(SimpleTestCase):
         self.assertIn("path: failure-logs.tar.age", uploads[0])
         seal = self.steps[named(self.steps, "Seal the withheld output")]
         self.assertIn('scripts/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age', seal)
-        self.assertLess(named(self.steps, "Seal the withheld output"),
-                        named(self.steps, "Upload the sealed output"))
+        self.assertLess(named(self.steps, "Seal the withheld output"), named(self.steps, "Upload the sealed output"))
 
     def test_wheel_digests_reach_the_build_as_a_file_not_an_argument(self):
         # The build log prints each RUN with its build arguments expanded.
         for path in (WORKFLOWS / "compose.yml", ROOT / "composition" / "Dockerfile"):
             with self.subTest(path=path.name):
                 self.assertNotIn("PLUGIN_WHEEL_DIGESTS", path.read_text())
-        self.assertIn("build/composition/digests /tmp/plugin/",
-                      (ROOT / "composition" / "Dockerfile").read_text())
+        self.assertIn("build/composition/digests /tmp/plugin/", (ROOT / "composition" / "Dockerfile").read_text())
 
     def test_sealed_logs_are_encrypted_to_a_post_quantum_key(self):
         pins = (ROOT / "scripts" / "toolchain.env").read_text()
@@ -183,10 +173,7 @@ class CoordinatedBranchTests(SimpleTestCase):
         self.steps = steps(self.compose_job)
 
     def test_every_candidate_step_runs_for_a_pull_request_only(self):
-        candidate = [
-            step for step in self.steps
-            if "steps.coordinated.outputs.found == 'true'" in condition(step)
-        ]
+        candidate = [step for step in self.steps if "steps.coordinated.outputs.found == 'true'" in condition(step)]
         self.assertGreaterEqual(len(candidate), 3)
         for step in candidate:
             with self.subTest(step=step.splitlines()[0]):
@@ -208,9 +195,9 @@ class CoordinatedBranchTests(SimpleTestCase):
         build = self.steps[named(self.steps, "Build coordinated extension branches")]
         run = build.split("run: |", 1)[1]
         self.assertIn('rm -rf "$dir/.git"', run)
-        self.assertIn('docker build -f composition/Dockerfile --target installer-base', run)
+        self.assertIn("docker build -f composition/Dockerfile --target installer-base", run)
         self.assertIn('--entrypoint uv "severino-hq-installer:$GITHUB_SHA"', run)
-        self.assertIn('build --python /usr/local/bin/python --no-cache --wheel', run)
+        self.assertIn("build --python /usr/local/bin/python --no-cache --wheel", run)
         self.assertNotIn("--env GH_TOKEN", run)
         self.assertNotIn("docker.sock", run)
         self.assertNotIn("pip wheel", run)
@@ -240,21 +227,19 @@ class CoordinatedBranchTests(SimpleTestCase):
 
     def test_host_commit_pinning_is_retired(self):
         tracked = [
-            path for path in (ROOT / ".github").rglob("*")
-            if path.is_file() and path.suffix in {".yml", ".yaml"}
+            path for path in (ROOT / ".github").rglob("*") if path.is_file() and path.suffix in {".yml", ".yaml"}
         ] + [ROOT / "docs" / "PLUGINS.md", ROOT / "README.md", ROOT / "AGENTS.md"]
         # The image ships no docs; the workflows are the part that must hold.
         offenders = [
-            str(path.relative_to(ROOT)) for path in tracked
+            str(path.relative_to(ROOT))
+            for path in tracked
             if path.exists() and re.search(r"HQ_COMMIT|hq-commit", path.read_text(encoding="utf-8"))
         ]
         self.assertEqual(offenders, [], "a coordinated branch replaces the host pin")
 
 
 def compose_plugins():
-    spec = importlib.util.spec_from_file_location(
-        "compose_plugins", ROOT / "scripts" / "compose-plugins.py"
-    )
+    spec = importlib.util.spec_from_file_location("compose_plugins", ROOT / "scripts" / "compose-plugins.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -310,12 +295,11 @@ class ComposeCandidateTests(SimpleTestCase):
         alpha = self.wheel("example_alpha-2.0-py3-none-any.whl")
         self.cordon([self.admitted(alpha)])
         out = self.root / "out"
-        code, output = self.run_main(
-            "--entry", self.entry(), "--wheel", str(alpha), "--out", str(out)
-        )
+        code, output = self.run_main("--entry", self.entry(), "--wheel", str(alpha), "--out", str(out))
         self.assertEqual(code, 0)
-        self.assertEqual(json.loads((out / "plugin-lock.json").read_text())["plugins"][0]
-                         ["distribution"], "example-alpha")
+        self.assertEqual(
+            json.loads((out / "plugin-lock.json").read_text())["plugins"][0]["distribution"], "example-alpha"
+        )
         self.assertEqual(output["references"], "example_alpha.plugin:plugin\n")
         self.assertEqual(output["policy-sha256"], f"{'a' * 64}\n")
 
@@ -336,8 +320,16 @@ class ComposeCandidateTests(SimpleTestCase):
                 self.assertEqual(output, {})
         self.cordon([self.admitted(alpha), self.admitted(beta, policy="b" * 64)])
         code, _ = self.run_main(
-            "--entry", self.entry(), "--wheel", str(alpha),
-            "--entry", self.entry(), "--wheel", str(beta), "--out", str(self.root / "out"),
+            "--entry",
+            self.entry(),
+            "--wheel",
+            str(alpha),
+            "--entry",
+            self.entry(),
+            "--wheel",
+            str(beta),
+            "--out",
+            str(self.root / "out"),
         )
         self.assertEqual(code, 1, "two admission policies cannot satisfy one runtime")
 
@@ -359,16 +351,11 @@ class ComposeCandidateTests(SimpleTestCase):
         (out / "plugin-lock.json").write_text("{}")
         beta = self.wheel("example_beta-1.0-py3-none-any.whl")
         alpha = self.wheel("example_alpha-2.0-py3-none-any.whl")
-        code, output = self.run_main(
-            "--candidate", "--wheel", str(beta), "--wheel", str(alpha), "--out", str(out)
-        )
+        code, output = self.run_main("--candidate", "--wheel", str(beta), "--wheel", str(alpha), "--out", str(out))
         self.assertEqual(code, 0)
         self.assertFalse((out / "plugin-lock.json").exists())
-        self.assertEqual(sorted(path.name for path in out.glob("*.whl")),
-                         [alpha.name, beta.name])
-        self.assertIn(
-            "example_alpha.plugin:plugin,example_beta.plugin:plugin\n", output["references"]
-        )
+        self.assertEqual(sorted(path.name for path in out.glob("*.whl")), [alpha.name, beta.name])
+        self.assertIn("example_alpha.plugin:plugin,example_beta.plugin:plugin\n", output["references"])
         self.assertIn(f"{self.module.sha256(alpha)}  {alpha.name}", output["digests"])
         self.assertNotIn("policy-sha256", output)
 
@@ -376,18 +363,30 @@ class ComposeCandidateTests(SimpleTestCase):
         first = self.wheel("example_alpha-1.0-py3-none-any.whl")
         second = self.wheel("example_alpha-2.0-py3-none-any.whl")
         code, _ = self.run_main(
-            "--candidate", "--wheel", str(first), "--wheel", str(second),
-            "--out", str(self.root / "out"),
+            "--candidate",
+            "--wheel",
+            str(first),
+            "--wheel",
+            str(second),
+            "--out",
+            str(self.root / "out"),
         )
         self.assertEqual(code, 1)
 
     def test_a_candidate_takes_no_admission_entries(self):
         wheel = self.wheel("example_alpha-1.0-py3-none-any.whl")
         with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
-            self.module.main([
-                "--candidate", "--entry", str(self.root / "entry.json"),
-                "--wheel", str(wheel), "--out", str(self.root / "out"),
-            ])
+            self.module.main(
+                [
+                    "--candidate",
+                    "--entry",
+                    str(self.root / "entry.json"),
+                    "--wheel",
+                    str(wheel),
+                    "--out",
+                    str(self.root / "out"),
+                ]
+            )
 
 
 class ScriptInputTests(SimpleTestCase):
@@ -436,9 +435,7 @@ class ScriptInputTests(SimpleTestCase):
 
 
 def plugin_identity():
-    spec = importlib.util.spec_from_file_location(
-        "plugin_identity", ROOT / "scripts" / "plugin-identity.py"
-    )
+    spec = importlib.util.spec_from_file_location("plugin_identity", ROOT / "scripts" / "plugin-identity.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -468,12 +465,15 @@ class PluginIdentityTests(SimpleTestCase):
 
     def test_the_package_declares_everything_admission_needs(self):
         found = plugin_identity().identity(self.package(self.manifest()))
-        self.assertEqual(found, {
-            "distribution": "example-alpha",
-            "plugin-id": "example.alpha",
-            "plugin-reference": "example_alpha.plugin:plugin",
-            "django-app": "example_alpha",
-        })
+        self.assertEqual(
+            found,
+            {
+                "distribution": "example-alpha",
+                "plugin-id": "example.alpha",
+                "plugin-reference": "example_alpha.plugin:plugin",
+                "django-app": "example_alpha",
+            },
+        )
 
     def test_a_package_that_disagrees_with_itself_is_refused(self):
         cases = {

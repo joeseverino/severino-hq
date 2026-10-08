@@ -12,12 +12,11 @@ HQ's own image is never planned here: it is deployed by its own signed
 pipeline, and only by that.
 """
 
-from __future__ import annotations
-
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
-from .containers import SERIOUS, BEHIND, VULNERABLE, Container, containers, ranked
+from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .images import affected, version
 
 PATCH = "patch"
@@ -29,20 +28,20 @@ MEDIUM = "medium"
 HIGH = "high"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Blocker:
     id: str
     reason: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Step:
     id: str
     label: str
     detail: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Plan:
     container: Container
     target_tag: str
@@ -126,7 +125,7 @@ def change_between(running: str, target: str) -> str:
         return UNKNOWN_CHANGE
     width = max(len(old), len(new))
     old, new = old + (0,) * (width - len(old)), new + (0,) * (width - len(new))
-    for index, (was, becomes) in enumerate(zip(old, new)):
+    for index, (was, becomes) in enumerate(zip(old, new, strict=True)):
         if was != becomes:
             return (MAJOR, MINOR)[index] if index < 2 else PATCH
     return UNKNOWN_CHANGE
@@ -224,9 +223,15 @@ def _unvetted(standing: Any) -> tuple[Blocker, ...]:
         return (Blocker("target-unread", "The new version's package list and build record have not been read yet."),)
     found = []
     if not attested.get("provenance"):
-        found.append(Blocker("no-provenance", "The new version has no build provenance, so what it was built from is unknown."))
+        found.append(
+            Blocker("no-provenance", "The new version has no build provenance, so what it was built from is unknown.")
+        )
     if not attested.get("packages"):
-        found.append(Blocker("no-package-list", "The new version has no package list, so it cannot be checked for vulnerabilities."))
+        found.append(
+            Blocker(
+                "no-package-list", "The new version has no package list, so it cannot be checked for vulnerabilities."
+            )
+        )
     elif standing.target_checked is None:
         found.append(Blocker("not-scanned", "The new version's packages have not been checked yet."))
     return tuple(found)
@@ -256,14 +261,14 @@ def _blockers(item: Container, standing: Any, introduces) -> tuple[Blocker, ...]
     if not item.running.watcher:
         found.append(Blocker("not-declared", "HQ does not track this container. Adopt it first."))
     if item.mounts is None:
-        found.append(Blocker("mounts-unread", "Its mounts have not been read, so its data cannot be found to snapshot."))
+        found.append(
+            Blocker("mounts-unread", "Its mounts have not been read, so its data cannot be found to snapshot.")
+        )
     if introduces:
         found.append(Blocker("target-affected", f"{standing.latest} brings a known vulnerability of its own."))
     # The queue does not yet send an upgrade to the one machine it concerns,
     # with or without the helper there (``install_steps``).
-    found.append(
-        Blocker("no-apply-path", f"HQ cannot apply an upgrade on {item.machine.name} yet.")
-    )
+    found.append(Blocker("no-apply-path", f"HQ cannot apply an upgrade on {item.machine.name} yet."))
     return tuple(found)
 
 
@@ -275,12 +280,19 @@ def _not_automatic(change: str, verified_by, blockers, unvetted=()) -> tuple[Blo
     if change != PATCH:
         found.append(Blocker("not-a-patch", f"A {change} update waits for you."))
     if not verified_by:
-        found.append(Blocker("unverifiable", "Nothing would show that the new version works, other than that it stays running."))
+        found.append(
+            Blocker("unverifiable", "Nothing would show that the new version works, other than that it stays running.")
+        )
     found.append(Blocker("not-opted-in", "Automatic upgrades are not turned on for this container."))
     return tuple(found)
 
 
-OVERRIDES = ("compose.override.yaml", "compose.override.yml", "docker-compose.override.yaml", "docker-compose.override.yml")
+OVERRIDES = (
+    "compose.override.yaml",
+    "compose.override.yml",
+    "docker-compose.override.yaml",
+    "docker-compose.override.yml",
+)
 
 
 def _pinned_in(item: Container) -> str:
@@ -332,7 +344,7 @@ def _steps(item: Container, target: str, digest: str, data, verified_by) -> tupl
     return tuple(steps)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Readiness:
     """What an upgrade of this container would take, before any is published:
     what would verify it, what would be snapshotted, and what keeps it from
@@ -462,7 +474,7 @@ def install_steps(machine: str, *, deployed_here: bool = False) -> tuple[Step, .
             "allow",
             f"On {machine}, let the controller's account run it with an upgrade's arguments, and nothing else. "
             "HQ does not know which account that is: set account= to it first.",
-            "account=CONTROLLER_ACCOUNT && id -u \"$account\" >/dev/null "
+            'account=CONTROLLER_ACCOUNT && id -u "$account" >/dev/null '
             f"&& printf '%s ALL=(root) NOPASSWD: %s\\n' \"$account\" '{sudoers_command()}' "
             f"| sudo tee {SUDOERS} >/dev/null && sudo chmod 0440 {SUDOERS} && sudo visudo -cf {SUDOERS}",
         ),
@@ -478,7 +490,9 @@ def _uncheckable(standing: Any) -> tuple[Blocker, ...]:
     if attested is None or attested.get("unread"):
         return (Blocker("attestations-unread", "Its package list and build record have not been read yet."),)
     if not attested.get("packages"):
-        return (Blocker("no-package-list", "Its publisher provides no package list, so a new release cannot be checked."),)
+        return (
+            Blocker("no-package-list", "Its publisher provides no package list, so a new release cannot be checked."),
+        )
     return ()
 
 

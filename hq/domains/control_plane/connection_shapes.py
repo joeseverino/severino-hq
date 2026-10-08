@@ -7,8 +7,6 @@ these (``bridge_registry``), so a setting's name, whether it is required and
 whether it is secret are stated here and nowhere else.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any
@@ -84,9 +82,7 @@ def _shapes(*shapes: ConnectionShape) -> Mapping[str, ConnectionShape]:
 
 # Every shape, by name. ``acme`` belongs to no provider: it is the certificate
 # authority account the TLS provider issues through.
-SHAPES = _shapes(
-    ACME, API_TOKEN, GITHUB_APP, LOGIN, OAUTH_CLIENT, SERVICE_ACCOUNT, SSH_TRANSPORT
-)
+SHAPES = _shapes(ACME, API_TOKEN, GITHUB_APP, LOGIN, OAUTH_CLIENT, SERVICE_ACCOUNT, SSH_TRANSPORT)
 
 
 def _entry(setting: Setting) -> dict[str, Any]:

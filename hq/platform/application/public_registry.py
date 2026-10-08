@@ -14,11 +14,10 @@ Each reading stands as long as what it reads is slow to change
 (``READ_EVERY``); a digest's attestations never change, so each is read once.
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timedelta
 from ipaddress import ip_address
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -96,14 +95,10 @@ def wanted_addresses() -> tuple[str, ...]:
     machine's tailnet client reports."""
 
     from .infrastructure import declared_machines
-    from .tailnet_presence import tailnet_presence
     from .services import service_catalog
+    from .tailnet_presence import tailnet_presence
 
-    found = {
-        public_address(service.origin.address)
-        for service in service_catalog()
-        if service.origin is not None
-    }
+    found = {public_address(service.origin.address) for service in service_catalog() if service.origin is not None}
     for machine in declared_machines():
         found.update(public_address(str(item)) for item in machine.get("addresses") or ())
     # Already filtered to public addresses by the reach ranges.
@@ -121,11 +116,7 @@ def holders(addresses) -> dict[str, str]:
     found = {}
     for address in addresses:
         holder = next(
-            (
-                item.title
-                for item in index.about(Subject.of(addresses=(address,)), kinds=(ADDRESS_KIND,))
-                if item.title
-            ),
+            (item.title for item in index.about(Subject.of(addresses=(address,)), kinds=(ADDRESS_KIND,)) if item.title),
             "",
         )
         found[address] = holder
@@ -186,12 +177,11 @@ def read_domain(domain: str, registrations: Callable[..., dict] = domain_registr
 def wanted_images() -> dict[str, tuple[str, ...]]:
     """``{registry/repository: the references running}`` for every image a container runs."""
 
+    from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
     from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     from .facts import inventory_records
     from .images import ImageRef
-
-    from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
 
     # A reference pinned by digest alone names no tag; the machine's copy says
     # which tag it was pulled as, so that tag's digest can be read too.
@@ -315,7 +305,12 @@ def read_digest(key: str) -> dict[str, Any]:
         raise LookupNotFound(str(exc)) from exc
     except RegistryReadError as exc:
         raise LookupUnavailable(str(exc)) from exc
-    return {"digest": key, "image": image.name, "platform_digest": attached["platform_digest"], **reduce(attached["statements"])}
+    return {
+        "digest": key,
+        "image": image.name,
+        "platform_digest": attached["platform_digest"],
+        **reduce(attached["statements"]),
+    }
 
 
 def vulnerability_reader(
@@ -454,10 +449,7 @@ def _report(
     from hq.domains.control_plane.models import ProviderInventory
 
     stored = ProviderInventory.objects.filter(kind=kind).first()
-    kept = {
-        str(record.get(key, "")): record
-        for record in (stored.records if stored is not None else ())
-    }
+    kept = {str(record.get(key, "")): record for record in (stored.records if stored is not None else ())}
     wanted = tuple(dict.fromkeys(subjects))
     every = READ_EVERY.get(kind, REFRESH_AFTER)
     due = [subject for subject in wanted if _due(kept.get(subject), every, now, force)]
@@ -554,7 +546,7 @@ def _images(now: datetime, force: bool, principal: Principal) -> list[Any]:
         ),
     )
     recorded: list[Any] = []
-    for kind, stage in zip((IMAGE_KIND, DIGEST_KIND, UPSTREAM_KIND, VULNERABILITY_KIND), stages):
+    for kind, stage in zip((IMAGE_KIND, DIGEST_KIND, UPSTREAM_KIND, VULNERABILITY_KIND), stages, strict=False):
         report = stage()
         if report is not None:
             recorded.extend(record_inventory({kind: report}, principal=principal).get("recorded") or ())

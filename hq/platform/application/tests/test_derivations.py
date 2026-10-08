@@ -1,11 +1,10 @@
 """Derived facts: computed once per change of their inputs, and never served stale."""
 
-from __future__ import annotations
-
 import pickle
 import sys
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone as utc
+from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from unittest import mock
 
 from django.core.cache import caches
@@ -31,7 +30,7 @@ from hq.platform.core.models import ActionItemRead, Revision, UpstreamReading
 READING = UpstreamReading._meta.db_table
 # A window the seeded estate has events in.
 WINDOW = (date(2026, 1, 1), date(2027, 12, 31))
-MOMENT = datetime(2026, 1, 1, 12, 0, tzinfo=utc.utc)
+MOMENT = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
 
 def _revision(table: str) -> int:
@@ -200,9 +199,10 @@ class DerivationTests(TestCase):
                 count()
 
     def test_arguments_are_answered_apart(self):
-        with declared(
-            "test.vary", reads=("core.UpstreamReading",), vary=lambda prefix: prefix.lower()
-        ) as (register, calls):
+        with declared("test.vary", reads=("core.UpstreamReading",), vary=lambda prefix: prefix.lower()) as (
+            register,
+            calls,
+        ):
             keys = register(lambda prefix: prefix)
 
             self.assertEqual((keys("a"), keys("b"), keys("A")), ("a", "b", "a"))
@@ -232,9 +232,7 @@ class DerivationTests(TestCase):
 
             self.assertEqual((both(), len(calls)), ((False,), 1))
             # Answered from the cache, the inner one still passes its deadline on.
-            caches[revisions.CACHE_ALIAS].delete_many(
-                [key for key in self._keys() if key.startswith("test.outer")]
-            )
+            caches[revisions.CACHE_ALIAS].delete_many([key for key in self._keys() if key.startswith("test.outer")])
             self.assertEqual((both(), len(calls)), ((False,), 2))
             clock.return_value = deadline
             self.assertEqual((both(), len(calls)), ((True,), 3))
@@ -311,7 +309,7 @@ class DerivationTests(TestCase):
 
     def test_a_value_that_cannot_be_stored_is_still_the_answer(self):
         with declared("test.unpicklable", reads=("core.UpstreamReading",)) as (register, calls):
-            answer = register(lambda: (lambda: 1))
+            answer = register(lambda: lambda: 1)
 
             with self.assertLogs("severino.derivations", "ERROR"):
                 self.assertEqual(answer()(), 1)
@@ -372,9 +370,7 @@ class ClockTests(SimpleTestCase):
         self.assertEqual(self._held(lambda: derivations.reached(later)), (False, later))
         self.assertEqual(self._held(lambda: derivations.reached(MOMENT)), (True, None))
         self.assertEqual(self._held(lambda: derivations.passed(MOMENT)), (False, MOMENT))
-        self.assertEqual(
-            self._held(lambda: derivations.passed(MOMENT - timedelta(seconds=1))), (True, None)
-        )
+        self.assertEqual(self._held(lambda: derivations.passed(MOMENT - timedelta(seconds=1))), (True, None))
 
     def test_whole_units_hold_until_the_next_one(self):
         start = MOMENT - timedelta(hours=2, minutes=30)
@@ -404,15 +400,13 @@ class ClockTests(SimpleTestCase):
     def test_days_left_agrees_with_itself_until_the_day_it_names_ends(self):
         for hours in (-60.2, -24.1, -1, 0.5, 11, 13, 35, 36.1, 37, 24 * 30 + 3):
             when = MOMENT + timedelta(hours=hours)
-            days, until = self._held(lambda: days_until(when))
+            days, until = self._held(partial(days_until, when))
             with self.subTest(hours=hours):
                 self.assertGreater(until, MOMENT)
                 just_before = until - timedelta(seconds=1)
-                self.assertEqual(self._held(lambda: days_until(when), just_before)[0], days)
+                self.assertEqual(self._held(partial(days_until, when), just_before)[0], days)
                 just_after = until + timedelta(seconds=1)
-                self.assertNotEqual(
-                    self._held(lambda: days_until(when), just_after)[0], days
-                )
+                self.assertNotEqual(self._held(partial(days_until, when), just_after)[0], days)
 
     def test_outside_a_derivation_the_clock_only_answers(self):
         self.assertFalse(derivations.reached(timezone.now() + timedelta(days=1)))
@@ -599,9 +593,7 @@ class ActionItemCountTests(TestCase):
         self.assertNotEqual(again.headers["ETag"], etag)
 
     def test_a_validator_that_names_nothing_is_answered_in_full(self):
-        self.assertEqual(
-            self.client.get(self.url, headers={"if-none-match": '"anything"'}).status_code, 200
-        )
+        self.assertEqual(self.client.get(self.url, headers={"if-none-match": '"anything"'}).status_code, 200)
 
     def test_a_queue_an_extension_reports_work_to_carries_a_validator(self):
         from hq.platform.application.domains import Domain, all_domains
@@ -610,7 +602,10 @@ class ActionItemCountTests(TestCase):
 
         item = Insight("attention", "Example", "Something waits", "1", "Body.")
         extra = Domain(
-            "example.extension", "Example", "extension", (),
+            "example.extension",
+            "Example",
+            "extension",
+            (),
             PluginIntegration(attention=provided("extension.example.extension.attention", lambda: (item,))),
         )
         with mock.patch(

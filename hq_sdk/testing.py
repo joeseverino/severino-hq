@@ -1,7 +1,5 @@
 """Conformance helpers for plugin test suites."""
 
-from __future__ import annotations
-
 import time
 
 from django.db.models import Manager

@@ -1,13 +1,12 @@
 """Readings a controller takes of the machine it runs on and the edges it can see."""
 
-from __future__ import annotations
-
 import re
 from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator, ConfigDict, Field
 
 from .contract import ObservationRecord, ObservationSpec
+
 
 class HostFirewallRecord(ObservationRecord):
     record: str
@@ -131,9 +130,7 @@ def _or_blank(pattern: str) -> str:
 UnitName = Annotated[str, Field(pattern=UNIT_NAME, max_length=UNIT_NAME_LENGTH)]
 UnitWord = Annotated[str, Field(pattern=UNIT_WORD)]
 UnitInstant = Annotated[str, Field(pattern=UNIT_INSTANT)]
-OptionalUnitName = Annotated[
-    str, Field(pattern=_or_blank(UNIT_NAME), max_length=UNIT_NAME_LENGTH)
-]
+OptionalUnitName = Annotated[str, Field(pattern=_or_blank(UNIT_NAME), max_length=UNIT_NAME_LENGTH)]
 OptionalUnitWord = Annotated[str, Field(pattern=_or_blank(UNIT_WORD))]
 OptionalUnitInstant = Annotated[str, Field(pattern=_or_blank(UNIT_INSTANT))]
 
@@ -148,24 +145,54 @@ class HostUnitRecord(ObservationRecord):
 
     # The controller sends these members and no other; HQ drops one it does
     # not name, so nothing a unit runs, is given or reads has a field to keep.
-    model_config = ConfigDict(
-        extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False}
-    )
+    model_config = ConfigDict(extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False})
 
     unit: UnitName = Field(description="Id: the unit's name.")
-    load: UnitWord = Field(description="LoadState: loaded, or why systemd holds no configuration for it (not-found, masked, error, bad-setting).")
-    file_state: OptionalUnitWord = Field(default="", description="UnitFileState: whether the unit file is enabled, static or disabled. Absent for a unit with no file.")
-    active: UnitWord = Field(description="ActiveState: active, inactive, activating, deactivating, failed and the like.")
-    sub: UnitWord = Field(description="SubState: the unit type's own word for the same state, such as waiting or elapsed for a timer.")
-    result: OptionalUnitWord = Field(default="", description="Result: success, or why the last run failed (exit-code, signal, timeout and the like).")
-    main_code: int = Field(default=0, ge=0, description="ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).")
-    main_status: int = Field(default=0, ge=0, description="ExecMainStatus: the exit status or signal number of the main process of the last run.")
-    started_at: OptionalUnitInstant = Field(default="", description="InactiveExitTimestamp: when the last start began, on this boot.")
-    ended_at: OptionalUnitInstant = Field(default="", description="InactiveEnterTimestamp: when the unit last became inactive or failed, on this boot.")
-    condition: OptionalUnitWord = Field(default="", description="ConditionResult: yes or no, whether the unit's conditions held when last checked. A start whose conditions do not hold is skipped without failing.")
-    condition_at: OptionalUnitInstant = Field(default="", description="ConditionTimestamp: when the conditions were last checked.")
-    last_trigger_at: OptionalUnitInstant = Field(default="", description="LastTriggerUSec: when a timer last started its unit.")
-    next_elapse_at: OptionalUnitInstant = Field(default="", description="NextElapseUSecRealtime: when a timer with a calendar schedule next elapses.")
+    load: UnitWord = Field(
+        description="LoadState: loaded, or why systemd holds no configuration for it (not-found, masked, error, bad-setting)."
+    )
+    file_state: OptionalUnitWord = Field(
+        default="",
+        description="UnitFileState: whether the unit file is enabled, static or disabled. Absent for a unit with no file.",
+    )
+    active: UnitWord = Field(
+        description="ActiveState: active, inactive, activating, deactivating, failed and the like."
+    )
+    sub: UnitWord = Field(
+        description="SubState: the unit type's own word for the same state, such as waiting or elapsed for a timer."
+    )
+    result: OptionalUnitWord = Field(
+        default="", description="Result: success, or why the last run failed (exit-code, signal, timeout and the like)."
+    )
+    main_code: int = Field(
+        default=0,
+        ge=0,
+        description="ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
+    )
+    main_status: int = Field(
+        default=0,
+        ge=0,
+        description="ExecMainStatus: the exit status or signal number of the main process of the last run.",
+    )
+    started_at: OptionalUnitInstant = Field(
+        default="", description="InactiveExitTimestamp: when the last start began, on this boot."
+    )
+    ended_at: OptionalUnitInstant = Field(
+        default="", description="InactiveEnterTimestamp: when the unit last became inactive or failed, on this boot."
+    )
+    condition: OptionalUnitWord = Field(
+        default="",
+        description="ConditionResult: yes or no, whether the unit's conditions held when last checked. A start whose conditions do not hold is skipped without failing.",
+    )
+    condition_at: OptionalUnitInstant = Field(
+        default="", description="ConditionTimestamp: when the conditions were last checked."
+    )
+    last_trigger_at: OptionalUnitInstant = Field(
+        default="", description="LastTriggerUSec: when a timer last started its unit."
+    )
+    next_elapse_at: OptionalUnitInstant = Field(
+        default="", description="NextElapseUSecRealtime: when a timer with a calendar schedule next elapses."
+    )
     activates: OptionalUnitName = Field(default="", description="Unit: the unit a timer or path starts.")
     read_at: UnitInstant = Field(description="When the launcher asked systemd.")
 

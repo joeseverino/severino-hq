@@ -7,15 +7,13 @@ entry says which object it changed. These prove the page reads those rather than
 asking for a column that points at infrastructure.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.core.models import AuditLog
 from hq.domains.projects.models import Project
+from hq.platform.core.models import AuditLog
 
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import service_or_prospect
@@ -88,8 +86,10 @@ class ActivityTests(TestCase):
     def test_changes_to_the_resources_behind_the_name_are_shown(self):
         service = a_service()
         AuditLog.objects.create(
-            action="update", object_type="ManagedResource",
-            object_id="probe-dns", object_repr="probe-dns",
+            action="update",
+            object_type="ManagedResource",
+            object_id="probe-dns",
+            object_repr="probe-dns",
         )
 
         self.assertIn("activity", by_id(service))
@@ -99,8 +99,10 @@ class ActivityTests(TestCase):
 
         service = a_service()
         AuditLog.objects.create(
-            action="update", object_type="ManagedResource",
-            object_id="unrelated", object_repr="unrelated",
+            action="update",
+            object_type="ManagedResource",
+            object_id="unrelated",
+            object_repr="unrelated",
         )
 
         self.assertNotIn("activity", by_id(service))
@@ -108,19 +110,14 @@ class ActivityTests(TestCase):
 
 class PageTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
 
     def test_the_page_renders_what_the_registry_produced(self):
         a_project(name="A Project", repository_url="https://github.com/example/a")
         a_service()
 
-        response = self.client.get(
-            reverse("control_plane:service",
-                    kwargs={"hostname": "probe.example.com"})
-        )
+        response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "probe.example.com"}))
 
         # The project is a tile of the band.
         self.assertContains(response, ">Project<")
@@ -135,10 +132,7 @@ class PageTests(TestCase):
     def test_a_service_nothing_else_knows_about_grows_no_bands(self):
         a_service()
 
-        response = self.client.get(
-            reverse("control_plane:service",
-                    kwargs={"hostname": "probe.example.com"})
-        )
+        response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "probe.example.com"}))
 
         self.assertNotContains(response, "Delivery")
         self.assertNotContains(response, "Recent changes")
@@ -246,9 +240,7 @@ class OneWindowTests(TestCase):
         owner = root / "analytics.py"
         declares = re.compile(r"^[A-Z_]*HOST_TRAFFIC_DAYS\s*=", re.MULTILINE)
         offenders = [
-            path.name
-            for path in sorted(root.glob("*.py"))
-            if path != owner and declares.search(path.read_text())
+            path.name for path in sorted(root.glob("*.py")) if path != owner and declares.search(path.read_text())
         ]
         self.assertEqual(offenders, [])
 
@@ -256,8 +248,7 @@ class OneWindowTests(TestCase):
         import pathlib
 
         template = (
-            pathlib.Path(__file__).resolve().parents[4]
-            / "templates/control_plane/_topology_node_body.html"
+            pathlib.Path(__file__).resolve().parents[4] / "templates/control_plane/_topology_node_body.html"
         ).read_text()
         self.assertIn("{{ traffic_window_days|counted", template)
         self.assertNotIn("Traffic · 7 days", template)
@@ -276,8 +267,12 @@ class PartRowTests(TestCase):
 
         from ..service_context import PartRow
 
-        declared = PartRow(claim=SimpleNamespace(health={"state": "healthy", "label": "Healthy"}, kind="npm.proxy_host"))
-        broken = PartRow(claim=SimpleNamespace(health={"state": "degraded", "label": "Needs attention"}, kind="npm.proxy_host"))
+        declared = PartRow(
+            claim=SimpleNamespace(health={"state": "healthy", "label": "Healthy"}, kind="npm.proxy_host")
+        )
+        broken = PartRow(
+            claim=SimpleNamespace(health={"state": "degraded", "label": "Needs attention"}, kind="npm.proxy_host")
+        )
         read = PartRow(observed_health=("Online", "pill-reachable"))
 
         self.assertEqual(declared.health, ("Healthy", "pill-reachable"))

@@ -18,8 +18,6 @@ What an action is handed has the types, the required members and the bounds
 the contract states, so an action reads a member and never coerces one.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -28,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+
 # jsonschema ships without inline type information.
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from jsonschema.exceptions import ValidationError, best_match  # type: ignore[import-untyped]
@@ -125,7 +124,7 @@ def limit(schema: str, *path: str | int) -> int:
     return node
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Parameter:
     """One query parameter of a bridge action, as the contract states it."""
 
@@ -151,7 +150,7 @@ _REASONS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Operation:
     """One bridge action: its path, its query parameters, and the payload it takes."""
 
@@ -183,9 +182,7 @@ def _violation(validator: Any, subject: str, value: Any) -> str | None:
     error: ValidationError | None = best_match(validator.iter_errors(value))
     if error is None:
         return None
-    pointer = "".join(
-        "/" + str(part).replace("~", "~0").replace("/", "~1") for part in error.absolute_path
-    )
+    pointer = "".join("/" + str(part).replace("~", "~0").replace("/", "~1") for part in error.absolute_path)
     expected = error.validator_value
     if error.validator in ("required", "additionalProperties"):
         # Member names only, which the contract itself publishes.
@@ -225,9 +222,7 @@ def departs(name: str, value: Any) -> str | None:
 
     if name not in contract()["components"]["schemas"]:
         raise ValueError(f"the bridge contract has no {name} schema")
-    validator = Draft202012Validator(
-        {"$ref": f"{CONTRACT_URI}#/components/schemas/{name}"}, registry=_registry()
-    )
+    validator = Draft202012Validator({"$ref": f"{CONTRACT_URI}#/components/schemas/{name}"}, registry=_registry())
     return _violation(validator, name, value)
 
 

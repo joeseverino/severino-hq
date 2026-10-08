@@ -7,28 +7,59 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0032_rules'),
+        ("control_plane", "0032_rules"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='managedresource',
-            name='connection_ref',
-            field=models.GeneratedField(db_persist=True, expression=django.db.models.functions.text.Trim(django.db.models.functions.comparison.Coalesce(django.db.models.functions.comparison.NullIf(django.db.models.fields.json.KeyTextTransform('connection_ref', 'spec'), models.Value('null')), models.Value(''), output_field=models.TextField())), output_field=models.CharField(max_length=160)),
+            model_name="managedresource",
+            name="connection_ref",
+            field=models.GeneratedField(
+                db_persist=True,
+                expression=django.db.models.functions.text.Trim(
+                    django.db.models.functions.comparison.Coalesce(
+                        django.db.models.functions.comparison.NullIf(
+                            django.db.models.fields.json.KeyTextTransform("connection_ref", "spec"),
+                            models.Value("null"),
+                        ),
+                        models.Value(""),
+                        output_field=models.TextField(),
+                    )
+                ),
+                output_field=models.CharField(max_length=160),
+            ),
         ),
         migrations.AddField(
-            model_name='managedresource',
-            name='zone',
-            field=models.GeneratedField(db_persist=True, expression=models.Func(django.db.models.functions.text.Lower(django.db.models.functions.text.Trim(django.db.models.functions.comparison.Coalesce(django.db.models.functions.comparison.NullIf(django.db.models.fields.json.KeyTextTransform('zone', 'spec'), models.Value('null')), models.Value(''), output_field=models.TextField()))), models.Value('.'), function='RTRIM', output_field=models.TextField()), output_field=models.CharField(max_length=253)),
+            model_name="managedresource",
+            name="zone",
+            field=models.GeneratedField(
+                db_persist=True,
+                expression=models.Func(
+                    django.db.models.functions.text.Lower(
+                        django.db.models.functions.text.Trim(
+                            django.db.models.functions.comparison.Coalesce(
+                                django.db.models.functions.comparison.NullIf(
+                                    django.db.models.fields.json.KeyTextTransform("zone", "spec"), models.Value("null")
+                                ),
+                                models.Value(""),
+                                output_field=models.TextField(),
+                            )
+                        )
+                    ),
+                    models.Value("."),
+                    function="RTRIM",
+                    output_field=models.TextField(),
+                ),
+                output_field=models.CharField(max_length=253),
+            ),
         ),
         migrations.AddIndex(
-            model_name='managedresource',
-            index=models.Index(fields=['zone'], name='resource_zone'),
+            model_name="managedresource",
+            index=models.Index(fields=["zone"], name="resource_zone"),
         ),
         migrations.AddIndex(
-            model_name='managedresource',
-            index=models.Index(fields=['connection_ref'], name='resource_connection_ref'),
+            model_name="managedresource",
+            index=models.Index(fields=["connection_ref"], name="resource_connection_ref"),
         ),
     ]

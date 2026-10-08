@@ -26,8 +26,6 @@ Nothing here decides what is true. A request that arrives before the thread
 has finished derives for itself, exactly as it did before.
 """
 
-from __future__ import annotations
-
 import logging
 import re
 import threading
@@ -100,7 +98,7 @@ class _Keeper:
             close_old_connections()
             try:
                 derivations.derive_ahead(self._woken_again)
-            except Exception:  # noqa: BLE001 - the next pass tries again
+            except Exception:  # the next pass tries again
                 logger.exception("ahead.pass_failed")
             finally:
                 close_old_connections()
@@ -136,9 +134,7 @@ class _Keeper:
 KEEPER = _Keeper()
 
 
-def note_write(
-    execute: Callable[..., Any], sql: str, params: Any, many: bool, context: dict[str, Any]
-) -> Any:
+def note_write(execute: Callable[..., Any], sql: str, params: Any, many: bool, context: dict[str, Any]) -> Any:
     """Run the statement; if it wrote a table a remembered question reads, say
     so when its transaction commits."""
 

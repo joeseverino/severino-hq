@@ -1,7 +1,5 @@
 """The list contract's wording: a sort names its order the way a person would."""
 
-from __future__ import annotations
-
 import re
 
 from django.test import SimpleTestCase
@@ -14,7 +12,7 @@ QUERY_WORDS = re.compile(r"\b(reverse|ascending|descending)\b", re.IGNORECASE)
 
 
 def _list_views() -> list[type]:
-    get_resolver().url_patterns  # every view module is imported once the URLs are
+    _ = get_resolver().url_patterns  # every view module is imported once the URLs are
     found, waiting = [], list(TableListMixin.__subclasses__())
     while waiting:
         view = waiting.pop()

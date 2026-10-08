@@ -1,7 +1,7 @@
 [project]
 name = "severino-hq"
 version = "0.0.0"
-requires-python = ">=3.13,<3.15"
+requires-python = ">=3.14,<3.15"
 # Host-owned plugin libraries stay here: admitted wheels install with --no-deps.
 # tblib lets composed parallel suites report real tracebacks.
 dependencies = [
@@ -51,20 +51,55 @@ audit = [
 ]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
+# The width the code is wrapped at; it only decides when isort wraps an import.
+line-length = 120
 # Python without a .py name: the forced command HQ's key runs on shared hosting.
 extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 
+[tool.ruff.per-file-target-version]
+# Run by whatever interpreter the runner or workstation has, not the locked 3.14.
+"scripts/*.py" = "py312"
+"deploy/targets/severino-hq-cpanel-controller" = "py37"
+
 [tool.ruff.lint]
 # Keep the contract explicit and stable across developer machines and CI.
-select = ["E4", "E7", "E9", "F", "C90"]
+select = ["E4", "E7", "E9", "F", "C90", "I", "UP", "B", "SIM", "PTH", "C4", "PERF", "RUF", "FURB", "DJ", "BLE"]
+ignore = [
+    # En dashes, multiplication signs and curly quotes are deliberate typography in user-facing copy.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Django's declarative class bodies: Meta options, form fields and migration operations are lists by contract.
+"**/migrations/*.py" = ["RUF012"]
+"**/models.py" = ["RUF012"]
+"**/forms.py" = ["RUF012"]
+# Test classes hold fixtures as plain class attributes.
+"**/tests/**" = ["RUF012"]
+"**/tests.py" = ["RUF012"]
+"**/test_*.py" = ["RUF012"]
+"hq/platform/core/browser_tests.py" = ["RUF012"]
+# Pydantic copies a field default for each instance.
+"hq/domains/control_plane/observations/*.py" = ["RUF012"]
+# Runs on the 3.6 interpreter shared hosting ships; newer idioms would not run there.
+"deploy/targets/severino-hq-cpanel-controller" = ["UP", "SIM", "PTH", "PERF", "FURB", "B", "RUF", "C4"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ruff.lint.flake8-bugbear]
+# A frozen dataclass: sharing the one default instance is safe.
+extend-immutable-calls = ["hq.platform.application.plugins.PluginIntegration"]
 
 [tool.ruff.lint.mccabe]
 # A function past this many paths is split into named steps.
 max-complexity = 15
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/outbound_work.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/bridge_actions.py", "hq/domains/control_plane/bridge_application.py", "hq/domains/control_plane/bridge_contract.py", "hq/domains/control_plane/bridge_registry.py", "hq/domains/control_plane/connection_shapes.py", "hq/platform/core/unix_server.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp"]
 exclude = "(^|/)(tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
@@ -74,7 +109,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 strict_equality = true
 check_untyped_defs = true
-enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool", "explicit-override"]
 
 [tool.django-stubs]
 django_settings_module = "hq.config.settings_typecheck"

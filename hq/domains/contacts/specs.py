@@ -1,7 +1,5 @@
 """Contact submissions' commands and resource, declared on their domain in application/domains.py."""
 
-from __future__ import annotations
-
 from hq.platform.application import contact_submissions
 from hq.platform.application.contact_submissions import (
     ContactDeleteCommand,

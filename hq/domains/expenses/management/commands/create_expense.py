@@ -3,6 +3,7 @@
 import json
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -13,6 +14,7 @@ from hq.platform.application.security import cli_principal
 class Command(BaseCommand):
     help = "Create an Expense record."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument("--date", required=True)
         parser.add_argument("--vendor", required=True)
@@ -29,6 +31,7 @@ class Command(BaseCommand):
         parser.add_argument("--doc")
         parser.add_argument("--json", action="store_true")
 
+    @override
     def handle(self, *args, **options):
         try:
             expense_date = date.fromisoformat(options["date"])

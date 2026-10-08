@@ -13,14 +13,12 @@ name that resolves only to public addresses, never to the machines HQ sits
 among. A token never follows a redirect to another host.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, override
 
 from .images import DOCKER_HUB, ImageRef
 from .reach import public_host
@@ -66,6 +64,7 @@ class _CheckedRedirects(urllib.request.HTTPRedirectHandler):
     """Follow a registry to its CDN, checked like the first request, and
     without the registry's token."""
 
+    @override
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         _checked(newurl)
         found = super().redirect_request(req, fp, code, msg, headers, newurl)
@@ -165,7 +164,9 @@ def attestations(image: ImageRef, digest: str) -> dict[str, Any]:
     host = _API_HOST.get(image.registry, image.registry)
     index, _headers, token = _get(host, f"/v2/{image.repository}/manifests/{digest}", image, "", _MANIFESTS)
     manifests = [item for item in index.get("manifests") or () if isinstance(item, dict)]
-    runnable = [item for item in manifests if (item.get("annotations") or {}).get("vnd.docker.reference.type") != _ATTESTATION]
+    runnable = [
+        item for item in manifests if (item.get("annotations") or {}).get("vnd.docker.reference.type") != _ATTESTATION
+    ]
     if not runnable:
         return {"platform_digest": digest, "statements": []}
     platform = str(_platform(runnable).get("digest", ""))
@@ -244,7 +245,7 @@ def _request(
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(_checked(url), headers=headers, method=method)
     try:
-        with _opener.open(request, timeout=TIMEOUT_SECONDS) as response:  # nosec B310: checked https, public host
+        with _opener.open(request, timeout=TIMEOUT_SECONDS) as response:  # checked https, public host
             if method == "HEAD":
                 return {}, response.headers
             body = response.read(limit + 1)

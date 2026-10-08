@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
 
+from ..connection_catalog import ConnectionAbilityState, ConnectionGroup, ConnectionView
 from ..connection_security import (
     connection_security_posture,
     observed_connection_controls,
@@ -16,7 +17,6 @@ from ..connections import (
     ConnectionLink,
     ConnectionSpec,
 )
-from ..connection_catalog import ConnectionAbilityState, ConnectionGroup, ConnectionView
 from ..security import Capability
 
 
@@ -61,9 +61,7 @@ def _groups(*, ability_available=True, status="good", required_scopes=("example:
             (
                 ConnectionView(
                     instance,
-                    lifecycle={"good": "ready", "serious": "unreachable"}.get(
-                        status, "configured"
-                    ),
+                    lifecycle={"good": "ready", "serious": "unreachable"}.get(status, "configured"),
                     abilities=(
                         ConnectionAbilityState(
                             ability,
@@ -96,9 +94,7 @@ class OneStateModelTests(TestCase):
         (group,) = _groups()
         view = replace(group.connections[0], lifecycle=lifecycle)
         request = RequestFactory().get("/", HTTP_HOST="hq.example.test", REMOTE_ADDR="100.64.0.5")
-        return connection_security_posture(
-            (replace(group, connections=(view,)),), request=request
-        )
+        return connection_security_posture((replace(group, connections=(view,)),), request=request)
 
     def test_each_lifecycle_lands_in_exactly_one_headline_bucket(self):
         for lifecycle, bucket in (
@@ -113,8 +109,7 @@ class OneStateModelTests(TestCase):
             with self.subTest(lifecycle=lifecycle):
                 posture = self._posture_with(lifecycle)
                 counts = {
-                    name: getattr(posture, name)
-                    for name in ("healthy_count", "attention_count", "unverified_count")
+                    name: getattr(posture, name) for name in ("healthy_count", "attention_count", "unverified_count")
                 }
                 self.assertEqual(counts[bucket], 1, counts)
                 self.assertEqual(sum(counts.values()), 1, counts)
@@ -177,9 +172,7 @@ class ConnectionSecurityPostureTests(TestCase):
         self.assertEqual(proxy.evidence, "1 trusted proxy")
 
     def test_unknown_scope_evidence_stays_visibly_unknown(self):
-        posture = connection_security_posture(
-            _groups(ability_available=None), request=self.request()
-        )
+        posture = connection_security_posture(_groups(ability_available=None), request=self.request())
 
         scope = next(control for control in posture.controls if control.id == "scope")
         self.assertEqual(scope.state, "attention")
@@ -210,12 +203,8 @@ class ConnectionSecurityPostureTests(TestCase):
         self.assertEqual(scope.evidence, "1 checked")
 
     def test_missing_scope_or_untrusted_ingress_never_gets_a_green_summary(self):
-        missing = connection_security_posture(
-            _groups(ability_available=False), request=self.request()
-        )
-        public = connection_security_posture(
-            _groups(), request=self.request("203.0.113.7")
-        )
+        missing = connection_security_posture(_groups(ability_available=False), request=self.request())
+        public = connection_security_posture(_groups(), request=self.request("203.0.113.7"))
 
         self.assertEqual(missing.state, "serious")
         self.assertEqual(public.state, "serious")
@@ -252,9 +241,7 @@ class ConnectionSecurityPostureTests(TestCase):
 
         with self.assertNumQueries(1):
             edge = observed_ingress_control("hq.example.test")
-        posture = connection_security_posture(
-            _groups(), request=self.request(), edge=edge
-        )
+        posture = connection_security_posture(_groups(), request=self.request(), edge=edge)
 
         self.assertEqual(edge.state, "good")
         self.assertEqual(edge.evidence, "Tailnet ranges · deny all")
@@ -311,9 +298,7 @@ class ConnectionSecurityPostureTests(TestCase):
         )
 
         edge = observed_ingress_control("hq.example.test")
-        posture = connection_security_posture(
-            _groups(), request=self.request(), edge=edge
-        )
+        posture = connection_security_posture(_groups(), request=self.request(), edge=edge)
 
         self.assertEqual(edge.state, "serious")
         self.assertEqual(posture.state, "serious")
@@ -341,9 +326,7 @@ class ConnectionSecurityPostureTests(TestCase):
         )
 
         with self.assertNumQueries(1):
-            tailnet_policy, _edge = observed_connection_controls(
-                "hq.example.test"
-            )
+            tailnet_policy, _edge = observed_connection_controls("hq.example.test")
 
         self.assertEqual(tailnet_policy.state, "good")
         self.assertEqual(tailnet_policy.evidence, "1 grant · 1 test")
@@ -420,9 +403,7 @@ class IngressRegistryTests(TestCase):
             PROVIDERS["npm.proxy_host"],
             kind="example.proxy",
             connection_providers=("ssh",),
-            ingress_policy=lambda record: IngressPolicy(
-                hostnames=tuple(record["names"]), restricted=False
-            ),
+            ingress_policy=lambda record: IngressPolicy(hostnames=tuple(record["names"]), restricted=False),
         )
         ProviderInventory.objects.create(
             kind="example.proxy",

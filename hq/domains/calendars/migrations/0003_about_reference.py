@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('calendars', '0002_rules'),
+        ("calendars", "0002_rules"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='entry',
-            name='about',
-            field=models.CharField(blank=True, db_index=True, default='', max_length=300, verbose_name='about'),
+            model_name="entry",
+            name="about",
+            field=models.CharField(blank=True, db_index=True, default="", max_length=300, verbose_name="about"),
         ),
         migrations.AddField(
-            model_name='entry',
-            name='about_name',
-            field=models.CharField(blank=True, default='', editable=False, max_length=200),
+            model_name="entry",
+            name="about_name",
+            field=models.CharField(blank=True, default="", editable=False, max_length=200),
         ),
     ]

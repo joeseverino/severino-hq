@@ -1,24 +1,21 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
-from __future__ import annotations
-from .sensitivity import SAFE_SENSITIVITIES
-from .projection import iso, page_size
-from . import records
-
 from typing import Any
 
 from django.db.models import FETCH_RAISE, Count
 from django.utils import timezone
 
-from hq.platform.core.models import AuditLog
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
+from hq.platform.core.models import AuditLog
+
+from . import records
+from .projection import iso, page_size
+from .sensitivity import SAFE_SENSITIVITIES
 
 
-def list_expenses(
-    *, year: int | None = None, category: str | None = None, limit: int = 50
-) -> dict[str, Any]:
+def list_expenses(*, year: int | None = None, category: str | None = None, limit: int = 50) -> dict[str, Any]:
     """List expense records with stable, sensitivity-safe relationships."""
     queryset = Expense.objects.select_related(
         "related_project", "related_asset", "related_content", "related_documentation"
@@ -38,19 +35,12 @@ def list_expenses(
             "business_use_percentage": expense.business_use_percentage,
             "estimated_deductible_amount": str(expense.estimated_deductible_amount),
             "business_purpose": expense.business_purpose,
-            "related_project": (
-                expense.related_project.slug if expense.related_project else None
-            ),
-            "related_asset": (
-                expense.related_asset.slug if expense.related_asset else None
-            ),
-            "related_content": (
-                expense.related_content.slug if expense.related_content else None
-            ),
+            "related_project": (expense.related_project.slug if expense.related_project else None),
+            "related_asset": (expense.related_asset.slug if expense.related_asset else None),
+            "related_content": (expense.related_content.slug if expense.related_content else None),
             "related_documentation": (
                 expense.related_documentation.doc_id
-                if expense.related_documentation
-                and expense.related_documentation.sensitivity in SAFE_SENSITIVITIES
+                if expense.related_documentation and expense.related_documentation.sensitivity in SAFE_SENSITIVITIES
                 else None
             ),
         }
@@ -63,9 +53,7 @@ def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str,
     """List receipt metadata without file contents, storage paths, or URLs."""
     queryset = Receipt.objects.fetch_mode(FETCH_RAISE)
     if unmatched_only:
-        queryset = queryset.filter(
-            related_expense__isnull=True, related_asset__isnull=True
-        )
+        queryset = queryset.filter(related_expense__isnull=True, related_asset__isnull=True)
     items = [
         {
             "id": receipt.id,
@@ -76,36 +64,25 @@ def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str,
             "date": iso(receipt.date),
             "amount": str(receipt.amount),
             "related_expense_id": receipt.related_expense_id,
-            "related_asset": (
-                receipt.related_asset.slug if receipt.related_asset else None
-            ),
+            "related_asset": (receipt.related_asset.slug if receipt.related_asset else None),
             "uploaded_at": iso(receipt.uploaded_at),
         }
-        for receipt in queryset.select_related("related_asset").order_by(
-            "-uploaded_at"
-        )[: page_size(limit)]
+        for receipt in queryset.select_related("related_asset").order_by("-uploaded_at")[: page_size(limit)]
     ]
     return {"items": items, "count": len(items)}
 
 
 def documentation_status() -> dict[str, Any]:
     """Summarize AI-safe documentation pointers; sensitive records stay excluded."""
-    safe = DocumentationRecord.objects.filter(
-        sensitivity__in=SAFE_SENSITIVITIES
-    ).fetch_mode(FETCH_RAISE)
+    safe = DocumentationRecord.objects.filter(sensitivity__in=SAFE_SENSITIVITIES).fetch_mode(FETCH_RAISE)
     return {
         "total": safe.count(),
         "by_status": {
-            row["status"]: row["count"]
-            for row in safe.values("status")
-            .annotate(count=Count("id"))
-            .order_by("status")
+            row["status"]: row["count"] for row in safe.values("status").annotate(count=Count("id")).order_by("status")
         },
         "by_type": {
             row["doc_type"]: row["count"]
-            for row in safe.values("doc_type")
-            .annotate(count=Count("id"))
-            .order_by("doc_type")
+            for row in safe.values("doc_type").annotate(count=Count("id")).order_by("doc_type")
         },
         "records": [
             {

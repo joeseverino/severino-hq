@@ -10,25 +10,20 @@ opened in six months is a normal state, and a URL that quietly changed meaning
 is the failure this prevents.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Concatenate, Literal, NotRequired, TypedDict, cast
-
-from pydantic import ConfigDict, with_config
 
 from django.conf import settings
 from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
+from pydantic import ConfigDict, with_config
 
 from hq.platform.application.agent_access import agents_paused
 from hq.platform.application.agent_registry import observe
-from hq.platform.application.denials import record_denial
-from hq.platform.core.network import client_ip
 from hq.platform.application.capabilities import (
     CapabilityDescription,
     authorize_capability,
@@ -37,9 +32,15 @@ from hq.platform.application.capabilities import (
     execute_capability,
 )
 from hq.platform.application.connections import describe_connections, list_connections
+from hq.platform.application.denials import record_denial
 from hq.platform.application.findings import findings as application_findings
-from hq.platform.application.topology import topology as application_topology
-from hq.platform.application.security import AuthorizationError, Capability, Principal, web_principal
+from hq.platform.application.idempotency import (
+    IdempotencyConflict,
+    InvalidIdempotencyKey,
+    execute_once,
+    request_fingerprint,
+    validate_key,
+)
 from hq.platform.application.resources import (
     InvalidResourceInput,
     ResourceDescription,
@@ -50,19 +51,16 @@ from hq.platform.application.resources import (
     get_resource as get_application_resource,
     list_resource as list_application_resource,
 )
+from hq.platform.application.security import AuthorizationError, Capability, Principal, web_principal
+from hq.platform.application.topology import topology as application_topology
+from hq.platform.core.network import client_ip
 
-from hq.platform.application.idempotency import (
-    IdempotencyConflict,
-    InvalidIdempotencyKey,
-    execute_once,
-    request_fingerprint,
-    validate_key,
-)
 from .security import TokenError, api_principal, granted, is_configured, verify
 
 CURRENT_API_VERSION = 2
 
 REALM = 'Bearer realm="Severino HQ"'
+
 
 class APIRequest(HttpRequest):
     """A request `_endpoint` has authenticated: who is calling, and with what."""
@@ -180,9 +178,7 @@ def _ok(data: Any, *, status: int = 200) -> HttpResponse:
     return _json({"ok": True, "data": data}, status=status)
 
 
-def _permission_catalog(
-    specs: list[dict[str, Any]], held: set[str] | frozenset[str]
-) -> list[dict[str, Any]]:
+def _permission_catalog(specs: list[dict[str, Any]], held: set[str] | frozenset[str]) -> list[dict[str, Any]]:
     """Annotate static registry entries without duplicating adapter policy."""
 
     return [
@@ -233,9 +229,7 @@ def _request_schema(spec: Mapping[str, Any]) -> dict[str, Any]:
     # schema is nested under ``payload`` those refs still resolve from the
     # document root, so hoist its definitions into the envelope root instead
     # of publishing a schema that only looks valid for flat commands.
-    input_schema = {
-        key: value for key, value in spec["input_schema"].items() if key != "$defs"
-    }
+    input_schema = {key: value for key, value in spec["input_schema"].items() if key != "$defs"}
     properties: dict[str, Any] = {
         "payload": input_schema,
         "expected_updated_at": {"type": "string", "format": "date-time"},
@@ -368,12 +362,14 @@ def _endpoint(
         # without this decorator is not merely unprotected by convention: it
         # is served to anyone who asks. `core.tests.test_security` walks these routes
         # and fails if one lacks the mark.
-        setattr(wrapper, "__hq_authenticated__", True)
-        setattr(wrapper, "__hq_methods__", methods)
-        setattr(wrapper, "__hq_title__", title)
-        setattr(wrapper, "__hq_data__", data)
-        setattr(wrapper, "__hq_errors__", tuple(sorted({*ENDPOINT_ERRORS, *errors})))
-        setattr(wrapper, "__hq_operator_session__", operator_session)
+        wrapper.__dict__.update(
+            __hq_authenticated__=True,
+            __hq_methods__=methods,
+            __hq_title__=title,
+            __hq_data__=data,
+            __hq_errors__=tuple(sorted({*ENDPOINT_ERRORS, *errors})),
+            __hq_operator_session__=operator_session,
+        )
         return wrapper
 
     return decorate
@@ -449,17 +445,12 @@ def resources(request: APIRequest) -> HttpResponse:
     specs: list[ResourceDescription] = described["resources"]
     catalog: ResourceCatalog = {
         "schema_version": described["schema_version"],
-        "resources": [
-            {**spec, "permitted": set(spec["required_capabilities"]) <= held}
-            for spec in specs
-        ],
+        "resources": [{**spec, "permitted": set(spec["required_capabilities"]) <= held} for spec in specs],
     }
     return _ok(catalog)
 
 
-def _projection(
-    serve: Callable[..., Any], query_fields: tuple[str, ...], name: str, title: str, doc: str
-) -> View:
+def _projection(serve: Callable[..., Any], query_fields: tuple[str, ...], name: str, title: str, doc: str) -> View:
     """One principal-scoped projection, served with declared narrowing inputs.
 
     `topology` and `findings` are the same adapter: authorize, read one query
@@ -478,10 +469,7 @@ def _projection(
             return _ok(
                 serve(
                     principal=request.principal,
-                    **{
-                        field: request.GET.get(field, "").strip()
-                        for field in query_fields
-                    },
+                    **{field: request.GET.get(field, "").strip() for field in query_fields},
                 )
             )
         except AuthorizationError as exc:
@@ -493,7 +481,7 @@ def _projection(
     view.__doc__ = doc
     served = _endpoint(("GET",), title=title, data=Projection)(view)
     # The narrowing inputs, for the OpenAPI document's query parameters.
-    setattr(served, "__hq_query_fields__", query_fields)
+    served.__dict__.update(__hq_query_fields__=query_fields)
     return served
 
 
@@ -550,9 +538,7 @@ def _resource_failure(exc: Exception) -> HttpResponse:
     if isinstance(exc, InvalidResourceInput):
         # ``details`` stays the pydantic error list: a documented part of the
         # invalid_input contract, describing the request the client sent.
-        return _fail(
-            exc.reason, code="invalid_input", status=400, details=exc.errors
-        )
+        return _fail(exc.reason, code="invalid_input", status=400, details=exc.errors)
     if isinstance(exc, AuthorizationError):
         return _fail(exc.reason, code=exc.code, status=403)
     raise exc
@@ -576,11 +562,7 @@ def resource_list(request: APIRequest, name: str) -> HttpResponse:
             )
         filters[key] = values[0]
     try:
-        return _ok(
-            list_application_resource(
-                name, filters, principal=request.principal, strict=False
-            )
-        )
+        return _ok(list_application_resource(name, filters, principal=request.principal, strict=False))
     except (
         AuthorizationError,
         InvalidResourceInput,
@@ -595,11 +577,7 @@ def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResp
     """Get one resource record through its declared identifier contract."""
 
     try:
-        return _ok(
-            get_application_resource(
-                name, identifier, principal=request.principal, strict=False
-            )
-        )
+        return _ok(get_application_resource(name, identifier, principal=request.principal, strict=False))
     except (
         AuthorizationError,
         InvalidResourceInput,
@@ -613,16 +591,14 @@ def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResp
 class EnvelopeError(Exception):
     """A request body that never reaches a capability, and why."""
 
-    def __init__(
-        self, message: str, *, code: str = "invalid_input", status: int = 400
-    ) -> None:
+    def __init__(self, message: str, *, code: str = "invalid_input", status: int = 400) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
         self.status = status
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Envelope:
     """The three things a capability call arrives wrapped in."""
 
@@ -659,14 +635,10 @@ def _body_json(request: HttpRequest) -> dict[str, Any]:
             parse_constant=_reject_json_constant,
             object_pairs_hook=_strict_json_object,
         )
-    except (ValueError, UnicodeDecodeError):
-        raise EnvelopeError(
-            "Request body is not valid JSON.", code="invalid_json"
-        ) from None
+    except ValueError, UnicodeDecodeError:
+        raise EnvelopeError("Request body is not valid JSON.", code="invalid_json") from None
     if not isinstance(payload, dict):
-        raise EnvelopeError(
-            "Request body must be a JSON object.", code="invalid_json"
-        )
+        raise EnvelopeError("Request body must be a JSON object.", code="invalid_json")
     return payload
 
 
@@ -735,9 +707,7 @@ def execute(request: APIRequest, name: str) -> HttpResponse:
         code = error.get("code", "operation_failed")
         detail = {
             "code": code,
-            "message": error.get(
-                "message", "The capability could not be executed."
-            ),
+            "message": error.get("message", "The capability could not be executed."),
         }
         if error.get("details") is not None:
             detail["details"] = error["details"]

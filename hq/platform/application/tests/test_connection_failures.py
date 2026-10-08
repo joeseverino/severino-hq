@@ -1,8 +1,6 @@
 """A connection that does not answer: its cause is stored at the source and its
 fix follows the cause."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -17,8 +15,7 @@ from ..security import Capability, Principal, cli_principal
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 SIGN_IN = (
-    "The address answered with a sign-in page at sso.example.com, not the API. "
-    "Use the provider's direct API address."
+    "The address answered with a sign-in page at sso.example.com, not the API. Use the provider's direct API address."
 )
 
 
@@ -66,9 +63,7 @@ class FixFollowsCauseTests(TestCase):
 
         self.assertEqual(found["title"], "example-npm: the address is not Nginx Proxy Manager's API")
         (step,) = found["operator_steps"]
-        self.assertEqual(
-            step["label"], "Point the connection at Nginx Proxy Manager's own API address"
-        )
+        self.assertEqual(step["label"], "Point the connection at Nginx Proxy Manager's own API address")
         self.assertIn(address_fields(), " ".join(step["notes"]))
         self.assertIn("https://proxy.example.com is not the API.", step["notes"])
         self.assertIn({"label": "Cause", "value": "The address is not the API"}, found["evidence"])
@@ -112,16 +107,20 @@ class FixFollowsCauseTests(TestCase):
 class SshTransportTests(TestCase):
     def test_a_host_and_port_endpoint_names_the_host(self):
         ProviderConnection.objects.create(
-            connection_ref="example-ssh", controller_id="example-controller",
-            provider="ssh", endpoint="192.0.2.9:22", reachable=False, probed=True,
-            detail="Timed out", failure="network", observed_at=timezone.now(),
+            connection_ref="example-ssh",
+            controller_id="example-controller",
+            provider="ssh",
+            endpoint="192.0.2.9:22",
+            reachable=False,
+            probed=True,
+            detail="Timed out",
+            failure="network",
+            observed_at=timezone.now(),
         )
 
         (step,) = finding()["operator_steps"]
 
-        self.assertEqual(
-            step["label"], "Check that 192.0.2.9 is up and the controller can reach it"
-        )
+        self.assertEqual(step["label"], "Check that 192.0.2.9 is up and the controller can reach it")
 
 
 class FindingCardTests(TestCase):
@@ -159,6 +158,4 @@ class FindingCardTests(TestCase):
 
         self.assertIn("operator_steps", found)
         self.assertIn("workflow", found)
-        self.assertEqual(
-            [step["phase"] for step in found["workflow"]["steps"]][-1], "verify"
-        )
+        self.assertEqual([step["phase"] for step in found["workflow"]["steps"]][-1], "verify")

@@ -1,22 +1,21 @@
 """Machines and the tailnet: the list, one machine's page, and what a change to either would reach."""
 
-from __future__ import annotations
-
+from typing import override
 from urllib.parse import urlencode
 
 from django.http import Http404
 from django.shortcuts import redirect
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
 from hq.platform.application.connections import machines_once
-from hq.platform.application.machine_context import machine_links, sections_for as machine_sections
-from hq.platform.application.tailnet_context import tailnet_context
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
+from hq.platform.application.machine_context import machine_links, sections_for as machine_sections
 from hq.platform.application.machines import declaration_seed, machine
-from hq.platform.application.security import web_principal
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.resource_capabilities import resource_capabilities
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import web_principal
+from hq.platform.application.tailnet_context import tailnet_context
 
 from .models import ManagedResource
 from .provider_adapters.declarations import MACHINE_KIND
@@ -34,6 +33,7 @@ class MachineListView(PageMixin, TemplateView):
     template_name = "control_plane/machine_list.html"
     page_title = "Machines"
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         machines = machines_once()
@@ -65,8 +65,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
     known = devices()
     asked = {
         "source": request.GET.get("source", "") or default,
-        "target": request.GET.get("target", "")
-        or (default if target_default is None else target_default),
+        "target": request.GET.get("target", "") or (default if target_default is None else target_default),
         "port": request.GET.get("port", ""),
     }
     context = {
@@ -86,9 +85,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
         # exercise. Shown, never applied: what to do about a denial is the
         # operator's call and the editor is where it is made.
         if verdict.known and not verdict.allowed:
-            context["proposal"] = proposed_grant(
-                asked["source"], asked["target"], int(asked["port"])
-            )
+            context["proposal"] = proposed_grant(asked["source"], asked["target"], int(asked["port"]))
     return context
 
 
@@ -103,6 +100,7 @@ class TailnetView(PageMixin, TemplateView):
     template_name = "control_plane/tailnet.html"
     page_title = "Tailnet"
 
+    @override
     def get_page_actions(self):
         policy_declaration = self.tailnet.declaration
         return (
@@ -125,10 +123,12 @@ class TailnetView(PageMixin, TemplateView):
             PageAction("All machines", reverse("control_plane:machines")),
         )
 
+    @override
     def get(self, request, *args, **kwargs):
         self.tailnet = tailnet_context(principal=web_principal(request.user))
         return super().get(request, *args, **kwargs)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(whatif_context(self.request))
@@ -146,6 +146,7 @@ class MachineDetailView(PageMixin, TemplateView):
 
     template_name = "control_plane/machine_detail.html"
 
+    @override
     def get(self, request, *args, **kwargs):
         self.found = machine(kwargs["name"])
         if self.found is None:
@@ -155,23 +156,22 @@ class MachineDetailView(PageMixin, TemplateView):
             return redirect("control_plane:machine", name=self.found.name)
         return super().get(request, *args, **kwargs)
 
+    @override
     def get_page_title(self):
         return self.found.name
 
+    @override
     def get_page_trail(self):
         return (("Machines", reverse("control_plane:machines")),)
 
+    @override
     def get_page_actions(self):
         # The machine's declaration is edited from its own page.
         if self.found.declaration:
             key = self.found.declaration
-            return tuple(
-                [
-                    PageAction("Edit machine", reverse("control_plane:edit", args=[key])),
-                    PageAction(
-                        "Remove", reverse("control_plane:remove", args=[key]), danger=True
-                    ),
-                ]
+            return (
+                PageAction("Edit machine", reverse("control_plane:edit", args=[key])),
+                PageAction("Remove", reverse("control_plane:remove", args=[key]), danger=True),
             )
         # Seeded with what HQ knows, and back here after saving. A machine the
         # tailnet device declaration already names gets its details added; one
@@ -191,23 +191,18 @@ class MachineDetailView(PageMixin, TemplateView):
             ),
         )
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         found = self.found
         context["machine"] = found
         device = (
-            ManagedResource.objects.filter(key=found.route_approval_key).first()
-            if found.route_approval_key
-            else None
+            ManagedResource.objects.filter(key=found.route_approval_key).first() if found.route_approval_key else None
         )
         context["route_approval"] = (
-            resource_capabilities(device, running=()).actions.get("approve-routes")
-            if device is not None
-            else None
+            resource_capabilities(device, running=()).actions.get("approve-routes") if device is not None else None
         )
-        context["route_approval_off"] = bool(
-            context["route_approval"] and not context["route_approval"].enabled
-        )
+        context["route_approval_off"] = bool(context["route_approval"] and not context["route_approval"].enabled)
         # What else HQ can say about this machine, from a registry rather than
         # from this view. A band appears because a resolver produced one, so
         # what HQ learns next reaches the page without either being edited.
@@ -215,16 +210,12 @@ class MachineDetailView(PageMixin, TemplateView):
         from hq.platform.application.docker_sections import docker_line
         from hq.platform.application.page_relations import for_machine
 
-        whole, context["relationships"] = for_machine(
-            found, sections, principal=web_principal(self.request.user)
-        )
+        whole, context["relationships"] = for_machine(found, sections, principal=web_principal(self.request.user))
         # One Docker environment is a line under the containers heading. Its
         # table is left for a machine that has several.
         context["docker"] = docker_line(found) if found.containers else None
         context["sections"] = tuple(
-            section
-            for section in sections
-            if not (context["docker"] and section.id == "docker-environment")
+            section for section in sections if not (context["docker"] and section.id == "docker-environment")
         )
         # The load reading counts running containers at its own moment. The
         # page states one count, the container list's, so the two cannot differ.

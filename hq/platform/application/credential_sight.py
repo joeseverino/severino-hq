@@ -10,13 +10,12 @@ A record that names its ``connection_ref`` belongs to that connection alone, so
 two connections of one provider never show each other's readings.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.contracts import (
@@ -24,7 +23,6 @@ from hq.domains.control_plane.provider_adapters.contracts import (
     PERMISSION_REFUSAL,
 )
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from hq.domains.control_plane.reading_parts import PartRefusal, parts_of, refused_parts
 
 from .labels import human_label
@@ -48,7 +46,7 @@ STATE_LABELS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Sight:
     """One reading or resource kind, and whether the credential can read it."""
 
@@ -121,7 +119,7 @@ class Sight:
         return self.state != READABLE or self.records > 0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProviderSight:
     provider: str
     label: str
@@ -138,11 +136,7 @@ class ProviderSight:
     def tally(self) -> tuple[tuple[int, str], ...]:
         """(count, state label) for each state present, in STATE_LABELS order."""
 
-        return tuple(
-            (count, label)
-            for state, label in STATE_LABELS.items()
-            if (count := self._count(state))
-        )
+        return tuple((count, label) for state, label in STATE_LABELS.items() if (count := self._count(state)))
 
     @property
     def summary(self) -> str:
@@ -164,11 +158,7 @@ class ProviderSight:
         """When what it reads was last read: the oldest of them, said once."""
 
         return min(
-            (
-                sight.observed_at
-                for sight in self.sights
-                if sight.state in (READABLE, PARTIAL) and sight.observed_at
-            ),
+            (sight.observed_at for sight in self.sights if sight.state in (READABLE, PARTIAL) and sight.observed_at),
             default=None,
         )
 
@@ -199,9 +189,7 @@ class ProviderSight:
     def missing(self) -> tuple[str, ...]:
         """Each permission a refused reading or part declares, once, sorted."""
 
-        return tuple(
-            sorted({name for sight in self.refused_permission for name in sight.missing})
-        )
+        return tuple(sorted({name for sight in self.refused_permission for name in sight.missing}))
 
     @property
     def more_scope(self) -> tuple[str, ...]:
@@ -213,9 +201,7 @@ class ProviderSight:
     def unseen(self) -> tuple[str, ...]:
         """What those permissions would let HQ see."""
 
-        return tuple(
-            dict.fromkeys(label for sight in self.refused_permission for label in sight.unseen)
-        )
+        return tuple(dict.fromkeys(label for sight in self.refused_permission for label in sight.unseen))
 
 
 def _through(row: ProviderInventory, connection_ref: str) -> list | None:
@@ -251,8 +237,13 @@ def sight(
         return Sight(kind, label, source, NEVER_SWEPT, requires=requires, permissions=permissions)
     if not row.connected:
         return Sight(
-            kind, label, source, NOT_CONNECTED, observed_at=row.observed_at,
-            requires=requires, permissions=permissions,
+            kind,
+            label,
+            source,
+            NOT_CONNECTED,
+            observed_at=row.observed_at,
+            requires=requires,
+            permissions=permissions,
         )
     if not row.reachable:
         refusal = row.refusal
@@ -310,11 +301,7 @@ def refused_outright(rows: Iterable[Any]) -> str:
     if any(row.reachable for row in rows):
         return ""
     return next(
-        (
-            row.error or "The service refused the credential."
-            for row in rows
-            if row.refusal == CREDENTIAL_REFUSAL
-        ),
+        (row.error or "The service refused the credential." for row in rows if row.refusal == CREDENTIAL_REFUSAL),
         "",
     )
 
@@ -361,9 +348,7 @@ def _attributed(
 PART_SOURCE = "part"
 
 
-def _parts_for(
-    row: ProviderInventory, provider: str, connection_ref: str, *, own: bool
-) -> tuple[PartRefusal, ...]:
+def _parts_for(row: ProviderInventory, provider: str, connection_ref: str, *, own: bool) -> tuple[PartRefusal, ...]:
     """The row's refused parts this provider's credential read: its own kind's
     parts no other provider reads, or the parts it reads of another's."""
 
@@ -396,10 +381,7 @@ def credential_sight(
             for kind, _label, source, _permissions in kinds
             if kind in inventory and source != PART_SOURCE
         )
-        sights = (
-            _attributed(item, inventory.get(item[0]), connection_ref, not refused, provider)
-            for item in kinds
-        )
+        sights = (_attributed(item, inventory.get(item[0]), connection_ref, not refused, provider) for item in kinds)
         found.append(
             ProviderSight(
                 provider,
@@ -424,15 +406,11 @@ def fed_kinds(provider: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(kind for kind, *_rest in fed.get(provider, ())))
 
 
-def _fed() -> tuple[
-    dict[str, list[tuple[str, str, str, tuple[str, ...]]]], dict[str, list[str]]
-]:
+def _fed() -> tuple[dict[str, list[tuple[str, str, str, tuple[str, ...]]]], dict[str, list[str]]]:
     """(kind, label, source, permissions) each provider's credential feeds, and
     the labels of the resource kinds it acts on."""
 
-    fed: dict[str, list[tuple[str, str, str, tuple[str, ...]]]] = {
-        provider: [] for provider in CONNECTION_CREDENTIALS
-    }
+    fed: dict[str, list[tuple[str, str, str, tuple[str, ...]]]] = {provider: [] for provider in CONNECTION_CREDENTIALS}
     manages: dict[str, list[str]] = {}
     for kind, spec in OBSERVATIONS.items():
         if spec.provider in fed:
@@ -485,11 +463,7 @@ def sight_by_connection(
     connected = set(connections.values())
     return (
         by_ref,
-        tuple(
-            found
-            for found in credential_sight(inventory=inventory)
-            if found.provider not in connected
-        )
+        tuple(found for found in credential_sight(inventory=inventory) if found.provider not in connected)
         if connected
         else (),
     )

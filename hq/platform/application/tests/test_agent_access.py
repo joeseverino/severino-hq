@@ -1,7 +1,5 @@
 """Tests for the agent pause switch."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -16,10 +14,7 @@ from ..security import AuthorizationError, Capability, Principal
 
 
 def _said():
-    return [
-        event.message
-        for event in AuditLog.objects.filter(object_type="Agent access").order_by("id")
-    ]
+    return [event.message for event in AuditLog.objects.filter(object_type="Agent access").order_by("id")]
 
 
 class StateTests(TestCase):
@@ -28,9 +23,7 @@ class StateTests(TestCase):
         self.assertFalse(agents_paused())
 
     def test_an_unreadable_switch_refuses_agents(self):
-        with mock.patch.object(
-            AgentAccess.objects, "filter", side_effect=DatabaseError("locked")
-        ):
+        with mock.patch.object(AgentAccess.objects, "filter", side_effect=DatabaseError("locked")):
             self.assertTrue(agents_paused())
 
 
@@ -49,9 +42,10 @@ class WhoMayPullItTests(TestCase):
 
     def test_the_change_does_not_happen_without_its_record(self):
         person = Principal("op", "web", frozenset())
-        with mock.patch(
-            "hq.platform.application.agent_access.record_event", side_effect=RuntimeError("audit down")
-        ), self.assertRaises(RuntimeError):
+        with (
+            mock.patch("hq.platform.application.agent_access.record_event", side_effect=RuntimeError("audit down")),
+            self.assertRaises(RuntimeError),
+        ):
             set_agents_paused(True, principal=person, user=self.user)
 
         self.assertFalse(agents_paused())

@@ -1,9 +1,12 @@
+from typing import override
+
 from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
     help = "Write hq_sdk/contract.json from the SDK's exports, or --check it for drift."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument(
             "--check",
@@ -11,6 +14,7 @@ class Command(BaseCommand):
             help="Exit 1 when the committed contract differs from the exports.",
         )
 
+    @override
     def handle(self, *args, **options):
         from hq_sdk.contract import (
             CONTRACT_PATH,

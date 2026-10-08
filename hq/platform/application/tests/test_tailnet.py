@@ -10,8 +10,6 @@ Every pair on the operator's own tailnet is currently allowed (one owner, one
 admin group) so a refusal cannot be observed there and is built here.
 """
 
-from __future__ import annotations
-
 from django.test import TestCase
 from django.utils import timezone
 
@@ -33,8 +31,7 @@ def a_device(name, *, user="", tags=(), reach=()):
         "user": user,
         "tags": list(tags),
         "reach": [
-            {"port": port, "who": list(who), "rules": [{"who": list(who), "to": [], "line": 1}]}
-            for port, who in reach
+            {"port": port, "who": list(who), "rules": [{"who": list(who), "to": [], "line": 1}]} for port, who in reach
         ],
     }
 
@@ -211,10 +208,8 @@ class SpokenAsDevicesTests(TestCase):
         from hq.platform.application.tailnet import Device
 
         return {
-            "a-laptop": Device(name="a-laptop", addresses=("100.64.0.9",),
-                               aliases=("laptop", "laptop-v6")),
-            "a-server": Device(name="a-server", addresses=("100.64.0.10",),
-                               aliases=("server", "server-v6")),
+            "a-laptop": Device(name="a-laptop", addresses=("100.64.0.9",), aliases=("laptop", "laptop-v6")),
+            "a-server": Device(name="a-server", addresses=("100.64.0.10",), aliases=("server", "server-v6")),
         }
 
     def test_both_aliases_of_a_device_are_that_device_once(self):

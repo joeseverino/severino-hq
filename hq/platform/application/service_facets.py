@@ -1,14 +1,12 @@
 """One facet of a service: what each kind of declaration says about a name, and the zone that holds it."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.names import in_zone
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.provider_spec import NameContext
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .containers import Running
 from .entity_links import EntityLink, entity_link, kind_label
@@ -19,7 +17,7 @@ from .service_declarations import Claim
 from .timestamps import moment
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ReadingLine:
     """The readings of one kind that supply a facet, as one line."""
 
@@ -39,7 +37,7 @@ class ReadingLine:
         return f"{self.relation} · earliest expires {self.expiry}" if self.expiry else self.relation
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Facet:
     """One thing that has to be true for a hostname to answer, and whether it is."""
 
@@ -50,7 +48,7 @@ class Facet:
     # has three states, not two: declared, found, and absent. Collapsing the
     # middle one into absent reports a running service as missing, and offers to
     # build a second of what is already there.
-    observed: "Running | None" = None
+    observed: Running | None = None
     # The machine whatever supplies this facet runs on. Held here so the card
     # links it once, whether the container is declared or merely observed.
     machine: Any = None
@@ -67,7 +65,7 @@ class Facet:
         return bool(self.claims)
 
     @property
-    def reading_lines(self) -> tuple["ReadingLine", ...]:
+    def reading_lines(self) -> tuple[ReadingLine, ...]:
         """One line per reading kind: its short label, issuers or titles, earliest expiry."""
 
         by_kind: dict[str, list[Joined]] = {}
@@ -87,11 +85,7 @@ class Facet:
                     relation=items[0].relation,
                     expiry=earliest,
                     issued=bool(issuers),
-                    entities=tuple(
-                        dict.fromkeys(
-                            entity_link(item.kind, "", record=item.record) for item in items
-                        )
-                    ),
+                    entities=tuple(dict.fromkeys(entity_link(item.kind, "", record=item.record) for item in items)),
                     stale=any(item.stale for item in items),
                 )
             )
@@ -106,8 +100,8 @@ class Facet:
         or the connected ones whose credential does not read it.
         """
 
-        from hq.domains.control_plane.observations import OBSERVATIONS
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+        from hq.domains.control_plane.observations import OBSERVATIONS
 
         from .connections import connection_rows
 
@@ -155,9 +149,7 @@ class Facet:
                     lower_first(kind_label(kind)),
                 )
                 for kind, provider in PROVIDERS.items()
-                if provider.facet == self.id
-                and provider.seed is not None
-                and not self._refused(provider)
+                if provider.facet == self.id and provider.seed is not None and not self._refused(provider)
             )
         )
 
@@ -187,9 +179,7 @@ class Facet:
             sorted(
                 (kind_label(kind), refused)
                 for kind, provider in PROVIDERS.items()
-                if provider.facet == self.id
-                and provider.seed is not None
-                and (refused := self._refused(provider))
+                if provider.facet == self.id and provider.seed is not None and (refused := self._refused(provider))
             )
         )
 
@@ -198,7 +188,7 @@ class Facet:
             return ""
         try:
             return provider.applies(self.context)
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             return ""
 
     @property
@@ -212,11 +202,7 @@ class Facet:
         nothing on this network to answer for it.
         """
 
-        return any(
-            provider.origin is not None
-            for provider in PROVIDERS.values()
-            if provider.facet == self.id
-        )
+        return any(provider.origin is not None for provider in PROVIDERS.values() if provider.facet == self.id)
 
     @property
     def state(self) -> str:
@@ -250,9 +236,7 @@ def connected_kinds() -> frozenset[str]:
 
     return read_once(
         "services.connected_kinds",
-        lambda: frozenset(
-            ProviderInventory.objects.filter(connected=True).values_list("kind", flat=True)
-        ),
+        lambda: frozenset(ProviderInventory.objects.filter(connected=True).values_list("kind", flat=True)),
     )
 
 

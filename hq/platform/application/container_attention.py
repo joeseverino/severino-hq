@@ -9,14 +9,11 @@ offering per container the compose change HQ wrote for it
 declaration that says holding it is the container's job.
 """
 
-from __future__ import annotations
-
 import shlex
 from typing import Any
 
-from hq.platform.application.routes import reverse
-
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.platform.application.routes import reverse
 
 from .action_links import command_url
 from .containers import VULNERABLE, Container, Standing, containers
@@ -113,7 +110,8 @@ def _by_hand_step(plan: Any) -> WorkflowStep:
     command = (
         on_machine(
             machine,
-            "docker compose " + " ".join(f"-f {shlex.quote(path)}" for path in files)
+            "docker compose "
+            + " ".join(f"-f {shlex.quote(path)}" for path in files)
             + f" up -d {shlex.quote(service)}",
         )
         if files and service
@@ -172,7 +170,10 @@ def _upgrade_action(plan: Any, known: int) -> str:
 def _upgrade_link(item: Container) -> ActionLink:
     if item.running.watcher:
         return ActionLink(
-            "upgrade-plan", f"Upgrade plan for {item.running.name}", "read", f"{item.url}#upgrade",
+            "upgrade-plan",
+            f"Upgrade plan for {item.running.name}",
+            "read",
+            f"{item.url}#upgrade",
             reason="The steps to upgrade it, and what blocks them.",
         )
     return _adopt(item, f"Adopt {item.running.name} to plan its upgrade")
@@ -182,7 +183,9 @@ def _adopt(item: Container, label: str) -> ActionLink:
     """Take the container on: HQ plans and hardens only what it watches."""
 
     return ActionLink(
-        "adopt", label, "remote_write",
+        "adopt",
+        label,
+        "remote_write",
         reverse("control_plane:adopt_record", kwargs={"kind": CONTAINER_KIND, "token": item.running.token}),
         method="POST",
         reason="Nothing changes on the machine. HQ starts tracking the container.",
@@ -250,13 +253,18 @@ def _reach(running) -> tuple[str, str]:
     if worst is None:
         return UNROUTED, ""
     item, exposure = worst
-    return level, f" Most exposed: {item.running.name} on {item.machine.name}, {exposure.sentence[:1].lower()}{exposure.sentence[1:]}."
+    return (
+        level,
+        f" Most exposed: {item.running.name} on {item.machine.name}, {exposure.sentence[:1].lower()}{exposure.sentence[1:]}.",
+    )
 
 
 def _help(check_id: str) -> str:
     if check_id == "no-docker-socket":
-        return ("HQ cannot tell which Docker calls each needs, so it cannot write a socket proxy for it. "
-                "For a container that is meant to control Docker, say so and HQ stops warning about it.")
+        return (
+            "HQ cannot tell which Docker calls each needs, so it cannot write a socket proxy for it. "
+            "For a container that is meant to control Docker, say so and HQ stops warning about it."
+        )
     return "The compose change for each is on its page."
 
 
@@ -268,7 +276,10 @@ def _posture_link(check_id: str, item: Container) -> ActionLink:
     if check_id == "no-docker-socket":
         return socket_holder_link(item)
     return ActionLink(
-        "compose-change", f"Compose change for {name}", "read", f"{item.url}#hardening",
+        "compose-change",
+        f"Compose change for {name}",
+        "read",
+        f"{item.url}#hardening",
         reason="The lines to add to its compose file, and what each can break.",
     )
 

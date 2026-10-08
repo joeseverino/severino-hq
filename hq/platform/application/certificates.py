@@ -10,8 +10,6 @@ Only the leaf certificate and its key move: the same pair that would otherwise
 be pasted into a provider's web form by hand. The root CA key stays where it is.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,15 +24,15 @@ from hq.domains.control_plane.models import CertificateMaterial, ManagedResource
 from hq.platform.core import secrets
 
 from .infrastructure import delivery_targets
-from .security import Capability, Principal
 from .moments import when_day
+from .security import Capability, Principal
 
 
 class CertificateError(ValueError):
     """The uploaded material is not a usable certificate and key pair."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UploadCertificateCommand:
     key: str
     fullchain: str
@@ -53,30 +51,20 @@ def inspect(fullchain: str, private_key: str) -> dict[str, Any]:
     try:
         certificate = x509.load_pem_x509_certificate(fullchain.encode())
     except (ValueError, TypeError) as exc:
-        raise CertificateError(
-            "Not a PEM certificate. Paste the contents of fullchain.pem."
-        ) from exc
+        raise CertificateError("Not a PEM certificate. Paste the contents of fullchain.pem.") from exc
     try:
         key = serialization.load_pem_private_key(private_key.encode(), password=None)
     except TypeError as exc:
-        raise CertificateError(
-            "The private key has a passphrase. Export it without one."
-        ) from exc
+        raise CertificateError("The private key has a passphrase. Export it without one.") from exc
     except (ValueError, UnsupportedAlgorithm) as exc:
-        raise CertificateError(
-            "Not a PEM private key. Paste the contents of the .key file."
-        ) from exc
+        raise CertificateError("Not a PEM private key. Paste the contents of the .key file.") from exc
 
     if key.public_key().public_numbers() != certificate.public_key().public_numbers():
-        raise CertificateError(
-            "The private key does not match the certificate."
-        )
+        raise CertificateError("The private key does not match the certificate.")
 
     expires = certificate.not_valid_after_utc
     if expires <= timezone.now():
-        raise CertificateError(
-            f"The certificate expired on {when_day(expires)}. Upload a current one."
-        )
+        raise CertificateError(f"The certificate expired on {when_day(expires)}. Upload a current one.")
     return {
         "fingerprint_sha256": certificate.fingerprint(hashes.SHA256()).hex(),
         "not_after": expires,
@@ -87,9 +75,7 @@ def inspect(fullchain: str, private_key: str) -> dict[str, Any]:
 
 def _names(certificate: x509.Certificate) -> list[str]:
     try:
-        extension = certificate.extensions.get_extension_for_class(
-            x509.SubjectAlternativeName
-        )
+        extension = certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName)
     except x509.ExtensionNotFound:
         return []
     return [name.lower() for name in extension.value.get_values_for_type(x509.DNSName)]
@@ -112,9 +98,7 @@ def store_certificate(
     del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     if not secrets.available():
-        raise secrets.SecretsUnavailable(
-            "No secret store key is configured. Nothing was stored."
-        )
+        raise secrets.SecretsUnavailable("No secret store key is configured. Nothing was stored.")
     details = inspect(command.fullchain, command.private_key)
     try:
         resource = ManagedResource.objects.get(key=command.key)
@@ -147,9 +131,7 @@ def store_certificate(
         targets=delivery_targets(),
         resource_key=resource.key,
     )
-    resource.save(
-        update_fields=("spec", "generation", "desired_fingerprint", "updated_at")
-    )
+    resource.save(update_fields=("spec", "generation", "desired_fingerprint", "updated_at"))
     return {
         "ok": True,
         "resource": resource.key,
@@ -176,9 +158,7 @@ def material_for(key: str) -> dict[str, str]:
     }
 
 
-def store_uploaded_material(
-    key: str, cleaned: dict[str, Any], *, principal: Principal
-) -> dict[str, Any]:
+def store_uploaded_material(key: str, cleaned: dict[str, Any], *, principal: Principal) -> dict[str, Any]:
     """Adapter for the create page, which collects the material with the rest."""
 
     return store_certificate(

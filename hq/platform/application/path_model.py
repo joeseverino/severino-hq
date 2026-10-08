@@ -4,8 +4,6 @@ The hops a request takes, the routes that carry it, the certificates it meets,
 and where each fact came from.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
@@ -16,7 +14,6 @@ from hq.domains.control_plane.providers import PROVIDERS
 from .entity_links import EntityLink, entity_link, kind_label
 from .labels import lower_first
 
-
 NETWORK_LABELS = {
     "tailnet": "Tailnet",
     "network": "Local network",
@@ -25,7 +22,7 @@ NETWORK_LABELS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Source:
     """Where a hop was read: the kind, the connection, and when; or the declaration."""
 
@@ -53,7 +50,7 @@ class Source:
         return f"{self.label} through {self.connection}" if self.connection else self.label
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Certificate:
     """The certificate one hop presents, or why HQ cannot say."""
 
@@ -130,7 +127,7 @@ _HOP_ICONS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Hop:
     """One thing a request meets on the way to what answers it."""
 
@@ -188,7 +185,7 @@ def last_machine(hops: tuple[Hop, ...]) -> str:
     return next((hop.name for hop in reversed(hops) if hop.step == "machine"), "")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Route:
     """The hops from one DNS answer to what serves the name."""
 
@@ -246,7 +243,7 @@ class Route:
         return tuple(dict.fromkeys(found))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServicePath:
     hostname: str
     routes: tuple[Route, ...] = ()

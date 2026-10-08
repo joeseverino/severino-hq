@@ -8,16 +8,14 @@ action queue do. Readings leave only through their schema
 so none can be returned.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
-from hq.domains.control_plane.names import normalized_hostname
-from hq.domains.control_plane.models import ProviderInventory
-from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.names import normalized_hostname
+from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .labels import human_label
 from .own_addresses import tailnet_sightings
@@ -75,9 +73,7 @@ def list_estate() -> dict[str, Any]:
         )
 
 
-def list_action_items(
-    *, query: str = "", status: str = "", source: str = "", limit: int = 50
-) -> dict[str, Any]:
+def list_action_items(*, query: str = "", status: str = "", source: str = "", limit: int = 50) -> dict[str, Any]:
     """The composed action queue, filtered the way the action items page filters it."""
 
     from .action_items import filter_items
@@ -132,8 +128,7 @@ def serialize_machine(machine: Any) -> dict[str, Any]:
         "aliases": list(machine.aliases),
         "addresses": list(machine.addresses),
         "header_addresses": [
-            {"label": kind, "address": address, "holder": holder}
-            for kind, address, holder in header_addresses(machine)
+            {"label": kind, "address": address, "holder": holder} for kind, address, holder in header_addresses(machine)
         ],
         "hostnames": list(machine.hostnames),
         "runs_hq": machine.runs_hq,
@@ -166,9 +161,7 @@ def list_machines(*, limit: int = 50) -> dict[str, Any]:
     from .connections import machines_once
 
     with projection_scope():
-        return _collection(
-            [serialize_machine(item) for item in machines_once()[: page_size(limit)]]
-        )
+        return _collection([serialize_machine(item) for item in machines_once()[: page_size(limit)]])
 
 
 def get_machine(name: str) -> dict[str, Any]:
@@ -185,11 +178,11 @@ def get_machine(name: str) -> dict[str, Any]:
 
 
 def _domains() -> list[dict[str, Any]]:
+    from .entity_links import entity_link
     from .estate import estate_reading
     from .infrastructure import enabled_resources
     from .service_list import services_by_zone
     from .zones import ZONE_KIND
-    from .entity_links import entity_link
 
     estate = estate_reading()
     declared = {
@@ -209,8 +202,7 @@ def _domains() -> list[dict[str, Any]]:
                 "url": entity_link("zone", name).url,
                 "declaration": declared.get(name, ""),
                 "services": [
-                    {"hostname": member.hostname, "status": member.status}
-                    for member in members.get(name, ())
+                    {"hostname": member.hostname, "status": member.status} for member in members.get(name, ())
                 ],
                 "registration": (
                     {
@@ -368,9 +360,7 @@ def serialize_hop(hop: Any) -> dict[str, Any]:
         "source": _source(hop.source),
         "certificate": _certificate(hop.certificate),
         "unread": hop.unread,
-        "overlays": [
-            {"relation": relation, "link": _link(link)} for relation, link in hop.overlays
-        ],
+        "overlays": [{"relation": relation, "link": _link(link)} for relation, link in hop.overlays],
     }
     if hop.check is None:
         return found
@@ -499,11 +489,9 @@ def _rows(kinds) -> dict[str, ProviderInventory]:
 def list_readings(*, provider: str | None = None, limit: int = 50) -> dict[str, Any]:
     """Every registered reading kind and whether its last read succeeded."""
 
-    kinds = [
-        kind
-        for kind, spec in OBSERVATIONS.items()
-        if provider is None or spec.provider == provider
-    ][: page_size(limit)]
+    kinds = [kind for kind, spec in OBSERVATIONS.items() if provider is None or spec.provider == provider][
+        : page_size(limit)
+    ]
     rows = _rows(kinds)
     return _collection([_reading(kind, rows.get(kind)) for kind in kinds])
 

@@ -8,8 +8,6 @@ named, so the schema drops them.
 ``requires`` names NPM's own permission areas at the ``view`` level.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from typing import Any
 
@@ -32,15 +30,11 @@ DEAD_HOST_KIND = "npm.dead_host"
 # certificate reading, and the one that says which names an access list guards.
 SERVING_PARTS = (
     ReadingPart("proxy_hosts", "Names served by proxy hosts", ("proxy_hosts: view",)),
-    ReadingPart(
-        "redirection_hosts", "Names served by redirection hosts", ("redirection_hosts: view",)
-    ),
+    ReadingPart("redirection_hosts", "Names served by redirection hosts", ("redirection_hosts: view",)),
     ReadingPart("dead_hosts", "Names served by 404 hosts", ("dead_hosts: view",)),
     ReadingPart("streams", "Streams served", ("streams: view",)),
 )
-PROTECTED_HOSTS_PART = ReadingPart(
-    "proxy_hosts", "Proxy hosts behind it", ("proxy_hosts: view",)
-)
+PROTECTED_HOSTS_PART = ReadingPart("proxy_hosts", "Proxy hosts behind it", ("proxy_hosts: view",))
 
 
 def _names(values: Any) -> tuple[str, ...]:
@@ -128,9 +122,7 @@ def _stream_target(record: Mapping[str, Any]) -> str:
 
 
 def _stream_title(record: Mapping[str, Any]) -> str:
-    protocols = "/".join(
-        name for name, on in (("TCP", record.get("tcp")), ("UDP", record.get("udp"))) if on
-    )
+    protocols = "/".join(name for name, on in (("TCP", record.get("tcp")), ("UDP", record.get("udp"))) if on)
     return f"{protocols or 'Stream'} {record.get('incoming_port', '')} to {_stream_target(record)}"
 
 

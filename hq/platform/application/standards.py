@@ -8,11 +8,9 @@ A subject may declare a check its job requires it to fail, with the reason:
 that check is "by design", shown with the reason and never a gap.
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from collections.abc import Mapping
-from typing import Any, Callable
+from typing import Any
 
 MET = "met"
 UNMET = "unmet"
@@ -20,7 +18,7 @@ UNAVAILABLE = "unavailable"
 INTENDED = "intended"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Check:
     id: str
     label: str
@@ -35,7 +33,7 @@ class Check:
     applies: Callable[[Any], bool] | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Result:
     check: Check
     state: str
@@ -43,7 +41,7 @@ class Result:
     reason: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Posture:
     subject: Any
     results: tuple[Result, ...]

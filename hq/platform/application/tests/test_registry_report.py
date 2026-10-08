@@ -1,7 +1,5 @@
 """One image the registry refuses must never cost HQ the readings it holds."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.test import TestCase
@@ -25,8 +23,11 @@ class OneRefusedImageTests(TestCase):
             observed_at=now,
             records=[
                 {"image": "docker.io/example/app", "tags": ["1.0.0"], "read_at": now.isoformat()},
-                {"image": "ghcr.io/example/private", "unread": "refused",
-                 "read_at": (now - timedelta(days=2)).isoformat()},
+                {
+                    "image": "ghcr.io/example/private",
+                    "unread": "refused",
+                    "read_at": (now - timedelta(days=2)).isoformat(),
+                },
             ],
         )
 

@@ -7,8 +7,6 @@ call does as far as the rule can tell (``hq_sdk.testing.reaches_out``), so a
 request that reached it would be refused.
 """
 
-from __future__ import annotations
-
 import importlib
 import os
 from unittest import mock
@@ -29,12 +27,10 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
 from hq_sdk.outbound import Failed, ask, run_now
 from hq_sdk.testing import OutboundInRequest, held_jobs, reaches_out
-from tests.fixtures.example_hq_plugin import outbound as example
-from tests.fixtures.example_hq_plugin import registry
+from tests.fixtures.example_hq_plugin import outbound as example, registry
 
 EXAMPLE = "tests.fixtures.example_hq_plugin"
 SCRIPT = {"X-Requested-With": "XMLHttpRequest"}
-
 
 
 def calls_out(request):
@@ -78,9 +74,7 @@ class ComposedExample(TestCase):
         composed = mock.patch.dict(
             os.environ,
             {
-                "SEVERINO_HQ_PLUGINS": ",".join(
-                    part for part in (installed, f"{EXAMPLE}.plugin:plugin") if part
-                ),
+                "SEVERINO_HQ_PLUGINS": ",".join(part for part in (installed, f"{EXAMPLE}.plugin:plugin") if part),
                 # A fixture has no signed approval to be admitted by.
                 "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
             },

@@ -23,8 +23,6 @@ serious, the same advisory behind a gate or on the tailnet is attention, and
 one nothing routes to is information.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -51,7 +49,11 @@ LABELS = {
 SHORT = {OPEN: "Internet", GATED: "Behind a login", PRIVATE: "Private", UNKNOWN: "Unknown", UNROUTED: "Not reachable"}
 # What a serious problem becomes at each exposure. Unknown keeps it serious.
 _SERIOUS_AT = {
-    OPEN: "serious", GATED: "attention", PRIVATE: "attention", UNKNOWN: "serious", UNROUTED: "neutral",
+    OPEN: "serious",
+    GATED: "attention",
+    PRIVATE: "attention",
+    UNKNOWN: "serious",
+    UNROUTED: "neutral",
 }
 # The ports a machine's front door answers on: a request routed to the machine
 # lands on whichever container publishes one of them.
@@ -59,7 +61,7 @@ FRONT_DOOR_PORTS = frozenset({80, 443})
 _STATUS_ORDER = ("serious", "attention", "neutral", "good")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RouteExposure:
     """One route to one name, and who it lets in."""
 
@@ -77,7 +79,7 @@ class RouteExposure:
         return LABELS[self.level]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Exposure:
     """The routes reaching one thing, worst first."""
 
@@ -106,7 +108,7 @@ class Exposure:
 
     @property
     def sentence(self) -> str:
-        """"Open to the internet as shop.example.com", or why it is not."""
+        """ "Open to the internet as shop.example.com", or why it is not."""
 
         worst = self.worst
         if worst is None:

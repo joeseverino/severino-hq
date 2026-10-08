@@ -4,8 +4,6 @@ Registered on the calendar's host domain, so web, API and MCP read the same
 declarations without a central list naming the calendar.
 """
 
-from __future__ import annotations
-
 from datetime import date
 
 from pydantic import Field

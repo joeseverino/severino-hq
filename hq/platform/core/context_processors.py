@@ -1,6 +1,6 @@
-from hq.platform.application.domains import domain_navigation
-
 from django.conf import settings
+
+from hq.platform.application.domains import domain_navigation
 
 
 def site(request):

@@ -1,7 +1,5 @@
 """How HQ spells and compares DNS names. No Django, no registry: every layer imports it."""
 
-from __future__ import annotations
-
 import re
 from collections.abc import Set as AbstractSet
 from typing import Any

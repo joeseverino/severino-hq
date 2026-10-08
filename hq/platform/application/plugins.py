@@ -1,11 +1,6 @@
 """Versioned, explicitly allowlisted extension contract for trusted HQ plugins."""
 
-from __future__ import annotations
-
-from dataclasses import asdict, dataclass, is_dataclass, replace
-from functools import cache, lru_cache, partial
 import hashlib
-from importlib import import_module
 import inspect
 import itertools
 import marshal
@@ -13,12 +8,17 @@ import os
 import pickle
 import re
 import time
-from types import CodeType
 import weakref
-from typing import Any, Callable, Iterable
+from collections.abc import Callable, Iterable
+from dataclasses import asdict, dataclass, is_dataclass, replace
+from functools import cache, lru_cache, partial
+from importlib import import_module
+from types import CodeType
+from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import URLResolver, include, path
+
 from hq.platform.application.routes import reverse
 
 from .demo import showing_demo
@@ -48,13 +48,11 @@ PLUGIN_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 PLUGIN_WORKFLOW = re.compile(r"^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$")
 CAPABILITY_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
 PYTHON_PATH = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
-PYTHON_REFERENCE = re.compile(
-    r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*:[A-Za-z_]\w*$"
-)
+PYTHON_REFERENCE = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*:[A-Za-z_]\w*$")
 URL_PREFIX = re.compile(r"^(?:[A-Za-z0-9_-]+/)+$")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NavigationItem:
     label: str
     route: str
@@ -66,7 +64,7 @@ class NavigationItem:
     group: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PluginIntegration:
     """One extension's complete, lazy executable contribution to HQ."""
 
@@ -86,7 +84,7 @@ class PluginIntegration:
     outbound: Callable[[], Iterable[Any]] | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PluginManifest:
     id: str
     name: str
@@ -118,9 +116,7 @@ class PluginManifest:
 def _import(spec: str) -> Any:
     module_name, separator, attribute = spec.partition(":")
     if not separator or not module_name or not attribute:
-        raise ImproperlyConfigured(
-            f"Plugin reference {spec!r} must use 'module:attribute'."
-        )
+        raise ImproperlyConfigured(f"Plugin reference {spec!r} must use 'module:attribute'.")
     try:
         return getattr(import_module(module_name), attribute)
     except (ImportError, AttributeError) as exc:
@@ -136,9 +132,7 @@ def _load_manifest(reference: str) -> PluginManifest:
         detail = str(exc)
         if not detail.startswith("PluginManifest.__init__()"):
             raise
-        legacy_fields = tuple(
-            field for field in PLUGIN_API_1_PROVIDER_FIELDS if field in detail
-        )
+        legacy_fields = tuple(field for field in PLUGIN_API_1_PROVIDER_FIELDS if field in detail)
         if legacy_fields:
             raise ImproperlyConfigured(
                 f"Plugin reference {reference!r} uses plugin API 1 provider "
@@ -147,8 +141,7 @@ def _load_manifest(reference: str) -> PluginManifest:
             ) from exc
         if "api_version" in detail and "required" in detail:
             raise ImproperlyConfigured(
-                f"Plugin reference {reference!r} does not declare api_version; "
-                f"HQ supports {PLUGIN_API_VERSION}."
+                f"Plugin reference {reference!r} does not declare api_version; HQ supports {PLUGIN_API_VERSION}."
             ) from exc
         raise
     if not isinstance(manifest, PluginManifest):
@@ -167,25 +160,16 @@ def _validate_identity(manifest: PluginManifest) -> None:
     if not PLUGIN_ID.fullmatch(manifest.id):
         raise ImproperlyConfigured(f"Invalid HQ plugin id {manifest.id!r}.")
     if not manifest.name.strip() or not manifest.version.strip():
-        raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} must declare a name and version."
-        )
+        raise ImproperlyConfigured(f"Plugin {manifest.id!r} must declare a name and version.")
     if not PLUGIN_DISTRIBUTION.fullmatch(manifest.distribution):
-        raise ImproperlyConfigured(
-            f"Invalid HQ plugin distribution {manifest.distribution!r}."
-        )
+        raise ImproperlyConfigured(f"Invalid HQ plugin distribution {manifest.distribution!r}.")
     if not PLUGIN_REPOSITORY.fullmatch(manifest.source_repository):
-        raise ImproperlyConfigured(
-            f"Invalid HQ plugin repository {manifest.source_repository!r}."
-        )
+        raise ImproperlyConfigured(f"Invalid HQ plugin repository {manifest.source_repository!r}.")
     if not PLUGIN_WORKFLOW.fullmatch(manifest.source_workflow):
-        raise ImproperlyConfigured(
-            f"Invalid HQ plugin workflow {manifest.source_workflow!r}."
-        )
+        raise ImproperlyConfigured(f"Invalid HQ plugin workflow {manifest.source_workflow!r}.")
     if manifest.api_version != PLUGIN_API_VERSION:
         raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} requires API {manifest.api_version}; "
-            f"HQ supports {PLUGIN_API_VERSION}."
+            f"Plugin {manifest.id!r} requires API {manifest.api_version}; HQ supports {PLUGIN_API_VERSION}."
         )
 
 
@@ -193,22 +177,14 @@ def _validate_mount(manifest: PluginManifest) -> None:
     """Where the plugin attaches to the URL tree, and its Django apps."""
 
     if bool(manifest.url_prefix) != bool(manifest.urlconf):
-        raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} must declare url_prefix and urlconf together."
-        )
+        raise ImproperlyConfigured(f"Plugin {manifest.id!r} must declare url_prefix and urlconf together.")
     if manifest.url_prefix and not URL_PREFIX.fullmatch(manifest.url_prefix):
-        raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} has invalid url_prefix {manifest.url_prefix!r}."
-        )
+        raise ImproperlyConfigured(f"Plugin {manifest.id!r} has invalid url_prefix {manifest.url_prefix!r}.")
     if manifest.urlconf and not PYTHON_PATH.fullmatch(manifest.urlconf):
-        raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} has invalid urlconf {manifest.urlconf!r}."
-        )
+        raise ImproperlyConfigured(f"Plugin {manifest.id!r} has invalid urlconf {manifest.urlconf!r}.")
     for app in manifest.django_apps:
         if not PYTHON_PATH.fullmatch(app):
-            raise ImproperlyConfigured(
-                f"Plugin {manifest.id!r} has invalid Django app {app!r}."
-            )
+            raise ImproperlyConfigured(f"Plugin {manifest.id!r} has invalid Django app {app!r}.")
 
 
 def _validate_providers(manifest: PluginManifest) -> None:
@@ -216,25 +192,19 @@ def _validate_providers(manifest: PluginManifest) -> None:
 
     if not PYTHON_REFERENCE.fullmatch(manifest.integration_provider):
         raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} has invalid integration_provider "
-            f"{manifest.integration_provider!r}."
+            f"Plugin {manifest.id!r} has invalid integration_provider {manifest.integration_provider!r}."
         )
 
 
 def _validate_token_routes(manifest: PluginManifest) -> None:
     """Routes exempt from the session login redirect, and only those."""
 
-    if len(manifest.token_authenticated_routes) != len(
-        set(manifest.token_authenticated_routes)
-    ):
-        raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} repeats a token-authenticated route."
-        )
+    if len(manifest.token_authenticated_routes) != len(set(manifest.token_authenticated_routes)):
+        raise ImproperlyConfigured(f"Plugin {manifest.id!r} repeats a token-authenticated route.")
     for route in manifest.token_authenticated_routes:
         if not manifest.url_prefix:
             raise ImproperlyConfigured(
-                f"Plugin {manifest.id!r} declares token-authenticated routes "
-                "without a url_prefix to anchor them to."
+                f"Plugin {manifest.id!r} declares token-authenticated routes without a url_prefix to anchor them to."
             )
         # An absolute or traversing route would reach outside the plugin's own
         # mount, which is the one thing this field must never be able to do.
@@ -247,15 +217,8 @@ def _validate_token_routes(manifest: PluginManifest) -> None:
 
 def _validate_navigation(manifest: PluginManifest) -> None:
     for item in manifest.navigation:
-        if (
-            not item.label.strip()
-            or not item.namespace
-            or not item.route
-            or not isinstance(item.order, int)
-        ):
-            raise ImproperlyConfigured(
-                f"Plugin {manifest.id!r} has an incomplete navigation item."
-            )
+        if not item.label.strip() or not item.namespace or not item.route or not isinstance(item.order, int):
+            raise ImproperlyConfigured(f"Plugin {manifest.id!r} has an incomplete navigation item.")
 
 
 def _validate_capabilities(manifest: PluginManifest) -> None:
@@ -268,9 +231,7 @@ def _validate_capabilities(manifest: PluginManifest) -> None:
     )
     for capability in declared_capabilities:
         if not CAPABILITY_NAME.fullmatch(capability):
-            raise ImproperlyConfigured(
-                f"Plugin {manifest.id!r} declares invalid capability {capability!r}."
-            )
+            raise ImproperlyConfigured(f"Plugin {manifest.id!r} declares invalid capability {capability!r}.")
     from .security import host_capabilities
 
     host = {str(capability) for capability in host_capabilities()}
@@ -286,17 +247,12 @@ def _validate_capabilities(manifest: PluginManifest) -> None:
         ("mcp_write", manifest.mcp_write_capabilities),
     ):
         if len(capabilities) != len(set(capabilities)):
-            raise ImproperlyConfigured(
-                f"Plugin {manifest.id!r} repeats a capability in {label}."
-            )
+            raise ImproperlyConfigured(f"Plugin {manifest.id!r} repeats a capability in {label}.")
     operator = set(manifest.operator_capabilities)
-    mcp_only = (
-        set(manifest.mcp_read_capabilities) | set(manifest.mcp_write_capabilities)
-    ) - operator
+    mcp_only = (set(manifest.mcp_read_capabilities) | set(manifest.mcp_write_capabilities)) - operator
     if mcp_only:
         raise ImproperlyConfigured(
-            f"Plugin {manifest.id!r} grants MCP capabilities its operator does not "
-            f"hold: {', '.join(sorted(mcp_only))}."
+            f"Plugin {manifest.id!r} grants MCP capabilities its operator does not hold: {', '.join(sorted(mcp_only))}."
         )
 
 
@@ -318,6 +274,7 @@ def _validate(manifest: PluginManifest) -> None:
     _validate_navigation(manifest)
     _validate_capabilities(manifest)
 
+
 def _validate_composition(plugins: tuple[PluginManifest, ...]) -> None:
     """Reject collisions Django would otherwise resolve by ordering."""
 
@@ -331,22 +288,16 @@ def _validate_composition(plugins: tuple[PluginManifest, ...]) -> None:
     ):
         duplicates = sorted({value for value in values if values.count(value) > 1})
         if duplicates:
-            raise ImproperlyConfigured(
-                f"Duplicate plugin {label}: {', '.join(duplicates)}."
-            )
+            raise ImproperlyConfigured(f"Duplicate plugin {label}: {', '.join(duplicates)}.")
 
-    prefixes = sorted(
-        plugin.url_prefix for plugin in plugins if plugin.url_prefix
-    )
+    prefixes = sorted(plugin.url_prefix for plugin in plugins if plugin.url_prefix)
     for index, prefix in enumerate(prefixes):
         nested = next(
             (candidate for candidate in prefixes[index + 1 :] if candidate.startswith(prefix)),
             None,
         )
         if nested:
-            raise ImproperlyConfigured(
-                f"Plugin URL prefixes overlap: {prefix!r} and {nested!r}."
-            )
+            raise ImproperlyConfigured(f"Plugin URL prefixes overlap: {prefix!r} and {nested!r}.")
 
 
 @cache
@@ -404,9 +355,7 @@ def plugin_token_authenticated_prefixes() -> tuple[str, ...]:
     """
 
     return tuple(
-        f"/{plugin.url_prefix}{route}"
-        for plugin in installed_plugins()
-        for route in plugin.token_authenticated_routes
+        f"/{plugin.url_prefix}{route}" for plugin in installed_plugins() for route in plugin.token_authenticated_routes
     )
 
 
@@ -415,15 +364,10 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
 
     integrations = []
     for plugin in installed_plugins():
-        provider: Callable[[], PluginIntegration] = _import(
-            plugin.integration_provider
-        )
+        provider: Callable[[], PluginIntegration] = _import(plugin.integration_provider)
         integration = provider()
         if not isinstance(integration, PluginIntegration):
-            raise ImproperlyConfigured(
-                f"Plugin {plugin.id!r} integration provider must return "
-                "PluginIntegration."
-            )
+            raise ImproperlyConfigured(f"Plugin {plugin.id!r} integration provider must return PluginIntegration.")
         invalid = [
             field
             for field in (
@@ -438,13 +382,11 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
                 "calendars",
                 "outbound",
             )
-            if (value := getattr(integration, field)) is not None
-            and not callable(value)
+            if (value := getattr(integration, field)) is not None and not callable(value)
         ]
         if invalid:
             raise ImproperlyConfigured(
-                f"Plugin {plugin.id!r} integration fields must be callable: "
-                f"{', '.join(invalid)}."
+                f"Plugin {plugin.id!r} integration fields must be callable: {', '.join(invalid)}."
             )
         integrations.append((plugin, _derived(plugin.id, integration)))
     return tuple(integrations)
@@ -593,9 +535,7 @@ def _derived_calendars(plugin_id: str, provider: Callable[[], Iterable[Any]]) ->
     def derived(source: Any) -> Any:
         if not _is_source(source):
             return source
-        events = provided(
-            f"extension.{plugin_id}.calendar.{source.id}", source.events, ahead=CALENDAR_WINDOWS
-        )
+        events = provided(f"extension.{plugin_id}.calendar.{source.id}", source.events, ahead=CALENDAR_WINDOWS)
         return replace(source, events=events)
 
     def sources() -> tuple[Any, ...]:
@@ -656,11 +596,7 @@ def plugin_dashboard_sections() -> tuple[dict[str, Any], ...]:
             {
                 "id": plugin.id,
                 "label": plugin.name,
-                "url": (
-                    reverse(plugin.navigation[0].route)
-                    if plugin.navigation
-                    else cards[0]["url"] if cards else ""
-                ),
+                "url": (reverse(plugin.navigation[0].route) if plugin.navigation else cards[0]["url"] if cards else ""),
                 "cards": cards,
             }
         )
@@ -677,18 +613,11 @@ def gather_cards(
     whoever produced it.
     """
 
-    cards = tuple(
-        card
-        for _, provider in sources
-        if provider is not None
-        for card in provider()
-    )
+    cards = tuple(card for _, provider in sources if provider is not None for card in provider())
     _validate_dashboard_cards(cards)
     ids = [card["id"] for card in cards]
     if len(ids) != len(set(ids)):
-        raise ImproperlyConfigured(
-            "Duplicate dashboard card id across HQ sections and extensions."
-        )
+        raise ImproperlyConfigured("Duplicate dashboard card id across HQ sections and extensions.")
     return cards
 
 
@@ -700,37 +629,29 @@ def plugin_overviews() -> tuple[dict[str, Any], ...]:
             continue
         overview = integration.overview()
         if not isinstance(overview, DomainOverview):
-            raise ImproperlyConfigured(
-                f"Plugin {plugin.id!r} overview must return DomainOverview."
-            )
+            raise ImproperlyConfigured(f"Plugin {plugin.id!r} overview must return DomainOverview.")
         sections.append({"id": plugin.id, "label": plugin.name, "overview": overview})
     return tuple(sections)
 
 
 def _validate_dashboard_cards(cards: Iterable[object]) -> None:
     for card in cards:
-        if not isinstance(card, dict) or not CARD_REQUIRED_KEYS <= card.keys():
-            raise ImproperlyConfigured(
-                "Plugin dashboard cards require id, label, value, and url."
-            )
+        if not isinstance(card, dict) or not card.keys() >= CARD_REQUIRED_KEYS:
+            raise ImproperlyConfigured("Plugin dashboard cards require id, label, value, and url.")
         # Unknown keys are rejected rather than ignored: a typo'd optional key
         # would otherwise silently render nothing at all.
         unknown = card.keys() - CARD_REQUIRED_KEYS - CARD_OPTIONAL_KEYS
         if unknown:
-            raise ImproperlyConfigured(
-                f"Unknown dashboard card keys: {', '.join(sorted(unknown))}."
-            )
+            raise ImproperlyConfigured(f"Unknown dashboard card keys: {', '.join(sorted(unknown))}.")
         status = card.get("status")
         if status is not None and status not in CARD_STATUS_VALUES:
             raise ImproperlyConfigured(
-                f"Dashboard card status must be one of "
-                f"{', '.join(sorted(CARD_STATUS_VALUES))}; got {status!r}."
+                f"Dashboard card status must be one of {', '.join(sorted(CARD_STATUS_VALUES))}; got {status!r}."
             )
         trend = card.get("trend")
         if trend is not None and trend not in CARD_TREND_VALUES:
             raise ImproperlyConfigured(
-                f"Dashboard card trend must be one of "
-                f"{', '.join(sorted(CARD_TREND_VALUES))}; got {trend!r}."
+                f"Dashboard card trend must be one of {', '.join(sorted(CARD_TREND_VALUES))}; got {trend!r}."
             )
 
 
@@ -741,9 +662,7 @@ ATTENTION_ORDER = ("serious", "attention")
 
 
 def gather_attention(
-    sources: Iterable[
-        tuple[str, str, Callable[[], Iterable[Any]] | None]
-    ],
+    sources: Iterable[tuple[str, str, Callable[[], Iterable[Any]] | None]],
 ) -> tuple[dict[str, Any], ...]:
     """Collect, validate, attribute and order attention items from any sources.
 
@@ -808,8 +727,7 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
     return tuple(
         entry
         for entry in gather_attention(
-            (plugin.id, plugin.name, integration.attention)
-            for plugin, integration in installed_integrations()
+            (plugin.id, plugin.name, integration.attention) for plugin, integration in installed_integrations()
         )
         if not getattr(entry["item"], "notice", False)
     )
@@ -856,11 +774,7 @@ def plugin_capabilities(kind: str) -> frozenset[str]:
         "mcp_read": "mcp_read_capabilities",
         "mcp_write": "mcp_write_capabilities",
     }[kind]
-    return frozenset(
-        capability
-        for plugin in installed_plugins()
-        for capability in getattr(plugin, attribute)
-    )
+    return frozenset(capability for plugin in installed_plugins() for capability in getattr(plugin, attribute))
 
 
 def describe_plugins() -> dict[str, Any]:

@@ -1,7 +1,5 @@
 """The widget's one write: create, or update by slug."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

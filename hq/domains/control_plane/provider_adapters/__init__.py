@@ -8,6 +8,7 @@ contributes nothing, and adding a provider is writing its module and naming it
 here.
 """
 
+from ..provider_spec import ConnectionKind
 from . import (
     adguard,
     caddy,
@@ -19,7 +20,6 @@ from . import (
     tailscale,
     tls,
 )
-from ..provider_spec import ConnectionKind
 
 ADMITTED = (tls, npm, github, portainer, tailscale, declarations, caddy, adguard, cloudflare)
 
@@ -30,9 +30,7 @@ def admitted_connections(modules) -> dict[str, ConnectionKind]:
     """Every connection provider, named once, in admission order."""
 
     found: dict[str, ConnectionKind] = {}
-    for provider, kind in (
-        item for module in modules for item in getattr(module, "CONNECTIONS", {}).items()
-    ):
+    for provider, kind in (item for module in modules for item in getattr(module, "CONNECTIONS", {}).items()):
         if provider in found:
             raise ValueError(f"Two modules declare the connection provider {provider!r}.")
         found[provider] = kind

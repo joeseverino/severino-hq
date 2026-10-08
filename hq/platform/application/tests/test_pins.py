@@ -6,19 +6,14 @@ order is the substance of it: alphabetical among favorites is an ordering
 nobody chose, which is the whole reason the list needed one.
 """
 
-from __future__ import annotations
-
 from django.test import TestCase
 
 
 class ServiceFavoriteTests(TestCase):
-
     def setUp(self):
         from django.contrib.auth import get_user_model
 
-        self.user = get_user_model().objects.create_user(
-            username="an-operator", password="not-used-here"
-        )
+        self.user = get_user_model().objects.create_user(username="an-operator", password="not-used-here")
 
     def order(self):
         from hq.platform.application.pins import SERVICE, ordered
@@ -66,9 +61,7 @@ class ServiceFavoriteTests(TestCase):
         self.pin("one.example.test", "two.example.test", "three.example.test")
         toggle(self.user, SERVICE, "two.example.test")
 
-        self.assertEqual(
-            self.order(), ["one.example.test", "three.example.test"]
-        )
+        self.assertEqual(self.order(), ["one.example.test", "three.example.test"])
 
     def test_reordering_cannot_pin_something_new(self):
         """An order says what comes first, not what belongs in the list."""
@@ -88,9 +81,8 @@ class ServiceFavoriteTests(TestCase):
         self.assertEqual(ordered(AnonymousUser(), SERVICE), ())
 
     def test_membership_is_derived_from_the_ordered_read(self):
-        from hq.platform.core.models import Pin
-
         from hq.platform.application.pins import SERVICE, pinned
+        from hq.platform.core.models import Pin
 
         Pin.objects.create(
             user=self.user,

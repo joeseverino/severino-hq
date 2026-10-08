@@ -4,13 +4,12 @@ Every detector module builds its findings from these, and application.findings
 derives, resolves and serves them. Kept apart so a detector can import its
 vocabulary without importing the pipeline that collects it."""
 
-from __future__ import annotations
-
 import re
 import shlex
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -20,7 +19,7 @@ from .topology_model import Topology, TopologyNode
 from .workflows import WorkflowPlan
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Remedy:
     """An existing capability, named: never a new way to change anything."""
 
@@ -36,7 +35,7 @@ class Remedy:
     auto: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Finding:
     """One claim, the evidence for it, and what could be done about it."""
 
@@ -69,7 +68,7 @@ class Finding:
     since: datetime | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FindingRule:
     """A named claim, and how to decide and explain it.
 
@@ -81,7 +80,7 @@ class FindingRule:
     name: str
     title: str
     severity: str
-    detect: Callable[["FindingEstate"], tuple[Finding, ...]]
+    detect: Callable[[FindingEstate], tuple[Finding, ...]]
     # The precise action that resolves a finding of this rule by hand. Required:
     # a finding either offers an operation through the gated queue or says
     # exactly what to do. A finding may state a more specific one.
@@ -96,12 +95,10 @@ class FindingRule:
         if not self.operator_action.strip():
             raise ValueError(f"Finding rule {self.name!r} must say how it is resolved.")
         if not self.no_help_reason.strip():
-            raise ValueError(
-                f"Finding rule {self.name!r} must say why HQ cannot resolve it itself."
-            )
+            raise ValueError(f"Finding rule {self.name!r} must say why HQ cannot resolve it itself.")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FindingEstate:
     """The projection plus the two indices every rule wants, built once."""
 
@@ -190,7 +187,7 @@ def built_findings(fields: tuple[dict[str, Any], ...]) -> tuple[Finding, ...]:
     return tuple(Finding(**item) for item in fields)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OperatorStep:
     """A command an operator runs on their own machine. HQ never runs it."""
 
@@ -219,9 +216,7 @@ def on_machine(machine: str, command: str) -> str:
     return f'ssh {machine} "sudo {escaped}"'
 
 
-def machine_step(
-    label: str, machine: str, command: str, notes: tuple[str, ...] = ()
-) -> tuple[OperatorStep, ...]:
+def machine_step(label: str, machine: str, command: str, notes: tuple[str, ...] = ()) -> tuple[OperatorStep, ...]:
     """One step that is a command on ``machine``, or none when the command
     cannot be written for it: a step with no command says nothing to run."""
 

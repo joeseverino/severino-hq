@@ -1,7 +1,5 @@
 """An extension's part of a shared composition, derived once per change by the host."""
 
-from __future__ import annotations
-
 from datetime import date
 from functools import partial
 from unittest import mock
@@ -141,7 +139,7 @@ class IdentityTests(SimpleTestCase):
         self.assertTrue(_identity(_module_level).startswith(f"{__name__}:_module_level:"))
 
     def test_two_functions_of_one_name_differ_by_what_they_are_written_to_do(self):
-        one, other = (lambda: 1), (lambda: 2)  # noqa: E731
+        one, other = (lambda: 1), (lambda: 2)
 
         self.assertEqual(one.__qualname__, other.__qualname__)
         self.assertNotEqual(_identity(one), _identity(other))

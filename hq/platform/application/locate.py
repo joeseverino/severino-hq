@@ -20,8 +20,6 @@ splits ``2001:db8::1`` into ``2001:db8:`` and ``1``. ``core.network`` parses
 them correctly for the trusted-proxy gate; this reads endpoints through it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -92,7 +90,7 @@ def points_at_host(endpoint: Any) -> bool:
     return bool(text) and "://" not in text
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Machines:
     """Every way HQ has of naming a machine, with the two kinds kept apart.
 
@@ -259,15 +257,13 @@ def _observed_record(provider, record) -> tuple[tuple, tuple]:
     try:
         spec = provider.from_record(record)
         return tuple(provider.hostnames(spec)), tuple(provider.answers(spec))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         # The inventory sweep reports its own health. One unreadable row is
         # evidence about that row, not a reason to hide every healthy answer.
         return (), ()
 
 
-def _record_observed_answers(
-    found: dict[str, set[str]], names: tuple, addresses: tuple
-) -> None:
+def _record_observed_answers(found: dict[str, set[str]], names: tuple, addresses: tuple) -> None:
     """Normalize one provider's vocabulary into the shared answer index."""
 
     answered = tuple(str(address) for address in addresses if address)

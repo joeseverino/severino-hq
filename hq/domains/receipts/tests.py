@@ -1,7 +1,5 @@
 """Receipts: each names what it is for, and says what went wrong in plain words."""
 
-from __future__ import annotations
-
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model

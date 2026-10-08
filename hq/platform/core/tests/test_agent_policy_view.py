@@ -1,7 +1,5 @@
 """The agents page marks a column off by the column, not by its label."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -41,16 +39,10 @@ class DormantColumnTests(TestCase):
                 ),
             ),
         )
-        self.client.force_login(
-            get_user_model().objects.create_user("op", password="x" * 20)
-        )
-        with patch(
-            "hq.platform.application.capability_policy.matrix", return_value=((surface, agent), groups)
-        ):
+        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
+        with patch("hq.platform.application.capability_policy.matrix", return_value=((surface, agent), groups)):
             # Every action: a column is headed only over the rows that are drawn.
             response = self.client.get(reverse("agent_policy"), {"all": 1})
 
-        self.assertEqual(
-            [head["dormant"] for head in response.context["column_heads"]], [True, False]
-        )
+        self.assertEqual([head["dormant"] for head in response.context["column_heads"]], [True, False])
         self.assertContains(response, '<span class="policy-off">off in HQ\'s settings</span>', count=1)

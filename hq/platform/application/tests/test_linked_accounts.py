@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
@@ -28,7 +26,9 @@ class RecordTests(TestCase):
 
         self.assertEqual(linked_login(self.user, GITHUB), "example-user")
         # Unchanged on the second sign-in, so audited once.
-        self.assertEqual(AuditLog.objects.filter(message="Your sign-in names the github account example-user").count(), 1)
+        self.assertEqual(
+            AuditLog.objects.filter(message="Your sign-in names the github account example-user").count(), 1
+        )
 
     def test_a_changed_claim_replaces_the_login(self):
         record_claimed_accounts(self.user, {"github": "old-name"})

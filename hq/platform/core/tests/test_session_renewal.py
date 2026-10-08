@@ -1,7 +1,5 @@
 """Renewing a session returns the operator to the page they were on."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth.models import AnonymousUser
@@ -33,8 +31,11 @@ class RenewalTests(SimpleTestCase):
 
     def test_a_background_request_returns_to_the_page_it_serves(self):
         self.assertEqual(
-            self.renew("/health/live/?t=1", background=True,
-                       referer="https://hq.example.com/infrastructure/connections/?kind=dns"),
+            self.renew(
+                "/health/live/?t=1",
+                background=True,
+                referer="https://hq.example.com/infrastructure/connections/?kind=dns",
+            ),
             "/infrastructure/connections/?kind=dns",
         )
 
@@ -79,9 +80,7 @@ class RenamedBackendTests(SimpleTestCase):
 
     def test_a_session_naming_the_current_backend_is_kept(self):
         request = self.request("hq.platform.core.oidc.HQOIDCAuthenticationBackend")
-        with mock.patch(
-            "mozilla_django_oidc.middleware.SessionRefresh.process_request", return_value=None
-        ):
+        with mock.patch("mozilla_django_oidc.middleware.SessionRefresh.process_request", return_value=None):
             HQSessionRefresh(lambda request: HttpResponse()).process_request(request)
         self.assertEqual(request.session["_auth_user_id"], "1")
 

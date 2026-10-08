@@ -4,19 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0003_pin'),
+        ("core", "0003_pin"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='pin',
-            options={'ordering': ('position', 'target_key')},
+            name="pin",
+            options={"ordering": ("position", "target_key")},
         ),
         migrations.AddField(
-            model_name='pin',
-            name='position',
+            model_name="pin",
+            name="position",
             field=models.IntegerField(default=0),
         ),
     ]

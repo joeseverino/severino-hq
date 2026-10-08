@@ -1,14 +1,18 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
 class ContentConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = 'hq.domains.content'
-    label = 'content'
+    name = "hq.domains.content"
+    label = "content"
     verbose_name = "Content Pipeline"
 
+    @override
     def ready(self):
         from hq.platform.core.audit import register_audit
+
         from .models import ContentItem
 
         register_audit(ContentItem, "ContentItem")

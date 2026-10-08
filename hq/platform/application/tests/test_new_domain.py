@@ -1,7 +1,5 @@
 """docs/NEW_DOMAIN.md names every architecture rule and nothing that is gone."""
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path
@@ -25,9 +23,7 @@ def rules() -> dict[str, set[str]]:
             if not isinstance(node, ast.ClassDef):
                 continue
             methods = {
-                item.name
-                for item in node.body
-                if isinstance(item, ast.FunctionDef) and item.name.startswith("test_")
+                item.name for item in node.body if isinstance(item, ast.FunctionDef) and item.name.startswith("test_")
             }
             if methods:
                 found[node.name] = methods

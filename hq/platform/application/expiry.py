@@ -4,11 +4,10 @@ Every surface that says "N days" reads ``days_until``, so a dashboard card and
 a domain page never disagree about the same certificate by a day.
 """
 
-from __future__ import annotations
-
 import math
-from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from .derivations import holds_until, present
 from .timestamps import moment
@@ -24,7 +23,7 @@ def days_until(when: datetime, now: datetime | None = None) -> int:
     """
 
     if when.tzinfo is None:
-        when = when.replace(tzinfo=timezone.utc)
+        when = when.replace(tzinfo=UTC)
     left = (when - (now or present())).total_seconds() / 86400
     if left > 0:
         days = max(1, math.floor(left + 0.5))
@@ -42,7 +41,7 @@ def renewal_window(spec: Mapping[str, Any]) -> int:
 
     try:
         return int(spec.get("renewal_window_days") or DEFAULT_RENEWAL_WINDOW_DAYS)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return DEFAULT_RENEWAL_WINDOW_DAYS
 
 

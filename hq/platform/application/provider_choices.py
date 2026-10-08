@@ -10,13 +10,9 @@ module declares rather than queries. Providers point at these by name, the same
 late-bound way a domain points at its attention provider.
 """
 
-from __future__ import annotations
-
 from collections.abc import Set as AbstractSet
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
-from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.cloudflare import (
     DNS_RECORD_TYPES,
     ZONE_KIND,
@@ -25,6 +21,7 @@ from hq.domains.control_plane.provider_adapters.declarations import (
     DELIVERY_TARGET_KIND,
     MACHINE_KIND,
 )
+from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.provider_adapters.tls import (
     CERTIFICATE_KIND,
@@ -32,6 +29,7 @@ from hq.domains.control_plane.provider_adapters.tls import (
     UPLOADED_CERTIFICATE_REFUSALS,
 )
 from hq.domains.control_plane.provider_spec import NameContext
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .connections import connections_for, reachable_through
 
@@ -60,11 +58,7 @@ def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]
         for resource in managed
         if resource.key in covering
     ]
-    options.extend(
-        (resource.key, resource.key)
-        for resource in managed
-        if resource.key not in covering
-    )
+    options.extend((resource.key, resource.key) for resource in managed if resource.key not in covering)
     # No blank option here. Whether "leave it as it is" is even a coherent
     # answer depends on whether the thing exists yet, and only the form knows
     # that: on a create page there is no existing certificate to keep.
@@ -85,9 +79,7 @@ def _install_targets(exclude: AbstractSet[str] = frozenset()):
     is stated once on the target.
     """
 
-    targets = ManagedResource.objects.filter(
-        kind=DELIVERY_TARGET_KIND, enabled=True
-    ).values_list("spec", flat=True)
+    targets = ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND, enabled=True).values_list("spec", flat=True)
     return sorted(
         (spec["connection_ref"], f"{spec['name']} ({spec['kind']})")
         for spec in targets
@@ -129,9 +121,9 @@ def delivery_target(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
             ("", "None"),
             *sorted(
                 (key, key)
-                for key in ManagedResource.objects.filter(
-                    kind=CERTIFICATE_KIND, enabled=True
-                ).values_list("key", flat=True)
+                for key in ManagedResource.objects.filter(kind=CERTIFICATE_KIND, enabled=True).values_list(
+                    "key", flat=True
+                )
             ),
         ),
     }
@@ -159,9 +151,7 @@ def dns_record(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
         # menu reads "A / AAAA / CNAME / TXT / MX / CAA", which is a quiz for
         # anyone who does not already know the answer, and the registry
         # already carries a sentence about each one.
-        "record_type": tuple(
-            (record_type.id, record_type.label) for record_type in DNS_RECORD_TYPES
-        ),
+        "record_type": tuple((record_type.id, record_type.label) for record_type in DNS_RECORD_TYPES),
     }
 
 
@@ -196,9 +186,7 @@ def _declared_roles() -> dict[str, str]:
 
     return {
         spec["name"]: spec.get("role", "")
-        for spec in ManagedResource.objects.filter(
-            kind=MACHINE_KIND, enabled=True
-        ).values_list("spec", flat=True)
+        for spec in ManagedResource.objects.filter(kind=MACHINE_KIND, enabled=True).values_list("spec", flat=True)
         if spec.get("name")
     }
 
@@ -241,10 +229,7 @@ def _known_zones() -> tuple[tuple[str, str], ...]:
         if record.get("zone")
     }
     options = [(zone, zone) for zone in sorted(declared)]
-    options.extend(
-        (zone, f"{zone} · not managed")
-        for zone in sorted(seen - declared)
-    )
+    options.extend((zone, f"{zone} · not managed") for zone in sorted(seen - declared))
     return tuple(options)
 
 
@@ -252,9 +237,7 @@ def _connections_of(kind: str) -> tuple[tuple[str, str], ...]:
     """The connections of every provider the registry says reaches ``kind``."""
 
     return tuple(
-        choice
-        for provider in PROVIDERS[kind].connection_providers
-        for choice in _connection_choices(provider)
+        choice for provider in PROVIDERS[kind].connection_providers for choice in _connection_choices(provider)
     )
 
 
@@ -271,9 +254,7 @@ def _connection_choices(provider: str) -> tuple[tuple[str, str], ...]:
     return tuple(
         (
             connection.connection_ref,
-            connection.connection_ref
-            if connection.reachable
-            else f"{connection.connection_ref} (unreachable)",
+            connection.connection_ref if connection.reachable else f"{connection.connection_ref} (unreachable)",
         )
         for connection in connections_for(provider)
     )

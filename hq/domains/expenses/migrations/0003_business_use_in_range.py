@@ -5,23 +5,33 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('assets', '0003_business_use_in_range'),
-        ('content', '0003_collapse_status_and_add_page_type'),
-        ('docs_index', '0007_help_text_copy'),
-        ('expenses', '0002_help_text_copy'),
-        ('projects', '0002_project_last_push_at'),
+        ("assets", "0003_business_use_in_range"),
+        ("content", "0003_collapse_status_and_add_page_type"),
+        ("docs_index", "0007_help_text_copy"),
+        ("expenses", "0002_help_text_copy"),
+        ("projects", "0002_project_last_push_at"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='expense',
-            name='business_use_percentage',
-            field=models.PositiveSmallIntegerField(default=100, help_text='0-100. Used to estimate the deductible amount.', validators=[django.core.validators.MinValueValidator(0, message='Must be between 0 and 100.'), django.core.validators.MaxValueValidator(100, message='Must be between 0 and 100.')]),
+            model_name="expense",
+            name="business_use_percentage",
+            field=models.PositiveSmallIntegerField(
+                default=100,
+                help_text="0-100. Used to estimate the deductible amount.",
+                validators=[
+                    django.core.validators.MinValueValidator(0, message="Must be between 0 and 100."),
+                    django.core.validators.MaxValueValidator(100, message="Must be between 0 and 100."),
+                ],
+            ),
         ),
         migrations.AddConstraint(
-            model_name='expense',
-            constraint=models.CheckConstraint(condition=models.Q(('business_use_percentage__gte', 0), ('business_use_percentage__lte', 100)), name='expense_business_use_in_range', violation_error_message='Must be between 0 and 100.'),
+            model_name="expense",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("business_use_percentage__gte", 0), ("business_use_percentage__lte", 100)),
+                name="expense_business_use_in_range",
+                violation_error_message="Must be between 0 and 100.",
+            ),
         ),
     ]

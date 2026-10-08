@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
 from hq.platform.api.openapi import document
+
 from .binding import register_tools
 from .declarations import HANDLERS, argument_metadata
 
@@ -30,8 +31,9 @@ class DocumentToolTests(SimpleTestCase):
         entry["description"] = "An injected catalog description."
         entry["inputSchema"]["properties"]["name"]["enum"] = ["example.injected"]
         execute = AsyncMock(return_value={"items": [], "count": 0})
-        with patch("hq.platform.mcp.binding.sync_to_async", return_value=execute), patch(
-            "hq.platform.application.resources.resource_registry", side_effect=AssertionError("registry walk")
+        with (
+            patch("hq.platform.mcp.binding.sync_to_async", return_value=execute),
+            patch("hq.platform.application.resources.resource_registry", side_effect=AssertionError("registry walk")),
         ):
             target = FastMCP("injected-test")
             register_tools(target, value)
@@ -61,7 +63,9 @@ class DocumentToolTests(SimpleTestCase):
     def test_signature_or_handler_set_drift_fails_before_registration(self):
         for mutate in (
             lambda value: value["x-hq-mcp-tools"].pop("system_health"),
-            lambda value: value["x-hq-mcp-tools"]["recent_activity"]["inputSchema"]["properties"]["limit"].update(type="string"),
+            lambda value: value["x-hq-mcp-tools"]["recent_activity"]["inputSchema"]["properties"]["limit"].update(
+                type="string"
+            ),
             lambda value: value["x-hq-mcp-tools"]["recent_activity"]["inputSchema"].update(required=["limit"]),
         ):
             value = document()

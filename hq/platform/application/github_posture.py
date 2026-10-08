@@ -10,21 +10,18 @@ Checked against the GitHub App's own reading (``github_estate``), so nothing
 here asks GitHub anything, and a check HQ cannot read says so.
 """
 
-from __future__ import annotations
-
 import json
 import shlex
+from collections.abc import Callable
 from datetime import timedelta
-from typing import Any, Callable
+from typing import Any
 
 from hq.platform.application.routes import reverse
 
 from .derivations import passed
-from .github_estate import Repository, repositories
-from .github_estate import attention as repository_attention
+from .github_estate import Repository, attention as repository_attention, repositories
 from .item_help import cannot_help, do_step, run_step, steps
-from .standards import UNMET, Posture, measure
-from .standards import Check as _Check
+from .standards import UNMET, Check as _Check, Posture, measure
 from .timestamps import moment
 from .ui import Insight, counted
 
@@ -105,48 +102,120 @@ def _code_scanning(repo: Repository) -> bool | None:
 
 
 STANDARD: tuple[Check, ...] = (
-    Check("only-you", "Only you have access", BOTH, _only_you,
-          "Anyone else with access can read private code or push to it.",
-          "Remove the collaborator in the repository's access settings.", serious=True),
-    Check("keys-read-only", "Deploy keys can only read", BOTH, _keys_read_only,
-          "A deploy key that can write can push to the repository without you.",
-          "Replace the key with a read-only one.", serious=True),
-    Check("keys-in-use", "Every deploy key is in use", BOTH, _keys_in_use,
-          f"A key unused for {KEY_IDLE_DAYS} days is access nothing needs.",
-          "Delete the key, or find what stopped using it."),
-    Check("token-read-only", "The workflow token is read-only", BOTH, _setting("token", "read"),
-          "A writable default token lets any workflow change the repository.",
-          "Set workflow permissions to read in the Actions settings."),
-    Check("token-no-approvals", "Workflows cannot approve pull requests", BOTH, _setting("token_approves_reviews", False),
-          "A workflow that approves its own pull request skips review.",
-          "Turn off approving pull requests in the Actions settings."),
-    Check("actions-pinned", "Actions must be pinned to a commit", BOTH, _setting("pinning_required", True),
-          "A tag can be moved to different code; a commit cannot.",
-          "Pin every action its workflows use to a commit, then require pinning in the Actions settings."),
-    Check("security-fixes", "Dependabot opens security fixes", BOTH, _setting("security_fixes", True),
-          "A known-vulnerable dependency waits for you to notice it.",
-          "Turn on Dependabot security updates."),
-    Check("no-variables", "No Actions variables", BOTH, _no_variables,
-          "A variable is state outside the repository that changes what a build does.",
-          "Move it into the workflow or a secret, or delete it."),
-    Check("pull-request-required", "Changes arrive by pull request", PUBLIC, _rule("pull_request"),
-          "A direct push to the default branch skips every check.",
-          "Require a pull request in the default branch's ruleset."),
-    Check("force-push-blocked", "The default branch cannot be rewritten", PUBLIC, _rule("blocks_force_push"),
-          "A force push rewrites history others have already built on.",
-          "Block force pushes in the default branch's ruleset."),
-    Check("deletion-blocked", "The default branch cannot be deleted", PUBLIC, _rule("blocks_deletion"),
-          "Deleting the default branch takes every deploy with it.",
-          "Block deletion in the default branch's ruleset."),
-    Check("secret-scanning", "Leaked credentials are scanned for", PUBLIC, _security("secret_scanning"),
-          "A credential committed to a public repository is found by others first.",
-          "Turn on secret scanning."),
-    Check("push-protection", "Credentials are stopped before they are pushed", PUBLIC, _security("secret_scanning_push_protection"),
-          "Scanning finds a leak after it is public; push protection stops it.",
-          "Turn on push protection."),
-    Check("code-scanning", "Code is scanned", PUBLIC, _code_scanning,
-          "Code scanning finds vulnerable patterns before a reviewer does.",
-          "Turn on code scanning."),
+    Check(
+        "only-you",
+        "Only you have access",
+        BOTH,
+        _only_you,
+        "Anyone else with access can read private code or push to it.",
+        "Remove the collaborator in the repository's access settings.",
+        serious=True,
+    ),
+    Check(
+        "keys-read-only",
+        "Deploy keys can only read",
+        BOTH,
+        _keys_read_only,
+        "A deploy key that can write can push to the repository without you.",
+        "Replace the key with a read-only one.",
+        serious=True,
+    ),
+    Check(
+        "keys-in-use",
+        "Every deploy key is in use",
+        BOTH,
+        _keys_in_use,
+        f"A key unused for {KEY_IDLE_DAYS} days is access nothing needs.",
+        "Delete the key, or find what stopped using it.",
+    ),
+    Check(
+        "token-read-only",
+        "The workflow token is read-only",
+        BOTH,
+        _setting("token", "read"),
+        "A writable default token lets any workflow change the repository.",
+        "Set workflow permissions to read in the Actions settings.",
+    ),
+    Check(
+        "token-no-approvals",
+        "Workflows cannot approve pull requests",
+        BOTH,
+        _setting("token_approves_reviews", False),
+        "A workflow that approves its own pull request skips review.",
+        "Turn off approving pull requests in the Actions settings.",
+    ),
+    Check(
+        "actions-pinned",
+        "Actions must be pinned to a commit",
+        BOTH,
+        _setting("pinning_required", True),
+        "A tag can be moved to different code; a commit cannot.",
+        "Pin every action its workflows use to a commit, then require pinning in the Actions settings.",
+    ),
+    Check(
+        "security-fixes",
+        "Dependabot opens security fixes",
+        BOTH,
+        _setting("security_fixes", True),
+        "A known-vulnerable dependency waits for you to notice it.",
+        "Turn on Dependabot security updates.",
+    ),
+    Check(
+        "no-variables",
+        "No Actions variables",
+        BOTH,
+        _no_variables,
+        "A variable is state outside the repository that changes what a build does.",
+        "Move it into the workflow or a secret, or delete it.",
+    ),
+    Check(
+        "pull-request-required",
+        "Changes arrive by pull request",
+        PUBLIC,
+        _rule("pull_request"),
+        "A direct push to the default branch skips every check.",
+        "Require a pull request in the default branch's ruleset.",
+    ),
+    Check(
+        "force-push-blocked",
+        "The default branch cannot be rewritten",
+        PUBLIC,
+        _rule("blocks_force_push"),
+        "A force push rewrites history others have already built on.",
+        "Block force pushes in the default branch's ruleset.",
+    ),
+    Check(
+        "deletion-blocked",
+        "The default branch cannot be deleted",
+        PUBLIC,
+        _rule("blocks_deletion"),
+        "Deleting the default branch takes every deploy with it.",
+        "Block deletion in the default branch's ruleset.",
+    ),
+    Check(
+        "secret-scanning",
+        "Leaked credentials are scanned for",
+        PUBLIC,
+        _security("secret_scanning"),
+        "A credential committed to a public repository is found by others first.",
+        "Turn on secret scanning.",
+    ),
+    Check(
+        "push-protection",
+        "Credentials are stopped before they are pushed",
+        PUBLIC,
+        _security("secret_scanning_push_protection"),
+        "Scanning finds a leak after it is public; push protection stops it.",
+        "Turn on push protection.",
+    ),
+    Check(
+        "code-scanning",
+        "Code is scanned",
+        PUBLIC,
+        _code_scanning,
+        "Code scanning finds vulnerable patterns before a reviewer does.",
+        "Turn on code scanning.",
+    ),
 )
 
 
@@ -238,7 +307,12 @@ def _ruleset(name: str, rule: dict[str, Any]) -> Callable[[Repository], Runs]:
 
 
 def _security_fixes(repo: Repository) -> Runs:
-    return ((repo.short, f"{_api(repo, 'PUT', '/vulnerability-alerts')} && {_api(repo, 'PUT', '/automated-security-fixes')}"),)
+    return (
+        (
+            repo.short,
+            f"{_api(repo, 'PUT', '/vulnerability-alerts')} && {_api(repo, 'PUT', '/automated-security-fixes')}",
+        ),
+    )
 
 
 def _literal(text: str) -> str:
@@ -261,7 +335,7 @@ def _pin_edit(pin: dict[str, Any]) -> str:
 
     pinned = _literal(f"uses: {pin['action']}@{pin['sha']} # {pin['ref']}")
     return (
-        rf"""s/^([ \t]*(?:-[ \t]+)?)uses:[ \t]*(["']?){_literal(pin['uses'])}\2"""
+        rf"""s/^([ \t]*(?:-[ \t]+)?)uses:[ \t]*(["']?){_literal(pin["uses"])}\2"""
         rf"""(?:[ \t]+#[^\r\n]*)?[ \t]*(\r?)$/${{1}}{pinned}${{3}}/;"""
     )
 
@@ -326,18 +400,21 @@ COMMANDS: dict[str, Callable[[Repository], Runs]] = {
     "no-variables": _variables,
     "pull-request-required": _ruleset(
         "Require a pull request",
-        {"type": "pull_request", "parameters": {
-            "required_approving_review_count": 0, "dismiss_stale_reviews_on_push": False,
-            "require_code_owner_review": False, "require_last_push_approval": False,
-            "required_review_thread_resolution": False,
-        }},
+        {
+            "type": "pull_request",
+            "parameters": {
+                "required_approving_review_count": 0,
+                "dismiss_stale_reviews_on_push": False,
+                "require_code_owner_review": False,
+                "require_last_push_approval": False,
+                "required_review_thread_resolution": False,
+            },
+        },
     ),
     "force-push-blocked": _ruleset("Block force pushes", {"type": "non_fast_forward"}),
     "deletion-blocked": _ruleset("Block deletion", {"type": "deletion"}),
     "secret-scanning": _setting(f"-f '{_ANALYSIS.format('secret_scanning')}'", method="PATCH", path=""),
-    "push-protection": _setting(
-        f"-f '{_ANALYSIS.format('secret_scanning_push_protection')}'", method="PATCH", path=""
-    ),
+    "push-protection": _setting(f"-f '{_ANALYSIS.format('secret_scanning_push_protection')}'", method="PATCH", path=""),
     "code-scanning": _setting("-f state=configured", method="PATCH", path="/code-scanning/default-setup"),
     "actions-pinned": _pinning,
 }

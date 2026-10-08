@@ -17,26 +17,23 @@ Which means a layer can report that it does *not* hold, and say so plainly.
 That is the property that makes the rest worth reading.
 """
 
-from __future__ import annotations
-
-from ipaddress import ip_address
-
 from dataclasses import dataclass
 from datetime import datetime
+from ipaddress import ip_address
 from typing import Any
 
 from hq.platform.core.network import client_ip, is_trusted_proxy, split_host_port
 
-from .labels import human_bytes
 from . import tailnet
+from .labels import human_bytes
 from .reach import network_of, on_link_networks
-from .ui import MISSING
 from .request_channel import Channel, channel_for_request, displayed_client_ip, forwarded_chain, socket_peer
 from .request_identity import Identity, identity_of
 from .request_layers import Layer, ServingDeviceResolution, admission_layers
+from .ui import MISSING
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Peering:
     """Which network the tailnet link itself is running over.
 
@@ -73,8 +70,7 @@ class Peering:
 PEERING_UNKNOWN = Peering(
     "unknown",
     "Not known yet",
-    "This device is on the tailnet, and it has no direct or relayed path to "
-    "HQ's machine right now.",
+    "This device is on the tailnet, and it has no direct or relayed path to HQ's machine right now.",
 )
 # Not the same statement. "No peering" is a fact about the device; this is a fact about
 # HQ's view of it. Behind a proxy it has not been told to trust, HQ judges the
@@ -121,8 +117,7 @@ def _peering(presence) -> Peering:
         return Peering(
             "local",
             "Direct, on your own network",
-            "The two machines connect directly on the same private network. "
-            "Nothing crosses the internet.",
+            "The two machines connect directly on the same private network. Nothing crosses the internet.",
             address=host,
         )
     if where == "public":
@@ -138,13 +133,12 @@ def _peering(presence) -> Peering:
     return Peering(
         "indirect",
         "Through another tailnet device",
-        "The other end of this link is itself a tailnet address, so another "
-        "device on the tailnet is carrying it.",
+        "The other end of this link is itself a tailnet address, so another device on the tailnet is carrying it.",
         address=host,
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Connection:
     """One request, described from the outside in."""
 
@@ -190,9 +184,7 @@ class Connection:
 
     @property
     def failing(self) -> tuple[Layer, ...]:
-        return tuple(
-            layer for layer in self.layers if layer.conclusive and not layer.holds
-        )
+        return tuple(layer for layer in self.layers if layer.conclusive and not layer.holds)
 
     @property
     def unverified(self) -> tuple[Layer, ...]:
@@ -281,12 +273,7 @@ class Connection:
     def link_observed_by_hq(self) -> bool:
         """Whether the daemon measurement is provably from HQ's own node."""
 
-        return bool(
-            self.serves_verified
-            and self.observer
-            and self.serves
-            and self.observer.name == self.serves.name
-        )
+        return bool(self.serves_verified and self.observer and self.serves and self.observer.name == self.serves.name)
 
     @property
     def measurement_label(self) -> str:
@@ -386,9 +373,7 @@ def connection(request, *, edge=None, firewall=None) -> Connection:
     from .tailnet_presence import tailnet_presence
 
     own = hq_service(request, catalog=machines_once())
-    serving = _serving_device_resolution(
-        known, declared, served_at(request), machine=own.machine if own else ""
-    )
+    serving = _serving_device_resolution(known, declared, served_at(request), machine=own.machine if own else "")
     # A fallback observer is useful provenance, but it is not a placement
     # result. Never use it as HQ's policy target or draw it as HQ's endpoint.
     serves = serving.device if serving.verified else None
@@ -469,8 +454,7 @@ def _serving_device_resolution(
             return ServingDeviceResolution(device, True, "found by an address on this machine")
     index = index_of(declared=declared)
     for placed, basis in (
-        (hq_machine(index, (), {}, served_at=served, devices=known.values()),
-         "found by the machine HQ is recorded on"),
+        (hq_machine(index, (), {}, served_at=served, devices=known.values()), "found by the machine HQ is recorded on"),
         (machine, "found by the machine HQ's names lead to"),
     ):
         device = _device_on(placed, index, known)
@@ -490,11 +474,7 @@ def _device_on(machine: str, index, known: dict[str, tailnet.Device]) -> tailnet
     if not machine:
         return None
     return next(
-        (
-            device
-            for device in known.values()
-            if any(index.at(address) == machine for address in device.addresses)
-        ),
+        (device for device in known.values() if any(index.at(address) == machine for address in device.addresses)),
         None,
     )
 

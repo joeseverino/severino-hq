@@ -33,8 +33,6 @@ slice.toml:
                    enum or alias elsewhere in the slice.
 """
 
-from __future__ import annotations
-
 import copy
 import json
 import sys
@@ -248,7 +246,7 @@ def name_components(components, names):
 def main(path):
     vendor = Path.cwd()
     settings = tomllib.loads((vendor / "slice.toml").read_text(encoding="utf-8"))
-    with open(path, encoding="utf-8") as handle:
+    with Path(path).open(encoding="utf-8") as handle:
         spec = json.load(handle)
     if not spec.get("servers"):
         raise SystemExit("upstream names no servers")

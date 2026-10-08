@@ -24,9 +24,7 @@ django_application = get_asgi_application()
 # the middleware that refuses untrusted callers everywhere else.
 # No compressor: the image build compressed each asset once and the mount sends
 # that copy.
-static_application = TrustedNetworkASGI(
-    CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False)
-)
+static_application = TrustedNetworkASGI(CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False))
 # LowercaseHeaders inside the compressor, not outside it: the compressor has to
 # see names it can match, and by the time the response leaves it the damage
 # would already be two Content-Lengths.
@@ -37,10 +35,10 @@ compressed_django_application = GZipMiddleware(
 
 from asgiref.sync import sync_to_async  # noqa: E402
 
+from hq.platform.api import security as api_security  # noqa: E402
 from hq.platform.application.agent_access import agents_paused  # noqa: E402
 from hq.platform.application.agent_registry import observe  # noqa: E402
 from hq.platform.application.denials import record_denial  # noqa: E402
-from hq.platform.api import security as api_security  # noqa: E402
 from hq.platform.mcp.identity import token_principal  # noqa: E402
 from hq.platform.mcp.security import MCPBoundary  # noqa: E402
 from hq.platform.mcp.server import mcp  # noqa: E402

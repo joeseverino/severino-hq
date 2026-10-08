@@ -1,33 +1,29 @@
 """Thin MCP adapters over HQ's canonical application services and safe queries."""
 
-from __future__ import annotations
-
 from typing import Any
 
-from hq.platform.application.dashboard import operating_snapshot
-from hq.platform.application.connections import (
-    describe_connections as describe_application_connections,
-)
-from hq.platform.application.connections import list_connections as list_application_connections
+from hq.platform.application import read_models
 from hq.platform.application.capabilities import (
     describe_capabilities as describe_application_capabilities,
-)
-from hq.platform.application.capabilities import (
     execute_capability as execute_application_capability,
 )
-from hq.platform.mcp.identity import current_principal
-from hq.platform.application.security import Capability
+from hq.platform.application.connections import (
+    describe_connections as describe_application_connections,
+    list_connections as list_application_connections,
+)
+from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.findings import findings as application_findings
-from hq.platform.application.topology import topology as application_topology
 from hq.platform.application.registry import audit_registry as audit_application_registry
+from hq.platform.application.reports import export_year_summary as export_application_year_summary
 from hq.platform.application.resources import (
     ResourceNotFound,
     describe_resources as describe_application_resources,
     get_resource as get_application_resource,
     list_resource as list_application_resource,
 )
-from hq.platform.application import read_models
-from hq.platform.application.reports import export_year_summary as export_application_year_summary
+from hq.platform.application.security import Capability
+from hq.platform.application.topology import topology as application_topology
+from hq.platform.mcp.identity import current_principal
 
 
 class NotFoundError(ValueError):
@@ -119,23 +115,17 @@ def get_topology(
     )
 
 
-def list_resource(
-    name: str, filters: dict[str, Any] | None = None
-) -> dict[str, Any]:
+def list_resource(name: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
     """List any registered resource with schema-validated filters."""
 
-    return list_application_resource(
-        name, filters, principal=current_principal(), strict=True
-    )
+    return list_application_resource(name, filters, principal=current_principal(), strict=True)
 
 
 def get_resource(name: str, identifier: str | int) -> dict[str, Any]:
     """Get one record from any registered addressable resource."""
 
     try:
-        return get_application_resource(
-            name, identifier, principal=current_principal(), strict=True
-        )
+        return get_application_resource(name, identifier, principal=current_principal(), strict=True)
     except ResourceNotFound as exc:
         raise NotFoundError(exc.reason) from exc
 

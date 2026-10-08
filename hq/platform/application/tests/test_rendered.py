@@ -11,12 +11,10 @@ twice, and no em dash or count that disagrees with its noun ("1 resources",
 "account(s)") in what it says.
 """
 
-from __future__ import annotations
-
 import re
-from io import StringIO
 from collections import deque
 from html.parser import HTMLParser
+from io import StringIO
 from urllib.parse import urlsplit
 
 from django.contrib.auth import get_user_model
@@ -36,10 +34,34 @@ PAGE_LIMIT = 400
 # Words ending in "s" that are not plurals, so "1 needs" and "1 status" pass.
 NOT_PLURAL = frozenset(
     {
-        "access", "across", "address", "alias", "always", "analysis", "bonus",
-        "canvas", "class", "does", "focus", "has", "is", "its", "less", "lens",
-        "news", "needs", "pass", "plus", "process", "series", "status", "this",
-        "unless", "was", "yes", "ms",
+        "access",
+        "across",
+        "address",
+        "alias",
+        "always",
+        "analysis",
+        "bonus",
+        "canvas",
+        "class",
+        "does",
+        "focus",
+        "has",
+        "is",
+        "its",
+        "less",
+        "lens",
+        "news",
+        "needs",
+        "pass",
+        "plus",
+        "process",
+        "series",
+        "status",
+        "this",
+        "unless",
+        "was",
+        "yes",
+        "ms",
     }
 )
 ONE_PLURAL = re.compile(r"(?<![\d.,:/-])\b1 ([a-z]+s)\b")
@@ -132,9 +154,7 @@ class RenderedPageTests(TestCase):
                 continue
             seen.add(path)
             response = self.client.get(path)
-            if response.status_code != 200 or "text/html" not in response.get(
-                "Content-Type", ""
-            ):
+            if response.status_code != 200 or "text/html" not in response.get("Content-Type", ""):
                 continue
             html = response.content.decode()
             page = _Page()
@@ -170,11 +190,13 @@ class RenderedPageTests(TestCase):
                 problems.append(f"{path}: ids used twice: {', '.join(doubled[:5])}")
             if "—" in text:
                 at = text.index("—")
-                problems.append(f"{path}: em dash in {text[max(at - 30, 0):at + 30]!r}")
-            for noun in ONE_PLURAL.findall(text):
-                # "-ous" words are adjectives ("1 serious"), not plurals.
-                if noun not in NOT_PLURAL and not noun.endswith("ous"):
-                    problems.append(f"{path}: \"1 {noun}\"")
+                problems.append(f"{path}: em dash in {text[max(at - 30, 0) : at + 30]!r}")
+            # "-ous" words are adjectives ("1 serious"), not plurals.
+            problems.extend(
+                f'{path}: "1 {noun}"'
+                for noun in ONE_PLURAL.findall(text)
+                if noun not in NOT_PLURAL and not noun.endswith("ous")
+            )
             if BRACKETED.search(text):
                 problems.append(f"{path}: plural in brackets: {BRACKETED.search(text).group()!r}")
         self.assertGreater(crawled, 20, "The crawl reached too few pages to mean anything.")

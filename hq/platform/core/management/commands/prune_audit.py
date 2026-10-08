@@ -6,7 +6,7 @@ eligible. Prints counts only. The daily run is the ``audit.prune`` job
 to count what it would delete.
 """
 
-from __future__ import annotations
+from typing import override
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -19,6 +19,7 @@ from hq.platform.core.audit import prune_routine
 class Command(BaseCommand):
     help = "Delete routine audit events older than SEVERINO_AUDIT_ROUTINE_DAYS."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument(
             "--check-only",
@@ -26,6 +27,7 @@ class Command(BaseCommand):
             help="Count what would be deleted and delete nothing.",
         )
 
+    @override
     def handle(self, *args, **options):
         days = int(settings.SEVERINO_AUDIT_ROUTINE_DAYS)
         if options["check_only"]:

@@ -1,7 +1,5 @@
 """A list read does not fetch a relation once per row."""
 
-from __future__ import annotations
-
 from datetime import date
 
 from django.core.exceptions import FieldFetchBlocked
@@ -18,9 +16,7 @@ from ..tables import TableListMixin
 def _expenses(count: int) -> None:
     for index in range(count):
         project = Project.objects.create(name=f"Example project {index}")
-        Expense.objects.create(
-            date=date(2026, 10, 1), vendor="Example", item=f"Item {index}", related_project=project
-        )
+        Expense.objects.create(date=date(2026, 10, 1), vendor="Example", item=f"Item {index}", related_project=project)
 
 
 class GuardedTests(TestCase):
@@ -49,12 +45,12 @@ class GuardedTests(TestCase):
 
     def test_every_table_and_every_listing_is_guarded(self):
         class View(TableListMixin):
-            class request:  # noqa: N801 - stands in for a request with no query
+            class request:
                 GET = __import__("django.http").http.QueryDict("")
 
         rows = View().apply_table_query(Expense.objects.all())
         with self.assertRaises(FieldFetchBlocked):
-            rows[0].related_project
+            _ = rows[0].related_project
 
         modes = listing(Project, lambda row: row._state.fetch_mode, search=())["items"]
         self.assertEqual(modes, [FETCH_RAISE] * 3)

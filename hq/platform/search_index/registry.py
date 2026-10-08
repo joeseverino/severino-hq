@@ -1,7 +1,5 @@
 """Search projection definitions for HQ record types."""
 
-from __future__ import annotations
-
 from hq.platform.application.resources import resource_search_definitions
 
 DEFINITIONS = resource_search_definitions()

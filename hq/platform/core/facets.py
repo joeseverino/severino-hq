@@ -14,10 +14,8 @@ render one facet can render all of them. Unset fields are absent from the row
 rather than stored as null.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, fields
-from typing import ClassVar
+from typing import ClassVar, override
 
 
 class Facet:
@@ -58,7 +56,7 @@ def _non_negative(instance, *names) -> None:
             raise ValueError(f"{type(instance).__name__}.{name} cannot be negative.")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Counts(Facet):
     """How much a thing changed."""
 
@@ -76,12 +74,10 @@ class Counts(Facet):
     @property
     def touched(self) -> int:
         """Rows changed, as opposed to rows read."""
-        return sum(
-            value or 0 for value in (self.created, self.updated, self.deleted)
-        )
+        return sum(value or 0 for value in (self.created, self.updated, self.deleted))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Timing(Facet):
     """How long it took.
 
@@ -102,7 +98,7 @@ class Timing(Facet):
         return None if self.duration_ms is None else self.duration_ms / 1000
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Source(Facet):
     """What the work read, so a result can be traced back to its input."""
 
@@ -116,7 +112,7 @@ class Source(Facet):
         _non_negative(self, "bytes")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Steps(Facet):
     """The steps that completed, in order.
 
@@ -128,11 +124,12 @@ class Steps(Facet):
 
     done: tuple[str, ...] = ()
 
+    @override
     def as_metadata(self) -> dict:
         return {"done": [str(step) for step in self.done]} if self.done else {}
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Failure(Facet):
     """Why it stopped, separated from the fact that it did."""
 

@@ -1,9 +1,7 @@
 """The unit state reading, and what HQ says when a unit fails, is absent or stalls."""
 
-from __future__ import annotations
-
 import re
-from datetime import timedelta, timezone as utc
+from datetime import UTC, timedelta
 from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase
@@ -11,7 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.bridge_contract import contract
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.observations.host import HostUnitRecord, RENDER_STATUS_KIND, UNIT_KIND
+from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND, HostUnitRecord
 
 from .. import unit_findings as rules
 from ..dashboard import work_queue
@@ -32,7 +30,7 @@ TIMER = "severino-hq-example.timer"
 def stamp(age: timedelta = timedelta(0)) -> str:
     """An instant ``age`` ago, as the controller writes one."""
 
-    return (timezone.now() - age).astimezone(utc.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (timezone.now() - age).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def service(unit: str = SERVICE, **said) -> dict:
@@ -123,7 +121,12 @@ class RecordTests(SimpleTestCase):
             with self.subTest(field=name):
                 self.assertTrue(schema["type"] == "integer" or schema.get("pattern"), "free text")
                 self.assertNotRegex(name, r"exec|environment|credential|path|command")
-        for sentinel in ("EXAMPLE_TOKEN=sentinel-value", "/run/example/token", "two words", "Sentinel0123456789abcdef0123456789abcdef"):
+        for sentinel in (
+            "EXAMPLE_TOKEN=sentinel-value",
+            "/run/example/token",
+            "two words",
+            "Sentinel0123456789abcdef0123456789abcdef",
+        ):
             for name, schema in declared["properties"].items():
                 if "pattern" in schema:
                     self.assertIsNone(re.search(schema["pattern"], sentinel), (name, sentinel))
@@ -156,8 +159,11 @@ class SourceTests(SimpleTestCase):
 
     def test_the_rules_name_no_unit(self):
         source = (ROOT / "hq" / "platform" / "application" / "unit_findings.py").read_text()
-        shipped = [path.name.split("@")[0].removesuffix(".service").removesuffix(".timer")
-                   for path in UNITS.iterdir() if path.is_file() and not path.name.endswith(".example")]
+        shipped = [
+            path.name.split("@")[0].removesuffix(".service").removesuffix(".timer")
+            for path in UNITS.iterdir()
+            if path.is_file() and not path.name.endswith(".example")
+        ]
 
         self.assertTrue(shipped)
         for name in shipped:
@@ -264,7 +270,7 @@ class AbsentTests(TestCase):
         (finding,) = raised("unit-not-installed")
         self.assertEqual(finding["severity"], "serious")
         values = [item["value"] for item in finding["evidence"]]
-        return dict(zip(values[::2], values[1::2]))
+        return dict(zip(values[::2], values[1::2], strict=False))
 
     def test_each_way_a_shipped_unit_is_not_running_is_said(self):
         sweep(
@@ -406,7 +412,10 @@ class QueueTests(TestCase):
                 self.assertIn(f"hq.infrastructure:finding:{rule}:{subject}", keys)
         for finding in raised("unit-failed"):
             verify = [
-                action for step in finding["workflow"]["steps"] for action in step["actions"] if action["name"] == "verify"
+                action
+                for step in finding["workflow"]["steps"]
+                for action in step["actions"]
+                if action["name"] == "verify"
             ]
             self.assertEqual(len(verify), 1)
             self.assertIn(f"kind={UNIT_KIND}", verify[0]["url"])
@@ -415,9 +424,21 @@ class QueueTests(TestCase):
 class FactTests(SimpleTestCase):
     def test_a_fact_carries_a_unit_whole(self):
         unit = rules.UnitState(
-            SERVICE, "loaded", "static", "failed", "failed", "exit-code", "3", "2026-01-02T03:05:00Z",
-            "2026-01-02T03:06:00Z", "yes", "2026-01-02T03:05:00Z", "2026-01-03T03:05:00Z", TIMER,
-            "2026-01-02T04:00:00Z", "",
+            SERVICE,
+            "loaded",
+            "static",
+            "failed",
+            "failed",
+            "exit-code",
+            "3",
+            "2026-01-02T03:05:00Z",
+            "2026-01-02T03:06:00Z",
+            "yes",
+            "2026-01-02T03:05:00Z",
+            "2026-01-03T03:05:00Z",
+            TIMER,
+            "2026-01-02T04:00:00Z",
+            "",
         )
 
         key, value = unit.fact

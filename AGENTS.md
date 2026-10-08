@@ -18,7 +18,9 @@ Setup is [mise](https://mise.jdx.dev), `mise install` and uv on the PATH: the
 pinned tools, at the versions in `mise.toml` and the checksums in `mise.lock`.
 Python dependencies come from `uv.lock` through `uv run --locked`, so no
 virtualenv is made by hand. uv's own pin is in `pyproject.toml` with its hashes
-in `uv.lock`, which is the uv the pipeline installs. Every gate is a task in `mise.toml` named `<job>:<gate>`;
+in `uv.lock`, which is the uv the pipeline installs. The images take uv from its
+own image, pinned by digest in `Dockerfile` and `composition/Dockerfile`. Every
+gate is a task in `mise.toml` named `<job>:<gate>`;
 `mise tasks` lists them and `mise run checks:ruff` runs one. Outside a task,
 run a command with the same dependencies as `uv run --locked python
 manage.py ...`.
@@ -238,6 +240,12 @@ cyclomatic complexity exceeds 15, and `CognitiveComplexityTests` in
 `hq/platform/application/tests/test_architecture.py` fails any non-test function whose cognitive
 complexity exceeds 20. There is no allowance list: a function over either
 limit is split into named steps.
+
+Ruff also holds import order, pyupgrade, bugbear, simplify, pathlib, comprehension,
+performance, Ruff-specific, refurb, Django and blind-except rules. A rule is
+switched off only in `pyproject.toml`, with the reason beside it; a line-level
+`# noqa` names its code and says why. A method that overrides a base-class method
+carries `@override`, and mypy's `explicit-override` holds the typed modules to it.
 
 The architectural seams are type checked. `mise run checks:mypy` (a gate of
 `mise run ci` and CI's Checks job) runs mypy with django-stubs over the modules

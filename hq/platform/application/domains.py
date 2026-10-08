@@ -17,27 +17,26 @@ labels arrive from installed manifests at runtime, and ``test_domains``
 enforces that nothing here hardcodes one.
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, Callable, NamedTuple
+from typing import Any, NamedTuple
 
 from django.urls import URLResolver, include, path
 from django.utils.module_loading import import_string
 
+from .derivations import derivation
+from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
 from .plugins import (
     DERIVED_PROVIDERS,
     NavigationItem,
     PluginIntegration,
     answered_by,
     gather_attention,
-    ordered_attention,
     gather_cards,
     installed_integrations,
+    ordered_attention,
 )
-from .derivations import derivation
-from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
 
 # Order bands. Below HOST_ORDER_FLOOR is reserved for extension-supplied
 # domains, so an installed extension leads the bar ahead of the host's own
@@ -58,7 +57,7 @@ class Mount(NamedTuple):
     urlconf: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Records:
     """A plain record domain: one model created, changed and deleted by command.
 
@@ -103,7 +102,7 @@ class Records:
         return f"delete_{self.resource}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DomainDescriptor:
     """A host section's whole declaration.
 
@@ -122,7 +121,7 @@ class DomainDescriptor:
     records: Records | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Domain:
     """A descriptor or a manifest, seen through one lens.
 
@@ -185,9 +184,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # The one inline entry: no group, so it renders as a bare link at the
         # head of the bar rather than a dropdown of one.
         navigation=(NavigationItem("Dashboard", "dashboard", "", 0, ""),),
-        integration=PluginIntegration(
-            connections=_provider("hq.platform.application.glance:connection_specs")
-        ),
+        integration=PluginIntegration(connections=_provider("hq.platform.application.glance:connection_specs")),
     ),
     DomainDescriptor(
         id="hq.calendar",
@@ -206,9 +203,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.projects",
         label="Projects",
-        navigation=(
-            NavigationItem("Projects", "projects:list", "projects", 100, "Projects"),
-        ),
+        navigation=(NavigationItem("Projects", "projects:list", "projects", 100, "Projects"),),
         # No attention provider, deliberately. "Active work with nothing
         # written about it yet" is a shape of the portfolio, not a decision:
         # only months of work clear it, so it does not belong in the queue.
@@ -248,9 +243,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.docs",
         label="Docs",
-        navigation=(
-            NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Projects"),
-        ),
+        navigation=(NavigationItem("Docs", "docs_index:list", "docs_index", 101, "Projects"),),
         integration=PluginIntegration(
             resources=_provider("hq.domains.docs_index.specs:resources"),
             attention=_provider("hq.platform.application.attention:documentation"),
@@ -280,9 +273,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # queues and card are declared here rather than on the sibling below
         # because they count the whole registry, both halves, and a queue
         # declared twice would report its backlog twice.
-        navigation=(
-            NavigationItem("Writeups", "content:writeups", "content", 110, "Web"),
-        ),
+        navigation=(NavigationItem("Writeups", "content:writeups", "content", 110, "Web"),),
         integration=PluginIntegration(
             resources=_provider("hq.domains.content.specs:resources"),
             attention=_provider("hq.platform.application.attention:content"),
@@ -306,16 +297,12 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Pages",
         # The structural pages: the ones that make the site navigable rather
         # than worth visiting. Same registry, same table, different half.
-        navigation=(
-            NavigationItem("Pages", "content:pages", "content", 111, "Web"),
-        ),
+        navigation=(NavigationItem("Pages", "content:pages", "content", 111, "Web"),),
     ),
     DomainDescriptor(
         id="hq.contacts",
         label="Contacts",
-        navigation=(
-            NavigationItem("Messages", "contacts:list", "contacts", 112, "Web"),
-        ),
+        navigation=(NavigationItem("Messages", "contacts:list", "contacts", 112, "Web"),),
         integration=PluginIntegration(
             capabilities=_provider("hq.domains.contacts.specs:capabilities"),
             resources=_provider("hq.domains.contacts.specs:resources"),
@@ -333,9 +320,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # infrastructure resources and stay listed there; this is where the
         # records themselves are read and changed, which is a different job done
         # on a different day.
-        navigation=(
-            NavigationItem("Domains", "zones:index", "zones", 113, "Web"),
-        ),
+        navigation=(NavigationItem("Domains", "zones:index", "zones", 113, "Web"),),
         mounts=(Mount("domains/", "hq.domains.control_plane.zone_urls"),),
     ),
     DomainDescriptor(
@@ -343,9 +328,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Analytics",
         # Last in Web, because it is the section that reports on the others.
         # Reading it is what you do after publishing, not before.
-        navigation=(
-            NavigationItem("Analytics", "analytics:overview", "analytics", 114, "Web"),
-        ),
+        navigation=(NavigationItem("Analytics", "analytics:overview", "analytics", 114, "Web"),),
         integration=PluginIntegration(
             resources=_provider("hq.domains.analytics.specs:resources"),
         ),
@@ -355,9 +338,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.expenses",
         label="Expenses",
-        navigation=(
-            NavigationItem("Expenses", "expenses:list", "expenses", 120, "Business"),
-        ),
+        navigation=(NavigationItem("Expenses", "expenses:list", "expenses", 120, "Business"),),
         integration=PluginIntegration(
             resources=_provider("hq.domains.expenses.specs:resources"),
             attention=_provider("hq.platform.application.attention:expenses"),
@@ -379,9 +360,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.receipts",
         label="Receipts",
-        navigation=(
-            NavigationItem("Receipts", "receipts:list", "receipts", 121, "Business"),
-        ),
+        navigation=(NavigationItem("Receipts", "receipts:list", "receipts", 121, "Business"),),
         integration=PluginIntegration(
             resources=_provider("hq.domains.receipts.specs:resources"),
             attention=_provider("hq.platform.application.attention:receipts"),
@@ -408,9 +387,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.assets",
         label="Assets",
-        navigation=(
-            NavigationItem("Assets", "assets:list", "assets", 122, "Business"),
-        ),
+        navigation=(NavigationItem("Assets", "assets:list", "assets", 122, "Business"),),
         integration=PluginIntegration(
             resources=_provider("hq.domains.assets.specs:resources"),
             attention=_provider("hq.platform.application.attention:assets"),
@@ -431,9 +408,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.reports",
         label="Reports",
-        navigation=(
-            NavigationItem("Reports", "reports:dashboard", "reports", 123, "Business"),
-        ),
+        navigation=(NavigationItem("Reports", "reports:dashboard", "reports", 123, "Business"),),
         apps=("hq.domains.reports",),
         mounts=(Mount("reports/", "hq.domains.reports.urls"),),
     ),
@@ -442,7 +417,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Findings",
         navigation=(
             NavigationItem(
-                "Findings", "control_plane:findings", "control_plane", 128,
+                "Findings",
+                "control_plane:findings",
+                "control_plane",
+                128,
                 "Infrastructure",
             ),
         ),
@@ -454,7 +432,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # entry point that explains how every narrower workspace fits together.
         navigation=(
             NavigationItem(
-                "Map", "control_plane:topology", "control_plane", 129,
+                "Map",
+                "control_plane:topology",
+                "control_plane",
+                129,
                 "Infrastructure",
             ),
         ),
@@ -468,7 +449,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # further in, where the answer is "which declaration is wrong".
         navigation=(
             NavigationItem(
-                "Services", "control_plane:services", "control_plane", 130,
+                "Services",
+                "control_plane:services",
+                "control_plane",
+                130,
                 "Infrastructure",
             ),
         ),
@@ -493,13 +477,14 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Infrastructure",
         navigation=(
             NavigationItem(
-                "All records", "control_plane:list", "control_plane", 131,
+                "All records",
+                "control_plane:list",
+                "control_plane",
+                131,
                 "Infrastructure",
             ),
         ),
-        integration=PluginIntegration(
-            attention=_provider("hq.platform.application.attention:infrastructure")
-        ),
+        integration=PluginIntegration(attention=_provider("hq.platform.application.attention:infrastructure")),
         apps=("hq.domains.control_plane",),
         mounts=(Mount("infrastructure/", "hq.domains.control_plane.urls"),),
     ),
@@ -513,13 +498,14 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # costs no more of the bar than the first.
         navigation=(
             NavigationItem(
-                "Tools", "control_plane:tools", "control_plane", 133,
+                "Tools",
+                "control_plane:tools",
+                "control_plane",
+                133,
                 "Infrastructure",
             ),
         ),
-        integration=PluginIntegration(
-            connections=_provider("hq.domains.control_plane.dns_lookup:connection_specs")
-        ),
+        integration=PluginIntegration(connections=_provider("hq.domains.control_plane.dns_lookup:connection_specs")),
     ),
     DomainDescriptor(
         id="hq.machines",
@@ -529,7 +515,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # about.
         navigation=(
             NavigationItem(
-                "Machines", "control_plane:machines", "control_plane", 132,
+                "Machines",
+                "control_plane:machines",
+                "control_plane",
+                132,
                 "Infrastructure",
             ),
         ),
@@ -541,7 +530,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # question here is whether what runs on them is current and safe.
         navigation=(
             NavigationItem(
-                "Containers", "control_plane:containers", "control_plane", 132,
+                "Containers",
+                "control_plane:containers",
+                "control_plane",
+                132,
                 "Infrastructure",
             ),
         ),
@@ -555,7 +547,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # only meaningful once you know which machine you are asking about.
         navigation=(
             NavigationItem(
-                "Tailnet", "control_plane:tailnet", "control_plane", 133,
+                "Tailnet",
+                "control_plane:tailnet",
+                "control_plane",
+                133,
                 "Infrastructure",
             ),
         ),
@@ -569,34 +564,27 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # does.
         navigation=(
             NavigationItem(
-                "Connections", "control_plane:connections", "control_plane", 133,
+                "Connections",
+                "control_plane:connections",
+                "control_plane",
+                133,
                 "Infrastructure",
             ),
         ),
-        integration=PluginIntegration(
-            connections=_provider("hq.platform.application.connections:connection_specs")
-        ),
+        integration=PluginIntegration(connections=_provider("hq.platform.application.connections:connection_specs")),
     ),
     DomainDescriptor(
         id="hq.jobs",
         label="Jobs",
-        navigation=(
-            NavigationItem("Background jobs", "jobs:list", "jobs", 132, "Infrastructure"),
-        ),
+        navigation=(NavigationItem("Background jobs", "jobs:list", "jobs", 132, "Infrastructure"),),
         apps=("hq.domains.jobs",),
         mounts=(Mount("jobs/", "hq.domains.jobs.urls"),),
     ),
     DomainDescriptor(
         id="hq.audit",
         label="Audit",
-        navigation=(
-            NavigationItem(
-                "Audit log", "core:audit_list", "core", HOST_ORDER_MACHINERY, "System"
-            ),
-        ),
-        integration=PluginIntegration(
-            attention=_provider("hq.platform.application.attention:waiting_for_approval")
-        ),
+        navigation=(NavigationItem("Audit log", "core:audit_list", "core", HOST_ORDER_MACHINERY, "System"),),
+        integration=PluginIntegration(attention=_provider("hq.platform.application.attention:waiting_for_approval")),
         mounts=(Mount("audit/", "hq.platform.core.urls"),),
     ),
     DomainDescriptor(
@@ -604,16 +592,12 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="History",
         # No page of its own: what happened is read on the calendar, a day at
         # a time, and in full on the audit log.
-        integration=PluginIntegration(
-            calendars=_provider("hq.platform.application.calendar_sources:history_sources")
-        ),
+        integration=PluginIntegration(calendars=_provider("hq.platform.application.calendar_sources:history_sources")),
     ),
     DomainDescriptor(
         id="hq.agents",
         label="Agents",
-        navigation=(
-            NavigationItem("Agents", "agent_policy", "", HOST_ORDER_MACHINERY + 1, "System"),
-        ),
+        navigation=(NavigationItem("Agents", "agent_policy", "", HOST_ORDER_MACHINERY + 1, "System"),),
     ),
     DomainDescriptor(
         id="hq.api",
@@ -621,8 +605,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # Beside Agents: the machine API is what an agent's token reaches.
         navigation=(
             NavigationItem(
-                "API", "api_reference:reference", "api_reference",
-                HOST_ORDER_MACHINERY + 2, "System",
+                "API",
+                "api_reference:reference",
+                "api_reference",
+                HOST_ORDER_MACHINERY + 2,
+                "System",
             ),
         ),
         mounts=(Mount("api/docs/", "hq.platform.api.web_urls"),),
@@ -654,11 +641,7 @@ def host_apps() -> list[str]:
 def host_urlpatterns() -> list[URLResolver]:
     """Each domain's URL configuration, mounted where it declares."""
 
-    return [
-        path(mount.prefix, include(mount.urlconf))
-        for descriptor in HOST_DOMAINS
-        for mount in descriptor.mounts
-    ]
+    return [path(mount.prefix, include(mount.urlconf)) for descriptor in HOST_DOMAINS for mount in descriptor.mounts]
 
 
 def host_records() -> tuple[Records, ...]:
@@ -700,9 +683,7 @@ def all_domains() -> tuple[Domain, ...]:
     presentation order asks ``domain_navigation`` for it.
     """
 
-    return tuple(
-        sorted((*host_domains(), *extension_domains()), key=lambda domain: domain.id)
-    )
+    return tuple(sorted((*host_domains(), *extension_domains()), key=lambda domain: domain.id))
 
 
 def composition() -> tuple[tuple[str, str, str], ...]:
@@ -751,12 +732,7 @@ def domain_navigation() -> tuple[NavigationItem, ...]:
     # An extension may place a host page in its own group by naming its route.
     # Where one does, the host's own entry for that page steps aside; where
     # none does, the page stays where the host puts it.
-    placed = {
-        item.route
-        for domain in domains
-        if domain.origin == "extension"
-        for item in domain.navigation
-    }
+    placed = {item.route for domain in domains if domain.origin == "extension" for item in domain.navigation}
     items: list[NavigationItem] = []
     seen: set[str] = set()
     for item in sorted(
@@ -792,9 +768,7 @@ def domain_attention_items() -> tuple[dict[str, Any], ...]:
     # Each extension's provider is a derivation of its own (``plugins``), so
     # this gathers stored answers and orders them.
     extensions = gather_attention(
-        (domain.id, domain.label, domain.integration.attention)
-        for domain in all_domains()
-        if domain.origin != "host"
+        (domain.id, domain.label, domain.integration.attention) for domain in all_domains() if domain.origin != "host"
     )
     # One order for both: an extension's entries are merged in by the same key.
     return ordered_attention((*_host_attention(), *extensions))
@@ -805,9 +779,7 @@ def _host_attention() -> tuple[dict[str, Any], ...]:
     """What the host's own sections report, derived once per change of the estate."""
 
     return gather_attention(
-        (domain.id, domain.label, domain.integration.attention)
-        for domain in all_domains()
-        if domain.origin == "host"
+        (domain.id, domain.label, domain.integration.attention) for domain in all_domains() if domain.origin == "host"
     )
 
 
@@ -822,9 +794,7 @@ def domain_dashboard_cards() -> tuple[dict[str, Any], ...]:
     operator reads every day.
     """
 
-    return tuple(
-        card for section in domain_dashboard_sections() for card in section["cards"]
-    )
+    return tuple(card for section in domain_dashboard_sections() for card in section["cards"])
 
 
 def _given(cards: tuple[dict[str, Any], ...]) -> Callable[[], tuple[dict[str, Any], ...]]:

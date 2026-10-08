@@ -21,10 +21,9 @@ and upserts DocumentationRecord rows. The Obsidian vault stays the source of
 truth: HQ tracks only metadata and relationships.
 """
 
-from __future__ import annotations
-
+from collections.abc import Iterable
 from datetime import date, datetime
-from typing import Any, Iterable
+from typing import Any
 
 from django.db import transaction
 from django.db.models import Count, F, Q
@@ -59,9 +58,7 @@ def _validate_choice(value: str, allowed, *, field: str) -> str:
     # wrote. Do not pass model `.choices` here; that would reintroduce drift.
     if value in allowed:
         return value
-    raise ManifestImportError(
-        f"Invalid {field}={value!r}. Allowed: {sorted(allowed)}"
-    )
+    raise ManifestImportError(f"Invalid {field}={value!r}. Allowed: {sorted(allowed)}")
 
 
 def _is_content_entry(entry: dict) -> bool:
@@ -100,15 +97,9 @@ def _enforce_contract(entry: dict, doc_id: str) -> None:
     """
     label = doc_id or "(no doc_id)"
     is_task = entry.get("doc_type") == "task"
-    required = (
-        frontmatter_schema.TASK_REQUIRED_FIELDS
-        if is_task
-        else frontmatter_schema.REQUIRED_FIELDS
-    )
+    required = frontmatter_schema.TASK_REQUIRED_FIELDS if is_task else frontmatter_schema.REQUIRED_FIELDS
     missing = [
-        field
-        for field in required
-        if all(_is_blank(entry.get(key)) for key in _FIELD_ALIASES.get(field, (field,)))
+        field for field in required if all(_is_blank(entry.get(key)) for key in _FIELD_ALIASES.get(field, (field,)))
     ]
     if missing:
         raise ManifestImportError(
@@ -119,9 +110,7 @@ def _enforce_contract(entry: dict, doc_id: str) -> None:
         return
     prefixes = frontmatter_schema.DOC_ID_PREFIXES
     if not doc_id.startswith(prefixes):
-        raise ManifestImportError(
-            f"{label}: doc_id must start with one of: {', '.join(prefixes)}"
-        )
+        raise ManifestImportError(f"{label}: doc_id must start with one of: {', '.join(prefixes)}")
 
 
 def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
@@ -142,9 +131,7 @@ def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
         field="doc_type",
     )
     is_task = doc_type == "task"
-    status_allowed = (
-        frontmatter_schema.TASK_STATUSES if is_task else frontmatter_schema.STATUSES
-    )
+    status_allowed = frontmatter_schema.TASK_STATUSES if is_task else frontmatter_schema.STATUSES
     defaults = {
         "title": entry.get("title") or doc_id,
         "doc_type": doc_type,
@@ -214,9 +201,7 @@ def _sync_relation(record, manager, slugs, *, kind: str, doc_id: str, stats: dic
     for slug in slugs:
         if slug not in found:
             stats["missing_relations"] += 1
-            stats["missing_relations_detail"].append(
-                {"doc_id": doc_id, "kind": kind, "slug": slug}
-            )
+            stats["missing_relations_detail"].append({"doc_id": doc_id, "kind": kind, "slug": slug})
     return qs, changed
 
 
@@ -244,7 +229,7 @@ def _legacy_content_slug_from_doc_id(doc_id: str) -> str:
 
 
 def _prune_legacy_content_item_for_record(
-    record: "DocumentationRecord",
+    record: DocumentationRecord,
     stats: dict,
 ) -> None:
     """Remove a stale mirrored ContentItem for records no longer in content."""
@@ -264,7 +249,7 @@ def _prune_legacy_content_item_for_record(
 
 
 def _upsert_content_item(
-    record: "DocumentationRecord",
+    record: DocumentationRecord,
     entry: dict,
     defaults: dict,
     stats: dict,
@@ -288,12 +273,8 @@ def _upsert_content_item(
     if "published" in entry:
         is_published = bool(entry.get("published"))
     else:
-        is_published = bool(
-            defaults.get("published_at") or defaults.get("external_url")
-        )
-    item_status = (
-        ContentItem.Status.PUBLISHED if is_published else ContentItem.Status.DRAFT
-    )
+        is_published = bool(defaults.get("published_at") or defaults.get("external_url"))
+    item_status = ContentItem.Status.PUBLISHED if is_published else ContentItem.Status.DRAFT
 
     tags = entry.get("tags") or entry.get("technologies") or []
     tags_str = ", ".join(t for t in tags if t) if isinstance(tags, list) else str(tags)
@@ -302,26 +283,17 @@ def _upsert_content_item(
         "title": defaults["title"],
         "content_type": content_type,
         "status": item_status,
-        "topic": (
-            entry.get("topic")
-            or entry.get("description")
-            or entry.get("excerpt")
-            or entry.get("system")
-            or ""
-        ),
+        "topic": (entry.get("topic") or entry.get("description") or entry.get("excerpt") or entry.get("system") or ""),
         "tags": tags_str,
         "published_url": defaults.get("external_url") or "",
         "published_at": defaults.get("published_at"),
     }
 
-    item, created = ContentItem.objects.get_or_create(
-        slug=article_slug, defaults=content_defaults
-    )
-    if not created:
-        if any(getattr(item, k) != v for k, v in content_defaults.items()):
-            for k, v in content_defaults.items():
-                setattr(item, k, v)
-            item.save()
+    item, created = ContentItem.objects.get_or_create(slug=article_slug, defaults=content_defaults)
+    if not created and any(getattr(item, k) != v for k, v in content_defaults.items()):
+        for k, v in content_defaults.items():
+            setattr(item, k, v)
+        item.save()
 
     if not item.related_documentation.filter(pk=record.pk).exists():
         item.related_documentation.add(record)
@@ -380,9 +352,7 @@ def _import_entry(entry: dict, *, doc_id: str, update_existing: bool, stats: dic
 
     _, defaults, _ = _build_record_defaults(entry)
 
-    record, created = DocumentationRecord.objects.get_or_create(
-        doc_id=doc_id, defaults=defaults
-    )
+    record, created = DocumentationRecord.objects.get_or_create(doc_id=doc_id, defaults=defaults)
     if created:
         changed = True
     elif update_existing:
@@ -405,9 +375,7 @@ def _import_entry(entry: dict, *, doc_id: str, update_existing: bool, stats: dic
         changed = changed or rel_changed
         _backfill_project_technologies(qs, entry, stats)
     if asset_slugs:
-        _, rel_changed = _sync_relation(
-            record, Asset.objects, asset_slugs, kind="asset", doc_id=doc_id, stats=stats
-        )
+        _, rel_changed = _sync_relation(record, Asset.objects, asset_slugs, kind="asset", doc_id=doc_id, stats=stats)
         changed = changed or rel_changed
 
     if created:
@@ -500,9 +468,7 @@ def import_manifest_data(
         # Claimed before the update decision: a record the manifest names but
         # chose not to update is still named, and must not read as an orphan.
         manifest_doc_ids.add(doc_id)
-        _import_entry(
-            entry, doc_id=doc_id, update_existing=update_existing, stats=stats
-        )
+        _import_entry(entry, doc_id=doc_id, update_existing=update_existing, stats=stats)
 
     if report_orphans or prune_orphans:
         _reap_orphans(manifest_doc_ids, prune=prune_orphans, stats=stats)

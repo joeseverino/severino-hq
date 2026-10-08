@@ -7,8 +7,6 @@ node stands and ordered by ``topology.relation_rank``. Nothing here derives a
 relationship: an edge is either in the graph or not on the page.
 """
 
-from __future__ import annotations
-
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,7 +22,7 @@ from .topology import relation_graph
 from .topology_model import RELATIONS, TopologyEdge, relation_rank
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Relationship:
     """One thing a node is related to, who says so, and when they last read it."""
 
@@ -34,7 +32,7 @@ class Relationship:
     stale: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RelationGroup:
     phrase: str
     rank: int
@@ -49,10 +47,7 @@ class RelationGroup:
         """
 
         return all(
-            item.source is None
-            and item.observed_at is None
-            and not item.stale
-            and not item.entity.detail
+            item.source is None and item.observed_at is None and not item.stale and not item.entity.detail
             for item in self.items
         )
 
@@ -71,7 +66,7 @@ class RelationGroup:
         return Relationship(self.items[0].entity, self.items[0].source, min(read) if read else None)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Relationships:
     node_id: str
     groups: tuple[RelationGroup, ...] = ()
@@ -96,7 +91,7 @@ class Relationships:
         found = self.group(phrase)
         return tuple(item.entity.label for item in found.items) if found else ()
 
-    def without(self, *phrases: str) -> "Relationships":
+    def without(self, *phrases: str) -> Relationships:
         """The same answer less the groups a page already renders elsewhere."""
 
         return Relationships(
@@ -127,7 +122,7 @@ def _rows(edge: TopologyEdge, node_id: str, nodes: dict[str, Any]):
             yield edge.label, Relationship(entity, source, observed, stale)
         return
     relation = RELATIONS.get(edge.kind)
-    if relation is None:
+    if relation is None:  # noqa: SIM108 - a nested conditional expression reads worse
         phrase = edge.label
     else:
         phrase = relation.phrase if outbound else relation.inverse
@@ -170,9 +165,7 @@ def relationships_for(node_id: str, *, principal: Principal) -> Relationships:
             rank,
             tuple(sorted(items, key=lambda row: row.entity.label.casefold())),
         )
-        for phrase, (rank, items) in sorted(
-            grouped.items(), key=lambda pair: (pair[1][0], pair[0])
-        )
+        for phrase, (rank, items) in sorted(grouped.items(), key=lambda pair: (pair[1][0], pair[0]))
     )
     return Relationships(
         node_id=node_id,
@@ -204,9 +197,7 @@ def readout_records(subject) -> tuple[tuple[str, str, str, tuple[dict[str, Any],
         record = joined.spec.admitted(joined.record)
         if record not in records:
             records.append(record)
-    return tuple(
-        (kind, label, ref, tuple(records)) for (kind, label, ref), records in found.items()
-    )
+    return tuple((kind, label, ref, tuple(records)) for (kind, label, ref), records in found.items())
 
 
 def _readouts(subject) -> tuple[tuple[str, EntityLink | None, str], ...]:

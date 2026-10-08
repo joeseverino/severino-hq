@@ -6,17 +6,13 @@ apart from both so a provider can import its vocabulary without importing the
 registry that collects it.
 """
 
-from __future__ import annotations
-
 import re
-from functools import lru_cache
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal
+from functools import cache
+from typing import Any, Literal
 
 from django.urls import NoReverseMatch
-
-from hq.platform.application.routes import reverse
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -27,19 +23,20 @@ from pydantic import (
 )
 
 from hq.platform.application.moments import span, when_day
+from hq.platform.application.routes import reverse
 
 from .names import in_zone
 from .observations.contract import ReadingPart
 
 
-@lru_cache(maxsize=None)
+@cache
 def adapter(spec_type: Any) -> TypeAdapter[Any]:
     """The validator for one spec type, built once: a type's schema never changes."""
 
     return TypeAdapter(spec_type)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SharedValue:
     """One value the controller checks as HQ does: a pattern, a bound, a default.
 
@@ -62,7 +59,7 @@ class SharedValue:
     varnames: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Setting:
     """One setting of a connection, and where its vault item holds it.
 
@@ -85,7 +82,7 @@ class Setting:
             raise ValueError(f"{self.name} comes from exactly one place on its item.")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionShape:
     """The settings one kind of credential arrives as: a login, an API token.
 
@@ -117,7 +114,7 @@ class ConnectionShape:
 ENVELOPE_SETTINGS = frozenset({"CONNECTION_REF", "MANAGES", "PROVIDER"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionKind:
     """One connection provider: its name on the page, and how its credential is held.
 
@@ -192,14 +189,10 @@ class ControllerCapabilityRegistry(ProviderModel):
     capabilities: dict[str, ControllerProviderCapability]
 
 
-def applies(
-    *, automatic: bool = False, verification: ControllerVerification | None = None
-) -> ControllerActionPolicy:
+def applies(*, automatic: bool = False, verification: ControllerVerification | None = None) -> ControllerActionPolicy:
     """The controller may run this action."""
 
-    return ControllerActionPolicy(
-        mode="apply", automatic=automatic, verification=verification
-    )
+    return ControllerActionPolicy(mode="apply", automatic=automatic, verification=verification)
 
 
 def locked(reason: str) -> ControllerActionPolicy:
@@ -211,7 +204,8 @@ def locked(reason: str) -> ControllerActionPolicy:
 
     return ControllerActionPolicy(mode="locked", reason=reason)
 
-def origin_is_authoritative(provider: "ProviderSpec") -> bool:
+
+def origin_is_authoritative(provider: ProviderSpec) -> bool:
     """Whether this provider's origin says where a request is *finally* served.
 
     Two kinds of provider answer "and then what serves it", and they mean
@@ -247,7 +241,8 @@ SERVICE_FACETS: tuple[tuple[str, str], ...] = (
 )
 SERVICE_FACET_IDS = frozenset(facet for facet, _ in SERVICE_FACETS)
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, slots=True)
 class NameContext:
     """What HQ already knows about a hostname, offered to the next question.
 
@@ -291,7 +286,7 @@ class NameContext:
         return next((zone for zone in self.public_zones if in_zone(self.hostname, zone)), "")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProviderSpec:
     kind: str
     # What this is called in a sentence, and what it does in one line. Both are
@@ -300,9 +295,7 @@ class ProviderSpec:
     summary: str
     spec_type: type
     resolved_type: type | None = None
-    resolver: (
-        Callable[[dict[str, Any], "ProviderResolutionContext"], dict[str, Any]] | None
-    ) = None
+    resolver: Callable[[dict[str, Any], ProviderResolutionContext], dict[str, Any]] | None = None
     destructive: bool = False
     public_effect: bool = False
     # Declared after the positional fields, and always passed by keyword: the
@@ -336,7 +329,7 @@ class ProviderSpec:
     # provider that declares a facet for it, so the operator types it once
     # rather than once per resource, and a provider added later joins that
     # flow by saying which of its fields the name fills in.
-    seed: Callable[["NameContext"], dict[str, Any]] | None = None
+    seed: Callable[[NameContext], dict[str, Any]] | None = None
     # Some resources are not complete without material the operator has to
     # supply: an uploaded certificate is only a name and a list of targets
     # until the certificate itself arrives. Declared as a form and a handler so
@@ -447,7 +440,7 @@ class ProviderSpec:
     # `.home.arpa` name cannot get a Let's Encrypt certificate, whose DNS-01
     # challenge needs a zone a credential holds. A sentence rather than a
     # boolean, because the page says why.
-    applies: Callable[["NameContext"], str] | None = None
+    applies: Callable[[NameContext], str] | None = None
     # ``module:attribute`` returning ``{field: ((value, label), ...)}`` for the
     # fields whose valid answers are a matter of live data rather than of type.
     # A topology reference is the case that forced it: rendered from the
@@ -466,10 +459,7 @@ class ProviderSpec:
     # What this resource actually does, as (label, desired, observed) rows.
     # Desired and observed sit side by side because the interesting case is when they differ, and either
     # may be blank: a certificate has no authored expiry, only a found one.
-    readout: (
-        Callable[[dict[str, Any], dict[str, Any]], tuple[tuple[str, str, str], ...]]
-        | None
-    ) = None
+    readout: Callable[[dict[str, Any], dict[str, Any]], tuple[tuple[str, str, str], ...]] | None = None
     # ----- Identity ----------------------------------------------------------
     #
     # How to tell that a live record and a declaration are the same thing.
@@ -585,7 +575,7 @@ class ProviderSpec:
         return adapter(self.spec_type).validate_python(payload)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProviderResolutionContext:
     # Every place a certificate can be installed, as HQ holds them. Passed in
     # rather than queried here so this module stays free of the database and a
@@ -594,9 +584,7 @@ class ProviderResolutionContext:
     # ``(key, kinds) -> status``. Kinds rather than one kind because a proxy
     # host can be bound to a certificate HQ issued or one it was given, and it
     # names the resource without saying which it is.
-    resource_status: Callable[[str, tuple[str, ...]], dict[str, Any] | None] | None = (
-        None
-    )
+    resource_status: Callable[[str, tuple[str, ...]], dict[str, Any] | None] | None = None
     # The key of the resource being resolved, where resolution depends on which
     # resource is asking: a target's name belongs to one certificate, and the
     # rest are named after themselves.

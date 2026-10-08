@@ -16,11 +16,7 @@ from django.db import migrations
 
 
 def _install_domains(attributes):
-    return [
-        domain
-        for domain in attributes.get("install_domains") or []
-        if "*" not in domain
-    ]
+    return [domain for domain in attributes.get("install_domains") or [] if "*" not in domain]
 
 
 def own_the_topology(apps, schema_editor):
@@ -68,17 +64,11 @@ def own_the_topology(apps, schema_editor):
     declared_ports = {}
     for host in payload.get("hosts", []):
         for container in host.get("containers", []):
-            ports = [
-                int(part)
-                for part in str(container.get("ports", "")).replace(",", " ").split()
-                if part.isdigit()
-            ]
+            ports = [int(part) for part in str(container.get("ports", "")).replace(",", " ").split() if part.isdigit()]
             if ports:
                 declared_ports[(host.get("id"), container.get("id"))] = ports
     for resource in Resource.objects.filter(kind="portainer.container"):
-        ports = declared_ports.get(
-            (resource.spec.get("host"), resource.spec.get("name"))
-        )
+        ports = declared_ports.get((resource.spec.get("host"), resource.spec.get("name")))
         if ports:
             resource.spec = {**resource.spec, "serves_ports": ports}
             resource.save(update_fields=["spec"])
@@ -105,25 +95,13 @@ def own_the_topology(apps, schema_editor):
                     "name": attributes.get("name", connection_ref),
                     "certificate_resource": "",
                     "verify_domains": attributes.get("verify_domains") or [],
+                    **({"certificate_directory": attributes["certificate_directory"]} if kind == "caddy" else {}),
                     **(
-                        {"certificate_directory": attributes["certificate_directory"]}
-                        if kind == "caddy"
-                        else {}
-                    ),
-                    **(
-                        {
-                            "discover_covered_hosts": bool(
-                                attributes.get("discover_covered_hosts")
-                            )
-                        }
+                        {"discover_covered_hosts": bool(attributes.get("discover_covered_hosts"))}
                         if kind == "npm"
                         else {}
                     ),
-                    **(
-                        {"install_domains": _install_domains(attributes)}
-                        if kind == "cpanel"
-                        else {}
-                    ),
+                    **({"install_domains": _install_domains(attributes)} if kind == "cpanel" else {}),
                 },
                 "enabled": True,
                 "generation": 1,
@@ -140,9 +118,7 @@ def own_the_topology(apps, schema_editor):
         targets = installed_on.get(reference, [])
         spec = {key: value for key, value in resource.spec.items() if key != "topology_ref"}
         spec["certificate_name"] = (
-            spec.get("certificate_name")
-            or entry.get("certificate_name")
-            or reference.removeprefix("pki:")
+            spec.get("certificate_name") or entry.get("certificate_name") or reference.removeprefix("pki:")
         )
         spec["domains"] = spec.get("domains") or entry.get("domains") or []
         spec["install_on"] = spec.get("install_on") or targets
@@ -161,7 +137,6 @@ def own_the_topology(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("control_plane", "0011_alter_operationrequest_action"),
     ]

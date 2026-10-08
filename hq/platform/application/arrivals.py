@@ -17,8 +17,6 @@ The record schema (``control_plane.observations.hq.ArrivalRecord``) admits
 nothing else: no path, query, header value, body or user agent.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from dataclasses import dataclass
@@ -30,6 +28,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
+
 from .derivations import passed, present
 
 logger = logging.getLogger(__name__)
@@ -206,7 +205,7 @@ _CHANNELS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Arrival:
     """The last time one source reached HQ, and how."""
 
@@ -230,7 +229,7 @@ class Arrival:
 
     @property
     def phrase(self) -> str:
-        """"3 hours ago, directly over the tailnet"."""
+        """ "3 hours ago, directly over the tailnet"."""
 
         from .moments import ago
 

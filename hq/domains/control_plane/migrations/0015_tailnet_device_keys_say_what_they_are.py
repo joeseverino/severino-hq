@@ -15,8 +15,6 @@ by foreign key and need no help.
 Reversible: the down migration restores the bare name where it is free.
 """
 
-from __future__ import annotations
-
 from django.db import migrations
 from django.utils.text import slugify
 
@@ -59,9 +57,7 @@ def _rename(apps, key_for):
         taken.add(wanted)
         resource.key = wanted
         resource.save(update_fields=["key"])
-        AuditLog.objects.filter(object_type="ManagedResource", object_id=old).update(
-            object_id=wanted
-        )
+        AuditLog.objects.filter(object_type="ManagedResource", object_id=old).update(object_id=wanted)
 
 
 def forwards(apps, schema_editor):

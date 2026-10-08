@@ -4,8 +4,6 @@ Every test here substitutes the gateways. That is the point of injecting them:
 the suite must never depend on a third party being up.
 """
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable
@@ -98,11 +96,8 @@ class NameLookupTests(SimpleTestCase):
 
     def test_a_name_that_is_not_one_never_reaches_the_resolver(self):
         for value in ("", "not a hostname", "-nope.test", "a" * 300):
-            with self.subTest(value=value):
-                with self.assertRaises(ValueError):
-                    look_up_name(
-                        NameCommand(name=value), principal=OPERATOR, resolver=_fails
-                    )
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                look_up_name(NameCommand(name=value), principal=OPERATOR, resolver=_fails)
 
     def test_it_is_refused_without_the_capability(self):
         from ..security import AuthorizationError
@@ -184,12 +179,8 @@ class ReadCapabilityTests(TestCase):
 
         from unittest import mock
 
-        with mock.patch(
-            "hq.platform.application.lookup.resolve", return_value=A_NAME
-        ):
-            result = execute_capability(
-                "lookup.name", {"name": "example.test"}, principal=OPERATOR
-            )
+        with mock.patch("hq.platform.application.lookup.resolve", return_value=A_NAME):
+            result = execute_capability("lookup.name", {"name": "example.test"}, principal=OPERATOR)
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["name"], "example.test")
@@ -200,13 +191,9 @@ class ReadCapabilityTests(TestCase):
         from ..security import mcp_principal
 
         with override_settings(SEVERINO_MCP_ENABLE_LOOKUP=False):
-            self.assertFalse(
-                mcp_principal().permits(Capability.LOOK_UP_PUBLIC_RECORDS)
-            )
+            self.assertFalse(mcp_principal().permits(Capability.LOOK_UP_PUBLIC_RECORDS))
         with override_settings(SEVERINO_MCP_ENABLE_LOOKUP=True):
-            self.assertTrue(
-                mcp_principal().permits(Capability.LOOK_UP_PUBLIC_RECORDS)
-            )
+            self.assertTrue(mcp_principal().permits(Capability.LOOK_UP_PUBLIC_RECORDS))
 
 
 class AddressCacheTests(TestCase):
@@ -237,9 +224,7 @@ class AddressCacheTests(TestCase):
         second = self._look()
 
         self.assertEqual(len(self.calls), calls_after_first)
-        self.assertEqual(
-            first["allocation"]["organisation"], second["allocation"]["organisation"]
-        )
+        self.assertEqual(first["allocation"]["organisation"], second["allocation"]["organisation"])
 
     def test_the_stored_answer_says_when_it_was_read(self):
         self.assertTrue(self._look()["observed_at"])
@@ -279,12 +264,15 @@ class RegistryRedirectTests(SimpleTestCase):
         from hq.domains.control_plane.dns_lookup import _HTTPSOnlyRedirects
 
         request = urllib.request.Request("https://rdap.example.test/ip/192.0.2.1")
-        with mock.patch("hq.domains.control_plane.dns_lookup.public_host", side_effect=lambda host: host == "rdap.example.org"):
+        with mock.patch(
+            "hq.domains.control_plane.dns_lookup.public_host", side_effect=lambda host: host == "rdap.example.org"
+        ):
             return _HTTPSOnlyRedirects().redirect_request(request, None, 302, "Found", {}, url)
 
     def test_a_public_registry_is_followed(self):
-        self.assertEqual(self.follow("https://rdap.example.org/ip/192.0.2.1").full_url,
-                         "https://rdap.example.org/ip/192.0.2.1")
+        self.assertEqual(
+            self.follow("https://rdap.example.org/ip/192.0.2.1").full_url, "https://rdap.example.org/ip/192.0.2.1"
+        )
 
     def test_an_inside_address_is_not(self):
         for url in ("https://10.0.0.1/admin", "https://inside.example.test/latest"):

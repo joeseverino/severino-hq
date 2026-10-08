@@ -1,9 +1,8 @@
 """Core models: AuditLog and shared mixins."""
 
-from __future__ import annotations
-
 import functools
 import re
+from typing import override
 
 from django.conf import settings
 from django.db import models
@@ -16,10 +15,7 @@ from .rules import singleton
 def _model_labels() -> dict[str, str]:
     from django.apps import apps
 
-    return {
-        model.__name__: _sentence(str(model._meta.verbose_name))
-        for model in reversed(apps.get_models())
-    }
+    return {model.__name__: _sentence(str(model._meta.verbose_name)) for model in reversed(apps.get_models())}
 
 
 @functools.cache
@@ -103,14 +99,6 @@ class TimestampedModel(models.Model):
 class AuditLog(models.Model):
     """A single record of something a user (or the system) did."""
 
-    @property
-    def type_label(self) -> str:
-        return object_type_label(self.object_type)
-
-    @property
-    def type_plural(self) -> str:
-        return object_type_plural(self.object_type)
-
     class Action(models.TextChoices):
         CREATED = "created", "Created"
         UPDATED = "updated", "Updated"
@@ -158,6 +146,26 @@ class AuditLog(models.Model):
             models.Index(fields=("connection", "-created_at")),
         ]
 
+    @override
+    def __str__(self) -> str:
+        who = self.actor_label
+        subject = self.object_repr or self.type_label
+        target = f" {subject}" if subject else ""
+        return f"[{self.created_at:%Y-%m-%d %H:%M}] {who} {self.action}{target}"
+
+    def get_absolute_url(self) -> str:
+        from django.urls import reverse
+
+        return reverse("core:audit_detail", kwargs={"pk": self.pk})
+
+    @property
+    def type_label(self) -> str:
+        return object_type_label(self.object_type)
+
+    @property
+    def type_plural(self) -> str:
+        return object_type_plural(self.object_type)
+
     @property
     def actor_label(self) -> str:
         """The operator, else the recorded machine actor, else an unauthenticated source."""
@@ -195,17 +203,6 @@ class AuditLog(models.Model):
         message = " ".join(_IDENTIFIER.sub("", first).split())[:160]
         return " · ".join(part for part in (self.type_label, message) if part)
 
-    def get_absolute_url(self) -> str:
-        from django.urls import reverse
-
-        return reverse("core:audit_detail", kwargs={"pk": self.pk})
-
-    def __str__(self) -> str:
-        who = self.actor_label
-        subject = self.object_repr or self.type_label
-        target = f" {subject}" if subject else ""
-        return f"[{self.created_at:%Y-%m-%d %H:%M}] {who} {self.action}{target}"
-
 
 class Pin(models.Model):
     """Something an operator wants to see first.
@@ -221,9 +218,7 @@ class Pin(models.Model):
     than growing a second one shaped identically.
     """
 
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pins"
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pins")
     target_kind = models.CharField(max_length=64)
     target_key = models.CharField(max_length=255)
     # Where the operator wants it, among the others they pinned. Alphabetical
@@ -234,17 +229,14 @@ class Pin(models.Model):
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=("user", "target_kind", "target_key"), name="unique_pin"
-            )
-        ]
+        constraints = [models.UniqueConstraint(fields=("user", "target_kind", "target_key"), name="unique_pin")]
         indexes = [models.Index(fields=("user", "target_kind"))]
         # Position first, then the key, so pins that predate an ordering (all
         # of them share position 0) still come out stable rather than shuffling
         # between requests.
         ordering = ("position", "target_key")
 
+    @override
     def __str__(self) -> str:
         return f"{self.user_id}:{self.target_kind}:{self.target_key}"
 
@@ -265,6 +257,7 @@ class AgentAccess(models.Model):
     class Meta:
         constraints = [singleton("agent_access_is_one_row")]
 
+    @override
     def __str__(self) -> str:
         return "agents paused" if self.paused else "agents allowed"
 
@@ -281,11 +274,12 @@ class AgentIdentity(models.Model):
     class Meta:
         ordering = ("client_id",)
 
+    @override
     def __str__(self) -> str:
         return self.client_id
 
 
-class ActionItemRead(models.Model):
+class ActionItemRead(models.Model):  # noqa: DJ008 - stored state, never shown by name
     """An action item a person has seen: which item, and which revision of it."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
@@ -311,15 +305,14 @@ class LinkedAccount(models.Model):
     updated_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=("user", "provider"), name="unique_linked_account_per_provider")
-        ]
+        constraints = [models.UniqueConstraint(fields=("user", "provider"), name="unique_linked_account_per_provider")]
 
+    @override
     def __str__(self) -> str:
         return f"{self.provider}:{self.login}"
 
 
-class UpstreamReading(models.Model):
+class UpstreamReading(models.Model):  # noqa: DJ008 - stored state, never shown by name
     """The last value read from a service outside HQ, and when it was read."""
 
     key = models.CharField(max_length=100, primary_key=True)
@@ -338,6 +331,7 @@ class Revision(models.Model):
     name = models.CharField(max_length=160, primary_key=True)
     value = models.PositiveBigIntegerField(default=0)
 
+    @override
     def __str__(self) -> str:
         return f"{self.name}@{self.value}"
 
@@ -354,12 +348,11 @@ class Appearance(models.Model):
         LIGHT = "light", "Light"
         DARK = "dark", "Dark"
 
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="appearance"
-    )
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="appearance")
     theme = models.CharField(max_length=8, choices=Theme.choices, default=Theme.SYSTEM)
     changed_at = models.DateTimeField(default=timezone.now)
 
+    @override
     def __str__(self) -> str:
         return f"{self.user_id}:{self.theme}"
 
@@ -373,9 +366,7 @@ class Avatar(models.Model):
     provider every time somebody looked at a page.
     """
 
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar"
-    )
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar")
     content_type = models.CharField(max_length=32)
     image = models.BinaryField()
     # What a page puts in the image's address, so a new picture is a new address
@@ -384,5 +375,6 @@ class Avatar(models.Model):
     source = models.CharField(max_length=500)
     fetched_at = models.DateTimeField(default=timezone.now)
 
+    @override
     def __str__(self) -> str:
         return f"{self.user_id}:{self.digest[:12]}"

@@ -1,12 +1,10 @@
 """What changed, when, and what happened near it: one history, on the audit log."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.db import connection
+from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -15,20 +13,26 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core.models import AuditLog
 
 from ..conditions import held_since, stamped
+from ..history import moments, near
 from ..inventory import READING_AUDIT_TYPE, record_inventory
 from ..security import cli_principal
-from ..history import moments, near
 from ..topology_facts import add_observed_facts
 
 
 def dns(content="192.0.2.10", name="app.example.com"):
-    return {"zone": "example.com", "name": name, "record_type": "A", "content": content,
-            "proxied": False, "ttl": 1, "connection_ref": "example-dns"}
+    return {
+        "zone": "example.com",
+        "name": name,
+        "record_type": "A",
+        "content": content,
+        "proxied": False,
+        "ttl": 1,
+        "connection_ref": "example-dns",
+    }
 
 
 def sweep(*records):
-    record_inventory({"cloudflare.dns_record": {"ok": True, "records": list(records)}},
-                     principal=cli_principal())
+    record_inventory({"cloudflare.dns_record": {"ok": True, "records": list(records)}}, principal=cli_principal())
 
 
 def readings():
@@ -68,7 +72,9 @@ class ReadingChangeTests(TestCase):
 
     def test_a_failed_read_is_not_a_change(self):
         sweep(dns())
-        record_inventory({"cloudflare.dns_record": {"ok": False, "records": [], "error": "refused"}}, principal=cli_principal())
+        record_inventory(
+            {"cloudflare.dns_record": {"ok": False, "records": [], "error": "refused"}}, principal=cli_principal()
+        )
 
         self.assertEqual(readings(), [])
 
@@ -77,16 +83,34 @@ class HistoryTests(TestCase):
     def setUp(self):
         self.now = timezone.now()
         ProviderInventory.objects.create(
-            kind="github.repository", observed_at=self.now,
-            records=[{"repository": "example/app", "connection_ref": "example-github", "deployments": [
-                {"environment": "production", "sha": "abc1234def", "created_at": (self.now - timedelta(hours=1)).isoformat(),
-                 "url": "https://github.com/example/app/actions/runs/1"},
-            ]}],
+            kind="github.repository",
+            observed_at=self.now,
+            records=[
+                {
+                    "repository": "example/app",
+                    "connection_ref": "example-github",
+                    "deployments": [
+                        {
+                            "environment": "production",
+                            "sha": "abc1234def",
+                            "created_at": (self.now - timedelta(hours=1)).isoformat(),
+                            "url": "https://github.com/example/app/actions/runs/1",
+                        },
+                    ],
+                }
+            ],
         )
         ProviderInventory.objects.create(
-            kind="portainer.runtime", observed_at=self.now,
-            records=[{"container": "app", "host": "example-box", "connection_ref": "example-portainer",
-                      "started_at": (self.now - timedelta(hours=2)).isoformat()}],
+            kind="portainer.runtime",
+            observed_at=self.now,
+            records=[
+                {
+                    "container": "app",
+                    "host": "example-box",
+                    "connection_ref": "example-portainer",
+                    "started_at": (self.now - timedelta(hours=2)).isoformat(),
+                }
+            ],
         )
 
     def test_deploys_starts_and_changes_are_one_line_newest_first(self):
@@ -106,9 +130,14 @@ class HistoryTests(TestCase):
 
     def test_a_drift_says_when_it_was_first_seen_and_what_happened_near_then(self):
         resource = ManagedResource.objects.create(
-            key="example-record", kind="cloudflare.dns_record", spec={},
-            conditions=stamped([], [{"type": "Drifted", "status": True, "message": "differs"}],
-                               now=self.now - timedelta(hours=1, minutes=10)),
+            key="example-record",
+            kind="cloudflare.dns_record",
+            spec={},
+            conditions=stamped(
+                [],
+                [{"type": "Drifted", "status": True, "message": "differs"}],
+                now=self.now - timedelta(hours=1, minutes=10),
+            ),
         )
 
         facts = dict(add_observed_facts((resource,))).get(f"resource:{resource.key}", ())
@@ -120,8 +149,12 @@ class HistoryTests(TestCase):
 
 def event(action="created", *, ago, repr_="", type_="Container", message="", **extra):
     return AuditLog.objects.create(
-        action=action, object_type=type_, object_repr=repr_, message=message,
-        created_at=timezone.now() - ago, **extra,
+        action=action,
+        object_type=type_,
+        object_repr=repr_,
+        message=message,
+        created_at=timezone.now() - ago,
+        **extra,
     )
 
 
@@ -137,17 +170,34 @@ class AuditHistoryPageTests(TestCase):
 
     def stored(self):
         ProviderInventory.objects.create(
-            kind="github.repository", observed_at=self.now,
-            records=[{"repository": "example/app", "connection_ref": "example-github", "deployments": [
-                {"environment": "production", "sha": "abc1234def",
-                 "created_at": (self.now - timedelta(hours=1)).isoformat(),
-                 "url": "https://github.com/example/app/actions/runs/1"},
-            ]}],
+            kind="github.repository",
+            observed_at=self.now,
+            records=[
+                {
+                    "repository": "example/app",
+                    "connection_ref": "example-github",
+                    "deployments": [
+                        {
+                            "environment": "production",
+                            "sha": "abc1234def",
+                            "created_at": (self.now - timedelta(hours=1)).isoformat(),
+                            "url": "https://github.com/example/app/actions/runs/1",
+                        },
+                    ],
+                }
+            ],
         )
         ProviderInventory.objects.create(
-            kind="portainer.runtime", observed_at=self.now,
-            records=[{"container": "app", "host": "example-box", "connection_ref": "example-portainer",
-                      "started_at": (self.now - timedelta(hours=2)).isoformat()}],
+            kind="portainer.runtime",
+            observed_at=self.now,
+            records=[
+                {
+                    "container": "app",
+                    "host": "example-box",
+                    "connection_ref": "example-portainer",
+                    "started_at": (self.now - timedelta(hours=2)).isoformat(),
+                }
+            ],
         )
 
     def rows(self, **params):
@@ -169,8 +219,12 @@ class AuditHistoryPageTests(TestCase):
     def test_everything_is_on_one_line_newest_first(self):
         self.stored()
         event("updated", ago=timedelta(minutes=30), repr_="example-record", type_="DNS record")
-        event("observed", ago=timedelta(hours=3), type_=READING_AUDIT_TYPE,
-              message="Public DNS record changed: 1 record gone")
+        event(
+            "observed",
+            ago=timedelta(hours=3),
+            type_=READING_AUDIT_TYPE,
+            message="Public DNS record changed: 1 record gone",
+        )
 
         found = self.rows()
 
@@ -189,8 +243,7 @@ class AuditHistoryPageTests(TestCase):
         event("observed", ago=timedelta(hours=3), type_=READING_AUDIT_TYPE, message="changed")
 
         def sources(value):
-            return [row.moment.source if row.moment else row.event.object_type
-                    for row in self.rows(source=value)]
+            return [row.moment.source if row.moment else row.event.object_type for row in self.rows(source=value)]
 
         self.assertEqual(sources("hq"), ["DNS record"])
         self.assertEqual(sources("outside"), [READING_AUDIT_TYPE])
@@ -220,8 +273,7 @@ class AuditHistoryPageTests(TestCase):
         for index in range(2):
             event(ago=timedelta(minutes=10, seconds=index * 20), repr_=f"entry-{index}", type_="Calendar entry")
         for index in range(2):
-            event("updated", ago=timedelta(hours=2, seconds=index), repr_=f"sweep-{index}",
-                  type_="ProviderInventory")
+            event("updated", ago=timedelta(hours=2, seconds=index), repr_=f"sweep-{index}", type_="ProviderInventory")
 
         page = self.client.get(self.url()).content.decode()
 

@@ -8,6 +8,7 @@ from hq.platform.core.audit import (
     record_operation,
     register_audit,
 )
+
 # Typed metadata, exported so an extension records "12 updated, 1 failed" in
 # the vocabulary every other event already uses, so `metadata` stays comparable
 # across callers.

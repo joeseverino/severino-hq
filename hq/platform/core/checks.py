@@ -5,8 +5,6 @@ source tree: a rule about source is an architecture test, which a gate runs
 once (``hq.platform.core.interface_text`` holds the ones about wording).
 """
 
-from __future__ import annotations
-
 from django.conf import settings
 from django.core import checks
 

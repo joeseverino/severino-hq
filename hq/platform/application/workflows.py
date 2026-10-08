@@ -1,7 +1,5 @@
 """Domain-neutral resolution plans derived from claims and registered actions."""
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 
@@ -11,9 +9,7 @@ from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, Workf
 def claim_identity(namespace: str, rule: str, subject: str, scope: str = "") -> str:
     """Stable identity for any domain claim across repeated derivations."""
 
-    digest = sha256(
-        f"{namespace}\0{rule}\0{subject}\0{scope}".encode()
-    ).hexdigest()[:16]
+    digest = sha256(f"{namespace}\0{rule}\0{subject}\0{scope}".encode()).hexdigest()[:16]
     return f"claim:{digest}"
 
 
@@ -76,7 +72,7 @@ def serialize_workflow(plan: WorkflowPlan | None):
     return asdict(plan) if plan is not None else None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WorkflowLayout:
     """A claim as a card shows it: the remedies lead as the fix, and where to
     look and how to confirm are one line of links."""

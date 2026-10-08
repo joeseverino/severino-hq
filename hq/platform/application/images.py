@@ -7,8 +7,6 @@ their own tags are written, so ``1.31.3-alpine`` is compared only with other
 ``N.N.N-alpine`` tags, never with ``1.33.0`` or ``mainline``.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 
@@ -20,7 +18,7 @@ _DIGITS = re.compile(r"\d+")
 _COMPARATOR = re.compile(r"^\s*(<=|>=|<|>|=)?\s*v?([0-9][0-9A-Za-z.\-+]*)\s*$")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ImageRef:
     registry: str
     repository: str
@@ -106,11 +104,7 @@ def newer(tag: str, tags) -> list[str]:
     if not running:
         return []
     form = shape(tag)
-    found = {
-        other
-        for other in tags or ()
-        if shape(other) == form and compare(version(other), running) > 0
-    }
+    found = {other for other in tags or () if shape(other) == form and compare(version(other), running) > 0}
     return sorted(found, key=lambda item: _padded(version(item), running)[0], reverse=True)
 
 

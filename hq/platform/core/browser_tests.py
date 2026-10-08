@@ -96,10 +96,7 @@ SELECTORS = {
     "contrast_scope": "main, .site-header",
     # Filled boxes that are not tiles: controls, tables, code, charts, and
     # anything floating over the page.
-    "tile_exempt": (
-        ".btn, .pill, button, input, select, textarea, table, pre, code, svg, canvas,"
-        " dialog, [data-menu]"
-    ),
+    "tile_exempt": (".btn, .pill, button, input, select, textarea, table, pre, code, svg, canvas, dialog, [data-menu]"),
     # A control inside a tile is measured by its own box, not its text.
     "tile_control": ".btn, button",
     # A menu and the topology map lay out away from the box they sit in, so
@@ -170,7 +167,10 @@ _STYLESHEETS = """() => {
           loaded: loaded.length};
 }"""
 
-_ESCAPES = "() => {" + _DESCRIBE + """
+_ESCAPES = (
+    "() => {"
+    + _DESCRIBE
+    + """
   const width = document.documentElement.clientWidth;
   const found = [];
   if (document.documentElement.scrollWidth > width + 1) {
@@ -189,8 +189,12 @@ _ESCAPES = "() => {" + _DESCRIBE + """
   }
   return found.slice(0, 10);
 }"""
+)
 
-_NESTED_FRAMES = "([exemptSelector, withinSelector]) => {" + _DESCRIBE + r"""
+_NESTED_FRAMES = (
+    "([exemptSelector, withinSelector]) => {"
+    + _DESCRIBE
+    + r"""
   // One frame per thing. A box that draws its own border inside a box that
   // draws one is two borders, two paddings and often two shadows around the
   // same content; the design has one surface per thing and dividers inside it.
@@ -215,6 +219,7 @@ _NESTED_FRAMES = "([exemptSelector, withinSelector]) => {" + _DESCRIBE + r"""
   }
   return found.slice(0, 10);
 }"""
+)
 
 _HEAD_ON_ONE_LINE = """([leadSelector, titleSelector]) => {
   // A narrow head is one line: the title and its lead control, nothing
@@ -226,7 +231,10 @@ _HEAD_ON_ONE_LINE = """([leadSelector, titleSelector]) => {
   return a.top < t.bottom && a.bottom > t.top;
 }"""
 
-_SIDEWAYS = "(allowed) => {" + _DESCRIBE + """
+_SIDEWAYS = (
+    "(allowed) => {"
+    + _DESCRIBE
+    + """
   // Nothing moves sideways except inside the one box built for it. A chip row,
   // a lane or a code block scrolled past the edge of a phone is content nobody
   // finds; a name cut off with an ellipsis is a deliberate truncation.
@@ -249,8 +257,12 @@ _SIDEWAYS = "(allowed) => {" + _DESCRIBE + """
   }
   return found.slice(0, 10);
 }"""
+)
 
-_CELLS = "() => {" + _DESCRIBE + """
+_CELLS = (
+    "() => {"
+    + _DESCRIBE
+    + """
   // A cell's content stays in the cell. Inside a table that scrolls, running
   // past the edge is not caught by anything else: it lands under the next
   // column, readable in neither.
@@ -267,10 +279,14 @@ _CELLS = "() => {" + _DESCRIBE + """
   }
   return [...new Set(found)].slice(0, 10);
 }"""
+)
 
 # A link that sits above or below the words it continues: an inline line in a
 # smaller size than its cell aligns a clamped link to the cell's taller line.
-_RAISED_LINKS = "() => {" + _DESCRIBE + """
+_RAISED_LINKS = (
+    "() => {"
+    + _DESCRIBE
+    + """
   const found = [];
   const rects = (node) => {
     const range = document.createRange();
@@ -292,19 +308,27 @@ _RAISED_LINKS = "() => {" + _DESCRIBE + """
   }
   return [...new Set(found)].slice(0, 10);
 }"""
+)
 
 # A row has one disclosure. The row toggle shows what a row holds back; a
 # dropdown inside the row beside it is a second, smaller way to do the same.
-_NESTED_DISCLOSURES = "() => {" + _DESCRIBE + """
+_NESTED_DISCLOSURES = (
+    "() => {"
+    + _DESCRIBE
+    + """
   return [...document.querySelectorAll('main table > tbody > tr')]
     .filter((row) => row.querySelector('button[aria-expanded]') && row.querySelector(':is(td, th) details'))
     .map((row) => `${describe(row)} has a row toggle and a dropdown`)
     .slice(0, 10);
 }"""
+)
 
 # A plain word split across lines inside a table cell: its column was given
 # less than the word, because another column's content took the width.
-_BROKEN_WORDS = "() => {" + _DESCRIBE + """
+_BROKEN_WORDS = (
+    "() => {"
+    + _DESCRIBE
+    + """
   const found = [];
   const range = document.createRange();
   for (const cell of document.querySelectorAll('main td')) {
@@ -321,8 +345,12 @@ _BROKEN_WORDS = "() => {" + _DESCRIBE + """
   }
   return [...new Set(found)].slice(0, 10);
 }"""
+)
 
-_TABLES = "() => {" + _DESCRIBE + """
+_TABLES = (
+    "() => {"
+    + _DESCRIBE
+    + """
   const width = document.documentElement.clientWidth;
   const found = [];
   let seen = 0;
@@ -354,8 +382,12 @@ _TABLES = "() => {" + _DESCRIBE + """
   }
   return {seen, found};
 }"""
+)
 
-_PAIRS = "() => {" + _DESCRIBE + """
+_PAIRS = (
+    "() => {"
+    + _DESCRIBE
+    + """
   const found = [];
   for (const grid of document.querySelectorAll('main *')) {
     const style = getComputedStyle(grid);
@@ -377,8 +409,12 @@ _PAIRS = "() => {" + _DESCRIBE + """
   }
   return found;
 }"""
+)
 
-_WRAPPED_PILLS = "(selector) => {" + _DESCRIBE + """
+_WRAPPED_PILLS = (
+    "(selector) => {"
+    + _DESCRIBE
+    + """
   // A pill is one short state: no taller than the same pill holding one letter.
   const found = [];
   for (const pill of document.querySelectorAll(selector)) {
@@ -392,9 +428,13 @@ _WRAPPED_PILLS = "(selector) => {" + _DESCRIBE + """
   }
   return found;
 }"""
+)
 
 
-_OVERLAPS = "() => {" + _DESCRIBE + """
+_OVERLAPS = (
+    "() => {"
+    + _DESCRIBE
+    + """
   const found = [];
   for (const parent of document.querySelectorAll('main *')) {
     const display = getComputedStyle(parent).display;
@@ -412,8 +452,12 @@ _OVERLAPS = "() => {" + _DESCRIBE + """
   }
   return found.slice(0, 10);
 }"""
+)
 
-_ROW_HEIGHTS = "(lines) => {" + _DESCRIBE + """
+_ROW_HEIGHTS = (
+    "(lines) => {"
+    + _DESCRIBE
+    + """
   // A row is as tall as its tallest cell's content. The cell itself is
   // stretched to the row, so what is measured is the visible text in it: not
   // a closed disclosure's body, not the lines a clamp cuts off.
@@ -448,8 +492,12 @@ _ROW_HEIGHTS = "(lines) => {" + _DESCRIBE + """
   }
   return [...new Set(found)].slice(0, 10);
 }"""
+)
 
-_CONTRAST = "([scope, body, large]) => {" + _DESCRIBE + """
+_CONTRAST = (
+    "([scope, body, large]) => {"
+    + _DESCRIBE
+    + """
   // Every visible element that holds text of its own, measured against the
   // colour actually behind it: the nearest ancestor that paints a background,
   // with translucent layers composited down to an opaque one. A colour
@@ -527,12 +575,16 @@ _CONTRAST = "([scope, body, large]) => {" + _DESCRIBE + """
   }
   return {sampled, found: [...new Set(found)].slice(0, 10)};
 }"""
+)
 
 
 # A band cell with no padding: its content touches the hairlines around it.
 # The frame rule zeroes the inset of anything nested in a surface, and a band
 # is one, so a component placed in a band loses its padding without a trace.
-_UNPADDED_CELLS = "(selector) => {" + _DESCRIBE + """
+_UNPADDED_CELLS = (
+    "(selector) => {"
+    + _DESCRIBE
+    + """
   return [...document.querySelectorAll(selector)]
     .filter((el) => el.getBoundingClientRect().width > 0)
     .filter((el) => {
@@ -541,12 +593,16 @@ _UNPADDED_CELLS = "(selector) => {" + _DESCRIBE + """
     })
     .map(describe);
 }"""
+)
 
 
 # A filled box whose text or buttons touch its edge. The frame rule strips a
 # nested surface's border and padding together; one that keeps its own fill is
 # still a tile, and without padding its content sits on the fill's edge.
-_UNPADDED_TILES = "([exempt, control, detached, disclosure]) => {" + _DESCRIBE + """
+_UNPADDED_TILES = (
+    "([exempt, control, detached, disclosure]) => {"
+    + _DESCRIBE
+    + """
   // What a disclosure holds is laid out only when it is open.
   for (const details of document.querySelectorAll(disclosure)) details.open = true;
   const fill = (el) => {
@@ -589,6 +645,7 @@ _UNPADDED_TILES = "([exempt, control, detached, disclosure]) => {" + _DESCRIBE +
   }
   return [...new Set(found)].slice(0, 10);
 }"""
+)
 
 
 # The first table on a page as a phone lays it out: whether it runs past its
@@ -639,7 +696,10 @@ _NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' 
     return new Set(edges).size;
   })"""
 # Press a heading's sort control and read its column back, top to bottom.
-_SPILLED_LABELS = "(selector) => {" + _DESCRIBE + """
+_SPILLED_LABELS = (
+    "(selector) => {"
+    + _DESCRIBE
+    + """
   // A control is at least as wide as what it says. One sized for a glyph and
   // given a word draws the word over whatever stands beside it.
   const found = [];
@@ -653,10 +713,14 @@ _SPILLED_LABELS = "(selector) => {" + _DESCRIBE + """
   }
   return found.slice(0, 10);
 }"""
+)
 
 _SETTLED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
 
-_UNSEEN_COLUMNS = "(scroll) => {" + _DESCRIBE + """
+_UNSEEN_COLUMNS = (
+    "(scroll) => {"
+    + _DESCRIBE
+    + """
   // A table's width belongs to the columns that are showing. A cell left
   // spanning columns that were dropped keeps them in the table, and a table
   // held to its box then shares its width with columns nobody sees.
@@ -674,8 +738,12 @@ _UNSEEN_COLUMNS = "(scroll) => {" + _DESCRIBE + """
   }
   return found;
 }"""
+)
 
-_MOVED_BY_SPEAKING = "async ([said, spoken]) => {" + _DESCRIBE + """
+_MOVED_BY_SPEAKING = (
+    "async ([said, spoken]) => {"
+    + _DESCRIBE
+    + """
   // Pressing a control moves nothing. What it says about the work it asked
   // for is drawn over the page, so every other box is where it was, the page
   // is the size it was, and the words themselves are on the screen.
@@ -716,6 +784,7 @@ _MOVED_BY_SPEAKING = "async ([said, spoken]) => {" + _DESCRIBE + """
   }
   return found.slice(0, 10);
 }"""
+)
 
 _SORT_BY = """([scroll, column]) => {
   const table = document.querySelector('main ' + scroll + ' > table');
@@ -731,7 +800,9 @@ _SORT_BY = """([scroll, column]) => {
         .map((row) => row.children[column].textContent.trim().replace(/\\s+/g, ' '))),
   };
 }"""
-_PRESS_FIRST_ROW_TOGGLE = "(scroll) => document.querySelector('main ' + scroll + ' tbody button[aria-expanded]').click()"
+_PRESS_FIRST_ROW_TOGGLE = (
+    "(scroll) => document.querySelector('main ' + scroll + ' tbody button[aria-expanded]').click()"
+)
 
 
 # Each reading's mark and lines, as laid out: where the mark sits, and for each
@@ -798,9 +869,7 @@ class BrowserGate(SimpleTestCase):
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
-            raise RuntimeError(
-                "Playwright is not installed. Run: mise run browser"
-            ) from exc
+            raise RuntimeError("Playwright is not installed. Run: mise run browser") from exc
         cls.playwright = sync_playwright().start()
         cls.addClassCleanup(cls.playwright.stop)
         engine = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
@@ -837,16 +906,13 @@ class BrowserGate(SimpleTestCase):
         path = urlsplit(route.request.url).path
         name = path.strip("/")
         if name in self.pages:
-            route.fulfill(
-                content_type=mimetypes.guess_type(name)[0] or "text/html", body=self.pages[name]
-            )
+            route.fulfill(content_type=mimetypes.guess_type(name)[0] or "text/html", body=self.pages[name])
             return
         if path.startswith(settings.STATIC_URL):
             asset = finders.find(path.removeprefix(settings.STATIC_URL))
             if asset:
                 route.fulfill(
-                    content_type=mimetypes.guess_type(asset)[0]
-                    or "application/octet-stream",
+                    content_type=mimetypes.guess_type(asset)[0] or "application/octet-stream",
                     body=Path(asset).read_bytes(),
                 )
                 return
@@ -854,10 +920,7 @@ class BrowserGate(SimpleTestCase):
 
     def capture_failure(self):
         result = self._outcome.result
-        if any(
-            getattr(test, "test_case", test) is self
-            for test, _ in result.failures + result.errors
-        ):
+        if any(getattr(test, "test_case", test) is self for test, _ in result.failures + result.errors):
             folder = Path(tempfile.mkdtemp(prefix="hq-browser-failure-"))
             self.page.screenshot(path=str(folder / "page.png"), full_page=True)
             print(f"Browser failure screenshot: {folder / 'page.png'}")
@@ -1007,9 +1070,7 @@ class LayoutBrowserTests(BrowserGate):
 
         def check(_name):
             self.assertEqual(self.page.evaluate(_ESCAPES), [])
-            self.page.evaluate(
-                "() => document.querySelectorAll('details').forEach((d) => { d.open = true; })"
-            )
+            self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
             self.assertEqual(self.page.evaluate(_ESCAPES), [])
 
         self.each(check)
@@ -1022,9 +1083,7 @@ class LayoutBrowserTests(BrowserGate):
     def test_nothing_is_framed_inside_a_frame(self):
         def check(_name):
             self.assertEqual(
-                self.page.evaluate(
-                    _NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]]
-                ),
+                self.page.evaluate(_NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]]),
                 [],
             )
 
@@ -1035,9 +1094,7 @@ class LayoutBrowserTests(BrowserGate):
             with self.subTest(page=name):
                 self.open(name, PHONE_SCREEN[0])
                 self.assertIn(
-                    self.page.evaluate(
-                        _HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"]]
-                    ),
+                    self.page.evaluate(_HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"]]),
                     (None, True),
                 )
 
@@ -1094,9 +1151,7 @@ class LayoutBrowserTests(BrowserGate):
 
         def check(_name):
             self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
-            self.page.evaluate(
-                "() => document.querySelectorAll('details').forEach((d) => { d.open = true; })"
-            )
+            self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
             self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
 
         self.across(check)
@@ -1105,9 +1160,7 @@ class LayoutBrowserTests(BrowserGate):
         self.across(lambda _name: self.assertEqual(self.page.evaluate(_CELLS), []))
 
     def test_a_table_row_stays_within_its_height_budget(self):
-        self.across(
-            lambda _name: self.assertEqual(self.page.evaluate(_ROW_HEIGHTS, ROW_LINES), [])
-        )
+        self.across(lambda _name: self.assertEqual(self.page.evaluate(_ROW_HEIGHTS, ROW_LINES), []))
 
     def test_dense_pages_keep_to_their_boxes(self):
         """Nothing escapes, overlaps, or wraps a pill with production-sized data."""
@@ -1134,27 +1187,18 @@ class LayoutBrowserTests(BrowserGate):
         self.each(lambda _name: self.assertEqual(self.page.evaluate(_PAIRS), []))
 
     def test_a_pill_never_wraps(self):
-        self.each(
-            lambda _name: self.assertEqual(
-                self.page.evaluate(_WRAPPED_PILLS, SELECTORS["pill"]), []
-            )
-        )
+        self.each(lambda _name: self.assertEqual(self.page.evaluate(_WRAPPED_PILLS, SELECTORS["pill"]), []))
 
     def test_nothing_overlaps(self):
         self.each(lambda _name: self.assertEqual(self.page.evaluate(_OVERLAPS), []))
 
     def test_layout_audit_structural_rules(self):
         audit = AUDIT.read_text(encoding="utf-8").strip()
-        script = (
-            "async () => { const audit = " + audit + ";\n"
-            "return await audit({ evaluate: (probe) => probe() }); }"
-        )
+        script = "async () => { const audit = " + audit + ";\nreturn await audit({ evaluate: (probe) => probe() }); }"
 
         def check(_name):
             report = self.page.evaluate(script)
-            self.assertEqual(
-                [v for v in report["violations"] if v["rule"] in AUDIT_RULES], []
-            )
+            self.assertEqual([v for v in report["violations"] if v["rule"] in AUDIT_RULES], [])
 
         self.each(check)
 
@@ -1171,12 +1215,8 @@ class LayoutBrowserTests(BrowserGate):
         self.start(color_scheme="dark")
 
         def check(_name):
-            self.assertEqual(
-                self.page.evaluate("() => matchMedia('(prefers-color-scheme: dark)').matches"), True
-            )
-            report = self.page.evaluate(
-                _CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST]
-            )
+            self.assertEqual(self.page.evaluate("() => matchMedia('(prefers-color-scheme: dark)').matches"), True)
+            report = self.page.evaluate(_CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST])
             self.assertGreater(report["sampled"], 0)
             self.assertEqual(report["found"], [])
 
@@ -1278,14 +1318,10 @@ class LayoutBrowserTests(BrowserGate):
         self.start(java_script_enabled=True)
 
         def check(_name):
-            self.page.evaluate(
-                "() => document.querySelectorAll('details').forEach((d) => { d.open = true; })"
-            )
+            self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
             self.page.evaluate("() => window.dispatchEvent(new Event('resize'))")
             self.page.wait_for_timeout(200)
-            self.assertEqual(
-                self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), []
-            )
+            self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
         self.across(check)
 
@@ -1351,8 +1387,14 @@ class LayoutBrowserTests(BrowserGate):
             lambda _name: self.assertEqual(
                 self.page.evaluate(
                     _UNPADDED_TILES,
-                    [SELECTORS["tile_exempt"], SELECTORS["tile_control"], SELECTORS["tile_detached"], SELECTORS["disclosure"]],
-                ), []
+                    [
+                        SELECTORS["tile_exempt"],
+                        SELECTORS["tile_control"],
+                        SELECTORS["tile_detached"],
+                        SELECTORS["disclosure"],
+                    ],
+                ),
+                [],
             )
         )
 
@@ -1671,9 +1713,7 @@ class FragmentBrowserTests(BrowserGate):
             cls.calendar, cls.following = url, following
             answers = {
                 (url, ""): page.content.decode(),
-                (following, "calendar"): client.get(
-                    following, headers={"X-Fragment": "calendar"}
-                ).content.decode(),
+                (following, "calendar"): client.get(following, headers={"X-Fragment": "calendar"}).content.decode(),
                 (reverse("action_item_count"), ""): '{"count": 0}',
             }
             transaction.set_rollback(True)
@@ -1758,7 +1798,5 @@ class FragmentBrowserTests(BrowserGate):
         self.assertTrue(self.page.evaluate("() => window.kept === true"))
         self.assertTrue(self.page.url.endswith(self.following))
         # The keyboard is where it was: on the control that was pressed.
-        self.assertEqual(
-            self.page.evaluate("() => document.activeElement.getAttribute('rel')"), "next"
-        )
+        self.assertEqual(self.page.evaluate("() => document.activeElement.getAttribute('rel')"), "next")
         self.assertEqual(self.errors, [])

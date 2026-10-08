@@ -7,8 +7,6 @@ set aside here, as Django's test client sets aside the request signals'. The
 scope names a Unix listener, which is the only kind the application serves.
 """
 
-from __future__ import annotations
-
 import json
 from dataclasses import dataclass
 from typing import Any

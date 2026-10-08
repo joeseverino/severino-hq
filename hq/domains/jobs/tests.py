@@ -1,7 +1,5 @@
 """What a job has to get right for anything to be trusted to it."""
 
-from __future__ import annotations
-
 import threading
 from datetime import timedelta
 
@@ -71,13 +69,9 @@ class JobRunnerTests(TransactionTestCase):
 
     def test_how_it_ended_is_audited_and_attributed(self):
         user = get_user_model().objects.create_user("operator", password="x" * 14)
-        job = self.wait(
-            start("test.audited", "Audited", lambda p: {"rows": 3}, requested_by=user)
-        )
+        job = self.wait(start("test.audited", "Audited", lambda p: {"rows": 3}, requested_by=user))
 
-        entry = AuditLog.objects.filter(
-            action=AuditLog.Action.IMPORTED, object_id=str(job.pk)
-        ).first()
+        entry = AuditLog.objects.filter(action=AuditLog.Action.IMPORTED, object_id=str(job.pk)).first()
         self.assertIsNotNone(entry, "a finished job must say so in the audit log")
         # Attributed. There is no request on a worker thread, so an audit row
         # written without being told the user records the work as having been
@@ -162,9 +156,7 @@ class ReapTests(TestCase):
         # being lost means) so the reaper writes the only record there will
         # ever be of how it ended.
         self.assertTrue(
-            AuditLog.objects.filter(
-                action=AuditLog.Action.FAILED, object_id=str(job.pk)
-            ).exists(),
+            AuditLog.objects.filter(action=AuditLog.Action.FAILED, object_id=str(job.pk)).exists(),
             "a lost job must leave a record of having ended",
         )
 
@@ -205,8 +197,12 @@ class JobStatusViewTests(TestCase):
 
     def test_status_reports_what_a_watching_page_needs(self):
         job = Job.objects.create(
-            kind="test.status", label="Reading", state=Job.State.RUNNING,
-            percent=42, note="halfway", started_at=timezone.now(),
+            kind="test.status",
+            label="Reading",
+            state=Job.State.RUNNING,
+            percent=42,
+            note="halfway",
+            started_at=timezone.now(),
         )
 
         payload = self.client.get(reverse("jobs:status", args=[job.pk])).json()
@@ -262,7 +258,9 @@ class RunOnTheCallingThreadTests(TestCase):
         self.assertEqual((job.state, job.error), ("failed", "The registry lists nothing for it."))
         self.assertEqual(job_standing(job).note, "The registry lists nothing for it.")
         failed = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.FAILED).get()
-        self.assertEqual(failed.metadata["failure"], {"message": "The registry lists nothing for it.", "kind": "Failed"})
+        self.assertEqual(
+            failed.metadata["failure"], {"message": "The registry lists nothing for it.", "kind": "Failed"}
+        )
 
     def test_any_other_exception_keeps_its_traceback(self):
         def work(progress):

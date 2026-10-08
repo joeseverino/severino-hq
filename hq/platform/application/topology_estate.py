@@ -11,36 +11,30 @@ zone inventory: never a match on labels alone. What an extension reaches that
 is none of these stays a target.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from itertools import combinations
 from typing import Any
 
-
+from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.adguard import QUERY_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
-
-from hq.domains.control_plane.names import normalized_hostname
-
 from .action_links import ActionLink as TopologyAction
+from .connections import machines_once
 from .entity_links import entity_link
 from .facts import Joined, Subject, inventory_records, readings
 from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
-from .connections import machines_once
 from .topology_model import (
+    TopologyEdge,
+    TopologyNode,
     derived_id,
     edge_between,
     newest_stamp,
-    TopologyEdge,
-    TopologyNode,
 )
-
 
 # Derived node kinds that only stand for a machine something mentioned: a
 # controller is the machine it runs on, a target is the machine it reaches.
@@ -73,9 +67,7 @@ class _Estate:
         text = str(value or "").strip()
         if not text:
             return ""
-        return self.machine_ids.get(text) or self.machine_ids.get(
-            self.index.resolve(text), ""
-        )
+        return self.machine_ids.get(text) or self.machine_ids.get(self.index.resolve(text), "")
 
 
 def add_estate(
@@ -156,12 +148,8 @@ def _machines(nodes, edges, resources) -> _Estate:
             for connection_id in connections.get(ref, ()):
                 relation = edge_between(connection_id, node_id, "reaches")
                 edges[relation.id] = relation
-        subjects[node_id] = Subject.of(
-            hostnames=(machine.name, *machine.aliases), addresses=machine.addresses
-        )
-    index = index_of(
-        declared=[{"name": item.name, "addresses": item.addresses} for item in catalog]
-    )
+        subjects[node_id] = Subject.of(hostnames=(machine.name, *machine.aliases), addresses=machine.addresses)
+    index = index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog])
     estate = _Estate(subjects=subjects, machine_ids=machine_ids, index=index)
     # Its device reading, its telemetry and its containers.
     for machine in catalog:
@@ -209,8 +197,8 @@ _SERVICE_SUBTITLES = {"observed": "Service not in HQ"}
 
 def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
     from .hq_self import hq_service
-    from .service_list import listed_services
     from .service_facets import zone_holding
+    from .service_list import listed_services
 
     own = hq_service(catalog=machines_once())
     for service in listed_services():
@@ -220,9 +208,7 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
             kind="service",
             label=service.hostname,
             subtitle=(
-                own.label
-                if service.is_hq and own is not None
-                else _SERVICE_SUBTITLES.get(service.mark, "Service")
+                own.label if service.is_hq and own is not None else _SERVICE_SUBTITLES.get(service.mark, "Service")
             ),
             status=_SERVICE_STATUS.get(service.base_health.state, "neutral"),
             status_label=service.base_health.label,
@@ -302,11 +288,7 @@ def _fold(nodes, edges, estate: _Estate) -> None:
             host,
             facts=facts,
             actions=host.actions
-            + tuple(
-                action
-                for action in node.actions
-                if all(existing.url != action.url for existing in host.actions)
-            ),
+            + tuple(action for action in node.actions if all(existing.url != action.url for existing in host.actions)),
         )
     if not folded:
         return
@@ -396,8 +378,7 @@ def _device_hosts(device, estate: _Estate) -> set[str]:
     """The machines holding any of a tailnet device's addresses."""
 
     return {
-        estate.machine_ids.get(estate.index.at(address), "")
-        for address in (device.addresses if device else ())
+        estate.machine_ids.get(estate.index.at(address), "") for address in (device.addresses if device else ())
     } - {""}
 
 
@@ -435,7 +416,7 @@ def _holder_edges(nodes, edges, resources) -> None:
 def _mirrored_identity(kind: str, record) -> tuple[str, ...]:
     try:
         spec = PROVIDERS[kind].from_record(dict(record))
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return ()
     return record_identity(kind, spec)
 
@@ -444,11 +425,7 @@ def _holders(provider, record, by_ref, by_provider) -> list[str]:
     ref = str(record.get("connection_ref", "") or "")
     if ref:
         return by_ref.get(ref, [])
-    return [
-        node_id
-        for name in provider.connection_providers
-        for node_id in by_provider.get(name, [])
-    ]
+    return [node_id for name in provider.connection_providers for node_id in by_provider.get(name, [])]
 
 
 def _connects_edges(nodes, edges, estate: _Estate) -> None:
@@ -459,10 +436,7 @@ def _connects_edges(nodes, edges, estate: _Estate) -> None:
     """
 
     declared = {
-        key: node_id
-        for node_id, subject in estate.subjects.items()
-        if node_id in nodes
-        for key in subject.containers
+        key: node_id for node_id, subject in estate.subjects.items() if node_id in nodes for key in subject.containers
     }
     if not declared:
         return
@@ -535,14 +509,9 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
         if not nodes[source].observed_at:
             estate.saw(source, *moments)
         about = nodes[target].label
-        titles = tuple(
-            dict.fromkeys(_named(item, about) or item.title for item in items if item.title)
-        )
+        titles = tuple(dict.fromkeys(_named(item, about) or item.title for item in items if item.title))
         entities = tuple(
-            dict.fromkeys(
-                entity_link(item.kind, "", record=item.record, label=_named(item, about))
-                for item in items
-            )
+            dict.fromkeys(entity_link(item.kind, "", record=item.record, label=_named(item, about)) for item in items)
         )
         relation = TopologyEdge(
             id=derived_id("edge", source, target, kind),
@@ -603,15 +572,11 @@ def _readers(joined: Joined, by_ref, by_provider, nodes) -> tuple[str, ...]:
         return tuple(by_ref[joined.connection_ref])
     found = by_provider.get(joined.spec.provider, [])
     if joined.controller_id:
-        narrowed = [
-            node_id for node_id in found if nodes[node_id].controller_id == joined.controller_id
-        ]
+        narrowed = [node_id for node_id in found if nodes[node_id].controller_id == joined.controller_id]
         found = narrowed or found
     if found:
         return tuple(found)
-    return _unreported(
-        nodes, by_ref, joined.connection_ref or joined.spec.provider, joined.spec.provider
-    )
+    return _unreported(nodes, by_ref, joined.connection_ref or joined.spec.provider, joined.spec.provider)
 
 
 def _holding(provider, record, by_ref, by_provider, nodes) -> tuple[str, ...]:

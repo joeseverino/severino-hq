@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0019_a_change_a_credential_asks_for_waits_for_a_person'),
+        ("control_plane", "0019_a_change_a_credential_asks_for_waits_for_a_person"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='providerconnection',
-            name='failing_steps',
+            model_name="providerconnection",
+            name="failing_steps",
             field=models.JSONField(blank=True, default=list),
         ),
     ]

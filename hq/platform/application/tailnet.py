@@ -12,11 +12,8 @@ Tailscale did, and a question the sweep cannot answer says so rather than
 guessing.
 """
 
-from __future__ import annotations
-
-import re
-
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from ipaddress import ip_address
@@ -33,7 +30,7 @@ RESOLVES_THROUGH = "Resolves through"
 NEW_DEVICES = "New devices"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Device:
     """One machine as the policy names it: an owner, some tags, some ports."""
 
@@ -105,7 +102,7 @@ class Device:
         return tuple((port, self.reach[port]) for port in self.ports)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Verdict:
     """One answer, and the reason it is that answer."""
 
@@ -160,9 +157,7 @@ def devices() -> dict[str, Device]:
                     for entry in record.get("reach") or ()
                     if str(entry.get("port", "")).isdigit()
                 },
-                addresses=tuple(
-                    str(address) for address in record.get("addresses") or ()
-                ),
+                addresses=tuple(str(address) for address in record.get("addresses") or ()),
                 aliases=tuple(
                     sorted(
                         {
@@ -179,9 +174,7 @@ def devices() -> dict[str, Device]:
                 public_key=str(record.get("public_key", "")),
                 authorized=bool(record.get("authorized", True)),
                 lock_error=str(record.get("lock_error", "")),
-                endpoints=tuple(
-                    str(endpoint) for endpoint in record.get("endpoints") or ()
-                ),
+                endpoints=tuple(str(endpoint) for endpoint in record.get("endpoints") or ()),
                 key_expires=str(record.get("key_expires", "")),
                 offers_exit_node=bool(record.get("offers_exit_node")),
                 observed_at=snapshot.observed_at,
@@ -201,11 +194,7 @@ def device_at(address: str, known: dict[str, Device] | None = None) -> Device | 
     if not wanted:
         return None
     return next(
-        (
-            found
-            for found in (known if known is not None else devices()).values()
-            if wanted in found.addresses
-        ),
+        (found for found in (known if known is not None else devices()).values() if wanted in found.addresses),
         None,
     )
 
@@ -214,11 +203,7 @@ def observer(known: dict[str, Device] | None = None) -> Device | None:
     """The device whose daemon took the reading: the one HQ runs on."""
 
     return next(
-        (
-            found
-            for found in (known if known is not None else devices()).values()
-            if found.observer
-        ),
+        (found for found in (known if known is not None else devices()).values() if found.observer),
         None,
     )
 
@@ -251,9 +236,7 @@ def by_device(destinations, owners: dict[str, str]) -> tuple[str, ...]:
             name, port = str(destination), ""
         ports_of.setdefault(owners.get(name, name), set()).add(port)
     return tuple(
-        f"{device}: {', '.join(sorted((p for p in ports if p), key=_port_order))}"
-        if any(ports)
-        else device
+        f"{device}: {', '.join(sorted((p for p in ports if p), key=_port_order))}" if any(ports) else device
         for device, ports in ports_of.items()
     )
 
@@ -274,9 +257,7 @@ def ports() -> tuple[int, ...]:
     return tuple(sorted({port for device in devices().values() for port in device.reach}))
 
 
-def may_reach(
-    source: str, target: str, port: int, known: dict[str, Device] | None = None
-) -> Verdict:
+def may_reach(source: str, target: str, port: int, known: dict[str, Device] | None = None) -> Verdict:
     """Whether the policy admits ``source`` to ``target`` on ``port``.
 
     Three answers, not two. "Cannot say" is a real outcome and is kept distinct
@@ -289,9 +270,7 @@ def may_reach(
     who_answers = known.get(target)
     if who_asks is None or who_answers is None:
         missing = source if who_asks is None else target
-        return Verdict(
-            False, False, f"{missing} was not in the last read of the tailnet."
-        )
+        return Verdict(False, False, f"{missing} was not in the last read of the tailnet.")
     if not who_asks.principals:
         return Verdict(
             False,
@@ -311,8 +290,7 @@ def may_reach(
         return Verdict(
             True,
             True,
-            f"Allowed: {', '.join(as_devices(matched, owners))} to "
-            f"{owners.get(target, target)} on {port}.",
+            f"Allowed: {', '.join(as_devices(matched, owners))} to {owners.get(target, target)} on {port}.",
             via=matched,
             rules=who_answers.rules.get(port, ()),
         )
@@ -329,7 +307,7 @@ def may_reach(
 POLICY_KIND = TAILNET_POLICY_KIND
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Policy:
     """The policy as HQ last read it, in the shape a page renders."""
 
@@ -366,35 +344,41 @@ class Policy:
         days = self.settings.get("devicesKeyDurationDays")
         if days:
             rows.append(("Device keys expire after", f"{days} days"))
-        rows.append((
-            NEW_DEVICES,
-            "Need approval" if self.settings.get("devicesApprovalOn") else "Join without approval",
-        ))
-        rows.append((
-            "New users",
-            "Need approval" if self.settings.get("usersApprovalOn") else "Join without approval",
-        ))
-        rows.append((
-            "Client updates",
-            "Automatic" if self.settings.get("devicesAutoUpdatesOn") else "Manual",
-        ))
-        rows.append((
-            "Policy edited in",
-            "Outside Tailscale" if self.settings.get("aclsExternallyManagedOn") else "Tailscale",
-        ))
+        rows.append(
+            (
+                NEW_DEVICES,
+                "Need approval" if self.settings.get("devicesApprovalOn") else "Join without approval",
+            )
+        )
+        rows.append(
+            (
+                "New users",
+                "Need approval" if self.settings.get("usersApprovalOn") else "Join without approval",
+            )
+        )
+        rows.append(
+            (
+                "Client updates",
+                "Automatic" if self.settings.get("devicesAutoUpdatesOn") else "Manual",
+            )
+        )
+        rows.append(
+            (
+                "Policy edited in",
+                "Outside Tailscale" if self.settings.get("aclsExternallyManagedOn") else "Tailscale",
+            )
+        )
         # Only when the reading exists. A tailnet whose daemon never answered
         # should say nothing here rather than report lock as off, which is a
         # claim about the tailnet rather than about the reading.
         if self.lock:
             keys = self.lock.get("trusted_keys") or 0
-            rows.append((
-                "Tailnet lock",
+            rows.append(
                 (
-                    f"On · {counted(keys, 'signing key', 'signing keys')}"
-                    if self.lock.get("enabled")
-                    else "Off"
-                ),
-            ))
+                    "Tailnet lock",
+                    (f"On · {counted(keys, 'signing key', 'signing keys')}" if self.lock.get("enabled") else "Off"),
+                )
+            )
         return tuple(rows)
 
     @property
@@ -419,9 +403,7 @@ def declaration() -> str:
     from .infrastructure import enabled_resources
 
     # From the read every estate page already shares, in its order.
-    return next(
-        (resource.key for resource in enabled_resources() if resource.kind == POLICY_KIND), ""
-    )
+    return next((resource.key for resource in enabled_resources() if resource.kind == POLICY_KIND), "")
 
 
 def proposed_grant(source: str, target: str, port: int) -> dict:
@@ -459,9 +441,7 @@ def snapshots() -> dict[str, list]:
 
     def load() -> dict[str, list]:
         found: dict[str, list] = {TAILNET_KIND: [], POLICY_KIND: [], ARRIVAL_KIND: []}
-        for snapshot in ProviderInventory.objects.filter(
-            kind__in=(TAILNET_KIND, POLICY_KIND, ARRIVAL_KIND)
-        ):
+        for snapshot in ProviderInventory.objects.filter(kind__in=(TAILNET_KIND, POLICY_KIND, ARRIVAL_KIND)):
             found.setdefault(snapshot.kind, []).append(snapshot)
         return found
 
@@ -515,9 +495,7 @@ def _named(mapping, field: str) -> tuple[dict, ...]:
     return tuple({"name": name, field: sorted(values or ())} for name, values in sorted(mapping.items()))
 
 
-def policy_allowing(
-    document: str, *, source: str, target: str, port: int
-) -> tuple[str, str]:
+def policy_allowing(document: str, *, source: str, target: str, port: int) -> tuple[str, str]:
     """The same policy with one path opened, and a sentence saying what moved.
 
     Returns ``("", "")`` when the policy already admits the path, so a caller
@@ -542,12 +520,7 @@ def policy_allowing(
     changed: list[str] = []
 
     existing = next(
-        (
-            grant
-            for grant in grants
-            if source in (grant.get("src") or ())
-            and target in (grant.get("dst") or ())
-        ),
+        (grant for grant in grants if source in (grant.get("src") or ()) and target in (grant.get("dst") or ())),
         None,
     )
     if existing is not None:
@@ -595,9 +568,7 @@ WELL_KNOWN_PORTS = {
 _PORT_ENTRY = re.compile(r"(?:(?:tcp|udp|sctp):)?([0-9]+)")
 
 
-def grant_ports(
-    grants, known: dict[str, Device] | None = None, machines=None
-) -> tuple[dict, ...]:
+def grant_ports(grants, known: dict[str, Device] | None = None, machines=None) -> tuple[dict, ...]:
     """Each grant with ``ports``: ``(entry, name)`` per ``ip`` entry.
 
     A single port is named, in order, by HQ itself when the destination runs HQ
@@ -649,7 +620,7 @@ def _ssh_ports() -> dict[str, set[int]]:
     return found
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _ServicePort:
     """A port a connection to a service names, and where that connection points."""
 
@@ -675,9 +646,7 @@ def _service_ports() -> tuple[_ServicePort, ...]:
             continue
         host, port = split_endpoint(row.endpoint)
         if host and port.isdigit():
-            found.append(
-                _ServicePort(row.connection_ref, row.controller_id, host, int(port), label)
-            )
+            found.append(_ServicePort(row.connection_ref, row.controller_id, host, int(port), label))
     return tuple(found)
 
 
@@ -695,10 +664,7 @@ def _grant_machines(names, known, by_name) -> tuple:
 
     found = []
     for device in known.values():
-        if not any(
-            name == "*" or name in device.principals or name in device.addresses
-            for name in names
-        ):
+        if not any(name == "*" or name in device.principals or name in device.addresses for name in names):
             continue
         machine = by_name.get(device.label.lower()) or by_name.get(device.name.lower())
         if machine is not None and machine not in found:
@@ -709,9 +675,7 @@ def _grant_machines(names, known, by_name) -> tuple:
 class _PortNamer:
     """What answers on a port of a grant's machines: HQ, SSH, a container, a service."""
 
-    def __init__(
-        self, ssh_ports: dict[str, set[int]], service_ports: tuple[_ServicePort, ...] = ()
-    ):
+    def __init__(self, ssh_ports: dict[str, set[int]], service_ports: tuple[_ServicePort, ...] = ()):
         from .hq_self import scoped_served_port
 
         self.ssh_ports = ssh_ports
@@ -786,7 +750,6 @@ def _policy_admits_only_named() -> bool:
     )
 
 
-
 def posture_facts() -> tuple[tuple[str, str], ...]:
     """Policy settings worth a finding, as topology facts on the tailnet connection.
 
@@ -808,10 +771,7 @@ def posture_facts() -> tuple[tuple[str, str], ...]:
     if found.settings.get("devicesApprovalOn") is False and not found.lock.get("enabled"):
         entries.append(("devices-join-unapproved", "Off"))
     named = {
-        name
-        for rule in (*found.grants, *found.ssh_rules)
-        for side in ("src", "dst")
-        for name in rule.get(side) or ()
+        name for rule in (*found.grants, *found.ssh_rules) for side in ("src", "dst") for name in rule.get(side) or ()
     }
     entries.extend(
         ("empty-group-granted", str(group.get("name", "")))

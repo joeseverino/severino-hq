@@ -1,17 +1,16 @@
 """The audit log and one entry in it."""
 
-from __future__ import annotations
+from typing import override
 
 from django.urls import reverse
 from django.views.generic import DetailView, ListView
 
-from hq.platform.application.projection import day_span
 from hq.platform.application import history
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.projection import projection_scope
+from hq.platform.application.projection import day_span, projection_scope
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
-from .models import AuditLog
 
+from .models import AuditLog
 
 # The toggle that brings the asks for a fresh reading back into the log.
 READS = "reads"
@@ -41,10 +40,10 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-created_at"
     table_search_placeholder = "Search what changed, ids and messages…"
     page_lede = (
-        "Everything that changed, and who or what changed it. How background work "
-        "went is under Background jobs."
+        "Everything that changed, and who or what changed it. How background work went is under Background jobs."
     )
 
+    @override
     def get_page_actions(self):
         from hq.platform.application.approvals import awaiting_ids
 
@@ -65,6 +64,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
             )
         return tuple(actions)
 
+    @override
     def get_queryset(self):
         qs = AuditLog.objects.select_related("user").annotate(source=history.source_of_event())
         if not self.request.GET.get(READS):
@@ -104,6 +104,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         except ValueError:
             return None
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["awaiting"] = self._awaiting()
@@ -180,6 +181,7 @@ class AuditLogDetailView(PageMixin, DetailView):
     template_name = "core/auditlog_detail.html"
     context_object_name = "event"
 
+    @override
     def get_queryset(self):
         return AuditLog.objects.select_related("user")
 
@@ -193,12 +195,15 @@ class AuditLogDetailView(PageMixin, DetailView):
             self._held_approval = approvals.review(held) if held is not None else None
         return self._held_approval
 
+    @override
     def get_page_title(self):
         return "Approval" if self.held_approval() is not None else "Audit event"
 
+    @override
     def get_page_trail(self):
         return (("Audit log", reverse("core:audit_list")),)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         event = self.object
@@ -211,11 +216,7 @@ class AuditLogDetailView(PageMixin, DetailView):
             if isinstance(pair, list) and len(pair) == 2
         ]
         # Everything else in the metadata, minus what is already rendered.
-        context["extra"] = {
-            key: value
-            for key, value in sorted(event.metadata.items())
-            if key != "changes"
-        }
+        context["extra"] = {key: value for key, value in sorted(event.metadata.items()) if key != "changes"}
 
         # The rest of the same operation: what `operation_id` is for. One
         # action can touch many rows, and matching them up by timestamp alone
@@ -229,9 +230,7 @@ class AuditLogDetailView(PageMixin, DetailView):
         # Everything else that ever happened to this object.
         if event.object_type and event.object_id:
             context["history"] = (
-                AuditLog.objects.filter(
-                    object_type=event.object_type, object_id=event.object_id
-                )
+                AuditLog.objects.filter(object_type=event.object_type, object_id=event.object_id)
                 .exclude(pk=event.pk)
                 .select_related("user")[:20]
             )

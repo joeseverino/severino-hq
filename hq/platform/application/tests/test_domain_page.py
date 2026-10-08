@@ -1,7 +1,5 @@
 """A domain's page says each thing once, in the owner's words."""
 
-from __future__ import annotations
-
 from types import SimpleNamespace
 
 from django.template.loader import render_to_string
@@ -79,18 +77,31 @@ class RecordsLedeTests(SimpleTestCase):
 
 class RecordTableTests(SimpleTestCase):
     def record(self, **fields):
-        base = dict(
-            name="app.example.com", record_type="A", value="192.0.2.10", proxied=False, ttl=1,
-            service_url="", manageable=True, managed=True, edit_url="/edit/", remove_url="/remove/",
-            health={"state": "healthy", "label": "Healthy"},
-        )
+        base = {
+            "name": "app.example.com",
+            "record_type": "A",
+            "value": "192.0.2.10",
+            "proxied": False,
+            "ttl": 1,
+            "service_url": "",
+            "manageable": True,
+            "managed": True,
+            "edit_url": "/edit/",
+            "remove_url": "/remove/",
+            "health": {"state": "healthy", "label": "Healthy"},
+        }
         return SimpleNamespace(**{**base, **fields})
 
     def table(self, *rows, **context):
         return render_to_string(
             "control_plane/_zone_records.html",
-            {"rows": rows, "zone": SimpleNamespace(managed=True), "public_dns_enabled": True,
-             "request": SimpleNamespace(get_full_path=lambda: "/domains/example.com/"), **context},
+            {
+                "rows": rows,
+                "zone": SimpleNamespace(managed=True),
+                "public_dns_enabled": True,
+                "request": SimpleNamespace(get_full_path=lambda: "/domains/example.com/"),
+                **context,
+            },
         )
 
     def test_a_state_is_said_only_where_it_is_not_healthy(self):

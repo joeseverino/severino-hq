@@ -13,12 +13,11 @@ each is counted with the SQL the migration would put in the ``CHECK``.
 Exit status 1 when a migration not yet applied would be refused by a row.
 """
 
-from __future__ import annotations
-
 import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar, override
 
 from django.apps import apps
 from django.core.management.base import BaseCommand, CommandError
@@ -37,7 +36,7 @@ INFORMATIONAL = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Check:
     """One ``AddConstraint`` of a check constraint, as its migration states it."""
 
@@ -100,8 +99,9 @@ def _informational() -> Iterator[tuple[str, str]]:
 
 class Command(BaseCommand):
     help = "Count, reading only, the rows each added check constraint would refuse."
-    requires_system_checks: list[str] = []
+    requires_system_checks: ClassVar[list[str]] = []
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument(
             "--path",
@@ -113,6 +113,7 @@ class Command(BaseCommand):
             help="Print the counting statements and read nothing.",
         )
 
+    @override
     def handle(self, *args, **options):
         found = list(checks())
         if options["sql"]:
@@ -144,9 +145,7 @@ class Command(BaseCommand):
             pending = (check.app, check.migration) not in applied
             if heading != (check.app, check.migration):
                 heading = (check.app, check.migration)
-                self.stdout.write(
-                    f"{check.app}.{check.migration} ({'pending' if pending else 'applied'})"
-                )
+                self.stdout.write(f"{check.app}.{check.migration} ({'pending' if pending else 'applied'})")
             count, sample = _count(database, check)
             if count is None:
                 self.stdout.write(f"  #{check.position} {check.name}: no table {check.table}")

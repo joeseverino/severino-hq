@@ -1,7 +1,5 @@
 """A page opens on what differs, and the rest is one press away."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model

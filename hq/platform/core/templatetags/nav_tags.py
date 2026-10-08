@@ -1,7 +1,5 @@
 """Links that remember where they were followed from."""
 
-from __future__ import annotations
-
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 from django import template

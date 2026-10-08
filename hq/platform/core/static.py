@@ -1,6 +1,7 @@
 """Static assets: collected and compressed once at image build, served natively over ASGI."""
 
-import os
+from pathlib import Path
+from typing import override
 
 from django.conf import settings
 from django.contrib.staticfiles import finders
@@ -22,6 +23,7 @@ class HashedStaticStorage(CompressedManifestStaticFilesStorage):
 
     manifest_strict = False
 
+    @override
     def stored_name(self, name):
         try:
             return super().stored_name(name)
@@ -69,6 +71,7 @@ class CachedStaticFiles(StaticFiles):
     one set of bytes.
     """
 
+    @override
     def lookup_path(self, path):
         # Live, the source trees answer first, through the same finders
         # collectstatic reads, so there is nothing to collect after an edit.
@@ -77,7 +80,7 @@ class CachedStaticFiles(StaticFiles):
         if settings.STATIC_LIVE and not path.startswith(("/", "\\")):
             found = finders.find(path)
             if found:
-                return found, os.stat(found)
+                return found, Path(found).stat()
         return super().lookup_path(path)
 
     async def precompressed(self, path, scope):
@@ -96,6 +99,7 @@ class CachedStaticFiles(StaticFiles):
             response.headers["Content-Encoding"] = "gzip"
         return response
 
+    @override
     async def get_response(self, path, scope):
         response = await self.precompressed(path, scope) or await super().get_response(path, scope)
         if not settings.STATIC_LIVE:

@@ -10,8 +10,6 @@ estate, answered from one stored value until the estate changes; an
 extension's items are composed on every request and are about its own records.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from .derivations import derivation

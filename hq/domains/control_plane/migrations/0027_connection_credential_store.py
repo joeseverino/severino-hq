@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0026_not_managed'),
+        ("control_plane", "0026_not_managed"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='providerconnection',
-            name='expires_at',
+            model_name="providerconnection",
+            name="expires_at",
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='providerconnection',
-            name='store',
+            model_name="providerconnection",
+            name="store",
             field=models.JSONField(blank=True, default=dict),
         ),
     ]

@@ -1,9 +1,6 @@
 """What the connections themselves report, attached to the nodes they read: the perimeter, the tailnet, and the policy each observation is judged against."""
 
-from __future__ import annotations
-
 import re
-
 from dataclasses import replace
 from typing import Any
 
@@ -55,15 +52,10 @@ def _perimeter_facts() -> dict[str, tuple[tuple[str, str], ...]]:
             unit = str(record.get("firewall_unit", "")).strip()
             if unit and unit != "active":
                 entries.append(("firewall-unit", unit))
-            entries.extend(
-                ("answers-publicly", str(port))
-                for port in record.get("answered_publicly") or ()
-            )
+            entries.extend(("answers-publicly", str(port)) for port in record.get("answered_publicly") or ())
             if entries:
                 found[connection_ref] = tuple(entries)
     return found
-
-
 
 
 def _tailnet_facts() -> tuple[tuple[str, str], ...]:
@@ -82,11 +74,7 @@ def _tailnet_facts() -> tuple[tuple[str, str], ...]:
     for snapshot in _inventory_of(TAILNET_KIND):
         for record in snapshot.records:
             addresses.update(str(item) for item in record.get("addresses") or ())
-            routes.update(
-                str(route)
-                for route in record.get("enabled_routes") or ()
-                if str(route) not in EXIT_ROUTES
-            )
+            routes.update(str(route) for route in record.get("enabled_routes") or () if str(route) not in EXIT_ROUTES)
     if not addresses:
         return ()
     entries: list[tuple[str, str]] = []
@@ -97,11 +85,7 @@ def _tailnet_facts() -> tuple[tuple[str, str], ...]:
                 for address in record.get("nameservers") or ()
                 if parse_ip(str(address)) is not None and str(address) not in addresses
             )
-    entries.extend(
-        ("tailnet-address", address)
-        for address in sorted(addresses)
-        if parse_ip(address) is not None
-    )
+    entries.extend(("tailnet-address", address) for address in sorted(addresses) if parse_ip(address) is not None)
     entries.extend(("tailnet-route", route) for route in sorted(routes))
     return tuple(entries)
 
@@ -120,7 +104,7 @@ def _policy_verdicts(
     to change an access policy that was never the problem.
     """
 
-    from .tailnet import devices, device_at, may_reach, observer
+    from .tailnet import device_at, devices, may_reach, observer
 
     known = devices()
     watcher = observer(known)
@@ -139,7 +123,8 @@ def _policy_verdicts(
         verdict = may_reach(watcher.name, target.name, port, known)
         if verdict.allowed or not verdict.known:
             continue
-        found[node_id] = found.get(node_id, ()) + (
+        found[node_id] = (
+            *found.get(node_id, ()),
             ("path-denied", f"{watcher.name} to {target.name} on {port}"),
         )
     return found
@@ -156,7 +141,6 @@ def add_observed_facts(
     and no declaration mentions. A rule reasoning about either has no other way
     to see it, and rules may not query.
     """
-
 
     from .zones import ZONE_KIND
 
@@ -175,8 +159,7 @@ def add_observed_facts(
                 str(item.get("domain") or item.get("consumer") or "").strip(),
             )
             for item in unreachable
-            if isinstance(item, dict)
-            and str(item.get("domain") or item.get("consumer") or "").strip()
+            if isinstance(item, dict) and str(item.get("domain") or item.get("consumer") or "").strip()
         )
         if entries:
             found[f"resource:{resource.key}"] = entries
@@ -208,9 +191,7 @@ def add_observed_facts(
     # nothing when nothing is named like a host. This runs inside the shared
     # projection that the dashboard budget measures, so a deployment with no
     # domains must not buy a query to learn it has none.
-    zones = tuple(
-        resource for resource in resources if resource.kind == ZONE_KIND
-    )
+    zones = tuple(resource for resource in resources if resource.kind == ZONE_KIND)
     if not zones:
         return found
 
@@ -224,9 +205,8 @@ def add_observed_facts(
         if not registration or registration.get("unread"):
             continue
         # Added to, never over: the unreachable consumers above are kept.
-        found[f"resource:{resource.key}"] = found.get(
-            f"resource:{resource.key}", ()
-        ) + (
+        found[f"resource:{resource.key}"] = (
+            *found.get(f"resource:{resource.key}", ()),
             ("domain", name),
             ("expires_at", str(registration.get("expires_at", ""))),
             ("auto_renew", "yes" if registration.get("auto_renew") else "no"),
@@ -256,9 +236,7 @@ _OPERATION_STATE = re.compile(r"\((queued|claimed|succeeded|failed)\)$")
 
 
 def _own_bookkeeping(item, key: str) -> bool:
-    return item.source == "HQ" and (
-        item.title.endswith(f" {key}") or _OPERATION_STATE.search(item.title) is not None
-    )
+    return item.source == "HQ" and (item.title.endswith(f" {key}") or _OPERATION_STATE.search(item.title) is not None)
 
 
 def add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
@@ -273,9 +251,9 @@ def add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
 
     from .connections import unfinished_work
     from .credential_findings import credential_facts
-    from .facts import connection_facts
     from .credential_mint import credential_fixes
     from .estate import refused_connections
+    from .facts import connection_facts
     from .tailnet import TAILNET_KIND, posture_facts
 
     perimeter = _perimeter_facts()

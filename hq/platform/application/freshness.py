@@ -8,8 +8,6 @@ with no newer reading, so a surface says it is out of date. Nothing else
 decides either.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -36,7 +34,7 @@ GLANCE_EVERY = timedelta(minutes=5)
 VISIT_EVERY = timedelta(minutes=2)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Cadence:
     """How often a kind is read, and how many of those may pass unread."""
 
@@ -76,7 +74,7 @@ def stale_after(kind: str = "") -> timedelta:
     return cadence(kind).stale_after
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Freshness:
     state: str
     observed_at: datetime | None

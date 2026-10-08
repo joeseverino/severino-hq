@@ -14,7 +14,6 @@ Reversible: the fields are restored empty.
 
 from django.db import migrations
 
-
 # Every field removed from MachineSpec. The tailnet reports `operating_system`;
 # the other three are read only by the form's own readout.
 FIELDS = ("operating_system", "form", "ssh_alias", "ssh_port")

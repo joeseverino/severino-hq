@@ -21,15 +21,14 @@ Siblings are synthetic: no import, no database, no second repository checked
 out. They exist to make "something else is installed" true.
 """
 
-from __future__ import annotations
-
+import os
+import re
+from collections.abc import Iterable
 from contextlib import ExitStack
 from datetime import date, timedelta
 from functools import partial
-import os
 from pathlib import Path
-import re
-from typing import Any, Iterable
+from typing import Any
 from unittest import mock
 
 from .plugins import (
@@ -148,15 +147,11 @@ def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None 
     )
 
     def questions() -> dict[str, Any]:
-        integration = next(
-            (found for plugin, found in installed_integrations() if plugin.id == plugin_id), None
-        )
+        integration = next((found for plugin, found in installed_integrations() if plugin.id == plugin_id), None)
         if integration is None:
             raise LookupError(f"No installed plugin has the id {plugin_id!r}.")
         asked = {
-            field: provider
-            for field in DERIVED_PROVIDERS
-            if (provider := getattr(integration, field)) is not None
+            field: provider for field in DERIVED_PROVIDERS if (provider := getattr(integration, field)) is not None
         }
         for source in integration.calendars() if integration.calendars else ():
             asked[f"calendar {source.id}"] = partial(source.events, first, last)
@@ -184,7 +179,7 @@ class ComposedPluginTestCase:
 
     siblings: tuple = ()
 
-    def setUp(self):  # noqa: N802 - unittest's own name
+    def setUp(self):
         super().setUp()
         self._composition = ExitStack()
         self.addCleanup(self._composition.close)
@@ -195,17 +190,13 @@ class ComposedPluginTestCase:
 
         real = os.environ.get("SEVERINO_HQ_PLUGINS", "")
         manifests = [manifest for manifest, _ in self.siblings]
-        contributions = {
-            manifest.id: integration for manifest, integration in self.siblings
-        }
+        contributions = {manifest.id: integration for manifest, integration in self.siblings}
         references = [f"{manifest.id}:manifest" for manifest in manifests]
         self._composition.enter_context(
             mock.patch.dict(
                 os.environ,
                 {
-                    "SEVERINO_HQ_PLUGINS": ",".join(
-                        part for part in (real, *references) if part
-                    ),
+                    "SEVERINO_HQ_PLUGINS": ",".join(part for part in (real, *references) if part),
                     # A sibling built here exists for the length of one test.
                     # It has no wheel, no artifact digest and no signed
                     # approval, so it can never appear in the admission lock,
@@ -239,6 +230,4 @@ class ComposedPluginTestCase:
                     return lambda: contributions[module]
             return original(spec)
 
-        self._composition.enter_context(
-            mock.patch("hq.platform.application.plugins._import", side_effect=_import)
-        )
+        self._composition.enter_context(mock.patch("hq.platform.application.plugins._import", side_effect=_import))

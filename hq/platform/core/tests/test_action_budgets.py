@@ -5,8 +5,6 @@ a constant number of queries whatever the estate holds, a 202 with where to
 follow the work, and nothing read, run or changed by the time it has answered.
 """
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.test import Client, TestCase

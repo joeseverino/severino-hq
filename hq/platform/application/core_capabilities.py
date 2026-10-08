@@ -7,8 +7,6 @@ not here: ``application.records`` derives them from its declaration.
 extension declares; ``application.capabilities`` runs them.
 """
 
-from __future__ import annotations
-
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
 from .cadence import ControllerSweepCommand, request_controller_sweep
@@ -16,6 +14,7 @@ from .documentation import (
     DocumentationSyncCommand,
     execute_documentation_sync,
 )
+from .domains import records_of
 from .infrastructure import ManagedResourceCommand, save_managed_resource
 from .integration_specs import CapabilitySpec
 from .lookup import (
@@ -29,8 +28,7 @@ from .projects import (
     ProjectRefreshCommand,
     execute_project_refresh,
 )
-from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES
-from .registry_import import HQImportCommand, execute_hq_import
+from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES, HQImportCommand, execute_hq_import
 from .resource_operations import (
     OperationCommand,
     accept_observed,
@@ -40,11 +38,9 @@ from .resource_operations import (
     request_removal,
     request_route_approval,
 )
-from .domains import records_of
 from .security import Capability
 from .sync import HQSyncCommand, execute_hq_sync
-from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND
-from .tailnet import TAILNET_KIND
+from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
 
 CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
@@ -88,8 +84,7 @@ CORE_CAPABILITY_SPECS = (
         target_label="Project",
         target_help="The project to refresh.",
         execution_notes=(
-            "Start the refresh as a job and answer at once with the job's id; the "
-            "work runs outside the request.",
+            "Start the refresh as a job and answer at once with the job's id; the work runs outside the request.",
             "Where the GitHub App reads the repository, ask the controller to read that "
             "connection now, through infrastructure.controller.refresh.",
             "For a repository the App does not read, read its last push from GitHub's "
@@ -223,8 +218,7 @@ CORE_CAPABILITY_SPECS = (
         execution_notes=(
             "Read the addresses and ports the last reading could not reach.",
             "Ask the policy whether it refuses each one, and keep only those it does.",
-            "Change the Tailscale policy. A person approves the change before "
-            "anything reaches the tailnet.",
+            "Change the Tailscale policy. A person approves the change before anything reaches the tailnet.",
         ),
         label="Allow a blocked Tailscale connection",
     ),
@@ -242,8 +236,7 @@ CORE_CAPABILITY_SPECS = (
         target_query=(("kind", TAILNET_POLICY_KIND),),
         execution_notes=(
             "Read HQ's copy of the policy and find the groups with no members that a rule names.",
-            "Refuse when such a group is named anywhere else, since removing it would "
-            "change what the policy means.",
+            "Refuse when such a group is named anywhere else, since removing it would change what the policy means.",
             "Strike them from their rules, dropping a rule left admitting nobody, and "
             "propose the changed policy, which a person approves.",
         ),
@@ -297,8 +290,7 @@ CORE_CAPABILITY_SPECS = (
         execution_notes=(
             "Refuse a private address locally; nothing outside can describe it, "
             "and asking would disclose it for no answer.",
-            "Read reverse DNS, which the address holder publishes and which "
-            "usually carries a brand name.",
+            "Read reverse DNS, which the address holder publishes and which usually carries a brand name.",
             "Read the RDAP allocation, which the registry publishes and which "
             "carries the company. Either registry may fail without the other.",
         ),

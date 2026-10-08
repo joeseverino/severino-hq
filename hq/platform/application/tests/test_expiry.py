@@ -1,9 +1,7 @@
 """One days-left rule, and one derivation of a resource for every adapter."""
 
-from __future__ import annotations
-
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase
@@ -18,7 +16,7 @@ from ..resource_context import resource_context
 from ..resources import get_resource
 from ..security import Capability, Principal
 
-NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 
 
@@ -50,7 +48,11 @@ class DaysUntilTests(SimpleTestCase):
 
         root = Path(__file__).resolve().parents[4]
         pattern = re.compile(r"(?<!/)/\s*86400|\)\.days\b")
-        allowed = {"hq/platform/application/expiry.py", "hq/platform/application/ui.py", "hq/platform/application/analytics.py"}
+        allowed = {
+            "hq/platform/application/expiry.py",
+            "hq/platform/application/ui.py",
+            "hq/platform/application/analytics.py",
+        }
         found = []
         for path in root.glob("*/**/*.py"):
             relative = path.relative_to(root).as_posix()
@@ -74,11 +76,7 @@ class OneAnswerTests(TestCase):
             key="example-wildcard",
             kind=CERTIFICATE_KIND,
             spec={"certificate_name": "example-wildcard", "domains": ["*.example.com"]},
-            status={
-                "not_after": (
-                    dj_timezone.now() + timedelta(days=87, hours=12, minutes=30)
-                ).isoformat()
-            },
+            status={"not_after": (dj_timezone.now() + timedelta(days=87, hours=12, minutes=30)).isoformat()},
         )
 
     def test_every_surface_says_the_same_days_left(self):

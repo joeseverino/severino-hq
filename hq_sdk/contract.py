@@ -19,14 +19,13 @@ review answers.
     python manage.py sdk_contract --check  # exit 1 on drift
 """
 
-from __future__ import annotations
-
 import dataclasses
 import enum
 import importlib
 import inspect
 import json
 import pkgutil
+from annotationlib import Format
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -37,16 +36,11 @@ import hq_sdk
 
 CONTRACT_PATH = Path(__file__).with_name("contract.json")
 
+
 def module_names() -> tuple[str, ...]:
     """Every SDK module, discovered rather than listed, so none can be missed."""
 
-    return tuple(
-        sorted(
-            info.name
-            for info in pkgutil.iter_modules(hq_sdk.__path__)
-            if info.name != "contract"
-        )
-    )
+    return tuple(sorted(info.name for info in pkgutil.iter_modules(hq_sdk.__path__) if info.name != "contract"))
 
 
 def exports(module: ModuleType) -> tuple[str, ...]:
@@ -59,8 +53,7 @@ def exports(module: ModuleType) -> tuple[str, ...]:
         sorted(
             name
             for name, value in vars(module).items()
-            if not name.startswith("_")
-            and getattr(value, "__module__", None) == module.__name__
+            if not name.startswith("_") and getattr(value, "__module__", None) == module.__name__
         )
     )
 
@@ -70,8 +63,8 @@ def _parameters(target: Any) -> list[str] | None:
     ``*args``/``**kwargs``, and the bare ``*`` and ``/`` markers Python uses."""
 
     try:
-        signature = inspect.signature(target)
-    except (TypeError, ValueError):
+        signature = inspect.signature(target, annotation_format=Format.STRING)
+    except TypeError, ValueError:
         return None
     parameters = list(signature.parameters.values())
     rendered: list[str] = []
@@ -91,9 +84,7 @@ def _parameters(target: Any) -> list[str] | None:
         optional = parameter.default is not inspect.Parameter.empty
         rendered.append(f"{parameter.name}=" if optional else parameter.name)
         following = parameters[index + 1] if index + 1 < len(parameters) else None
-        if kind is inspect.Parameter.POSITIONAL_ONLY and (
-            following is None or following.kind is not kind
-        ):
+        if kind is inspect.Parameter.POSITIONAL_ONLY and (following is None or following.kind is not kind):
             rendered.append("/")
     return rendered
 
@@ -130,15 +121,10 @@ def _class(cls: type) -> dict[str, Any]:
         # The constructor already carries every init field, in order, with its
         # default; only the fields a caller cannot pass need naming here.
         shape["kind"] = "dataclass"
-        shape["fields"] = sorted(
-            field.name for field in dataclasses.fields(cls) if not field.init
-        )
+        shape["fields"] = sorted(field.name for field in dataclasses.fields(cls) if not field.init)
     elif issubclass(cls, BaseModel):
         shape["kind"] = "model"
-        shape["fields"] = {
-            name: {"required": info.is_required()}
-            for name, info in cls.model_fields.items()
-        }
+        shape["fields"] = {name: {"required": info.is_required()} for name, info in cls.model_fields.items()}
     return shape
 
 
@@ -214,9 +200,7 @@ def _module_drift(module: str, before: dict[str, Any], after: dict[str, Any]) ->
         elif name not in after:
             lines.append(f"- hq_sdk.{module}.{name}")
         elif before[name] != after[name]:
-            lines.append(
-                f"~ hq_sdk.{module}.{name}: {_summary(before[name], after[name])}"
-            )
+            lines.append(f"~ hq_sdk.{module}.{name}: {_summary(before[name], after[name])}")
     return lines
 
 

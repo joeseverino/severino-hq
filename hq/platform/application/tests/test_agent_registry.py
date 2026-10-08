@@ -1,7 +1,5 @@
 """The agents HQ knows about: learned from tokens, and loud when they change."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest import mock
 
@@ -19,9 +17,7 @@ def agent(*granted, interface="mcp", actor="example-agent"):
 
 
 def _events():
-    return list(
-        AuditLog.objects.filter(object_type=AUDIT_LABEL).order_by("id").values_list("message", flat=True)
-    )
+    return list(AuditLog.objects.filter(object_type=AUDIT_LABEL).order_by("id").values_list("message", flat=True))
 
 
 class LearningTests(TestCase):
@@ -39,17 +35,13 @@ class LearningTests(TestCase):
         observe(agent("read", "delete_projects"))
 
         self.assertEqual(AgentIdentity.objects.get().granted, ["delete_projects", "read"])
-        self.assertEqual(
-            _events()[-1], "Grant for example-agent changed: added delete_projects"
-        )
+        self.assertEqual(_events()[-1], "Grant for example-agent changed: added delete_projects")
 
     def test_a_narrowed_grant_is_announced_too(self):
         observe(agent("read", "write_projects"))
         observe(agent("read"))
 
-        self.assertEqual(
-            _events()[-1], "Grant for example-agent changed: removed write_projects"
-        )
+        self.assertEqual(_events()[-1], "Grant for example-agent changed: removed write_projects")
 
     def test_one_client_on_two_surfaces_is_one_identity(self):
         observe(agent("read", interface="mcp"))

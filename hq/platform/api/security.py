@@ -11,10 +11,7 @@ be a third place for the authorization model to live, and the first thing to go
 stale the next time a plugin adds a capability.
 """
 
-from __future__ import annotations
-
 import logging
-
 from functools import cache
 from typing import Any
 
@@ -112,9 +109,7 @@ def verify(token: str) -> dict[str, Any]:
         # token exactly what to change about the next one. The client is told
         # that the token was not accepted; the reason is logged here, where it
         # is useful and unreachable.
-        logger.warning(
-            "Rejected a machine API token: %s", exc, extra={"event": "api.token.rejected"}
-        )
+        logger.warning("Rejected a machine API token: %s", exc, extra={"event": "api.token.rejected"})
         raise TokenError("The access token was not accepted.") from exc
 
 
@@ -144,8 +139,7 @@ def api_principal(claims: dict[str, Any]) -> Principal:
     permissions = granted(claims)
     if not permissions:
         raise AuthorizationError(
-            "This token grants no HQ permissions. Add them to the client's "
-            "scope on the Pocket ID API resource."
+            "This token grants no HQ permissions. Add them to the client's scope on the Pocket ID API resource."
         )
     # client_id for a client-credentials grant, sub for a user-delegated one.
     # Whichever it is lands in the audit log as the actor, so an import can

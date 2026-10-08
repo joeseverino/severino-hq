@@ -1,13 +1,10 @@
 """What each kind of connection is called, and how its credential can be held."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from types import MappingProxyType
 
 from .provider_adapters import CONNECTIONS
 from .provider_spec import ConnectionKind
-
 
 # Every connection provider, declared by the provider module that uses it and
 # gathered from the admitted set, so a provider cannot be admitted without one.

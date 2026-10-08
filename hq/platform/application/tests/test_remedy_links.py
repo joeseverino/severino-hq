@@ -9,8 +9,6 @@ it acts on, however far down the catalogue, and every link the findings, the
 action queue and the service pages emit is followed and checked.
 """
 
-from __future__ import annotations
-
 import re
 from html import unescape
 from urllib.parse import parse_qs, urlsplit
@@ -29,20 +27,18 @@ from ..findings import derive_findings
 from ..paths import routed_names
 from ..projection import MAX_PAGE_SIZE, projection_scope
 from ..security import web_principal
+from ..topology import derive_topology
 from .test_approvals import POLICY_KEY, declare_policy
 from .test_finding_fixes import document
 from .test_paths import PUBLIC_RANGE, estate, record, store
 from .test_tailnet_posture import policy as tailnet_policy, tailnet_connection
-from ..topology import derive_topology
 
 TRAP = "This replaces the whole record"
 UNOFFERED = "cannot be used here"
 
 
 def an_operator():
-    return get_user_model().objects.create_user(
-        "example-operator", password="x" * 20, is_staff=True, is_superuser=True
-    )
+    return get_user_model().objects.create_user("example-operator", password="x" * 20, is_staff=True, is_superuser=True)
 
 
 def _kind_for(spec) -> str:
@@ -62,12 +58,16 @@ class EveryTargetedCommandPreselectsTests(TestCase):
         # More than the largest page of declarations, all sorting before the
         # target, so only a form that fetches the linked one can offer it.
         ManagedResource.objects.bulk_create(
-            ManagedResource(key=f"a-{index:03}", kind="adguard.rewrite",
-                            spec={"domain": f"h{index}.example.com", "answer": "192.0.2.1"})
+            ManagedResource(
+                key=f"a-{index:03}",
+                kind="adguard.rewrite",
+                spec={"domain": f"h{index}.example.com", "answer": "192.0.2.1"},
+            )
             for index in range(MAX_PAGE_SIZE + 1)
         )
         commands = [
-            spec for spec in capability_registry().values()
+            spec
+            for spec in capability_registry().values()
             if spec.subject_resource == "infrastructure.resources" and spec.target_kind
         ]
         self.assertTrue(commands)
@@ -125,13 +125,20 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
             {"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
         )
         ManagedResource.objects.create(
-            key="example-db-rewrite", kind="adguard.rewrite",
+            key="example-db-rewrite",
+            kind="adguard.rewrite",
             spec={"domain": "db.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
         )
         ManagedResource.objects.create(
-            key="example-shop-proxy", kind="npm.proxy_host",
-            spec={"domain_names": ["shop.example.com"], "forward_scheme": "http",
-                  "forward_host": "198.51.100.20", "forward_port": 8080, "connection_ref": "example-npm"},
+            key="example-shop-proxy",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["shop.example.com"],
+                "forward_scheme": "http",
+                "forward_host": "198.51.100.20",
+                "forward_port": 8080,
+                "connection_ref": "example-npm",
+            },
         )
         # A drifted tailnet policy with empty groups: keep-live and amend remedies.
         declare_policy(document())
@@ -145,8 +152,15 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
             groups=[{"name": "group:empty", "members": []}],
             grants=[{"src": ["group:empty"], "dst": ["tag:gone:443"]}],
         )
-        store("tailscale.device", {"name": "example-device", "tags": ["tag:server"],
-                                   "addresses": ["100.64.0.20"], "connection_ref": "example-tailnet"})
+        store(
+            "tailscale.device",
+            {
+                "name": "example-device",
+                "tags": ["tag:server"],
+                "addresses": ["100.64.0.20"],
+                "connection_ref": "example-tailnet",
+            },
+        )
         self.user = an_operator()
         self.client.force_login(self.user)
 
@@ -168,14 +182,15 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         """Every command link the pages themselves render, as a person meets them."""
 
         pages = [
-            reverse("control_plane:findings"), reverse("action_items"),
+            reverse("control_plane:findings"),
+            reverse("action_items"),
             *(reverse("control_plane:service", args=[name]) for name in routed_names()),
             *(resource.get_absolute_url() for resource in ManagedResource.objects.all()),
         ]
         found = []
         for page in pages:
             body = self.client.get(page).content.decode()
-            for label_url in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"[^>]*>(.*?)</a>', body, re.S):
+            for label_url in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"[^>]*>(.*?)</a>', body, re.DOTALL):
                 url, label = unescape(label_url.group(1)), re.sub(r"<[^>]+>|\s+", " ", label_url.group(2)).strip()
                 found.append((label, url, "GET"))
         return found

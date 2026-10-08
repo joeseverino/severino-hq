@@ -9,21 +9,20 @@ def forget_fingerprint_marks(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0009_upstream_reading'),
+        ("core", "0009_upstream_reading"),
     ]
 
     operations = [
         migrations.RunPython(forget_fingerprint_marks, migrations.RunPython.noop),
         migrations.AddField(
-            model_name='actionitemread',
-            name='revision',
-            field=models.CharField(default='', max_length=16),
+            model_name="actionitemread",
+            name="revision",
+            field=models.CharField(default="", max_length=16),
         ),
         migrations.AlterField(
-            model_name='actionitemread',
-            name='key',
+            model_name="actionitemread",
+            name="key",
             field=models.CharField(max_length=200),
         ),
     ]

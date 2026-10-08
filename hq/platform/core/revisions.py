@@ -20,8 +20,6 @@ there each time it reads, and answers None when they are not: a caller then
 derives rather than trust a count nothing is keeping.
 """
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -98,7 +96,7 @@ def install(connection=default_connection) -> list[str]:
     return tables
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Revisions:
     """Every table's revision as one statement saw them, and which are kept."""
 

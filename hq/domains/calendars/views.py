@@ -1,8 +1,7 @@
 """The calendar: a month of every source, a day of everything, and the operator's own events."""
 
-from __future__ import annotations
-
 from datetime import date
+from typing import override
 from uuid import UUID
 
 from django.http import Http404, HttpResponseRedirect
@@ -55,14 +54,12 @@ class CalendarView(PageMixin, TemplateView):
     def _selected(self) -> date | None:
         return _day(self.request.GET.get("day", ""))
 
+    @override
     def get_page_actions(self):
         day = self._selected() or timezone.localdate()
-        return (
-            PageAction(
-                "Add event", f"{reverse('calendar:entry_new')}?on={day.isoformat()}", primary=True
-            ),
-        )
+        return (PageAction("Add event", f"{reverse('calendar:entry_new')}?on={day.isoformat()}", primary=True),)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         today = timezone.localdate()
@@ -87,7 +84,6 @@ class CalendarView(PageMixin, TemplateView):
         )
         return context
 
-
     def _entry(self, day: date | None) -> dict | None:
         """The entry opened beside the month: what it is, and what can be done to it."""
 
@@ -100,11 +96,9 @@ class CalendarView(PageMixin, TemplateView):
             "about": reference_of(entry, "about", principal=web_principal(self.request.user)),
             "when": when_label(entry),
             "repeat": repeat_label(entry),
-            "next": [
-                (when, month_url(when.replace(day=1), when))
-                for when in upcoming(entry, count=4)
-                if when != day
-            ][:3]
+            "next": [(when, month_url(when.replace(day=1), when)) for when in upcoming(entry, count=4) if when != day][
+                :3
+            ]
             if entry.repeat
             else (),
             "actions": (
@@ -170,6 +164,7 @@ class EntryPage(PageMixin):
     slug_field = "uid"
     slug_url_kwarg = "uid"
 
+    @override
     def get_page_trail(self):
         return (CALENDAR_TRAIL,)
 
@@ -185,6 +180,7 @@ class EntryWrite:
 class EntryDetailView(RedirectView):
     """An entry's own address opens it on the calendar."""
 
+    @override
     def get_redirect_url(self, uid):
         return get_object_or_404(Entry, uid=uid).get_absolute_url()
 
@@ -196,6 +192,7 @@ class EntryCreateView(EntryWrite, EntryPage, ReferencePickerMixin, ServiceCreate
     service = staticmethod(save_entry)
     command_from_cleaned_data = staticmethod(entry_command)
 
+    @override
     def get_initial(self):
         on = _day(self.request.GET.get("on", ""))
         return {"starts_on": on or timezone.localdate()}

@@ -4,9 +4,9 @@ from types import MappingProxyType
 
 from django.test import TestCase
 
-from hq_sdk.capabilities import StrictCommand
 from hq.domains.projects.models import Project
 from hq.domains.projects.specs import ProjectQuery
+from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CapabilitySpec, describe_capabilities
 from ..command_center import command_center
@@ -18,23 +18,21 @@ from ..integrations import (
     integration_graph,
     override_integration_graph,
 )
+from ..plugins import clear_plugin_composition_cache
 from ..resources import EmptyQuery, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
-from ..plugins import clear_plugin_composition_cache
 
 
 class SyntheticCommand(StrictCommand):
     pass
 
 
-def execute_synthetic(command, *, principal, expected_updated_at):  # noqa: ARG001
+def execute_synthetic(command, *, principal, expected_updated_at):
     return {"ok": True}
 
 
-def execute_targeted(
-    command, *, principal, current_slug, expected_updated_at  # noqa: ARG001
-):
+def execute_targeted(command, *, principal, current_slug, expected_updated_at):
     return {"ok": True}
 
 
@@ -151,9 +149,7 @@ class IntegrationGraphTests(TestCase):
             SyntheticCommand,
             execute_synthetic,
         )
-        malformed_resource = ResourceSpec(
-            "example.empty", "Empty", "Exposes nothing.", Capability.READ
-        )
+        malformed_resource = ResourceSpec("example.empty", "Empty", "Exposes nothing.", Capability.READ)
         malformed_connection = ConnectionSpec(
             "example.gateway",
             "Gateway",
@@ -200,20 +196,14 @@ class IntegrationGraphTests(TestCase):
         self.assertIn("returned NoneType, expected ConnectionSpec", str(raised.exception))
 
     def test_standalone_search_is_part_of_the_compiled_graph(self):
-        definition = SearchDefinition(
-            "example.records", Project, "slug", ("name",)
-        )
+        definition = SearchDefinition("example.records", Project, "slug", ("name",))
 
-        graph = compile_integration_graph(
-            capabilities=(), resources=(), connections=(), search=(definition,)
-        )
+        graph = compile_integration_graph(capabilities=(), resources=(), connections=(), search=(definition,))
 
         self.assertIs(graph.search[definition.scope], definition)
 
     def test_resource_and_standalone_search_scopes_cannot_collide(self):
-        definition = SearchDefinition(
-            "example.records", Project, "slug", ("name",)
-        )
+        definition = SearchDefinition("example.records", Project, "slug", ("name",))
         resource = ResourceSpec(
             "example.records",
             "Records",
@@ -265,13 +255,9 @@ class IntegrationGraphTests(TestCase):
     def test_a_connection_emits_its_capability_edge_once(self):
         graph = integration_graph()
         d1 = graph.connections["hq.cloudflare_d1"]
-        review = next(
-            ability for ability in d1.abilities if ability.capability == "contact.submission.review"
-        )
+        review = next(ability for ability in d1.abilities if ability.capability == "contact.submission.review")
 
-        self.assertIs(
-            graph.capabilities[review.capability], graph.capabilities["contact.submission.review"]
-        )
+        self.assertIs(graph.capabilities[review.capability], graph.capabilities["contact.submission.review"])
 
     def test_every_projection_sees_one_synthetic_contribution(self):
         resource = ResourceSpec(
@@ -333,10 +319,6 @@ class IntegrationGraphTests(TestCase):
                 {item["name"] for item in describe_connections()["connections"]},
             )
             self.assertEqual(
-                {
-                    item.name
-                    for group in ("resources", "commands", "connections")
-                    for item in discovery[group]
-                },
+                {item.name for group in ("resources", "commands", "connections") for item in discovery[group]},
                 {resource.name, capability.name, connection.name},
             )

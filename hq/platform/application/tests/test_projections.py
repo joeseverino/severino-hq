@@ -1,28 +1,25 @@
-from __future__ import annotations
-
 import json
 from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.db import connection
-from django.test import TestCase, override_settings
-
-from hq.platform.application.security import cli_principal
-from django.test.utils import CaptureQueriesContext
 from django.template.loader import render_to_string
+from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-
 from hq.platform.application.derivations import uncached
-from ..dashboard import operating_snapshot
-from ..resource_operations import operation_summary
-from ..resource_context import get_managed_resource
-from ..projection import projection_scope, read_once
+from hq.platform.application.security import cli_principal
+
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
+from ..dashboard import operating_snapshot
+from ..projection import projection_scope, read_once
+from ..resource_context import get_managed_resource
+from ..resource_operations import operation_summary
 from ..ui import (
     MISSING,
     PLOT_LEFT,
@@ -50,9 +47,7 @@ class UiProjectionTests(TestCase):
             )
         )
 
-        rendered = render_to_string(
-            "partials/_page_navigation.html", {"navigation": navigation}
-        )
+        rendered = render_to_string("partials/_page_navigation.html", {"navigation": navigation})
 
         self.assertIn('aria-label="On this page"', rendered)
         self.assertIn('href="#recent-work"', rendered)
@@ -61,9 +56,7 @@ class UiProjectionTests(TestCase):
         with self.assertRaisesMessage(ValueError, "only lowercase"):
             PageSection("Recent work", "Recent work")
         with self.assertRaisesMessage(ValueError, "must be unique"):
-            PageNavigation(
-                (PageSection("overview", "Overview"), PageSection("overview", "Again"))
-            )
+            PageNavigation((PageSection("overview", "Overview"), PageSection("overview", "Again")))
 
     def test_timeline_requires_chronological_items_and_renders_links(self):
         item = TimelineItem(
@@ -112,9 +105,7 @@ class UiProjectionTests(TestCase):
         self.assertFalse(chart.empty)
         self.assertEqual(chart.rows[1].values, (45.0, 30.0))
         self.assertEqual(len(chart.bars), 4)
-        rendered = render_to_string(
-            "partials/_stacked_bar_chart.html", {"chart": chart}
-        )
+        rendered = render_to_string("partials/_stacked_bar_chart.html", {"chart": chart})
         self.assertIn("Training", rendered)
         self.assertIn("View chart data", rendered)
         # The tooltip names its period as well as its series: hovering a bar
@@ -257,9 +248,7 @@ class LineChartTests(TestCase):
             self.assertLess(point.y, 214.0)
 
     def test_one_reading_is_not_a_chart(self):
-        chart = line_chart(
-            "Lonely", "", (("Only", ((date(2026, 1, 1), 7.0),), 1),), unit="h"
-        )
+        chart = line_chart("Lonely", "", (("Only", ((date(2026, 1, 1), 7.0),), 1),), unit="h")
         self.assertTrue(chart.empty)
 
     def test_a_mark_lands_on_its_own_date(self):
@@ -274,9 +263,7 @@ class LineChartTests(TestCase):
         self.assertAlmostEqual(chart.marks[0].x, chart.series[0].points[1].x, places=1)
 
     def test_a_mark_outside_the_window_is_dropped(self):
-        chart = line_chart(
-            "Resting", "", self.SERIES, unit="bpm", marks=((date(2025, 1, 1), "Old"),)
-        )
+        chart = line_chart("Resting", "", self.SERIES, unit="bpm", marks=((date(2025, 1, 1), "Old"),))
         self.assertEqual(chart.marks, ())
 
     def test_the_line_is_stroked_rather_than_filled(self):
@@ -319,9 +306,7 @@ class LineChartTests(TestCase):
 
     def test_the_plot_rectangle_is_shared_with_the_bar_chart(self):
         line = line_chart("Resting", "", self.SERIES, unit="bpm")
-        bars = stacked_bar_chart(
-            "Training", "", ("a", "b"), (ChartSeries("Run", (1.0, 2.0), 1),), unit="m"
-        )
+        bars = stacked_bar_chart("Training", "", ("a", "b"), (ChartSeries("Run", (1.0, 2.0), 1),), unit="m")
         # Two charts stacked in a column have to share an axis position, or the
         # page reads as two unrelated drawings. A bar is centred in its own
         # column so its x is not the plot's left edge; the axis is what has to
@@ -333,9 +318,7 @@ class LineChartTests(TestCase):
         # would break the test that exists to prove the plot moved everywhere
         # at once.
         self.assertAlmostEqual(line.series[0].points[0].x, PLOT_LEFT, places=1)
-        self.assertAlmostEqual(
-            line.series[0].points[-1].x, PLOT_LEFT + PLOT_WIDTH, places=1
-        )
+        self.assertAlmostEqual(line.series[0].points[-1].x, PLOT_LEFT + PLOT_WIDTH, places=1)
         self.assertAlmostEqual(line.plot_right, bars.plot_right, places=1)
         self.assertAlmostEqual(line.plot_left, bars.plot_left, places=1)
 
@@ -345,7 +328,7 @@ class ChartDataTableTests(TestCase):
 
     def table(self, template, chart):
         rendered = render_to_string(template, {"chart": chart})
-        return rendered[rendered.index('<details class="chart-data">'):]
+        return rendered[rendered.index('<details class="chart-data">') :]
 
     def test_a_line_charts_table_rounds_as_its_tooltip_does(self):
         chart = line_chart(
@@ -361,7 +344,7 @@ class ChartDataTableTests(TestCase):
         self.assertIn('<td class="num-col">1,250</td>', table)
         self.assertNotIn("52.25", table)
         self.assertIn("Resting heart rate (bpm)", table)
-        for point, row in zip(chart.series[0].points, chart.table_rows):
+        for point, row in zip(chart.series[0].points, chart.table_rows, strict=False):
             self.assertIn(f": {row.cells[0]} bpm", point.tooltip)
 
     def test_a_bar_charts_table_shows_no_raw_float(self):
@@ -396,9 +379,7 @@ class ChartDataTableTests(TestCase):
         self.assertIn("Balance: $12,346", chart.series[0].points[0].tooltip)
 
     def test_a_unit_the_series_already_names_is_said_once(self):
-        chart = stacked_bar_chart(
-            "Distance", "", ("Aug 3",), (ChartSeries("Miles", (12.0,), 1),), unit="miles"
-        )
+        chart = stacked_bar_chart("Distance", "", ("Aug 3",), (ChartSeries("Miles", (12.0,), 1),), unit="miles")
 
         self.assertEqual(chart.table_headings, ("Miles",))
 
@@ -451,9 +432,7 @@ class CadenceTests(TestCase):
         self.assertIn('<span class="cadence-count">2/3</span>', rendered)
 
     def test_the_matrix_draws_no_data_apart_from_a_miss(self):
-        matrix = CadenceMatrix(
-            tuple(week.label for week in self.WEEKS), (CadenceRow("Chest", self.WEEKS),)
-        )
+        matrix = CadenceMatrix(tuple(week.label for week in self.WEEKS), (CadenceRow("Chest", self.WEEKS),))
 
         rendered = render_to_string("partials/_cadence_matrix.html", {"matrix": matrix})
 
@@ -467,8 +446,9 @@ class CadenceTests(TestCase):
         self.assertEqual(week.said, "No data for the week of Sep 22")
 
     def test_the_no_data_mark_is_styled(self):
-        from django.conf import settings
         from pathlib import Path
+
+        from django.conf import settings
 
         css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
 
@@ -509,10 +489,7 @@ class ChartAxisSpanTests(TestCase):
 
     def _chart(self, days):
         start = date(2020, 1, 15)
-        points = tuple(
-            (start + timedelta(days=step), 1.0 + step / 100)
-            for step in range(0, days, max(1, days // 40))
-        )
+        points = tuple((start + timedelta(days=step), 1.0 + step / 100) for step in range(0, days, max(1, days // 40)))
         return line_chart("Span", "", (("Measure", points, 1),), unit="u")
 
     def test_a_short_range_labels_the_day(self):
@@ -618,8 +595,8 @@ class DashboardProjectionTests(TestCase):
             status=Project.Status.ACTIVE,
         )
 
-        from hq.platform.application import readings
         from hq.domains.contacts.d1 import UNREAD
+        from hq.platform.application import readings
 
         readings.record(UNREAD, {"count": 2, "status": "ok"})
         with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")):
@@ -740,9 +717,7 @@ class OperationProjectionTests(TestCase):
 
         result = operation_summary(operation)
 
-        self.assertEqual(
-            result["headline"], "One consumer serves the previous certificate."
-        )
+        self.assertEqual(result["headline"], "One consumer serves the previous certificate.")
         self.assertEqual(result["condition"]["reason"], "VerificationFailed")
         self.assertEqual(result["affected"][0]["domain"], "hq.example.com")
         self.assertTrue(result["automatic"])

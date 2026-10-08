@@ -28,15 +28,13 @@ error, the warning loses that site, and it is the one fact that finds the leak,
 since the finalizer runs wherever collection happened to.
 """
 
-from __future__ import annotations
-
 import atexit
 import os
-from pathlib import Path
 import sys
 import tempfile
 import tracemalloc
 import warnings
+from pathlib import Path
 
 _LEDGER = "SEVERINO_TEST_LEAK_LEDGER"
 
@@ -44,9 +42,7 @@ _LEDGER = "SEVERINO_TEST_LEAK_LEDGER"
 def enforce(base_dir: Path) -> None:
     # The repository's packages, read from the tree rather than listed, so a new
     # app is covered the day it is added.
-    packages = sorted(
-        path.name for path in base_dir.iterdir() if (path / "__init__.py").is_file()
-    )
+    packages = sorted(path.name for path in base_dir.iterdir() if (path / "__init__.py").is_file())
     warnings.filterwarnings("error", module=rf"({'|'.join(packages)})(\.|$)")
     if tracemalloc.is_tracing():
         warnings.simplefilter("always", ResourceWarning)
@@ -68,7 +64,7 @@ def _record_leak(unraisable) -> None:
         return
     if sys.is_finalizing():
         _exit_failed(f"{unraisable.exc_value}\n")
-    with open(os.environ[_LEDGER], "a", encoding="utf-8") as ledger:
+    with Path(os.environ[_LEDGER]).open("a", encoding="utf-8") as ledger:
         ledger.write(f"{unraisable.exc_value}\n")
 
 

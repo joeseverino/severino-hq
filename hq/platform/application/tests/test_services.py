@@ -4,15 +4,13 @@ Every hostname here is under ``example.com`` or ``example.test``. This repositor
 is public, and a fixture is documentation whether or not it was meant to be.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.provider_spec import SERVICE_FACET_IDS, SERVICE_FACETS
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.provider_spec import SERVICE_FACETS, SERVICE_FACET_IDS
 from hq.domains.projects.models import Project
 
 from ..attention import services as service_attention
@@ -99,11 +97,11 @@ class ServiceCompositionTests(TestCase):
                     key="wildcard",
                     kind="tls.certificate",
                     spec={
-                    "certificate_name": "wildcard",
-                    "domains": ["example.com", "*.example.com"],
-                    "install_on": ["a-proxy"],
-                    "renewal_window_days": 30,
-                },
+                        "certificate_name": "wildcard",
+                        "domains": ["example.com", "*.example.com"],
+                        "install_on": ["a-proxy"],
+                        "renewal_window_days": 30,
+                    },
                 )
             )
 
@@ -304,13 +302,9 @@ class OriginProvenanceTests(TestCase):
         from django.contrib.auth import get_user_model
         from django.urls import reverse
 
-        user = get_user_model().objects.create_user(
-            username="op", password="pw", is_staff=True, is_superuser=True
-        )
+        user = get_user_model().objects.create_user(username="op", password="pw", is_staff=True, is_superuser=True)
         self.client.force_login(user)
-        return self.client.get(
-            reverse("control_plane:service", kwargs={"hostname": hostname})
-        )
+        return self.client.get(reverse("control_plane:service", kwargs={"hostname": hostname}))
 
     def test_a_name_with_only_a_record_is_not_told_an_ingress_forwards_it(self):
         """A record-derived origin is not described as an ingress.
@@ -334,7 +328,7 @@ class OriginProvenanceTests(TestCase):
         # cards, and said once: Relationships leaves it to that row.
         self.assertNotContains(response, "The name resolves to")
         self.assertNotContains(response, "Ingress forwards to")
-        self.assertContains(response, '<td>Machine</td>')
+        self.assertContains(response, "<td>Machine</td>")
         self.assertNotContains(response, '<th scope="rowgroup" rowspan="1">Runs on</th>')
 
     def test_a_proxied_name_still_says_its_ingress_forwards(self):
@@ -531,9 +525,7 @@ class WiringFaultTests(TestCase):
             kind="adguard.rewrite",
             spec={"domain": "app.example.com", "answer": "10.0.0.10"},
         )
-        resource.conditions = [
-            {"type": "Degraded", "status": True, "reason": "", "message": "No answer."}
-        ]
+        resource.conditions = [{"type": "Degraded", "status": True, "reason": "", "message": "No answer."}]
         resource.save(update_fields=["conditions"])
 
         self.assertEqual(find_service("app.example.com").status, "serious")
@@ -550,9 +542,7 @@ class WiringFaultTests(TestCase):
             kind="adguard.rewrite",
             spec={"domain": "app.example.com", "answer": "10.0.0.10"},
         )
-        resource.conditions = [
-            {"type": "Degraded", "status": True, "reason": "", "message": "No answer."}
-        ]
+        resource.conditions = [{"type": "Degraded", "status": True, "reason": "", "message": "No answer."}]
         resource.save(update_fields=["conditions"])
 
         self.assertEqual(service_attention(), ())
@@ -595,9 +585,7 @@ class ServiceResolutionTests(TestCase):
 
         certificate = facet(service, "certificate")
         self.assertTrue(certificate.present)
-        self.assertNotIn(
-            "No certificate in HQ covers this name", " ".join(service.faults)
-        )
+        self.assertNotIn("No certificate in HQ covers this name", " ".join(service.faults))
 
     def test_a_project_publishing_to_a_name_is_an_annotation_not_a_requirement(self):
         healthy(
@@ -614,9 +602,7 @@ class ServiceResolutionTests(TestCase):
                 spec={"domain": "tool.example.com", "answer": "10.0.0.10"},
             )
         )
-        Project.objects.create(
-            name="The app", slug="the-app", public_url="https://app.example.com/"
-        )
+        Project.objects.create(name="The app", slug="the-app", public_url="https://app.example.com/")
 
         catalog = {service.hostname: service for service in service_catalog()}
 
@@ -645,9 +631,7 @@ class ServiceSurfaceTests(TestCase):
     def test_a_fault_reaches_the_composed_queue_with_its_own_link(self):
         item = service_attention()[0]
 
-        self.assertEqual(item.url, reverse(
-            "control_plane:service", kwargs={"hostname": "app.example.com"}
-        ))
+        self.assertEqual(item.url, reverse("control_plane:service", kwargs={"hostname": "app.example.com"}))
         self.assertEqual(item.status, "attention")
 
     def test_the_estate_card_counts_services_and_names_the_incomplete_ones(self):
@@ -742,15 +726,30 @@ class AliasNavigationTests(TestCase):
 
     def setUp(self):
         ManagedResource.objects.create(
-            key="site", kind="cloudflare.dns_record", enabled=True,
-            spec={"zone": "example.com", "name": "example.com", "record_type": "CNAME",
-                  "content": "example.pages.dev", "proxied": True, "ttl": 1},
+            key="site",
+            kind="cloudflare.dns_record",
+            enabled=True,
+            spec={
+                "zone": "example.com",
+                "name": "example.com",
+                "record_type": "CNAME",
+                "content": "example.pages.dev",
+                "proxied": True,
+                "ttl": 1,
+            },
         )
         ManagedResource.objects.create(
-            key="www", kind="cloudflare.dns_record", enabled=True,
-            spec={"zone": "example.com", "name": "www.example.com",
-                  "record_type": "CNAME", "content": "example.com",
-                  "proxied": True, "ttl": 1},
+            key="www",
+            kind="cloudflare.dns_record",
+            enabled=True,
+            spec={
+                "zone": "example.com",
+                "name": "www.example.com",
+                "record_type": "CNAME",
+                "content": "example.com",
+                "proxied": True,
+                "ttl": 1,
+            },
         )
 
     def test_an_alias_names_the_service_it_stands_for(self):
@@ -775,9 +774,7 @@ class AliasNavigationTests(TestCase):
 
         user = get_user_model().objects.create_user("op", password="x")
         self.client.force_login(user)
-        response = self.client.get(
-            reverse("control_plane:service", kwargs={"hostname": "www.example.com"})
-        )
+        response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "www.example.com"}))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response["Location"],
@@ -794,26 +791,35 @@ class OriginNoteTests(TestCase):
         from hq.domains.control_plane.provider_spec import NameContext
 
         from ..containers import Running
-        from ..services import Service
         from ..service_facets import Facet
+        from ..services import Service
         from ..whereabouts import Origin
 
         running = Running(
-            name="probe", host="a-docker-host", stack="probe", image="",
-            state="running", status="", ports=(8099,), network_mode="bridge",
-            host_address="", portainer_managed=False, connection_ref="",
+            name="probe",
+            host="a-docker-host",
+            stack="probe",
+            image="",
+            state="running",
+            status="",
+            ports=(8099,),
+            network_mode="bridge",
+            host_address="",
+            portainer_managed=False,
+            connection_ref="",
             observed_at=None,
         )
         service = Service(
             hostname="probe.invalid",
             facets=(
                 Facet(
-                    id="runtime", label="Runtime", observed=running,
+                    id="runtime",
+                    label="Runtime",
+                    observed=running,
                     context=NameContext(),
                 ),
             ),
-            origin=Origin(address="10.0.0.9:8099", host="a-docker-host",
-                          container="probe"),
+            origin=Origin(address="10.0.0.9:8099", host="a-docker-host", container="probe"),
         )
 
         self.assertFalse(service.origin_is_news)
@@ -835,7 +841,6 @@ class OriginNoteTests(TestCase):
         cannot describe, reconcile or reach."""
 
         from ..services import Service
-
         from ..whereabouts import Origin
 
         service = Service(
@@ -849,10 +854,8 @@ class OriginNoteTests(TestCase):
     def test_it_speaks_up_when_nothing_identified_what_is_running(self):
         from hq.domains.control_plane.provider_spec import NameContext
 
-        from ..services import Service
-
         from ..service_facets import Facet
-
+        from ..services import Service
         from ..whereabouts import Origin
 
         service = Service(
@@ -882,8 +885,7 @@ class OriginWordingTests(TestCase):
     def test_a_known_machine_reads_as_itself(self):
         from ..whereabouts import Origin
 
-        origin = Origin(address="10.0.0.9:8000", host="a-docker-host",
-                        container="probe")
+        origin = Origin(address="10.0.0.9:8000", host="a-docker-host", container="probe")
 
         self.assertEqual(origin.headline, "a-docker-host · probe")
         self.assertEqual(origin.qualifier, "")
@@ -907,15 +909,21 @@ class ConnectedMachineTests(TestCase):
     """
 
     def test_an_address_a_connection_points_at_is_named(self):
-        from hq.domains.control_plane.models import ProviderConnection
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderConnection
 
         from ..whereabouts import locate
 
         ProviderConnection.objects.create(
-            connection_ref="a-shared-host", controller_id="a-controller",
-            provider="ssh", endpoint="203.0.113.10:21098", reaches=[],
-            reachable=True, probed=True, observed_at=timezone.now(),
+            connection_ref="a-shared-host",
+            controller_id="a-controller",
+            provider="ssh",
+            endpoint="203.0.113.10:21098",
+            reaches=[],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
         )
 
         origin = locate("203.0.113.10:443", ())
@@ -932,15 +940,21 @@ class ConnectedMachineTests(TestCase):
         self.assertEqual(origin.qualifier, "unknown host")
 
     def test_a_url_endpoint_matches_by_its_hostname(self):
-        from hq.domains.control_plane.models import ProviderConnection
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderConnection
 
         from ..whereabouts import locate
 
         ProviderConnection.objects.create(
-            connection_ref="a-proxy", controller_id="a-controller",
-            provider="npm", endpoint="https://proxy.example", reaches=[],
-            reachable=True, probed=True, observed_at=timezone.now(),
+            connection_ref="a-proxy",
+            controller_id="a-controller",
+            provider="npm",
+            endpoint="https://proxy.example",
+            reaches=[],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
         )
 
         origin = locate("proxy.example:81", ())
@@ -966,15 +980,21 @@ class PortlessOriginTests(TestCase):
         self.assertFalse(origin.external)
 
     def test_a_bare_address_matches_a_connection_too(self):
-        from hq.domains.control_plane.models import ProviderConnection
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderConnection
 
         from ..whereabouts import locate
 
         ProviderConnection.objects.create(
-            connection_ref="a-shared-host", controller_id="a-controller",
-            provider="ssh", endpoint="203.0.113.10:21098", reaches=[],
-            reachable=True, probed=True, observed_at=timezone.now(),
+            connection_ref="a-shared-host",
+            controller_id="a-controller",
+            provider="ssh",
+            endpoint="203.0.113.10:21098",
+            reaches=[],
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
         )
 
         origin = locate("203.0.113.10", ())
@@ -1040,14 +1060,13 @@ class LoopbackOriginTests(TestCase):
         from django.utils import timezone
 
         from hq.domains.control_plane.models import ProviderInventory
+
         from ..services import CONTAINER_KIND
 
         ProviderInventory.objects.update_or_create(
             kind=CONTAINER_KIND,
             defaults={
-                "records": [
-                    {"name": name, "host": host, "ports": [port], "state": "running"}
-                ],
+                "records": [{"name": name, "host": host, "ports": [port], "state": "running"}],
                 "observed_at": timezone.now(),
             },
         )
@@ -1075,6 +1094,7 @@ class LoopbackOriginTests(TestCase):
         from django.utils import timezone
 
         from hq.domains.control_plane.models import ProviderInventory
+
         from ..services import CONTAINER_KIND
         from ..whereabouts import locate
 
@@ -1112,25 +1132,19 @@ class WwwIsTheSameSiteTests(TestCase):
         return _aliases(declared or set(origins), origins)
 
     def test_www_folds_into_the_apex_when_both_point_at_one_place(self):
-        found = self.aliases(
-            {"example.com": "203.0.113.9", "www.example.com": "203.0.113.9"}
-        )
+        found = self.aliases({"example.com": "203.0.113.9", "www.example.com": "203.0.113.9"})
 
         self.assertEqual(found, {"www.example.com": "example.com"})
 
     def test_www_pointing_somewhere_else_stays_its_own_service(self):
         """Two addresses is two places, whatever the names suggest."""
 
-        found = self.aliases(
-            {"example.com": "203.0.113.9", "www.example.com": "203.0.113.10"}
-        )
+        found = self.aliases({"example.com": "203.0.113.9", "www.example.com": "203.0.113.10"})
 
         self.assertEqual(found, {})
 
     def test_another_subdomain_on_the_same_address_is_not_folded(self):
-        found = self.aliases(
-            {"example.com": "203.0.113.9", "mail.example.com": "203.0.113.9"}
-        )
+        found = self.aliases({"example.com": "203.0.113.9", "mail.example.com": "203.0.113.9"})
 
         self.assertEqual(found, {})
 
@@ -1170,9 +1184,7 @@ class TlsHqDoesNotOwnTests(TestCase):
             {"name": "a-host.example.com", "domains": ["a-host.example.com"]},
         )
 
-        self.assertEqual(
-            _certificates_in_use()["a-host.example.com"]["name"], "a-host.example.com"
-        )
+        self.assertEqual(_certificates_in_use()["a-host.example.com"]["name"], "a-host.example.com")
 
     def test_the_certificate_is_read_through_the_kinds_that_declare_one(self):
         from dataclasses import replace

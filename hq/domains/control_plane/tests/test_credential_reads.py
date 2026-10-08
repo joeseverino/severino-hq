@@ -4,25 +4,21 @@ Derived from ``OBSERVATIONS`` at test time, so a reading registered with a new
 ``requires`` fails here until the checked-in list names it.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from django.conf import settings
 from django.test import SimpleTestCase
 
+from ..connection_kinds import CONNECTION_CREDENTIALS
 from ..credential_reads import UNREGISTERED_READS, observer_permissions
 from ..observations import OBSERVATIONS
-from ..connection_kinds import CONNECTION_CREDENTIALS
 
 SCRIPTS = Path(settings.BASE_DIR) / "scripts"
 
 
 def listed(name: str) -> tuple[str, ...]:
     lines = (SCRIPTS / name).read_text(encoding="utf-8").splitlines()
-    return tuple(
-        line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")
-    )
+    return tuple(line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#"))
 
 
 class ObserverPermissionFileTests(SimpleTestCase):

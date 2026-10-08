@@ -5,7 +5,7 @@ time the same way. ``hq_sdk.ui`` hands these to extensions, and
 ``core.templatetags.value_tags`` owns the one filter that puts them in a page.
 """
 
-from __future__ import annotations
+from datetime import UTC
 
 from .timestamps import moment
 
@@ -141,11 +141,11 @@ def when_range(start, end) -> str:
 def duration(delta) -> str:
     """A length of time in the phrasing ``ago`` uses, without the "ago"."""
 
-    from datetime import datetime, timedelta, timezone as _tz
+    from datetime import datetime, timedelta
 
     from django.utils.timesince import timesince
 
-    start = datetime(2000, 1, 1, tzinfo=_tz.utc)
+    start = datetime(2000, 1, 1, tzinfo=UTC)
     return timesince(start, start + max(delta, timedelta(0)))
 
 

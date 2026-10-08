@@ -7,8 +7,6 @@ kind, so a person consents before anything reaches the tailnet, and the
 controller applies it only through a connection that manages.
 """
 
-from __future__ import annotations
-
 import json
 from typing import Any
 
@@ -48,9 +46,7 @@ def _referenced_outside_rules(parsed: dict[str, Any], group: str) -> list[str]:
     """Top-level sections other than groups, grants and ssh that name ``group``."""
 
     return sorted(
-        key
-        for key, value in parsed.items()
-        if key not in {"groups", "grants", "ssh"} and group in _names(value)
+        key for key, value in parsed.items() if key not in {"groups", "grants", "ssh"} and group in _names(value)
     )
 
 
@@ -87,13 +83,8 @@ def policy_without_empty_groups(document: str) -> tuple[str, str]:
     for group in sorted(empty):
         elsewhere = _referenced_outside_rules(parsed, group)
         if elsewhere:
-            raise ValueError(
-                f"{group} is also named in {', '.join(elsewhere)}. Edit the policy by hand."
-            )
-    parsed["groups"] = {
-        name: members for name, members in (parsed.get("groups") or {}).items()
-        if name not in empty
-    }
+            raise ValueError(f"{group} is also named in {', '.join(elsewhere)}. Edit the policy by hand.")
+    parsed["groups"] = {name: members for name, members in (parsed.get("groups") or {}).items() if name not in empty}
     dropped = 0
     for section in ("grants", "ssh"):
         if section in parsed:

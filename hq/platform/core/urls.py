@@ -1,7 +1,7 @@
 from django.urls import path
 
-from .views import ApprovalEntryView
 from .audit_views import AuditLogDetailView, AuditLogListView
+from .views import ApprovalEntryView
 
 app_name = "core"
 

@@ -14,10 +14,9 @@ stops the same job starting twice.
 extension owns the work while the host owns the running of it.
 """
 
-from __future__ import annotations
-
 import uuid
 from datetime import timedelta
+from typing import override
 
 from django.conf import settings
 from django.db import models
@@ -52,9 +51,7 @@ class Job(models.Model):
     # readable with several extensions running work.
     kind = models.CharField(max_length=64, db_index=True)
     label = models.CharField(max_length=200)
-    state = models.CharField(
-        max_length=16, choices=State, default=State.QUEUED, db_index=True
-    )
+    state = models.CharField(max_length=16, choices=State, default=State.QUEUED, db_index=True)
     # 0 to 100 (``job_percent_at_most_100``), or null where the work cannot
     # say: better than a number that stops moving.
     percent = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -97,6 +94,7 @@ class Job(models.Model):
             one_of("state", JobState, "job_state_is_declared"),
         ]
 
+    @override
     def __str__(self):
         return f"{self.kind}: {self.get_state_display()}"
 

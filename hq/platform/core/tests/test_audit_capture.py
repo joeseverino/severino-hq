@@ -7,13 +7,11 @@ under both over the same real models, and the audit rows must match field by
 field, with the same number of queries.
 """
 
-from __future__ import annotations
-
 import copy
 import pickle
 import uuid
 from contextlib import ExitStack, contextmanager
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest import mock
 
@@ -50,8 +48,8 @@ SIGNALS = (post_init, post_save, post_delete)
 
 RESOURCE_ID = uuid.UUID(int=7)
 OTHER_ID = uuid.UUID(int=8)
-SEEN = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
-SEEN_AGAIN = datetime(2026, 1, 3, 3, 4, 5, tzinfo=timezone.utc)
+SEEN = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+SEEN_AGAIN = datetime(2026, 1, 3, 3, 4, 5, tzinfo=UTC)
 
 
 def _eager_snapshot(instance) -> dict:
@@ -75,9 +73,7 @@ def register_eager(model, type_label, *, redact=(), observation=(), connection=N
     def on_save(sender, instance, created, **kwargs):
         changes = {}
         if not created:
-            changes = _changes(
-                getattr(instance, "_audit_snapshot", None), _eager_snapshot(instance), secret
-            )
+            changes = _changes(getattr(instance, "_audit_snapshot", None), _eager_snapshot(instance), secret)
             if looked and changes and set(changes) <= looked:
                 instance._audit_snapshot = _eager_snapshot(instance)
                 return
@@ -345,9 +341,7 @@ def update_fields():
 
 
 def no_signal_paths():
-    Expense.objects.bulk_create(
-        [Expense(date=date(2026, 1, day), vendor="Bulk", item=str(day)) for day in (1, 2, 3)]
-    )
+    Expense.objects.bulk_create([Expense(date=date(2026, 1, day), vendor="Bulk", item=str(day)) for day in (1, 2, 3)])
     rows = list(Expense.objects.order_by("pk"))
     for row in rows:
         row.vendor = "Bulk updated"
@@ -368,7 +362,7 @@ def copied_and_pickled():
     deep.save()
     a_resource()
     resource = ManagedResource.objects.get(pk=RESOURCE_ID)
-    revived = pickle.loads(pickle.dumps(resource))  # noqa: S301 - bytes made on the line itself
+    revived = pickle.loads(pickle.dumps(resource))
     revived.spec["answer"] = "192.0.2.5"
     revived.save()
     twin = copy.deepcopy(resource)

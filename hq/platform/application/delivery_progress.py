@@ -12,8 +12,6 @@ A reading without it carries only the controller's sentence, whose closing
 words are fixed (controller/providers/github_delivery.go).
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -41,7 +39,7 @@ _SENTENCES = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Progress:
     """Where a delivery behind production stands, at its least advanced plugin."""
 
@@ -71,9 +69,7 @@ def delivery_progress(resource) -> Progress | None:
     behind = [
         item
         for item in (resource.status or {}).get("extensions") or ()
-        if isinstance(item, Mapping)
-        and item.get("admitted")
-        and item.get("admitted") != item.get("running")
+        if isinstance(item, Mapping) and item.get("admitted") and item.get("admitted") != item.get("running")
     ]
     stages = {_stage(item) for item in behind}
     if not stages or ENDED in stages:

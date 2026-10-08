@@ -14,8 +14,7 @@ _REWRITE = (
 _TABLE = "search_index_searchdocument"
 
 CONDITIONAL = (
-    f"CREATE TRIGGER search_document_au AFTER UPDATE OF body ON {_TABLE} "
-    f"WHEN old.body IS NOT new.body {_REWRITE}"
+    f"CREATE TRIGGER search_document_au AFTER UPDATE OF body ON {_TABLE} WHEN old.body IS NOT new.body {_REWRITE}"
 )
 UNCONDITIONAL = f"CREATE TRIGGER search_document_au AFTER UPDATE ON {_TABLE} {_REWRITE}"
 

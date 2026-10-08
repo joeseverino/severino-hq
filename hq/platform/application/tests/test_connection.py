@@ -6,8 +6,6 @@ security surface is worse than nothing: it is read as a measurement. So most of
 what follows takes a fact away and asserts the page notices.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from unittest import mock
 
@@ -18,13 +16,13 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
-from ..moments import when
-from ..ui import MISSING
 from ..connection import connection
+from ..moments import when
 from ..request_addresses import addresses_of, addresses_of_hq
 from ..request_channel import channel_for_request, channel_of
 from ..request_headers import headers_of
 from ..request_path import address_chain
+from ..ui import MISSING
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -58,10 +56,7 @@ def a_device(name, address, *, user="", tags=(), observer=False, reach=(), **ext
         "user": user,
         "tags": list(tags),
         "self": observer,
-        "reach": [
-            {"port": port, "who": list(who), "rules": [{"who": list(who), "line": 1}]}
-            for port, who in reach
-        ],
+        "reach": [{"port": port, "who": list(who), "rules": [{"who": list(who), "line": 1}]} for port, who in reach],
         "public_key": f"test-key-{name}",
         "last_handshake": timezone.now().isoformat(),
         **extra,
@@ -69,9 +64,7 @@ def a_device(name, address, *, user="", tags=(), observer=False, reach=(), **ext
 
 
 def a_request(address=A_TAILNET_ADDRESS, *, host="hq.example.test", secure=True):
-    request = RequestFactory().get(
-        "/connection/", secure=secure, HTTP_HOST=host, REMOTE_ADDR=address
-    )
+    request = RequestFactory().get("/connection/", secure=secure, HTTP_HOST=host, REMOTE_ADDR=address)
     request.user = get_user_model()(username="someone", email="someone@example.test")
     return request
 
@@ -100,9 +93,7 @@ class ChannelTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_PROXIES=["10.0.0.0/8"])
     def test_deciding_the_request_channel_also_costs_no_queries(self):
-        request = RequestFactory().get(
-            "/", REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS
-        )
+        request = RequestFactory().get("/", REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS)
 
         with self.assertNumQueries(0):
             self.assertEqual(channel_for_request(request).id, "tailnet")
@@ -236,9 +227,7 @@ class LayerTests(TestCase):
             HTTP_X_CLIENT=A_TAILNET_ADDRESS,
             HTTP_X_SCHEME="https",
         )
-        declared = replace(
-            PROVIDERS["npm.proxy_host"], forwarding_headers=("X-Client", "X-Scheme")
-        )
+        declared = replace(PROVIDERS["npm.proxy_host"], forwarding_headers=("X-Client", "X-Scheme"))
         with mock.patch.dict(PROVIDERS, {"npm.proxy_host": declared}):
             layer = self.layer(connection(request), "proxy-evidence")
 
@@ -287,9 +276,7 @@ class LayerTests(TestCase):
         self.assertFalse(self.layer(found, "gate").holds)
         self.assertIn("not checking which address", self.layer(found, "gate").detail)
 
-    @override_settings(
-        AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"]
-    )
+    @override_settings(AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"])
     def test_an_installed_password_backend_is_reported(self):
         found = connection(a_request())
 
@@ -357,7 +344,8 @@ class LayerTests(TestCase):
 
         a_tailnet(
             a_device(
-                "a-laptop", "100.64.0.77",
+                "a-laptop",
+                "100.64.0.77",
                 lock_error="node is not signed by a trusted key.",
             )
         )
@@ -396,9 +384,7 @@ class IdentityTests(TestCase):
 
         self.assertFalse(identity.corroborated)
         self.assertTrue(identity.conflicted)
-        layer = next(
-            layer for layer in connection(request).layers if layer.id == "identity-agreement"
-        )
+        layer = next(layer for layer in connection(request).layers if layer.id == "identity-agreement")
         self.assertFalse(layer.holds)
 
     def test_an_sso_signed_link_correlates_different_identity_namespaces(self):
@@ -443,23 +429,17 @@ class IdentityTests(TestCase):
         self.assertFalse(identity.corroborated)
         self.assertFalse(identity.conflicted)
 
-    @override_settings(
-        OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize"
-    )
+    @override_settings(OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize")
     def test_a_configured_sso_provider_is_not_attributed_to_a_password_session(self):
         request = a_request()
-        request.session = {
-            "_auth_user_backend": "django.contrib.auth.backends.ModelBackend"
-        }
+        request.session = {"_auth_user_backend": "django.contrib.auth.backends.ModelBackend"}
 
         identity = connection(request).identity
 
         self.assertEqual(identity.route, "password")
         self.assertEqual(identity.provider, "")
 
-    @override_settings(
-        OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize"
-    )
+    @override_settings(OIDC_OP_AUTHORIZATION_ENDPOINT="https://identity.example.test/authorize")
     def test_the_provider_that_signed_an_oidc_session_is_named(self):
         request = a_request()
         request.session = {"_auth_user_backend": "hq.platform.core.oidc.HQOIDCAuthenticationBackend"}
@@ -475,8 +455,11 @@ class LinkTests(TestCase):
     def test_a_relayed_peer_is_not_described_as_direct(self):
         a_tailnet(
             a_device(
-                "a-laptop", A_TAILNET_ADDRESS, user="someone@example.test",
-                relay="ord", direct_endpoint="",
+                "a-laptop",
+                A_TAILNET_ADDRESS,
+                user="someone@example.test",
+                relay="ord",
+                direct_endpoint="",
             ),
             a_device("hq-host", "100.64.0.9", observer=True),
         )
@@ -486,7 +469,9 @@ class LinkTests(TestCase):
     def test_a_direct_peer_is_reported_with_its_endpoint(self):
         a_tailnet(
             a_device(
-                "a-laptop", A_TAILNET_ADDRESS, direct_endpoint="203.0.113.9:41641",
+                "a-laptop",
+                A_TAILNET_ADDRESS,
+                direct_endpoint="203.0.113.9:41641",
                 relay="ord",
             ),
             a_device("hq-host", "100.64.0.9", observer=True),
@@ -499,7 +484,8 @@ class LinkTests(TestCase):
 
         a_tailnet(
             a_device(
-                "a-laptop", A_TAILNET_ADDRESS,
+                "a-laptop",
+                A_TAILNET_ADDRESS,
                 last_handshake="0001-01-01T00:00:00Z",
             ),
             a_device("hq-host", "100.64.0.9", observer=True),
@@ -581,9 +567,7 @@ class ConnectionPageTests(TestCase):
 
         response = self.client.get(reverse("connection"))
 
-        edge = next(
-            layer for layer in response.context["connection"].layers if layer.id == "edge"
-        )
+        edge = next(layer for layer in response.context["connection"].layers if layer.id == "edge")
         self.assertTrue(edge.holds)
         self.assertContains(response, "Tailnet ranges · implicit deny all")
 
@@ -659,7 +643,9 @@ class HopTests(TestCase):
 
     def hops(self, *, peer, forwarded=""):
         request = RequestFactory().get(
-            "/connection/", HTTP_HOST="hq.example.test", REMOTE_ADDR=peer,
+            "/connection/",
+            HTTP_HOST="hq.example.test",
+            REMOTE_ADDR=peer,
             **({"HTTP_X_FORWARDED_FOR": forwarded} if forwarded else {}),
         )
         return address_chain(request)
@@ -696,9 +682,7 @@ class HopTests(TestCase):
     def test_the_chain_reads_in_the_order_the_hops_happened(self):
         found = self.hops(peer="10.0.0.9", forwarded="100.64.0.5")
 
-        self.assertEqual(
-            [hop.value for hop in found], ["100.64.0.5", "10.0.0.9"]
-        )
+        self.assertEqual([hop.value for hop in found], ["100.64.0.5", "10.0.0.9"])
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -747,8 +731,10 @@ class HeaderTests(TestCase):
     def test_headers_hq_acts_on_come_first(self):
         found = headers_of(
             RequestFactory().get(
-                "/connection/", HTTP_HOST="hq.example.test",
-                HTTP_X_REAL_IP="100.64.0.5", HTTP_X_FORWARDED_FOR="100.64.0.5",
+                "/connection/",
+                HTTP_HOST="hq.example.test",
+                HTTP_X_REAL_IP="100.64.0.5",
+                HTTP_X_FORWARDED_FOR="100.64.0.5",
             )
         )
 
@@ -829,8 +815,11 @@ class ProxyThatDropsTheCallerTests(TestCase):
 
     def found(self):
         request = RequestFactory().get(
-            "/connection/", secure=True, HTTP_HOST="hq.example.test",
-            REMOTE_ADDR="10.0.0.9", HTTP_X_FORWARDED_FOR="172.18.0.1",
+            "/connection/",
+            secure=True,
+            HTTP_HOST="hq.example.test",
+            REMOTE_ADDR="10.0.0.9",
+            HTTP_X_FORWARDED_FOR="172.18.0.1",
         )
         request.user = get_user_model()(username="someone")
         return connection(request)
@@ -842,9 +831,7 @@ class ProxyThatDropsTheCallerTests(TestCase):
         self.assertEqual(self.found().channel.id, "opaque")
 
     def test_the_gate_does_not_claim_to_hold_while_judging_a_proxy(self):
-        gate = next(
-            layer for layer in self.found().layers if layer.id == "gate"
-        )
+        gate = next(layer for layer in self.found().layers if layer.id == "gate")
 
         self.assertFalse(gate.holds)
         self.assertIn("checking the proxy's address", gate.detail)
@@ -860,9 +847,7 @@ class DeclinedHeaderTests(TestCase):
     """
 
     def header(self, name, **extra):
-        request = RequestFactory().get(
-            "/connection/", HTTP_HOST="hq.example.test", **extra
-        )
+        request = RequestFactory().get("/connection/", HTTP_HOST="hq.example.test", **extra)
         return next(h for h in headers_of(request) if h.name == name)
 
     def test_a_single_asserted_address_is_declined_rather_than_unread(self):
@@ -884,8 +869,10 @@ class DeclinedHeaderTests(TestCase):
     def test_declined_headers_sort_above_ignored_ones(self):
         found = headers_of(
             RequestFactory().get(
-                "/connection/", HTTP_HOST="hq.example.test",
-                HTTP_ACCEPT_LANGUAGE="en", HTTP_X_REAL_IP="100.64.0.5",
+                "/connection/",
+                HTTP_HOST="hq.example.test",
+                HTTP_ACCEPT_LANGUAGE="en",
+                HTTP_X_REAL_IP="100.64.0.5",
             )
         )
         states = [h.state for h in found]
@@ -930,16 +917,12 @@ class ServingDeviceTests(TestCase):
         return self.resolution(own, served).device
 
     def resolution(self, own, served=()):
+        from .. import tailnet
         from ..connection import _serving_device_resolution
         from ..infrastructure import declared_machines
-        from .. import tailnet
 
-        with mock.patch(
-            "hq.platform.application.hq_self.host_addresses", return_value=frozenset(own)
-        ):
-            return _serving_device_resolution(
-                tailnet.devices(), declared_machines(), tuple(served)
-            )
+        with mock.patch("hq.platform.application.hq_self.host_addresses", return_value=frozenset(own)):
+            return _serving_device_resolution(tailnet.devices(), declared_machines(), tuple(served))
 
     def test_locating_hq_never_puts_dns_in_the_request_path(self):
         from unittest import mock
@@ -953,9 +936,7 @@ class ServingDeviceTests(TestCase):
                     "hq.platform.application.hq_self.socket.getaddrinfo",
                     side_effect=AssertionError("DNS must not be consulted"),
                 ),
-                mock.patch(
-                    "hq.platform.application.hq_self.socket.socket", side_effect=OSError
-                ),
+                mock.patch("hq.platform.application.hq_self.socket.socket", side_effect=OSError),
             ):
                 self.assertEqual(host_addresses(), frozenset({"127.0.0.1", "::1"}))
         finally:
@@ -1006,9 +987,7 @@ class ServingDeviceTests(TestCase):
         self.assertFalse(self.resolution(set()).verified)
 
     def test_an_observer_fallback_is_not_drawn_or_authorized_as_hq(self):
-        with mock.patch(
-            "hq.platform.application.hq_self.host_addresses", return_value=frozenset()
-        ):
+        with mock.patch("hq.platform.application.hq_self.host_addresses", return_value=frozenset()):
             found = connection(a_request())
 
         self.assertIsNone(found.serves)
@@ -1046,9 +1025,7 @@ class CarriageTests(TestCase):
 
     def _connection(self, **endpoint):
         a_tailnet(
-            a_device(
-                "a-laptop", A_TAILNET_ADDRESS, user="someone@example.test", **endpoint
-            ),
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test", **endpoint),
             a_device("hq-host", "100.64.0.9", observer=True),
         )
         return connection(a_request())
@@ -1111,9 +1088,7 @@ class CarriageTests(TestCase):
         from django.template.loader import render_to_string
 
         public = self._connection(direct_endpoint=f"{self.PUBLIC}:41641")
-        markup = render_to_string(
-            "core/_connection_panel.html", {"connection": public}
-        )
+        markup = render_to_string("core/_connection_panel.html", {"connection": public})
         self.assertIn("data-peering-detail", markup)
         self.assertIn(f"address={self.PUBLIC}", markup)
 
@@ -1159,19 +1134,17 @@ class LocalProxyPolicyTests(TestCase):
 
     def found(self):
         request = RequestFactory().get(
-            "/connection/", secure=True, HTTP_HOST="hq.example.test",
-            REMOTE_ADDR="127.0.0.1", HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
+            "/connection/",
+            secure=True,
+            HTTP_HOST="hq.example.test",
+            REMOTE_ADDR="127.0.0.1",
+            HTTP_X_FORWARDED_FOR=A_TAILNET_ADDRESS,
         )
-        request.user = get_user_model()(
-            username="someone", email="someone@example.test"
-        )
+        request.user = get_user_model()(username="someone", email="someone@example.test")
         return connection(request)
 
     def policy_layers(self):
-        return [
-            layer for layer in self.found().layers
-            if layer.boundary == "Zero trust policy"
-        ]
+        return [layer for layer in self.found().layers if layer.boundary == "Zero trust policy"]
 
     def test_the_boundary_does_not_disappear_behind_a_local_proxy(self):
         self.assertTrue(self.policy_layers())
@@ -1210,9 +1183,7 @@ class TailnetLockTests(TestCase):
         )
 
     def layer(self, found):
-        return next(
-            (item for item in found.layers if item.id == "tailnet-lock"), None
-        )
+        return next((item for item in found.layers if item.id == "tailnet-lock"), None)
 
     def test_an_unswept_tailnet_says_nothing_rather_than_off(self):
         # No reading is not a reading of "off". Rendering one would be HQ
@@ -1251,13 +1222,10 @@ class TailnetLockTests(TestCase):
 
     def test_one_signing_key_is_not_pluralised(self):
         a_tailnet_policy(enabled=True, trusted_keys=1)
-        self.assertEqual(
-            self.layer(connection(a_request())).evidence, "Signed · 1 signing key"
-        )
+        self.assertEqual(self.layer(connection(a_request())).evidence, "Signed · 1 signing key")
 
     def test_no_device_means_no_signature_line(self):
         # The device layer above has already said no node answers here. A line
         # about that node's signature would be describing nothing.
         a_tailnet_policy(enabled=True, trusted_keys=2)
         self.assertIsNone(self.layer(connection(a_request(A_LAN_ADDRESS))))
-

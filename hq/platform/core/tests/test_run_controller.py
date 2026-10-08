@@ -1,7 +1,5 @@
 """The controller container: its isolation, the binary it runs, and the environment it reads."""
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from unittest import skipUnless
@@ -35,7 +33,7 @@ class ControllerBinaryTests(SimpleTestCase):
 
     def test_the_entrypoint_is_the_binary_the_image_builds(self):
         dockerfile = DOCKERFILE.read_text()
-        built = re.search(r"^COPY --from=controller /out/hq-controller (\S+)$", dockerfile, re.M)
+        built = re.search(r"^COPY --from=controller /out/hq-controller (\S+)$", dockerfile, re.MULTILINE)
 
         self.assertIsNotNone(built)
         self.assertIn(f"--entrypoint {built.group(1)} ", SCRIPT.read_text())
@@ -66,13 +64,13 @@ class BridgeSocketDeliveryTests(SimpleTestCase):
     compose = (ROOT / "docker-compose.yml").read_text()
 
     def socket(self) -> str:
-        named = re.findall(r"^\s+SEVERINO_BRIDGE_SOCKET: (\S+)$", self.compose, re.M)
+        named = re.findall(r"^\s+SEVERINO_BRIDGE_SOCKET: (\S+)$", self.compose, re.MULTILINE)
         self.assertEqual(len(named), 1)
         return named[0]
 
     def test_the_socket_is_in_a_named_volume_of_its_own(self):
         directory = self.socket().rsplit("/", 1)[0]
-        mounted = re.findall(rf"^\s+- (\w+):{re.escape(directory)}$", self.compose, re.M)
+        mounted = re.findall(rf"^\s+- (\w+):{re.escape(directory)}$", self.compose, re.MULTILINE)
         self.assertEqual(len(mounted), 1)
         self.assertRegex(self.compose, rf"(?m)^volumes:\n(?:  \w+:\n)*  {mounted[0]}:$")
         # Nothing else is mounted at or under it, and it is not a host path.
@@ -85,7 +83,7 @@ class BridgeSocketDeliveryTests(SimpleTestCase):
         self.assertIn(f"chmod 0700 {directory}", dockerfile)
 
     def test_the_web_listener_is_not_the_socket(self):
-        command = re.search(r'^CMD \[(.+?)\]$', DOCKERFILE.read_text(), re.M | re.S).group(1)
+        command = re.search(r"^CMD \[(.+?)\]$", DOCKERFILE.read_text(), re.MULTILINE | re.DOTALL).group(1)
         self.assertIn('"hq.config.asgi:application"', command)
         self.assertNotIn("--uds", command)
         self.assertNotIn("--fd", command)

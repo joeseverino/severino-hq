@@ -1,15 +1,13 @@
 """Nginx Proxy Manager: the proxy hosts HQ declares. The controller reads and writes them."""
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import Field
 
 from hq.platform.core.network import split_host_port
 
-from ..names import normalized_hostname
 from ..connection_shapes import LOGIN
+from ..names import normalized_hostname
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
 from .contracts import IngressPolicy, ServedCertificate
 
@@ -18,11 +16,7 @@ FORWARDING_HEADERS = ("X-Real-IP", "X-Forwarded-Scheme")
 
 
 def _names(record: dict[str, Any]) -> tuple[str, ...]:
-    return tuple(
-        name
-        for name in (normalized_hostname(item) for item in record.get("domain_names") or ())
-        if name
-    )
+    return tuple(name for name in (normalized_hostname(item) for item in record.get("domain_names") or ()) if name)
 
 
 def ingress_policy(record: dict[str, Any]) -> IngressPolicy:
@@ -112,15 +106,15 @@ class NPMProxyHostSpec(ProviderModel):
     trust_forwarded_proto: bool = False
     serving: bool = True
 
+
 class ResolvedNPMProxyHostSpec(NPMProxyHostSpec):
     certificate_id: int | None = Field(default=None, ge=1)
+
 
 def _resolve(authored, context):
     resource_key = authored.get("certificate_resource")
     status = (
-        context.resource_status(
-            resource_key, ("tls.certificate", "tls.uploaded_certificate")
-        )
+        context.resource_status(resource_key, ("tls.certificate", "tls.uploaded_certificate"))
         if resource_key and context.resource_status
         else None
     )
@@ -128,6 +122,7 @@ def _resolve(authored, context):
         **authored,
         "certificate_id": status.get("npm_certificate_id") if status else None,
     }
+
 
 def _from_record(record):
     return {
@@ -149,6 +144,7 @@ def _from_record(record):
         "serving": bool(record.get("enabled", True)),
     }
 
+
 def _seed(context):
     host, port = split_host_port(context.origin_address or context.origin)
     result = {"domain_names": [context.hostname]}
@@ -157,6 +153,7 @@ def _seed(context):
     if len(context.certificates) == 1:
         result["certificate_resource"] = context.certificates[0]
     return result
+
 
 DEFINITION = ProviderSpec(
     "npm.proxy_host",
@@ -167,11 +164,7 @@ DEFINITION = ProviderSpec(
     actions={"reconcile": applies(automatic=True), "delete": applies()},
     label="Proxy host",
     connection_providers=("npm",),
-    removal_note=lambda spec: (
-        "These names stop being served: "
-        + ", ".join(spec.get("domain_names", ()))
-        + "."
-    ),
+    removal_note=lambda spec: "These names stop being served: " + ", ".join(spec.get("domain_names", ())) + ".",
     choices="hq.platform.application.provider_choices:proxy_choices",
     required_on_create=("certificate_resource",),
     unobservable_fields=("certificate_resource",),

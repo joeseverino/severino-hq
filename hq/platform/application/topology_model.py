@@ -4,8 +4,6 @@ Also how each relation ranks on a page, and the one way an edge is emitted, so
 every module that adds edges gives them the same stable id and phrase.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from hashlib import sha256
 
@@ -16,7 +14,7 @@ from .entity_links import EntityLink
 from .timestamps import moment
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TopologyNode:
     """One addressable thing in the derived topology."""
 
@@ -87,7 +85,7 @@ class TopologyNode:
     actions: tuple[TopologyAction, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TopologyEdge:
     """A relationship derived from a declaration or observation."""
 
@@ -108,7 +106,7 @@ class TopologyEdge:
     facet: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RelationKind:
     """What an edge kind says from each end, and where it ranks on a page.
 
@@ -152,7 +150,7 @@ READING_RANKS: dict[str, int] = {
 }
 
 
-def relation_rank(edge: "TopologyEdge") -> int:
+def relation_rank(edge: TopologyEdge) -> int:
     """Where an edge's relation is shown among a node's relationships."""
 
     if edge.kind == "reading":
@@ -161,7 +159,7 @@ def relation_rank(edge: "TopologyEdge") -> int:
     return relation.rank if relation else 99
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Topology:
     """The complete permitted projection consumed by web, API, and MCP."""
 
@@ -169,7 +167,7 @@ class Topology:
     edges: tuple[TopologyEdge, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TopologyTrace:
     """A bounded traversal applied to an already-authorized topology."""
 
@@ -177,6 +175,7 @@ class TopologyTrace:
     direction: str
     depth: int
     hops: tuple[tuple[str, int], ...]
+
 
 # Node kinds whose ``observed_at`` is the newest of the readings joined to
 # them rather than one sweep's stamp, so siblings are not compared by it.
@@ -210,9 +209,7 @@ def derived_id(kind: str, *parts: str) -> str:
     return f"{kind}:{digest}"
 
 
-def edge_between(
-    source: str, target: str, kind: str, label: str = "", status: str = "neutral"
-) -> TopologyEdge:
+def edge_between(source: str, target: str, kind: str, label: str = "", status: str = "neutral") -> TopologyEdge:
     """The edge of one relation kind from ``source`` to ``target``, with a stable id."""
 
     return TopologyEdge(

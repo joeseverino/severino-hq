@@ -18,9 +18,7 @@ Adding a rule to a model with rows is a migration that fails if a row breaks
 it. ``manage.py constraint_preflight`` counts those rows first, reading only.
 """
 
-from __future__ import annotations
-
-from typing import Any
+from typing import Any, override
 
 from django.core.exceptions import ValidationError
 from django.db import DEFAULT_DB_ALIAS, models
@@ -35,6 +33,7 @@ class Rule(models.CheckConstraint):
         super().__init__(**kwargs)
         self.field = field
 
+    @override
     def validate(self, model, instance, exclude=None, using=DEFAULT_DB_ALIAS) -> None:
         try:
             super().validate(model, instance, exclude=exclude, using=using)
@@ -44,12 +43,14 @@ class Rule(models.CheckConstraint):
                 raise
             raise ValidationError({self.field: error.error_list}) from None
 
+    @override
     def deconstruct(self):
         path, args, kwargs = super().deconstruct()
         if self.field:
             kwargs["field"] = self.field
         return path, args, kwargs
 
+    @override
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Rule):
             return self.field == other.field and super().__eq__(other)

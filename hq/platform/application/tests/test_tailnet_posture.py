@@ -1,7 +1,5 @@
 """Tailnet posture findings, and port names on the policy page."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -110,25 +108,19 @@ class EmptyGroupTests(TestCase):
                 {"name": "group:admins", "members": ["someone@example.com"]},
                 {"name": "group:unused", "members": []},
             ],
-            grants=[{"src": ["group:empty", "group:admins"], "dst": ["tag:server"],
-                     "ip": ["tcp:22"]}],
+            grants=[{"src": ["group:empty", "group:admins"], "dst": ["tag:server"], "ip": ["tcp:22"]}],
         )
 
         (finding,) = raised("empty-group-granted")
 
         self.assertEqual(finding["severity"], "neutral")
-        self.assertEqual(
-            finding["title"], "group:empty has no members but is still granted access"
-        )
-        self.assertEqual(
-            finding["evidence"], [{"label": "Empty group", "value": "group:empty"}]
-        )
+        self.assertEqual(finding["title"], "group:empty has no members but is still granted access")
+        self.assertEqual(finding["evidence"], [{"label": "Empty group", "value": "group:empty"}])
 
     def test_a_shell_rule_counts_as_a_grant(self):
         policy(
             groups=[{"name": "group:ops", "members": []}],
-            ssh_rules=[{"action": "check", "src": ["group:ops"], "dst": ["tag:server"],
-                        "users": ["root"]}],
+            ssh_rules=[{"action": "check", "src": ["group:ops"], "dst": ["tag:server"], "users": ["root"]}],
         )
 
         self.assertEqual(len(raised("empty-group-granted")), 1)
@@ -140,7 +132,9 @@ class RefusedConnectionTests(TestCase):
 
         tailnet_connection("example-cf", provider="cloudflare_api")
         store(
-            "cloudflare.pages_project", reachable=False, refusal=CREDENTIAL_REFUSAL,
+            "cloudflare.pages_project",
+            reachable=False,
+            refusal=CREDENTIAL_REFUSAL,
             error="Invalid API token",
         )
 
@@ -152,9 +146,14 @@ class RefusedConnectionTests(TestCase):
 
     def test_an_unreachable_connection_still_says_not_answering(self):
         ProviderConnection.objects.create(
-            connection_ref="example-ssh", controller_id="example-controller",
-            provider="ssh", endpoint="192.0.2.9:22", reachable=False, probed=True,
-            detail="Timed out", observed_at=timezone.now(),
+            connection_ref="example-ssh",
+            controller_id="example-controller",
+            provider="ssh",
+            endpoint="192.0.2.9:22",
+            reachable=False,
+            probed=True,
+            detail="Timed out",
+            observed_at=timezone.now(),
         )
 
         (finding,) = raised("connection-not-answering")
@@ -166,12 +165,15 @@ class PortNameTests(TestCase):
     def setUp(self):
         store(
             "tailscale.device",
-            {"name": "example-host", "online": True, "tags": ["tag:server"],
-             "addresses": ["100.64.0.5"]},
+            {"name": "example-host", "online": True, "tags": ["tag:server"], "addresses": ["100.64.0.5"]},
         )
         ProviderConnection.objects.create(
-            connection_ref="example-host", controller_id="example-controller",
-            provider="ssh", endpoint="100.64.0.5:7722", reachable=True, probed=True,
+            connection_ref="example-host",
+            controller_id="example-controller",
+            provider="ssh",
+            endpoint="100.64.0.5:7722",
+            reachable=True,
+            probed=True,
             observed_at=timezone.now(),
         )
         store(
@@ -193,9 +195,13 @@ class PortNameTests(TestCase):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 
         ProviderConnection.objects.create(
-            connection_ref="example-dns", controller_id="example-host",
-            provider="adguard", endpoint="http://127.0.0.1:3001", reachable=True,
-            probed=True, observed_at=timezone.now(),
+            connection_ref="example-dns",
+            controller_id="example-host",
+            provider="adguard",
+            endpoint="http://127.0.0.1:3001",
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
         )
 
         self.assertEqual(self.names("tcp:3001")["tcp:3001"], CONNECTION_LABELS["adguard"])
@@ -221,13 +227,15 @@ class PortNameTests(TestCase):
         from ..projection import projection_scope
 
         machine = SimpleNamespace(
-            name="example-host", aliases=(), reached_by=(), opened_by=(),
-            containers=(), runs_hq=runs_hq,
+            name="example-host",
+            aliases=(),
+            reached_by=(),
+            opened_by=(),
+            containers=(),
+            runs_hq=runs_hq,
         )
         with projection_scope(seed={"hq.served_port": port}):
-            (grant,) = grant_ports(
-                ({"src": ["*"], "dst": ["tag:server"], "ip": [entry]},), machines=[machine]
-            )
+            (grant,) = grant_ports(({"src": ["*"], "dst": ["tag:server"], "ip": [entry]},), machines=[machine])
         return dict(grant["ports"])[entry]
 
     def test_hq_names_the_port_it_serves_on_its_own_machine(self):
@@ -262,8 +270,10 @@ class TrustedNetworksWidthTests(TestCase):
 
         machine = SimpleNamespace(runs_hq=True, addresses=("100.64.0.5",))
         device = SimpleNamespace(addresses=("100.64.0.5",), reach=reach)
-        with mock.patch("hq.platform.application.connections.machines_once", return_value=(machine,)), \
-                mock.patch("hq.platform.application.tailnet.devices", return_value={"hq-box": device}):
+        with (
+            mock.patch("hq.platform.application.connections.machines_once", return_value=(machine,)),
+            mock.patch("hq.platform.application.tailnet.devices", return_value={"hq-box": device}),
+        ):
             return tailnet._policy_admits_only_named()
 
     def test_named_devices_only_means_the_width_exposes_nothing(self):
@@ -286,12 +296,18 @@ class PolicyDocumentTests(TestCase):
 
         from ..tailnet import policy as read_policy
 
-        policy(document=json.dumps({
-            "acls": [{"action": "accept", "src": ["group:admins"], "dst": ["tag:server:22"]},
-                     {"action": "accept", "src": ["autogroup:member"], "dst": ["tag:web:443"]}],
-            "groups": {"group:admins": ["someone@example.com"]},
-            "tagOwners": {"tag:server": ["group:admins"], "tag:web": ["group:admins"]},
-        }))
+        policy(
+            document=json.dumps(
+                {
+                    "acls": [
+                        {"action": "accept", "src": ["group:admins"], "dst": ["tag:server:22"]},
+                        {"action": "accept", "src": ["autogroup:member"], "dst": ["tag:web:443"]},
+                    ],
+                    "groups": {"group:admins": ["someone@example.com"]},
+                    "tagOwners": {"tag:server": ["group:admins"], "tag:web": ["group:admins"]},
+                }
+            )
+        )
 
         found = read_policy()
 
@@ -304,8 +320,7 @@ class PolicyDocumentTests(TestCase):
 
         from ..tailnet import policy as read_policy
 
-        policy(groups=[{"name": "group:read", "members": []}],
-               document=json.dumps({"groups": {"group:document": []}}))
+        policy(groups=[{"name": "group:read", "members": []}], document=json.dumps({"groups": {"group:document": []}}))
 
         self.assertEqual([group["name"] for group in read_policy().groups], ["group:read"])
 

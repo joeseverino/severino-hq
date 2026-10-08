@@ -1,17 +1,14 @@
 """Tailnet devices and the tailnet policy: settings HQ keeps, not things it made."""
 
-from __future__ import annotations
-
 import json
-
 from collections.abc import Mapping
 from typing import Any
 
 from pydantic import Field
 
+from ..connection_shapes import OAUTH_CLIENT
 from ..consoles import tailscale_machine
 from ..observations.contract import ReadingPart
-from ..connection_shapes import OAUTH_CLIENT
 from ..provider_spec import (
     ConnectionKind,
     ControllerVerification,
@@ -20,7 +17,6 @@ from ..provider_spec import (
     applies,
     expiry_phrase,
 )
-
 
 TAILNET_KIND = "tailscale.device"
 TAILNET_POLICY_KIND = "tailscale.policy"
@@ -59,10 +55,7 @@ class TailnetDeviceSpec(ProviderModel):
     key_expiry_disabled: bool = Field(
         default=False,
         title="Disable key expiry",
-        description=(
-            "Disables node key expiry. Without it, the device becomes "
-            "unreachable when its key expires."
-        ),
+        description=("Disables node key expiry. Without it, the device becomes unreachable when its key expires."),
     )
 
 
@@ -105,18 +98,14 @@ def _tailnet_device_key_hint(spec: dict[str, Any]) -> str:
     return f"{name}-{TAILNET_FACET}" if name else ""
 
 
-def _tailnet_device_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _tailnet_device_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """What HQ asked for about this device, beside what the tailnet reports."""
 
     wanted = "Never expires" if spec.get("key_expiry_disabled") else "Expires"
     observed = ""
     if status:
         observed = (
-            "Never expires"
-            if status.get("key_expiry_disabled")
-            else expiry_phrase(str(status.get("key_expires", "")))
+            "Never expires" if status.get("key_expiry_disabled") else expiry_phrase(str(status.get("key_expires", "")))
         )
     return (
         ("Device", "", str(spec.get("name", ""))),
@@ -144,8 +133,7 @@ def _tailnet_device_from_record(record: dict[str, Any]) -> dict[str, Any]:
 
 DEVICE = ProviderSpec(
     TAILNET_KIND,
-    "Settings HQ keeps for one device on your tailnet, such as key "
-    "expiry.",
+    "Settings HQ keeps for one device on your tailnet, such as key expiry.",
     TailnetDeviceSpec,
     actions={
         "reconcile": applies(
@@ -185,17 +173,18 @@ DEVICE = ProviderSpec(
     change_effects=(
         (
             "key_expiry_disabled",
-            "Applied on the next reconcile. Turning it off restores key "
-            "expiry.",
+            "Applied on the next reconcile. Turning it off restores key expiry.",
         ),
     ),
     removal_note=lambda spec: (
-        f"HQ stops managing {spec.get('name', 'this device')}. Its current "
-        "settings stay as they are."
+        f"HQ stops managing {spec.get('name', 'this device')}. Its current settings stay as they are."
     ),
 )
 
-def _policy_readout(spec: Mapping[str, Any] | None, status: Mapping[str, Any] | None) -> tuple[tuple[str, str, str], ...]:
+
+def _policy_readout(
+    spec: Mapping[str, Any] | None, status: Mapping[str, Any] | None
+) -> tuple[tuple[str, str, str], ...]:
     """How many grants, groups and tests the policy holds, counted from the
     document itself: what was last read when there is one, else what is asked.
 
@@ -221,8 +210,7 @@ def _policy_readout(spec: Mapping[str, Any] | None, status: Mapping[str, Any] | 
 
 POLICY = ProviderSpec(
     TAILNET_POLICY_KIND,
-    "The tailnet's access policy. HQ runs the policy's tests before "
-    "applying a change.",
+    "The tailnet's access policy. HQ runs the policy's tests before applying a change.",
     TailnetPolicySpec,
     actions={
         "reconcile": applies(
@@ -258,8 +246,7 @@ POLICY = ProviderSpec(
     change_effects=(
         (
             "document",
-            "Saving records it. Reconciling applies it if the policy's own "
-            "tests pass.",
+            "Saving records it. Reconciling applies it if the policy's own tests pass.",
         ),
     ),
     readout=_policy_readout,

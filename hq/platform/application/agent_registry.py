@@ -4,8 +4,6 @@ A first sighting and any change to an identity's grant are audited. Observation
 never blocks a request.
 """
 
-from __future__ import annotations
-
 import logging
 from datetime import timedelta
 
@@ -34,7 +32,8 @@ def observe(principal: Principal | None) -> None:
         _observe(principal)
     except Exception:  # noqa: BLE001 - observation never blocks a request
         logger.warning(
-            "Agent identity not recorded: %s", principal.actor,
+            "Agent identity not recorded: %s",
+            principal.actor,
             extra={"event": "agents.identity.unrecorded"},
         )
 

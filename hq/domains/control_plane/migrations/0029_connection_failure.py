@@ -4,15 +4,23 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0028_connection_reported_at'),
+        ("control_plane", "0028_connection_reported_at"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='providerconnection',
-            name='failure',
-            field=models.CharField(blank=True, choices=[('credential', 'credential'), ('permission', 'permission'), ('address', 'address'), ('network', 'network')], max_length=16),
+            model_name="providerconnection",
+            name="failure",
+            field=models.CharField(
+                blank=True,
+                choices=[
+                    ("credential", "credential"),
+                    ("permission", "permission"),
+                    ("address", "address"),
+                    ("network", "network"),
+                ],
+                max_length=16,
+            ),
         ),
     ]

@@ -5,17 +5,14 @@ boundary used by web, Command Center, API, and MCP, so an external write cannot
 quietly acquire different validation or audit behavior in each adapter.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 
+from hq.domains.contacts import d1
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
-from hq.domains.contacts import d1
 
 from .security import Capability, Principal
-
 
 CONTACT_STATUSES = frozenset({"unread", "read", "replied", "archived", "spam"})
 
@@ -24,21 +21,21 @@ class ContactSubmissionNotFound(ValueError):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ContactListCommand:
     status: str = ""
     query: str = ""
     limit: int = 100
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ContactReviewCommand:
     status: str
     assigned_to: str = ""
     admin_notes: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ContactDeleteCommand:
     confirm: str
 
@@ -55,15 +52,11 @@ def _status(value: str, *, allow_blank: bool = False) -> str:
 def _submission(identifier: int) -> dict[str, Any]:
     found = d1.get_submission(identifier)
     if found is None:
-        raise ContactSubmissionNotFound(
-            f"Contact submission #{identifier} was not found."
-        )
+        raise ContactSubmissionNotFound(f"Contact submission #{identifier} was not found.")
     return found
 
 
-def list_contact_submissions(
-    *, status: str = "", query: str = "", limit: int = 100
-) -> dict[str, Any]:
+def list_contact_submissions(*, status: str = "", query: str = "", limit: int = 100) -> dict[str, Any]:
     status = _status(status, allow_blank=True)
     if limit < 1 or limit > 500:
         raise ValueError("limit must be between 1 and 500")
@@ -83,11 +76,14 @@ def execute_contact_list(
 ) -> dict[str, Any]:
     del expected_updated_at
     principal.require(Capability.MANAGE_CONTACTS)
-    return {"ok": True, **list_contact_submissions(
-        status=command.status,
-        query=command.query,
-        limit=command.limit,
-    )}
+    return {
+        "ok": True,
+        **list_contact_submissions(
+            status=command.status,
+            query=command.query,
+            limit=command.limit,
+        ),
+    }
 
 
 def execute_contact_review(

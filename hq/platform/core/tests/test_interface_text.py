@@ -1,7 +1,5 @@
 """The one pass that reads what HQ and its extensions show people."""
 
-from __future__ import annotations
-
 import ast
 import sys
 import tempfile
@@ -49,54 +47,60 @@ def read(files, plugin_apps=(), worded=("host",)):
 class WordingTests(SimpleTestCase):
     def test_an_em_dash_is_found_outside_comments_and_docstrings(self):
         dash = interface_text.EM_DASH
-        found = read({
-            "host/page.html": f"{{# {dash} #}}\n<p>one {dash} two</p>\n",
-            "host/views.py": f'"""Doc {dash}."""\nLABEL = "one {dash} two"  # {dash}\n',
-        })
+        found = read(
+            {
+                "host/page.html": f"{{# {dash} #}}\n<p>one {dash} two</p>\n",
+                "host/views.py": f'"""Doc {dash}."""\nLABEL = "one {dash} two"  # {dash}\n',
+            }
+        )
         self.assertEqual(found["em_dashes"], [("host/page.html", 2), ("host/views.py", 2)])
 
     def test_a_plural_built_by_hand_is_found(self):
-        found = read({
-            "host/page.html": "{{ n }} row{{ n|pluralize }}\n{{ n }} account(s)\n",
-            "host/views.py": (
-                "a = f\"{n} row{'s' if n != 1 else ''}\"\n"
-                "b = f\"{n} row(s)\"\n"
-                "c = \"Duration(s)\"\n"
-            ),
-        })
+        found = read(
+            {
+                "host/page.html": "{{ n }} row{{ n|pluralize }}\n{{ n }} account(s)\n",
+                "host/views.py": ('a = f"{n} row{\'s\' if n != 1 else \'\'}"\nb = f"{n} row(s)"\nc = "Duration(s)"\n'),
+            }
+        )
         self.assertEqual(
             sorted(found["hand_plurals"]),
             [("host/page.html", 1), ("host/page.html", 2), ("host/views.py", 1), ("host/views.py", 2)],
         )
 
     def test_a_form_opened_inside_a_form_is_found_per_template(self):
-        found = read({
-            "host/a.html": "<form>\n<form>\n</form>\n",
-            "host/b.html": "<form>\n</form>\n<form></form>\n",
-        })
+        found = read(
+            {
+                "host/a.html": "<form>\n<form>\n</form>\n",
+                "host/b.html": "<form>\n</form>\n<form></form>\n",
+            }
+        )
         self.assertEqual(found["nested_forms"], [("host/a.html", 2)])
 
     def test_tests_migrations_and_hidden_trees_are_not_read(self):
         dash = interface_text.EM_DASH
         line = f'LABEL = "{dash}"\n'
-        found = read({
-            "host/views.py": line,
-            "host/test_views.py": line,
-            "host/tests/helpers.py": line,
-            "host/migrations/0001_initial.py": line,
-            "host/.venv/lib/module.py": line,
-            "host/node_modules/package/page.html": dash,
-        })
+        found = read(
+            {
+                "host/views.py": line,
+                "host/test_views.py": line,
+                "host/tests/helpers.py": line,
+                "host/migrations/0001_initial.py": line,
+                "host/.venv/lib/module.py": line,
+                "host/node_modules/package/page.html": dash,
+            }
+        )
         self.assertEqual(found["em_dashes"], [("host/views.py", 1)])
         self.assertEqual(found["files"], 1)
 
     def test_bad_bytes_and_unparsable_source_are_skipped_not_raised(self):
-        found = read({
-            "host/page.html": b"\xff\xfe" + interface_text.EM_DASH.encode(),
-            "host/binary.py": b"x = '\xff'\n",
-            "host/nulls.py": b"x = 1\x00\n",
-            "host/folder.py/inner.txt": "",
-        })
+        found = read(
+            {
+                "host/page.html": b"\xff\xfe" + interface_text.EM_DASH.encode(),
+                "host/binary.py": b"x = '\xff'\n",
+                "host/nulls.py": b"x = 1\x00\n",
+                "host/folder.py/inner.txt": "",
+            }
+        )
         self.assertEqual(found["em_dashes"], [("host/page.html", 1)])
 
     def test_each_file_is_parsed_once(self):
@@ -108,9 +112,7 @@ class WordingTests(SimpleTestCase):
 
     def test_a_root_inside_another_is_read_once(self):
         dash = interface_text.EM_DASH
-        found = read(
-            {"host/inner/views.py": f'LABEL = "{dash}"\n'}, worded=("host", "host/inner")
-        )
+        found = read({"host/inner/views.py": f'LABEL = "{dash}"\n'}, worded=("host", "host/inner"))
         self.assertEqual(found["em_dashes"], [("host/inner/views.py", 1)])
 
 
@@ -118,28 +120,32 @@ class CountedPhraseTests(SimpleTestCase):
     """A literal phrase that cannot agree is found in source, not by a page render."""
 
     def test_a_template_phrase_without_its_plural_is_found(self):
-        found = read({
-            "host/page.html": (
-                '{{ n|counted:"zone band" }}\n'
-                '{{ n|counted:"zone band,zone bands" }}\n'
-                "{{ n|counted:'change' }}\n"
-                "{{ n|counted:'' }}\n"
-            ),
-        })
+        found = read(
+            {
+                "host/page.html": (
+                    '{{ n|counted:"zone band" }}\n'
+                    '{{ n|counted:"zone band,zone bands" }}\n'
+                    "{{ n|counted:'change' }}\n"
+                    "{{ n|counted:'' }}\n"
+                ),
+            }
+        )
         self.assertEqual(found["unagreeable_counts"], [("host/page.html", 1), ("host/page.html", 4)])
 
     def test_a_python_call_with_literal_words_is_found(self):
-        found = read({
-            "host/views.py": (
-                "counted(n, 'content item')\n"
-                "counted(n, 'content item', 'content items')\n"
-                "ui.counted(n, 'row needs you', many='rows need you')\n"
-                "counted(n, 'change')\n"
-                "counted(n, phrase)\n"
-                "counted(n, 'zone band', plural)\n"
-                "ui.counted(n, 'zone band')\n"
-            ),
-        })
+        found = read(
+            {
+                "host/views.py": (
+                    "counted(n, 'content item')\n"
+                    "counted(n, 'content item', 'content items')\n"
+                    "ui.counted(n, 'row needs you', many='rows need you')\n"
+                    "counted(n, 'change')\n"
+                    "counted(n, phrase)\n"
+                    "counted(n, 'zone band', plural)\n"
+                    "ui.counted(n, 'zone band')\n"
+                ),
+            }
+        )
         self.assertEqual(found["unagreeable_counts"], [("host/views.py", 1), ("host/views.py", 7)])
 
     def test_an_installed_extension_is_read_wherever_it_is_installed(self):

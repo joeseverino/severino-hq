@@ -7,55 +7,53 @@ answer. Both read the same declarations: there is no second store and no
 second truth, only a second way of slicing the first.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
-from hq.platform.application.routes import reverse
 from django.utils.html import format_html
 from django.views import View
 
+from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.application.adoption import AdoptCommand, adopt
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.infrastructure import (
+    ManagedResourceCommand,
     NotFoundError,
     PolicyError,
-    ManagedResourceCommand,
     save_managed_resource,
 )
-from hq.platform.application.pages import PageAction, page_context
-from hq.platform.application.entity_links import entity_link
-from hq.platform.application.relationships import relationships_for
-from hq.platform.application.resource_capabilities import public_dns_enabled, resource_capabilities
 from hq.platform.application.inventory import inventory_state
-from hq.platform.application.adoption import AdoptCommand, adopt
-from hq.platform.application.security import web_principal, safe_next
-
-from .resource_form_views import _readable_error
-from hq.platform.application.pins import DOMAIN, pinned, toggle
 from hq.platform.application.mail_policy import (
     DMARC_TAGS,
-    SPF_LOOKUP_LIMIT,
     SPF_DEFAULTS,
+    SPF_LOOKUP_LIMIT,
     SpfTerm,
     compose_dmarc,
     compose_spf,
     mail_overview,
     parse_spf,
 )
-from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.pages import PageAction, page_context
+from hq.platform.application.pins import DOMAIN, pinned, toggle
+from hq.platform.application.relationships import relationships_for
+from hq.platform.application.resource_capabilities import public_dns_enabled, resource_capabilities
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.ui import counted
 from hq.platform.application.zones import (
-    find_zone,
     RECORD_KIND,
     ZONE_KIND,
     adopt_zone_records,
     domain_context,
+    find_zone,
     zone_catalog,
 )
-from hq.platform.application.ui import counted
-from hq.domains.control_plane.names import normalized_hostname
+
+from .resource_form_views import _readable_error
 
 
 def _records_lede(zone) -> str:
@@ -174,8 +172,7 @@ class ZoneMailView(View):
                 "spf_default": _spf_default(_spf_value(found)),
                 **page_context(
                     f"Email for {found.zone}",
-                    "Who receives mail for this domain, who may send as it, and what "
-                    "happens to forgeries.",
+                    "Who receives mail for this domain, who may send as it, and what happens to forgeries.",
                     trail=((found.zone, found.url),),
                 ),
             },
@@ -202,9 +199,7 @@ class ZoneMailView(View):
         except (DjangoValidationError, PolicyError, NotFoundError, ValueError) as exc:
             messages.error(request, _readable_error(exc))
             return redirect("zones:mail", zone=zone.zone)
-        messages.success(
-            request, f"{what} saved. Publishing within a minute."
-        )
+        messages.success(request, f"{what} saved. Publishing within a minute.")
         return redirect("zones:mail", zone=zone.zone)
 
     def post(self, request, zone: str):
@@ -227,22 +222,17 @@ class ZoneMailView(View):
                 terms.append(SpfTerm(qualifier, mechanism.lower(), argument))
             terms.append(SpfTerm(request.POST.get("default", "-"), "all", ""))
             spf_record = next(
-                (r for section in overview.sections if section.id == "sending"
-                 for r in section.records),
+                (r for section in overview.sections if section.id == "sending" for r in section.records),
                 None,
             )
-            return self._publish(
-                request, found, spf_record, compose_spf(tuple(terms)), "SPF"
-            )
+            return self._publish(request, found, spf_record, compose_spf(tuple(terms)), "SPF")
 
         # Unknown tags survive: the record belongs to the operator, and an
         # editor that drops what it does not model deletes policy silently.
         tags = dict(overview.dmarc_tags)
         for tag in DMARC_TAGS:
             tags[tag.id] = request.POST.get(tag.id, "").strip()
-        return self._publish(
-            request, found, overview.dmarc_record, compose_dmarc(tags), "DMARC"
-        )
+        return self._publish(request, found, overview.dmarc_record, compose_dmarc(tags), "DMARC")
 
 
 class ZonePinView(View):
@@ -269,11 +259,7 @@ def _pin_action(zone) -> PageAction:
         "★ Opens first" if zone.pinned else "☆ Open this one first",
         reverse("zones:pin", args=[zone.zone]),
         method="post",
-        title=(
-            "Domains opens on this one. Press to undo."
-            if zone.pinned
-            else "Make Domains open on this one."
-        ),
+        title=("Domains opens on this one. Press to undo." if zone.pinned else "Make Domains open on this one."),
     )
 
 
@@ -344,9 +330,7 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
                 reverse("control_plane:remove", args=[resource.key]),
                 danger=True,
                 title=(
-                    "HQ stops changing this domain. Its records stay live."
-                    if capabilities.removal == "forget"
-                    else ""
+                    "HQ stops changing this domain. Its records stay live." if capabilities.removal == "forget" else ""
                 ),
             )
         )
@@ -376,15 +360,14 @@ class ZoneAdoptView(View):
         try:
             records = adopt_zone_records(zone, principal=principal)
             adopted = len(records["adopted"])
-        except (NotFoundError, PolicyError, DjangoValidationError):
+        except NotFoundError, PolicyError, DjangoValidationError:
             # The domain is declared either way. A zone with nothing left to
             # take on is the ordinary case, not a failure worth interrupting.
             adopted = 0
 
         messages.success(
             request,
-            f"HQ now manages {zone} and {counted(adopted, 'record')} in it. "
-            "Nothing changed at Cloudflare.",
+            f"HQ now manages {zone} and {counted(adopted, 'record')} in it. Nothing changed at Cloudflare.",
         )
         return redirect("zones:detail", zone=zone)
 

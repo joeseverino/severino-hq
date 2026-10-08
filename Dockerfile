@@ -3,22 +3,26 @@
 # as a non-root user.
 
 # Every stage pins its base by digest; Dependabot bumps it on these lines.
-FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS build
-ENV PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_ROOT_USER_ACTION=ignore
+# uv comes from its own image, as in composition/Dockerfile.
+FROM ghcr.io/astral-sh/uv:0.12.23@sha256:61d393e44e249f2e4b526b6c7ddcecce245946826e608e11c93ad4f5bba55b21 AS uv
+FROM python:3.14-slim-bookworm@sha256:c8137f4c460908c8763f281c8f22c431eb5c538514ba9553fc3a89c06b7cfb88 AS build
+COPY --from=uv /uv /usr/local/bin/uv
+# The cache mount and /install are different filesystems, so files are copied.
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
 WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml uv.lock ./
-COPY scripts/dependency_config.py scripts/dependency_config.py
-# Bootstrap uv from the same approved artifact hashes the lock records.
-RUN python scripts/dependency_config.py uv-requirements > /tmp/uv-bootstrap.txt \
-    && pip install --require-hashes --no-deps --ignore-installed --prefix=/uv-bootstrap -r /tmp/uv-bootstrap.txt \
-    && /uv-bootstrap/bin/uv export --locked --no-default-groups --no-emit-project \
+# The export is complete and hashed: nothing resolves, and a file that differs
+# from the lock is refused.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv export --locked --no-default-groups --no-emit-project \
         --format requirements-txt --output-file /tmp/hq-runtime.txt > /dev/null \
-    && pip install --require-hashes --prefix=/install -r /tmp/hq-runtime.txt
+    && uv pip install --python /usr/local/bin/python --prefix /install \
+        --require-hashes --no-deps -r /tmp/hq-runtime.txt
 
 
 # The controller and the root secret renderer, one static binary each: CGO off,
@@ -42,7 +46,7 @@ RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq
     && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-secrets ./cmd/hq-secrets
 
 
-FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS runtime
+FROM python:3.14-slim-bookworm@sha256:c8137f4c460908c8763f281c8f22c431eb5c538514ba9553fc3a89c06b7cfb88 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base

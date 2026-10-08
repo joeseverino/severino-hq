@@ -13,13 +13,11 @@ Nothing here reads anything. The answers are only as fresh as those readings,
 and a page says when they were taken.
 """
 
-from __future__ import annotations
-
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping
-
+from typing import Any
 
 from hq.domains.control_plane.observations.portainer import (
     IMAGE_KIND as PULLED_KIND,
@@ -35,8 +33,8 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .github_public import github_repository
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, StandingWords
+from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
 from .projection import projection_scope, read_once
 from .timestamps import moment
@@ -56,7 +54,12 @@ DECLARED = "declared"
 LABEL = "label"
 PROVENANCE = "provenance"
 REGISTRY = "registry"
-_KNOWN_BY = {DECLARED: "as set in HQ", LABEL: "by its label", PROVENANCE: "by its provenance", REGISTRY: "by its registry"}
+_KNOWN_BY = {
+    DECLARED: "as set in HQ",
+    LABEL: "by its label",
+    PROVENANCE: "by its provenance",
+    REGISTRY: "by its registry",
+}
 
 
 # Docker's status ends with its health check's verdict: "Up 11 hours (healthy)".
@@ -83,7 +86,7 @@ def check_of(status: str) -> str:
     return f"health check {verdict.removeprefix('health: ')}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Running:
     """A container a controller last saw, described as a person would read it.
 
@@ -120,7 +123,7 @@ class Running:
         record: dict[str, Any],
         observed_at: Any,
         watchers: dict[tuple[str, str], tuple[str, bool]] | None = None,
-    ) -> "Running":
+    ) -> Running:
         host = str(record.get("host", ""))
         name = str(record.get("name", ""))
         return cls(
@@ -130,9 +133,7 @@ class Running:
             image=str(record.get("image", "")),
             state=str(record.get("state", "")),
             status=str(record.get("status", "")),
-            ports=tuple(
-                int(port) for port in record.get("ports") or () if str(port).isdigit()
-            ),
+            ports=tuple(int(port) for port in record.get("ports") or () if str(port).isdigit()),
             network_mode=str(record.get("network_mode", "")),
             host_address=str(record.get("host_address", "")),
             portainer_managed=bool(record.get("portainer_managed")),
@@ -259,7 +260,7 @@ def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
     }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Standing(StandingWords):
     """What is known about one image at one version, wherever it runs."""
 
@@ -418,7 +419,7 @@ class Standing(StandingWords):
         return "Update status unknown"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Container:
     running: Any
     machine: Any
@@ -476,15 +477,13 @@ class Container:
         return _mounts_from_volumes().get((self.machine.name, self.running.name))
 
     @property
-    def shared_mounts(self) -> dict[str, tuple["Container", ...]]:
+    def shared_mounts(self) -> dict[str, tuple[Container, ...]]:
         """The other containers on its machine that mount each of its sources."""
 
         mounts = self.mounts or ()
         wanted = {str(mount.get("source", "")) for mount in mounts}
         users = {
-            source: names
-            for source, names in _mount_users().get(self.machine.name, {}).items()
-            if source in wanted
+            source: names for source, names in _mount_users().get(self.machine.name, {}).items() if source in wanted
         }
         if not any(name != self.running.name for names in users.values() for name in names):
             return {}
@@ -536,20 +535,25 @@ def _containers() -> list[Container]:
     serves = served_by()
     found = []
     for machine in machines_once():
-        for running in machine.containers:
-            found.append(
-                Container(
-                    running=running,
-                    machine=machine,
-                    standing=_standing(running.image, machine.name, running.name),
-                    serves=tuple(sorted(serves.get((machine.name, running.name), ()))),
-                    runtime=_runtimes().get((machine.name, running.name)),
-                )
+        found.extend(
+            Container(
+                running=running,
+                machine=machine,
+                standing=_standing(running.image, machine.name, running.name),
+                serves=tuple(sorted(serves.get((machine.name, running.name), ()))),
+                runtime=_runtimes().get((machine.name, running.name)),
             )
+            for running in machine.containers
+        )
     order = (VULNERABLE, BEHIND, UNKNOWN, CURRENT)
     return sorted(
         found,
-        key=lambda item: (order.index(item.standing.state), not item.standing.serious, item.machine.name, item.running.name),
+        key=lambda item: (
+            order.index(item.standing.state),
+            not item.standing.serious,
+            item.machine.name,
+            item.running.name,
+        ),
     )
 
 
@@ -844,7 +848,11 @@ def _declared_sources() -> dict[tuple[str, str], str]:
 
         found = {}
         for resource in enabled_resources():
-            named = github_repository(str(resource.spec.get("source", "") or "")) if resource.kind == CONTAINER_KIND else None
+            named = (
+                github_repository(str(resource.spec.get("source", "") or ""))
+                if resource.kind == CONTAINER_KIND
+                else None
+            )
             if named:
                 host = str(resource.spec.get("host", ""))
                 on = machine(host)

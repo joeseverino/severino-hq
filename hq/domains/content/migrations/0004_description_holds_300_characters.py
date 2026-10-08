@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('content', '0003_collapse_status_and_add_page_type'),
+        ("content", "0003_collapse_status_and_add_page_type"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='contentitem',
-            name='topic',
+            model_name="contentitem",
+            name="topic",
             field=models.CharField(blank=True, max_length=300),
         ),
     ]

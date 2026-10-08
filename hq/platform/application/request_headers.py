@@ -1,11 +1,9 @@
 """The request headers HQ reads, the ones it declines to, and how each is shown."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Header:
     """One header as it arrived, and what HQ did with it."""
 
@@ -49,20 +47,15 @@ _CREDENTIAL_WORDS = ("auth", "token", "secret", "key", "jwt", "assertion", "sess
 def is_redacted(name: str) -> bool:
     lowered = name.lower()
     return name in REDACTED or any(word in lowered for word in _CREDENTIAL_WORDS)
+
+
 # Headers deliberately not believed, and the reason. Without these the page
 # lists a header carrying the correct answer as merely ignored, which reads as
 # an oversight rather than as the safer of two choices.
 HEADERS_DECLINED = {
-    "X-Real-Ip": (
-        "One address from the proxy. HQ takes your address from "
-        "X-Forwarded-For instead."
-    ),
-    "X-Forwarded-Scheme": (
-        "Repeats X-Forwarded-Proto, which is the one HQ reads."
-    ),
-    "X-Forwarded-Host": (
-        "HQ takes the name from the Host header and ignores this copy."
-    ),
+    "X-Real-Ip": ("One address from the proxy. HQ takes your address from X-Forwarded-For instead."),
+    "X-Forwarded-Scheme": ("Repeats X-Forwarded-Proto, which is the one HQ reads."),
+    "X-Forwarded-Host": ("HQ takes the name from the Host header and ignores this copy."),
 }
 
 
@@ -87,11 +80,7 @@ def headers_of(request) -> tuple[Header, ...]:
         found.append(
             Header(
                 name=name,
-                value=(
-                    f"present, {len(str(value))} characters"
-                    if redacted
-                    else str(value)
-                ),
+                value=(f"present, {len(str(value))} characters" if redacted else str(value)),
                 purpose=HEADERS_READ.get(name, ""),
                 declined=HEADERS_DECLINED.get(name, ""),
                 redacted=redacted,

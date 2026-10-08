@@ -1,7 +1,5 @@
 """The content resource, declared on its domain in application/domains.py."""
 
-from __future__ import annotations
-
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability

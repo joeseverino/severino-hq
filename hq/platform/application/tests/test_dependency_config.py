@@ -1,7 +1,5 @@
 """Dependency bootstrap and config-reader contracts."""
 
-from __future__ import annotations
-
 import importlib.util
 import json
 import tempfile
@@ -27,15 +25,22 @@ class DependencyConfigTests(SimpleTestCase):
         for declarations in (["uv>=0.12"], ["uv==0.12", "uv==0.13"]):
             with self.subTest(declarations=declarations), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                (root / "pyproject.toml").write_text("[dependency-groups]\ntools = " + json.dumps(declarations) + "\nbrowser = []\n")
+                (root / "pyproject.toml").write_text(
+                    "[dependency-groups]\ntools = " + json.dumps(declarations) + "\nbrowser = []\n"
+                )
                 with self.assertRaisesRegex(ValueError, "one exact tool pin"):
                     config.tool_pin("uv", root)
 
     def test_bootstrap_refuses_unhashed_or_nonregistry_artifacts(self):
-        for source, hashes in (("{path = '.'}", '[{hash = "sha256:' + "a" * 64 + '"}]'), ('{registry = "https://pypi.org/simple"}', '[]')):
+        for source, hashes in (
+            ("{path = '.'}", '[{hash = "sha256:' + "a" * 64 + '"}]'),
+            ('{registry = "https://pypi.org/simple"}', "[]"),
+        ):
             with self.subTest(source=source, hashes=hashes), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 (root / "pyproject.toml").write_text('[dependency-groups]\ntools = ["uv==0.12"]\nbrowser = []\n')
-                (root / "uv.lock").write_text('[[package]]\nname="uv"\nversion="0.12"\nsource=' + source + '\nwheels=' + hashes + '\n')
+                (root / "uv.lock").write_text(
+                    '[[package]]\nname="uv"\nversion="0.12"\nsource=' + source + "\nwheels=" + hashes + "\n"
+                )
                 with self.assertRaises(ValueError):
                     config.uv_requirements(root)

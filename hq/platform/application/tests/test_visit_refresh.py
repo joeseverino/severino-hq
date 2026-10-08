@@ -1,11 +1,9 @@
 """An open page asks for its own readings: only those, only when due, only by POST."""
 
-from __future__ import annotations
-
-from datetime import timedelta
-from pathlib import Path
 import re
 import tempfile
+from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -17,9 +15,9 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, ReadRequest
 
 from .. import visit_refresh
+from ..asks import Standing, read_standing, watched
 from ..freshness import VISIT_EVERY
 from ..security import Capability, Principal, cli_principal
-from ..asks import Standing, read_standing, watched
 from ..visit_refresh import Reads, askable, request_visit_refresh
 
 DIRECTORY = Path(tempfile.mkdtemp())
@@ -167,8 +165,8 @@ class VisitRefreshTests(TestCase):
     def test_nothing_is_asked_for_that_could_not_be_answered(self):
         """A request nothing answers forces sweeps until it expires."""
 
-        store("tls.certificate", age=OLD)   # declared, and no sweep reads it
-        store("registry.domain", age=OLD)   # read by HQ, not the controller
+        store("tls.certificate", age=OLD)  # declared, and no sweep reads it
+        store("registry.domain", age=OLD)  # read by HQ, not the controller
         store("a.kind.nothing.declares", age=OLD)
 
         with page("tls.certificate", "registry.domain", "a.kind.nothing.declares", "npm.proxy_host"):
@@ -279,8 +277,7 @@ class AskableTests(TestCase):
         found = sorted(
             str(path.relative_to(root))
             for path in (root / "controller" / "providers").glob("*.go")
-            if not path.name.endswith("_test.go")
-            and opens_a_shell.search(path.read_text(encoding="utf-8"))
+            if not path.name.endswith("_test.go") and opens_a_shell.search(path.read_text(encoding="utf-8"))
         )
 
         self.assertEqual(
@@ -319,12 +316,16 @@ class SubjectTests(TestCase):
         from ..machines import Machine
 
         ProviderConnection.objects.create(
-            controller_id="example-controller", connection_ref="example-tailnet",
-            provider="tailscale", observed_at=timezone.now(),
+            controller_id="example-controller",
+            connection_ref="example-tailnet",
+            provider="tailscale",
+            observed_at=timezone.now(),
         )
         ProviderConnection.objects.create(
-            controller_id="example-controller", connection_ref="example-shell",
-            provider="ssh", observed_at=timezone.now(),
+            controller_id="example-controller",
+            connection_ref="example-shell",
+            provider="ssh",
+            observed_at=timezone.now(),
         )
         found = Machine(name="example-host", reached_by=("example-tailnet", "example-shell"))
 
@@ -428,9 +429,7 @@ class VisitRefreshViewTests(TestCase):
             for query in ({}, {"subject": "example", "name": "known"}, {"watch": "forged"}, {"watch": "x" * 5000}):
                 with self.subTest(query=sorted(query)):
                     self.assertEqual(self.client.get(self.url, query).status_code, 405)
-                    self.assertEqual(
-                        self.client.get(reverse("control_plane:read_status"), query).status_code, 404
-                    )
+                    self.assertEqual(self.client.get(reverse("control_plane:read_status"), query).status_code, 404)
 
         self.assertEqual(asked(), set())
 

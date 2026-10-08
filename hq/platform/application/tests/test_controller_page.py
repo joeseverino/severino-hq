@@ -1,12 +1,10 @@
 """The controller's own page: what HQ knows of it, from what it left behind."""
 
-from __future__ import annotations
-
 import os
-from datetime import timedelta
-from pathlib import Path
 import tempfile
 import time
+from datetime import timedelta
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -55,7 +53,7 @@ class ControllerPageTests(TestCase):
 
         page = controller_page()
 
-        self.assertEqual([reading.kind for reading in page.readings][0], "tailscale.device")
+        self.assertEqual(next(reading.kind for reading in page.readings), "tailscale.device")
         self.assertEqual(page.failing, 1)
         results = {reading.kind: (reading.ok, reading.result) for reading in page.readings}
         self.assertEqual(results["adguard.rewrite"], (True, "Read"))
@@ -76,7 +74,12 @@ class ControllerPageTests(TestCase):
 
     def test_work_and_reads_waiting_for_it_are_listed_and_finished_work_is_not(self):
         resource = ManagedResource.objects.create(key="example-dns", kind="adguard.rewrite", spec={})
-        asked = {"resource": resource, "action": "reconcile", "requested_actor": "someone", "requested_interface": "web"}
+        asked = {
+            "resource": resource,
+            "action": "reconcile",
+            "requested_actor": "someone",
+            "requested_interface": "web",
+        }
         OperationRequest.objects.create(**asked, idempotency_key="waiting")
         OperationRequest.objects.create(
             **asked,
@@ -116,4 +119,4 @@ class ControllerPageTests(TestCase):
         user = get_user_model().objects.create_user(username="someone", password="not-used-here")
         self.client.force_login(user)
 
-        self.assertContains(self.client.get("/"), 'href="%s"' % reverse("control_plane:controller"))
+        self.assertContains(self.client.get("/"), f'href="{reverse("control_plane:controller")}"')

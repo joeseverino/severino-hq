@@ -10,8 +10,6 @@ revoked one keeps working. The reading is one fact per renderer on the node of
 the controller that read it, and the rules here read those facts.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -19,10 +17,11 @@ from typing import Any
 
 from hq.domains.control_plane.observations.host import (
     RENDER_READ,
-    RENDER_UNREADABLE,
     RENDER_STATUS_KIND,
+    RENDER_UNREADABLE,
 )
 
+from .cadence import slowest_sweep_interval
 from .derivations import passed
 from .finding_model import (
     Finding,
@@ -102,7 +101,7 @@ SYNC_ACTIVE = "ACTIVE"
 SYNC_UNREPORTED = "not reported"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Rendering(FactRow):
     """One renderer as its fact carries it: words and instants, in field order."""
 
@@ -120,6 +119,8 @@ class Rendering(FactRow):
     # never reached Connect.
     sync: str = ""
     sync_read_at: str = ""
+    # When the controller read the document.
+    read_at: str = ""
 
     @property
     def name(self) -> str:
@@ -132,27 +133,35 @@ class Rendering(FactRow):
     def unconfirmed(self, now: datetime) -> bool:
         """Whether nothing has confirmed the files current within ``CONFIRMED_WITHIN``."""
 
-        return _overdue(self.confirmed_at, CONFIRMED_WITHIN, now)
+        return self._behind(self.confirmed_at, CONFIRMED_WITHIN, now)
 
     def unrendered(self, now: datetime) -> bool:
         """Whether no full read has happened within ``RENDERED_WITHIN``."""
 
-        return _overdue(self.rendered_at, RENDERED_WITHIN, now)
+        return self._behind(self.rendered_at, RENDERED_WITHIN, now)
+
+    def _behind(self, stamp: str, within: timedelta, now: datetime) -> bool:
+        """Whether ``stamp`` was more than ``within`` old when the document was
+        read. A stamp that names no instant is: a renderer that has never
+        succeeded has nothing current.
+
+        A document says how things stood when it was read. While HQ is not in
+        use the controller reads hours apart, and a renderer that has run every
+        hour since is not behind for that. A reading older than the slowest
+        the controller ever reads means it has stopped reading, and then what
+        the document described is measured against now, through ``passed``, so
+        the answer says when it stops holding.
+        """
+
+        when, read = moment(stamp), moment(self.read_at)
+        if when is None:
+            return True
+        if read is None or passed(read + slowest_sweep_interval(), now=now):
+            return passed(when + within, now=now)
+        return read - when > within
 
 
-def _overdue(stamp: str, within: timedelta, now: datetime) -> bool:
-    """Whether ``stamp`` is more than ``within`` old. A stamp that names no
-    instant is: a renderer that has never succeeded has nothing current.
-
-    The one threshold against the clock in this module, asked of the estate's
-    own ``now`` through ``passed``, so the answer says when it stops holding.
-    """
-
-    when = moment(stamp)
-    return when is None or passed(when + within, now=now)
-
-
-def _rendering(record: dict[str, Any]) -> Rendering:
+def _rendering(record: dict[str, Any], read_at: datetime | None = None) -> Rendering:
     status = record.get("status") or {}
     attempt = status.get("last_attempt") or {}
     success = status.get("last_success") or {}
@@ -178,6 +187,7 @@ def _rendering(record: dict[str, Any]) -> Rendering:
         rendered_at=str(success.get("rendered_at", "")),
         sync=sync,
         sync_read_at=str((connect or {}).get("read_at", "")),
+        read_at=read_at.isoformat() if read_at else "",
     )
 
 
@@ -188,7 +198,11 @@ def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
         nodes,
         machine,
         RENDER_STATUS_KIND,
-        lambda snapshot: rows_of(snapshot, _rendering, lambda reason: Rendering(reason=reason)),
+        lambda snapshot: rows_of(
+            snapshot,
+            lambda record: _rendering(record, snapshot.observed_at),
+            lambda reason: Rendering(reason=reason),
+        ),
     )
 
 
@@ -204,9 +218,7 @@ def failed_units(node: TopologyNode) -> frozenset[str]:
     """
 
     return frozenset(
-        unit
-        for rendering in stated_on(node)
-        if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
+        unit for rendering in stated_on(node) if rendering.failed and (unit := RENDERER_UNITS.get(rendering.renderer))
     )
 
 
@@ -232,9 +244,7 @@ def _run_again(
         step
         for rendering in renderings
         if (unit := RENDERER_UNITS.get(rendering.renderer))
-        for step in machine_step(
-            label + _job(rendering, renderings), node.label, f"systemctl start {unit}", notes
-        )
+        for step in machine_step(label + _job(rendering, renderings), node.label, f"systemctl start {unit}", notes)
     )
 
 
@@ -247,10 +257,7 @@ def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[Ope
             "See why" + _job(rendering, renderings),
             node.label,
             unit,
-            (
-                "Look for the line with event=secrets.render.failed. "
-                "The lines above it say what was refused.",
-            ),
+            ("Look for the line with event=secrets.render.failed. The lines above it say what was refused.",),
         )
     )
 
@@ -371,9 +378,7 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                     f"1Password in full every {duration(FULL_READ_EVERY)}. The job is "
                     "either not running or failing before it starts."
                 ),
-                evidence=tuple(
-                    item for rendering in stale for item in _stale_evidence(rendering, estate.now)
-                ),
+                evidence=tuple(item for rendering in stale for item in _stale_evidence(rendering, estate.now)),
                 steps=tuple(
                     step
                     for rendering in stale
@@ -430,8 +435,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 steps=(
                     OperatorStep(
-                        label=f"Restart 1Password Connect on {node.label} and read its "
-                        "sync container's log",
+                        label=f"Restart 1Password Connect on {node.label} and read its sync container's log",
                         notes=("TOKEN_NEEDED means it has not been given its credentials file.",),
                     ),
                     *_run_again(node, stalled, "Then run the refresh again"),
@@ -477,9 +481,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                         ),
                     )
                 ),
-                steps=_run_again(
-                    node, unread, "Run it once", ("If this stays, deploy HQ.",)
-                ),
+                steps=_run_again(node, unread, "Run it once", ("If this stays, deploy HQ.",)),
                 no_help_reason=cannot_run_commands(node.label),
             )
         )
@@ -494,8 +496,7 @@ RULES: tuple[FindingRule, ...] = (
         "serious",
         _failing,
         operator_action=(
-            "On the machine, read the refresh job's log for why it failed, "
-            "fix that, then start the job again."
+            "On the machine, read the refresh job's log for why it failed, fix that, then start the job again."
         ),
         no_help_reason=cannot_run_commands(),
     ),
@@ -504,9 +505,7 @@ RULES: tuple[FindingRule, ...] = (
         "Credentials not refreshed lately",
         "serious",
         _stale,
-        operator_action=(
-            "On the machine, check that the refresh job's timer is on, then start the job."
-        ),
+        operator_action=("On the machine, check that the refresh job's timer is on, then start the job."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -514,9 +513,7 @@ RULES: tuple[FindingRule, ...] = (
         "1Password Connect has stopped syncing",
         "attention",
         _sync_stalled,
-        operator_action=(
-            "Restart 1Password Connect on the machine, then start the refresh job."
-        ),
+        operator_action=("Restart 1Password Connect on the machine, then start the refresh job."),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(
@@ -524,9 +521,7 @@ RULES: tuple[FindingRule, ...] = (
         "Cannot tell whether credentials are fresh",
         "attention",
         _unread,
-        operator_action=(
-            "Start the refresh job on the machine. If this stays, deploy HQ."
-        ),
+        operator_action=("Start the refresh job on the machine. If this stays, deploy HQ."),
         no_help_reason=cannot_run_commands(),
     ),
 )

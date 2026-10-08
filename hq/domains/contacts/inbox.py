@@ -7,8 +7,6 @@ the header count and the search page read that stored copy. D1 is read by
 a write to D1 runs after it changes a submission; no GET reads D1 for these.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from hq.platform.application import readings
@@ -52,9 +50,7 @@ def search(q: str, limit: int) -> list[dict]:
     wanted = q.strip().casefold()
     if not wanted:
         return []
-    return [row for row in _rows() if wanted in str(row.get("name", "")).casefold()][
-        :limit
-    ]
+    return [row for row in _rows() if wanted in str(row.get("name", "")).casefold()][:limit]
 
 
 def refresh(*, force: bool = False) -> None:

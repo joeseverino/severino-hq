@@ -7,8 +7,6 @@ extension's tables cannot be named here: a derivation learns those the first
 time it reads them and keys its answers on them from then on (``derivations``).
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 # The estate: what is declared, what the controller observed, and the readings
@@ -31,7 +29,8 @@ ESTATE_READS: tuple[str, ...] = (
 )
 
 # The composed queue: the estate, and each record domain that reports work.
-QUEUE_READS: tuple[str, ...] = ESTATE_READS + (
+QUEUE_READS: tuple[str, ...] = (
+    *ESTATE_READS,
     "assets.Asset",
     "content.ContentItem",
     "content.ContentItem_related_documentation",
@@ -43,12 +42,12 @@ QUEUE_READS: tuple[str, ...] = ESTATE_READS + (
 
 # The dashboard's cards and overviews: the estate, and each record domain's
 # headline reading.
-DASHBOARD_READS: tuple[str, ...] = ESTATE_READS + (
+DASHBOARD_READS: tuple[str, ...] = (
+    *ESTATE_READS,
     "content.ContentItem",
     "docs_index.DocumentationRecord",
     "expenses.Expense",
 )
-
 
 
 def composed_variant() -> tuple[Any, ...]:

@@ -18,8 +18,6 @@ contract test (``application/tests/test_item_help.py``) holds every host provide
 to it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from typing import Any
 
@@ -69,9 +67,7 @@ def cannot_step(reason: str) -> WorkflowStep:
     return WorkflowStep(CANNOT, "Why HQ cannot do this for you", reason, "blocked")
 
 
-def commands(
-    key: str, runs: Iterable[tuple[str, str]], *, then: str = "", reason: str = ""
-) -> WorkflowPlan:
+def commands(key: str, runs: Iterable[tuple[str, str]], *, then: str = "", reason: str = "") -> WorkflowPlan:
     """Commands to run, in order, as ``(label, command)`` pairs; ``then`` is a
     last step said in words, and ``reason`` is why they cannot be run from HQ,
     where that is worth saying."""

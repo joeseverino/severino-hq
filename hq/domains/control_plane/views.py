@@ -1,44 +1,31 @@
-from __future__ import annotations
-
 import json
 import uuid
 from functools import cached_property
-from typing import Any
+from typing import Any, override
 
 from django.contrib import messages
-
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from hq.platform.application.routes import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView
 
 from hq.platform.application.action_links import command_url
-from hq.platform.application.inventory import service_hostnames
+from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.infrastructure import (
     PolicyError,
     declared_machines,
     delivery_targets,
     is_drifted,
-    serialize_resource,
     serialize_public_status,
+    serialize_resource,
 )
-
-from hq.platform.application.resource_operations import (
-    ACTION_LABELS,
-    HISTORY_WINDOW,
-    OperationCommand,
-    changes,
-    operation_summary,
-    requested_by,
-    resource_history,
-    request_certificate_renewal,
-    request_lifecycle,
-    request_reconcile,
-    request_removal,
-)
-from hq.platform.application.entity_links import kind_label, record_name, web_url
+from hq.platform.application.inventory import service_hostnames
+from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.relationships import relationships_for
+from hq.platform.application.resource_capabilities import (
+    VERB_LABELS,
+    resource_capabilities,
+)
 from hq.platform.application.resource_context import (
     controller_summary,
     newest_reading,
@@ -48,24 +35,31 @@ from hq.platform.application.resource_context import (
     record_status,
     resource_context,
 )
+from hq.platform.application.resource_operations import (
+    ACTION_LABELS,
+    HISTORY_WINDOW,
+    OperationCommand,
+    changes,
+    operation_summary,
+    request_certificate_renewal,
+    request_lifecycle,
+    request_reconcile,
+    request_removal,
+    requested_by,
+    resource_history,
+)
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.topology_model import RELATIONS
-from hq.platform.application.whereabouts import whereabouts
-from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.pages import PageAction, PageMixin, page_context
-from hq.platform.application.resource_capabilities import (
-    VERB_LABELS,
-    resource_capabilities,
-)
 from hq.platform.application.ui import counted
-
+from hq.platform.application.whereabouts import whereabouts
 from hq.platform.core.templatetags.nav_tags import returning_to
 
 from .models import ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
 from .providers import PROVIDERS, describe_providers
-
 
 # Which use case serves which verb. A table rather than a fall-through, so a
 # lifecycle verb such as Restart never reaches reconciliation, which is locked
@@ -88,9 +82,7 @@ def _web_operation(request, resource, action):
     # Everything else is a lifecycle verb: asked for once, about something
     # already as declared. One entry point rather than one function per verb,
     # because they differ only in the word.
-    return request_lifecycle(
-        command, principal=principal, current_key=resource.key, action=action
-    )
+    return request_lifecycle(command, principal=principal, current_key=resource.key, action=action)
 
 
 def _json(value: Any) -> str:
@@ -142,11 +134,7 @@ def _spec_rows(resource, *, beside_readout: bool = False) -> dict[str, tuple[tup
         # A reported field's setting is the fixed goal its readout already states.
         if value is None or name in provider.reported_fields:
             continue
-        label = (
-            fields[name].title or name.replace("_", " ").capitalize()
-            if name in fields
-            else name
-        )
+        label = fields[name].title or name.replace("_", " ").capitalize() if name in fields else name
         if label.strip().casefold() in shown:
             continue
         rendered = _spec_value(value)
@@ -171,16 +159,9 @@ def _linked_readout(resource, relationships) -> tuple[tuple[str, str, str, tuple
     says use this declaration.
     """
 
-    related = {
-        item.entity.label: item.entity
-        for group in relationships.groups
-        for item in group.items
-    }
+    related = {item.entity.label: item.entity for group in relationships.groups for item in group.items}
     connections = tuple(
-        item.entity
-        for group in relationships.groups
-        for item in group.items
-        if item.entity.kind == "connection"
+        item.entity for group in relationships.groups for item in group.items if item.entity.kind == "connection"
     )
     field = PROVIDERS[resource.kind].spec_type.model_fields.get("connection_ref")
     connection_label = (field.title or "") if field is not None else ""
@@ -205,7 +186,7 @@ def _removal_note(resource) -> str:
         return ""
     try:
         return note(resource.spec)
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         # A confirmation page that cannot render is worse than one missing a
         # sentence, and this is the page an operator uses to stop.
         return ""
@@ -283,8 +264,7 @@ class ResourceRemoveView(View):
         verb = "Queued" if result["queued"] else "Already queued"
         messages.success(
             request,
-            f"{verb} removal of “{resource.key}”. HQ forgets it once it is "
-            "confirmed gone.",
+            f"{verb} removal of “{resource.key}”. HQ forgets it once it is confirmed gone.",
         )
         return redirect("control_plane:detail", key=key)
 
@@ -295,6 +275,7 @@ class InfrastructureListView(PageMixin, ListView):
     context_object_name = "resources"
     page_title = "All records"
 
+    @override
     def get_page_actions(self):
         return (
             PageAction("Add a record", reverse("control_plane:create"), primary=True),
@@ -302,6 +283,7 @@ class InfrastructureListView(PageMixin, ListView):
             PageAction("Setting reference", reverse("control_plane:providers")),
         )
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # Read once for the whole page. Every row that forwards somewhere asks
@@ -333,9 +315,7 @@ class InfrastructureListView(PageMixin, ListView):
                 "by": requested_by(operation),
                 "at": operation.created_at,
             }
-            for operation in changes(
-                OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12
-            )
+            for operation in changes(OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12)
         ]
         context["provider_catalog"] = describe_providers()
         context["records"] = record_list(
@@ -353,6 +333,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
     template_name = "control_plane/resource_detail.html"
     context_object_name = "resource"
 
+    @override
     def get_object(self, queryset=None):
         # Read once: ``get`` asks before deciding where the record lives, and
         # the detail view asks again to draw it.
@@ -360,6 +341,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
             self._record = super().get_object(queryset)
         return self._record
 
+    @override
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         home = self.object.get_absolute_url()
@@ -386,12 +368,14 @@ class InfrastructureDetailView(PageMixin, DetailView):
 
         return container_detail(self.object, self.request)
 
+    @override
     def get_page_title(self):
         # A container by its own name: its machine is the trail above it.
         if self.object.kind == CONTAINER_KIND and self.object.spec.get("name"):
             return self.object.spec["name"]
         return record_name(self.object.kind, self.object.spec, self.object.key)
 
+    @override
     def get_page_lede(self):
         # A record whose name is its type says what it does instead.
         label = kind_label(self.object.kind)
@@ -401,9 +385,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
     def all_relationships(self):
         """Every relation, for what the page derives from them (its home)."""
 
-        return relationships_for(
-            f"resource:{self.object.key}", principal=web_principal(self.request.user)
-        )
+        return relationships_for(f"resource:{self.object.key}", principal=web_principal(self.request.user))
 
     @cached_property
     def relationships(self):
@@ -430,12 +412,14 @@ class InfrastructureDetailView(PageMixin, DetailView):
             None,
         )
 
+    @override
     def get_page_trail(self):
         crumbs = []
         if self.home and self.home.url:
             crumbs.append((self.home.label, self.home.url))
         return tuple(crumbs)
 
+    @override
     def get_page_actions(self):
         if self.capabilities.removal_pending:
             return ()
@@ -493,9 +477,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         if PROVIDERS[self.object.kind].material_form:
             actions.append(
                 PageAction(
-                    "Replace certificate"
-                    if getattr(self.object, "material", None)
-                    else "Upload certificate",
+                    "Replace certificate" if getattr(self.object, "material", None) else "Upload certificate",
                     reverse("control_plane:upload_certificate", args=[key]),
                     primary=True,
                 )
@@ -510,6 +492,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
             )
         return tuple(actions)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         capabilities = self.capabilities
@@ -518,24 +501,18 @@ class InfrastructureDetailView(PageMixin, DetailView):
             capabilities.actions, lambda verb: VERB_LABELS.get(verb, verb.replace("-", " ").capitalize())
         )
         derived = self.derived
-        context["status"] = record_status(
-            self.object, health=derived.health, newest=newest_reading(self.object.kind)
-        )
+        context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))
         # What this resource does, said by its own provider.
         context["label"] = kind_label(self.object.kind)
         # Relationships names the service it is for; the head says it only when
         # that section does not.
         relations = {group.phrase for group in self.relationships.groups}
-        context["service_links"] = (
-            () if RELATIONS["declared_by"].inverse in relations else derived.service_links
-        )
+        context["service_links"] = () if RELATIONS["declared_by"].inverse in relations else derived.service_links
         # Where this resource sends traffic, when it sends it anywhere, and the
         # machine running the provider that manages it.
         context["origin_machine"] = derived.origin_machine
         # A DNS record answers with an address; a proxy sends requests on.
-        context["origin_phrase"] = (
-            "Points to" if PROVIDERS[self.object.kind].answers else "Forwards to"
-        )
+        context["origin_phrase"] = "Points to" if PROVIDERS[self.object.kind].answers else "Forwards to"
         context["provider_machine"] = derived.provider_machine
         context["managing_connections"] = tuple(
             item.entity
@@ -552,9 +529,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.
         context["readout_rows"] = (
-            ()
-            if self.object.kind == CONTAINER_KIND
-            else _linked_readout(self.object, self.relationships)
+            () if self.object.kind == CONTAINER_KIND else _linked_readout(self.object, self.relationships)
         )
         context["relationships"] = self.relationships
         context["spec_rows"] = _spec_rows(self.object, beside_readout=True)
@@ -602,9 +577,7 @@ class OperationView(View):
         # the fact the verb answers (a machine's routes, a service's
         # container) and send `next`. Validated through the shared helper, so
         # the field cannot become an open redirect.
-        destination = safe_next(
-            request, fallback=reverse("control_plane:detail", kwargs={"key": key})
-        )
+        destination = safe_next(request, fallback=reverse("control_plane:detail", kwargs={"key": key}))
         try:
             result = _web_operation(request, resource, self.action)
         except PolicyError as exc:
@@ -631,9 +604,7 @@ class CertificateDownloadView(View):
                 status=500,
             )
         response = HttpResponse(certificate_pem, content_type="application/x-pem-file")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{resource.key}-public.pem"'
-        )
+        response["Content-Disposition"] = f'attachment; filename="{resource.key}-public.pem"'
         return response
 
 
@@ -655,9 +626,7 @@ class ResourceReportDownloadView(View):
             ],
         }
         response = JsonResponse(payload, json_dumps_params={"indent": 2})
-        response["Content-Disposition"] = (
-            f'attachment; filename="{resource.key}-status.json"'
-        )
+        response["Content-Disposition"] = f'attachment; filename="{resource.key}-status.json"'
         return response
 
 

@@ -1,7 +1,5 @@
 """Refusals, recorded: attributed when the caller is known, counted when not."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest import mock
 
@@ -47,9 +45,7 @@ class AuthenticatedRefusalTests(TestCase):
 class UnauthenticatedRefusalTests(TestCase):
     def test_repeats_from_one_source_are_counted_not_multiplied(self):
         for _ in range(5):
-            record_denial(
-                interface="mcp", reason="invalid_credential", source="100.64.0.7", authenticated=False
-            )
+            record_denial(interface="mcp", reason="invalid_credential", source="100.64.0.7", authenticated=False)
 
         row = _denials().get()
         self.assertEqual(row.metadata["count"], 5)
@@ -82,9 +78,7 @@ class NeverInTheWayTests(TestCase):
 class ApiDoorTests(TestCase):
     def test_a_rejected_token_is_counted_and_its_value_is_never_kept(self):
         for _ in range(2):
-            response = self.client.get(
-                "/api/v2/", HTTP_AUTHORIZATION=f"Bearer {A_TOKEN_VALUE}"
-            )
+            response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {A_TOKEN_VALUE}")
             self.assertEqual(response.status_code, 401)
 
         row = _denials().get()

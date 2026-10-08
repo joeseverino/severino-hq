@@ -5,12 +5,10 @@ rule of a period with no data (drawn as its own mark, counted in no total) is
 in one short module.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CadenceWeek:
     """One period in a "did I do this" strip.
 
@@ -31,9 +29,7 @@ class CadenceWeek:
 
     def __post_init__(self) -> None:
         if self.no_data and (self.hit or self.count):
-            raise ValueError(
-                f"{self.label!r} cannot both have no data and have been done."
-            )
+            raise ValueError(f"{self.label!r} cannot both have no data and have been done.")
 
     @property
     def said(self) -> str:
@@ -73,7 +69,7 @@ def _tally(weeks: tuple[CadenceWeek, ...]) -> str:
     return f"{_hits(weeks)}/{known}" if known else MISSING
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Cadence:
     title: str
     description: str
@@ -93,7 +89,7 @@ class Cadence:
         return _streak(self.weeks)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CadenceRow:
     """One thing tracked across the shared periods of a matrix."""
 
@@ -115,7 +111,7 @@ class CadenceRow:
         return _streak(self.weeks)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CadenceMatrix:
     """Several cadences sharing one set of periods, so they can be compared.
 

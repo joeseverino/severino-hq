@@ -1,24 +1,26 @@
-from django.http import Http404
+from typing import override
+
 from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.http import Http404
 from django.urls import reverse, reverse_lazy
 from django.utils.functional import cached_property
 from django.views.generic import (
-    TemplateView,
     CreateView,
     DeleteView,
     DetailView,
     ListView,
+    TemplateView,
     UpdateView,
     View,
 )
 
+from hq.domains.projects.github import github_repository
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
-from hq.platform.application.projects import NotFoundError, hq_sections
-from hq.domains.projects.github import github_repository
-from hq.platform.application.security import web_principal
-from hq.platform.application.timestamps import moment
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
+from hq.platform.application.projects import NotFoundError, hq_sections
+from hq.platform.application.security import web_principal
+from hq.platform.application.services import service_url_for
 from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
@@ -26,11 +28,11 @@ from hq.platform.application.tables import (
     TableSort,
     TableToggle,
 )
-from hq.platform.application.services import service_url_for
+from hq.platform.application.timestamps import moment
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
-
 
 PROJECTS_TRAIL = ("Projects", reverse_lazy("projects:list"))
 
@@ -55,18 +57,14 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
     )
     table_sorts = (
         TableSort("-updated_at", "Recently edited", ("archive_rank", "-updated_at")),
-        TableSort(
-            "updated_at", "Least recently edited", ("archive_rank", "updated_at")
-        ),
+        TableSort("updated_at", "Least recently edited", ("archive_rank", "updated_at")),
         TableSort("name", "Name A–Z", ("archive_rank", "name")),
         TableSort("-name", "Name Z–A", ("archive_rank", "-name")),
         TableSort("status", "Status A–Z", ("archive_rank", "status")),
         TableSort("-status", "Status Z–A", ("archive_rank", "-status")),
         TableSort("category", "Category A–Z", ("archive_rank", "category")),
         TableSort("-category", "Category Z–A", ("archive_rank", "-category")),
-        TableSort(
-            "technologies_used", "Technology A–Z", ("archive_rank", "technologies_used")
-        ),
+        TableSort("technologies_used", "Technology A–Z", ("archive_rank", "technologies_used")),
         TableSort(
             "-technologies_used",
             "Technology Z–A",
@@ -81,9 +79,11 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search projects, technology, and notes…"
 
+    @override
     def get_page_actions(self):
         return (PageAction("New project", reverse("projects:create"), primary=True),)
 
+    @override
     def get_queryset(self):
         qs = Project.objects.all()
         needs_output = self.request.GET.get("needs_output", "").strip()
@@ -95,9 +95,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
                 doc_count=Count("documentation_records", distinct=True),
             )
         if needs_output:
-            qs = qs.filter(status=Project.Status.ACTIVE).filter(
-                Q(content_count=0) | Q(doc_count=0)
-            )
+            qs = qs.filter(status=Project.Status.ACTIVE).filter(Q(content_count=0) | Q(doc_count=0))
         if no_content:
             qs = qs.filter(content_count=0)
         if no_docs:
@@ -111,6 +109,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         )
         return self.apply_table_query(qs)
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.github_estate import repository_for
 
@@ -135,9 +134,7 @@ class ProjectRefreshView(View):
 
         back = reverse("projects:detail", args=[slug])
         try:
-            job = request_project_refresh(
-                slug, principal=web_principal(request.user), requested_by=request.user
-            )
+            job = request_project_refresh(slug, principal=web_principal(request.user), requested_by=request.user)
         except NotFoundError as exc:
             raise Http404(str(exc)) from exc
         except JobConflict:
@@ -171,6 +168,7 @@ def refresh_ask(project):
 class ProjectPage(PageMixin):
     """A page about one project, or a new one: its trail runs back to the list."""
 
+    @override
     def get_page_trail(self):
         return record_trail(PROJECTS_TRAIL, getattr(self, "object", None), lambda project: project.name)
 
@@ -181,9 +179,7 @@ class ProjectDetailView(PageMixin, DetailView):
     slug_field = "slug"
     slug_url_kwarg = "slug"
     context_object_name = "project"
-    queryset = Project.objects.prefetch_related(
-        "content_items", "assets", "documentation_records", "expenses"
-    )
+    queryset = Project.objects.prefetch_related("content_items", "assets", "documentation_records", "expenses")
 
     @cached_property
     def repository(self):
@@ -193,6 +189,7 @@ class ProjectDetailView(PageMixin, DetailView):
 
         return repository_for(self.object.repository_url)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # The reverse of the tie the service page makes. A project says where it
@@ -200,9 +197,7 @@ class ProjectDetailView(PageMixin, DetailView):
         # from either side, and only one side led anywhere.
         context["service_url"] = service_url_for(self.object.public_url)
         context["github"] = self.repository
-        context["documents"] = related_documents(
-            self.object.documentation_records.all(), about=self.object
-        )
+        context["documents"] = related_documents(self.object.documentation_records.all(), about=self.object)
         if context["github"] is not None:
             from hq.platform.application.github_posture import posture_of
 
@@ -214,9 +209,11 @@ class ProjectDetailView(PageMixin, DetailView):
         context["page_badges"] = (PageBadge(self.object.get_status_display(), self.object.status),)
         return context
 
+    @override
     def get_page_title(self):
         return self.object.name
 
+    @override
     def get_page_lede(self):
         """The one line under the name, inside the head beside its actions."""
 
@@ -237,9 +234,11 @@ class ProjectDetailView(PageMixin, DetailView):
             },
         )
 
+    @override
     def get_page_trail(self):
         return (PROJECTS_TRAIL,)
 
+    @override
     def get_page_actions(self):
         project = self.object
         actions = []
@@ -247,9 +246,7 @@ class ProjectDetailView(PageMixin, DetailView):
             actions.append(refresh_ask(project))
         actions += [
             PageAction("Edit", reverse("projects:edit", args=[project.slug])),
-            PageAction(
-                "Delete", reverse("projects:delete", args=[project.slug]), danger=True
-            ),
+            PageAction("Delete", reverse("projects:delete", args=[project.slug]), danger=True),
         ]
         return tuple(actions)
 
@@ -288,9 +285,11 @@ class WatchingView(PageMixin, TemplateView):
 
         return linked_login(self.request.user, GITHUB)
 
+    @override
     def get_page_lede(self) -> str:
         return "What you star on GitHub, with each project's latest release and security advisories."
 
+    @override
     def get_page_actions(self):
         if not self.login:
             return []
@@ -308,6 +307,7 @@ class WatchingView(PageMixin, TemplateView):
             ),
         ]
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.github_profile import profile
 
@@ -326,7 +326,6 @@ class WatchingView(PageMixin, TemplateView):
 
         owner = self.login.lower()
         from hq.domains.projects.models import Project
-
         from hq.platform.application.github_public import github_repository
 
         # The HQ project each repository is, when one names it, so a row links there.
@@ -393,9 +392,11 @@ class PostureView(PageMixin, TemplateView):
     template_name = "projects/posture.html"
     page_title = "Repo checks"
 
+    @override
     def get_page_lede(self) -> str:
         return "Each repository checked against your repository rules. Public ones have extra checks."
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.github_posture import STANDARD, postures
         from hq.platform.application.standards import MET, UNMET

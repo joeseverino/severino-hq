@@ -1,7 +1,5 @@
 """Audit events name their connection; routine ones expire and nothing else does."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from io import StringIO
 
@@ -31,9 +29,7 @@ def _event(action, object_type="", *, days_old=0, connection="", user=None, mess
         message=message,
     )
     if days_old:
-        AuditLog.objects.filter(pk=event.pk).update(
-            created_at=timezone.now() - timedelta(days=days_old)
-        )
+        AuditLog.objects.filter(pk=event.pk).update(created_at=timezone.now() - timedelta(days=days_old))
     return event
 
 
@@ -63,21 +59,14 @@ class ClassificationTests(TestCase):
 
 class PruneTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
 
     def test_only_old_routine_machine_events_are_deleted(self):
         old = _event(AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE, days_old=40)
         recent = _event(AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE, days_old=5)
-        by_person = _event(
-            AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE, days_old=40, user=self.user
-        )
+        by_person = _event(AuditLog.Action.OBSERVED, CONNECTION_AUDIT_TYPE, days_old=40, user=self.user)
         other_type = _event(AuditLog.Action.OBSERVED, "Managed resource", days_old=40)
-        kept = [
-            _event(action, CONNECTION_AUDIT_TYPE, days_old=400)
-            for action in SECURITY_ACTIONS
-        ]
+        kept = [_event(action, CONNECTION_AUDIT_TYPE, days_old=400) for action in SECURITY_ACTIONS]
 
         deleted = prune_routine(days=30)
 
@@ -121,11 +110,7 @@ class PruneTests(TestCase):
         self.assertEqual(out.getvalue().strip(), "1 routine event older than 10 days deleted.")
         self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.OBSERVED).count(), 1)
         # The prune is itself on the record, and not routine.
-        self.assertTrue(
-            AuditLog.objects.filter(
-                object_type="audit.prune", action=AuditLog.Action.DELETED
-            ).exists()
-        )
+        self.assertTrue(AuditLog.objects.filter(object_type="audit.prune", action=AuditLog.Action.DELETED).exists())
 
 
 class ConnectionAttributionTests(TestCase):

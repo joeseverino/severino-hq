@@ -19,22 +19,34 @@ def card(item) -> str:
 class DecisionTests(SimpleTestCase):
     def item(self, *, actions=(), steps=(), **fields):
         return {
-            "label": "Example needs a decision", "status": "attention",
-            "source": "Example", "detail": "What it means for the reader.",
-            "count": 1, "actions": [asdict(action) for action in actions],
-            "workflow": asdict(WorkflowPlan(
-                "example", "What to do", steps, WorkflowOutcome("claim_absent", "example", ""),
-            )) if steps else None,
+            "label": "Example needs a decision",
+            "status": "attention",
+            "source": "Example",
+            "detail": "What it means for the reader.",
+            "count": 1,
+            "actions": [asdict(action) for action in actions],
+            "workflow": asdict(
+                WorkflowPlan(
+                    "example",
+                    "What to do",
+                    steps,
+                    WorkflowOutcome("claim_absent", "example", ""),
+                )
+            )
+            if steps
+            else None,
             **fields,
         }
 
     def test_the_first_available_step_leads_without_mutating_or_repeating_it(self):
         action = ActionLink("fix", "Review change", "read", "/example/review/", recommended=True)
         verify = ActionLink("verify", "Recheck", "write", "/example/check/", method="POST")
-        item = self.item(steps=(
-            WorkflowStep("act", "Fix it", "", "recommended", (action,)),
-            WorkflowStep("verify", "Confirm", "Check the outcome", "after_action", (verify,)),
-        ))
+        item = self.item(
+            steps=(
+                WorkflowStep("act", "Fix it", "", "recommended", (action,)),
+                WorkflowStep("verify", "Confirm", "Check the outcome", "after_action", (verify,)),
+            )
+        )
         before = deepcopy(item)
         shown = decision(item)
         self.assertEqual(item, before)
@@ -49,10 +61,14 @@ class DecisionTests(SimpleTestCase):
     def test_what_is_wrong_and_its_buttons_are_on_the_face_of_the_card(self):
         fix = ActionLink("fix", "Restore the example", "remote_write", "/example/fix/", recommended=True)
         check = ActionLink("verify", "Check again", "read", "/example/check/", method="POST")
-        html = card(self.item(steps=(
-            WorkflowStep("act", "Fix it", "", "recommended", (fix,)),
-            WorkflowStep("verify", "Check that it worked", "", "after_action", (check,)),
-        )))
+        html = card(
+            self.item(
+                steps=(
+                    WorkflowStep("act", "Fix it", "", "recommended", (fix,)),
+                    WorkflowStep("verify", "Check that it worked", "", "after_action", (check,)),
+                )
+            )
+        )
 
         self.assertNotIn("<details", html)
         self.assertNotIn("<ol", html)
@@ -71,9 +87,9 @@ class DecisionTests(SimpleTestCase):
     def test_a_check_stands_beside_the_owners_own_action(self):
         own = ActionLink("open", "Open", "read", "/example/")
         check = ActionLink("verify", "Check again", "read", "/example/check/", method="POST")
-        shown = decision(self.item(actions=(own,), steps=(
-            WorkflowStep("verify", "Check again", "", "available", (check,)),
-        )))
+        shown = decision(
+            self.item(actions=(own,), steps=(WorkflowStep("verify", "Check again", "", "available", (check,)),))
+        )
 
         self.assertEqual(shown["actions"], [asdict(own), asdict(check)])
 
@@ -91,9 +107,14 @@ class DecisionTests(SimpleTestCase):
 
     def test_one_command_stands_alone_and_several_are_numbered(self):
         one = card(self.item(steps=(run_step("On the machine", "example --fix"),)))
-        two = card(self.item(steps=(
-            run_step("On the machine", "example --fix"), do_step("Then sign in again."),
-        )))
+        two = card(
+            self.item(
+                steps=(
+                    run_step("On the machine", "example --fix"),
+                    do_step("Then sign in again."),
+                )
+            )
+        )
 
         self.assertIn('<ul class="resolution-workflow">', one)
         self.assertIn("<code>example --fix</code>", one)
@@ -141,9 +162,11 @@ class DecisionTests(SimpleTestCase):
     def test_owner_actions_win_and_only_identical_method_and_url_are_removed(self):
         get = ActionLink("open", "Open", "read", "/example/")
         post = ActionLink("run", "Run", "write", "/example/", method="POST")
-        shown = decision(self.item(actions=(get,), steps=(
-            WorkflowStep("act", "Act", "Keep this explanation", "recommended", (get, post)),
-        )))
+        shown = decision(
+            self.item(
+                actions=(get,), steps=(WorkflowStep("act", "Act", "Keep this explanation", "recommended", (get, post)),)
+            )
+        )
         self.assertEqual(shown["actions"], [asdict(get)])
         self.assertEqual(shown["workflow"]["steps"][0]["actions"], [asdict(post)])
         self.assertEqual(shown["workflow"]["steps"][0]["summary"], "Keep this explanation")

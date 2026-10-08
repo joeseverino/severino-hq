@@ -1,7 +1,5 @@
 """What HQ offers to do with a resource follows whether its connection manages."""
 
-from __future__ import annotations
-
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
@@ -13,8 +11,10 @@ from ..resource_capabilities import OBSERVES_ONLY, resource_capabilities
 class CapabilitiesFollowTheConnectionTests(TestCase):
     def _rewrite(self):
         return ManagedResource.objects.create(
-            key="app-rewrite", kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.10"}, enabled=True,
+            key="app-rewrite",
+            kind="adguard.rewrite",
+            spec={"domain": "app.example.com", "answer": "10.0.0.10"},
+            enabled=True,
         )
 
     def test_an_observing_connection_offers_nothing_it_cannot_do(self):
@@ -48,9 +48,12 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
 
         self.principal = cli_principal()
         self.resource = ManagedResource.objects.create(
-            key="app-rewrite", kind="adguard.rewrite",
+            key="app-rewrite",
+            kind="adguard.rewrite",
             spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-            enabled=True, generation=2, observed_generation=1,
+            enabled=True,
+            generation=2,
+            observed_generation=1,
         )
 
     def test_queueing_through_an_observing_connection_is_refused(self):
@@ -74,7 +77,8 @@ class EveryWritePathFollowsTheConnectionTests(TestCase):
         with self.assertRaisesMessage(PolicyError, OBSERVES_ONLY):
             save_managed_resource(
                 ManagedResourceCommand(
-                    key="other-rewrite", kind="adguard.rewrite",
+                    key="other-rewrite",
+                    kind="adguard.rewrite",
                     spec={"domain": "other.example.com", "answer": "10.0.0.11"},
                     enabled=True,
                 ),

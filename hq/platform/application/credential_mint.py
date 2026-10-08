@@ -12,8 +12,6 @@ readings name, and ``op://`` references to the connection item and its
 bootstrap item. No value HQ holds is a secret, so no secret can reach it.
 """
 
-from __future__ import annotations
-
 import re
 import shlex
 from collections.abc import Mapping
@@ -89,8 +87,7 @@ def projection_field(variable: str) -> str:
     }
     if len(fields) != 1:
         raise ImproperlyConfigured(
-            f"{variable} is rendered from {len(fields)} different fields; a stored "
-            "credential needs exactly one."
+            f"{variable} is rendered from {len(fields)} different fields; a stored credential needs exactly one."
         )
     return fields.pop()
 
@@ -117,12 +114,10 @@ def address_fields() -> str:
         sources.setdefault(where, []).append(name)
     if len(sources) == 1:
         return next(iter(sources))
-    return " or ".join(
-        f"{where} ({', '.join(names)} items)" for where, names in sources.items()
-    )
+    return " or ".join(f"{where} ({', '.join(names)} items)" for where, names in sources.items())
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CredentialFix:
     """One connection's credential: what it lacks, and how it is replaced."""
 
@@ -191,9 +186,7 @@ def _reference(vault: str, item: str, variable: str) -> str:
     return f"op://{vault}/{item}/{projection_field(variable)}"
 
 
-def mint_command(
-    minter: Minter, provider: str, store: Mapping[str, str]
-) -> tuple[str, tuple[str, ...]]:
+def mint_command(minter: Minter, provider: str, store: Mapping[str, str]) -> tuple[str, tuple[str, ...]]:
     """The operator command, or "", and what HQ could not derive for it.
 
     A missing account or item leaves no command: guessing either would mint a
@@ -220,8 +213,7 @@ def mint_command(
             arguments += [flag, _reference(vault, item, variable)]
     else:
         blocking.append(
-            "The controller has not said which 1Password item holds this "
-            "token. It will once it is up to date."
+            "The controller has not said which 1Password item holds this token. It will once it is up to date."
         )
     prefix: list[str] = []
     bootstrap = _BOOTSTRAP.match(store.get("bootstrap", ""))
@@ -266,9 +258,6 @@ def credential_fixes() -> dict[str, CredentialFix]:
         from .credential_sight import credential_sight
 
         sights = {found.provider: found for found in credential_sight()}
-        return {
-            row.connection_ref: _fix(row, sights.get(row.provider))
-            for row in connection_rows()
-        }
+        return {row.connection_ref: _fix(row, sights.get(row.provider)) for row in connection_rows()}
 
     return read_once("credential_fixes", load)

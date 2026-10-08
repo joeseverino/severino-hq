@@ -9,8 +9,6 @@ Notes are free text. A machine or a document a note names is a link wherever
 the name is one HQ knows, and plain text everywhere else.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass, replace
 from urllib.parse import urlparse
@@ -22,7 +20,7 @@ from .entity_links import EntityLink, container_link, entity_link
 from .projection import read_once
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RunsOn:
     """The service a project is published as, and what answers for it."""
 
@@ -49,9 +47,7 @@ def where_it_runs(public_url: str) -> RunsOn | None:
     return RunsOn(
         service=entity_link("service", service.hostname),
         machine=entity_link("machine", machine) if machine else None,
-        container=(
-            container_link(container.host, container.name, container.watcher) if container else None
-        ),
+        container=(container_link(container.host, container.name, container.watcher) if container else None),
     )
 
 

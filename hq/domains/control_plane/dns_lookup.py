@@ -15,12 +15,11 @@ already checked is a hostname or an address. No credential travels with it,
 which is what makes the call acceptable here rather than controller work.
 """
 
-from __future__ import annotations
-
 import json
+import urllib.request
+from typing import override
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
-import urllib.request
 
 from django.conf import settings
 
@@ -37,9 +36,7 @@ from hq.platform.core.errors import UpstreamUnavailable
 def connection_specs():
     """Emit the keyless public registries used by lookup capabilities."""
 
-    def configured_instance(
-        *, identifier: str, label: str, kind: str, setting: str, abilities: tuple[str, ...]
-    ):
+    def configured_instance(*, identifier: str, label: str, kind: str, setting: str, abilities: tuple[str, ...]):
         endpoint = str(getattr(settings, setting, "") or "").strip()
         parsed = urlsplit(endpoint)
         if parsed.scheme != "https" or not parsed.hostname:
@@ -129,6 +126,7 @@ class _HTTPSOnlyRedirects(urllib.request.HTTPRedirectHandler):
     answer a question about privacy.
     """
 
+    @override
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         target = urlsplit(newurl)
         if target.scheme != "https":
@@ -180,9 +178,7 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     """
 
     seconds = timeout or int(getattr(settings, "SEVERINO_LOOKUP_TIMEOUT_SECONDS", 6))
-    request = urllib.request.Request(
-        url, headers={"Accept": accept, "User-Agent": "severino-hq"}
-    )
+    request = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "severino-hq"})
     try:
         with _opener.open(request, timeout=seconds) as response:
             payload = _answer(response)

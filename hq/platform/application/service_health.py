@@ -6,8 +6,6 @@ machine, its service or a controller. A name nothing declares reads as what
 the readings observing it say, and whether a DNS record names it.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,7 +18,7 @@ SERIOUS = "serious"
 UNKNOWN = "unknown"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Health:
     state: str
     label: str
@@ -102,9 +100,7 @@ def _in_place(service: Any) -> Health:
             "Nothing on that port",
             f"{checked}. The proxy forwards to {address}, and no container on {machine} publishes that port.",
         )
-    return Health(
-        GOOD, "Set up", f"{checked}. The proxy forwards to {address}. HQ does not read what runs there."
-    )
+    return Health(GOOD, "Set up", f"{checked}. The proxy forwards to {address}. HQ does not read what runs there.")
 
 
 def _and(names: list[str]) -> str:

@@ -22,9 +22,7 @@ def _route_error(owner: str, name: str, route: str, error_id: str) -> Error | No
 
 
 @register(Tags.compatibility)
-def capability_contract_check(
-    app_configs: Sequence[AppConfig] | None, **kwargs: Any  # noqa: ARG001
-) -> list[CheckMessage]:
+def capability_contract_check(app_configs: Sequence[AppConfig] | None, **kwargs: Any) -> list[CheckMessage]:
     try:
         graph = integration_graph()
     except IntegrationGraphError as exc:
@@ -36,7 +34,7 @@ def capability_contract_check(
             )
             for violation in exc.violations
         ]
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - any failure to build the graph is reported as a check error
         return [
             Error(
                 f"The composed integration graph is invalid: {exc}",

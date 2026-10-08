@@ -13,15 +13,13 @@ operation, are written to ``openapi-examples.json`` when the run ends:
     python manage.py api_openapi
 """
 
-from __future__ import annotations
-
 import atexit
 import json
 import os
 import re
-from functools import cached_property
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from functools import cached_property
+from typing import TYPE_CHECKING, Any, override
 from urllib.parse import urlsplit
 
 from django.http import HttpResponse
@@ -49,9 +47,7 @@ class Contract:
 
     def __init__(self, value: dict[str, Any]) -> None:
         self.value = value
-        self.registry = Registry().with_resource(
-            URI, Resource.from_contents(value, default_specification=DRAFT202012)
-        )
+        self.registry = Registry().with_resource(URI, Resource.from_contents(value, default_specification=DRAFT202012))
         self.templates = [
             (re.compile("^" + re.sub(r"\\\{\w+\\\}", "[^/]+", re.escape(path)) + "$"), path)
             for path in value["paths"]
@@ -85,6 +81,7 @@ class ContractClient(Client):
     def contract(self) -> Contract:
         return Contract(document())
 
+    @override
     def generic(
         self,
         method: str,
@@ -112,9 +109,7 @@ class ContractClient(Client):
             self._conform(method.lower(), url, data, response)
         return response
 
-    def _conform(
-        self, method: str, url: str, data: Any, response: HttpResponse | _MonkeyPatchedWSGIResponse
-    ) -> None:
+    def _conform(self, method: str, url: str, data: Any, response: HttpResponse | _MonkeyPatchedWSGIResponse) -> None:
         contract = self.contract
         path = contract.path(url)
         if path is None:

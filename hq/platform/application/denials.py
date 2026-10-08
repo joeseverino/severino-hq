@@ -6,8 +6,6 @@ per minute. The credential itself is never recorded, and recording never blocks
 the refusal.
 """
 
-from __future__ import annotations
-
 import logging
 from datetime import timedelta
 
@@ -51,7 +49,9 @@ def record_denial(
         )
     except Exception:  # noqa: BLE001 - best effort by contract
         logger.warning(
-            "Refusal not recorded: %s on %s", reason, interface,
+            "Refusal not recorded: %s on %s",
+            reason,
+            interface,
             extra={"event": "audit.denial.unrecorded"},
         )
 

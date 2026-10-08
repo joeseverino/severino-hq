@@ -17,7 +17,6 @@ from ..connections import list_connections
 from ..integrations import integration_graph
 from ..security import Capability, Principal
 
-
 OPERATOR = Principal(
     "operator",
     "test",
@@ -44,9 +43,7 @@ class GatewayConnectionTests(TestCase):
             slug="example",
             repository_url="https://github.com/example/project",
         )
-        DashboardConfiguration.objects.create(
-            weather_point="41.8781,-87.6298", weather_label="Chicago"
-        )
+        DashboardConfiguration.objects.create(weather_point="41.8781,-87.6298", weather_label="Chicago")
         # The account and database come from the observer's D1 reading.
         ProviderInventory.objects.create(
             kind="cloudflare.d1_database",

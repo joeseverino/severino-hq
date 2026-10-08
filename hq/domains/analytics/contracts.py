@@ -1,9 +1,6 @@
 """Pure analytics boundaries shared by HQ and its provider adapter."""
 
-from __future__ import annotations
-
-from datetime import date, datetime, timedelta, timezone
-
+from datetime import UTC, date, datetime, timedelta
 
 # Cloudflare's widest accepted query is 13w2d. HQ backfills a quarter on first
 # sight, then keeps the last few completed days warm so late provider updates
@@ -17,6 +14,6 @@ REFRESH_DAYS = 3
 def completed_window(days: int, *, today: date | None = None) -> tuple[date, date]:
     """Return the most recent ``days`` whole UTC dates, never a partial today."""
 
-    current = today or datetime.now(timezone.utc).date()
+    current = today or datetime.now(UTC).date()
     end = current - timedelta(days=1)
     return end - timedelta(days=max(days, 1) - 1), end

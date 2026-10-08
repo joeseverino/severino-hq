@@ -6,7 +6,6 @@ The simpler model mirrors the vault's `published` boolean directly.
 
 from django.db import migrations, models
 
-
 COLLAPSE_MAP = {
     "idea": "draft",
     "researching": "draft",
@@ -27,7 +26,6 @@ def reverse_noop(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("content", "0002_initial"),
     ]

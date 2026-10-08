@@ -7,14 +7,13 @@ the estate is due is one answer whatever window is asked, and what happened is
 one per window.
 """
 
-from __future__ import annotations
-
 from collections import Counter
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
-from hq.platform.application.routes import reverse
 from django.utils import timezone
+
+from hq.platform.application.routes import reverse
 
 from .calendar import CalendarEvent, CalendarSource
 from .derivations import derivation
@@ -32,6 +31,7 @@ def _whatever_window(first: date, last: date) -> tuple[Any, ...]:
     what falls inside it."""
 
     return estate_variant()
+
 
 # How long before a registration's expiry renewing it by hand belongs on the
 # calendar, when the registrar does not renew it on its own.

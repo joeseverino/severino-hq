@@ -42,8 +42,6 @@ triggers, the cache cannot be read or a stored value does not load, the
 function runs and its answer is used.
 """
 
-from __future__ import annotations
-
 import copyreg
 import hashlib
 import logging
@@ -59,7 +57,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from functools import wraps
 from types import MappingProxyType
-from typing import Any, TypeVar
+from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
@@ -67,6 +65,7 @@ from django.utils import timezone
 from .projection import projection_scope, read_once, seeded
 
 logger = logging.getLogger("severino.derivations")
+
 
 # A read-only mapping has no pickle of its own. A stored value carries it as a
 # dict and loads it read-only again.
@@ -76,7 +75,6 @@ def _read_only(mapping: dict[Any, Any]) -> MappingProxyType[Any, Any]:
 
 copyreg.pickle(MappingProxyType, lambda mapping: (_read_only, (dict(mapping),)))
 
-_T = TypeVar("_T")
 # The clock, as the module holds it. Derivations reach it only through the
 # functions below, which is what lets a test forbid every other way in.
 _clock = timezone.now
@@ -92,7 +90,7 @@ REMEMBERED = 8
 ASKED_WITHIN = 24 * 60 * 60
 
 # Every declared derivation, by name.
-DERIVATIONS: dict[str, "Derivation"] = {}
+DERIVATIONS: dict[str, Derivation] = {}
 # How many times each derivation ran its function, and was answered from the
 # cache, in this process. Read by the budgets and the bench.
 COMPUTED: Counter[str] = Counter()
@@ -227,7 +225,7 @@ def _midnight_after(local: datetime) -> datetime:
 # ----- Declaring and answering -------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Derivation:
     name: str
     reads: tuple[str, ...]
@@ -249,9 +247,7 @@ class Derivation:
         if not self._tables:
             from django.apps import apps
 
-            self._tables.append(
-                frozenset(apps.get_model(label)._meta.db_table for label in self.reads)
-            )
+            self._tables.append(frozenset(apps.get_model(label)._meta.db_table for label in self.reads))
         return self._tables[0]
 
     @property
@@ -274,14 +270,14 @@ class Derivation:
         return bool(new)
 
 
-def derivation(
+def derivation[T](
     name: str,
     *,
     reads: tuple[str, ...],
     vary: Callable[..., Any] | None = None,
     unseen: bool = False,
     ahead: int = REMEMBERED,
-) -> Callable[[Callable[..., _T]], Callable[..., _T]]:
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Declare a function as a derived fact of the tables in ``reads``.
 
     ``reads`` names every model the function queries, directly or through
@@ -297,14 +293,14 @@ def derivation(
     first, and 0 keeps none.
     """
 
-    def declare(function: Callable[..., _T]) -> Callable[..., _T]:
+    def declare(function: Callable[..., T]) -> Callable[..., T]:
         if name in DERIVATIONS:
             raise ImproperlyConfigured(f"Derivation {name!r} is declared twice.")
         declared = Derivation(name, tuple(sorted(set(reads))), function, vary, unseen, ahead)
         DERIVATIONS[name] = declared
 
         @wraps(function)
-        def answer(*args: Any, **kwargs: Any) -> _T:
+        def answer(*args: Any, **kwargs: Any) -> T:
             variant = repr(vary(*args, **kwargs) if vary else (args, sorted(kwargs.items())))
             _may_ask(declared)
             value, until = read_once(
@@ -366,9 +362,7 @@ def _may_ask(declared: Derivation) -> None:
     if parent is None or parent.learns or declared.declared <= parent.tables:
         return
     missing = ", ".join(sorted(declared.declared - parent.tables))
-    raise ImproperlyConfigured(
-        f"A derivation calls {declared.name!r} without declaring what it reads: {missing}."
-    )
+    raise ImproperlyConfigured(f"A derivation calls {declared.name!r} without declaring what it reads: {missing}.")
 
 
 def _tell(declared: Derivation, until: datetime | None) -> None:
@@ -382,9 +376,7 @@ def _tell(declared: Derivation, until: datetime | None) -> None:
         parent.hold_until(until)
 
 
-def _answer(
-    declared: Derivation, variant: str, args: tuple, kwargs: dict
-) -> tuple[Any, datetime | None]:
+def _answer(declared: Derivation, variant: str, args: tuple, kwargs: dict) -> tuple[Any, datetime | None]:
     """The answer and the moment it stops standing."""
 
     key = None if _UNCACHED.get() else _key(declared, variant)
@@ -478,7 +470,7 @@ def _awaited_pass(declared: Derivation, key: str | None) -> bool:
     return True
 
 
-def _next_asked(pending: list[tuple[str, str, "_Ask"]]) -> int:
+def _next_asked(pending: list[tuple[str, str, _Ask]]) -> int:
     """Which pending question the pass asks next: one a request waits on, else the first."""
 
     with _TURN:
@@ -538,7 +530,7 @@ def _stored(key: str | None) -> tuple[Any, datetime | None, bool]:
         return None, None, False
     try:
         entry = _store().get(key)
-    except Exception:  # noqa: BLE001 - an unreadable cache is a miss, never an error page
+    except Exception:  # an unreadable cache is a miss, never an error page
         logger.exception("The derived cache could not be read; deriving instead.")
         return None, None, False
     if entry is None:
@@ -601,13 +593,13 @@ def _keep(key: str | None, value: Any, until: datetime | None) -> bool:
             return False
     try:
         _store().set(key, (value, until), timeout=lifetime)
-    except Exception:  # noqa: BLE001 - a value that cannot be stored is still the answer
+    except Exception:  # a value that cannot be stored is still the answer
         logger.exception("A derived value could not be stored.")
         return False
     return True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Standing:
     """What an answer was derived at, and the moment it stops holding."""
 
@@ -697,7 +689,11 @@ def _answered_until(declared: Derivation, variant: str) -> datetime | None:
 
 
 def _remember(
-    declared: Derivation, variant: str, answer: Callable[..., Any], args: tuple, kwargs: dict,
+    declared: Derivation,
+    variant: str,
+    answer: Callable[..., Any],
+    args: tuple,
+    kwargs: dict,
     until: datetime | None,
 ) -> None:
     now = monotonic_time.monotonic()
@@ -767,7 +763,7 @@ def _pass() -> list[str]:
         name, variant, ask = pending.pop(_next_asked(pending))
         try:
             derived, key = ask.context.copy().run(_again, ask)
-        except Exception:  # noqa: BLE001 - one question failing must not stop the rest
+        except Exception:  # one question failing must not stop the rest
             logger.exception("Derivation %s could not be asked again ahead.", name)
             with _ASKS_LOCK:
                 _ASKS.get(name, {}).pop(variant, None)
@@ -789,9 +785,7 @@ def _again(ask: _Ask) -> tuple[bool, str]:
     try:
         with projection_scope(ask.seed, apart=True):
             variant = repr(
-                declared.vary(*ask.args, **ask.kwargs)
-                if declared.vary
-                else (ask.args, sorted(ask.kwargs.items()))
+                declared.vary(*ask.args, **ask.kwargs) if declared.vary else (ask.args, sorted(ask.kwargs.items()))
             )
             key = _key(declared, variant)
             if key is None:
@@ -826,10 +820,7 @@ def asked_of(table: str) -> bool:
 
     with _ASKS_LOCK:
         asked = [name for name, asks in _ASKS.items() if asks]
-    return any(
-        (declared := DERIVATIONS.get(name)) is not None and declared.reads_table(table)
-        for name in asked
-    )
+    return any((declared := DERIVATIONS.get(name)) is not None and declared.reads_table(table) for name in asked)
 
 
 def next_due() -> datetime | None:

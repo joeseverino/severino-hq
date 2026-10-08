@@ -1,7 +1,5 @@
 """What each credential can see: derived from the registries, read in one query."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -9,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec
 from hq.domains.control_plane.observations.contract import registry
@@ -17,7 +16,6 @@ from hq.domains.control_plane.provider_adapters.contracts import (
     PERMISSION_REFUSAL,
 )
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 
 from ..connections import _controller_contract
 from ..credential_sight import (
@@ -54,11 +52,7 @@ def with_example():
 
 
 def sights_by_kind():
-    return {
-        (provider.provider, sight.kind): sight
-        for provider in credential_sight()
-        for sight in provider.sights
-    }
+    return {(provider.provider, sight.kind): sight for provider in credential_sight() for sight in provider.sights}
 
 
 def by_provider():
@@ -111,9 +105,7 @@ class CredentialSightTests(TestCase):
         self.assertEqual(sight.source, "reading")
 
     def test_a_kind_with_no_connection_is_not_connected_rather_than_empty(self):
-        ProviderInventory.objects.create(
-            kind="host.perimeter", records=[], connected=False, observed_at=timezone.now()
-        )
+        ProviderInventory.objects.create(kind="host.perimeter", records=[], connected=False, observed_at=timezone.now())
 
         sight = sights_by_kind()[("ssh", "host.perimeter")]
 
@@ -196,9 +188,7 @@ class CredentialSightTests(TestCase):
         now = timezone.now()
         for kind in list(PROVIDERS)[:5]:
             ProviderInventory.objects.create(kind=kind, records=[{}], observed_at=now)
-        ProviderInventory.objects.create(
-            kind="host.perimeter", reachable=False, error="refused", observed_at=now
-        )
+        ProviderInventory.objects.create(kind="host.perimeter", reachable=False, error="refused", observed_at=now)
 
         with self.assertNumQueries(1):
             credential_sight()
@@ -242,9 +232,7 @@ class PerConnectionSightTests(TestCase):
     def test_each_connection_counts_only_what_was_read_through_it(self):
         connected, _ = sight_by_connection({"edge": "ssh", "shared-host": "ssh"})
 
-        self.assertEqual(
-            self.labels(connected["edge"]), {"host.perimeter": 1, "caddy.route": 3}
-        )
+        self.assertEqual(self.labels(connected["edge"]), {"host.perimeter": 1, "caddy.route": 3})
         seen = self.labels(connected["shared-host"])
         self.assertNotIn("host.perimeter", seen)
         self.assertNotIn("caddy.route", seen)
@@ -255,9 +243,7 @@ class PerConnectionSightTests(TestCase):
         self.assertEqual(found[("ssh", "caddy.route")].records, 3)
 
     def test_a_failed_read_is_said_on_every_connection_it_could_be(self):
-        ProviderInventory.objects.filter(kind="host.perimeter").update(
-            reachable=False, error="exit 255"
-        )
+        ProviderInventory.objects.filter(kind="host.perimeter").update(reachable=False, error="exit 255")
 
         connected, _ = sight_by_connection({"edge": "ssh", "shared-host": "ssh"})
 
@@ -291,9 +277,7 @@ class PerConnectionSightTests(TestCase):
         )
 
         self.assertEqual(unattributed_kinds(observations, ()), ["example.unnamed"])
-        self.assertEqual(
-            unattributed_kinds(OBSERVATIONS, tuple(PROVIDERS.values())), []
-        )
+        self.assertEqual(unattributed_kinds(OBSERVATIONS, tuple(PROVIDERS.values())), [])
 
 
 class CanDoTests(TestCase):
@@ -326,9 +310,7 @@ class RefusalEndToEndTests(TestCase):
         return report, by_provider()["cloudflare_api"]
 
     def test_a_refused_credential_reaches_the_page_as_one_refusal(self):
-        report, provider = self._sweep(
-            CREDENTIAL_REFUSAL, "Cannot use the access token from location: 192.0.2.1"
-        )
+        report, provider = self._sweep(CREDENTIAL_REFUSAL, "Cannot use the access token from location: 192.0.2.1")
 
         self.assertTrue(report)
         for kind, found in report.items():
@@ -357,9 +339,7 @@ class RefusalEndToEndTests(TestCase):
             {"host.perimeter": {"ok": False, "records": [], "error": "x", "refusal": CREDENTIAL_REFUSAL}},
             principal=cli_principal(),
         )
-        record_inventory(
-            {"host.perimeter": {"ok": True, "records": []}}, principal=cli_principal()
-        )
+        record_inventory({"host.perimeter": {"ok": True, "records": []}}, principal=cli_principal())
 
         self.assertEqual(ProviderInventory.objects.get(kind="host.perimeter").refusal, "")
 
@@ -374,9 +354,7 @@ class RefusalEndToEndTests(TestCase):
 
 class CredentialSightPageTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(user)
         now = timezone.now()
         for ref, provider in (
@@ -393,9 +371,7 @@ class CredentialSightPageTests(TestCase):
             )
         # Fully readable.
         for kind in ("host.perimeter", "caddy.route"):
-            ProviderInventory.objects.create(
-                kind=kind, records=[{"record": "a"}], observed_at=now
-            )
+            ProviderInventory.objects.create(kind=kind, records=[{"record": "a"}], observed_at=now)
         # The credential itself refused.
         for kind, spec in OBSERVATIONS.items():
             if spec.provider == "cloudflare_api":
@@ -415,9 +391,7 @@ class CredentialSightPageTests(TestCase):
             observed_at=now,
         )
         # No connection.
-        ProviderInventory.objects.create(
-            kind="adguard.rewrite", records=[], connected=False, observed_at=now
-        )
+        ProviderInventory.objects.create(kind="adguard.rewrite", records=[], connected=False, observed_at=now)
 
     def test_the_page_shows_each_connection_and_what_it_can_see(self):
         response = self.client.get(reverse("control_plane:connections"))
@@ -427,8 +401,7 @@ class CredentialSightPageTests(TestCase):
         self.assertContains(response, 'class="connection-sight"', count=3)
         self.assertContains(
             response,
-            "Cloudflare API refused this credential: "
-            "Cannot use the access token from location: 192.0.2.1",
+            "Cloudflare API refused this credential: Cannot use the access token from location: 192.0.2.1",
             count=1,
         )
         self.assertNotIn("Add D1 Read (account)", body)
@@ -436,9 +409,7 @@ class CredentialSightPageTests(TestCase):
         self.assertContains(response, "Reads 2 things")
         # Not connected, once each, with what it would let HQ see.
         self.assertContains(response, "<strong>AdGuard Home</strong>", count=1)
-        self.assertContains(
-            response, "Would let HQ see: DNS client, DNS lookups, DNS server, Internal DNS record"
-        )
+        self.assertContains(response, "Would let HQ see: DNS client, DNS lookups, DNS server, Internal DNS record")
         self.assertContains(response, "<strong>1Password</strong>", count=1)
         self.assertContains(response, "Would let HQ manage: Certificate target")
         # Nothing sweeps these, so no credential is said to see them.
@@ -455,10 +426,7 @@ class CredentialSightPageTests(TestCase):
             observed_at=timezone.now(),
         )
         ProviderInventory.objects.filter(kind="caddy.route").update(
-            records=[
-                {"connection_ref": "example-ssh", "domain": f"{n}.example.com"}
-                for n in ("a", "b", "c")
-            ]
+            records=[{"connection_ref": "example-ssh", "domain": f"{n}.example.com"} for n in ("a", "b", "c")]
         )
         ProviderInventory.objects.filter(kind="host.perimeter").update(
             records=[{"record": "perimeter", "connection_ref": "example-ssh"}]
@@ -468,15 +436,12 @@ class CredentialSightPageTests(TestCase):
         # Each row's "Can see" block alone: its abilities name the same kinds.
         rows = {
             chunk.split('"', 1)[0]: "".join(
-                block.split("</ul>", 1)[0]
-                for block in chunk.split('<div class="connection-sight">')[1:]
+                block.split("</ul>", 1)[0] for block in chunk.split('<div class="connection-sight">')[1:]
             )
             for chunk in response.content.decode().split('<tr id="')[1:]
         }
         own = next(row for anchor, row in rows.items() if anchor.endswith("example-ssh"))
-        other = next(
-            row for anchor, row in rows.items() if anchor.endswith("example-shared-host")
-        )
+        other = next(row for anchor, row in rows.items() if anchor.endswith("example-shared-host"))
 
         self.assertIn("Caddy route", own)
         self.assertIn('<span class="muted">3</span>', own)

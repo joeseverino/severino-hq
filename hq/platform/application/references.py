@@ -16,13 +16,11 @@ an extension's records refer to the host's, and the host's to an extension's,
 with neither naming the other.
 """
 
-from __future__ import annotations
-
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 from django import forms
 from django.apps import apps
@@ -44,7 +42,7 @@ NAME_SUFFIX = "_name"
 CERTIFICATE = "certificate"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Reference:
     """``kind:identity``, taken apart."""
 
@@ -61,7 +59,7 @@ class Reference:
         return f"{self.kind}:{self.identity}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Referable:
     """Declared on a model as ``referable``: its rows can be referred to.
 
@@ -85,7 +83,7 @@ class Referable:
     pickable: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Target:
     """One referable model, as the resolver reads it."""
 
@@ -146,6 +144,7 @@ class ReferenceField(models.CharField):
         kwargs.setdefault("db_index", True)
         super().__init__(*args, **kwargs)
 
+    @override
     def deconstruct(self) -> Any:
         """A plain text column to a migration: what it may name is not schema."""
 
@@ -156,6 +155,7 @@ class ReferenceField(models.CharField):
     def name_attname(self) -> str:
         return f"{self.attname}{NAME_SUFFIX}"
 
+    @override
     def check(self, **kwargs: Any) -> list[checks.CheckMessage]:
         found = list(super().check(**kwargs))
         names = {field.name for field in self.model._meta.get_fields()}
@@ -186,6 +186,7 @@ class ReferenceField(models.CharField):
             return target is not None and target.declared.role == self.role
         return kind not in self.but
 
+    @override
     def clean(self, value: Any, model_instance: models.Model | None) -> Any:
         value = super().clean(value, model_instance)
         if model_instance is None:
@@ -203,6 +204,7 @@ class ReferenceField(models.CharField):
             raise ValidationError(f"HQ has nothing called {value!r} to link this to.")
         return value
 
+    @override
     def pre_save(self, model_instance: models.Model, add: bool) -> Any:
         """No reference keeps no name. ``clean`` is not asked about an empty value."""
 
@@ -218,6 +220,7 @@ class ReferenceField(models.CharField):
             return False
         return type(row)._default_manager.filter(pk=row.pk, **{self.attname: value}).exists()
 
+    @override
     def formfield(self, **kwargs: Any) -> Any:
         return ReferenceChoiceField(
             reference=self,
@@ -347,15 +350,13 @@ def _rows(
 
 def _hydrate(model: type[models.Model], columns: tuple[str, ...], values: Sequence[Any]) -> models.Model:
     held = {}
-    for column, value in zip(columns, values):
+    for column, value in zip(columns, values, strict=False):
         field = model._meta.pk if column == "pk" else model._meta.get_field(column)
         held[column] = field.to_python(value) if value is not None else None
     return model(**held)
 
 
-def _found(
-    references: Iterable[Reference], *, principal: Principal
-) -> dict[Reference, EntityLink]:
+def _found(references: Iterable[Reference], *, principal: Principal) -> dict[Reference, EntityLink]:
     """The link for each reference that names something this principal may see.
 
     One read of the topology for every infrastructure kind, and one statement
@@ -379,7 +380,7 @@ def _found(
         )
         for kind in kinds
     ]
-    for kind, rows in zip(kinds, _rows(parts)):
+    for kind, rows in zip(kinds, _rows(parts), strict=True):
         target = known[kind]
         for row in rows:
             identity = str(getattr(row, target.declared.key))
@@ -425,9 +426,7 @@ def _noun(kind: str) -> str:
     return target.noun.capitalize() if target is not None else kind_label(kind)
 
 
-def resolve_many(
-    stored: Sequence[tuple[str, str]], *, principal: Principal
-) -> list[EntityLink | None]:
+def resolve_many(stored: Sequence[tuple[str, str]], *, principal: Principal) -> list[EntityLink | None]:
     """A link for each ``(reference, stored name)``, in order.
 
     None for no reference, and for one of a kind this principal may not be
@@ -442,7 +441,7 @@ def resolve_many(
     found = _found([reference for reference in parsed if reference], principal=principal)
     known = targets()
     links: list[EntityLink | None] = []
-    for reference, (value, name) in zip(parsed, stored):
+    for reference, (value, name) in zip(parsed, stored, strict=True):
         if reference is None:
             links.append(EntityLink(label=name or str(value), kind_label="Not in HQ") if value else None)
         elif reference.kind in known and not _may_name(known[reference.kind], principal):
@@ -473,9 +472,7 @@ def resolve(value: str, name: str = "", *, principal: Principal) -> EntityLink |
 def reference_of(row: models.Model, field: str, *, principal: Principal) -> EntityLink | None:
     """The link for the reference a row holds in ``field``."""
 
-    return resolve(
-        getattr(row, field, ""), getattr(row, f"{field}{NAME_SUFFIX}", ""), principal=principal
-    )
+    return resolve(getattr(row, field, ""), getattr(row, f"{field}{NAME_SUFFIX}", ""), principal=principal)
 
 
 def stored_name(value: str, *, principal: Principal) -> str:
@@ -520,7 +517,6 @@ def as_stored(value: Any) -> tuple[str, str]:
     was not chosen from a list, so a reference that names nothing is stored
     all the same and reported by ``dangling``.
     """
-
 
     principal = _reader()
     reference = authored(value, principal=principal)
@@ -573,9 +569,7 @@ class ReferencePickerMixin:
         return form
 
 
-def choices(
-    field: ReferenceField, *, principal: Principal, held: tuple[str, str] = ("", "")
-) -> list[tuple[Any, Any]]:
+def choices(field: ReferenceField, *, principal: Principal, held: tuple[str, str] = ("", "")) -> list[tuple[Any, Any]]:
     """The grouped options for one reference column.
 
     Infrastructure comes from the topology and every model kind from one
@@ -587,9 +581,7 @@ def choices(
 
     known = targets()
     estate_kinds = [
-        kind
-        for kind in (*ESTATE_KINDS, *_certificate_kinds())
-        if kind not in known and field.accepts(kind)
+        kind for kind in (*ESTATE_KINDS, *_certificate_kinds()) if kind not in known and field.accepts(kind)
     ]
     picked = [
         target
@@ -609,7 +601,7 @@ def choices(
             groups.append((plural.capitalize(), options))
             seen.update(value for value, _name in options)
     rows = _rows([(target.model, target.columns, Q()) for target in picked])
-    for target, found in zip(picked, rows):
+    for target, found in zip(picked, rows, strict=True):
         options = sorted(
             (
                 (str(Reference(target.kind, str(getattr(row, target.declared.key)))), target.name_of(row))
@@ -629,7 +621,7 @@ def choices(
 # ----- What names a thing --------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Mention:
     """One row that names a thing: its link, and a few words beside it."""
 
@@ -637,7 +629,7 @@ class Mention:
     note: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Mentions:
     """The rows that name a thing through one kind of reference."""
 
@@ -660,11 +652,9 @@ def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Me
         for field in reference_fields()
         if field.accepts(kind) and (field.model not in known or _may_name(known[field.model], principal))
     ]
-    rows = _rows(
-        [(field.model, _unique(("pk", *field.shows)), Q(**{field.attname: value})) for field in fields]
-    )
+    rows = _rows([(field.model, _unique(("pk", *field.shows)), Q(**{field.attname: value})) for field in fields])
     groups: dict[str, list[Mention]] = defaultdict(list)
-    for field, found in zip(fields, rows):
+    for field, found in zip(fields, rows, strict=True):
         for row in found:
             groups[field.heading].append(
                 Mention(
@@ -725,13 +715,17 @@ def dangling(
 
     gone = [{value for value in values if names_nothing(value)} for values in held]
     parts = [
-        (field.model, _unique(("pk", field.attname, field.name_attname, *field.shows)), Q(**{f"{field.attname}__in": values}))
-        for field, values in zip(fields, gone)
+        (
+            field.model,
+            _unique(("pk", field.attname, field.name_attname, *field.shows)),
+            Q(**{f"{field.attname}__in": values}),
+        )
+        for field, values in zip(fields, gone, strict=False)
         if values
     ]
-    live = [field for field, values in zip(fields, gone) if values]
+    live = [field for field, values in zip(fields, gone, strict=False) if values]
     found: list[Insight] = []
-    for field, rows in zip(live, _rows(parts)):
+    for field, rows in zip(live, _rows(parts), strict=True):
         for row in rows:
             name = getattr(row, field.name_attname) or getattr(row, field.attname)
             found.append(

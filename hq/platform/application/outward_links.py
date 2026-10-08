@@ -4,12 +4,9 @@ Each provider's own console and the operator's declared links, as the
 navigation offers them.
 """
 
-from __future__ import annotations
-
 from hq.domains.control_plane.models import ProviderConnection
 
 from .derivations import derivation
-
 
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
@@ -94,14 +91,8 @@ def offered_links() -> list[dict[str, str]]:
             "sub": "HQ's own health check",
             "href": reverse("health_ready"),
         },
-        *(
-            {"label": label, "sub": sub or "admin console", "href": href}
-            for label, sub, href in consoles()
-        ),
-        *(
-            {"label": hostname, "sub": sub or "public site", "href": href}
-            for hostname, sub, href in public_sites()
-        ),
+        *({"label": label, "sub": sub or "admin console", "href": href} for label, sub, href in consoles()),
+        *({"label": hostname, "sub": sub or "public site", "href": href} for hostname, sub, href in public_sites()),
         *operator_links(),
     ]
 

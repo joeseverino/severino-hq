@@ -6,8 +6,6 @@ carries beyond that is a field here, so the schema drops it: no path, query,
 header value, body or user agent.
 """
 
-from __future__ import annotations
-
 from .contract import ObservationRecord, ObservationSpec
 
 ARRIVAL_KIND = "hq.request_path"

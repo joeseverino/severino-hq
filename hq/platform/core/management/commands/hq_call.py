@@ -12,10 +12,9 @@ The contract is the MCP tool surface itself, so the two cannot drift:
 A tool that fails writes its message to stderr and exits non-zero.
 """
 
-from __future__ import annotations
-
 import json
 import sys
+from typing import override
 
 from asgiref.sync import async_to_sync
 from django.core.management.base import BaseCommand, CommandError
@@ -28,6 +27,7 @@ from hq.platform.mcp.server import mcp
 class Command(BaseCommand):
     help = "Call one MCP tool as the operator: JSON request on stdin, JSON result on stdout."
 
+    @override
     def handle(self, *args, **options):
         try:
             request = json.load(sys.stdin)
@@ -45,7 +45,7 @@ class Command(BaseCommand):
         bound = set_principal(cli_principal())
         try:
             result = async_to_sync(tool.run)(arguments)
-        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+        except Exception as exc:  # reported, never swallowed
             raise CommandError(str(exc)) from exc
         finally:
             reset_principal(bound)

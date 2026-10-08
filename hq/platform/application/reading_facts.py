@@ -7,8 +7,6 @@ the rules read the rows back. A reading that could not be taken is a row too,
 so what went quiet is said and not dropped.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import fields, replace
 from datetime import datetime
@@ -42,10 +40,12 @@ class FactRow:
     def of(cls, value: str) -> Self:
         names = [field.name for field in fields(cls)]
         parts = (value.split("|") + [""] * len(names))[: len(names)]
-        return cls(**dict(zip(names, parts)))
+        return cls(**dict(zip(names, parts, strict=True)))
 
 
-def rows_of(snapshot: Any, row: Callable[[dict[str, Any]], FactRow], unread: Callable[[str], FactRow]) -> Iterator[FactRow]:
+def rows_of(
+    snapshot: Any, row: Callable[[dict[str, Any]], FactRow], unread: Callable[[str], FactRow]
+) -> Iterator[FactRow]:
     """What one stored reading says: a row per record, and the reading's own
     failure as a row ``unread`` makes from ``UNREAD`` or ``REFUSED``."""
 

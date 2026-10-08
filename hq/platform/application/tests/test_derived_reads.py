@@ -1,9 +1,8 @@
 """What the estate pages derive reaches the API, MCP, CLI and SDK from one registration."""
 
-from __future__ import annotations
-
 import json
 import re
+from functools import partial
 from io import StringIO
 from unittest import mock
 
@@ -45,7 +44,7 @@ DETAILS = {
     "readings": "cloudflare.pages_project",
     "credentials": "cloudflare_api",
 }
-SECRET_KEY_NAME = re.compile(r"secret|token|password|private|credential_value", re.I)
+SECRET_KEY_NAME = re.compile(r"secret|token|password|private|credential_value", re.IGNORECASE)
 PLANTED = "planted-value-not-for-output"
 
 
@@ -86,9 +85,7 @@ class ApplicationTests(TestCase):
         machines = list_resource("machines", {}, principal=READER)
         domains = list_resource("domains", {}, principal=READER)
 
-        self.assertEqual(
-            [item["name"] for item in machines["items"]], ["example-host-0", "example-host-1"]
-        )
+        self.assertEqual([item["name"] for item in machines["items"]], ["example-host-0", "example-host-1"])
         self.assertEqual(domains["items"][0]["name"], "example.com")
         # The Pages project's custom domain is a service nothing declares: observed.
         self.assertEqual(
@@ -123,9 +120,7 @@ class ApplicationTests(TestCase):
 
     def test_action_items_filter_as_the_page_does(self):
         everything = list_resource("action.items", {}, principal=READER)
-        nothing = list_resource(
-            "action.items", {"query": "no-such-words-anywhere"}, principal=READER
-        )
+        nothing = list_resource("action.items", {"query": "no-such-words-anywhere"}, principal=READER)
 
         self.assertEqual(nothing["count"], 0)
         self.assertGreaterEqual(everything["count"], 0)
@@ -172,9 +167,7 @@ class ApiTests(TestCase):
                 suffix = "?" + "&".join(f"{k}={v}" for k, v in query.items()) if query else ""
                 response = self.get(f"/api/v2/resources/{name}/{suffix}")
                 self.assertEqual(response.status_code, 200, response.content)
-                self.assertEqual(
-                    response.json()["data"]["count"], len(response.json()["data"]["items"])
-                )
+                self.assertEqual(response.json()["data"]["count"], len(response.json()["data"]["items"]))
         for name, identifier in DETAILS.items():
             with self.subTest(name):
                 response = self.get(f"/api/v2/resources/{name}/{identifier}/")
@@ -183,11 +176,7 @@ class ApiTests(TestCase):
     def test_a_token_without_read_is_refused(self):
         for name in (*LISTS, *DETAILS):
             with self.subTest(name):
-                path = (
-                    f"/api/v2/resources/{name}/{DETAILS[name]}/"
-                    if name in DETAILS
-                    else f"/api/v2/resources/{name}/"
-                )
+                path = f"/api/v2/resources/{name}/{DETAILS[name]}/" if name in DETAILS else f"/api/v2/resources/{name}/"
                 response = self.get(path, scope="example.write")
                 self.assertEqual(response.status_code, 403)
 
@@ -215,8 +204,7 @@ class McpCliAndSdkTests(TestCase):
 
     def test_the_cli_reaches_them_through_the_same_tool(self):
         output = StringIO()
-        request = {"tool": "get_resource",
-                   "arguments": {"name": "machines", "identifier": "example-host-1"}}
+        request = {"tool": "get_resource", "arguments": {"name": "machines", "identifier": "example-host-1"}}
         with mock.patch("sys.stdin", StringIO(json.dumps(request))):
             call_command("hq_call", stdout=output)
 
@@ -260,10 +248,7 @@ class NoSecretTests(TestCase):
 
     def test_no_derived_read_names_a_secret_looking_field(self):
         answers = [list_resource(name, query, principal=READER) for name, query in LISTS.items()]
-        answers += [
-            get_resource(name, identifier, principal=READER)
-            for name, identifier in DETAILS.items()
-        ]
+        answers += [get_resource(name, identifier, principal=READER) for name, identifier in DETAILS.items()]
         for answer in answers:
             named = {name for name in keys(answer) if SECRET_KEY_NAME.search(str(name))}
             self.assertEqual(named, set())
@@ -287,14 +272,12 @@ class QueryBudgetTests(TestCase):
     def test_lists(self):
         for name, query in LISTS.items():
             with self.subTest(name):
-                self.assert_flat(name, lambda: list_resource(name, query, principal=READER))
+                self.assert_flat(name, partial(list_resource, name, query, principal=READER))
 
     def test_details(self):
         for name, identifier in DETAILS.items():
             with self.subTest(name):
-                self.assert_flat(
-                    name, lambda: get_resource(name, identifier, principal=READER)
-                )
+                self.assert_flat(name, partial(get_resource, name, identifier, principal=READER))
 
 
 class ServedMachineReadTests(TestCase):

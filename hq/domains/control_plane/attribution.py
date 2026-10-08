@@ -1,7 +1,5 @@
 """Which connection a reading belongs to."""
 
-from __future__ import annotations
-
 # Providers HQ holds many connections of, each reaching a different machine. A
 # record read through one names that connection, so no two connections can
 # share a reading. Refused here when a kind of one does not.
@@ -16,8 +14,7 @@ def unattributed_kinds(observations, providers) -> list[str]:
         for kind, spec in observations.items()
         if spec.provider in PER_CONNECTION_PROVIDERS
         and not (
-            "connection_ref" in spec.record.model_fields
-            and spec.record.model_fields["connection_ref"].is_required()
+            "connection_ref" in spec.record.model_fields and spec.record.model_fields["connection_ref"].is_required()
         )
     ]
     for spec in providers:
@@ -29,4 +26,3 @@ def unattributed_kinds(observations, providers) -> list[str]:
         if not sample.get("connection_ref") or "connection_ref" not in spec.from_record(sample):
             found.append(spec.kind)
     return sorted(found)
-

@@ -1,7 +1,5 @@
 """The one-time import: validated whole, applied whole, audited per record."""
 
-from __future__ import annotations
-
 import io
 import json
 from decimal import Decimal
@@ -11,8 +9,8 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from hq.domains.assets.models import Asset
-from hq.platform.core.models import AuditLog
 from hq.domains.projects.models import Project
+from hq.platform.core.models import AuditLog
 
 from ..capabilities import capability_registry, execute_capability
 from ..registry_import import MAX_IMPORT_RECORDS, HQImportCommand, import_registry
@@ -60,9 +58,7 @@ class ImportTests(TestCase):
         self.assertEqual(result["summary"]["created"], 3)
         asset = Asset.objects.get(slug="example-server")
         self.assertEqual(asset.total_cost, Decimal("420.00"))
-        self.assertEqual(
-            list(asset.related_projects.values_list("slug", flat=True)), ["example-site"]
-        )
+        self.assertEqual(list(asset.related_projects.values_list("slug", flat=True)), ["example-site"])
 
     def test_importing_twice_changes_nothing(self):
         run()
@@ -150,17 +146,11 @@ class ValidationTests(TestCase):
         )
 
     def test_every_problem_is_reported_at_once(self):
-        result = self.assert_refused(
-            {"projects": [{"name": "A"}, {"slug": "b", "name": "B", "category": "nope"}]}
-        )
+        result = self.assert_refused({"projects": [{"name": "A"}, {"slug": "b", "name": "B", "category": "nope"}]})
         self.assertEqual(len(result["problems"]), 2)
 
     def test_the_record_limit_is_enforced(self):
-        document = {
-            "projects": [
-                {"slug": f"p-{index}", "name": "P"} for index in range(MAX_IMPORT_RECORDS + 1)
-            ]
-        }
+        document = {"projects": [{"slug": f"p-{index}", "name": "P"} for index in range(MAX_IMPORT_RECORDS + 1)]}
         self.assert_refused(document, "the limit is")
 
     def test_a_record_refused_while_writing_rolls_back_every_record(self):
@@ -197,9 +187,7 @@ class CheckOnlyTests(TestCase):
 
 class DerivedFieldTests(TestCase):
     def test_a_stored_public_url_that_differs_is_kept_and_reported(self):
-        Project.objects.create(
-            slug="example-site", name="Example site", public_url="https://pages.example.com"
-        )
+        Project.objects.create(slug="example-site", name="Example site", public_url="https://pages.example.com")
 
         result = run()
 
@@ -215,9 +203,7 @@ class DerivedFieldTests(TestCase):
                 }
             ],
         )
-        self.assertEqual(
-            Project.objects.get(slug="example-site").public_url, "https://pages.example.com"
-        )
+        self.assertEqual(Project.objects.get(slug="example-site").public_url, "https://pages.example.com")
         self.assertEqual(result["summary"]["kept"], 1)
 
     def test_a_blank_public_url_is_filled(self):
@@ -225,9 +211,7 @@ class DerivedFieldTests(TestCase):
 
         run()
 
-        self.assertEqual(
-            Project.objects.get(slug="example-site").public_url, "https://www.example.com"
-        )
+        self.assertEqual(Project.objects.get(slug="example-site").public_url, "https://www.example.com")
 
 
 class CapabilityGateTests(TestCase):
@@ -261,9 +245,8 @@ class ManagementCommandTests(TestCase):
     def write(self, document):
         import tempfile
 
-        handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
-        json.dump(document, handle)
-        handle.close()
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump(document, handle)
         self.addCleanup(lambda: __import__("os").unlink(handle.name))
         return handle.name
 

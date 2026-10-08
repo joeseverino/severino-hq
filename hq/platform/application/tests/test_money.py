@@ -1,7 +1,5 @@
 """An amount is written one way on every page."""
 
-from __future__ import annotations
-
 from decimal import Decimal
 
 from django.template import Context, Template, TemplateSyntaxError
@@ -19,7 +17,7 @@ class MoneyTests(SimpleTestCase):
         self.assertEqual(money(0), "$0.00")
 
     def test_a_negative_amount_takes_one_true_minus_sign_before_the_dollar(self):
-        self.assertEqual(money(Decimal("-5")), f"{MINUS}$5.00")
+        self.assertEqual(money(Decimal(-5)), f"{MINUS}$5.00")
 
     def test_an_amount_that_rounds_to_nothing_is_not_negative(self):
         self.assertEqual(money(Decimal("-0.004")), "$0.00")
@@ -39,7 +37,9 @@ class MoneyTests(SimpleTestCase):
             Context({"a": Decimal("-1234.5"), "nothing": None})
         )
 
-        self.assertEqual(drawn, f"{MINUS}$1,234.50 {MINUS}$1,234 " + '<span class="empty-value" title="None">' + MISSING + "</span>")
+        self.assertEqual(
+            drawn, f"{MINUS}$1,234.50 {MINUS}$1,234 " + '<span class="empty-value" title="None">' + MISSING + "</span>"
+        )
 
     def test_the_filter_refuses_a_form_it_does_not_have(self):
         with self.assertRaises(TemplateSyntaxError):

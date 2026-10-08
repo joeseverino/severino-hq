@@ -1,7 +1,5 @@
 """Continuous delivery is scheduled once per stage, and only through a connection that manages it."""
 
-from __future__ import annotations
-
 from django.test import TestCase
 from django.utils import timezone
 
@@ -31,13 +29,13 @@ class DeliveryScheduleTests(TestCase):
             },
             generation=1,
             observed_generation=1,
-            conditions=drifted("example.alpha: bbbbbbb is approved, production still runs aaaaaaa. No deploy has started."),
+            conditions=drifted(
+                "example.alpha: bbbbbbb is approved, production still runs aaaaaaa. No deploy has started."
+            ),
         )
 
     def settle(self):
-        OperationRequest.objects.update(
-            state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now()
-        )
+        OperationRequest.objects.update(state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now())
 
     def test_each_new_stage_is_one_reconcile(self):
         self.assertEqual(len(schedule_automatic_operations("example-controller")["scheduled"]), 1)

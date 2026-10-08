@@ -1,12 +1,15 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
 class HQAPIConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = 'hq.platform.api'
-    label = 'hq_api'
+    name = "hq.platform.api"
+    label = "hq_api"
     verbose_name = "HQ machine API"
 
+    @override
     def ready(self) -> None:
         # Register the composed capability-contract check after every model has
         # loaded. ``migrate`` and deployment checks then reject a bad extension

@@ -5,27 +5,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0006_hq_owns_managed_resources'),
+        ("control_plane", "0006_hq_owns_managed_resources"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ProviderInventory',
+            name="ProviderInventory",
             fields=[
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('kind', models.CharField(max_length=64, primary_key=True, serialize=False)),
-                ('records', models.JSONField(blank=True, default=list)),
-                ('reachable', models.BooleanField(default=True)),
-                ('error', models.CharField(blank=True, max_length=500)),
-                ('observed_at', models.DateTimeField()),
-                ('controller_id', models.CharField(blank=True, max_length=160)),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("kind", models.CharField(max_length=64, primary_key=True, serialize=False)),
+                ("records", models.JSONField(blank=True, default=list)),
+                ("reachable", models.BooleanField(default=True)),
+                ("error", models.CharField(blank=True, max_length=500)),
+                ("observed_at", models.DateTimeField()),
+                ("controller_id", models.CharField(blank=True, max_length=160)),
             ],
             options={
-                'verbose_name_plural': 'provider inventories',
-                'ordering': ('kind',),
+                "verbose_name_plural": "provider inventories",
+                "ordering": ("kind",),
             },
         ),
     ]

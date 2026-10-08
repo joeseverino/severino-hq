@@ -7,25 +7,22 @@ Middleware for Severino HQ.
   ORM signals can attribute audit events without leaking across requests.
 """
 
-from __future__ import annotations
-
-from contextvars import ContextVar
 import logging
+from contextvars import ContextVar
 from time import monotonic
+from typing import override
 from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import middleware as auth_middleware
 
+import hq.platform.core.logging as request_logging
+from hq.platform.application import request_context
 from hq.platform.application.arrivals import note as note_arrival
 from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import demo_scope
-
-import hq.platform.core.logging as request_logging
 from hq.platform.core import speculation
 from hq.platform.core.outbound import serving
-from hq.platform.application import request_context
-
 
 # Where the browser's own answer to "show me stand-ins" is kept. Named here
 # because the middleware that reads it and the view that writes it are the only
@@ -55,9 +52,7 @@ class DemoModeMiddleware:
 
     def __call__(self, request):
         showing = bool(
-            getattr(request, "user", None)
-            and request.user.is_authenticated
-            and request.session.get(DEMO_SESSION_KEY)
+            getattr(request, "user", None) and request.user.is_authenticated and request.session.get(DEMO_SESSION_KEY)
         )
         request.showing_demo = showing
         with demo_scope(showing):
@@ -113,8 +108,7 @@ class RequestContextMiddleware:
             # available to anything that manages to run in the page.
             response.setdefault(
                 "Permissions-Policy",
-                "geolocation=(), microphone=(), camera=(), usb=(), payment=(), "
-                "interest-cohort=()",
+                "geolocation=(), microphone=(), camera=(), usb=(), payment=(), interest-cohort=()",
             )
             # Nothing here is meant to be read by another origin. Django's
             # default opener policy already isolates the browsing context;
@@ -179,7 +173,7 @@ class CurrentUserMiddleware:
             # session-backed object on the event-loop thread (Django 6.1 then
             # correctly raises SynchronousOnlyOperation). Resolve it while
             # this synchronous middleware is still running in its worker.
-            user.is_authenticated
+            _ = user.is_authenticated
             user = getattr(request, "_cached_user", user)
         token = _current_user.set(user)
         try:
@@ -198,6 +192,7 @@ class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):
     login page a native client cannot use.
     """
 
+    @override
     def process_view(self, request, view_func, view_args, view_kwargs):
         from hq.platform.application.plugins import plugin_token_authenticated_prefixes
 

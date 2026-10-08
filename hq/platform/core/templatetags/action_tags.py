@@ -52,8 +52,7 @@ def queue_entries(entries):
     """Keep the SDK attention include on the queue's single projection."""
     from hq.platform.application.dashboard import queue_item
 
-    return [queue_item(entry.get("source_id", ""), entry["source"], entry["item"])
-            for entry in entries]
+    return [queue_item(entry.get("source_id", ""), entry["source"], entry["item"]) for entry in entries]
 
 
 @register.filter
@@ -65,9 +64,12 @@ def workflow_action(action):
 
     values = asdict(action) if is_dataclass(action) else action
     return PageAction(
-        values["label"], values["url"], method=values["method"].lower(),
+        values["label"],
+        values["url"],
+        method=values["method"].lower(),
         primary=values.get("recommended", False),
-        danger=values.get("effect") == "destructive", title=values.get("reason", ""),
+        danger=values.get("effect") == "destructive",
+        title=values.get("reason", ""),
     )
 
 

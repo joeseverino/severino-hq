@@ -7,8 +7,6 @@ controller, after a page rather than during one, and stores them through the
 same ingest as a sweep.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from ..names import normalized_hostname, organisation_name
@@ -146,9 +144,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Address owner",
         AddressHolderRecord,
         addresses=_address,
-        title=lambda record: organisation_name(
-            str(record.get("organisation") or record.get("network") or "")
-        ),
+        title=lambda record: organisation_name(str(record.get("organisation") or record.get("network") or "")),
         relation="On the network of",
         facet="network",
         read_by="hq",

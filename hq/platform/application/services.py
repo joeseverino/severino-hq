@@ -29,37 +29,34 @@ Two consequences:
   are made of.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import Any
 from urllib.parse import urlparse
 
+from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
-from .labels import lower_first, plural
-from hq.domains.control_plane.providers import PROVIDERS, registry_label, service_facets, resource_home
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+from hq.domains.control_plane.providers import PROVIDERS, registry_label, resource_home, service_facets
 
 from .containers import Running, container_watchers
+from .derivations import derivation
+from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import EntityLink, entity_link
 from .facts import Joined, Readings, Subject, readings as stored_readings
 from .infrastructure import enabled_resources
+from .labels import lower_first, plural
 from .locate import host_of, split_endpoint
 from .naming import name_context
-from .derivations import derivation
-from .derived_inputs import ESTATE_READS, estate_variant
 from .projection import read_once
+from .published_sites import published_projects
 from .reach import UNKNOWN, Reach, reach_of
 from .service_declarations import Claim, declarations, runtime_claim
+from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, Facet
 from .ui import ListRow
 from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
-from .service_facets import CERTIFICATE_FACET, DNS_FACET, Facet, RUNTIME_FACET
-from .published_sites import published_projects
-
 
 HQ_MARK = "hq"
 OBSERVED_MARK = "observed"
@@ -81,7 +78,7 @@ class Service:
     # ``(alias, claim)`` for the declarations that make those other names work.
     # Beside the service, never merged into its facets: merged, two CNAMEs read
     # as two records competing for one name.
-    alias_claims: tuple[tuple[str, "Claim"], ...] = ()
+    alias_claims: tuple[tuple[str, Claim], ...] = ()
     # Whether this operator keeps it at the top. A preference about a person,
     # never part of what HQ asks the controller to make true.
     pinned: bool = False
@@ -162,7 +159,7 @@ class Service:
         return tuple(claim for facet in self.facets for claim in facet.claims)
 
     @property
-    def container(self) -> "Running | None":
+    def container(self) -> Running | None:
         """The one container this service was found running in, if any.
 
         Held on the service rather than dug out of a facet by the template,
@@ -171,9 +168,7 @@ class Service:
         card that is describing something.
         """
 
-        return next(
-            (facet.observed for facet in self.facets if facet.observed), None
-        )
+        return next((facet.observed for facet in self.facets if facet.observed), None)
 
     @property
     def zone_key(self) -> str:
@@ -227,11 +222,7 @@ class Service:
         to reach it".
         """
 
-        return tuple(
-            claim
-            for claim in self.claims
-            if not (PROVIDERS.get(claim.kind) and PROVIDERS[claim.kind].covers)
-        )
+        return tuple(claim for claim in self.claims if not (PROVIDERS.get(claim.kind) and PROVIDERS[claim.kind].covers))
 
     @cached_property
     def health(self):
@@ -274,10 +265,7 @@ class Service:
         alone, cannot be forgotten by one of them.
         """
 
-        return tuple(
-            ListRow(title=fault, status="attention", badge="Setup")
-            for fault in self.faults
-        )
+        return tuple(ListRow(title=fault, status="attention", badge="Setup") for fault in self.faults)
 
 
 def _certificates_in_use() -> dict[str, dict[str, Any]]:
@@ -292,11 +280,7 @@ def _certificates_in_use() -> dict[str, dict[str, Any]]:
     because the proxy is the thing that chooses which certificate answers.
     """
 
-    readers = {
-        kind: spec.served_certificate
-        for kind, spec in PROVIDERS.items()
-        if spec.served_certificate is not None
-    }
+    readers = {kind: spec.served_certificate for kind, spec in PROVIDERS.items() if spec.served_certificate is not None}
     found: dict[str, dict[str, Any]] = {}
     for snapshot in ProviderInventory.objects.filter(kind__in=tuple(readers)):
         for record in snapshot.records:
@@ -313,7 +297,14 @@ def _service_catalog() -> tuple[Service, ...]:
     """Every hostname HQ declares, assembled from the resources that name it."""
 
     (
-        declared, covering, origins, aliases, alias_claims, machines, answers, routed,
+        declared,
+        covering,
+        origins,
+        aliases,
+        alias_claims,
+        machines,
+        answers,
+        routed,
         served_with,
     ) = declarations()
     estate = _Estate.read(covering, machines)
@@ -336,9 +327,7 @@ def _service_catalog() -> tuple[Service, ...]:
     )
 
 
-def ordered_services(
-    found: tuple[Service, ...], favorites: tuple[str, ...]
-) -> tuple[Service, ...]:
+def ordered_services(found: tuple[Service, ...], favorites: tuple[str, ...]) -> tuple[Service, ...]:
     """The operator's favorites first, in their order, then the rest by name."""
 
     if not favorites:
@@ -346,10 +335,7 @@ def ordered_services(
     rank = {name: index for index, name in enumerate(favorites)}
     return tuple(
         sorted(
-            (
-                replace(service, pinned=service.hostname.lower() in rank)
-                for service in found
-            ),
+            (replace(service, pinned=service.hostname.lower() in rank) for service in found),
             key=lambda service: (
                 rank.get(service.hostname.lower(), len(rank)),
                 service.hostname,
@@ -397,9 +383,7 @@ def _services_by_resource() -> dict[str, Service]:
 
 def find_service(hostname: str) -> Service | None:
     wanted = normalized_hostname(hostname)
-    return next(
-        (service for service in service_catalog() if service.hostname == wanted), None
-    )
+    return next((service for service in service_catalog() if service.hostname == wanted), None)
 
 
 def alias_target(hostname: str) -> str:
@@ -415,16 +399,14 @@ def alias_target(hostname: str) -> str:
     return aliases.get(wanted, "")
 
 
-def _serves(hostname: str, names, claim: "Claim", served_with: frozenset[str]) -> bool:
+def _serves(hostname: str, names, claim: Claim, served_with: frozenset[str]) -> bool:
     """Whether a certificate that covers the name is the one it is served with.
 
     Where the ingress names the certificate it serves, only that one applies;
     covering the name is not serving it.
     """
 
-    return certificate_covers(hostname, names) and (
-        not served_with or claim.resource_key in served_with
-    )
+    return certificate_covers(hostname, names) and (not served_with or claim.resource_key in served_with)
 
 
 def certificates_serving(hostname: str) -> tuple[str, ...]:
@@ -443,7 +425,7 @@ def certificates_serving(hostname: str) -> tuple[str, ...]:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CertificateUse:
     """A certificate from the side of what it serves: the services served
     with it, and the names on it that no service is served under."""
@@ -456,19 +438,11 @@ def certificate_use(key: str, names: Iterable[str]) -> CertificateUse:
     """The reverse of ``certificates_serving``, for the certificate's own page."""
 
     used_by = tuple(
-        sorted(
-            service.hostname
-            for service in service_catalog()
-            if key in certificates_serving(service.hostname)
-        )
+        sorted(service.hostname for service in service_catalog() if key in certificates_serving(service.hostname))
     )
     return CertificateUse(
         used_by,
-        tuple(
-            name
-            for name in names
-            if not any(certificate_covers(hostname, {name}) for hostname in used_by)
-        ),
+        tuple(name for name in names if not any(certificate_covers(hostname, {name}) for hostname in used_by)),
     )
 
 
@@ -489,7 +463,14 @@ def prospects(hostnames: tuple[str, ...]) -> tuple[Service, ...]:
     """``service_or_prospect`` for several names, from one reading of the declarations."""
 
     (
-        declared, covering, origins, aliases, alias_claims, machines, answers, routed,
+        declared,
+        covering,
+        origins,
+        aliases,
+        alias_claims,
+        machines,
+        answers,
+        routed,
         served_with,
     ) = declarations()
     estate = _Estate.read(covering, machines) if hostnames else None
@@ -551,7 +532,7 @@ class _ContainersRunning:
         return self._found.get((host, name))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Estate:
     """One reading of the world, shared by every service assembled from it.
 
@@ -562,17 +543,17 @@ class _Estate:
     covering: list[tuple[str, frozenset[str], Claim]]
     projects: dict[str, dict[str, str]]
     machines: tuple[dict[str, Any], ...]
-    containers: "dict[tuple[str, str], Any]"
+    containers: dict[tuple[str, str], Any]
     # What places an address: whose machine it is, and what answers there. Read
     # at most once for the whole catalogue, and not at all by a page that lists
     # no service.
-    at: "Whereabouts | None" = None
-    in_use: "_CertificatesInUse | None" = None
-    readings: "Readings | None" = None
+    at: Whereabouts | None = None
+    in_use: _CertificatesInUse | None = None
+    readings: Readings | None = None
     running: _ContainersRunning = field(default_factory=_ContainersRunning)
 
     @classmethod
-    def read(cls, covering, machines) -> "_Estate":
+    def read(cls, covering, machines) -> _Estate:
         """The readings a catalogue needs, taken once."""
 
         return cls(
@@ -593,10 +574,10 @@ class _Estate:
 def _assemble(
     hostname: str,
     declared: dict[str, list[Claim]],
-    estate: "_Estate",
+    estate: _Estate,
     origin_address: str,
     aliases: tuple[str, ...] = (),
-    alias_claims: tuple[tuple[str, "Claim"], ...] = (),
+    alias_claims: tuple[tuple[str, Claim], ...] = (),
     answers: tuple[str, ...] = (),
     routed: bool = True,
     served_with: frozenset[str] = frozenset(),
@@ -606,11 +587,7 @@ def _assemble(
     machines = estate.machines
     containers = estate.containers
     in_use = estate.in_use
-    by_name = (
-        estate.readings.about(Subject.of(hostnames=(hostname,)))
-        if estate.readings is not None
-        else ()
-    )
+    by_name = estate.readings.about(Subject.of(hostnames=(hostname,))) if estate.readings is not None else ()
     origin = (
         replace(
             locate(origin_address, machines, estate.at),
@@ -637,9 +614,7 @@ def _assemble(
                 if covered_facet == facet_id and _serves(hostname, names, claim, served_with)
             ),
             observed=_observed(facet_id, origin, estate.running),
-            machine=(
-                machine_for(origin, machines) if facet_id == RUNTIME_FACET else None
-            ),
+            machine=(machine_for(origin, machines) if facet_id == RUNTIME_FACET else None),
             context=context,
             readings=tuple(item for item in by_name if item.facet == facet_id),
         )
@@ -647,11 +622,7 @@ def _assemble(
     )
     return Service(
         observed=tuple(item for item in by_name if not item.facet),
-        served_by=tuple(
-            dict.fromkeys(
-                item.title for item in by_name if item.facet in _SERVES and item.title
-            )
-        ),
+        served_by=tuple(dict.fromkeys(item.title for item in by_name if item.facet in _SERVES and item.title)),
         hostname=hostname,
         facets=facets,
         aliases=aliases,
@@ -667,7 +638,7 @@ def _assemble(
 _SERVES = ("runtime", "network")
 
 
-def _serving(index: "Readings | None", origin_address: str) -> tuple[str, ...]:
+def _serving(index: Readings | None, origin_address: str) -> tuple[str, ...]:
     """Readings joined to an origin that say what serves it, by name. The
     column is "Runs on", so the name is the answer: "Example Registrar", not "on the
     network of Example Registrar". The relation is for the relationships table."""
@@ -676,13 +647,7 @@ def _serving(index: "Readings | None", origin_address: str) -> tuple[str, ...]:
         return ()
     host = host_of(origin_address)
     found = index.about(Subject.of(hostnames=(host,), addresses=(host,)), facets=_SERVES)
-    return tuple(
-        dict.fromkeys(
-            item.title
-            for item in found
-            if item.title
-        )
-    )
+    return tuple(dict.fromkeys(item.title for item in found if item.title))
 
 
 # The provider whose inventory records are containers. Named once, here, because
@@ -690,9 +655,7 @@ def _serving(index: "Readings | None", origin_address: str) -> tuple[str, ...]:
 # other reference to it in this module goes through this.
 
 
-def _observed(
-    facet_id: str, origin: Origin | None, running: "_ContainersRunning"
-) -> "Running | None":
+def _observed(facet_id: str, origin: Origin | None, running: _ContainersRunning) -> Running | None:
     """What HQ found supplying this facet without having been told.
 
     Only the runtime facet can answer, because the origin has already done the
@@ -732,7 +695,7 @@ class _CertificatesInUse:
 def _faults(
     facets: tuple[Facet, ...],
     origin: Origin | None,
-    in_use: "_CertificatesInUse | None" = None,
+    in_use: _CertificatesInUse | None = None,
     hostname: str = "",
 ) -> tuple[str, ...]:
     """Wiring gaps: the failures that exist only in the join.
@@ -757,10 +720,10 @@ def _faults(
         # internal answer and a public one are both DNS and legitimately differ.
         # Two of the same kind is a contradiction: only one can win, and which
         # one is decided by whichever reconciled last.
-        for kind in sorted({kind for kind in kinds if kinds.count(kind) > 1}):
-            faults.append(
-                f"Two {plural(lower_first(registry_label(kind)))} are set up for this name. Remove one."
-            )
+        faults.extend(
+            f"Two {plural(lower_first(registry_label(kind)))} are set up for this name. Remove one."
+            for kind in sorted({kind for kind in kinds if kinds.count(kind) > 1})
+        )
 
     # These two rules are statements about particular facets, so they name them.
     # A facet no provider supplies is not assembled, so a rule about it simply
@@ -772,24 +735,15 @@ def _faults(
         return tuple(faults)
 
     serves = proxy.present
-    served_with = (
-        in_use.covering(hostname)
-        if serves and not certificate.present and in_use
-        else None
-    )
+    served_with = in_use.covering(hostname) if serves and not certificate.present and in_use else None
     if serves and not certificate.present and not served_with:
-        faults.append(
-            "Served without TLS. No certificate in HQ covers this name, "
-            "and the proxy host uses none."
-        )
+        faults.append("Served without TLS. No certificate in HQ covers this name, and the proxy host uses none.")
     if serves and origin is not None and not origin.known:
-        faults.append(
-            f"The proxy forwards to {origin.address}, which matches no known machine."
-        )
+        faults.append(f"The proxy forwards to {origin.address}, which matches no known machine.")
     return tuple(faults)
 
 
-def _points_nowhere(origin: Origin | None, dns: "Facet | None" = None) -> str:
+def _points_nowhere(origin: Origin | None, dns: Facet | None = None) -> str:
     """Why an address answers nothing, when that is knowable from the address.
 
     A parked name is a legitimate thing to have and an easy thing to forget, so
@@ -811,15 +765,13 @@ def _points_nowhere(origin: Origin | None, dns: "Facet | None" = None) -> str:
 
     address = split_endpoint(origin.address)[0] or origin.address
     if is_documentation(address):
-        return (
-            f"Resolves to {address}, a documentation address. Nothing answers there."
-        )
+        return f"Resolves to {address}, a documentation address. Nothing answers there."
     if address in {"0.0.0.0", "::"}:
         return f"Resolves to {address}, which is not a reachable address."
     return ""
 
 
-def _served_by_the_provider(dns: "Facet | None") -> bool:
+def _served_by_the_provider(dns: Facet | None) -> bool:
     """Whether a DNS provider answers for this name rather than forwarding it.
 
     A proxied record means the provider terminates the connection and does

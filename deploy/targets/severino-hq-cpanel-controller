@@ -51,17 +51,11 @@ def uapi(module, function, payload=None):
     try:
         result = json.loads(completed.stdout).get("result", {})
     except ValueError:
-        raise RuntimeError(
-            "{}::{} returned no JSON (exit {})".format(
-                module, function, completed.returncode
-            )
-        )
+        raise RuntimeError("{}::{} returned no JSON (exit {})".format(module, function, completed.returncode))
     errors = result.get("errors") or []
     if result.get("status") != 1 or errors:
         raise RuntimeError(
-            "{}::{} failed: {}".format(
-                module, function, "; ".join(str(error) for error in errors) or "no reason given"
-            )
+            "{}::{} failed: {}".format(module, function, "; ".join(str(error) for error in errors) or "no reason given")
         )
     return result.get("data")
 
@@ -142,13 +136,11 @@ def main():
         if operation == "deploy":
             certificate = read_certificate()
             sites = certificate.get("sites")
-            if not isinstance(sites, list) or not sites or not all(
-                isinstance(site, str) and site for site in sites
-            ):
+            if not isinstance(sites, list) or not sites or not all(isinstance(site, str) and site for site in sites):
                 raise RuntimeError("deploy needs a non-empty `sites` list")
             return install(sites, certificate)
         if operation.startswith("deploy:") and len(operation) > len("deploy:"):
-            return install([operation[len("deploy:"):]], read_certificate())
+            return install([operation[len("deploy:") :]], read_certificate())
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 1

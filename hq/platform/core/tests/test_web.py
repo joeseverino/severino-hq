@@ -5,8 +5,6 @@ and every page in the main nav (including reports + exports) renders without a
 500. Add module-specific tests inside each app as it grows.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging
@@ -21,38 +19,35 @@ from urllib.parse import parse_qs, urlsplit
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
-from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.auth import get_user_model
+from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
-
-from hq.platform.application.security import cli_principal
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application import readings
-from hq.platform.application.dashboard import operating_snapshot
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
-from hq.platform.core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
-from hq.platform.core.logging import JsonFormatter, reset_request_id, set_request_id
-from hq.platform.core.audit import operation_context
-from hq.platform.core.models import AuditLog
-from hq.platform.core.oidc import HQOIDCAuthenticationBackend
-from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY
-from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.docs_index.importer import (
     ManifestImportError,
     import_manifest_data,
     validate_manifest_data,
 )
+from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
-
+from hq.platform.application import readings
+from hq.platform.application.dashboard import operating_snapshot
+from hq.platform.application.security import cli_principal
+from hq.platform.core.audit import operation_context
+from hq.platform.core.logging import JsonFormatter, reset_request_id, set_request_id
+from hq.platform.core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
+from hq.platform.core.models import AuditLog
+from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
 
 User = get_user_model()
 
@@ -97,17 +92,20 @@ class AuthGateTests(TestCase):
     def test_readiness_fails_closed_without_collected_assets(self):
         """A start collects nothing, so an image built without its assets is not ready."""
 
-        with tempfile.TemporaryDirectory() as root, override_settings(
-            DEBUG=False,
-            STATIC_LIVE=False,
-            STATIC_ROOT=root,
-            STORAGES={
-                **settings.STORAGES,
-                "staticfiles": {
-                    **settings.STORAGES["staticfiles"],
-                    "BACKEND": "hq.platform.core.static.HashedStaticStorage",
+        with (
+            tempfile.TemporaryDirectory() as root,
+            override_settings(
+                DEBUG=False,
+                STATIC_LIVE=False,
+                STATIC_ROOT=root,
+                STORAGES={
+                    **settings.STORAGES,
+                    "staticfiles": {
+                        **settings.STORAGES["staticfiles"],
+                        "BACKEND": "hq.platform.core.static.HashedStaticStorage",
+                    },
                 },
-            },
+            ),
         ):
             empty = self.client.get("/health/ready/")
             call_command("collectstatic", interactive=False, verbosity=0)
@@ -210,13 +208,16 @@ class AuthGateTests(TestCase):
         """Production's storage, collected: no static URL on the shell is plain."""
 
         # DEBUG off: with it on, Django's manifest storage hands out plain names.
-        with tempfile.TemporaryDirectory() as root, override_settings(
-            DEBUG=False,
-            STATIC_ROOT=root,
-            STORAGES={
-                **settings.STORAGES,
-                "staticfiles": {"BACKEND": "hq.platform.core.static.HashedStaticStorage"},
-            },
+        with (
+            tempfile.TemporaryDirectory() as root,
+            override_settings(
+                DEBUG=False,
+                STATIC_ROOT=root,
+                STORAGES={
+                    **settings.STORAGES,
+                    "staticfiles": {"BACKEND": "hq.platform.core.static.HashedStaticStorage"},
+                },
+            ),
         ):
             call_command("collectstatic", interactive=False, verbosity=0)
             content = self.client.get("/accounts/login/").content.decode()
@@ -231,13 +232,16 @@ class AuthGateTests(TestCase):
 
         from django.contrib.staticfiles.storage import staticfiles_storage
 
-        with tempfile.TemporaryDirectory() as root, override_settings(
-            DEBUG=False,
-            STATIC_ROOT=root,
-            STORAGES={
-                **settings.STORAGES,
-                "staticfiles": {"BACKEND": "hq.platform.core.static.HashedStaticStorage"},
-            },
+        with (
+            tempfile.TemporaryDirectory() as root,
+            override_settings(
+                DEBUG=False,
+                STATIC_ROOT=root,
+                STORAGES={
+                    **settings.STORAGES,
+                    "staticfiles": {"BACKEND": "hq.platform.core.static.HashedStaticStorage"},
+                },
+            ),
         ):
             self.assertEqual(staticfiles_storage.url("css/app.css"), "/static/css/app.css")
 
@@ -400,9 +404,7 @@ class OIDCBackendTests(TestCase):
         user = User.objects.create_user(username="joe")
         backend = HQOIDCAuthenticationBackend()
 
-        users = backend.filter_users_by_claims(
-            {"sub": "subject-1", "preferred_username": "joe", "groups": ["admins"]}
-        )
+        users = backend.filter_users_by_claims({"sub": "subject-1", "preferred_username": "joe", "groups": ["admins"]})
 
         self.assertEqual(list(users), [user])
 
@@ -422,15 +424,14 @@ class OIDCBackendTests(TestCase):
 
         renamed = backend.filter_users_by_claims({"sub": "subject-1", "preferred_username": "sam"})
         impostor = backend.filter_users_by_claims(
-            {"sub": "subject-2", "preferred_username": "joe", "email": "joe@example.com",
-             "email_verified": True}
+            {"sub": "subject-2", "preferred_username": "joe", "email": "joe@example.com", "email_verified": True}
         )
 
         self.assertEqual(list(renamed), [first])
         self.assertEqual(list(impostor), [])
-        self.assertEqual(list(backend.filter_users_by_claims(
-            {"sub": "subject-2", "preferred_username": "sam"}
-        )), [other])
+        self.assertEqual(
+            list(backend.filter_users_by_claims({"sub": "subject-2", "preferred_username": "sam"})), [other]
+        )
 
     def test_an_unverified_address_does_not_find_an_account(self):
         User.objects.create_user(username="joe", email="joe@example.com")
@@ -446,9 +447,7 @@ class OIDCBackendTests(TestCase):
         backend = HQOIDCAuthenticationBackend()
 
         with override_settings(SEVERINO_OIDC_ALLOWED_GROUPS={"admins"}):
-            self.assertFalse(
-                backend.verify_claims({"preferred_username": "joe", "groups": ["admins"]})
-            )
+            self.assertFalse(backend.verify_claims({"preferred_username": "joe", "groups": ["admins"]}))
 
     def test_allows_user_by_allowed_email(self):
         backend = HQOIDCAuthenticationBackend()
@@ -471,18 +470,20 @@ class OIDCBackendTests(TestCase):
     def test_rejects_when_no_allow_rule_is_configured(self):
         backend = HQOIDCAuthenticationBackend()
 
-        with override_settings(
-            SEVERINO_OIDC_ALLOWED_EMAILS=set(),
-            SEVERINO_OIDC_ALLOWED_GROUPS=set(),
+        with (
+            override_settings(
+                SEVERINO_OIDC_ALLOWED_EMAILS=set(),
+                SEVERINO_OIDC_ALLOWED_GROUPS=set(),
+            ),
+            self.assertRaises(PermissionDenied),
         ):
-            with self.assertRaises(PermissionDenied):
-                backend.verify_claims(
-                    {
-                        "sub": "subject-1",
-                        "preferred_username": "joe",
-                        "groups": ["admins"],
-                    }
-                )
+            backend.verify_claims(
+                {
+                    "sub": "subject-1",
+                    "preferred_username": "joe",
+                    "groups": ["admins"],
+                }
+            )
 
 
 class _AuthedTestCase(TestCase):
@@ -788,15 +789,11 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertEqual(configuration.weather_label, "Outside")
 
     def test_action_items_is_the_full_existing_queue_and_filters_it(self):
-        ContentItem.objects.create(
-            title="Unfinished post", status=ContentItem.Status.DRAFT
-        )
+        ContentItem.objects.create(title="Unfinished post", status=ContentItem.Status.DRAFT)
 
         with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")):
             response = self.client.get("/action-items/")
-            filtered = self.client.get(
-                "/action-items/", {"status": "serious", "q": "draft"}
-            )
+            filtered = self.client.get("/action-items/", {"status": "serious", "q": "draft"})
 
         self.assertContains(response, "1 draft is not published")
         self.assertContains(response, 'href="/content/?status=draft"')
@@ -846,8 +843,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(silent, "Last read")
 
     def test_the_dashboard_draws_its_contacts_without_waiting_on_d1(self):
-        from hq.platform.application import readings
         from hq.domains.contacts import d1
+        from hq.platform.application import readings
 
         row = {"id": 7, "name": "One call", "status": "unread", "created_at": "2026-08-23"}
         readings.record(d1.UNREAD, {"count": 3, "rows": [row], "status": "ok"})
@@ -940,12 +937,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertEqual(operating_snapshot(principal=cli_principal())["kpis"]["docs_needing_review"], 0)
 
     def test_projects_can_filter_for_missing_output(self):
-        project = Project.objects.create(
-            name="No output yet", status=Project.Status.ACTIVE
-        )
-        documented = Project.objects.create(
-            name="Documented", status=Project.Status.ACTIVE
-        )
+        project = Project.objects.create(name="No output yet", status=Project.Status.ACTIVE)
+        documented = Project.objects.create(name="Documented", status=Project.Status.ACTIVE)
         doc = DocumentationRecord.objects.create(
             doc_id="rb-documented-001",
             title="Documented runbook",
@@ -962,12 +955,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertNotContains(response, documented.name)
 
     def test_archived_projects_sort_last_by_default(self):
-        active = Project.objects.create(
-            name="ZZZ active project", status=Project.Status.ACTIVE
-        )
-        archived = Project.objects.create(
-            name="AAA archived project", status=Project.Status.ARCHIVED
-        )
+        active = Project.objects.create(name="ZZZ active project", status=Project.Status.ACTIVE)
+        archived = Project.objects.create(name="AAA archived project", status=Project.Status.ARCHIVED)
 
         response = self.client.get("/projects/")
 
@@ -1004,11 +993,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertCountEqual(response.context["object_list"], [active_lab, idea_lab])
-        status_filter = next(
-            item
-            for item in response.context["table"]["filters"]
-            if item["name"] == "status"
-        )
+        status_filter = next(item for item in response.context["table"]["filters"] if item["name"] == "status")
         self.assertEqual(status_filter["selected_count"], 2)
 
     def test_table_sort_is_allowlisted(self):
@@ -1103,9 +1088,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
 class ExportSmokeTests(_AuthedTestCase):
     def setUp(self):
         super().setUp()
-        self.project = Project.objects.create(
-            name="Lab: homelab DNS", status=Project.Status.ACTIVE
-        )
+        self.project = Project.objects.create(name="Lab: homelab DNS", status=Project.Status.ACTIVE)
         self.asset = Asset.objects.create(
             item_name="Test switch",
             total_cost=Decimal("29.00"),
@@ -1127,9 +1110,7 @@ class ExportSmokeTests(_AuthedTestCase):
             title="Test runbook",
             obsidian_path="Infra/Test.md",
         )
-        self.content = ContentItem.objects.create(
-            title="Test article", status=ContentItem.Status.DRAFT
-        )
+        self.content = ContentItem.objects.create(title="Test article", status=ContentItem.Status.DRAFT)
 
     def test_csv_exports(self):
         for url in [
@@ -1327,16 +1308,10 @@ class ManifestImportTests(TestCase):
         self.assertEqual(DocumentationRecord.objects.count(), 0)
 
     def test_doc_id_outside_the_schema_prefixes_is_rejected(self):
-        self._assert_rejected(
-            {**self.STANDARD_DOC, "doc_id": "wiki-complete"}, "must start with", "rb-"
-        )
+        self._assert_rejected({**self.STANDARD_DOC, "doc_id": "wiki-complete"}, "must start with", "rb-")
 
     def test_standard_doc_missing_required_fields_is_rejected(self):
-        entry = {
-            k: v
-            for k, v in self.STANDARD_DOC.items()
-            if k not in {"environment", "sensitivity"}
-        }
+        entry = {k: v for k, v in self.STANDARD_DOC.items() if k not in {"environment", "sensitivity"}}
         self._assert_rejected(entry, "environment", "sensitivity")
 
     def test_blank_required_field_counts_as_missing(self):
@@ -1356,9 +1331,7 @@ class ManifestImportTests(TestCase):
     def test_vault_doc_cannot_take_a_content_id(self):
         # The schema's prefixes bind every vault doc: a runbook cannot pass
         # with a writeup's id.
-        self._assert_rejected(
-            {**self.STANDARD_DOC, "doc_id": "writeup-complete"}, "must start with"
-        )
+        self._assert_rejected({**self.STANDARD_DOC, "doc_id": "writeup-complete"}, "must start with")
 
     def test_public_article_draft_without_content_type_is_a_vault_doc(self):
         # Not routed to ContentItem, so held to the schema's prefixes.
@@ -1396,23 +1369,15 @@ class ManifestImportTests(TestCase):
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             f.write(bad)
             bad_path = f.name
-        ok = json.dumps(
-            [{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "open"}]
-        )
+        ok = json.dumps([{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "open"}])
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             f.write(ok)
             ok_path = f.name
         try:
             with self.assertRaises(CommandError):
-                call_command(
-                    "import_docs_manifest", bad_path, "--check-only", stdout=StringIO()
-                )
-            call_command(
-                "import_docs_manifest", ok_path, "--check-only", stdout=StringIO()
-            )  # no raise
-            self.assertEqual(
-                DocumentationRecord.objects.count(), 0
-            )  # read-only either way
+                call_command("import_docs_manifest", bad_path, "--check-only", stdout=StringIO())
+            call_command("import_docs_manifest", ok_path, "--check-only", stdout=StringIO())  # no raise
+            self.assertEqual(DocumentationRecord.objects.count(), 0)  # read-only either way
         finally:
             Path(bad_path).unlink()
             Path(ok_path).unlink()
@@ -1472,9 +1437,7 @@ class ManifestImportTests(TestCase):
         )
 
         self.assertEqual(stats["content_items_pruned"], 1)
-        self.assertFalse(
-            ContentItem.objects.filter(slug="report-platform-playbook-public").exists()
-        )
+        self.assertFalse(ContentItem.objects.filter(slug="report-platform-playbook-public").exists())
 
     def test_prune_removes_content_item_only_linked_to_orphan_doc(self):
         old_record = DocumentationRecord.objects.create(
@@ -1574,24 +1537,18 @@ class AuditChangeTests(TestCase):
         # A Decimal, a date and a UUID are none of the things JSON has. Left
         # as they are the row fails to write, `record_event` swallows it, and
         # the change is lost with nothing saying so.
-        expense = Expense.objects.create(
-            date=date.today(), vendor="V", item="I", total_cost=Decimal("1.00")
-        )
+        expense = Expense.objects.create(date=date.today(), vendor="V", item="I", total_cost=Decimal("1.00"))
         expense.total_cost = Decimal("2.50")
         expense.save()
 
-        event = AuditLog.objects.filter(
-            action=AuditLog.Action.UPDATED, object_type="Expense"
-        ).first()
+        event = AuditLog.objects.filter(action=AuditLog.Action.UPDATED, object_type="Expense").first()
         self.assertIsNotNone(event, "the row must be written, not swallowed")
         self.assertEqual(event.metadata["changes"]["total_cost"], ["1.00", "2.50"])
 
     def test_a_redacted_field_reports_the_change_without_the_value(self):
         from hq.platform.core.audit import REDACTED, _changes
 
-        changes = _changes(
-            {"token": "old-secret"}, {"token": "new-secret"}, frozenset({"token"})
-        )
+        changes = _changes({"token": "old-secret"}, {"token": "new-secret"}, frozenset({"token"}))
 
         # That it rotated is worth recording. What it rotated to is not.
         self.assertEqual(changes["token"], [REDACTED, REDACTED])
@@ -1617,9 +1574,7 @@ class AuditDetailPageTests(_AuthedTestCase):
     def test_an_event_links_to_the_rest_of_its_operation(self):
         # The point of operation_id: one action touching several rows is one
         # thing that happened, not four events that share a timestamp.
-        with operation_context(
-            interface="cli", actor="op", operation="test.bulk", operation_id="op-1"
-        ):
+        with operation_context(interface="cli", actor="op", operation="test.bulk", operation_id="op-1"):
             Project.objects.create(name="One", status=Project.Status.IDEA)
             Project.objects.create(name="Two", status=Project.Status.IDEA)
         event = AuditLog.objects.filter(operation_id="op-1").first()
@@ -1759,12 +1714,7 @@ class NavigationTests(TestCase):
         # Every entry in a section shares one namespace, so matching on that would
         # light the whole dropdown at once.
         entries = self._entries(reverse("expenses:list"))
-        active = [
-            item["label"]
-            for entry in entries
-            for item in (entry.get("items") or [entry])
-            if item.get("active")
-        ]
+        active = [item["label"] for entry in entries for item in (entry.get("items") or [entry]) if item.get("active")]
         self.assertEqual(active, ["Expenses"])
 
     def test_the_section_holding_the_page_is_marked_even_with_no_entry(self):
@@ -1773,17 +1723,11 @@ class NavigationTests(TestCase):
         # so regrouping a section stays a one-line change in one file.
         from hq.platform.application.domains import domain_navigation
 
-        holder = next(
-            item.group for item in domain_navigation() if item.route == "expenses:list"
-        )
+        holder = next(item.group for item in domain_navigation() if item.route == "expenses:list")
         entries = self._entries(reverse("expenses:create"))
-        groups = {
-            entry["label"]: entry for entry in entries if entry["kind"] == "group"
-        }
+        groups = {entry["label"]: entry for entry in entries if entry["kind"] == "group"}
         self.assertTrue(groups[holder]["active"])
-        self.assertEqual(
-            [label for label, entry in groups.items() if entry["active"]], [holder]
-        )
+        self.assertEqual([label for label, entry in groups.items() if entry["active"]], [holder])
 
     def test_system_sorts_after_every_section_that_holds_work(self):
         entries = self._entries(reverse("dashboard"))
@@ -1849,9 +1793,7 @@ class CompressedResponseTests(TestCase):
         )
 
         start = next(m for m in sent if m["type"] == "http.response.start")
-        lengths = [
-            v for name, v in start["headers"] if name.lower() == b"content-length"
-        ]
+        lengths = [v for name, v in start["headers"] if name.lower() == b"content-length"]
         self.assertEqual(len(lengths), 1)
         self.assertEqual(int(lengths[0]), len(sent[-1]["body"]))
 
@@ -1861,14 +1803,10 @@ class CompressedResponseTests(TestCase):
         from starlette.middleware.gzip import GZipMiddleware
 
         headers, body = self._compressible()
-        sent = self._send_through(
-            lambda app: GZipMiddleware(app, minimum_size=1000), headers, body
-        )
+        sent = self._send_through(lambda app: GZipMiddleware(app, minimum_size=1000), headers, body)
 
         start = next(m for m in sent if m["type"] == "http.response.start")
-        lengths = [
-            v for name, v in start["headers"] if name.lower() == b"content-length"
-        ]
+        lengths = [v for name, v in start["headers"] if name.lower() == b"content-length"]
         self.assertEqual(len(lengths), 2)
 
     def test_every_header_name_reaching_the_server_is_lowercase(self):

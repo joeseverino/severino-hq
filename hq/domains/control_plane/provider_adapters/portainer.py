@@ -4,8 +4,6 @@ The controller (controller/providers) reads and acts on them; what is declared
 about them is here.
 """
 
-from __future__ import annotations
-
 import re
 from typing import Any
 
@@ -23,7 +21,6 @@ from ..provider_spec import (
     key_from,
     locked,
 )
-
 
 CONTAINER_KIND = "portainer.container"
 CONTAINER_STACK_KIND = "portainer.stack"
@@ -63,12 +60,13 @@ class PortainerContainerSpec(ProviderModel):
     on_demand: bool = Field(
         default=False,
         title="Runs on demand",
-        description=(
-            "Usually stopped and removed. A sweep that misses it is not a "
-            "finding."
-        ),
+        description=("Usually stopped and removed. A sweep that misses it is not a finding."),
     )
-    holds_docker_socket: bool = Field(default=False, title="Holds the Docker socket", description="Its job is Docker: a socket proxy or an agent. The socket and Docker's data stay listed, never an action item.")
+    holds_docker_socket: bool = Field(
+        default=False,
+        title="Holds the Docker socket",
+        description="Its job is Docker: a socket proxy or an agent. The socket and Docker's data stay listed, never an action item.",
+    )
     by_design: dict[str, str] = Field(
         default_factory=dict,
         title="Checks its job requires",
@@ -81,10 +79,7 @@ class PortainerContainerSpec(ProviderModel):
     hidden: bool = Field(
         default=False,
         title="Collapse on machine page",
-        description=(
-            "Collapse it on the machine's page. HQ still watches and controls "
-            "it."
-        ),
+        description=("Collapse it on the machine's page. HQ still watches and controls it."),
     )
     serves_ports: list[int] = Field(
         default_factory=list,
@@ -205,9 +200,7 @@ def _stack_seed(context: NameContext) -> dict[str, Any]:
     return {"hostnames": [context.hostname], "name": label or "service"}
 
 
-def _stack_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _stack_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     port = spec.get("port")
     where = f"{spec.get('host', '')}:{port}" if port else spec.get("host", "")
     return (
@@ -235,9 +228,7 @@ def _stack_from_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _container_readout(
-    spec: dict[str, Any], status: dict[str, Any]
-) -> tuple[tuple[str, str, str], ...]:
+def _container_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     # No "Runs on" row: the card carries the machine as a link, and printing it
     # here as text would say it twice in the same box.
     #
@@ -280,13 +271,13 @@ def _container_removal_note(spec: dict[str, Any]) -> str:
 # machine in all but name. A scan of lines rather than a parse, because it only
 # tells the person approving where to look; the hold is the control.
 _ROOT_EQUIVALENT = (
-    (re.compile(r"^\s*privileged:\s*true\b", re.M), "runs a container privileged"),
+    (re.compile(r"^\s*privileged:\s*true\b", re.MULTILINE), "runs a container privileged"),
     (re.compile(r"/var/run/docker\.sock|/run/docker\.sock"), "mounts the Docker socket"),
-    (re.compile(r"^\s*network_mode:\s*[\"']?host\b", re.M), "uses the host's network"),
-    (re.compile(r"^\s*pid:\s*[\"']?host\b", re.M), "sees every process on the host"),
-    (re.compile(r"^\s*cap_add:", re.M), "adds kernel capabilities"),
-    (re.compile(r"^\s*devices:", re.M), "passes host devices through"),
-    (re.compile(r"^\s*-\s*[\"']?/(?::|\s|[\"']|$)", re.M), "mounts the host's root filesystem"),
+    (re.compile(r"^\s*network_mode:\s*[\"']?host\b", re.MULTILINE), "uses the host's network"),
+    (re.compile(r"^\s*pid:\s*[\"']?host\b", re.MULTILINE), "sees every process on the host"),
+    (re.compile(r"^\s*cap_add:", re.MULTILINE), "adds kernel capabilities"),
+    (re.compile(r"^\s*devices:", re.MULTILINE), "passes host devices through"),
+    (re.compile(r"^\s*-\s*[\"']?/(?::|\s|[\"']|$)", re.MULTILINE), "mounts the host's root filesystem"),
 )
 
 
@@ -299,8 +290,7 @@ def _stack_warnings(spec: dict[str, Any]) -> tuple[str, ...]:
 
 STACK = ProviderSpec(
     CONTAINER_STACK_KIND,
-    "A set of containers on one machine. HQ creates it in Portainer if "
-    "it does not exist.",
+    "A set of containers on one machine. HQ creates it in Portainer if it does not exist.",
     PortainerStackSpec,
     actions={
         "reconcile": applies(automatic=True),
@@ -332,9 +322,7 @@ STACK = ProviderSpec(
         "port": 3000,
     },
     choices="hq.platform.application.provider_choices:container_stack",
-    unobserved_reason=(
-        "Observed through its containers, which the sweep reads."
-    ),
+    unobserved_reason=("Observed through its containers, which the sweep reads."),
     # A compose file can mount the host's root, its Docker socket or its
     # network, which is root on that machine. A credential is not enough to
     # change one: a person reads what it reaches first.
@@ -344,13 +332,10 @@ STACK = ProviderSpec(
 
 CONTAINER = ProviderSpec(
     CONTAINER_KIND,
-    "A container HQ watches and can start, stop or restart. Its compose "
-    "file still defines it.",
+    "A container HQ watches and can start, stop or restart. Its compose file still defines it.",
     PortainerContainerSpec,
     actions={
-        "reconcile": locked(
-            "Defined by a compose file outside HQ. HQ can start, stop and restart it."
-        ),
+        "reconcile": locked("Defined by a compose file outside HQ. HQ can start, stop and restart it."),
         "restart": applies(),
         "start": applies(),
         "stop": applies(),

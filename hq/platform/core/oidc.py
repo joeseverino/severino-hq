@@ -1,14 +1,12 @@
 """Pocket ID / OIDC authentication integration."""
 
-from __future__ import annotations
+import logging
+from typing import override
 
+import requests
 from django.conf import settings
 from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
 from django.core.exceptions import PermissionDenied, SuspiciousOperation
-
-import logging
-
-import requests
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from mozilla_django_oidc.middleware import SessionRefresh
 
@@ -36,6 +34,7 @@ def _tailscale_principal(payload) -> str:
 class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     """Map approved Pocket ID users onto Django users."""
 
+    @override
     def authenticate(self, request, **kwargs):
         """A provider that refuses the exchange is a failed sign-in, not a crash.
 
@@ -68,6 +67,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
                 session[SSO_FAILURE_SESSION_KEY] = reason
             return None
 
+    @override
     def verify_token(self, token, **kwargs):
         """Check who the token was minted for, which the library does not.
 
@@ -90,12 +90,14 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             raise SuspiciousOperation("The ID token came from another issuer.")
         return payload
 
+    @override
     def get_userinfo(self, access_token, id_token, payload):
         """Kept for the rest of this sign-in: the picture claim is read from it."""
 
         self._userinfo = super().get_userinfo(access_token, id_token, payload)
         return self._userinfo
 
+    @override
     def get_or_create_user(self, access_token, id_token, payload):
         user = super().get_or_create_user(access_token, id_token, payload)
         if user is None:
@@ -145,6 +147,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         else:
             session.pop(SESSION_KEY, None)
 
+    @override
     def verify_claims(self, claims):
         preferred_username = claims.get("preferred_username", "").strip()
         email = claims.get("email", "").strip().lower()
@@ -161,13 +164,9 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             # An unverified address is a claim the person made about
             # themselves, not one the provider stands behind.
             verified_email = email if claims.get("email_verified") is True else ""
-            return bool(groups & allowed_groups) or (
-                bool(verified_email) and verified_email in allowed_emails
-            )
+            return bool(groups & allowed_groups) or (bool(verified_email) and verified_email in allowed_emails)
 
-        raise PermissionDenied(
-            "SEVERINO_OIDC_ALLOWED_EMAILS or SEVERINO_OIDC_ALLOWED_GROUPS must be set."
-        )
+        raise PermissionDenied("SEVERINO_OIDC_ALLOWED_EMAILS or SEVERINO_OIDC_ALLOWED_GROUPS must be set.")
 
     @staticmethod
     def _subject_key(claims) -> str:
@@ -178,6 +177,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             return ""
         return sign_in_subject(getattr(settings, "OIDC_ISSUER", ""), subject.strip())
 
+    @override
     def filter_users_by_claims(self, claims):
         """The user this subject signed in as before; else one not yet bound.
 
@@ -193,9 +193,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         key = self._subject_key(claims)
         if not key:
             return self.UserModel.objects.none()
-        bound = self.UserModel.objects.filter(
-            linked_accounts__provider=SIGN_IN, linked_accounts__login=key
-        )
+        bound = self.UserModel.objects.filter(linked_accounts__provider=SIGN_IN, linked_accounts__login=key)
         if bound.exists():
             return bound
         unbound = self.UserModel.objects.exclude(linked_accounts__provider=SIGN_IN)
@@ -214,13 +212,10 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
         return self.UserModel.objects.none()
 
+    @override
     def create_user(self, claims):
         email = claims.get("email", "").strip().lower()
-        username = (
-            claims.get("preferred_username", "").strip()
-            or email.split("@", 1)[0]
-            or claims.get("sub", "")
-        )
+        username = claims.get("preferred_username", "").strip() or email.split("@", 1)[0] or claims.get("sub", "")
         username = self._unique_username(username)
 
         user = self.UserModel.objects.create_user(
@@ -233,6 +228,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         user.save(update_fields=["password"])
         return user
 
+    @override
     def update_user(self, user, claims):
         changed = []
         mappings = {
@@ -276,6 +272,7 @@ class HQSessionRefresh(SessionRefresh):
         super().__init__(get_response)
         self.OIDC_EXEMPT_URLS = [*self.OIDC_EXEMPT_URLS, *self.PROBES]
 
+    @override
     def process_request(self, request):
         # A session signed in through a backend this release does not have is
         # signed out: Django already reads it so. It is ended here, before the
@@ -295,9 +292,7 @@ def _page_behind(request) -> str:
     from django.utils.http import url_has_allowed_host_and_scheme
 
     referer = request.headers.get("referer", "")
-    if url_has_allowed_host_and_scheme(
-        referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()
-    ):
+    if url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
         parts = urlsplit(referer)
         return parts.path + (f"?{parts.query}" if parts.query else "")
     return "/"

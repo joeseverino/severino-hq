@@ -17,8 +17,6 @@ JSON Pointer of the member that departs. A refusal is an RFC 9457 problem.
 Sizes are bounded in both directions by the contract's ``BridgeBody``.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -158,7 +156,7 @@ def endpoint(action: Action, operation: Operation) -> Callable[[Request], Awaita
             # What an action raises for input it will not take; pydantic's
             # validation error is one.
             return problem(HTTPStatus.BAD_REQUEST, str(exc))
-        except Exception as exc:  # noqa: BLE001 - the caller is told, the log keeps the trace
+        except Exception as exc:  # the caller is told, the log keeps the trace
             logger.exception("bridge.action_failed action=%s", action.name)
             return problem(HTTPStatus.INTERNAL_SERVER_ERROR, f"{type(exc).__name__}: {exc}")
         if len(answer) > max_body_bytes():
@@ -200,13 +198,9 @@ def _routes() -> list[Route]:
     by_name = {action.name: action for action in ACTIONS}
     if len(by_name) != len(ACTIONS) or set(by_name) != set(declared):
         raise RuntimeError(
-            "Bridge actions and the contract's paths differ: "
-            + ", ".join(sorted(set(by_name) ^ set(declared)))
+            "Bridge actions and the contract's paths differ: " + ", ".join(sorted(set(by_name) ^ set(declared)))
         )
-    return [
-        Route(f"/{name}", endpoint(by_name[name], declared[name]), methods=["POST"])
-        for name in sorted(declared)
-    ]
+    return [Route(f"/{name}", endpoint(by_name[name], declared[name]), methods=["POST"]) for name in sorted(declared)]
 
 
 application = UnixSocketOnly(Starlette(routes=_routes(), exception_handlers={HTTPException: _http_error}))

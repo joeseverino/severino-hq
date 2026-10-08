@@ -1,19 +1,15 @@
 """Canonical report exports shared by web and MCP adapters."""
 
-from __future__ import annotations
-
 from typing import Any
 
+from hq.domains.reports import exports
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
-from hq.domains.reports import exports
 
 from .security import Capability, Principal
 
 
-def export_year_summary(
-    year: int, output_format: str, *, principal: Principal
-) -> dict[str, Any]:
+def export_year_summary(year: int, output_format: str, *, principal: Principal) -> dict[str, Any]:
     principal.require(Capability.READ)
     normalized = "md" if output_format == "markdown" else output_format
     if normalized == "md":

@@ -1,7 +1,5 @@
 """A service's state says what was checked, and what answers behind its proxy."""
 
-from __future__ import annotations
-
 from ipaddress import ip_network
 from unittest import mock
 

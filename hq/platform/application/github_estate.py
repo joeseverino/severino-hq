@@ -7,17 +7,15 @@ few things on GitHub that wait on a person: a deploy held for approval, a
 default branch failing, a serious alert, an admission about to lapse.
 """
 
-from __future__ import annotations
-
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Mapping
-
+from typing import Any
 
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 
-from .derivations import reached, whole
 from .containers import SERIOUS
+from .derivations import reached, whole
 from .expiry import days_until
 from .github_public import github_repository
 from .item_help import cannot_help, commands
@@ -34,7 +32,7 @@ ARTIFACT_SERIOUS_DAYS = 3
 WAITING_SERIOUS_AFTER = timedelta(hours=1)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Repository:
     name: str
     record: Mapping[str, Any]
@@ -64,11 +62,7 @@ class Repository:
 
     @property
     def serious_alerts(self) -> int:
-        return sum(
-            counts.get(level, 0)
-            for counts in (self.record.get("alerts") or {}).values()
-            for level in SERIOUS
-        )
+        return sum(counts.get(level, 0) for counts in (self.record.get("alerts") or {}).values() for level in SERIOUS)
 
     @property
     def severities(self) -> list[tuple[int, str]]:
@@ -79,7 +73,10 @@ class Repository:
         for counts in (self.record.get("alerts") or {}).values():
             for level, n in counts.items():
                 totals[level] = totals.get(level, 0) + n
-        return sorted(((n, level) for level, n in totals.items()), key=lambda item: order.index(item[1]) if item[1] in order else len(order))
+        return sorted(
+            ((n, level) for level, n in totals.items()),
+            key=lambda item: order.index(item[1]) if item[1] in order else len(order),
+        )
 
     @property
     def open_alerts(self) -> int:
@@ -147,9 +144,7 @@ def _load() -> dict[str, Repository]:
         for record in snapshot.records or ():
             if isinstance(record, Mapping) and record.get("repository"):
                 name = str(record["repository"])
-                found[name] = Repository(
-                    name, record, snapshot.observed_at, tuple(refused_by_repo.get(name, ()))
-                )
+                found[name] = Repository(name, record, snapshot.observed_at, tuple(refused_by_repo.get(name, ())))
     return found
 
 
@@ -214,30 +209,29 @@ def attention() -> tuple[Insight, ...]:
                     url=f"{repo.url}/security",
                     workflow=cannot_help(
                         f"github-alerts:{repo.name}",
-                        "An alert closes with an upgrade in the repository's code, which HQ reads "
-                        "and never writes.",
+                        "An alert closes with an upgrade in the repository's code, which HQ reads and never writes.",
                     ),
                 )
             )
-        for artifact in repo.expiring():
-            items.append(
-                Insight(
-                    status="serious" if artifact["days"] <= ARTIFACT_SERIOUS_DAYS else "attention",
-                    eyebrow="GitHub",
-                    family="Workflow artifacts",
-                    key=f"github-artifact:{repo.name}:{artifact['name']}",
-                    title=f"{repo.short}'s admission lapses in {artifact['days']} days",
-                    value=str(artifact["days"]),
-                    body="Composition stops admitting it when it does. A new admission run renews it.",
-                    action="Open actions",
-                    url=f"{repo.url}/actions",
-                    workflow=cannot_help(
-                        f"github-artifact:{repo.name}:{artifact['name']}",
-                        "The reading names the artifact but not the workflow that makes it, so HQ "
-                        "cannot name the run to repeat.",
-                    ),
-                )
+        items.extend(
+            Insight(
+                status="serious" if artifact["days"] <= ARTIFACT_SERIOUS_DAYS else "attention",
+                eyebrow="GitHub",
+                family="Workflow artifacts",
+                key=f"github-artifact:{repo.name}:{artifact['name']}",
+                title=f"{repo.short}'s admission lapses in {artifact['days']} days",
+                value=str(artifact["days"]),
+                body="Composition stops admitting it when it does. A new admission run renews it.",
+                action="Open actions",
+                url=f"{repo.url}/actions",
+                workflow=cannot_help(
+                    f"github-artifact:{repo.name}:{artifact['name']}",
+                    "The reading names the artifact but not the workflow that makes it, so HQ "
+                    "cannot name the run to repeat.",
+                ),
             )
+            for artifact in repo.expiring()
+        )
     return tuple(items)
 
 
@@ -276,8 +270,7 @@ def _waiting(repo: Repository) -> list[Insight]:
                 url=str(run.get("url") or repo.url),
                 workflow=cannot_help(
                     f"github-waiting:{repo.name}:{run.get('id')}",
-                    "Only a required reviewer can approve a deployment, and HQ reads GitHub "
-                    "with read-only tokens.",
+                    "Only a required reviewer can approve a deployment, and HQ reads GitHub with read-only tokens.",
                 ),
             )
         )
@@ -305,5 +298,10 @@ def build_of(image: str) -> dict[str, Any] | None:
     for repo in repositories().values():
         for item in repo.images or ():
             if item.get("name") == name:
-                return {"repository": repo.name, "url": repo.url, "image": name, "signed": digest in (item.get("signed") or ())}
+                return {
+                    "repository": repo.name,
+                    "url": repo.url,
+                    "image": name,
+                    "signed": digest in (item.get("signed") or ()),
+                }
     return None

@@ -9,8 +9,6 @@ Environment variables, labels other than compose's own, and registry
 credentials are never named, so the schema drops them.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from typing import Any
 
@@ -224,9 +222,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         EnvironmentRecord,
         requires=(ENVIRONMENT_ACCESS,),
         hostnames=_host,
-        addresses=lambda record: tuple(
-            value for value in (str(record.get("address", "") or ""),) if value
-        ),
+        addresses=lambda record: tuple(value for value in (str(record.get("address", "") or ""),) if value),
         title=lambda record: str(record.get("name", "")),
         relation="Docker",
     ),

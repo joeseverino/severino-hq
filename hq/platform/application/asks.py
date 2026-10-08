@@ -13,8 +13,6 @@ What a page may watch is handed to it signed (``watch_token``), so a status
 resource reports only on what HQ itself said to watch.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -46,7 +44,7 @@ WATCH_SECONDS = 60 * 60
 WATCH_LIMIT = 4000
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Standing:
     """How one piece of asked-for work stands."""
 
@@ -83,7 +81,7 @@ class Standing:
         }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Ask:
     """One "do this now" control: what its button posts, and how the work it
     last asked for stands.
@@ -115,9 +113,7 @@ class Ask:
 
     @property
     def css(self) -> str:
-        return " ".join(
-            ("btn", *(("primary",) if self.primary else ()), *(("compact",) if self.compact else ()))
-        )
+        return " ".join(("btn", *(("primary",) if self.primary else ()), *(("compact",) if self.compact else ())))
 
 
 def answer(
@@ -171,9 +167,7 @@ def watched(token: str) -> dict[str, Any] | None:
 def read_watch(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> str:
     """The token for a read of ``kinds`` (none: every kind) asked for at ``asked``."""
 
-    return watch_token(
-        {"read": sorted(set(kinds)), "ref": connection_ref, "asked": asked.isoformat()}
-    )
+    return watch_token({"read": sorted(set(kinds)), "ref": connection_ref, "asked": asked.isoformat()})
 
 
 def read_status_url(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> str:
@@ -181,9 +175,7 @@ def read_status_url(kinds: Iterable[str], asked: datetime, *, connection_ref: st
     return f"{reverse('control_plane:read_status')}?watch={token}"
 
 
-def read_standing(
-    kinds: Iterable[str], asked: datetime, *, connection_ref: str = ""
-) -> Standing:
+def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> Standing:
     """How a read the controller was asked for at ``asked`` stands.
 
     Three stored facts decide it and nothing is asked of anyone: when each kind
@@ -209,9 +201,7 @@ def read_standing(
     )
     if connection_ref:
         probed = max(
-            ProviderConnection.objects.filter(connection_ref=connection_ref).values_list(
-                "observed_at", flat=True
-            ),
+            ProviderConnection.objects.filter(connection_ref=connection_ref).values_list("observed_at", flat=True),
             default=None,
         )
         tried = tried and probed is not None and probed > asked

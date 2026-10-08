@@ -12,8 +12,6 @@ Loopback and link-local addresses name no machine.
 Read-only. HQ's own service is not a declaration and nothing reconciles it.
 """
 
-from __future__ import annotations
-
 import ipaddress
 import socket
 from collections.abc import Iterable, Mapping
@@ -29,7 +27,6 @@ from hq.platform.core.network import is_address
 from .locate import Machines, host_of
 
 
-
 def site_label() -> str:
     """What HQ calls itself: the configured site name."""
 
@@ -42,6 +39,7 @@ def __getattr__(name: str) -> str:
         return site_label()
     raise AttributeError(name)
 
+
 # Names a deployment answers to that are not a place anyone reaches it by.
 _NOT_A_SITE = frozenset({"localhost", "testserver"})
 
@@ -50,7 +48,7 @@ _SERVED_AT = "hq.served_at"
 _SERVED_PORT = "hq.served_port"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SelfService:
     hostnames: tuple[str, ...]
     machine: str = ""
@@ -107,7 +105,7 @@ def served_port(request: Any) -> int | None:
         return None
     try:
         return int(server[1])
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -212,9 +210,7 @@ def hq_machine(
     return owners.pop() if len(owners) == 1 else ""
 
 
-def hq_service(
-    request: Any = None, *, catalog: Iterable[Any] | None = None
-) -> SelfService | None:
+def hq_service(request: Any = None, *, catalog: Iterable[Any] | None = None) -> SelfService | None:
     """HQ's own service, or None when it answers at no name worth listing.
 
     The machine is the machine catalogue's answer, so every page agrees.

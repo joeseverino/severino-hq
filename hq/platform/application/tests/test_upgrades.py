@@ -1,33 +1,39 @@
-from __future__ import annotations
-
 from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 
+from ..upgrades import HIGH as HIGH_RISK, LOW, MAJOR, PATCH, change_between, plans
 from .test_container_standard import runtime
 from .test_containers import HIGH, estate, inventory
-from ..upgrades import HIGH as HIGH_RISK
-from ..upgrades import LOW, MAJOR, PATCH, change_between, plans
 
 TARGET = "sha256:" + "9" * 64
 
 
 def declare(name):
     ManagedResource.objects.create(
-        key=f"example-box-{name}", kind="portainer.container",
+        key=f"example-box-{name}",
+        kind="portainer.container",
         spec={"connection_ref": "example-portainer", "host": "example-box", "name": name},
     )
 
 
 def published(app_tags=("v1.2.0", "v1.2.1"), digests=None):
     now = timezone.now().isoformat()
-    inventory("registry.image", [
-        {"image": "ghcr.io/example/app", "tags": list(app_tags), "digests": {"v1.2.1": TARGET} if digests is None else digests,
-         "source": "https://github.com/example/app", "read_at": now},
-        {"image": "docker.io/example/web", "tags": ["1.0.0"], "read_at": now},
-        {"image": "docker.io/example/kuma", "tags": ["1", "2"], "digests": {"2": TARGET}, "read_at": now},
-    ])
+    inventory(
+        "registry.image",
+        [
+            {
+                "image": "ghcr.io/example/app",
+                "tags": list(app_tags),
+                "digests": {"v1.2.1": TARGET} if digests is None else digests,
+                "source": "https://github.com/example/app",
+                "read_at": now,
+            },
+            {"image": "docker.io/example/web", "tags": ["1.0.0"], "read_at": now},
+            {"image": "docker.io/example/kuma", "tags": ["1", "2"], "digests": {"2": TARGET}, "read_at": now},
+        ],
+    )
 
 
 class ChangeTests(TestCase):
@@ -42,13 +48,15 @@ class DataTests(TestCase):
     def test_a_runtime_directory_is_never_data_to_keep(self):
         from ..upgrades import data_of
 
-        kept = data_of([
-            {"type": "volume", "source": "app_data", "destination": "/data", "read_only": False},
-            {"type": "bind", "source": "/opt/apps/app/conf", "destination": "/conf", "read_only": False},
-            {"type": "bind", "source": "/run/app", "destination": "/run/app", "read_only": False},
-            {"type": "bind", "source": "/var/run/app.pid", "destination": "/pid", "read_only": False},
-            {"type": "bind", "source": "/tmp/scratch", "destination": "/scratch", "read_only": False},
-        ])
+        kept = data_of(
+            [
+                {"type": "volume", "source": "app_data", "destination": "/data", "read_only": False},
+                {"type": "bind", "source": "/opt/apps/app/conf", "destination": "/conf", "read_only": False},
+                {"type": "bind", "source": "/run/app", "destination": "/run/app", "read_only": False},
+                {"type": "bind", "source": "/var/run/app.pid", "destination": "/pid", "read_only": False},
+                {"type": "bind", "source": "/tmp/scratch", "destination": "/scratch", "read_only": False},
+            ]
+        )
 
         self.assertEqual([mount["source"] for mount in kept], ["app_data", "/opt/apps/app/conf"])
 
@@ -76,10 +84,24 @@ class PlanTests(TestCase):
     def test_data_is_snapshotted_and_restored(self):
         estate()
         published()
-        inventory("portainer.runtime", [runtime("app", healthcheck=True, mounts=[
-            {"type": "volume", "source": "app_data", "destination": "/data", "read_only": False},
-            {"type": "bind", "source": "/etc/localtime", "destination": "/etc/localtime", "read_only": True},
-        ])])
+        inventory(
+            "portainer.runtime",
+            [
+                runtime(
+                    "app",
+                    healthcheck=True,
+                    mounts=[
+                        {"type": "volume", "source": "app_data", "destination": "/data", "read_only": False},
+                        {
+                            "type": "bind",
+                            "source": "/etc/localtime",
+                            "destination": "/etc/localtime",
+                            "read_only": True,
+                        },
+                    ],
+                )
+            ],
+        )
         declare("app")
 
         plan = self.plan("app")
@@ -151,9 +173,13 @@ class ProvenanceJoinTests(TestCase):
         from .test_github_estate import store
 
         store(
-            repository="example/app", url="https://github.com/example/app", head={"sha": "b" * 40},
+            repository="example/app",
+            url="https://github.com/example/app",
+            head={"sha": "b" * 40},
             deployments=[{"environment": "production", "sha": "a" * 40}],
-            pull_requests=[{"number": 159, "title": "Next", "url": "https://github.com/example/app/pull/159", "draft": True}],
+            pull_requests=[
+                {"number": 159, "title": "Next", "url": "https://github.com/example/app/pull/159", "draft": True}
+            ],
         )
         Project.objects.create(name="App", slug="app", repository_url="https://github.com/example/app")
         estate()
@@ -176,12 +202,25 @@ class JoinedReadingTests(TestCase):
         estate()
         published()
         declare("app")
-        inventory("portainer.volume", [
-            {"connection_ref": "example-portainer", "host": "example-box", "type": "bind", "source": "/opt/apps/app/data",
-             "used_by": [{"container": "app", "destination": "/data", "read_only": False}]},
-            {"connection_ref": "example-portainer", "host": "example-box", "type": "bind", "source": "/var/run/docker.sock",
-             "used_by": [{"container": "app", "destination": "/var/run/docker.sock", "read_only": True}]},
-        ])
+        inventory(
+            "portainer.volume",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "type": "bind",
+                    "source": "/opt/apps/app/data",
+                    "used_by": [{"container": "app", "destination": "/data", "read_only": False}],
+                },
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "type": "bind",
+                    "source": "/var/run/docker.sock",
+                    "used_by": [{"container": "app", "destination": "/var/run/docker.sock", "read_only": True}],
+                },
+            ],
+        )
 
         plan = next(plan for plan in plans() if plan.container.running.name == "app")
         posture = next(item.posture for item in containers() if item.running.name == "app")
@@ -193,10 +232,18 @@ class JoinedReadingTests(TestCase):
     def test_the_pin_step_names_the_override_it_would_write_never_the_compose_file(self):
         estate()
         published()
-        inventory("portainer.compose_project", [
-            {"connection_ref": "example-portainer", "host": "example-box", "name": "app",
-             "config_files": ["/opt/apps/app/docker-compose.yml"], "containers": ["app"]},
-        ])
+        inventory(
+            "portainer.compose_project",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "name": "app",
+                    "config_files": ["/opt/apps/app/docker-compose.yml"],
+                    "containers": ["app"],
+                },
+            ],
+        )
 
         plan = next(plan for plan in plans() if plan.container.running.name == "app")
 
@@ -207,11 +254,18 @@ class JoinedReadingTests(TestCase):
     def test_the_pin_step_names_the_stacks_own_override_when_it_has_one(self):
         estate()
         published()
-        inventory("portainer.compose_project", [
-            {"connection_ref": "example-portainer", "host": "example-box", "name": "app",
-             "config_files": ["/opt/apps/app/compose.yaml", "/opt/apps/app/compose.override.yaml"],
-             "containers": ["app"]},
-        ])
+        inventory(
+            "portainer.compose_project",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "name": "app",
+                    "config_files": ["/opt/apps/app/compose.yaml", "/opt/apps/app/compose.override.yaml"],
+                    "containers": ["app"],
+                },
+            ],
+        )
 
         plan = next(plan for plan in plans() if plan.container.running.name == "app")
 
@@ -227,10 +281,18 @@ class ReadinessTests(TestCase):
         estate()
         published()
         declare("web")
-        inventory("portainer.volume", [
-            {"connection_ref": "example-portainer", "host": "example-box", "type": "bind", "source": "/opt/apps/web/data",
-             "used_by": [{"container": "web", "destination": "/data", "read_only": False}]},
-        ])
+        inventory(
+            "portainer.volume",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "type": "bind",
+                    "source": "/opt/apps/web/data",
+                    "used_by": [{"container": "web", "destination": "/data", "read_only": False}],
+                },
+            ],
+        )
 
         found = readiness_of(next(item for item in containers() if item.running.name == "web"))
 

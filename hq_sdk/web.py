@@ -1,10 +1,8 @@
 """Authorization and navigation helpers for plugin-owned Django views."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Concatenate
+from typing import TYPE_CHECKING, Any, Concatenate, override
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -52,11 +50,10 @@ class CapabilityRequiredMixin(LoginRequiredMixin):
 
     def get_required_capability(self) -> str:
         if not self.required_capability:
-            raise ImproperlyConfigured(
-                f"{type(self).__name__} must define required_capability."
-            )
+            raise ImproperlyConfigured(f"{type(self).__name__} must define required_capability.")
         return self.required_capability
 
+    @override
     def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponseBase:
         if request.user.is_authenticated:
             _require(request.user, self.get_required_capability())

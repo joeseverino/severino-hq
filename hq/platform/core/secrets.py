@@ -17,13 +17,12 @@ plaintext is worse than not having one, because the operator believes the first
 sentence of this docstring.
 """
 
-from __future__ import annotations
-
 import base64
 import hashlib
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
+
 from .errors import UpstreamUnavailable
 
 
@@ -67,6 +66,4 @@ def unseal(ciphertext: str) -> str:
         # Almost always a rotated or mistyped key rather than tampering, and
         # either way the stored value is unreadable and saying so beats
         # returning something that looks like an empty secret.
-        raise SecretsUnavailable(
-            "A stored secret could not be decrypted with the configured key."
-        ) from exc
+        raise SecretsUnavailable("A stored secret could not be decrypted with the configured key.") from exc

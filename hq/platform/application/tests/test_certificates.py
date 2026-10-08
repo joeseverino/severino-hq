@@ -6,8 +6,6 @@ assuming: encrypted at rest, refused outright when there is nowhere safe to put
 it, never in a serializer, and checked before it is trusted.
 """
 
-from __future__ import annotations
-
 import datetime
 
 from cryptography import x509
@@ -37,7 +35,7 @@ def a_certificate(name: str = "newhost.example.test", *, before=-1, after=825):
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     certificate = (
         x509.CertificateBuilder()
         .subject_name(subject)
@@ -46,9 +44,7 @@ def a_certificate(name: str = "newhost.example.test", *, before=-1, after=825):
         .serial_number(x509.random_serial_number())
         .not_valid_before(now + datetime.timedelta(days=before))
         .not_valid_after(now + datetime.timedelta(days=after))
-        .add_extension(
-            x509.SubjectAlternativeName([x509.DNSName(name)]), critical=False
-        )
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName(name)]), critical=False)
         .sign(key, hashes.SHA256())
     )
     return (
@@ -68,7 +64,7 @@ class InspectionTests(TestCase):
         details = inspect(fullchain, private_key)
 
         self.assertEqual(details["domains"], ["newhost.example.test"])
-        self.assertGreater(details["not_after"], datetime.datetime.now(datetime.timezone.utc))
+        self.assertGreater(details["not_after"], datetime.datetime.now(datetime.UTC))
 
     def test_a_key_that_belongs_to_a_different_certificate_is_refused(self):
         """The failure this exists to catch.
@@ -167,9 +163,7 @@ class StorageTests(TestCase):
         self._store()
 
         self.assertEqual(CertificateMaterial.objects.count(), 1)
-        self.assertEqual(
-            material_for(self.resource.key)["private_key"], self.private_key
-        )
+        self.assertEqual(material_for(self.resource.key)["private_key"], self.private_key)
 
     def test_a_rejected_pair_stores_nothing(self):
         _, other_key = a_certificate("other.example.test")
@@ -201,9 +195,7 @@ class FailClosedTests(TestCase):
 
         with self.assertRaises(secrets.SecretsUnavailable):
             store_certificate(
-                UploadCertificateCommand(
-                    key=resource.key, fullchain=fullchain, private_key=private_key
-                ),
+                UploadCertificateCommand(key=resource.key, fullchain=fullchain, private_key=private_key),
                 principal=cli_principal(),
             )
 
@@ -218,9 +210,11 @@ class FailClosedTests(TestCase):
     def test_a_rotated_key_reports_rather_than_returning_an_empty_secret(self):
         sealed = secrets.seal("material")
 
-        with override_settings(SEVERINO_SECRET_STORE_KEY="a-different-key-of-full-length"):
-            with self.assertRaises(secrets.SecretsUnavailable):
-                secrets.unseal(sealed)
+        with (
+            override_settings(SEVERINO_SECRET_STORE_KEY="a-different-key-of-full-length"),
+            self.assertRaises(secrets.SecretsUnavailable),
+        ):
+            secrets.unseal(sealed)
 
 
 @override_settings(SEVERINO_SECRET_STORE_KEY=A_KEY)
@@ -247,9 +241,7 @@ class CoverageTests(TestCase):
     def upload(self, name="grafana.example"):
         fullchain, private_key = a_certificate(name)
         store_certificate(
-            UploadCertificateCommand(
-                key=self.resource.key, fullchain=fullchain, private_key=private_key
-            ),
+            UploadCertificateCommand(key=self.resource.key, fullchain=fullchain, private_key=private_key),
             principal=cli_principal(),
         )
         self.resource.refresh_from_db()
@@ -301,9 +293,7 @@ class CoverageTests(TestCase):
 
         service = service_or_prospect("grafana.example")
 
-        self.assertNotIn(
-            "no declared certificate covers it", " ".join(service.faults)
-        )
+        self.assertNotIn("no declared certificate covers it", " ".join(service.faults))
 
     def test_uploading_asks_for_it_to_be_installed(self):
         """The page promises a pass; something has to give that pass a reason."""
@@ -313,9 +303,7 @@ class CoverageTests(TestCase):
 
         self.upload("grafana.example")
 
-        self.assertGreater(
-            self.resource.generation, self.resource.observed_generation
-        )
+        self.assertGreater(self.resource.generation, self.resource.observed_generation)
 
     def test_replacing_it_with_a_renewal_asks_again(self):
         """A renewal covers the same names, and still has to be installed."""
@@ -326,9 +314,7 @@ class CoverageTests(TestCase):
 
         self.upload("grafana.example")
 
-        self.assertGreater(
-            self.resource.generation, self.resource.observed_generation
-        )
+        self.assertGreater(self.resource.generation, self.resource.observed_generation)
 
     def test_a_proxy_can_be_pointed_at_one_from_the_form(self):
         """The only possible answer for a private name is on the menu."""
@@ -338,11 +324,7 @@ class CoverageTests(TestCase):
         from ..provider_choices import proxy_choices
 
         self.upload("grafana.example")
-        offered = dict(
-            proxy_choices(NameContext(hostname="grafana.example"))[
-                "certificate_resource"
-            ]
-        )
+        offered = dict(proxy_choices(NameContext(hostname="grafana.example"))["certificate_resource"])
 
         self.assertIn("example-wildcard", offered)
 
@@ -351,10 +333,12 @@ class UploadFormTests(SimpleTestCase):
     def test_a_form_shown_again_never_carries_the_submitted_key(self):
         from ..provider_forms import CertificateUploadForm
 
-        form = CertificateUploadForm(data={
-            "fullchain": "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----",
-            "private_key": "-----BEGIN PRIVATE KEY-----\nexample-secret-material\n-----END PRIVATE KEY-----",
-        })
+        form = CertificateUploadForm(
+            data={
+                "fullchain": "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----",
+                "private_key": "-----BEGIN PRIVATE KEY-----\nexample-secret-material\n-----END PRIVATE KEY-----",
+            }
+        )
 
         rendered = str(form["private_key"])
 

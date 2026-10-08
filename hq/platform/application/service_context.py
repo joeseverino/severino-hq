@@ -18,24 +18,23 @@ uptime history) is one function and one entry, and the page renders it without
 learning anything.
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse
 
-from hq.platform.application.routes import reverse
-
-from hq.platform.core.models import AuditLog
 from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.application.routes import reverse
+from hq.platform.core.models import AuditLog
+
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
-from .published_sites import projects_by_hostname
 from .moments import ago
+from .published_sites import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, counted
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Cell:
     """One value in a section's table, and where it goes if anywhere."""
 
@@ -46,16 +45,16 @@ class Cell:
     external: bool = False
     muted: bool = False
     # An entity mention, rendered through the link builder's answer.
-    link: "EntityLink | None" = None
+    link: EntityLink | None = None
 
     @classmethod
-    def of(cls, link: "EntityLink", *, muted: bool = False) -> "Cell":
+    def of(cls, link: EntityLink, *, muted: bool = False) -> Cell:
         """A cell naming one entity, from ``entity_link``."""
 
         return cls(link.label, link.url, external=link.external, muted=muted, link=link)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServiceSection:
     """One band under a service: a heading, columns, and rows of cells.
 
@@ -101,9 +100,7 @@ class ServiceSection:
             )
             if len(keep) < len(self.columns):
                 object.__setattr__(self, "columns", tuple(self.columns[i] for i in keep))
-                object.__setattr__(
-                    self, "records", tuple(tuple(row[i] for i in keep) for row in self.records)
-                )
+                object.__setattr__(self, "records", tuple(tuple(row[i] for i in keep) for row in self.records))
 
 
 def sections_for(service) -> tuple[ServiceSection, ...]:
@@ -123,7 +120,6 @@ def _repository_label(url: str) -> str:
 
     path = urlparse(url).path.strip("/")
     return path or url
-
 
 
 def _activity(service, project) -> ServiceSection | None:
@@ -160,7 +156,7 @@ def _activity(service, project) -> ServiceSection | None:
     )
 
 
-def _traffic(service) -> "SummaryItem | None":
+def _traffic(service) -> SummaryItem | None:
     """What this host actually served, for the hosts something measures.
 
     The join is the name, like every other fact here: analytics stores a
@@ -175,9 +171,7 @@ def _traffic(service) -> "SummaryItem | None":
     hostname = getattr(service, "hostname", "") or ""
     if not hostname:
         return None
-    measured = traffic_for_hosts({hostname}, days=HOST_TRAFFIC_DAYS).get(
-        normalized_hostname(hostname)
-    )
+    measured = traffic_for_hosts({hostname}, days=HOST_TRAFFIC_DAYS).get(normalized_hostname(hostname))
     if not measured:
         return None
     interval = measured.get("sample_interval") or 1
@@ -193,13 +187,13 @@ def _traffic(service) -> "SummaryItem | None":
 # ----- Summary ---------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SummaryItem:
     """One line of a service's summary: a label, a value, and what backs it."""
 
     label: str
     value: str
-    link: "EntityLink | None" = None
+    link: EntityLink | None = None
     detail: str = ""
     tone: str = ""
     # Shown as a pill in ``tone``: a state never carried by colour alone.
@@ -257,8 +251,7 @@ def _what(service) -> str:
     if service.is_observed:
         seen = ", ".join(
             dict.fromkeys(
-                f"{hop.source.label} {hop.name}".strip() if hop.source else hop.name
-                for hop in service.path.observed
+                f"{hop.source.label} {hop.name}".strip() if hop.source else hop.name for hop in service.path.observed
             )
         )
         return f"Read through {seen}. Not in HQ's settings." if seen else "Read"
@@ -344,7 +337,8 @@ def _project(service) -> SummaryItem | None:
     project = Project.objects.filter(slug=service.project["slug"]).only("repository_url", "last_push_at").first()
     repo = repository_for(project.repository_url) if project and project.repository_url else None
     parts = [
-        _repository_detail(repo) or (_repository_label(project.repository_url) if project and project.repository_url else ""),
+        _repository_detail(repo)
+        or (_repository_label(project.repository_url) if project and project.repository_url else ""),
         f"pushed {ago(project.last_push_at)}" if project and project.last_push_at else "",
     ]
     return SummaryItem(
@@ -366,7 +360,7 @@ def _repository_detail(repo) -> str:
     return " · ".join(parts)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PartRow:
     """One part of a service, with everything the page knows about it.
 
@@ -428,13 +422,14 @@ def part_rows(service, route) -> tuple[PartRow, ...]:
     for index, hop in enumerate(route.hops):
         claim = claims.get(hop.link.url) if hop.link and hop.link.url else None
         certificate = hop.certificate
-        certificate_claim = (
-            claims.get(certificate.link.url) if certificate is not None and certificate.link else None
-        )
+        certificate_claim = claims.get(certificate.link.url) if certificate is not None and certificate.link else None
         used.update(item.url for item in (claim, certificate_claim) if item is not None)
         neighbours = {
             _shown(item)
-            for item in (route.hops[index - 1] if index else None, route.hops[index + 1] if index + 1 < len(route.hops) else None)
+            for item in (
+                route.hops[index - 1] if index else None,
+                route.hops[index + 1] if index + 1 < len(route.hops) else None,
+            )
             if item is not None
         }
         rows.append(
@@ -492,8 +487,10 @@ def _observed_health(hops, index: int) -> tuple[str, str] | None:
         return None
     if hop.step in ("upstream", "container"):
         # What answers a forward is the container behind it.
-        container = hop if hop.step == "container" else next(
-            (item for item in hops[index + 1 :] if item.step == "container"), None
+        container = (
+            hop
+            if hop.step == "container"
+            else next((item for item in hops[index + 1 :] if item.step == "container"), None)
         )
         on = next((item for item in reversed(hops[:index]) if item.step == "machine"), None)
         found = machine(on.name) if on else None
@@ -514,8 +511,8 @@ def routes_for(service, request) -> tuple:
     nothing about this one. The evidence itself is the connection page's.
     """
 
-    from hq.platform.core.network import split_host_port
     from hq.domains.control_plane.names import normalized_hostname
+    from hq.platform.core.network import split_host_port
 
     from .paths import hq_path
 

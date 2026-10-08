@@ -29,8 +29,6 @@ the read stands is ``asks.read_standing``, which is how any asked-for read is
 followed. This decides when to ask and for what, and nothing about how.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -46,7 +44,8 @@ from .cadence import controller_standing, forced_reads, request_reads
 from .freshness import PAGE_VISIT, freshness
 from .security import Capability, Principal
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, slots=True)
 class Reads:
     """The kinds one page is assembled from."""
 
@@ -127,18 +126,15 @@ def _due(kinds: tuple[str, ...], now: datetime) -> list[str]:
     asked = {read.kind for read in forced_reads() if read.kind}
     attempted = {
         kind: max(observed_at, updated_at)
-        for kind, observed_at, updated_at in ProviderInventory.objects.filter(
-            kind__in=kinds
-        ).values_list("kind", "observed_at", "updated_at")
+        for kind, observed_at, updated_at in ProviderInventory.objects.filter(kind__in=kinds).values_list(
+            "kind", "observed_at", "updated_at"
+        )
     }
     return [
         kind
         for kind in kinds
         # One no sweep has stored cannot be answered, so it is not asked for.
-        if kind in attempted
-        and kind not in asked
-        and askable(kind)
-        and freshness(PAGE_VISIT, attempted[kind], now).due
+        if kind in attempted and kind not in asked and askable(kind) and freshness(PAGE_VISIT, attempted[kind], now).due
     ]
 
 
@@ -180,17 +176,11 @@ def request_visit_refresh(subject: str, name: str, *, principal: Principal) -> d
     if reads is None:
         return None
     standing = controller_standing()
-    if (
-        not standing.known
-        or standing.silent
-        or not principal.permits(Capability.MANAGE_INFRASTRUCTURE)
-    ):
+    if not standing.known or standing.silent or not principal.permits(Capability.MANAGE_INFRASTRUCTURE):
         # Nobody is there to read it, or nobody entitled is asking. Asking
         # would leave a request that forces sweeps when the controller
         # returns, and a page promising a reading that is not coming.
         return _answer([], ())
-    with operation_context(
-        interface=principal.interface, actor=principal.actor, operation="visit.refresh"
-    ):
+    with operation_context(interface=principal.interface, actor=principal.actor, operation="visit.refresh"):
         requested = list(request_reads(_due(reads.kinds, timezone.now()), principal=principal))
     return _answer(requested, reads.kinds)

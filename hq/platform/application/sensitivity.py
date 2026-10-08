@@ -11,8 +11,6 @@ is how every other surface asks: it imports the model, never the reverse, so
 persistence does not depend on the application layer.
 """
 
-from __future__ import annotations
-
 from django.db.models import QuerySet
 
 from hq.domains.docs_index.models import SAFE_SENSITIVITIES, DocumentationRecord
@@ -24,9 +22,7 @@ def safe_doc_ids(documentation: QuerySet[DocumentationRecord]) -> list[str]:
     """The ``doc_id`` of each related record an AI-facing surface may name, in order."""
 
     return list(
-        documentation.filter(sensitivity__in=SAFE_SENSITIVITIES)
-        .order_by("doc_id")
-        .values_list("doc_id", flat=True)
+        documentation.filter(sensitivity__in=SAFE_SENSITIVITIES).order_by("doc_id").values_list("doc_id", flat=True)
     )
 
 

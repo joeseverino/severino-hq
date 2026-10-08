@@ -1,10 +1,8 @@
-from __future__ import annotations
-
-from datetime import timedelta
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from datetime import timedelta
+from pathlib import Path
 from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
@@ -54,8 +52,10 @@ class PostureTests(TestCase):
 
     def test_a_public_repository_is_held_to_more(self):
         store(
-            private=False, access=kept(security={"secret_scanning": "enabled", "secret_scanning_push_protection": "disabled"}),
-            variables=[], rules={"pull_request": True, "blocks_force_push": True, "blocks_deletion": False},
+            private=False,
+            access=kept(security={"secret_scanning": "enabled", "secret_scanning_push_protection": "disabled"}),
+            variables=[],
+            rules={"pull_request": True, "blocks_force_push": True, "blocks_deletion": False},
             alerts={"code_scanning": {}},
         )
 
@@ -78,32 +78,52 @@ class PostureTests(TestCase):
 
     def test_someone_gaining_reach_is_serious_and_drift_is_not(self):
         stale = (timezone.now() - timedelta(days=200)).isoformat()
-        store(private=True, variables=["DEPLOY_TARGET"], access=kept(
-            collaborators=[{"login": "example", "role": "admin"}, {"login": "guest", "role": "write"}],
-            deploy_keys=[{"title": "old", "read_only": False, "last_used": stale}],
-            token="write",
-        ))
+        store(
+            private=True,
+            variables=["DEPLOY_TARGET"],
+            access=kept(
+                collaborators=[{"login": "example", "role": "admin"}, {"login": "guest", "role": "write"}],
+                deploy_keys=[{"title": "old", "read_only": False, "last_used": stale}],
+                token="write",
+            ),
+        )
 
         items = {item.key: item.status for item in attention()}
 
-        self.assertEqual(items, {
-            "github-posture:only-you": "serious",
-            "github-posture:keys-read-only": "serious",
-            "github-posture:keys-in-use": "attention",
-            "github-posture:token-read-only": "attention",
-            "github-posture:no-variables": "attention",
-        })
+        self.assertEqual(
+            items,
+            {
+                "github-posture:only-you": "serious",
+                "github-posture:keys-read-only": "serious",
+                "github-posture:keys-in-use": "attention",
+                "github-posture:token-read-only": "attention",
+                "github-posture:no-variables": "attention",
+            },
+        )
 
     def test_one_item_per_gap_however_many_repositories_miss_it(self):
         from hq.domains.control_plane.models import ProviderInventory
 
-        record = {"connection_ref": "github", "default_branch": "main", "head": {}, "private": True,
-                  "access": kept(pinning_required=False), "variables": []}
-        ProviderInventory.objects.update_or_create(kind="github.repository", defaults={
-            "records": [{**record, "repository": f"example/{name}", "url": f"https://github.com/example/{name}"}
-                        for name in ("alpha", "beta", "gamma")],
-            "reachable": True, "connected": True, "observed_at": timezone.now(),
-        })
+        record = {
+            "connection_ref": "github",
+            "default_branch": "main",
+            "head": {},
+            "private": True,
+            "access": kept(pinning_required=False),
+            "variables": [],
+        }
+        ProviderInventory.objects.update_or_create(
+            kind="github.repository",
+            defaults={
+                "records": [
+                    {**record, "repository": f"example/{name}", "url": f"https://github.com/example/{name}"}
+                    for name in ("alpha", "beta", "gamma")
+                ],
+                "reachable": True,
+                "connected": True,
+                "observed_at": timezone.now(),
+            },
+        )
 
         (item,) = attention()
 
@@ -172,11 +192,16 @@ class PostureHelpTests(TestCase):
         item = self.item("security-fixes", access=kept(security_fixes=False))
 
         self.assertEqual(item_help(item), COMMAND)
-        self.assertEqual(runs(item), [(
-            "alpha",
-            "gh api -X PUT repos/example/alpha/vulnerability-alerts && "
-            "gh api -X PUT repos/example/alpha/automated-security-fixes",
-        )])
+        self.assertEqual(
+            runs(item),
+            [
+                (
+                    "alpha",
+                    "gh api -X PUT repos/example/alpha/vulnerability-alerts && "
+                    "gh api -X PUT repos/example/alpha/automated-security-fixes",
+                )
+            ],
+        )
 
     def test_pinning_offers_no_setting_while_the_workflows_were_not_read(self):
         item = self.item("actions-pinned", access=kept(pinning_required=False))
@@ -186,10 +211,20 @@ class PostureHelpTests(TestCase):
 
     def test_pinning_is_a_paste_per_workflow_then_the_setting(self):
         pins = [
-            {"path": ".github/workflows/ci.yml", "uses": "actions/checkout@v4",
-             "action": "actions/checkout", "ref": "v4", "sha": "a" * 40},
-            {"path": ".github/workflows/ci.yml", "uses": "actions/checkout@v4",
-             "action": "actions/checkout", "ref": "v4", "sha": "a" * 40},
+            {
+                "path": ".github/workflows/ci.yml",
+                "uses": "actions/checkout@v4",
+                "action": "actions/checkout",
+                "ref": "v4",
+                "sha": "a" * 40,
+            },
+            {
+                "path": ".github/workflows/ci.yml",
+                "uses": "actions/checkout@v4",
+                "action": "actions/checkout",
+                "ref": "v4",
+                "sha": "a" * 40,
+            },
         ]
         item = self.item("actions-pinned", access=kept(pinning_required=False), pins=pins)
 
@@ -200,16 +235,23 @@ class PostureHelpTests(TestCase):
         self.assertIn("checkout\\@" + "a" * 40 + "\\ \\#\\ v4", edit[1])
         self.assertEqual(
             setting,
-            ("alpha: then require pinning",
-             "gh api -X PUT repos/example/alpha/actions/permissions -F enabled=true -F sha_pinning_required=true"),
+            (
+                "alpha: then require pinning",
+                "gh api -X PUT repos/example/alpha/actions/permissions -F enabled=true -F sha_pinning_required=true",
+            ),
         )
 
     @skipUnless(shutil.which("perl"), "the pasted edit runs perl")
     def test_the_pasted_edit_pins_only_uses_lines_and_keeps_line_endings(self):
         sha = "a" * 40
         pins = [
-            {"path": ".github/workflows/ci.yml", "uses": uses, "action": uses.split("@")[0],
-             "ref": uses.split("@")[1], "sha": sha}
+            {
+                "path": ".github/workflows/ci.yml",
+                "uses": uses,
+                "action": uses.split("@")[0],
+                "ref": uses.split("@")[1],
+                "sha": sha,
+            }
             for uses in ("actions/checkout@v4", "example/setup@v2")
         ]
         before = (
@@ -219,7 +261,7 @@ class PostureHelpTests(TestCase):
             "      - uses: actions/checkout@v4   \r\n"
             "      # - uses: actions/checkout@v4\r\n"
             "      - name: setup\r\n"
-            "        uses: \"example/setup@v2\" # the old tag\r\n"
+            '        uses: "example/setup@v2" # the old tag\r\n'
             "      - uses: actions/checkout@v4.1\r\n"
             "      - run: echo uses: actions/checkout@v4\r\n"
         )
@@ -247,12 +289,17 @@ class PostureHelpTests(TestCase):
             self.assertEqual(sorted(path.name for path in workflow.parent.iterdir()), ["ci.yml"])
 
     def test_a_workflow_called_from_another_repository_holds_back_the_setting(self):
-        pins = [{"path": ".github/workflows/ci.yml", "uses": "actions/checkout@v4",
-                 "action": "actions/checkout", "ref": "v4", "sha": "a" * 40}]
+        pins = [
+            {
+                "path": ".github/workflows/ci.yml",
+                "uses": "actions/checkout@v4",
+                "action": "actions/checkout",
+                "ref": "v4",
+                "sha": "a" * 40,
+            }
+        ]
         called = ["example/shared/.github/workflows/build.yml@" + "c" * 40]
-        item = self.item(
-            "actions-pinned", access=kept(pinning_required=False), pins=pins, called_workflows=called
-        )
+        item = self.item("actions-pinned", access=kept(pinning_required=False), pins=pins, called_workflows=called)
 
         self.assertEqual(runs(item)[0][0], "alpha: pin .github/workflows/ci.yml")
         self.assertNotIn("sha_pinning_required", str(item.workflow))
@@ -266,8 +313,15 @@ class PostureHelpTests(TestCase):
         )
 
     def test_a_tag_that_could_not_be_resolved_holds_back_the_setting(self):
-        pins = [{"path": ".github/workflows/ci.yml", "uses": "example/gone@v1",
-                 "action": "example/gone", "ref": "v1", "sha": ""}]
+        pins = [
+            {
+                "path": ".github/workflows/ci.yml",
+                "uses": "example/gone@v1",
+                "action": "example/gone",
+                "ref": "v1",
+                "sha": "",
+            }
+        ]
         item = self.item("actions-pinned", access=kept(pinning_required=False), pins=pins)
 
         self.assertEqual([label for label, _summary in runs(item)], ["Why HQ cannot do this for you"])
@@ -277,11 +331,14 @@ class PostureHelpTests(TestCase):
     def test_a_wired_secret_kept_as_a_variable_moves_before_it_is_deleted(self):
         item = self.item("no-variables", variables=["HQ_APP_CLIENT_ID", "DEPLOY_TARGET"])
 
-        self.assertEqual([summary for _label, summary in runs(item)], [
-            'gh secret set HQ_APP_CLIENT_ID -R example/alpha --body "$(gh variable get HQ_APP_CLIENT_ID -R example/alpha)"',
-            "gh variable delete HQ_APP_CLIENT_ID -R example/alpha",
-            "gh variable delete DEPLOY_TARGET -R example/alpha",
-        ])
+        self.assertEqual(
+            [summary for _label, summary in runs(item)],
+            [
+                'gh secret set HQ_APP_CLIENT_ID -R example/alpha --body "$(gh variable get HQ_APP_CLIENT_ID -R example/alpha)"',
+                "gh variable delete HQ_APP_CLIENT_ID -R example/alpha",
+                "gh variable delete DEPLOY_TARGET -R example/alpha",
+            ],
+        )
         self.assertIn("only after its workflows read secrets.HQ_APP_CLIENT_ID", runs(item)[1][0])
 
     def test_the_wired_secrets_are_the_ones_the_wiring_sets(self):
@@ -291,12 +348,18 @@ class PostureHelpTests(TestCase):
             self.assertIn(f'"secret", "set", "{name}"', wiring)
 
     def test_a_collaborator_and_a_writable_key_are_removed_by_name(self):
-        guest = self.item("only-you", access=kept(collaborators=[
-            {"login": "example", "role": "admin"}, {"login": "guest", "role": "write"}]))
-        key = self.item("keys-read-only", access=kept(deploy_keys=[
-            {"title": "deploy", "read_only": False, "last_used": timezone.now().isoformat()}]))
+        guest = self.item(
+            "only-you",
+            access=kept(collaborators=[{"login": "example", "role": "admin"}, {"login": "guest", "role": "write"}]),
+        )
+        key = self.item(
+            "keys-read-only",
+            access=kept(deploy_keys=[{"title": "deploy", "read_only": False, "last_used": timezone.now().isoformat()}]),
+        )
 
-        self.assertEqual(runs(guest), [("alpha: remove guest", "gh api -X DELETE repos/example/alpha/collaborators/guest")])
+        self.assertEqual(
+            runs(guest), [("alpha: remove guest", "gh api -X DELETE repos/example/alpha/collaborators/guest")]
+        )
         self.assertEqual(
             runs(key)[0][1],
             "gh api -X DELETE repos/example/alpha/keys/"
@@ -304,8 +367,12 @@ class PostureHelpTests(TestCase):
         )
 
     def test_a_public_repository_gets_the_ruleset_and_scanning_commands(self):
-        store(private=False, access=kept(security={"secret_scanning": "disabled", "secret_scanning_push_protection": "enabled"}),
-              variables=[], rules={"pull_request": True, "blocks_force_push": True, "blocks_deletion": False})
+        store(
+            private=False,
+            access=kept(security={"secret_scanning": "disabled", "secret_scanning_push_protection": "enabled"}),
+            variables=[],
+            rules={"pull_request": True, "blocks_force_push": True, "blocks_deletion": False},
+        )
         items = {item.key: item for item in attention()}
 
         (deletion,) = runs(items["github-posture:deletion-blocked"])

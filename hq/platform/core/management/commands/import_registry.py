@@ -8,11 +8,10 @@ fields of ``project.upsert`` or ``asset.upsert`` and needs a slug. Runs the
 ``hq.import`` capability.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path
+from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -24,6 +23,7 @@ from hq.platform.application.ui import counted
 class Command(BaseCommand):
     help = "Import projects and assets from one JSON document, all or nothing."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument("path", help="Path to the JSON document, or '-' for stdin.")
         parser.add_argument(
@@ -49,6 +49,7 @@ class Command(BaseCommand):
             raise CommandError('The document is an object: {"projects": [...], "assets": [...]}.')
         return data
 
+    @override
     def handle(self, *args, **options):
         payload = {**self._document(options["path"]), "check_only": options["check_only"]}
         result = execute_capability("hq.import", payload, principal=cli_principal())

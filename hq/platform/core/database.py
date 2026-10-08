@@ -1,7 +1,5 @@
 """Upkeep the database asks of the application that holds it."""
 
-from __future__ import annotations
-
 from django.db import DEFAULT_DB_ALIAS, connections
 
 # Every table is checked, not only those this connection queried: the runs

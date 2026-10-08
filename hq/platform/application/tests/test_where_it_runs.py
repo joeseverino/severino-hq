@@ -1,7 +1,5 @@
 """A project from the side of what serves it, and names in a note as links."""
 
-from __future__ import annotations
-
 from django.template import Context, Template
 from django.test import TestCase
 

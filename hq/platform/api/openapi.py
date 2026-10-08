@@ -20,14 +20,12 @@ Examples are responses the suite really received, recorded into
 this document on every run.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from collections.abc import Callable, Iterator
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from pydantic import TypeAdapter
@@ -58,6 +56,7 @@ class OpenAPIError(RuntimeError):
 class _Closed(GenerateJsonSchema):
     """A TypedDict's keys are all of its keys, as the strict API reads them."""
 
+    @override
     def typed_dict_schema(self, schema: core_schema.TypedDictSchema) -> JsonSchemaValue:
         value = super().typed_dict_schema(schema)
         value.setdefault("additionalProperties", False)
@@ -65,9 +64,7 @@ class _Closed(GenerateJsonSchema):
 
 
 def _pascal(name: str) -> str:
-    return "".join(
-        part[:1].upper() + part[1:] for part in re.split(r"[^0-9A-Za-z]+", name) if part
-    )
+    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[^0-9A-Za-z]+", name) if part)
 
 
 def _camel(name: str) -> str:
@@ -313,9 +310,7 @@ class _Builder:
                     "content": _json_content(self.failure, _recorded(recorded[code])),
                 }
             else:
-                responses[code] = {
-                    "$ref": f"#/components/responses/{_pascal(HTTPStatus(status).phrase)}"
-                }
+                responses[code] = {"$ref": f"#/components/responses/{_pascal(HTTPStatus(status).phrase)}"}
         return responses
 
     def operation(
@@ -413,9 +408,7 @@ class _Builder:
                 self.tags.of_capability(name),
                 summary=spec["label"],
                 description=f"{spec['summary']}\n\nRequires: {grants}.",
-                parameters=(
-                    [{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"] != "read" else []
-                ),
+                parameters=([{"$ref": "#/components/parameters/IdempotencyKey"}] if spec["effect"] != "read" else []),
                 requestBody=_body(body),
                 **{
                     "x-hq-capability": name,
@@ -489,9 +482,7 @@ class _Builder:
                 self.tags.of_resource(name),
                 summary=f"Get one of {spec['label']}",
                 description=spec["summary"],
-                parameters=[
-                    _path_parameter("identifier", identifier, f"The {detail['identifier']}.")
-                ],
+                parameters=[_path_parameter("identifier", identifier, f"The {detail['identifier']}.")],
                 **{"x-hq-resource": name, "x-hq-identifier": detail["identifier"]},
             )
 
@@ -524,9 +515,7 @@ def document() -> dict[str, Any]:
     builder = _Builder()
     for route, pattern in routes():
         builder.route(route, pattern)
-    statuses = sorted(
-        {status for _, pattern in routes() for status in _view(pattern).__hq_errors__}
-    )
+    statuses = sorted({status for _, pattern in routes() for status in _view(pattern).__hq_errors__})
     responses: dict[str, Any] = {}
     for status in statuses:
         phrase = HTTPStatus(status).phrase

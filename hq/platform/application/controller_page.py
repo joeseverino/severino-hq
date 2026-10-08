@@ -7,8 +7,6 @@ readings it stored and when each was last attempted, the sweep policy, and
 the work queued for it. Nothing here asks the controller anything.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -30,7 +28,7 @@ from .moments import duration
 from .resource_operations import ACTION_LABELS
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class KindReading:
     """One kind the sweep reads: when it was last tried, and what came of it."""
 
@@ -44,7 +42,7 @@ class KindReading:
     ok: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class QueuedWork:
     resource: str
     action: str
@@ -52,7 +50,7 @@ class QueuedWork:
     created_at: datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ControllerPage:
     standing: ControllerStanding
     swept_at: datetime | None
@@ -125,9 +123,7 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
         standing=controller_standing(now),
         swept_at=max((reading.attempted_at for reading in readings), default=None),
         sweep_due=due,
-        next_sweep_at=(
-            None if due or age is None else now + timedelta(seconds=max(0, interval - int(age)))
-        ),
+        next_sweep_at=(None if due or age is None else now + timedelta(seconds=max(0, interval - int(age)))),
         sweep_every=duration(every),
         oldest=oldest,
         overdue=oldest is not None and interval > 0 and now - oldest.attempted_at > 2 * every,

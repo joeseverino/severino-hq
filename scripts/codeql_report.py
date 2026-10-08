@@ -14,14 +14,14 @@ from pathlib import Path
 
 # Run as a file, so the repository root is not on the path by itself.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from hq.platform.application.ui import counted  # noqa: E402
+from hq.platform.application.ui import counted
 
 # Kept in step with `query-filters` in .github/codeql/codeql-config.yml.
 EXCLUDED = {"py/cyclic-import"}
 
 
 def main(path: str) -> int:
-    with open(path) as handle:
+    with Path(path).open() as handle:
         sarif = json.load(handle)
 
     alerts = [

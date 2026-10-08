@@ -4,8 +4,6 @@ Atheris is not installed here, so a stand-in provides the one call the harness
 makes of it with input: decoding the fuzzer's bytes as text.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import sys
 import types

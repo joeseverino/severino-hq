@@ -1,3 +1,5 @@
+from typing import override
+
 from django.db.models import Q, Sum
 from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
@@ -17,6 +19,7 @@ from hq.platform.application.references import ReferencePickerMixin, reference_o
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
 
@@ -46,22 +49,21 @@ class AssetListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-purchase_date"
     table_search_placeholder = "Search assets, vendors, serials, and notes…"
 
+    @override
     def get_page_actions(self):
         return (PageAction("New asset", reverse("assets:create"), primary=True),)
 
+    @override
     def get_queryset(self):
         qs = Asset.objects.all()
         if self.request.GET.get("missing_purchase"):
-            qs = qs.filter(status=Asset.Status.ACTIVE).filter(
-                Q(purchase_date__isnull=True) | Q(total_cost=0)
-            )
+            qs = qs.filter(status=Asset.Status.ACTIVE).filter(Q(purchase_date__isnull=True) | Q(total_cost=0))
         return self.apply_table_query(qs)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        totals = self.object_list.aggregate(
-            total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount")
-        )
+        totals = self.object_list.aggregate(total=Sum("total_cost"), deductible=Sum("estimated_deductible_amount"))
         context["totals"] = cost_totals(totals, narrowed=bool(context["table"]["active_count"]))
         return context
 
@@ -69,6 +71,7 @@ class AssetListView(PageMixin, TableListMixin, ListView):
 class AssetPage(PageMixin):
     """A page about one asset, or a new one: its trail runs back to the list."""
 
+    @override
     def get_page_trail(self):
         return record_trail(
             ("Assets", reverse("assets:list")),
@@ -91,18 +94,19 @@ class AssetDetailView(PageMixin, DetailView):
         "receipts",
     )
 
+    @override
     def get_page_title(self):
         return self.object.item_name
 
+    @override
     def get_page_trail(self):
         return (("Assets", reverse("assets:list")),)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         asset = self.object
-        context["documents"] = related_documents(
-            asset.documentation_records.all(), listed=asset.related_projects.all()
-        )
+        context["documents"] = related_documents(asset.documentation_records.all(), listed=asset.related_projects.all())
         principal = web_principal(self.request.user)
         context["thing"] = reference_of(asset, "infrastructure", principal=principal)
         # A domain asset with no link is matched to the domain of its name.
@@ -110,6 +114,7 @@ class AssetDetailView(PageMixin, DetailView):
         context["mentions"] = referenced_by_row(asset, principal=principal)
         return context
 
+    @override
     def get_page_lede(self):
         return format_html(
             '{} · <span class="pill pill-{}">{}</span>',
@@ -118,6 +123,7 @@ class AssetDetailView(PageMixin, DetailView):
             self.object.get_status_display(),
         )
 
+    @override
     def get_page_actions(self):
         slug = self.object.slug
         return (

@@ -11,8 +11,6 @@ is the configuration. Secrets, variables' values and log contents are never
 read, so the schema has nowhere to put them.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 from typing import Any
 
@@ -42,8 +40,16 @@ VARIABLES = ReadingPart("variables", "Actions variables", requires=("Actions var
 # pinning fix replaces them with.
 WORKFLOW_PINS = ReadingPart("workflow_pins", "Workflow action pins", requires=("contents: read",))
 PARTS = (
-    CODE_SCANNING, DEPENDABOT, LEAKED_CREDENTIALS, BRANCH_RULES, ENVIRONMENTS, RUNNERS, IMAGES, ACCESS,
-    VARIABLES, WORKFLOW_PINS,
+    CODE_SCANNING,
+    DEPENDABOT,
+    LEAKED_CREDENTIALS,
+    BRANCH_RULES,
+    ENVIRONMENTS,
+    RUNNERS,
+    IMAGES,
+    ACCESS,
+    VARIABLES,
+    WORKFLOW_PINS,
 )
 
 

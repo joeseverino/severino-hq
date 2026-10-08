@@ -14,8 +14,6 @@ hostnames it serves. Every name is example.*; every address is a documentation
 or shared-address range (192.0.2.0/24, 198.51.100.0/24, 100.64.0.0/10).
 """
 
-from __future__ import annotations
-
 from contextlib import ExitStack
 from datetime import timedelta
 
@@ -23,12 +21,6 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
-from hq.platform.application import readings
-from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import cli_principal
-from hq.platform.application.services import CONTAINER_KIND
-from hq.platform.core.models import AuditLog
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -36,16 +28,22 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
     WeatherObservation,
 )
+from hq.domains.projects.models import Project
+from hq.platform.application import readings
+from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
+from hq.platform.application.report_testing import report_connections
+from hq.platform.application.security import cli_principal
+from hq.platform.application.services import CONTAINER_KIND
+from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.test_browser_fixtures import (
+    _THROUGH_THE_PROXY,
     CALLER,
     HQ,
     _asked_through_the_proxy,
     _dashboard,
     _healthy,
-    _THROUGH_THE_PROXY,
     render_pages,
 )
-from hq.domains.projects.models import Project
 
 # Hyphenated on purpose: a browser breaks a name at a hyphen, and a name that
 # wraps there mid-word is the failure this estate exists to show.
@@ -262,8 +260,18 @@ def _hardening():
                 "security_opt": ["seccomp=unconfined"],
                 "port_bindings": [{"container_port": "8080/tcp", "host_ip": "0.0.0.0", "host_port": "8080"}],
                 "mounts": [
-                    {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True},
-                    {"type": "bind", "source": "/etc/example-configuration-directory", "destination": "/host-etc", "read_only": False},
+                    {
+                        "type": "bind",
+                        "source": "/var/run/docker.sock",
+                        "destination": "/var/run/docker.sock",
+                        "read_only": True,
+                    },
+                    {
+                        "type": "bind",
+                        "source": "/etc/example-configuration-directory",
+                        "destination": "/host-etc",
+                        "read_only": False,
+                    },
                     {"type": "bind", "source": source, "destination": "/srv/configuration", "read_only": False},
                 ],
             },
@@ -295,9 +303,7 @@ def _glance():
         defaults={"weather_point": "41.0000,-87.0000", "weather_label": "Weather"},
     )
     for position, key in enumerate(("example-primary-host", "example-edge-host")):
-        DashboardMachine.objects.create(
-            machine=ManagedResource.objects.get(key=key), position=position
-        )
+        DashboardMachine.objects.create(machine=ManagedResource.objects.get(key=key), position=position)
         readings.record(
             readings.machine_telemetry(key),
             {

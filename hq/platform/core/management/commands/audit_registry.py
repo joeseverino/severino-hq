@@ -9,17 +9,18 @@ it is the fingerprint of a rename that left a stale slug, or a duplicate row.
 Read-only.
 """
 
-from __future__ import annotations
-
 import json
+from typing import override
 
 from django.core.management.base import BaseCommand
+
 from hq.platform.application.registry import audit_registry
 
 
 class Command(BaseCommand):
     help = "Report Project/Asset registry rows that no documentation references."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument(
             "--json",
@@ -27,6 +28,7 @@ class Command(BaseCommand):
             help="Emit raw JSON for wrapper CLIs instead of the human report.",
         )
 
+    @override
     def handle(self, *args, **options):
         stats = audit_registry()
         orphan_projects = stats["orphan_projects"]
@@ -36,26 +38,14 @@ class Command(BaseCommand):
             self.stdout.write(json.dumps(stats, default=str))
             return
 
-        self.stdout.write(
-            "Projects  %d total, %d with zero docs"
-            % (stats["projects_total"], len(orphan_projects))
-        )
+        self.stdout.write(f"Projects  {stats['projects_total']} total, {len(orphan_projects)} with zero docs")
         for slug in orphan_projects:
             self.stdout.write(f"          orphan: {slug}")
-        self.stdout.write(
-            "Assets    %d total, %d with zero docs"
-            % (stats["assets_total"], len(orphan_assets))
-        )
+        self.stdout.write(f"Assets    {stats['assets_total']} total, {len(orphan_assets)} with zero docs")
         for slug in orphan_assets:
             self.stdout.write(f"          orphan: {slug}")
 
         if orphan_projects or orphan_assets:
-            self.stdout.write(
-                "Registry  review orphans above: a stale slug from a rename, "
-                "or a duplicate row"
-            )
+            self.stdout.write("Registry  review orphans above: a stale slug from a rename, or a duplicate row")
         else:
-            self.stdout.write(
-                "Registry  ok: every Project and Asset is referenced by at "
-                "least one doc"
-            )
+            self.stdout.write("Registry  ok: every Project and Asset is referenced by at least one doc")

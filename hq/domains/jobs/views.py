@@ -1,8 +1,7 @@
 """Where a job says what it is doing, and where they are all listed."""
 
-from __future__ import annotations
-
 from functools import cached_property
+from typing import override
 
 from django.core.exceptions import PermissionDenied
 from django.db.models import Case, IntegerField, Value, When
@@ -15,7 +14,6 @@ from hq.platform.application.tables import TableColumn, TableFilter, TableListMi
 
 from .models import Job
 from .runner import reap
-
 
 FAILED_FIRST = "failed"
 ENDED_BADLY = (Job.State.FAILED, Job.State.LOST)
@@ -78,6 +76,7 @@ class JobListView(PageMixin, TableListMixin, ListView):
             key=lambda found: found[1].casefold(),
         )
 
+    @override
     def get_table_filters(self):
         # Kinds are strings extensions choose, so the options are whatever
         # has actually run rather than a list this app maintains. Each is
@@ -88,6 +87,7 @@ class JobListView(PageMixin, TableListMixin, ListView):
             TableFilter("kind", "Job", "kind", sorted(named.items(), key=lambda item: item[1].casefold())),
         )
 
+    @override
     def get_queryset(self):
         # Anything that died is settled before the list is drawn, so the page
         # never shows a job as running when its process is gone. Off a page
@@ -103,6 +103,7 @@ class JobListView(PageMixin, TableListMixin, ListView):
             )
         return rows
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["failed_last"] = [label for _pk, label in self.failed_last]
@@ -119,6 +120,7 @@ class JobStatusView(DetailView):
 
     model = Job
 
+    @override
     def render_to_response(self, context, **response_kwargs):
         job = self.object
         if job.is_stale:

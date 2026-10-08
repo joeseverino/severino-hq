@@ -4,8 +4,6 @@ Settings are loaded in a fresh process per case, because the switch is read
 once at import and the suite's own settings always have it off.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import json
 import subprocess
@@ -103,9 +101,7 @@ class SwitchTests(SimpleTestCase):
             for requested in (False, True):
                 for testing in (False, True):
                     with self.subTest(debug=debug, requested=requested, testing=testing):
-                        enabled = debug_toolbar_enabled(
-                            debug=debug, requested=requested, testing=testing
-                        )
+                        enabled = debug_toolbar_enabled(debug=debug, requested=requested, testing=testing)
                         expected = debug and requested and not testing and INSTALLED
                         self.assertEqual(enabled, expected)
 

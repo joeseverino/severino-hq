@@ -1,4 +1,5 @@
 """Conservative AST classifications for graph similarity, not a policy proof."""
+
 from __future__ import annotations
 
 import ast
@@ -20,7 +21,7 @@ def constructor_bindings(tree, path):
     for node in tree.body:
         if isinstance(node, ast.ImportFrom):
             package = list(Path(path).with_suffix("").parts[:-1])
-            prefix = ".".join(package[:len(package) - node.level + 1]) if node.level else ""
+            prefix = ".".join(package[: len(package) - node.level + 1]) if node.level else ""
             imported = ".".join(p for p in (prefix, node.module) if p)
             for alias in node.names:
                 bindings[alias.asname or alias.name] = f"{imported}.{alias.name}"
@@ -30,7 +31,9 @@ def constructor_bindings(tree, path):
             return {}
         if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in constructors_bound:
             return {}
-        if isinstance(node, ast.Import) and any((alias.asname or alias.name.split(".")[0]) in constructors_bound for alias in node.names):
+        if isinstance(node, ast.Import) and any(
+            (alias.asname or alias.name.split(".")[0]) in constructors_bound for alias in node.names
+        ):
             return {}
     return bindings
 
@@ -56,9 +59,15 @@ def metadata(root: Path, path: str, name: str) -> bool:
             return literal(node.value) and isinstance(node.value, (ast.Name, ast.Attribute))
         if isinstance(node, ast.Tuple):
             return all(literal(child) for child in node.elts)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and bindings.get(node.func.id) in CONSTRUCTORS:
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and bindings.get(node.func.id) in CONSTRUCTORS
+        ):
             constructors.append(bindings[node.func.id])
-            return all(literal(child) for child in node.args) and all(k.arg is not None and literal(k.value) for k in node.keywords)
+            return all(literal(child) for child in node.args) and all(
+                k.arg is not None and literal(k.value) for k in node.keywords
+            )
         return False
 
     return literal(function.body[0].value) and bool(constructors)
@@ -83,7 +92,12 @@ class Classifier:
         return self.cache[path]
 
     def tracked(self, path):
-        subprocess.run(["git", "ls-files", "--error-unmatch", "--", str(path.relative_to(self.root))], cwd=self.root, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", str(path.relative_to(self.root))],
+            cwd=self.root,
+            check=True,
+            capture_output=True,
+        )
 
     def generated(self, path):
         if not self.go(path)["Generated"]:
@@ -124,7 +138,14 @@ class Classifier:
                 return "generated provenance (adjacent tracked directive/config/schema; regeneration gate required)"
             x = self.go(a[0])["Wrappers"].get(a[1])
             y = self.go(b[0])["Wrappers"].get(b[1])
-            if x and y and x["Producer"] != y["Producer"] and x["ProducerSignature"] != y["ProducerSignature"] and x["Signature"] != y["Signature"] and x["Forward"] == y["Forward"]:
+            if (
+                x
+                and y
+                and x["Producer"] != y["Producer"]
+                and x["ProducerSignature"] != y["ProducerSignature"]
+                and x["Signature"] != y["Signature"]
+                and x["Forward"] == y["Forward"]
+            ):
                 return "typed delegation (distinct local string/error producer signatures; identical forward)"
         if a[0].endswith(".py") and b[0].endswith(".py") and metadata(self.root, *a) and metadata(self.root, *b):
             return "immutable metadata constructor declarations (no arguments/control/computed calls)"

@@ -1,13 +1,12 @@
 """Bind documented MCP arguments to the declared application adapters."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from copy import deepcopy
 from functools import wraps
 from typing import Any
 
 from asgiref.sync import sync_to_async
+
 # MCP's existing jsonschema dependency ships without inline type information.
 from jsonschema import Draft202012Validator, ValidationError  # type: ignore[import-untyped]
 from mcp.server.fastmcp import FastMCP
@@ -23,11 +22,25 @@ def _signature_shape(schema: Any) -> Any:
     if not isinstance(schema, dict):
         return schema
     return {
-        key: ({name: _signature_shape(value) for name, value in item.items()}
-              if key in {"properties", "$defs"} else _signature_shape(item))
+        key: (
+            {name: _signature_shape(value) for name, value in item.items()}
+            if key in {"properties", "$defs"}
+            else _signature_shape(item)
+        )
         for key, item in schema.items()
-        if key in {"type", "anyOf", "oneOf", "items", "properties", "required",
-                   "additionalProperties", "$ref", "$defs", "default"}
+        if key
+        in {
+            "type",
+            "anyOf",
+            "oneOf",
+            "items",
+            "properties",
+            "required",
+            "additionalProperties",
+            "$ref",
+            "$defs",
+            "default",
+        }
     }
 
 

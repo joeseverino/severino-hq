@@ -6,8 +6,6 @@ machine" or "which domain" is derived from that report, so an estate grows by
 being given a credential rather than by anything here being edited.
 """
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
@@ -15,16 +13,14 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
 
-from ..connections import connection_readings, connections_for, reachable_through
 from ..connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog
-from ..report_testing import report_connections
-from hq.domains.control_plane.provider_spec import NameContext
-
+from ..connections import connection_readings, connections_for, reachable_through
 from ..provider_choices import container_stack, zone
+from ..report_testing import report_connections
 from ..security import cli_principal
-
 
 A_PORTAINER = {
     "connection_ref": "a-portainer",
@@ -47,9 +43,7 @@ A_DNS_TOKEN = {
 
 
 def sweep(*connections, controller_id="a-controller"):
-    return report_connections(
-        list(connections), principal=cli_principal(), controller_id=controller_id
-    )
+    return report_connections(list(connections), principal=cli_principal(), controller_id=controller_id)
 
 
 class RecordingTests(TestCase):
@@ -139,11 +133,7 @@ class DerivationTests(TestCase):
         point it looks like a missing credential rather than a missing letter.
         """
 
-        named = {
-            provider
-            for spec in PROVIDERS.values()
-            for provider in spec.connection_providers
-        }
+        named = {provider for spec in PROVIDERS.values() for provider in spec.connection_providers}
 
         self.assertEqual(
             named
@@ -195,17 +185,14 @@ class DerivationTests(TestCase):
     def test_which_domains_can_be_declared_is_what_the_token_may_edit(self):
         sweep(A_DNS_TOKEN)
 
-        self.assertEqual(
-            zone(NameContext())["connection_ref"], (("cloudflare-dns",) * 2,)
-        )
+        self.assertEqual(zone(NameContext())["connection_ref"], (("cloudflare-dns",) * 2,))
 
     def test_the_menu_offers_whatever_providers_the_registry_says_reach_the_kind(self):
         from dataclasses import replace
         from unittest import mock
 
-        from hq.domains.control_plane.providers import PROVIDERS
-
         from hq.domains.control_plane.provider_adapters.cloudflare import ZONE_KIND
+        from hq.domains.control_plane.providers import PROVIDERS
 
         sweep(A_DNS_TOKEN, {**A_PORTAINER, "connection_ref": "another-dns"})
         widened = replace(PROVIDERS[ZONE_KIND], connection_providers=("cloudflare_dns", "portainer"))
@@ -241,9 +228,7 @@ class DerivationTests(TestCase):
 
 class ConnectionPageTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
 
     def test_the_page_lists_what_the_controller_reported(self):
@@ -383,10 +368,7 @@ def _certificate_and_dns(hostname):
     from ..service_facets import Facet
 
     context = name_context(hostname)
-    return {
-        facet: Facet(id=facet, label=facet.title(), context=context)
-        for facet in ("dns", "certificate")
-    }
+    return {facet: Facet(id=facet, label=facet.title(), context=context) for facet in ("dns", "certificate")}
 
 
 class SeedTests(TestCase):
@@ -497,9 +479,7 @@ class SeedTests(TestCase):
         from ..naming import name_context
 
         sweep({**A_DNS_TOKEN, "reaches": ["dev.example.com"]})
-        seeded = PROVIDERS["cloudflare.dns_record"].seed(
-            name_context("probe.dev.example.com")
-        )
+        seeded = PROVIDERS["cloudflare.dns_record"].seed(name_context("probe.dev.example.com"))
 
         self.assertEqual(seeded["zone"], "dev.example.com")
 
@@ -513,14 +493,13 @@ class AdoptionSafetyTests(TestCase):
     """
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
 
     def _service_page(self, portainer_managed):
-        from hq.domains.control_plane.models import ManagedResource, ProviderInventory
         from django.utils import timezone
+
+        from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
         ProviderInventory.objects.update_or_create(
             kind="portainer.container",
@@ -574,9 +553,7 @@ class AdoptionSafetyTests(TestCase):
                 },
             },
         )
-        return self.client.get(
-            reverse("control_plane:service", kwargs={"hostname": "probe.invalid"})
-        )
+        return self.client.get(reverse("control_plane:service", kwargs={"hostname": "probe.invalid"}))
 
     def test_a_container_portainer_did_not_create_cannot_be_redefined(self):
         response = self._service_page(portainer_managed=False)
@@ -624,9 +601,7 @@ class AdoptionSafetyTests(TestCase):
             },
         )
 
-        response = self.client.get(
-            reverse("control_plane:service", kwargs={"hostname": "probe.invalid"})
-        )
+        response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "probe.invalid"}))
 
         self.assertContains(response, "Restart")
         self.assertNotContains(response, "Watch container")
@@ -640,9 +615,7 @@ class ControllerColumnTests(TestCase):
     """
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
 
     def test_one_controller_is_not_named_on_every_row(self):
@@ -718,9 +691,7 @@ class OutwardLinkChoiceTests(TestCase):
     """
 
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
         sweep(A_PORTAINER, A_DNS_TOKEN)
 
@@ -735,15 +706,11 @@ class OutwardLinkChoiceTests(TestCase):
     def test_choosing_narrows_the_panel(self):
         from ..outward_links import outward_links
 
-        self.client.post(
-            reverse("dashboard_links"), {"href": "https://portainer.example"}
-        )
+        self.client.post(reverse("dashboard_links"), {"href": "https://portainer.example"})
         offered, curated = outward_links(self.user)
 
         self.assertTrue(curated)
-        self.assertEqual(
-            [item["href"] for item in offered], ["https://portainer.example"]
-        )
+        self.assertEqual([item["href"] for item in offered], ["https://portainer.example"])
 
     def test_choosing_again_replaces_rather_than_adds(self):
         """A chooser answers with the whole set, so applying it as toggles would
@@ -751,9 +718,7 @@ class OutwardLinkChoiceTests(TestCase):
 
         from ..outward_links import outward_links
 
-        self.client.post(
-            reverse("dashboard_links"), {"href": "https://portainer.example"}
-        )
+        self.client.post(reverse("dashboard_links"), {"href": "https://portainer.example"})
         self.client.post(reverse("dashboard_links"), {"href": "/health/ready/"})
         offered, _ = outward_links(self.user)
 
@@ -806,9 +771,7 @@ class StepFailureRecordingTests(TestCase):
         )
 
         (reading,) = connection_readings()
-        self.assertEqual(
-            reading.failing_steps, (("SSH routes for a-portainer", "exit 126"),)
-        )
+        self.assertEqual(reading.failing_steps, (("SSH routes for a-portainer", "exit 126"),))
         # The probe still says the credential works, which is the point: these
         # two facts disagree, and that disagreement is the finding.
         self.assertTrue(reading.reachable)
@@ -882,11 +845,7 @@ class DependsOnceTests(TestCase):
             for group in connection_catalog(principal=cli_principal())
             if group.spec.name == CONTROLLER_CONNECTIONS
         )
-        return next(
-            item.instance
-            for item in group.connections
-            if item.instance.label == "cloudflare-dns"
-        )
+        return next(item.instance for item in group.connections if item.instance.label == "cloudflare-dns")
 
     def test_a_zone_is_named_once_and_links_to_its_page(self):
         instance = self.instance()
@@ -901,9 +860,7 @@ class DependsOnceTests(TestCase):
         self.assertEqual([link.label for link in instance.dependencies], ["www-record"])
 
     def test_the_page_shows_the_zone_key_nowhere(self):
-        user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(user)
 
         response = self.client.get(reverse("control_plane:connections"))

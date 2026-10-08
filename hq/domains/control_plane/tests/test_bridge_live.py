@@ -5,8 +5,6 @@ call on a thread with a database connection of its own, against a WAL SQLite
 file with one writer at a time.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import shutil
@@ -90,7 +88,9 @@ class ConcurrentCallTests(LiveBridge):
             controller = f"controller-{index}"
             kind = index % 4
             if kind == 0:
-                return self.call(f"/inventory?controller-id={controller}", {"adguard.rewrite": {"ok": True, "records": []}})
+                return self.call(
+                    f"/inventory?controller-id={controller}", {"adguard.rewrite": {"ok": True, "records": []}}
+                )
             if kind == 1:
                 return self.call(
                     f"/steps?controller-id={controller}",
@@ -132,7 +132,9 @@ def controller_binary() -> Path | None:
     if not built.exists():
         subprocess.run(
             ["go", "build", "-o", str(built), "./cmd/hq-controller"],
-            cwd=CONTROLLER_SOURCE, check=True, capture_output=True,
+            cwd=CONTROLLER_SOURCE,
+            check=True,
+            capture_output=True,
         )
     return built
 
@@ -181,7 +183,10 @@ class ControllerPassTests(TransactionTestCase):
                 "SEVERINO_BRIDGE_SOCKET": str(socket or self.socket),
                 "HQ_CONTROLLER_ID": "example-controller",
             },
-            capture_output=True, text=True, timeout=120, check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
         )
         elapsed = time.monotonic() - started
         lines = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
@@ -193,8 +198,18 @@ class ControllerPassTests(TransactionTestCase):
         self.assertEqual(lines[-1], {"claimed": False, "mode": "apply", "ok": True})
         self.assertEqual(
             [action for action, _ in self.bridge.calls],
-            ["registry", "glance-plan", "claim", "sweep-due", "connections", "inventory", "analytics",
-             "schedule", "claim", "steps"],
+            [
+                "registry",
+                "glance-plan",
+                "claim",
+                "sweep-due",
+                "connections",
+                "inventory",
+                "analytics",
+                "schedule",
+                "claim",
+                "steps",
+            ],
         )
         # HQ recorded the pass: the controller arrived and a sweep landed.
         self.assertTrue(cadence.controller_standing().known)

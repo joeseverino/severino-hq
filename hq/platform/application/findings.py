@@ -30,17 +30,13 @@ Absence of a remedy is a fact, not an omission. A principal who cannot run the
 capability sees the finding and the evidence and no remedy at all.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
 
-
 from hq.domains.control_plane.providers import PROVIDERS
 
-from .derivations import present
 from . import (
     certificate_expiry,
     connection_findings,
@@ -62,21 +58,21 @@ from .action_links import (
     read_now_link,
     topology_investigation_links,
 )
-from .integrations import IntegrationGraph, integration_graph
 from .contracts import route_url
+from .derivations import derivation, present
+from .derived_inputs import ESTATE_READS, estate_variant
 from .finding_model import (
-    OperatorStep,
     Finding,
-    FindingRule,
-    Remedy,
     FindingEstate,
+    FindingRule,
+    OperatorStep,
+    Remedy,
     is_observable,
     parse_stamp,
 )
-from .security import Capability, Principal
-from .derivations import derivation
-from .derived_inputs import ESTATE_READS, estate_variant
 from .first_seen import recorded
+from .integrations import IntegrationGraph, integration_graph
+from .security import Capability, Principal
 from .topology import derive_topology
 from .topology_model import (
     JOINED_KINDS,
@@ -90,6 +86,7 @@ from .workflows import (
     serialize_workflow,
     workflow_layout,
 )
+
 _CLAIM_NAMESPACE = "infrastructure.finding"
 
 
@@ -105,9 +102,7 @@ def _causal_edges(topology: Topology) -> dict[str, dict[str, set[str]]]:
     return indexed
 
 
-def _controllers_by_kind(
-    topology: Topology, by_id: dict[str, TopologyNode]
-) -> dict[str, frozenset[str]]:
+def _controllers_by_kind(topology: Topology, by_id: dict[str, TopologyNode]) -> dict[str, frozenset[str]]:
     """Controllers a kind can be attributed to without guessing."""
 
     indexed = _causal_edges(topology)
@@ -115,9 +110,7 @@ def _controllers_by_kind(
     for resource_id, connections in indexed["used_by"].items():
         kind = getattr(by_id.get(resource_id), "kind_key", "")
         controllers = {
-            controller
-            for connection in connections
-            for controller in indexed["carries"].get(connection, set())
+            controller for connection in connections for controller in indexed["carries"].get(connection, set())
         }
         if kind and controllers:
             controllers_by_kind.setdefault(kind, set()).update(controllers)
@@ -127,9 +120,7 @@ def _controllers_by_kind(
     # every governed resource to both would manufacture knowledge HQ lacks.
     for ability, connections in indexed["enables"].items():
         controllers = {
-            controller
-            for connection in connections
-            for controller in indexed["carries"].get(connection, set())
+            controller for connection in connections for controller in indexed["carries"].get(connection, set())
         }
         if len(controllers) != 1:
             continue
@@ -151,9 +142,7 @@ def _estate(topology: Topology) -> FindingEstate:
         newest = latest.get(node.kind_key)
         if newest is None or moment > newest:
             latest[node.kind_key] = moment
-    governed = frozenset(
-        edge.target for edge in topology.edges if edge.kind == "governs"
-    )
+    governed = frozenset(edge.target for edge in topology.edges if edge.kind == "governs")
     counts: dict[str, int] = {}
     for node in topology.nodes:
         if node.kind == "resource" and node.managed and node.kind_key:
@@ -188,9 +177,7 @@ RULE_MODULES = (
     dns_findings,
     contradiction_findings,
 )
-RULES: tuple[FindingRule, ...] = tuple(
-    rule for module in RULE_MODULES for rule in module.RULES
-)
+RULES: tuple[FindingRule, ...] = tuple(rule for module in RULE_MODULES for rule in module.RULES)
 
 _RULE_BY_NAME = {rule.name: rule for rule in RULES}
 if len(_RULE_BY_NAME) != len(RULES):
@@ -223,9 +210,7 @@ def rule_for(name: str) -> FindingRule | None:
     return _RULE_BY_NAME.get(name)
 
 
-def _permitted(
-    capability: str, principal: Principal, graph: IntegrationGraph
-) -> tuple[bool, str]:
+def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, str]:
     """Whether this principal may run it, and what the registry says it does."""
 
     spec = graph.capabilities.get(capability)
@@ -236,9 +221,7 @@ def _permitted(
     return False, ""
 
 
-def _resolved(
-    finding: Finding, principal: Principal, subject: TopologyNode | None
-) -> Finding:
+def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | None) -> Finding:
     """Drop remedies this principal cannot run, and take effect from the spec.
 
     Absent rather than disabled: an offer that cannot work is worse than no
@@ -257,8 +240,7 @@ def _resolved(
             (
                 candidate
                 for candidate in (subject.actions if subject else ())
-                if candidate.capability == remedy.capability
-                and candidate.target == remedy.target
+                if candidate.capability == remedy.capability and candidate.target == remedy.target
             ),
             None,
         )
@@ -268,20 +250,14 @@ def _resolved(
                 target=remedy.target,
                 label=remedy.label,
                 effect=effect,
-                url=(
-                    action_with_return(action, "control_plane:findings").url
-                    if action
-                    else remedy.url
-                ),
+                url=(action_with_return(action, "control_plane:findings").url if action else remedy.url),
                 method=action.method if action else remedy.method,
                 auto=False,
             )
         )
     resolved_remedies = tuple(kept)
     offers = tuple(
-        action
-        for action in (subject.actions if subject else ())
-        if action.effect == "read" and action.method == "GET"
+        action for action in (subject.actions if subject else ()) if action.effect == "read" and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
     remedy_actions = tuple(
@@ -352,20 +328,14 @@ def _read_subject(finding: Finding, subject: TopologyNode | None) -> dict[str, A
     return None
 
 
-def _verification(
-    finding: Finding, principal: Principal, subject: TopologyNode | None
-) -> ActionLink | None:
+def _verification(finding: Finding, principal: Principal, subject: TopologyNode | None) -> ActionLink | None:
     """Read now and check again where a reading is involved; else check again."""
 
     findings_url = route_url("control_plane:findings")
     if not findings_url:
         return None
     wanted = _read_subject(finding, subject)
-    read = (
-        read_now_link(principal, label="Check again", **wanted)
-        if wanted is not None
-        else None
-    )
+    read = read_now_link(principal, label="Check again", **wanted) if wanted is not None else None
     again = f"{findings_url}?{urlencode({'rule': finding.rule})}"
     if read is not None:
         separator = "&" if "?" in read.url else "?"
@@ -409,11 +379,7 @@ def _silenced_scopes(
 ) -> dict[str, set[str]]:
     silenced: dict[str, set[str]] = {}
     for declared in RULES:
-        scopes = {
-            scope
-            for finding in raised[declared.name]
-            for scope in _finding_scopes(finding)
-        }
+        scopes = {scope for finding in raised[declared.name] for scope in _finding_scopes(finding)}
         for name in declared.subsumes:
             silenced.setdefault(name, set()).update(scopes)
     return silenced
@@ -424,11 +390,7 @@ def _subsumed_subjects(
 ) -> dict[str, set[str]]:
     subjects: dict[str, set[str]] = {}
     for declared in RULES:
-        found = {
-            finding.subject
-            for finding in raised[declared.name]
-            if finding.subject
-        }
+        found = {finding.subject for finding in raised[declared.name] if finding.subject}
         for name in declared.subsumes:
             subjects.setdefault(name, set()).update(found)
     return subjects
@@ -455,9 +417,7 @@ def _is_suppressed(
     )
 
 
-def derive_findings(
-    topology: Topology, *, principal: Principal, rule: str = ""
-) -> tuple[Finding, ...]:
+def derive_findings(topology: Topology, *, principal: Principal, rule: str = "") -> tuple[Finding, ...]:
     """Every claim the projection supports, most serious first.
 
     Pure: no query, no write. The projection was already narrowed to what this
@@ -497,9 +457,7 @@ def derive_findings(
             findings.append(_resolved(finding, principal, node))
 
     order = {"serious": 0, "attention": 1, "neutral": 2, "good": 3}
-    return tuple(
-        sorted(findings, key=lambda f: (order.get(f.severity, 9), f.rule, f.subject))
-    )
+    return tuple(sorted(findings, key=lambda f: (order.get(f.severity, 9), f.rule, f.subject)))
 
 
 def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
@@ -528,9 +486,7 @@ def finding_key(finding: Finding) -> str:
 
 def serialize_finding(finding: Finding) -> dict[str, Any]:
     return {
-        "id": claim_identity(
-            _CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope
-        ),
+        "id": claim_identity(_CLAIM_NAMESPACE, finding.rule, finding.subject, finding.scope),
         "rule": finding.rule,
         "subject": finding.subject or None,
         "scope": finding.scope or None,
@@ -538,9 +494,7 @@ def serialize_finding(finding: Finding) -> dict[str, Any]:
         "title": finding.title,
         "severity": finding.severity,
         "explanation": finding.explanation,
-        "evidence": [
-            {"label": label, "value": value} for label, value in finding.evidence
-        ],
+        "evidence": [{"label": label, "value": value} for label, value in finding.evidence],
         "remedies": [
             {
                 "capability": remedy.capability,
@@ -576,10 +530,7 @@ def findings(*, principal: Principal, rule: str = "") -> dict[str, Any]:
         # Which rule produced this, and every rule that could have. A client
         # that asked for an unknown one is told it got everything.
         "rule": selected.name if selected else None,
-        "rules": [
-            {"name": item.name, "title": item.title, "severity": item.severity}
-            for item in RULES
-        ],
+        "rules": [{"name": item.name, "title": item.title, "severity": item.severity} for item in RULES],
         "summary": {"findings": len(raised), "severities": counts},
         "findings": [serialize_finding(finding) for finding in raised],
     }
@@ -605,7 +556,7 @@ def findings(*, principal: Principal, rule: str = "") -> dict[str, Any]:
 _AUTO_RULES = ("skipped-by-a-sweep", "never-observed")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Repair:
     """One finding judged safe to queue, and why."""
 
@@ -622,8 +573,8 @@ def auto_remediable(*, principal: Principal, limit: int = 10) -> tuple[Repair, .
     web process, which is the one property the cadence design exists to protect.
     """
 
-    from hq.domains.control_plane.providers import enabled_controller_actions
     from hq.domains.control_plane.models import OperationRequest
+    from hq.domains.control_plane.providers import enabled_controller_actions
 
     automatic_kinds = {
         kind
@@ -639,9 +590,7 @@ def auto_remediable(*, principal: Principal, limit: int = 10) -> tuple[Repair, .
     # A kind the sweep never reached: the fault is the sweep. Repairing each
     # record of it would queue the whole class against a provider that is not
     # answering, which is the amplifier this guard exists to prevent.
-    unreached = {
-        finding.scope for finding in raised if finding.rule == "kind-never-swept"
-    }
+    unreached = {finding.scope for finding in raised if finding.rule == "kind-never-swept"}
     unreachable = _unreachable_kinds(topology)
     by_id = {node.id: node for node in topology.nodes}
 
@@ -676,9 +625,7 @@ def _unreachable_kinds(topology: Topology) -> frozenset[str]:
 
     status_of = {node.id: node.status for node in topology.nodes}
     live_abilities = {
-        edge.target
-        for edge in topology.edges
-        if edge.kind == "enables" and status_of.get(edge.source) != "serious"
+        edge.target for edge in topology.edges if edge.kind == "enables" and status_of.get(edge.source) != "serious"
     }
     governed_by: dict[str, set[str]] = {}
     kinds_of = {node.id: node.kind_key for node in topology.nodes}
@@ -689,7 +636,5 @@ def _unreachable_kinds(topology: Topology) -> frozenset[str]:
         if kind_key:
             governed_by.setdefault(kind_key, set()).add(edge.source)
     return frozenset(
-        kind_key
-        for kind_key, abilities in governed_by.items()
-        if abilities and not (abilities & live_abilities)
+        kind_key for kind_key, abilities in governed_by.items() if abilities and not (abilities & live_abilities)
     )

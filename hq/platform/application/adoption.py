@@ -12,8 +12,6 @@ skips that record until an operator manages it again, which clears the row.
 Both are audited through the model's registration.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -27,7 +25,6 @@ from hq.domains.control_plane.providers import PROVIDERS, registry_label, servic
 from .conditions import stamped
 from .inventory import record_identity, record_token, service_hostnames
 from .security import Principal
-
 
 OBSERVES_ONLY = "HQ only reads through this connection. Allow it to manage on the connection to change things."
 
@@ -52,28 +49,18 @@ def manages_through(
             rows = connection_rows() if connections is None else connections
             found: dict[str, list[tuple[str, bool]]] = {}
             for row in rows:
-                found.setdefault(row.provider, []).append(
-                    (row.connection_ref, row.manages)
-                )
+                found.setdefault(row.provider, []).append((row.connection_ref, row.manages))
             loaded.append(found)
         return loaded[0]
 
     def manages(kind: str, connection_ref: str = "") -> bool:
         known = by_provider()
         if connection_ref:
-            return any(
-                ref == connection_ref and flag
-                for rows in known.values()
-                for ref, flag in rows
-            )
+            return any(ref == connection_ref and flag for rows in known.values() for ref, flag in rows)
         provider = PROVIDERS.get(kind)
         if provider is None:
             return False
-        found = [
-            flag
-            for name in provider.connection_providers
-            for _, flag in known.get(name, ())
-        ]
+        found = [flag for name in provider.connection_providers for _, flag in known.get(name, ())]
         return bool(found) and all(found)
 
     return manages
@@ -141,7 +128,7 @@ def let_in(kind: str, token: str) -> None:
         row.delete()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Unmanaged:
     """One record a provider holds that no HQ declaration accounts for.
 
@@ -199,11 +186,9 @@ class Unmanaged:
             return ()
         try:
             rows = provider.readout(self.spec, {})
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             return ()
-        return tuple(
-            (label, str(desired)) for label, desired, _ in rows if desired
-        )
+        return tuple((label, str(desired)) for label, desired, _ in rows if desired)
 
 
 def unmanaged() -> tuple[Unmanaged, ...]:
@@ -221,9 +206,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
     for resource in enabled_resources():
         if resource.kind not in PROVIDERS:
             continue
-        declared.setdefault(resource.kind, set()).add(
-            record_identity(resource.kind, resource.spec)
-        )
+        declared.setdefault(resource.kind, set()).add(record_identity(resource.kind, resource.spec))
 
     manages = manages_through()
     found: list[Unmanaged] = []
@@ -235,7 +218,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
         for record in snapshot.records:
             try:
                 spec = provider.from_record(record)
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 continue
             identity = record_identity(snapshot.kind, spec)
             if not identity or identity in known:
@@ -248,17 +231,15 @@ def unmanaged() -> tuple[Unmanaged, ...]:
                     hostnames=service_hostnames(snapshot.kind, spec),
                     spec=spec,
                     observed_at=snapshot.observed_at,
-                    adoptable=not provider.adoption_gap
-                    and (provider.adopts is None or provider.adopts(record)),
+                    adoptable=not provider.adoption_gap and (provider.adopts is None or provider.adopts(record)),
                     connection_ref=connection_ref,
-                    observed_only=bool(provider.adoption_gap)
-                    or not manages(snapshot.kind, connection_ref),
+                    observed_only=bool(provider.adoption_gap) or not manages(snapshot.kind, connection_ref),
                 )
             )
     return tuple(sorted(found, key=lambda item: (item.identity, item.kind)))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UnmanagedService:
     """Every unmanaged record sharing one hostname, seen as one thing.
 
@@ -320,15 +301,10 @@ def unmanaged_services() -> tuple[UnmanagedService, ...]:
         if not item.hostname:
             continue
         grouped.setdefault(item.hostname, []).append(item)
-    return tuple(
-        UnmanagedService(hostname=hostname, items=tuple(items))
-        for hostname, items in sorted(grouped.items())
-    )
+    return tuple(UnmanagedService(hostname=hostname, items=tuple(items)) for hostname, items in sorted(grouped.items()))
 
 
-def find_unmanaged(
-    kind: str, hostname: str = "", *, token: str = ""
-) -> Unmanaged | None:
+def find_unmanaged(kind: str, hostname: str = "", *, token: str = "") -> Unmanaged | None:
     """One unmanaged record, found by exact identity or by the name it serves.
 
     Both, because both questions are asked. "Adopt this service" means every
@@ -343,7 +319,7 @@ def find_unmanaged(
     return next((item for item in candidates if wanted in item.hostnames), None)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AdoptServiceCommand:
     hostname: str
 
@@ -368,25 +344,18 @@ def adopt_service(
     from .infrastructure import NotFoundError
 
     found = next(
-        (
-            service
-            for service in unmanaged_services()
-            if service.hostname == normalized_hostname(command.hostname)
-        ),
+        (service for service in unmanaged_services() if service.hostname == normalized_hostname(command.hostname)),
         None,
     )
     if found is None:
         raise NotFoundError(
-            f"HQ found nothing it does not already manage for {command.hostname!r}. "
-            "It may be managed already, or gone."
+            f"HQ found nothing it does not already manage for {command.hostname!r}. It may be managed already, or gone."
         )
     from .infrastructure import PolicyError
 
     writable = [item for item in found.items if not item.observed_only]
     if not writable:
-        raise PolicyError(
-            f"{found.hostname} is read through connections that only observe."
-        )
+        raise PolicyError(f"{found.hostname} is read through connections that only observe.")
     adopted = [
         adopt(
             # By token, not by hostname: a service may be served by several
@@ -400,7 +369,7 @@ def adopt_service(
     return {"ok": True, "hostname": found.hostname, "adopted": adopted}
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AdoptCommand:
     kind: str
     hostname: str = ""
@@ -469,7 +438,7 @@ def adopt(
     return result
 
 
-def _record_as_observed(key: str, found: "Unmanaged") -> None:
+def _record_as_observed(key: str, found: Unmanaged) -> None:
     """Mark an adopted resource as seen, because it just was.
 
     Everything else here is born unobserved and waits for a controller to go
@@ -496,14 +465,17 @@ def _record_as_observed(key: str, found: "Unmanaged") -> None:
     resource.last_observed_at = timezone.now()
     # What was found, which for an adopted resource is what was declared.
     resource.status = dict(found.spec)
-    resource.conditions = stamped(resource.conditions, [
-        {
-            "type": "Ready",
-            "status": True,
-            "reason": "Adopted",
-            "message": "Added to HQ from what was live.",
-        }
-    ])
+    resource.conditions = stamped(
+        resource.conditions,
+        [
+            {
+                "type": "Ready",
+                "status": True,
+                "reason": "Adopted",
+                "message": "Added to HQ from what was live.",
+            }
+        ],
+    )
     resource.save(
         update_fields=[
             "observed_generation",
@@ -542,10 +514,8 @@ def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
         if (item.kind, item.token) in excluded:
             continue
         try:
-            result = adopt(
-                AdoptCommand(kind=item.kind, token=item.token), principal=principal
-            )
-        except (NotFoundError, PolicyError, ValidationError, ValueError):
+            result = adopt(AdoptCommand(kind=item.kind, token=item.token), principal=principal)
+        except NotFoundError, PolicyError, ValidationError, ValueError:
             # One record that cannot be adopted must not stop the rest. The
             # next sweep tries again, so this closes itself rather than needing
             # anybody to notice.

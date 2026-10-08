@@ -1,14 +1,18 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
 class ProjectsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = 'hq.domains.projects'
-    label = 'projects'
+    name = "hq.domains.projects"
+    label = "projects"
     verbose_name = "Projects & Labs"
 
+    @override
     def ready(self):
         from hq.platform.core.audit import register_audit
+
         from .models import Project
 
         register_audit(Project, "Project")

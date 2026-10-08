@@ -3,20 +3,20 @@
 Idempotent: re-running with the same slug updates the existing record.
 """
 
-from __future__ import annotations
-
 import json
+from typing import override
 
 from django.core.management.base import BaseCommand
 
+from hq.domains.projects.models import PROJECT_CATEGORY_CHOICES, Project
 from hq.platform.application.projects import ProjectCommand, save_project
 from hq.platform.application.security import cli_principal
-from hq.domains.projects.models import PROJECT_CATEGORY_CHOICES, Project
 
 
 class Command(BaseCommand):
     help = "Create or update a Project record by slug."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument("slug", help="URL slug (e.g. public-site).")
         parser.add_argument(
@@ -49,6 +49,7 @@ class Command(BaseCommand):
             help="Print the canonical service result as JSON.",
         )
 
+    @override
     def handle(self, *args, **opts):
         slug = opts["slug"]
         exists = Project.objects.filter(slug=slug).exists()

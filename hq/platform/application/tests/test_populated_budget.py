@@ -1,14 +1,10 @@
 """What the dashboard costs once the estate holds something."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest import mock
 
 from django.db import connection as database
 from django.test import TestCase
-
-from hq.platform.application.security import cli_principal
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -20,8 +16,9 @@ from hq.domains.control_plane.models import (
     WeatherObservation,
 )
 from hq.domains.projects.models import Project
-
 from hq.platform.application.derivations import uncached
+from hq.platform.application.security import cli_principal
+
 from ..dashboard import dashboard_highlights, operating_snapshot
 from ..projection import projection_scope
 
@@ -113,10 +110,7 @@ def populate(size: int = 8) -> None:
     )
     _store(
         "portainer.container",
-        [
-            {"host": f"example-host-{index}", "name": f"app-{index}", "ports": [8000 + index]}
-            for index in range(size)
-        ],
+        [{"host": f"example-host-{index}", "name": f"app-{index}", "ports": [8000 + index]} for index in range(size)],
     )
     for index in range(size):
         ManagedResource.objects.create(

@@ -1,21 +1,20 @@
 """Assets / equipment."""
 
-from __future__ import annotations
-
 from decimal import Decimal
+from typing import override
 
 from django.db import models
 from django.urls import reverse
 from django.utils.text import slugify
 
+from hq.platform.application import business_use
+
 # Re-exported: expenses imports it from here, and moving the rule should not
 # make every caller move with it. The rule itself lives in application.money,
 # which extensions can reach through hq_sdk and a domain app cannot.
 from hq.platform.application.money import quantize_money
-from hq.platform.application import business_use
 from hq.platform.application.references import CERTIFICATE, Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel
-
 
 PAYMENT_METHOD_CHOICES = [
     ("cash", "Cash"),
@@ -52,13 +51,9 @@ class Asset(TimestampedModel):
     item_name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=180, unique=True, blank=True)
     vendor = models.CharField(max_length=120, blank=True)
-    category = models.CharField(
-        max_length=30, choices=ASSET_CATEGORY_CHOICES, default="other"
-    )
+    category = models.CharField(max_length=30, choices=ASSET_CATEGORY_CHOICES, default="other")
     purchase_date = models.DateField(null=True, blank=True)
-    total_cost = models.DecimalField(
-        max_digits=12, decimal_places=2, default=Decimal("0.00")
-    )
+    total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     business_use_percentage = models.PositiveSmallIntegerField(
         default=100,
         validators=business_use.VALIDATORS,
@@ -69,23 +64,15 @@ class Asset(TimestampedModel):
         decimal_places=2,
         default=Decimal("0.00"),
         editable=False,
-        help_text=(
-            "total_cost × business_use_percentage / 100. Estimate, not tax advice."
-        ),
+        help_text=("total_cost × business_use_percentage / 100. Estimate, not tax advice."),
     )
-    payment_method = models.CharField(
-        max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True
-    )
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
     serial_number = models.CharField(max_length=120, blank=True)
     warranty_date = models.DateField(null=True, blank=True)
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.ACTIVE
-    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     notes = models.TextField(blank=True)
 
-    related_projects = models.ManyToManyField(
-        "projects.Project", blank=True, related_name="assets"
-    )
+    related_projects = models.ManyToManyField("projects.Project", blank=True, related_name="assets")
     # The machine, domain or certificate this asset is.
     infrastructure = ReferenceField(
         "this is",
@@ -107,9 +94,11 @@ class Asset(TimestampedModel):
         ]
         constraints = [business_use.in_range("asset_business_use_in_range")]
 
+    @override
     def __str__(self) -> str:
         return self.item_name
 
+    @override
     def save(self, *args, **kwargs):
         if not self.slug:
             base = slugify(self.item_name) or "asset"
@@ -120,9 +109,7 @@ class Asset(TimestampedModel):
                 n += 1
             self.slug = slug
         cost = self.total_cost or Decimal("0.00")
-        self.estimated_deductible_amount = quantize_money(
-            cost * Decimal(self.business_use_percentage) / Decimal(100)
-        )
+        self.estimated_deductible_amount = quantize_money(cost * Decimal(self.business_use_percentage) / Decimal(100))
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:

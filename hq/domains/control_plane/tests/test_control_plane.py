@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -18,8 +16,8 @@ from hq.platform.application.infrastructure import (
     ManagedResourceCommand,
     PolicyError,
     controller_contract,
-    save_managed_resource,
     delivery_targets as delivery_targets_for_test,
+    save_managed_resource,
 )
 from hq.platform.application.resource_operations import (
     OperationCommand,
@@ -28,7 +26,7 @@ from hq.platform.application.resource_operations import (
 )
 from hq.platform.application.security import cli_principal, mcp_principal
 
-from . import bridge_client
+from ..desired_state import advance_dependents
 from ..models import (
     ManagedResource,
     OperationRequest,
@@ -36,7 +34,7 @@ from ..models import (
     ProviderInventory,
 )
 from ..providers import PROVIDERS, describe_providers
-from ..desired_state import advance_dependents
+from . import bridge_client
 
 
 def validate_resolved_certificate(payload):
@@ -215,11 +213,7 @@ class DerivedConsumerTests(TestCase):
         from hq.platform.application.infrastructure import resolved_spec
 
         resolved = resolved_spec(self._estate())
-        return next(
-            consumer
-            for consumer in resolved["consumers"]
-            if consumer["connection_ref"] == "edge"
-        )
+        return next(consumer for consumer in resolved["consumers"] if consumer["connection_ref"] == "edge")
 
     def test_a_name_served_at_the_target_is_a_consumer_without_being_listed(self):
         self.assertIn("status.example.com", self._caddy_consumer()["verify_domains"])
@@ -232,16 +226,12 @@ class DerivedConsumerTests(TestCase):
     def test_a_name_the_certificate_does_not_cover_is_not_a_consumer(self):
         """Sharing a host is not being covered by the same certificate."""
 
-        self.assertNotIn(
-            "unrelated.invalid", self._caddy_consumer()["verify_domains"]
-        )
+        self.assertNotIn("unrelated.invalid", self._caddy_consumer()["verify_domains"])
 
     def test_a_covered_name_answering_elsewhere_is_not_a_consumer(self):
         """Coverage alone would make every name a consumer of every target."""
 
-        self.assertNotIn(
-            "elsewhere.example.com", self._caddy_consumer()["verify_domains"]
-        )
+        self.assertNotIn("elsewhere.example.com", self._caddy_consumer()["verify_domains"])
 
     def test_a_target_reached_by_name_is_placed_like_one_reached_by_address(self):
         """The endpoint is a name, so it is one hop from being a machine.
@@ -275,11 +265,7 @@ class DerivedConsumerTests(TestCase):
 
         from hq.platform.application.infrastructure import resolved_spec
 
-        consumer = next(
-            item
-            for item in resolved_spec(certificate)["consumers"]
-            if item["connection_ref"] == "edge"
-        )
+        consumer = next(item for item in resolved_spec(certificate)["consumers"] if item["connection_ref"] == "edge")
 
         self.assertIn("status.example.com", consumer["verify_domains"])
 
@@ -310,23 +296,19 @@ class DerivedConsumerTests(TestCase):
 
         from hq.platform.application.infrastructure import resolved_spec
 
-        consumer = next(
-            item
-            for item in resolved_spec(certificate)["consumers"]
-            if item["connection_ref"] == "edge"
-        )
+        consumer = next(item for item in resolved_spec(certificate)["consumers"] if item["connection_ref"] == "edge")
 
         self.assertNotIn("pending.example.com", consumer["verify_domains"])
 
 
 class DesiredStateOwnershipTests(TestCase):
     """HQ holds every part of the answer, including the parts it resolves."""
+
     def setUp(self):
         super().setUp()
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-
 
     def _certificate(self):
         declare_targets()
@@ -348,9 +330,7 @@ class DesiredStateOwnershipTests(TestCase):
 
         resolved = resolved_spec(self._certificate())
 
-        self.assertEqual(
-            resolved["consumers"], resolved_certificate_spec()["consumers"]
-        )
+        self.assertEqual(resolved["consumers"], resolved_certificate_spec()["consumers"])
 
     def test_a_certificate_naming_a_target_that_is_gone_covers_nothing(self):
         """Reported as an uncovered name, which is exactly what is true."""
@@ -484,9 +464,7 @@ class RegistrySymmetryTests(TestCase):
         from ..providers import PROVIDERS
 
         silent = sorted(
-            kind
-            for kind, provider in PROVIDERS.items()
-            if provider.answers is not None and provider.origin is None
+            kind for kind, provider in PROVIDERS.items() if provider.answers is not None and provider.origin is None
         )
 
         self.assertEqual(
@@ -531,9 +509,7 @@ class ProviderContractTests(TestCase):
             providers["tls.certificate"]["controller"]["actions"]["renew"]["mode"],
             "apply",
         )
-        self.assertFalse(
-            providers["tls.certificate"]["spec_schema"]["additionalProperties"]
-        )
+        self.assertFalse(providers["tls.certificate"]["spec_schema"]["additionalProperties"])
         self.assertIn(
             "install_on",
             providers["tls.certificate"]["spec_schema"]["properties"],
@@ -673,9 +649,7 @@ class InfrastructureWebTests(TestCase):
             ],
         }
         self.resource.save(update_fields=("status",))
-        response = self.client.get(
-            reverse("control_plane:detail", kwargs={"key": self.resource.key})
-        )
+        response = self.client.get(reverse("control_plane:detail", kwargs={"key": self.resource.key}))
 
         # One status line: this certificate's first change has not been applied.
         self.assertEqual(response.content.decode().count("data-record-status="), 1)
@@ -722,9 +696,7 @@ class InfrastructureWebTests(TestCase):
             },
         )
 
-        response = self.client.get(
-            reverse("control_plane:detail", kwargs={"key": proxy.key})
-        )
+        response = self.client.get(reverse("control_plane:detail", kwargs={"key": proxy.key}))
 
         self.assertEqual(response.context["provider_machine"]["name"], "example-host")
         self.assertEqual(response.context["origin_machine"].name, "app-server")
@@ -735,9 +707,7 @@ class InfrastructureWebTests(TestCase):
         self.assertContains(response, "Forwards to")
 
     def test_public_certificate_download_never_serves_private_key(self):
-        self.resource.status = {
-            "certificate_pem": "-----BEGIN PRIVATE KEY-----\nunsafe\n"
-        }
+        self.resource.status = {"certificate_pem": "-----BEGIN PRIVATE KEY-----\nunsafe\n"}
         self.resource.save(update_fields=("status",))
         response = self.client.get(
             reverse(
@@ -747,9 +717,7 @@ class InfrastructureWebTests(TestCase):
         )
         self.assertEqual(response.status_code, 500)
 
-        self.resource.status = {
-            "certificate_pem": "-----BEGIN CERTIFICATE-----\npublic\n"
-        }
+        self.resource.status = {"certificate_pem": "-----BEGIN CERTIFICATE-----\npublic\n"}
         self.resource.save(update_fields=("status",))
         response = self.client.get(
             reverse(
@@ -819,12 +787,8 @@ class OperationPolicyTests(TestCase):
         )
 
     def test_controller_automatically_queues_due_certificate_renewal(self):
-        self.resource.status = {
-            "not_after": (timezone.now() + timedelta(days=29)).isoformat()
-        }
-        self.resource.conditions = [
-            {"type": "Ready", "status": True, "reason": "Verified"}
-        ]
+        self.resource.status = {"not_after": (timezone.now() + timedelta(days=29)).isoformat()}
+        self.resource.conditions = [{"type": "Ready", "status": True, "reason": "Verified"}]
         self.resource.observed_generation = self.resource.generation
         self.resource.save()
 
@@ -836,12 +800,8 @@ class OperationPolicyTests(TestCase):
         self.assertEqual(operation.requested_interface, "controller")
 
     def test_controller_automatically_reconciles_a_new_generation(self):
-        self.resource.status = {
-            "not_after": (timezone.now() + timedelta(days=89)).isoformat()
-        }
-        self.resource.conditions = [
-            {"type": "Ready", "status": True, "reason": "Verified"}
-        ]
+        self.resource.status = {"not_after": (timezone.now() + timedelta(days=89)).isoformat()}
+        self.resource.conditions = [{"type": "Ready", "status": True, "reason": "Verified"}]
         self.resource.observed_generation = self.resource.generation - 1
         self.resource.save()
 
@@ -914,9 +874,7 @@ class OperationPolicyTests(TestCase):
         return_value=(True, "active"),
     )
     def test_renewal_is_blocked_outside_window(self, _policy):
-        self.resource.status = {
-            "not_after": (timezone.now() + timedelta(days=45)).isoformat()
-        }
+        self.resource.status = {"not_after": (timezone.now() + timedelta(days=45)).isoformat()}
         self.resource.save()
         with self.assertRaisesRegex(PolicyError, "Renews automatically from"):
             request_certificate_renewal(
@@ -930,12 +888,8 @@ class OperationPolicyTests(TestCase):
         return_value=(True, "active"),
     )
     def test_renewal_is_allowed_for_drift_and_idempotent(self, _policy):
-        self.resource.status = {
-            "not_after": (timezone.now() + timedelta(days=45)).isoformat()
-        }
-        self.resource.conditions = [
-            {"type": "Drifted", "status": True, "reason": "NPMStale"}
-        ]
+        self.resource.status = {"not_after": (timezone.now() + timedelta(days=45)).isoformat()}
+        self.resource.conditions = [{"type": "Drifted", "status": True, "reason": "NPMStale"}]
         self.resource.save()
         first = request_certificate_renewal(
             OperationCommand(idempotency_key="renew-drift"),
@@ -984,12 +938,8 @@ class OperationPolicyTests(TestCase):
             {
                 "success": True,
                 "observed_generation": self.resource.generation,
-                "status": {
-                    "not_after": (timezone.now() + timedelta(days=89)).isoformat()
-                },
-                "conditions": [
-                    {"type": "Ready", "status": True, "reason": "Verified", "message": ""}
-                ],
+                "status": {"not_after": (timezone.now() + timedelta(days=89)).isoformat()},
+                "conditions": [{"type": "Ready", "status": True, "reason": "Verified", "message": ""}],
                 "message": "All consumers verified.",
             },
             controller_id="example-controller",
@@ -1034,9 +984,7 @@ class DeliveryTargetConfirmationTests(TestCase):
         )
 
     def _confirmed(self, connection_ref):
-        return ManagedResource.objects.get(
-            key=f"{connection_ref}-certificate-target"
-        ).last_observed_at
+        return ManagedResource.objects.get(key=f"{connection_ref}-certificate-target").last_observed_at
 
     def test_a_target_the_certificate_was_verified_at_is_confirmed(self):
         declare_targets()
@@ -1064,9 +1012,7 @@ class DeliveryTargetConfirmationTests(TestCase):
 
 class InfrastructureViewsTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="joe", password="test-password"
-        )
+        self.user = get_user_model().objects.create_user(username="joe", password="test-password")
         self.resource = ManagedResource.objects.create(
             key="example-wildcard",
             kind="tls.certificate",
@@ -1079,16 +1025,12 @@ class InfrastructureViewsTests(TestCase):
         dashboard = self.client.get(reverse("control_plane:list"))
         self.assertContains(dashboard, "example-wildcard")
 
-        download = self.client.get(
-            reverse("control_plane:certificate_download", args=[self.resource.key])
-        )
+        download = self.client.get(reverse("control_plane:certificate_download", args=[self.resource.key]))
         self.assertEqual(download.status_code, 200)
         self.assertEqual(download.content, b"PUBLIC CERTIFICATE ONLY")
         self.assertNotIn(b"PRIVATE", download.content)
 
-        report = self.client.get(
-            reverse("control_plane:report_download", args=[self.resource.key])
-        )
+        report = self.client.get(reverse("control_plane:report_download", args=[self.resource.key]))
         self.assertEqual(report.status_code, 200)
         self.assertEqual(report.json()["resource"]["key"], self.resource.key)
 
@@ -1129,13 +1071,9 @@ class InfrastructureViewsTests(TestCase):
             "serious",
             "The graph proves one shared cause.",
             offers=(ActionLink("open", "Open connections", "read", "/connections/"),),
-            investigations=(
-                ActionLink("impact", "Trace impact", "read", "/topology/?trace"),
-            ),
+            investigations=(ActionLink("impact", "Trace impact", "read", "/topology/?trace"),),
         )
-        with patch(
-            "hq.domains.control_plane.finding_views.estate_findings", return_value=(finding,)
-        ):
+        with patch("hq.domains.control_plane.finding_views.estate_findings", return_value=(finding,)):
             response = self.client.get(reverse("control_plane:findings"))
 
         self.assertContains(response, '<a class="subtle-link" href="/connections/">Open connections</a>')
@@ -1166,9 +1104,7 @@ class InfrastructureViewsTests(TestCase):
             },
         )
 
-        detail = self.client.get(
-            reverse("control_plane:detail", args=[self.resource.key])
-        )
+        detail = self.client.get(reverse("control_plane:detail", args=[self.resource.key]))
 
         self.assertNotContains(detail, "serves a different certificate")
         self.assertNotContains(detail, "did not match")
@@ -1206,9 +1142,7 @@ class InfrastructureViewsTests(TestCase):
             },
         )
 
-        detail = self.client.get(
-            reverse("control_plane:detail", args=[self.resource.key])
-        )
+        detail = self.client.get(reverse("control_plane:detail", args=[self.resource.key]))
 
         self.assertContains(detail, "One consumer serves the previous certificate.")
         self.assertNotContains(detail, "Provider reason:")
@@ -1294,9 +1228,7 @@ class InfrastructureViewsTests(TestCase):
         self.resource.refresh_from_db()
         operation.refresh_from_db()
         self.assertEqual(self.resource.status, verified)
-        self.assertEqual(
-            operation.result["status"]["expected_fingerprint_sha256"], "new"
-        )
+        self.assertEqual(operation.result["status"]["expected_fingerprint_sha256"], "new")
 
 
 class DnsRecordReadoutTests(TestCase):
@@ -1315,7 +1247,7 @@ class DnsRecordReadoutTests(TestCase):
             "ttl": 1,
         }
         status = {**spec, "record_id": "abc"}
-        label, desired, observed = _dns_record_readout(spec, status)[0]
+        _label, desired, observed = _dns_record_readout(spec, status)[0]
         self.assertEqual(desired, observed)
 
     def test_a_changed_record_still_reports_drift(self):
@@ -1406,9 +1338,7 @@ class QueueHeadTests(TestCase):
     def test_a_resolvable_queue_is_untouched(self):
         wanted = self.queue(self.certificate, "wanted")
 
-        claimed = self.claim(
-            "a-controller", capabilities=(("tls.certificate", "reconcile"),)
-        )
+        claimed = self.claim("a-controller", capabilities=(("tls.certificate", "reconcile"),))
 
         self.assertEqual(claimed["operation"]["id"], str(wanted.id))
         self.assertIn("resource", claimed)
@@ -1430,9 +1360,7 @@ class QueueHeadTests(TestCase):
         )
 
         self.certificate.refresh_from_db()
-        self.assertGreater(
-            self.certificate.generation, self.certificate.observed_generation
-        )
+        self.assertGreater(self.certificate.generation, self.certificate.observed_generation)
 
 
 class ReadoutsSayNothingBlankTests(TestCase):
@@ -1475,10 +1403,7 @@ class ReadoutsSayNothingBlankTests(TestCase):
         """
 
         labels = [
-            label
-            for label, _, _ in self._rows(
-                "cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns"}
-            )
+            label for label, _, _ in self._rows("cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns"})
         ]
 
         for absent in ("Records", "Mail (MX)", "SPF", "DMARC"):
@@ -1528,16 +1453,15 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     }
 
     def _resolve(self, *targets, install_on=None):
-        from ..providers import resolve_provider_spec
         from ..provider_spec import ProviderResolutionContext
+        from ..providers import resolve_provider_spec
 
         return resolve_provider_spec(
             "tls.certificate",
             {
                 "certificate_name": "an-example-certificate",
                 "domains": ["shop.example.test", "*.shop.example.test"],
-                "install_on": install_on
-                or [target["connection_ref"] for target in targets],
+                "install_on": install_on or [target["connection_ref"] for target in targets],
                 "renewal_window_days": 30,
             },
             context=ProviderResolutionContext(delivery_targets=targets),
@@ -1574,9 +1498,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
 
         resolved = self._resolve(self.A_PROXY_TARGET, self.A_VAULT_TARGET)
 
-        self.assertEqual(
-            [consumer["kind"] for consumer in resolved["consumers"]], ["npm"]
-        )
+        self.assertEqual([consumer["kind"] for consumer in resolved["consumers"]], ["npm"])
         self.assertEqual(
             [publication["kind"] for publication in resolved["publish_to"]],
             ["onepassword"],
@@ -1585,9 +1507,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_publication_carries_addressing_and_nothing_else(self):
         """The declaration's whole vocabulary, so the code owns the content."""
 
-        publication = self._resolve(self.A_PROXY_TARGET, self.A_VAULT_TARGET)[
-            "publish_to"
-        ][0]
+        publication = self._resolve(self.A_PROXY_TARGET, self.A_VAULT_TARGET)["publish_to"][0]
 
         self.assertEqual(
             set(publication),
@@ -1664,8 +1584,8 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_certificate_hq_did_not_issue_cannot_be_recorded(self):
         """There are no observed facts to publish, only the declaration."""
 
-        from ..providers import resolve_provider_spec
         from ..provider_spec import ProviderResolutionContext
+        from ..providers import resolve_provider_spec
 
         with self.assertRaisesRegex(ValueError, "cannot be recorded in 1Password"):
             resolve_provider_spec(
@@ -1674,9 +1594,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
                     "certificate_name": "an-example-private-certificate",
                     "install_on": ["a-password-manager"],
                 },
-                context=ProviderResolutionContext(
-                    delivery_targets=(self.A_VAULT_TARGET,)
-                ),
+                context=ProviderResolutionContext(delivery_targets=(self.A_VAULT_TARGET,)),
             )
 
 

@@ -4,14 +4,13 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('search_index', '0004_fts_update_when_body_changes'),
+        ("search_index", "0004_fts_update_when_body_changes"),
     ]
 
     operations = [
         migrations.RemoveIndex(
-            model_name='searchdocument',
-            name='search_idx_scope_obj',
+            model_name="searchdocument",
+            name="search_idx_scope_obj",
         ),
     ]

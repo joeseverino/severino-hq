@@ -1,29 +1,29 @@
 """Dashboard + audit-log views."""
 
-from __future__ import annotations
-
+from typing import ClassVar, override
 from urllib.parse import quote
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.views import LoginView
-from django.conf import settings
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
+from hq.domains.contacts import inbox
 from hq.platform.application import fragments
 from hq.platform.application.agent_access import set_agents_paused
 from hq.platform.application.appearance import set_theme
 from hq.platform.application.avatars import avatar_of
 from hq.platform.application.command_center import command_center
+from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.search import global_search
 from hq.platform.application.security import AuthorizationError, safe_next, web_principal
-from hq.platform.application.pages import PageMixin
 from hq.platform.application.ui import counted
-from hq.domains.contacts import inbox
+
 from .audit import record_event
 from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
@@ -48,11 +48,9 @@ class ThrottledLoginView(LoginView):
 
     @property
     def sso_only(self) -> bool:
-        return (
-            settings.SEVERINO_OIDC_ENABLED
-            and not settings.SEVERINO_PASSWORD_LOGIN_ENABLED
-        )
+        return settings.SEVERINO_OIDC_ENABLED and not settings.SEVERINO_PASSWORD_LOGIN_ENABLED
 
+    @override
     def get(self, request, *args, **kwargs):
         """Go straight to Pocket ID rather than asking which door to use.
 
@@ -76,6 +74,7 @@ class ThrottledLoginView(LoginView):
             return redirect(target)
         return super().get(request, *args, **kwargs)
 
+    @override
     def get_context_data(self, **kwargs):
         from .oidc import SSO_FAILURE_SESSION_KEY
 
@@ -86,6 +85,7 @@ class ThrottledLoginView(LoginView):
             )
         return context
 
+    @override
     def post(self, request, *args, **kwargs):
         from .network import client_ip
         from .throttle import lockout
@@ -103,8 +103,7 @@ class ThrottledLoginView(LoginView):
         form.errors.pop("__all__", None)
         form.add_error(
             None,
-            "Too many failed sign-in attempts. Try again in "
-            f"{counted(state.minutes_remaining, 'minute')}.",
+            f"Too many failed sign-in attempts. Try again in {counted(state.minutes_remaining, 'minute')}.",
         )
         return self.render_to_response(self.get_context_data(form=form), status=429)
 
@@ -194,9 +193,9 @@ class AgentPolicyView(PageMixin, TemplateView):
     template_name = "core/agent_policy.html"
     page_title = "Agents"
 
+    @override
     def get_context_data(self, **kwargs):
         from datetime import timedelta
-
 
         from hq.platform.application import capability_policy
         from hq.platform.application.approvals import awaiting_ids
@@ -208,9 +207,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["show_all"] = bool(self.request.GET.get("all"))
         context["action_count"] = sum(len(group.rows) for group in context["groups"])
         context["shown_groups"] = (
-            context["groups"]
-            if context["show_all"]
-            else capability_policy.changed_only(context["groups"])
+            context["groups"] if context["show_all"] else capability_policy.changed_only(context["groups"])
         )
         context["agents"] = [column for column in context["columns"] if column.identity]
         # A column whose every settable rule is dormant is off as a whole, and
@@ -248,9 +245,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         for problem in problems:
             messages.error(request, problem)
         if changed:
-            messages.success(
-                request, f"Saved {counted(changed, 'change')}. Each is in the audit log."
-            )
+            messages.success(request, f"Saved {counted(changed, 'change')}. Each is in the audit log.")
         elif not problems:
             messages.info(request, "Nothing changed.")
         return redirect("agent_policy")
@@ -267,7 +262,7 @@ class SearchView(PageMixin, TemplateView):
     palette_search_total_limit = 12
     palette_result_limit = 25
     palette_group_limit = 5
-    palette_scope_priority = {
+    palette_scope_priority: ClassVar[dict[str, int]] = {
         "infrastructure.resources": 0,
         "projects": 1,
         "content": 2,
@@ -289,9 +284,7 @@ class SearchView(PageMixin, TemplateView):
             ("views", "Topology views"),
             ("checks", "Checks"),
         ):
-            items = tuple(item for item in discovery[key] if item.url)[
-                : min(self.palette_group_limit, remaining)
-            ]
+            items = tuple(item for item in discovery[key] if item.url)[: min(self.palette_group_limit, remaining)]
             if items:
                 groups.append({"key": key, "label": label, "items": items})
                 remaining -= len(items)
@@ -315,6 +308,7 @@ class SearchView(PageMixin, TemplateView):
                 break
         return visible
 
+    @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         q = self.request.GET.get("q", "").strip()
@@ -330,9 +324,7 @@ class SearchView(PageMixin, TemplateView):
                 outcome = global_search(
                     q,
                     principal=principal,
-                    limit_per_scope=(
-                        self.palette_search_limit if palette_request else self.result_limit
-                    ),
+                    limit_per_scope=(self.palette_search_limit if palette_request else self.result_limit),
                 )
                 groups = outcome["groups"]
                 total = outcome["total"]
@@ -344,7 +336,7 @@ class SearchView(PageMixin, TemplateView):
             discovery = (
                 command_center(q, principal=principal, include_live_connections=True)
                 if q or palette_request
-                else {key: () for key in DISCOVERY_GROUPS}
+                else dict.fromkeys(DISCOVERY_GROUPS, ())
             )
         # A page to go to: a resource with no page of its own is the API's.
         discovery = {
@@ -353,9 +345,7 @@ class SearchView(PageMixin, TemplateView):
         }
         palette_groups = self._palette_groups(discovery)
         palette_search_groups = self._palette_search_groups(groups)
-        palette_search_count = sum(
-            len(group["items"]) for group in palette_search_groups
-        )
+        palette_search_count = sum(len(group["items"]) for group in palette_search_groups)
         discovery_total = sum(len(discovery[key]) for key in discovery)
         ctx.update(
             q=q,
@@ -374,10 +364,7 @@ class SearchView(PageMixin, TemplateView):
             palette_estate=[group for group in palette_groups if group["key"] == "estate"],
             palette_groups=[group for group in palette_groups if group["key"] != "estate"],
             palette_search_groups=palette_search_groups,
-            palette_count=(
-                sum(len(group["items"]) for group in palette_groups)
-                + palette_search_count
-            ),
+            palette_count=(sum(len(group["items"]) for group in palette_groups) + palette_search_count),
             palette_total=discovery_total + total,
             palette_result_limit=self.palette_result_limit,
         )
@@ -408,10 +395,10 @@ class ConnectionView(PageMixin, TemplateView):
     template_name = "core/connection.html"
     page_title = "Your connection"
     page_lede = (
-        "How you are connected to HQ right now, who it takes you to be, and the "
-        "behind every admission decision."
+        "How you are connected to HQ right now, who it takes you to be, and the behind every admission decision."
     )
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.request_path import request_path
 
@@ -442,9 +429,7 @@ class PublicAddressView(View):
         return self._render(
             request,
             address,
-            lambda principal: stored_address(
-                AddressCommand(address=address), principal=principal
-            ),
+            lambda principal: stored_address(AddressCommand(address=address), principal=principal),
         )
 
     def post(self, request):
@@ -456,9 +441,7 @@ class PublicAddressView(View):
         return self._render(
             request,
             address,
-            lambda principal: look_up_address(
-                AddressCommand(address=address, refresh=True), principal=principal
-            ),
+            lambda principal: look_up_address(AddressCommand(address=address, refresh=True), principal=principal),
         )
 
     def _render(self, request, address, read):

@@ -11,9 +11,9 @@ from django.test.utils import CaptureQueriesContext
 from hq.platform.application.dashboard import dashboard_highlights
 from hq.platform.application.derivations import uncached
 from hq.platform.application.domains import Domain, domain_dashboard_cards
+from hq.platform.application.drawings import Dot, Dots, Trend
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
-from hq.platform.application.drawings import Dot, Dots, Trend
 from hq.platform.application.ui import DomainOverview, Kpi
 
 
@@ -87,16 +87,17 @@ class DashboardHighlightTests(SimpleTestCase):
 
     def test_cross_domain_card_collisions_are_still_rejected(self):
         domain = contributor(1)
-        with patch("hq.platform.application.domains.all_domains", return_value=(domain, domain)), uncached():
-            with self.assertRaises(ImproperlyConfigured):
-                domain_dashboard_cards()
+        with (
+            patch("hq.platform.application.domains.all_domains", return_value=(domain, domain)),
+            uncached(),
+            self.assertRaises(ImproperlyConfigured),
+        ):
+            domain_dashboard_cards()
 
     def test_one_metric_stays_compact_and_does_not_invoke_an_overview(self):
         overview = Mock()
         domain = contributor(1, overview=overview)
-        domain.integration.dashboard.return_value = (
-            domain.integration.dashboard.return_value[:1]
-        )
+        domain.integration.dashboard.return_value = domain.integration.dashboard.return_value[:1]
         with (
             patch("hq.platform.application.domains.all_domains", return_value=(domain,)),
             patch("hq.platform.application.dashboard.all_domains", return_value=(domain,)),

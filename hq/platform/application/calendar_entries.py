@@ -4,28 +4,26 @@ Web, API and MCP all write through these commands, so an entry an agent adds
 is the same audited write as one added on the page.
 """
 
-from __future__ import annotations
-
 import calendar as month_lengths
 from collections.abc import Iterator
-from itertools import count
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta
+from itertools import count
 from typing import Any, Literal
 
 from django.db import transaction
 from django.db.models import Q
 from django.db.models.functions import Coalesce
-from hq.platform.application.routes import reverse
 from django.utils import timezone
 
 from hq.domains.calendars.models import Entry, Preference
+from hq.platform.application.routes import reverse
 from hq.platform.core.audit import operation_context
 
 from .calendar import CalendarEvent, CalendarSource
 from .derivations import derivation
-from .security import Capability, Principal
 from .moments import when_day
+from .security import Capability, Principal
 from .ui import counted
 
 OWN_SOURCE = "calendar.mine"
@@ -74,9 +72,7 @@ def entry_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
         .filter(starts_on__lte=last)
         .filter(once | repeating)
     )
-    return tuple(
-        occurrence(entry, day) for entry in entries for day in occurrences(entry, first, last)
-    )
+    return tuple(occurrence(entry, day) for entry in entries for day in occurrences(entry, first, last))
 
 
 def _span_days(entry: Entry) -> int:
@@ -123,9 +119,7 @@ def _weekly(entry: Entry) -> Iterator[date]:
     days = entry.weekday_numbers or (start.weekday(),)
     week = start - timedelta(days=start.weekday())
     while True:
-        yield from (
-            day for day in (week + timedelta(days=weekday) for weekday in days) if day >= start
-        )
+        yield from (day for day in (week + timedelta(days=weekday) for weekday in days) if day >= start)
         week += timedelta(weeks=entry.interval)
 
 
@@ -192,7 +186,7 @@ def repeat_label(entry: Entry) -> str:
 # ----- Writing ----------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EntryCommand:
     """One entry, as every surface states it."""
 

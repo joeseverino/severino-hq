@@ -1,7 +1,5 @@
 """SQLite refreshes its planner statistics after a migration and nightly, never on a request."""
 
-from __future__ import annotations
-
 from io import StringIO
 from unittest.mock import patch
 
@@ -33,9 +31,7 @@ class OptimizeTests(TestCase):
     def test_a_migration_runs_it_once(self):
         with CaptureQueriesContext(connection) as queries:
             for config in apps.get_app_configs():
-                post_migrate.send(
-                    sender=config, app_config=config, verbosity=0, interactive=False, using="default"
-                )
+                post_migrate.send(sender=config, app_config=config, verbosity=0, interactive=False, using="default")
         self.assertEqual(optimizations(queries), ["PRAGMA optimize=0x10002"])
 
     def test_the_nightly_prune_runs_it(self):

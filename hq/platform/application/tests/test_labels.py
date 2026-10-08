@@ -49,8 +49,6 @@ class LowerFirstTests(SimpleTestCase):
             str(path.relative_to(root))
             for folder in ("application", "control_plane", "core")
             for path in (root / folder).rglob("*.py")
-            if not path.name.startswith("test")
-            and "[:1].lower() + " in path.read_text()
-            and path.name != "labels.py"
+            if not path.name.startswith("test") and "[:1].lower() + " in path.read_text() and path.name != "labels.py"
         ]
         self.assertEqual(copies, [])

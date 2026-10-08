@@ -6,10 +6,9 @@ or doc_id). Safe to run on a fresh DB or one with existing data.
     python manage.py seed_demo
 """
 
-from __future__ import annotations
-
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import override
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -24,6 +23,7 @@ from hq.domains.projects.models import Project
 class Command(BaseCommand):
     help = "Populate the database with demo projects, content, docs, assets, expenses."
 
+    @override
     def handle(self, *args, **options):
         today = timezone.localdate()
         year = today.year
@@ -32,15 +32,15 @@ class Command(BaseCommand):
         assets = self._seed_assets(today)
         content = self._seed_content(today, projects=projects, assets=assets)
         docs = self._seed_docs(today, projects=projects, assets=assets)
-        expenses = self._seed_expenses(
-            year=year, projects=projects, assets=assets, docs=docs, content=content
-        )
+        expenses = self._seed_expenses(year=year, projects=projects, assets=assets, docs=docs, content=content)
 
-        self.stdout.write(self.style.SUCCESS(
-            f"Demo seed complete: "
-            f"{len(projects)} projects, {len(content)} content, "
-            f"{len(docs)} docs, {len(assets)} assets, {len(expenses)} expenses."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Demo seed complete: "
+                f"{len(projects)} projects, {len(content)} content, "
+                f"{len(docs)} docs, {len(assets)} assets, {len(expenses)} expenses."
+            )
+        )
 
     def _seed_projects(self, today: date) -> dict[str, Project]:
         plan = [
@@ -71,9 +71,7 @@ class Command(BaseCommand):
         ]
         out: dict[str, Project] = {}
         for entry in plan:
-            obj, _ = Project.objects.get_or_create(
-                slug=entry["slug"], defaults=entry
-            )
+            obj, _ = Project.objects.get_or_create(slug=entry["slug"], defaults=entry)
             out[entry["slug"]] = obj
         return out
 
@@ -144,9 +142,7 @@ class Command(BaseCommand):
         for entry in plan:
             rel_projects = entry.pop("_related_projects", [])
             rel_assets = entry.pop("_related_assets", [])
-            obj, created = ContentItem.objects.get_or_create(
-                slug=entry["slug"], defaults=entry
-            )
+            obj, created = ContentItem.objects.get_or_create(slug=entry["slug"], defaults=entry)
             if created:
                 obj.related_projects.set(projects[s] for s in rel_projects if s in projects)
                 obj.related_assets.set(assets[s] for s in rel_assets if s in assets)
@@ -188,9 +184,7 @@ class Command(BaseCommand):
         for entry in plan:
             rel_projects = entry.pop("_projects", [])
             rel_assets = entry.pop("_assets", [])
-            obj, created = DocumentationRecord.objects.get_or_create(
-                doc_id=entry["doc_id"], defaults=entry
-            )
+            obj, created = DocumentationRecord.objects.get_or_create(doc_id=entry["doc_id"], defaults=entry)
             if created:
                 obj.related_projects.set(projects[s] for s in rel_projects if s in projects)
                 obj.related_assets.set(assets[s] for s in rel_assets if s in assets)

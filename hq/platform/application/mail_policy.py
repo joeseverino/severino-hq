@@ -16,8 +16,6 @@ back into one; publishing it is the DNS record's own use case, which already
 knows how to reconcile a change and say what it will cost.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -33,7 +31,7 @@ SPF_LOOKUP_LIMIT = 10
 SPF_LOOKUP_MECHANISMS = ("include", "a", "mx", "ptr", "exists", "redirect")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Choice:
     """One selectable answer, and what choosing it actually does."""
 
@@ -42,7 +40,7 @@ class Choice:
     consequence: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PolicyTag:
     """One field of a policy record.
 
@@ -107,20 +105,17 @@ DMARC_TAGS: tuple[PolicyTag, ...] = (
             Choice(
                 "none",
                 "Deliver it anyway",
-                "Nothing is blocked. Use this while you read the reports and "
-                "find out who legitimately sends as you.",
+                "Nothing is blocked. Use this while you read the reports and find out who legitimately sends as you.",
             ),
             Choice(
                 "quarantine",
                 "Send it to spam",
-                "Forged mail goes to junk. A real sender you forgot to list goes "
-                "to junk too.",
+                "Forged mail goes to junk. A real sender you forgot to list goes to junk too.",
             ),
             Choice(
                 "reject",
                 "Reject it outright",
-                "Forged mail is refused. A real sender you forgot to list is "
-                "refused too.",
+                "Forged mail is refused. A real sender you forgot to list is refused too.",
             ),
         ),
         sentence=_policy_sentence,
@@ -230,7 +225,7 @@ def describe_dmarc(value: str) -> tuple[str, ...]:
     return tuple(said)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SpfTerm:
     qualifier: str
     mechanism: str
@@ -245,7 +240,7 @@ class SpfTerm:
         return f"{prefix}{self.mechanism}" + (f":{self.argument}" if self.argument else "")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SpfPolicy:
     terms: tuple[SpfTerm, ...] = ()
     valid: bool = True
@@ -304,8 +299,7 @@ SPF_DEFAULTS: tuple[Choice, ...] = (
     Choice(
         "~",
         "Mark it as suspicious",
-        "A soft failure: receivers usually accept it and flag it. Useful while "
-        "you are still finding senders.",
+        "A soft failure: receivers usually accept it and flag it. Useful while you are still finding senders.",
     ),
     Choice(
         "?",
@@ -320,7 +314,7 @@ SPF_DEFAULTS: tuple[Choice, ...] = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MailSection:
     """One stage of a domain's mail, with the records that decide it."""
 
@@ -334,7 +328,7 @@ class MailSection:
     add_type: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MailOverview:
     """Receiving, sending, signing, enforcing: in the order mail flows."""
 
@@ -349,9 +343,7 @@ class MailOverview:
 
 
 def _is_spf(record) -> bool:
-    return record.record_type == "TXT" and unquote(record.content).lower().startswith(
-        f"v={SPF_VERSION}"
-    )
+    return record.record_type == "TXT" and unquote(record.content).lower().startswith(f"v={SPF_VERSION}")
 
 
 def _is_dmarc(record) -> bool:
@@ -375,7 +367,7 @@ def mail_overview(zone) -> MailOverview:
     mx = tuple(
         sorted(
             (r for r in records if r.record_type == "MX"),
-            key=lambda r: (r.priority if r.priority is not None else 0),
+            key=lambda r: r.priority if r.priority is not None else 0,
         )
     )
     spf_records = tuple(r for r in records if _is_spf(r))
@@ -392,11 +384,7 @@ def mail_overview(zone) -> MailOverview:
             id="receiving",
             label="Receiving",
             question="Who accepts mail for this domain?",
-            answer=(
-                ", ".join(sorted({r.content for r in mx}))
-                if mx
-                else "Nobody"
-            ),
+            answer=(", ".join(sorted({r.content for r in mx})) if mx else "Nobody"),
             detail=(
                 f"{counted(len(mx), 'mail server', 'mail servers')}, tried in priority order."
                 if mx
@@ -409,11 +397,7 @@ def mail_overview(zone) -> MailOverview:
             id="sending",
             label="Sending",
             question="Who is allowed to send as this domain?",
-            answer=(
-                counted(len(spf.terms), "rule")
-                if spf and spf.valid
-                else "Anyone"
-            ),
+            answer=(counted(len(spf.terms), "rule") if spf and spf.valid else "Anyone"),
             detail=(
                 spf.default_result
                 if spf and spf.valid
@@ -432,11 +416,7 @@ def mail_overview(zone) -> MailOverview:
             id="signing",
             label="Signing",
             question="What proves a message really came from here?",
-            answer=(
-                counted(len(dkim), "key")
-                if dkim
-                else "Nothing"
-            ),
+            answer=(counted(len(dkim), "key") if dkim else "Nothing"),
             detail=(
                 "These sign the mail sent from this domain."
                 if dkim
@@ -461,11 +441,7 @@ def mail_overview(zone) -> MailOverview:
                 "domain and receivers have no instruction to refuse it."
             ),
             records=dmarc_records,
-            concern=(
-                "Published but not enforcing: failures are delivered."
-                if policy == "none"
-                else ""
-            ),
+            concern=("Published but not enforcing: failures are delivered." if policy == "none" else ""),
             add_type="TXT",
         ),
     )

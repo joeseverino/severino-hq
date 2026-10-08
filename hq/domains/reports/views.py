@@ -1,10 +1,9 @@
 """Reports dashboard + exports."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import override
 
 from django.db.models import Count, Sum
 from django.http import HttpResponse, HttpResponseBadRequest
@@ -12,16 +11,16 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
-from hq.platform.application.pages import PageMixin
-from hq.platform.application.projection import years_of
-from hq.platform.application.documentation import document_link
 from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, Asset
 from hq.domains.content.models import ContentItem
-from hq.platform.core.audit import record_event
-from hq.platform.core.models import AuditLog
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.documentation import document_link
+from hq.platform.application.pages import PageMixin
+from hq.platform.application.projection import years_of
+from hq.platform.core.audit import record_event
+from hq.platform.core.models import AuditLog
 
 from . import exports as exporters
 
@@ -57,6 +56,7 @@ class ReportsView(PageMixin, TemplateView):
     template_name = "reports/reports.html"
     page_title = "Reports"
 
+    @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         try:
@@ -129,7 +129,7 @@ class ReportsView(PageMixin, TemplateView):
 CSV = "text/csv; charset=utf-8"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Export:
     """One downloadable report, declared rather than written out.
 
@@ -156,22 +156,29 @@ class Export:
 
 
 EXPORTS = (
-    Export("expenses_csv", "export/expenses.csv", exporters.expenses_csv, CSV,
-           "expenses", "csv", year="optional"),
-    Export("assets_csv", "export/assets.csv", exporters.assets_csv, CSV,
-           "assets", "csv", year="optional"),
-    Export("content_csv", "export/content.csv", exporters.content_csv, CSV,
-           "content", "csv"),
-    Export("projects_csv", "export/projects.csv", exporters.projects_csv, CSV,
-           "projects", "csv"),
-    Export("documentation_csv", "export/documentation.csv",
-           exporters.documentation_csv, CSV, "documentation", "csv"),
-    Export("year_summary_json", "export/year-summary.json",
-           exporters.year_summary_json, "application/json; charset=utf-8",
-           "year-summary", "json", year="required"),
-    Export("year_summary_md", "export/year-summary.md",
-           exporters.year_summary_markdown, "text/markdown; charset=utf-8",
-           "year-summary", "md", year="required"),
+    Export("expenses_csv", "export/expenses.csv", exporters.expenses_csv, CSV, "expenses", "csv", year="optional"),
+    Export("assets_csv", "export/assets.csv", exporters.assets_csv, CSV, "assets", "csv", year="optional"),
+    Export("content_csv", "export/content.csv", exporters.content_csv, CSV, "content", "csv"),
+    Export("projects_csv", "export/projects.csv", exporters.projects_csv, CSV, "projects", "csv"),
+    Export("documentation_csv", "export/documentation.csv", exporters.documentation_csv, CSV, "documentation", "csv"),
+    Export(
+        "year_summary_json",
+        "export/year-summary.json",
+        exporters.year_summary_json,
+        "application/json; charset=utf-8",
+        "year-summary",
+        "json",
+        year="required",
+    ),
+    Export(
+        "year_summary_md",
+        "export/year-summary.md",
+        exporters.year_summary_markdown,
+        "text/markdown; charset=utf-8",
+        "year-summary",
+        "md",
+        year="required",
+    ),
 )
 
 
@@ -195,7 +202,7 @@ class ExportView(View):
                 # (or this year) for a request that named neither hands back a
                 # document that is not the one asked for, and nothing says so.
                 return HttpResponseBadRequest("year must be a four-digit year.")
-            if raw:
+            if raw:  # noqa: SIM108 - a nested conditional expression reads worse
                 year = int(raw)
             else:
                 year = timezone.localdate().year if spec.year == "required" else None

@@ -4,10 +4,8 @@ A credential on its own must not be able to change a gated kind. Each test is
 one property that has to hold for that, and would fail quietly if it did not.
 """
 
-from __future__ import annotations
-
-from dataclasses import replace
 import json
+from dataclasses import replace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -19,8 +17,8 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, Op
 from hq.domains.control_plane.providers import PROVIDERS
 
 from ..approvals import (
-    ApprovalError,
     MAX_PENDING_PER_ACTOR,
+    ApprovalError,
     approve,
     compare,
     pending,
@@ -38,7 +36,6 @@ from ..security import (
     mcp_principal,
     web_principal,
 )
-
 
 POLICY_KEY = "access-policy"
 GATED_KIND = "tailscale.policy"
@@ -92,9 +89,7 @@ def reconcile_payload(key: str = "once") -> dict:
 
 
 def an_operator(username: str = "operator") -> Principal:
-    user = get_user_model().objects.create_user(
-        username=username, password="test-only-password"
-    )
+    user = get_user_model().objects.create_user(username=username, password="test-only-password")
     return web_principal(user)
 
 
@@ -135,9 +130,7 @@ class HeldRequestTests(TestCase):
             target=POLICY_KEY,
         )
 
-        claimed = claim_next_operation(
-            "controller-example", capabilities=((GATED_KIND, "reconcile"),)
-        )
+        claimed = claim_next_operation("controller-example", capabilities=((GATED_KIND, "reconcile"),))
 
         self.assertIsNone(claimed["operation"])
 
@@ -257,9 +250,7 @@ class HeldRequestTests(TestCase):
         result = execute_capability(
             "contact.submissions.list",
             {"status": "new", "limit": 1},
-            principal=Principal(
-                "reader", "mcp", frozenset({Capability.MANAGE_CONTACTS})
-            ),
+            principal=Principal("reader", "mcp", frozenset({Capability.MANAGE_CONTACTS})),
         )
 
         self.assertNotEqual(result.get("status"), "awaiting_approval")
@@ -384,9 +375,7 @@ class DecisionTests(TestCase):
         # Who asked stays who asked, and who agreed is recorded beside it.
         self.assertEqual(operation.requested_interface, "mcp")
         self.assertEqual(operation.input["approved_by"], "operator")
-        claimed = claim_next_operation(
-            "controller-example", capabilities=((GATED_KIND, "reconcile"),)
-        )
+        claimed = claim_next_operation("controller-example", capabilities=((GATED_KIND, "reconcile"),))
         self.assertEqual(claimed["operation"]["id"], str(operation.id))
 
     def test_pausing_agents_holds_the_work_an_agent_queued(self):
@@ -442,9 +431,7 @@ class DecisionTests(TestCase):
         """
 
         held = self.held()
-        omnipotent = Principal(
-            "well-equipped-token", "mcp", frozenset(Capability)
-        )
+        omnipotent = Principal("well-equipped-token", "mcp", frozenset(Capability))
 
         with self.assertRaises(AuthorizationError):
             approve(str(held.id), principal=omnipotent)
@@ -525,12 +512,12 @@ class ControllerTests(TestCase):
     toward a declaration a person has already agreed to. Holding that would stop
     the estate maintaining itself to protect against nothing.
     """
+
     def setUp(self):
         super().setUp()
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-
 
     def test_automatic_convergence_of_a_gated_kind_is_still_scheduled(self):
         gated_device = replace(PROVIDERS["tailscale.device"], requires_approval=True)
@@ -574,9 +561,7 @@ class FloorTests(TestCase):
                     kind=GATED_KIND,
                     spec={"document": policy_document("group:elsewhere")},
                 ),
-                principal=Principal(
-                    "a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})
-                ),
+                principal=Principal("a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
                 current_key=POLICY_KEY,
             )
 
@@ -587,9 +572,7 @@ class FloorTests(TestCase):
         with self.assertRaises(PolicyError):
             request_reconcile(
                 OperationCommand(idempotency_key="direct", reason=""),
-                principal=Principal(
-                    "a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})
-                ),
+                principal=Principal("a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})),
                 current_key=POLICY_KEY,
             )
 
@@ -630,9 +613,7 @@ class PreviewTests(TestCase):
         shown = compare(before, after, label="Declaration would change")
 
         paths = {row.path: (row.before, row.after) for row in shown.rows}
-        self.assertEqual(
-            paths["document.grants[0].src[0]"], ("group:example", "group:elsewhere")
-        )
+        self.assertEqual(paths["document.grants[0].src[0]"], ("group:example", "group:elsewhere"))
         # Everything that did not move stays out of it.
         self.assertEqual(len(shown.rows), 1)
         self.assertEqual(shown.lines, ())
@@ -677,9 +658,7 @@ class PreviewTests(TestCase):
         shown = preview(ApprovalRequest.objects.get())
 
         paths = {row.path: (row.before, row.after) for row in shown.rows}
-        self.assertEqual(
-            paths["document.grants[0].src[0]"], ("group:live", "group:example")
-        )
+        self.assertEqual(paths["document.grants[0].src[0]"], ("group:live", "group:example"))
 
 
 @override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
@@ -691,9 +670,7 @@ class SurfaceTests(TestCase):
 
         managing_everything()
         declare_policy()
-        self.user = get_user_model().objects.create_user(
-            username="reviewer", password="test-only-password"
-        )
+        self.user = get_user_model().objects.create_user(username="reviewer", password="test-only-password")
         self.client.force_login(self.user)
         execute_capability(
             "infrastructure.resource.update",
@@ -701,9 +678,7 @@ class SurfaceTests(TestCase):
             principal=mcp_principal(),
             target=POLICY_KEY,
         )
-        self.held = ApprovalRequest.objects.get(
-            capability="infrastructure.resource.update"
-        )
+        self.held = ApprovalRequest.objects.get(capability="infrastructure.resource.update")
         execute_capability(
             "infrastructure.reconcile",
             reconcile_payload(),
@@ -714,9 +689,7 @@ class SurfaceTests(TestCase):
     def _entry(self, held):
         """A held request's own audit entry, reached the way an agent's link is."""
 
-        return self.client.get(
-            reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True
-        )
+        return self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
 
     def test_the_queue_names_who_asked_the_reason_and_the_difference(self):
         reconcile = ApprovalRequest.objects.get(capability="infrastructure.reconcile")
@@ -730,9 +703,7 @@ class SurfaceTests(TestCase):
     def test_a_held_record_change_shows_what_would_be_written(self):
         from hq.domains.control_plane.models import CapabilityRule
 
-        CapabilityRule.objects.create(
-            scope="surface", subject="mcp", capability="project.create", rule="approve"
-        )
+        CapabilityRule.objects.create(scope="surface", subject="mcp", capability="project.create", rule="approve")
         writer = Principal("example-agent", "mcp", frozenset({Capability.READ, "write_projects"}))
         held = execute_capability("project.create", {"name": "Held project"}, principal=writer)
 
@@ -766,17 +737,13 @@ class SurfaceTests(TestCase):
         self.assertRedirects(response, f"{reverse('core:audit_list')}?awaiting=1")
 
     def test_the_resource_page_says_something_is_waiting(self):
-        page = self.client.get(
-            reverse("control_plane:detail", kwargs={"key": POLICY_KEY})
-        )
+        page = self.client.get(reverse("control_plane:detail", kwargs={"key": POLICY_KEY}))
 
         self.assertContains(page, "waiting for your approval")
 
     def test_approving_from_the_page_applies_it(self):
         response = self.client.post(
-            reverse(
-                "control_plane:approval_decision", kwargs={"approval_id": self.held.id}
-            ),
+            reverse("control_plane:approval_decision", kwargs={"approval_id": self.held.id}),
             {"decision": "approve"},
         )
 

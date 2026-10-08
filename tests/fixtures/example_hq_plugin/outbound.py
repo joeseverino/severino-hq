@@ -33,9 +33,7 @@ def refuse(subject):
 def stored(subject):
     """What the last lookup that ended well found for a note."""
 
-    job = Job.objects.filter(
-        kind=LOOKUP, state=Job.State.SUCCEEDED, request__subject=subject
-    ).first()
+    job = Job.objects.filter(kind=LOOKUP, state=Job.State.SUCCEEDED, request__subject=subject).first()
     return job.result.get("entries", []) if job else []
 
 

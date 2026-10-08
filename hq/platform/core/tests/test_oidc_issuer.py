@@ -1,7 +1,5 @@
 """The ID token's issuer is checked against a configured one, and none refuses all."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from django.core.exceptions import SuspiciousOperation

@@ -1,7 +1,5 @@
 """Open problems on the page of the thing they are about, and since when."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from unittest import mock
 
@@ -17,11 +15,11 @@ from .. import first_seen
 from ..attention import infrastructure
 from ..delivery_progress import STALLED_AFTER
 from ..entity_links import entity_link
-from ..infrastructure import resource_health
-from ..resource_context import record_status
 from ..first_seen import KNOWN_WITHIN, LOOK_EVERY, note_open, recorded
+from ..infrastructure import resource_health
 from ..problems import note_open_problems, problem_counts, problems_about
 from ..projection import projection_scope
+from ..resource_context import record_status
 from ..security import cli_principal
 from ..sweep import record_sweep
 
@@ -196,11 +194,21 @@ class DeployInProgressTests(TestCase):
             generation=1,
             observed_generation=1,
             last_observed_at=timezone.now(),
-            status={"extensions": [
-                {"plugin": "example.alpha", "running": "a" * 40, "admitted": "b" * 40, "stage": stage,
-                 "run_url": "https://github.example.com/example/host/actions/runs/9", **extension},
-            ]},
-            conditions=[{"type": "Degraded", "status": True, "reason": "NotDelivered", "message": message, "since": since}],
+            status={
+                "extensions": [
+                    {
+                        "plugin": "example.alpha",
+                        "running": "a" * 40,
+                        "admitted": "b" * 40,
+                        "stage": stage,
+                        "run_url": "https://github.example.com/example/host/actions/runs/9",
+                        **extension,
+                    },
+                ]
+            },
+            conditions=[
+                {"type": "Degraded", "status": True, "reason": "NotDelivered", "message": message, "since": since}
+            ],
         )
 
     def items(self):

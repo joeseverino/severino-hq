@@ -12,8 +12,6 @@ request half (how the request being answered reached HQ) exists only where
 there is a request, and is returned under ``request``.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
@@ -23,6 +21,14 @@ from hq.platform.core.models import AuditLog
 
 from .action_links import read_now_link
 from .cadence import forced_reads
+from .connection_catalog import (
+    CONTROLLER_CONNECTIONS,
+    LIFECYCLE_LABELS,
+    ConnectionGroup,
+    ConnectionView,
+    connection_catalog,
+    serialize_connection,
+)
 from .connection_contracts import ConnectionInstance
 from .connection_reach import ConnectionReach, connection_reach
 from .connection_security import (
@@ -32,31 +38,23 @@ from .connection_security import (
     connection_security_posture,
     observed_connection_controls,
 )
-from .connection_catalog import (
-    CONTROLLER_CONNECTIONS,
-    LIFECYCLE_LABELS,
-    ConnectionGroup,
-    ConnectionView,
-    connection_catalog,
-    serialize_connection,
-)
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import ProviderSight, sight_by_connection
 from .derived_reads import NotFoundError, serialize_path, serialize_provider_sight
 from .entity_links import entity_link
 from .freshness import freshness
 from .hq_self import hq_hostnames
+from .path_model import ServicePath
 from .paths import hq_path
 from .problems import problem_counts
-from .path_model import ServicePath
-from .request_path import joined
 from .projection import projection_scope, read_once
+from .request_path import joined
 from .security import Principal
 from .ui import counted
 from .workflow_contracts import ActionLink
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionRow:
     """One connection, and everything the page says beside it."""
 
@@ -185,7 +183,7 @@ def _control(control: Any) -> dict[str, str]:
     return asdict(control)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionsContext:
     groups: tuple[ConnectionGroup, ...]
     rows: tuple[ConnectionRow, ...]
@@ -239,9 +237,7 @@ class ConnectionsContext:
     @property
     def all_custodied(self) -> bool:
         posture = self.estate_posture
-        return bool(posture.connection_count) and (
-            posture.external_custody_count == posture.connection_count
-        )
+        return bool(posture.connection_count) and (posture.external_custody_count == posture.connection_count)
 
     def as_dict(self) -> dict[str, Any]:
         """The derived facts, for the API, MCP, CLI and SDK."""
@@ -282,9 +278,7 @@ class ConnectionsContext:
                     "label": provider.label,
                     "sees": list(provider.sees),
                     "manages": list(provider.manages),
-                    "requires": sorted(
-                        {name for sight in provider.sights for name in sight.permissions}
-                    ),
+                    "requires": sorted({name for sight in provider.sights for name in sight.permissions}),
                 }
                 for provider in self.unconnected_providers
             ],
@@ -312,11 +306,7 @@ class ConnectionsContext:
             "channel": posture.channel_label,
             "secure_transport": posture.secure_transport,
             "trusted_proxies": posture.trusted_proxy_count,
-            "controls": [
-                _control(control)
-                for control in posture.controls
-                if control.id in REQUEST_CONTROLS
-            ],
+            "controls": [_control(control) for control in posture.controls if control.id in REQUEST_CONTROLS],
             "caller": caller.hops[0].name if caller and caller.hops else None,
         }
 
@@ -342,13 +332,9 @@ def _rows(
 ) -> tuple[tuple[ConnectionRow, ...], tuple[ProviderSight, ...]]:
     sights, unconnected = sight_by_connection(controller_refs)
     fixes = credential_fixes()
-    events = last_activity(
-        connection.instance.connection_ref for group in groups for connection in group.connections
-    )
+    events = last_activity(connection.instance.connection_ref for group in groups for connection in group.connections)
     reach = connection_reach(
-        (view.instance.connection_ref, view.instance.endpoint)
-        for group in groups
-        for view in group.connections
+        (view.instance.connection_ref, view.instance.endpoint) for group in groups for view in group.connections
     )
     used_for = _used_for()
     open_problems = problem_counts()
@@ -365,23 +351,15 @@ def _rows(
                     sight=sights.get(ref),
                     fix=fix if fix is not None and fix.needed else None,
                     last_event=events.get(ref),
-                    read_now=(
-                        read_now_link(principal, connection_ref=ref)
-                        if ref in controller_refs
-                        else None
-                    ),
+                    read_now=(read_now_link(principal, connection_ref=ref) if ref in controller_refs else None),
                     read_requested_at=pending.get(ref),
                     reach=reach.get(ref),
                     used_for=used_for.get(group.spec.name, ""),
-                    problems=open_problems.get(
-                        entity_link("connection", connection.instance.label).url, 0
-                    ),
+                    problems=open_problems.get(entity_link("connection", connection.instance.label).url, 0),
                 )
             )
         # Within its group, a connection that needs a person comes first.
-        rows.extend(
-            sorted(found, key=lambda row: row.lifecycle not in ATTENTION_LIFECYCLES)
-        )
+        rows.extend(sorted(found, key=lambda row: row.lifecycle not in ATTENTION_LIFECYCLES))
     # Under what each is used for, in the order the first of each appears: the
     # sort is stable, so the controller's connections still lead.
     order = {name: place for place, name in enumerate(dict.fromkeys(row.used_for for row in rows))}
@@ -420,14 +398,10 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
 
     with projection_scope():
         groups = connection_catalog(principal=principal)
-        core = next(
-            (group for group in groups if group.spec.name == CONTROLLER_CONNECTIONS), None
-        )
+        core = next((group for group in groups if group.spec.name == CONTROLLER_CONNECTIONS), None)
         controller = core.connections if core else ()
         controller_refs = {
-            view.instance.connection_ref: view.instance.kind
-            for view in controller
-            if view.instance.connection_ref
+            view.instance.connection_ref: view.instance.kind for view in controller if view.instance.connection_ref
         }
         pending, everything = _pending_reads()
         rows, unconnected = _rows(groups, controller_refs, principal, pending)
@@ -450,21 +424,13 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
             ),
             estate_posture=estate,
             posture=(
-                connection_security_posture(
-                    groups, request=request, tailnet_policy=tailnet_policy, edge=edge
-                )
+                connection_security_posture(groups, request=request, tailnet_policy=tailnet_policy, edge=edge)
                 if request is not None
                 else estate
             ),
             hq_path=walked,
-            caller_path=(
-                joined(walked, request, None)
-                if walked is not None and request is not None
-                else None
-            ),
-            read_all=read_now_link(
-                principal, every_connection=True, label="Read all now"
-            ),
+            caller_path=(joined(walked, request, None) if walked is not None and request is not None else None),
+            read_all=read_now_link(principal, every_connection=True, label="Read all now"),
             reading_everything_since=everything,
             answers_request=request is not None,
         )

@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 import json
+from typing import override
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
@@ -18,8 +17,8 @@ from django.views.generic import (
 from hq.platform.application.documentation import (
     sync_documentation,
 )
-from hq.platform.application.security import web_principal
 from hq.platform.application.pages import PageAction, PageMixin, page_context, record_trail
+from hq.platform.application.security import web_principal
 from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
@@ -32,7 +31,6 @@ from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from .forms import DocumentationRecordForm, ManifestImportForm
 from .importer import ManifestImportError
 from .models import DocumentationRecord
-
 
 DOCS_TRAIL = ("Docs", reverse_lazy("docs_index:list"))
 
@@ -61,9 +59,7 @@ class DocsListView(PageMixin, TableListMixin, ListView):
             "environment",
             DocumentationRecord.Environment.choices,
         ),
-        TableFilter(
-            "doc_type", "Type", "doc_type", DocumentationRecord.DocType.choices
-        ),
+        TableFilter("doc_type", "Type", "doc_type", DocumentationRecord.DocType.choices),
         TableFilter(
             "sensitivity",
             "Sensitivity",
@@ -93,12 +89,14 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search IDs, titles, systems, paths, and notes…"
 
+    @override
     def get_page_actions(self):
         return (
             PageAction("Import manifest", reverse("docs_index:import")),
             PageAction("New document", reverse("docs_index:create"), primary=True),
         )
 
+    @override
     def get_queryset(self):
         qs = DocumentationRecord.objects.all()
         q = self.request.GET.get("q", "").strip()
@@ -118,6 +116,7 @@ class DocsListView(PageMixin, TableListMixin, ListView):
 class DocsPage(PageMixin):
     """A page about one doc record, or a new one: its trail runs back to the list."""
 
+    @override
     def get_page_trail(self):
         return record_trail(DOCS_TRAIL, getattr(self, "object", None), lambda record: record.doc_id)
 
@@ -135,9 +134,11 @@ class DocsDetailView(PageMixin, DetailView):
         "content_items",
     )
 
+    @override
     def get_page_title(self):
         return self.object.title
 
+    @override
     def get_page_lede(self):
         record = self.object
         return format_html(
@@ -151,9 +152,11 @@ class DocsDetailView(PageMixin, DetailView):
             record.get_sensitivity_display(),
         )
 
+    @override
     def get_page_trail(self):
         return (DOCS_TRAIL,)
 
+    @override
     def get_page_actions(self):
         doc_id = self.object.doc_id
         return (
@@ -235,9 +238,6 @@ class ManifestImportView(View):
         stats = result["stats"]
         messages.success(
             request,
-            (
-                f"Manifest imported: {stats['created']} new, "
-                f"{stats['updated']} changed, {stats['skipped']} unchanged."
-            ),
+            (f"Manifest imported: {stats['created']} new, {stats['updated']} changed, {stats['skipped']} unchanged."),
         )
         return redirect("docs_index:list")

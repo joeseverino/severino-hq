@@ -1,7 +1,5 @@
 """Leaf contracts shared by integration emitters and the graph compiler."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
@@ -45,8 +43,7 @@ _IDEMPOTENCY_SCHEMA: dict[str, Any] = {
     "type": "string",
     "title": "Idempotency Key",
     "description": (
-        "Optional. A repeat carrying the same key returns the first result "
-        "instead of acting a second time."
+        "Optional. A repeat carrying the same key returns the first result instead of acting a second time."
     ),
     "minLength": 1,
     "maxLength": 128,
@@ -82,7 +79,7 @@ def capability_schema(spec: CapabilitySpec) -> dict[str, Any]:
     return derived
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CapabilitySpec:
     name: str
     summary: str
@@ -116,7 +113,7 @@ class CapabilitySpec:
         return self.label or human_label(self.name)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ResourceSpec:
     """One declaration of a readable domain and every operation it supports."""
 

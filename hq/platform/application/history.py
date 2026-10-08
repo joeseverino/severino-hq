@@ -10,8 +10,6 @@ first seen.
 Read only from what is already stored; nothing here polls.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -90,7 +88,7 @@ def source_of_event():
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Moment:
     at: datetime
     # Where it was recorded: "HQ", "Reading", "Deploy", "Container".
@@ -106,7 +104,7 @@ class Moment:
         return self.url.startswith("https://")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Entry:
     """One line of the history: an audit event, a run of them, or a moment."""
 
@@ -161,9 +159,7 @@ def near(at: datetime, *, window: timedelta = NEAR, limit: int = 5) -> tuple[Mom
     return tuple(sorted(around, key=lambda item: abs(item.at - at))[:limit])
 
 
-def external(
-    sources: Iterable[str], *, since: datetime | None = None, until: datetime | None = None
-) -> list[Moment]:
+def external(sources: Iterable[str], *, since: datetime | None = None, until: datetime | None = None) -> list[Moment]:
     """The deploys and container starts HQ's readings hold, within the bounds."""
 
     wanted = set(sources)
@@ -279,9 +275,7 @@ def _starts(since: datetime | None, until: datetime | None) -> list[Moment]:
                     detail="created, recreated or restarted",
                     # Its row on its machine's page: a start is dated for every
                     # container, tracked or not.
-                    url=container_link(
-                        str(record.get("host") or ""), str(record.get("container") or "")
-                    ).url,
+                    url=container_link(str(record.get("host") or ""), str(record.get("container") or "")).url,
                     actor="Docker",
                 )
             )

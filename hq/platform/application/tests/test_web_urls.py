@@ -1,7 +1,5 @@
 """An href built from data someone else wrote is a web address or nothing."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -33,7 +31,9 @@ class WebUrlTests(SimpleTestCase):
 
     def test_a_reading_console_link_is_kept_only_when_it_is_a_web_address(self):
         # A repository reading's console is the url its record carries.
-        safe = entity_link("github.repository", "", record={"repository": "example/app", "url": "https://github.com/example/app"})
+        safe = entity_link(
+            "github.repository", "", record={"repository": "example/app", "url": "https://github.com/example/app"}
+        )
         hostile = entity_link("github.repository", "", record={"repository": "example/app", "url": HOSTILE[0]})
 
         self.assertEqual(safe.url, "https://github.com/example/app")
@@ -51,9 +51,7 @@ class RenderedLinkTests(TestCase):
     def test_a_manifest_url_that_is_not_a_web_address_renders_as_text(self):
         from hq.domains.docs_index.models import DocumentationRecord
 
-        record = DocumentationRecord.objects.create(
-            doc_id="example-doc", title="Example", external_url=HOSTILE[0]
-        )
+        record = DocumentationRecord.objects.create(doc_id="example-doc", title="Example", external_url=HOSTILE[0])
         self.client.force_login(get_user_model().objects.create_user("example-operator", password="x" * 20))
 
         body = self.client.get(reverse("docs_index:detail", args=[record.doc_id])).content.decode()

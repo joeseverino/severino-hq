@@ -11,9 +11,8 @@ Nothing here is a verdict on intent: a socket proxy exists to hold the Docker
 socket, and the page says so as plainly as for anything else.
 """
 
-from __future__ import annotations
-
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from .standards import Check, Posture, measure
 
@@ -25,7 +24,9 @@ SYSTEM_PATHS = ("/boot", "/dev", "/etc", "/proc", "/root", "/sys", "/usr", "/var
 SYSTEM_ROOTS = ("/", "/run", "/var/run")
 DOCKER_SOCKETS = ("/var/run/docker.sock", "/run/docker.sock")
 # Capabilities that are the machine's in all but name.
-POWERFUL_CAPABILITIES = frozenset({"ALL", "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_RAWIO", "DAC_READ_SEARCH", "NET_ADMIN", "BPF"})
+POWERFUL_CAPABILITIES = frozenset(
+    {"ALL", "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_RAWIO", "DAC_READ_SEARCH", "NET_ADMIN", "BPF"}
+)
 ROOT_USERS = frozenset({"", "0", "root", "0:0", "root:root"})
 _ANY_ADDRESS = frozenset({"", "0.0.0.0", "::"})
 
@@ -86,7 +87,8 @@ def writable_system_binds(binds, docker_held: bool = False) -> tuple[Mapping[str
         mount
         for mount in binds
         if (source := str(mount.get("source", ""))) not in DOCKER_SOCKETS
-        and system_path(source) and not mount.get("read_only")
+        and system_path(source)
+        and not mount.get("read_only")
         # Docker's own data is no more than its socket already reaches, for a
         # container declared to hold the socket (a management agent reads
         # volumes there). Any other system path still counts.
@@ -111,7 +113,9 @@ def _system_path_kept(container: Any) -> bool | None:
 
 
 def _confined(runtime: Mapping[str, Any]) -> bool:
-    return not any(option.endswith("=unconfined") or option.endswith(":unconfined") for option in runtime.get("security_opt") or ())
+    return not any(
+        option.endswith("=unconfined") or option.endswith(":unconfined") for option in runtime.get("security_opt") or ()
+    )
 
 
 def _no_powerful_capability(runtime: Mapping[str, Any]) -> bool:
@@ -133,47 +137,108 @@ def _bound_to_an_address(runtime: Mapping[str, Any]) -> bool:
 
 
 STANDARD: tuple[Check, ...] = (
-    Check("not-privileged", "Not privileged", _on(lambda runtime: not runtime.get("privileged")),
-          "A privileged container is root on its machine: every device and every kernel capability.",
-          "Remove privileged mode and add only the capability it needs.", serious=True),
-    Check("no-docker-socket", "No Docker socket", _socket_held,
-          "Anything holding the Docker socket can start a container as root with any mount, even when the socket is mounted read-only.",
-          "Put a socket proxy that allows only the calls it needs between it and the socket.", serious=True),
-    Check("own-process-namespace", "Does not share the host's process list", _on(lambda runtime: runtime.get("pid_mode") != "host"),
-          "Sharing the host's process namespace lets it see and signal every process on the machine.",
-          "Remove the host PID mode.", serious=True),
-    Check("confined", "Confined by seccomp and AppArmor", _on(_confined),
-          "An unconfined container can make any system call the kernel offers.",
-          "Remove the unconfined security option.", serious=True),
-    Check("no-system-path-writable", "No system path writable", _system_path_kept,
-          "A writable mount of a system path is a way to change the machine from inside the container.",
-          "Mount it read-only, or mount only the one file it needs.", serious=True),
-    Check("no-powerful-capability", "No extra kernel capabilities", _on(_no_powerful_capability),
-          "Some capabilities (SYS_ADMIN, NET_ADMIN, SYS_PTRACE and the like) give it nearly everything root on the machine has.",
-          "Drop the capability, or narrow it to the one operation it needs.", serious=True),
-    Check("not-root", "Runs as a user other than root", _on(lambda runtime: str(runtime.get("user", "")) not in ROOT_USERS),
-          "A process running as root inside a container becomes root on the machine if it escapes.",
-          "Set a non-root user in the compose file, or use an image that runs as one."),
-    Check("no-new-privileges", "Cannot gain privileges", _on(lambda runtime: any(
-              option.startswith("no-new-privileges") and not option.endswith("false")
-              for option in runtime.get("security_opt") or ())),
-          "Without it, a setuid program inside the container can gain more privileges.",
-          "Add no-new-privileges:true to its security options."),
-    Check("no-devices", "No host devices", _on(lambda runtime: not runtime.get("devices")),
-          "A passed-through device is direct access to that hardware.",
-          "Remove the device unless the service cannot work without it."),
-    Check("own-network", "Not on the host network", _on(lambda runtime: runtime.get("network_mode") != "host"),
-          "On the host network, every port it opens is the machine's, on every interface.",
-          "Give it a bridge network and publish only the ports it serves."),
-    Check("ports-bound", "Ports bound to an address", _on(_bound_to_an_address),
-          "A port published on every interface is reachable from every network the machine is on.",
-          "Publish it on the address it is meant to be reached at, 127.0.0.1 behind a proxy."),
-    Check("memory-limited", "Memory limited", _on(lambda runtime: bool(runtime.get("memory_limit"))),
-          "Without a limit, one runaway container can take the machine's memory from every other.",
-          "Set a memory limit in the compose file."),
-    Check("health-checked", "Has a health check", _health_checked,
-          "Without a check, HQ can only see that it is running, and cannot tell whether an upgrade worked.",
-          "Add a health check to the compose file, or serve it under a name HQ checks."),
+    Check(
+        "not-privileged",
+        "Not privileged",
+        _on(lambda runtime: not runtime.get("privileged")),
+        "A privileged container is root on its machine: every device and every kernel capability.",
+        "Remove privileged mode and add only the capability it needs.",
+        serious=True,
+    ),
+    Check(
+        "no-docker-socket",
+        "No Docker socket",
+        _socket_held,
+        "Anything holding the Docker socket can start a container as root with any mount, even when the socket is mounted read-only.",
+        "Put a socket proxy that allows only the calls it needs between it and the socket.",
+        serious=True,
+    ),
+    Check(
+        "own-process-namespace",
+        "Does not share the host's process list",
+        _on(lambda runtime: runtime.get("pid_mode") != "host"),
+        "Sharing the host's process namespace lets it see and signal every process on the machine.",
+        "Remove the host PID mode.",
+        serious=True,
+    ),
+    Check(
+        "confined",
+        "Confined by seccomp and AppArmor",
+        _on(_confined),
+        "An unconfined container can make any system call the kernel offers.",
+        "Remove the unconfined security option.",
+        serious=True,
+    ),
+    Check(
+        "no-system-path-writable",
+        "No system path writable",
+        _system_path_kept,
+        "A writable mount of a system path is a way to change the machine from inside the container.",
+        "Mount it read-only, or mount only the one file it needs.",
+        serious=True,
+    ),
+    Check(
+        "no-powerful-capability",
+        "No extra kernel capabilities",
+        _on(_no_powerful_capability),
+        "Some capabilities (SYS_ADMIN, NET_ADMIN, SYS_PTRACE and the like) give it nearly everything root on the machine has.",
+        "Drop the capability, or narrow it to the one operation it needs.",
+        serious=True,
+    ),
+    Check(
+        "not-root",
+        "Runs as a user other than root",
+        _on(lambda runtime: str(runtime.get("user", "")) not in ROOT_USERS),
+        "A process running as root inside a container becomes root on the machine if it escapes.",
+        "Set a non-root user in the compose file, or use an image that runs as one.",
+    ),
+    Check(
+        "no-new-privileges",
+        "Cannot gain privileges",
+        _on(
+            lambda runtime: any(
+                option.startswith("no-new-privileges") and not option.endswith("false")
+                for option in runtime.get("security_opt") or ()
+            )
+        ),
+        "Without it, a setuid program inside the container can gain more privileges.",
+        "Add no-new-privileges:true to its security options.",
+    ),
+    Check(
+        "no-devices",
+        "No host devices",
+        _on(lambda runtime: not runtime.get("devices")),
+        "A passed-through device is direct access to that hardware.",
+        "Remove the device unless the service cannot work without it.",
+    ),
+    Check(
+        "own-network",
+        "Not on the host network",
+        _on(lambda runtime: runtime.get("network_mode") != "host"),
+        "On the host network, every port it opens is the machine's, on every interface.",
+        "Give it a bridge network and publish only the ports it serves.",
+    ),
+    Check(
+        "ports-bound",
+        "Ports bound to an address",
+        _on(_bound_to_an_address),
+        "A port published on every interface is reachable from every network the machine is on.",
+        "Publish it on the address it is meant to be reached at, 127.0.0.1 behind a proxy.",
+    ),
+    Check(
+        "memory-limited",
+        "Memory limited",
+        _on(lambda runtime: bool(runtime.get("memory_limit"))),
+        "Without a limit, one runaway container can take the machine's memory from every other.",
+        "Set a memory limit in the compose file.",
+    ),
+    Check(
+        "health-checked",
+        "Has a health check",
+        _health_checked,
+        "Without a check, HQ can only see that it is running, and cannot tell whether an upgrade worked.",
+        "Add a health check to the compose file, or serve it under a name HQ checks.",
+    ),
 )
 
 

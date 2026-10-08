@@ -1,7 +1,5 @@
 """Static conformance checks for plugin source trees."""
 
-from __future__ import annotations
-
 import argparse
 import ast
 from pathlib import Path
@@ -60,9 +58,7 @@ def _host_packages() -> frozenset[str]:
     return frozenset(
         entry.name
         for entry in entries
-        if entry.is_dir()
-        and (entry / "__init__.py").exists()
-        and entry.name != _SUPPORTED_FACADE
+        if entry.is_dir() and (entry / "__init__.py").exists() and entry.name != _SUPPORTED_FACADE
     )
 
 
@@ -108,9 +104,7 @@ def unsupported_hq_imports(source_root: str | Path) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Reject plugin imports outside HQ's supported hq_sdk facade."
-    )
+    parser = argparse.ArgumentParser(description="Reject plugin imports outside HQ's supported hq_sdk facade.")
     parser.add_argument("source_root", type=Path)
     args = parser.parse_args()
     violations = unsupported_hq_imports(args.source_root)

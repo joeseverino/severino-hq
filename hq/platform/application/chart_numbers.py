@@ -1,7 +1,5 @@
 """How a chart rounds its axis and writes its numbers."""
 
-from __future__ import annotations
-
 import math
 
 from .money import MINUS

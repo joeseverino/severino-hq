@@ -7,8 +7,6 @@ internal IDs/slugs so a future MCP can reason about relationships.
 No secrets, no sensitive doc bodies, no receipt file contents: by design.
 """
 
-from __future__ import annotations
-
 import csv
 import json
 from collections.abc import Callable, Iterable
@@ -29,8 +27,8 @@ from hq.domains.projects.models import Project
 from hq.platform.application.money import money
 from hq.platform.application.ui import MISSING
 
-
 # ---------- CSV ----------------------------------------------------------------
+
 
 def _csv_response(headers: list[str], rows: Iterable[Iterable]) -> str:
     buf = StringIO()
@@ -58,10 +56,7 @@ Column = str | tuple[str, Callable[[Any], Any]]
 
 
 def _csv_of(records: Iterable[Any], columns: tuple[Column, ...]) -> str:
-    readers = [
-        (column, attrgetter(column)) if isinstance(column, str) else column
-        for column in columns
-    ]
+    readers = [(column, attrgetter(column)) if isinstance(column, str) else column for column in columns]
     return _csv_response(
         [header for header, _ in readers],
         ([read(record) for _, read in readers] for record in records),
@@ -80,32 +75,73 @@ def _slug_of(relation: str, field: str = "slug") -> tuple[str, Callable[[Any], A
 
 
 EXPENSE_COLUMNS: tuple[Column, ...] = (
-    "id", "date", "vendor", "item", "category",
-    "total_cost", "business_use_percentage", "estimated_deductible_amount",
-    "payment_method", "business_purpose",
-    _slug_of("related_project"), _slug_of("related_asset"), _slug_of("related_content"),
+    "id",
+    "date",
+    "vendor",
+    "item",
+    "category",
+    "total_cost",
+    "business_use_percentage",
+    "estimated_deductible_amount",
+    "payment_method",
+    "business_purpose",
+    _slug_of("related_project"),
+    _slug_of("related_asset"),
+    _slug_of("related_content"),
     _slug_of("related_documentation", "doc_id"),
     "notes",
 )
 ASSET_COLUMNS: tuple[Column, ...] = (
-    "id", "slug", "item_name", "vendor", "category",
-    "purchase_date", "total_cost",
-    "business_use_percentage", "estimated_deductible_amount",
-    "payment_method", "serial_number", "warranty_date", "status", "notes",
+    "id",
+    "slug",
+    "item_name",
+    "vendor",
+    "category",
+    "purchase_date",
+    "total_cost",
+    "business_use_percentage",
+    "estimated_deductible_amount",
+    "payment_method",
+    "serial_number",
+    "warranty_date",
+    "status",
+    "notes",
 )
 CONTENT_COLUMNS: tuple[Column, ...] = (
-    "id", "slug", "title", "content_type", "status", "topic", "tags",
-    "published_url", "published_at",
-    ("wordpress_post_id", lambda c: c.wordpress_post_id or ""), "wordpress_slug",
+    "id",
+    "slug",
+    "title",
+    "content_type",
+    "status",
+    "topic",
+    "tags",
+    "published_url",
+    "published_at",
+    ("wordpress_post_id", lambda c: c.wordpress_post_id or ""),
+    "wordpress_slug",
 )
 PROJECT_COLUMNS: tuple[Column, ...] = (
-    "id", "slug", "name", "category", "status",
-    "repository_url", "public_url", "technologies_used",
+    "id",
+    "slug",
+    "name",
+    "category",
+    "status",
+    "repository_url",
+    "public_url",
+    "technologies_used",
 )
 DOCUMENTATION_COLUMNS: tuple[Column, ...] = (
-    "doc_id", "title", "doc_type", "system_service", "environment",
-    "status", "sensitivity",
-    "obsidian_path", "github_path", "external_url", "last_reviewed",
+    "doc_id",
+    "title",
+    "doc_type",
+    "system_service",
+    "environment",
+    "status",
+    "sensitivity",
+    "obsidian_path",
+    "github_path",
+    "external_url",
+    "last_reviewed",
 )
 
 
@@ -114,7 +150,10 @@ def expenses_csv(year: int | None = None) -> str:
     if year:
         qs = qs.filter(date__year=year)
     qs = qs.order_by("date").select_related(
-        "related_project", "related_asset", "related_content", "related_documentation",
+        "related_project",
+        "related_asset",
+        "related_content",
+        "related_documentation",
     )
     return _csv_of(qs, EXPENSE_COLUMNS)
 
@@ -135,12 +174,11 @@ def projects_csv() -> str:
 
 
 def documentation_csv() -> str:
-    return _csv_of(
-        DocumentationRecord.objects.all().order_by("doc_id"), DOCUMENTATION_COLUMNS
-    )
+    return _csv_of(DocumentationRecord.objects.all().order_by("doc_id"), DOCUMENTATION_COLUMNS)
 
 
 # ---------- Year summary -------------------------------------------------------
+
 
 def _money(value) -> str:
     return f"{(value or Decimal('0.00')):.2f}"
@@ -160,7 +198,12 @@ def year_summary(year: int) -> dict:
 
     largest = list(
         expenses.order_by("-total_cost").values(
-            "id", "date", "vendor", "item", "category", "total_cost",
+            "id",
+            "date",
+            "vendor",
+            "item",
+            "category",
+            "total_cost",
         )[:10]
     )
 
@@ -214,9 +257,8 @@ def year_summary(year: int) -> dict:
             "related_projects": [related.slug for related in d.related_projects.all()],
             "related_assets": [related.slug for related in d.related_assets.all()],
         }
-        for d in DocumentationRecord.objects.all().prefetch_related(
-            "related_projects", "related_assets"
-        )
+        for d in DocumentationRecord.objects.all()
+        .prefetch_related("related_projects", "related_assets")
         .order_by("doc_id")
     ]
 
@@ -239,25 +281,14 @@ def year_summary(year: int) -> dict:
     return {
         "generated_at": timezone.now().isoformat(),
         "year": year,
-        "disclaimer": (
-            "Estimated deductible = cost × business-use %. Estimate, not tax "
-            "advice."
-        ),
+        "disclaimer": ("Estimated deductible = cost × business-use %. Estimate, not tax advice."),
         "totals": {
             "expenses_count": expenses.count(),
-            "expenses_total": _money(
-                expenses.aggregate(s=Sum("total_cost"))["s"]
-            ),
-            "expenses_deductible_total": _money(
-                expenses.aggregate(s=Sum("estimated_deductible_amount"))["s"]
-            ),
+            "expenses_total": _money(expenses.aggregate(s=Sum("total_cost"))["s"]),
+            "expenses_deductible_total": _money(expenses.aggregate(s=Sum("estimated_deductible_amount"))["s"]),
             "assets_count": assets.count(),
-            "assets_total": _money(
-                assets.aggregate(s=Sum("total_cost"))["s"]
-            ),
-            "assets_deductible_total": _money(
-                assets.aggregate(s=Sum("estimated_deductible_amount"))["s"]
-            ),
+            "assets_total": _money(assets.aggregate(s=Sum("total_cost"))["s"]),
+            "assets_deductible_total": _money(assets.aggregate(s=Sum("estimated_deductible_amount"))["s"]),
         },
         "expenses_by_category": [
             {
@@ -339,7 +370,9 @@ def _content_line(c) -> str:
 
 def _documentation_line(d) -> str:
     bits = [
-        f"`{d['type']}`", d["environment"], d["status"],
+        f"`{d['type']}`",
+        d["environment"],
+        d["status"],
         f"sensitivity={d['sensitivity']}",
     ]
     if d["obsidian_path"]:
@@ -382,19 +415,18 @@ def year_summary_markdown(year: int) -> str:
         f"> {data['disclaimer']}",
         "",
         *_totals_section(data["totals"]),
-        *_section("Expenses by category", data["expenses_by_category"],
-                  _category_line, no_expenses),
-        *_section("Largest expenses", data["largest_expenses"],
-                  _expense_line, no_expenses),
-        *_section("Projects", data["projects"], _project_line,
-                  "_No projects recorded._"),
-        *_section("Writeups and pages", data["content"], _content_line,
-                  "_No writeups or pages recorded._"),
-        *_section("Documentation index", data["documentation"], _documentation_line,
-                  "_No documentation records._",
-                  intro=("_Pointers only. Doc bodies stay in the vault._", "")),
-        *_section("Assets purchased this year", data["assets"], _asset_line,
-                  "_No assets purchased this year._"),
+        *_section("Expenses by category", data["expenses_by_category"], _category_line, no_expenses),
+        *_section("Largest expenses", data["largest_expenses"], _expense_line, no_expenses),
+        *_section("Projects", data["projects"], _project_line, "_No projects recorded._"),
+        *_section("Writeups and pages", data["content"], _content_line, "_No writeups or pages recorded._"),
+        *_section(
+            "Documentation index",
+            data["documentation"],
+            _documentation_line,
+            "_No documentation records._",
+            intro=("_Pointers only. Doc bodies stay in the vault._", ""),
+        ),
+        *_section("Assets purchased this year", data["assets"], _asset_line, "_No assets purchased this year._"),
         *RECORD_HOMES,
     ]
     return "\n".join(lines)

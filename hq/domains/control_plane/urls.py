@@ -1,6 +1,18 @@
 from django.urls import path
 
-from . import approval_views, connection_views, controller_views, finding_views, machine_views, resource_form_views, service_views, tool_views, topology_views, views, visit_views
+from . import (
+    approval_views,
+    connection_views,
+    controller_views,
+    finding_views,
+    machine_views,
+    resource_form_views,
+    service_views,
+    tool_views,
+    topology_views,
+    views,
+    visit_views,
+)
 from .container_views import ContainerListView
 from .models import OperationRequest
 

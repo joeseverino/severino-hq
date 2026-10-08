@@ -6,9 +6,8 @@ answer: what runs where, whether it is current and safe, how it is run, and
 what it would take to change it. Nothing here derives a fact.
 """
 
-from __future__ import annotations
-
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .projection import page_size, projection_scope
 
@@ -38,7 +37,12 @@ def _repository(repo: Any) -> dict[str, Any] | None:
         "undeployed": bool(head.get("sha") and deploy.get("sha") and head.get("sha") != deploy.get("sha")),
         "verified": repo.production_verified,
         "open_pull_requests": [
-            {"number": pull.get("number"), "title": pull.get("title", ""), "url": pull.get("url", ""), "draft": bool(pull.get("draft"))}
+            {
+                "number": pull.get("number"),
+                "title": pull.get("title", ""),
+                "url": pull.get("url", ""),
+                "draft": bool(pull.get("draft")),
+            }
             for pull in repo.pull_requests or ()
         ],
     }
@@ -48,15 +52,21 @@ def _posture(posture: Any) -> dict[str, Any]:
     return {
         "met": posture.met,
         "measured": posture.measured,
-        "checks": [{"id": result.check.id, "label": result.check.label, "state": result.state} for result in posture.results],
+        "checks": [
+            {"id": result.check.id, "label": result.check.label, "state": result.state} for result in posture.results
+        ],
         "unmet": [
-            {"id": result.check.id, "label": result.check.label, "serious": result.check.serious,
-             "why": result.check.why, "fix": result.check.fix}
+            {
+                "id": result.check.id,
+                "label": result.check.label,
+                "serious": result.check.serious,
+                "why": result.check.why,
+                "fix": result.check.fix,
+            }
             for result in posture.unmet
         ],
         "by_design": [
-            {"id": result.check.id, "label": result.check.label, "reason": result.reason}
-            for result in posture.intended
+            {"id": result.check.id, "label": result.check.label, "reason": result.reason} for result in posture.intended
         ],
     }
 
@@ -71,13 +81,19 @@ def _supply_chain(standing: Any) -> dict[str, Any]:
         "source_known_by": standing.source_from,
         "provenance": (
             {key: provenance.get(key, "") for key in ("format", "revision", "builder")}
-            | {"built_at": _moment(standing.built_at), "built_on": list(standing.built_on), "commit_url": standing.commit_url}
+            | {
+                "built_at": _moment(standing.built_at),
+                "built_on": list(standing.built_on),
+                "commit_url": standing.commit_url,
+            }
             if provenance
             else None
         ),
         "packages": standing.packages,
         "sbom": str((standing.attested or {}).get("sbom", "") or ""),
-        "attestations_unread": str((standing.attested or {}).get("unread", "") or "") if standing.attested else "not read yet",
+        "attestations_unread": str((standing.attested or {}).get("unread", "") or "")
+        if standing.attested
+        else "not read yet",
         "vulnerabilities_read_at": _moment(standing.checked_at),
         "vulnerabilities": [
             {key: finding.get(key, "") for key in ("id", "package", "installed", "severity", "summary", "url")}
@@ -116,7 +132,11 @@ def serialize_container(item: Any) -> dict[str, Any]:
             "newer": list(standing.newer),
             "latest": standing.latest,
             "release": (
-                {"tag": standing.release.get("tag", ""), "url": standing.release.get("url", ""), "published": _moment(standing.release.get("published"))}
+                {
+                    "tag": standing.release.get("tag", ""),
+                    "url": standing.release.get("url", ""),
+                    "published": _moment(standing.release.get("published")),
+                }
                 if standing.release
                 else None
             ),
@@ -187,7 +207,11 @@ def serialize_plan(plan: Any) -> dict[str, Any]:
         "from": {"tag": plan.container.standing.tag, "digest": plan.container.standing.digest},
         "to": {"tag": plan.target_tag, "digest": plan.target_digest},
         "release": (
-            {"tag": plan.release.get("tag", ""), "url": plan.release.get("url", ""), "published": _moment(plan.release.get("published"))}
+            {
+                "tag": plan.release.get("tag", ""),
+                "url": plan.release.get("url", ""),
+                "published": _moment(plan.release.get("published")),
+            }
             if plan.release
             else None
         ),

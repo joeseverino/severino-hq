@@ -1,6 +1,6 @@
 """Projects / labs."""
 
-from __future__ import annotations
+from typing import override
 
 from django.db import models
 from django.urls import reverse
@@ -8,7 +8,6 @@ from django.utils.text import slugify
 
 from hq.platform.application.references import Referable
 from hq.platform.core.models import TimestampedModel
-
 
 PROJECT_CATEGORY_CHOICES = [
     ("wordpress_security", "WordPress security"),
@@ -42,9 +41,7 @@ class Project(TimestampedModel):
         choices=PROJECT_CATEGORY_CHOICES,
         default="other",
     )
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.IDEA
-    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.IDEA)
     description = models.TextField(blank=True)
     technologies_used = models.CharField(
         max_length=300,
@@ -67,9 +64,11 @@ class Project(TimestampedModel):
             models.Index(fields=("category",)),
         ]
 
+    @override
     def __str__(self) -> str:
         return self.name
 
+    @override
     def save(self, *args, **kwargs):
         if not self.slug:
             base = slugify(self.name) or "project"

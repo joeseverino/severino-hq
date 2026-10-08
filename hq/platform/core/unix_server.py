@@ -12,8 +12,6 @@ not this account's socket, or a platform that cannot name a peer stops the
 listener; it never serves with less.
 """
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import logging
@@ -24,7 +22,8 @@ import struct
 import sys
 import threading
 from collections.abc import AsyncIterator
-from typing import Any
+from pathlib import Path
+from typing import Any, override
 
 import uvicorn
 from uvicorn.protocols.http.h11_impl import H11Protocol
@@ -63,7 +62,7 @@ def peer_uid(connection: Any) -> int | None:
         if sys.platform == "darwin":
             raw = connection.getsockopt(_DARWIN_SOL_LOCAL, _DARWIN_LOCAL_PEERCRED, _DARWIN_XUCRED.size)
             return int(_DARWIN_XUCRED.unpack(raw)[1])
-    except (OSError, struct.error):
+    except OSError, struct.error:
         return None
     return None
 
@@ -76,9 +75,9 @@ def private_listener(path: str, *, backlog: int = 64) -> socket.socket:
     socket, left by a previous run; it is replaced. Anything else is refused.
     """
 
-    if not os.path.isabs(path) or os.path.normpath(path) != path:
+    if not Path(path).is_absolute() or os.path.normpath(path) != path:
         raise SocketRefused("The socket path is not an absolute, normal path.")
-    directory = os.path.dirname(path)
+    directory = str(Path(path).parent)
     owner = os.geteuid()
     try:
         held = os.lstat(directory)
@@ -97,13 +96,13 @@ def private_listener(path: str, *, backlog: int = 64) -> socket.socket:
     if existing is not None:
         if not stat.S_ISSOCK(existing.st_mode) or existing.st_uid != owner:
             raise SocketRefused("The socket path holds something that is not this account's socket.")
-        os.unlink(path)
+        Path(path).unlink()
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         # bind refuses a path that exists, so nothing placed here in between is adopted.
         listener.bind(path)
         # Before listen: nothing can connect until the mode is the one served.
-        os.chmod(path, SOCKET_MODE)
+        Path(path).chmod(SOCKET_MODE)
         listener.listen(backlog)
     except OSError as exc:
         listener.close()
@@ -115,6 +114,7 @@ def private_listener(path: str, *, backlog: int = 64) -> socket.socket:
 class PeerCheckedProtocol(H11Protocol):
     """HTTP/1.1 for peers that are this account; anyone else is disconnected unheard."""
 
+    @override
     def connection_made(self, transport: asyncio.Transport) -> None:  # type: ignore[override]
         super().connection_made(transport)
         peer = peer_uid(transport.get_extra_info("socket"))
@@ -126,7 +126,7 @@ class PeerCheckedProtocol(H11Protocol):
 def _remove_socket(path: str) -> None:
     with contextlib.suppress(OSError):
         if stat.S_ISSOCK(os.lstat(path).st_mode):
-            os.unlink(path)
+            Path(path).unlink()
 
 
 @contextlib.asynccontextmanager
@@ -149,9 +149,7 @@ async def serving(application: Any, path: str) -> AsyncIterator[None]:
         limit_concurrency=CONCURRENT_CALLS,
     )
     server = uvicorn.Server(config)
-    thread = threading.Thread(
-        target=server.run, kwargs={"sockets": [listener]}, name="unix-server", daemon=True
-    )
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, name="unix-server", daemon=True)
     thread.start()
     try:
         waited = 0.0

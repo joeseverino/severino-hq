@@ -30,9 +30,7 @@ WIDE = 0.6
 
 
 def git(*args: str) -> list[str]:
-    out = subprocess.run(
-        ["git", *args], cwd=ROOT, check=True, capture_output=True, text=True
-    ).stdout
+    out = subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout
     return [line for line in out.splitlines() if line]
 
 
@@ -65,14 +63,13 @@ def module_name(path: Path) -> str:
 
 def python_files() -> list[Path]:
     found = set(git("ls-files", "--cached", "--others", "--exclude-standard", "*.py"))
-    return sorted(
-        Path(f) for f in found
-        if (ROOT / f).exists() and not SKIP_PARTS & set(Path(f).parts)
-    )
+    return sorted(Path(f) for f in found if (ROOT / f).exists() and not SKIP_PARTS & set(Path(f).parts))
 
 
 def is_test(path: Path) -> bool:
-    return path.suffix == ".py" and path.name != "__init__.py" and (path.name.startswith("test") or "fuzz" in path.parts)
+    return (
+        path.suffix == ".py" and path.name != "__init__.py" and (path.name.startswith("test") or "fuzz" in path.parts)
+    )
 
 
 def imports(path: Path, modules: set[str]) -> set[str]:
@@ -103,9 +100,15 @@ def imports(path: Path, modules: set[str]) -> set[str]:
                 head = node.module or ""
             names.add(head)
             names.update(f"{head}.{alias.name}" for alias in node.names)
-        elif test and isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if "." in node.value and " " not in node.value and len(node.value) < 200:
-                names.add(node.value)
+        elif (
+            test
+            and isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and "." in node.value
+            and " " not in node.value
+            and len(node.value) < 200
+        ):
+            names.add(node.value)
     reached: set[str] = set()
     for name in names:
         pieces = name.split(".")
@@ -146,10 +149,11 @@ def django_apps() -> dict[str, str]:
                 continue
             values = {
                 target.id: assignment.value.value
-                for assignment in node.body if isinstance(assignment, ast.Assign)
-                for target in assignment.targets if isinstance(target, ast.Name)
-                if isinstance(assignment.value, ast.Constant)
-                and isinstance(assignment.value.value, str)
+                for assignment in node.body
+                if isinstance(assignment, ast.Assign)
+                for target in assignment.targets
+                if isinstance(target, ast.Name)
+                if isinstance(assignment.value, ast.Constant) and isinstance(assignment.value.value, str)
             }
             name = values.get("name")
             if name:
@@ -229,9 +233,7 @@ def mypy_targets(changed: list[str]) -> list[str]:
     return [
         c
         for c in changed
-        if c.endswith(".py")
-        and not exclude.search(c)
-        and (c in listed or c.startswith(tuple(roots)))
+        if c.endswith(".py") and not exclude.search(c) and (c in listed or c.startswith(tuple(roots)))
     ]
 
 
@@ -254,10 +256,7 @@ def main(argv: list[str]) -> int:
     files = python_files()
     reached, touched = affected(changed, deleted, files)
     labels, total = test_labels(files, reached, touched)
-    print(
-        f"[fast] base {base[:9]}: {len(changed)} changed, {len(deleted)} deleted, "
-        f"{len(labels)}/{total} test modules"
-    )
+    print(f"[fast] base {base[:9]}: {len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules")
     if total and len(labels) / total > WIDE:
         print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
 
@@ -271,25 +270,25 @@ def main(argv: list[str]) -> int:
     if py:
         ok &= step("ruff (changed files)", [ruff, "check", *py])
     ok &= step("manage.py check", [python, "manage.py", "check"], env)
-    ok &= step(
-        "migration drift", [python, "manage.py", "makemigrations", "--check", "--dry-run"], env
-    )
+    ok &= step("migration drift", [python, "manage.py", "makemigrations", "--check", "--dry-run"], env)
     ok &= step(
         "OpenAPI drift",
         [python, "manage.py", "api_openapi", "--check"],
         {key: value for key, value in env.items() if key != "SEVERINO_HQ_PLUGINS"},
     )
-    ok &= step(
-        "controller contract drift", [python, "manage.py", "bridge_contract", "--check"], env
-    )
+    ok &= step("controller contract drift", [python, "manage.py", "bridge_contract", "--check"], env)
     typed = mypy_targets(changed)
     if typed:
         ok &= step("mypy (changed typed modules)", [python, "-m", "mypy", *typed], env)
     ok &= step(
-        "tests", [python, "manage.py", "test", "--noinput", "--parallel", os.environ.get("CHECK_PARALLEL", "auto"), *labels], env
+        "tests",
+        [python, "manage.py", "test", "--noinput", "--parallel", os.environ.get("CHECK_PARALLEL", "auto"), *labels],
+        env,
     )
     ok &= step("patch integrity", ["git", "diff", "--check", base])
-    print(f"[fast] {'passed' if ok else 'FAILED'} in {time.monotonic() - started:.1f}s (full gate before push: `mise run check`)")
+    print(
+        f"[fast] {'passed' if ok else 'FAILED'} in {time.monotonic() - started:.1f}s (full gate before push: `mise run check`)"
+    )
     return 0 if ok else 1
 
 

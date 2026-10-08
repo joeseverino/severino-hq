@@ -7,24 +7,32 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0011_audit_connection'),
+        ("core", "0011_audit_connection"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='LinkedAccount',
+            name="LinkedAccount",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('provider', models.CharField(max_length=40)),
-                ('login', models.CharField(max_length=100)),
-                ('updated_at', models.DateTimeField(default=django.utils.timezone.now)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='linked_accounts', to=settings.AUTH_USER_MODEL)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("provider", models.CharField(max_length=40)),
+                ("login", models.CharField(max_length=100)),
+                ("updated_at", models.DateTimeField(default=django.utils.timezone.now)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="linked_accounts",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'constraints': [models.UniqueConstraint(fields=('user', 'provider'), name='unique_linked_account_per_provider')],
+                "constraints": [
+                    models.UniqueConstraint(fields=("user", "provider"), name="unique_linked_account_per_provider")
+                ],
             },
         ),
     ]

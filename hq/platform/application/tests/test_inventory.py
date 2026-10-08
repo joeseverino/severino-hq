@@ -6,20 +6,17 @@ the first reconciliation is a no-op. Otherwise adopting a proxy host would
 reset it to HQ's defaults (HSTS off, for one).
 """
 
-from __future__ import annotations
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.core.models import AuditLog
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
+from hq.platform.core.models import AuditLog
 
-from unittest import mock
-
-from ..inventory import inventory_state, confirm_observed, record_inventory
 from ..adoption import (
     AdoptCommand,
     AdoptServiceCommand,
@@ -29,11 +26,12 @@ from ..adoption import (
     unmanaged,
     unmanaged_services,
 )
-from ..sweep import record_sweep
 from ..adoption_testing import managing_everything
-from ..report_testing import refused_part
 from ..infrastructure import NotFoundError
+from ..inventory import confirm_observed, inventory_state, record_inventory
+from ..report_testing import refused_part
 from ..security import cli_principal
+from ..sweep import record_sweep
 
 A_REWRITE = {"domain": "app.example.com", "answer": "10.0.0.10", "enabled": True}
 ANOTHER = {"domain": "tool.example.com", "answer": "10.0.0.11", "enabled": True}
@@ -71,13 +69,9 @@ class RecordingTests(TestCase):
             a_sweep(**{"adguard.rewrite": [A_REWRITE, ANOTHER]}),
             principal=cli_principal(),
         )
-        record_sweep(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
-        )
+        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
 
-        self.assertEqual(
-            len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1
-        )
+        self.assertEqual(len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1)
 
     def test_an_unreachable_provider_is_recorded_as_unreachable(self):
         record_sweep(
@@ -90,7 +84,7 @@ class RecordingTests(TestCase):
         self.assertEqual(snapshot.error, "timed out")
 
     def test_an_unreachable_provider_does_not_erase_what_it_last_held(self):
-        """"Could not ask" and "nothing there" are different facts.
+        """ "Could not ask" and "nothing there" are different facts.
 
         A controller run without one provider's credential reports it as
         unreachable and empty. Storing that as the truth deletes everything HQ
@@ -151,9 +145,7 @@ class ReadingStandingTests(TestCase):
     states, and freshness's once a readable one is out of date."""
 
     def row(self, kind, **fields):
-        ProviderInventory.objects.create(
-            kind=kind, records=[A_REWRITE], observed_at=timezone.now(), **fields
-        )
+        ProviderInventory.objects.create(kind=kind, records=[A_REWRITE], observed_at=timezone.now(), **fields)
 
     def states(self):
         return {item["kind"]: item["state_label"] for item in inventory_state()}
@@ -165,12 +157,9 @@ class ReadingStandingTests(TestCase):
 
         self.row("adguard.rewrite")
         self.row("npm.proxy_host", reachable=False, error="The address answered with a web page.")
-        self.row("cloudflare.access_app", reachable=False, refusal=CREDENTIAL_REFUSAL,
-                 error="Invalid API Token")
+        self.row("cloudflare.access_app", reachable=False, refusal=CREDENTIAL_REFUSAL, error="Invalid API Token")
         self.row("caddy.route")
-        ProviderInventory.objects.filter(kind="caddy.route").update(
-            observed_at=timezone.now() - timedelta(days=30)
-        )
+        ProviderInventory.objects.filter(kind="caddy.route").update(observed_at=timezone.now() - timedelta(days=30))
 
         self.assertEqual(
             self.states(),
@@ -233,9 +222,7 @@ class UnmanagedTests(TestCase):
             spec={"domain": "app.example.com", "answer": "10.0.0.10"},
         )
 
-        self.assertNotIn(
-            "app.example.com", [item.hostname for item in unmanaged()]
-        )
+        self.assertNotIn("app.example.com", [item.hostname for item in unmanaged()])
 
     def test_matching_is_by_hostname_not_by_the_declared_value(self):
         """The reconcilers find their record by hostname, so this must too.
@@ -250,9 +237,7 @@ class UnmanagedTests(TestCase):
             spec={"domain": "app.example.com", "answer": "10.9.9.9"},
         )
 
-        self.assertNotIn(
-            "app.example.com", [item.hostname for item in unmanaged()]
-        )
+        self.assertNotIn("app.example.com", [item.hostname for item in unmanaged()])
 
     def test_a_disabled_declaration_does_not_account_for_a_live_record(self):
         """HQ is not managing it, and the record is still out there serving."""
@@ -315,9 +300,7 @@ class AdoptionTests(TestCase):
             principal=cli_principal(),
         )
 
-        self.assertNotIn(
-            "app.example.com", [item.hostname for item in unmanaged()]
-        )
+        self.assertNotIn("app.example.com", [item.hostname for item in unmanaged()])
 
     def test_adopting_twice_is_refused_rather_than_duplicated(self):
         adopt(
@@ -358,36 +341,26 @@ class AdoptionTests(TestCase):
 
 class AdoptionWebTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="operator", password="test-only-password"
-        )
+        self.user = get_user_model().objects.create_user(username="operator", password="test-only-password")
         self.client.force_login(self.user)
         managing_everything()
         # Stored without adopting, because the tests below exercise the manual
         # button, which only has anything to do when nothing took the record
         # first. A real sweep adopts, and the test for that says so itself.
-        record_inventory(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
-        )
+        record_inventory(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
 
     def test_a_swept_record_is_managed_without_being_opted_in(self):
         """Through a connection that manages, a swept record needs no click."""
 
-        record_sweep(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
-        )
+        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
 
         response = self.client.get(reverse("control_plane:services"))
 
         self.assertContains(response, "app.example.com")
-        self.assertTrue(
-            ManagedResource.objects.filter(kind="adguard.rewrite").exists()
-        )
+        self.assertTrue(ManagedResource.objects.filter(kind="adguard.rewrite").exists())
 
     def test_adopting_from_the_page_creates_the_declaration(self):
-        response = self.client.post(
-            reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"})
-        )
+        response = self.client.post(reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"}))
 
         resource = ManagedResource.objects.get(kind="adguard.rewrite")
         self.assertRedirects(
@@ -399,9 +372,7 @@ class AdoptionWebTests(TestCase):
     def test_adopting_requires_a_signed_in_operator(self):
         self.client.logout()
 
-        response = self.client.post(
-            reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"})
-        )
+        response = self.client.post(reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"}))
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response["Location"])
@@ -447,9 +418,7 @@ class AdoptServiceTests(TestCase):
         record_inventory(
             a_sweep(
                 **{
-                    "adguard.rewrite": [
-                        {"domain": "shop.example.com", "answer": "10.0.0.20"}
-                    ],
+                    "adguard.rewrite": [{"domain": "shop.example.com", "answer": "10.0.0.20"}],
                     "npm.proxy_host": [A_PROXY],
                 }
             ),
@@ -474,12 +443,12 @@ class AdoptServiceTests(TestCase):
         )
         # A facet nothing supplies for *this* service renders empty rather than
         # being dropped, so the columns still line up.
-        empty = dict((facet_id, value) for facet_id, _, value in facets)
+        empty = {facet_id: value for facet_id, _, value in facets}
         self.assertEqual(empty["certificate"], "")
 
     def test_a_column_carries_the_value_and_not_its_label(self):
         """The heading already says DNS; "Answers with" in the cell is noise."""
-        facets = dict((facet_id, value) for facet_id, _, value in unmanaged_services()[0].facets)
+        facets = {facet_id: value for facet_id, _, value in unmanaged_services()[0].facets}
 
         self.assertEqual(facets["dns"], "10.0.0.20")
         self.assertEqual(facets["proxy"], "http://10.0.0.20:3000")
@@ -503,19 +472,19 @@ class AdoptServiceTests(TestCase):
     def test_a_failure_partway_adopts_nothing(self):
         """Half a service is worse than none: HQ would own the ingress and not
         the name, and the service page would show a gap that is not real."""
-        ManagedResource.objects.create(
-            key="shop-example-com-proxy", kind="adguard.rewrite", spec=A_REWRITE
-        )
+        ManagedResource.objects.create(key="shop-example-com-proxy", kind="adguard.rewrite", spec=A_REWRITE)
 
-        with mock.patch(
-            "hq.platform.application.adoption.adopt",
-            side_effect=[{"resource": {"key": "one"}}, RuntimeError("boom")],
+        with (
+            mock.patch(
+                "hq.platform.application.adoption.adopt",
+                side_effect=[{"resource": {"key": "one"}}, RuntimeError("boom")],
+            ),
+            self.assertRaises(RuntimeError),
         ):
-            with self.assertRaises(RuntimeError):
-                adopt_service(
-                    AdoptServiceCommand(hostname="shop.example.com"),
-                    principal=cli_principal(),
-                )
+            adopt_service(
+                AdoptServiceCommand(hostname="shop.example.com"),
+                principal=cli_principal(),
+            )
 
         self.assertEqual(ManagedResource.objects.count(), 1)
 
@@ -533,24 +502,18 @@ class AdoptedIsObservedTests(TestCase):
 
     def setUp(self):
         managing_everything()
-        record_sweep(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
-        )
+        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
         adopt_discovered("adguard.rewrite", principal=cli_principal())
         self.resource = ManagedResource.objects.get(kind="adguard.rewrite")
 
     def test_it_is_not_waiting_to_be_looked_at(self):
-        self.assertEqual(
-            self.resource.observed_generation, self.resource.generation
-        )
+        self.assertEqual(self.resource.observed_generation, self.resource.generation)
 
     def test_it_carries_when_it_was_seen(self):
         self.assertIsNotNone(self.resource.last_observed_at)
 
     def test_its_status_is_what_the_provider_was_holding(self):
-        self.assertEqual(
-            self.resource.status.get("domain"), A_REWRITE["domain"]
-        )
+        self.assertEqual(self.resource.status.get("domain"), A_REWRITE["domain"])
 
     def test_it_reads_as_healthy_rather_than_merely_recorded(self):
         from hq.platform.application.infrastructure import resource_health
@@ -570,9 +533,7 @@ class NothingWaitsToBeOptedInTests(TestCase):
 
     def swept(self, **kinds):
         record_sweep(a_sweep(**kinds), principal=cli_principal())
-        return set(
-            ManagedResource.objects.values_list("kind", flat=True)
-        )
+        return set(ManagedResource.objects.values_list("kind", flat=True))
 
     def test_a_rewrite_a_credential_reached_needs_no_click(self):
         self.assertIn("adguard.rewrite", self.swept(**{"adguard.rewrite": [A_REWRITE]}))
@@ -607,9 +568,7 @@ class NothingWaitsToBeOptedInTests(TestCase):
 
     def test_a_domain_the_credential_reaches_is_taken_on(self):
 
-        kinds = self.swept(
-            **{"cloudflare.zone": [{"zone": "example.com", "connection_ref": "a-token"}]}
-        )
+        kinds = self.swept(**{"cloudflare.zone": [{"zone": "example.com", "connection_ref": "a-token"}]})
 
         self.assertIn("cloudflare.zone", kinds)
 
@@ -624,15 +583,11 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
 
     def setUp(self):
         managing_everything()
-        record_sweep(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
-        )
+        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
         self.resource = ManagedResource.objects.get(kind="adguard.rewrite")
 
     def test_a_declaration_the_sweep_found_unchanged_is_observed(self):
-        self.assertEqual(
-            self.resource.observed_generation, self.resource.generation
-        )
+        self.assertEqual(self.resource.observed_generation, self.resource.generation)
 
     def test_it_reads_as_healthy_rather_than_awaiting_a_first_check(self):
         from hq.platform.application.infrastructure import resource_health
@@ -646,14 +601,10 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
         self.resource.generation += 1
         self.resource.save(update_fields=["spec", "generation"])
 
-        record_sweep(
-            a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal()
-        )
+        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
 
         self.resource.refresh_from_db()
-        self.assertNotEqual(
-            self.resource.observed_generation, self.resource.generation
-        )
+        self.assertNotEqual(self.resource.observed_generation, self.resource.generation)
 
     def test_a_provider_that_could_not_be_reached_confirms_nothing(self):
         before = ManagedResource.objects.get(kind="adguard.rewrite").last_observed_at
@@ -663,9 +614,7 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
             principal=cli_principal(),
         )
 
-        self.assertEqual(
-            ManagedResource.objects.get(kind="adguard.rewrite").last_observed_at, before
-        )
+        self.assertEqual(ManagedResource.objects.get(kind="adguard.rewrite").last_observed_at, before)
 
 
 A_COMPOSED_CONTAINER = {
@@ -699,10 +648,7 @@ class ASweepAdoptsOnlyWhatAComposeProjectDeclaresTests(TestCase):
         )
 
     def names(self):
-        return {
-            resource.spec.get("name")
-            for resource in ManagedResource.objects.filter(kind="portainer.container")
-        }
+        return {resource.spec.get("name") for resource in ManagedResource.objects.filter(kind="portainer.container")}
 
     def test_a_container_its_compose_project_declares_is_adopted(self):
         self.assertIn("a-web", self.names())
@@ -764,10 +710,7 @@ class ADeletedContainerIsForgottenTests(TestCase):
         )
 
     def names(self):
-        return {
-            resource.spec.get("name")
-            for resource in ManagedResource.objects.filter(kind="portainer.container")
-        }
+        return {resource.spec.get("name") for resource in ManagedResource.objects.filter(kind="portainer.container")}
 
     def sweep(self, *records, **report):
         return record_sweep(
@@ -823,8 +766,7 @@ class ADeletedContainerIsForgottenTests(TestCase):
 def _adoptable():
     """Every provider a sweep can rebuild a spec for, with its sample record."""
 
-    return [(kind, p) for kind, p in sorted(PROVIDERS.items())
-            if p.from_record and p.sample_record]
+    return [(kind, p) for kind, p in sorted(PROVIDERS.items()) if p.from_record and p.sample_record]
 
 
 class DriftIsSaidOutLoudTests(TestCase):
@@ -861,9 +803,7 @@ class DriftIsSaidOutLoudTests(TestCase):
                     "records": [
                         {
                             "name": "a-box",
-                            "key_expires": (
-                                "" if key_expiry_disabled else "2027-01-01T00:00:00Z"
-                            ),
+                            "key_expires": ("" if key_expiry_disabled else "2027-01-01T00:00:00Z"),
                             "tags": [],
                         }
                     ],
@@ -915,13 +855,13 @@ class UnobservableFieldTests(TestCase):
     def setUp(self):
         self.principal = cli_principal()
         self.resource = ManagedResource.objects.create(
-            key="secured-proxy", kind="npm.proxy_host",
-            spec={**PROVIDERS["npm.proxy_host"].from_record(A_PROXY),
-                  "certificate_resource": "example-wildcard"})
+            key="secured-proxy",
+            kind="npm.proxy_host",
+            spec={**PROVIDERS["npm.proxy_host"].from_record(A_PROXY), "certificate_resource": "example-wildcard"},
+        )
 
     def sweep(self, record=None):
-        record_sweep(a_sweep(**{"npm.proxy_host": [record or A_PROXY]}),
-                     principal=self.principal)
+        record_sweep(a_sweep(**{"npm.proxy_host": [record or A_PROXY]}), principal=self.principal)
         self.resource.refresh_from_db()
 
     def test_a_host_naming_a_certificate_is_confirmed_by_a_sweep(self):
@@ -962,9 +902,12 @@ class UnobservableFieldTests(TestCase):
                 if provider.sample_record.get(field, "") == "":
                     continue  # the record itself was blank; nothing was invented
                 with self.subTest(kind=kind, field=field):
-                    self.assertIn(field, provider.unobservable_fields,
+                    self.assertIn(
+                        field,
+                        provider.unobservable_fields,
                         f"{kind}.{field} is blanked by from_record but not declared "
-                        "unobservable, so a declaration naming it is never confirmed")
+                        "unobservable, so a declaration naming it is never confirmed",
+                    )
 
     def test_a_field_the_reading_never_carries_is_declared_even_when_omitted(self):
         """The guard above skips fields its sample record omits, which is
@@ -1006,10 +949,12 @@ class UnobservableFieldTests(TestCase):
                     )
                     resource.refresh_from_db()
                     self.assertEqual(
-                        _unconfirmed(resource, provider), (),
+                        _unconfirmed(resource, provider),
+                        (),
                         f"{kind}.{field} is asserted by a declaration and never "
                         "read back, so it raises a finding no sweep or reconcile "
-                        "can clear. Declare it in unobservable_fields.")
+                        "can clear. Declare it in unobservable_fields.",
+                    )
 
     def test_an_unobservable_field_that_does_round_trip_is_a_false_exemption(self):
         """Exemptions accrete, and each one forgives drift forever."""
@@ -1031,14 +976,13 @@ class UnobservableFieldTests(TestCase):
         for kind, provider in _adoptable():
             with self.subTest(kind=kind):
                 spec = provider.from_record(provider.sample_record)
-                resource = ManagedResource.objects.create(
-                    key=f"sample-{kind.replace('.', '-')}", kind=kind, spec=spec)
-                record_sweep(a_sweep(**{kind: [provider.sample_record]}),
-                             principal=cli_principal())
+                resource = ManagedResource.objects.create(key=f"sample-{kind.replace('.', '-')}", kind=kind, spec=spec)
+                record_sweep(a_sweep(**{kind: [provider.sample_record]}), principal=cli_principal())
                 resource.refresh_from_db()
-                self.assertIsNotNone(resource.last_observed_at,
-                    f"a {kind} declaration was not confirmed by a sweep of the "
-                    "very record it was built from")
+                self.assertIsNotNone(
+                    resource.last_observed_at,
+                    f"a {kind} declaration was not confirmed by a sweep of the very record it was built from",
+                )
                 self.assertEqual(resource.conditions[0]["reason"], "Observed")
 
 
@@ -1053,18 +997,15 @@ class ObservationIsNotAnEventTests(TestCase):
 
     def setUp(self):
         self.principal = cli_principal()
-        self.resource = ManagedResource.objects.create(
-            key="watched", kind="adguard.rewrite", spec=dict(A_REWRITE))
+        self.resource = ManagedResource.objects.create(key="watched", kind="adguard.rewrite", spec=dict(A_REWRITE))
         AuditLog.objects.all().delete()
 
     def sweep(self, record=None):
-        record_sweep(a_sweep(**{"adguard.rewrite": [record or A_REWRITE]}),
-                     principal=self.principal)
+        record_sweep(a_sweep(**{"adguard.rewrite": [record or A_REWRITE]}), principal=self.principal)
         self.resource.refresh_from_db()
 
     def updates(self):
-        return AuditLog.objects.filter(object_type="Managed resource",
-                                       action=AuditLog.Action.UPDATED)
+        return AuditLog.objects.filter(object_type="Managed resource", action=AuditLog.Action.UPDATED)
 
     def test_confirming_an_unchanged_declaration_writes_no_audit_row(self):
         # The first sweep is a real event: status, conditions and the observed
@@ -1091,8 +1032,7 @@ class ObservationIsNotAnEventTests(TestCase):
         AuditLog.objects.all().delete()
         self.sweep()
         self.assertEqual(self.updates().count(), 0, "a quiet sweep is not an event")
-        ManagedResource.objects.filter(pk=self.resource.pk).update(
-            spec={**A_REWRITE, "answer": "10.0.0.99"})
+        ManagedResource.objects.filter(pk=self.resource.pk).update(spec={**A_REWRITE, "answer": "10.0.0.99"})
         self.sweep({**A_REWRITE, "answer": "10.0.0.99"})
         self.assertEqual(self.updates().count(), 1)
         changed = self.updates().first().metadata["changes"]
@@ -1204,7 +1144,7 @@ class NothingIsJudgedAgainstAReadingThatDoesNotExistTests(TestCase):
         from ..topology import _unconfirmed
 
         provider = PROVIDERS[kind]
-        spec = {field: "declared" for field in provider.spec_type.model_fields}
+        spec = dict.fromkeys(provider.spec_type.model_fields, "declared")
         return _unconfirmed(self._Resource(spec, status), provider)
 
     def test_a_provider_with_no_reading_reports_nothing_unconfirmed(self):
@@ -1213,7 +1153,8 @@ class NothingIsJudgedAgainstAReadingThatDoesNotExistTests(TestCase):
                 continue
             with self.subTest(kind=kind):
                 self.assertEqual(
-                    self._unconfirmed(kind, {"something": "else"}), (),
+                    self._unconfirmed(kind, {"something": "else"}),
+                    (),
                     f"{kind} has no from_record, so every declared field would "
                     "report unconfirmed forever with nothing able to clear it",
                 )
@@ -1224,8 +1165,7 @@ class NothingIsJudgedAgainstAReadingThatDoesNotExistTests(TestCase):
         unconfirmed = self._unconfirmed("tailscale.device", {"name": "declared"})
         self.assertTrue(
             unconfirmed,
-            "a provider that can be read back must still report what its "
-            "reading did not confirm",
+            "a provider that can be read back must still report what its reading did not confirm",
         )
         self.assertNotIn("name", unconfirmed)
 
@@ -1245,9 +1185,7 @@ class ADeclarationCanAlwaysBeGotRidOfTests(TestCase):
         for kind, provider in sorted(PROVIDERS.items()):
             if provider.declaration_only:
                 continue  # removal forgets the declaration; always available
-            allowed, explanation = controller_action_policy(
-                kind, OperationRequest.Action.DELETE
-            )
+            allowed, explanation = controller_action_policy(kind, OperationRequest.Action.DELETE)
             with self.subTest(kind=kind):
                 self.assertTrue(
                     allowed or provider.removal_gap,
@@ -1267,9 +1205,7 @@ class ADeclarationCanAlwaysBeGotRidOfTests(TestCase):
         for kind, provider in sorted(PROVIDERS.items()):
             if not provider.removal_gap:
                 continue
-            allowed, _ = controller_action_policy(
-                kind, OperationRequest.Action.DELETE
-            )
+            allowed, _ = controller_action_policy(kind, OperationRequest.Action.DELETE)
             with self.subTest(kind=kind):
                 self.assertFalse(
                     allowed or provider.declaration_only,
@@ -1320,9 +1256,7 @@ class ObservationKindTests(TestCase):
             principal=cli_principal(),
         )
 
-        self.assertFalse(
-            ProviderInventory.objects.filter(kind="host.something-newer").exists()
-        )
+        self.assertFalse(ProviderInventory.objects.filter(kind="host.something-newer").exists())
 
 
 class AcceptObservedTests(TestCase):

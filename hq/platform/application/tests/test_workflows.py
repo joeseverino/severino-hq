@@ -1,12 +1,11 @@
 """Resolution workflows derived from facts, never a second executor."""
 
-from django.test import SimpleTestCase
 from django.template.loader import render_to_string
+from django.test import SimpleTestCase
 
 from ..action_links import ActionLink
 from ..ui import Insight
 from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
-
 
 REMEDY = ActionLink(
     "remedy",

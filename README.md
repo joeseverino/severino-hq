@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
 &nbsp;![coverage](https://img.shields.io/badge/coverage-90%25%2B-brightgreen)
-&nbsp;![python](https://img.shields.io/badge/python-3.13%20%7C%203.14-blue)
+&nbsp;![python](https://img.shields.io/badge/python-3.14-blue)
 
 A self-hosted operations hub that derives its picture of your infrastructure
 from the credentials you give it. Connect a Cloudflare token and a Tailscale
@@ -266,7 +266,7 @@ workflow is started by an event. **CI**
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every pull
 request and push: Checks (lint, types, lockfiles, workflows, shell, a
 `check --deploy` posture gate, `pip-audit`, dependency review, the structural
-bar and Scorecard), Tests on Python 3.13/3.14, Browser, Controller (the Go
+bar and Scorecard), Tests on Python 3.14, Browser, Controller (the Go
 controller's own gate), and Image (a
 production image that must boot healthy and pass Trivy, then published and
 signed), and **Ready**, which writes HQ's review, the one required check. Each

@@ -1,35 +1,39 @@
 """Services: the catalogue, one service's page, publishing a new one, and the favourites order."""
 
-from __future__ import annotations
-
 from functools import cached_property
+from typing import override
 
 from django.contrib import messages
-
 from django.http import Http404
 from django.shortcuts import redirect, render
-from hq.platform.application.routes import reverse
 from django.views import View
 from django.views.generic import TemplateView
 
 from hq.platform.application.adoption import unmanaged_services
-from hq.platform.application.inventory import inventory_state
 from hq.platform.application.connections import machines_once
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.exposure import OPEN
 from hq.platform.application.exposure_fixes import gate_links
 from hq.platform.application.hq_self import LABEL as HQ_LABEL, hq_service
-from hq.platform.application.service_list import listed_service, listed_services
-from hq.platform.application.services import alias_target
-from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET
-from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.service_context import missing_facets, page_parts, sections_for, service_badges, service_summary
+from hq.platform.application.inventory import inventory_state
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
     VERB_LABELS,
     resource_capabilities,
 )
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.service_context import (
+    missing_facets,
+    page_parts,
+    sections_for,
+    service_badges,
+    service_summary,
+)
+from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET
+from hq.platform.application.service_list import listed_service, listed_services
+from hq.platform.application.services import alias_target
 from hq.platform.application.ui import PageNavigation, PageSection
 
 from .models import ManagedResource
@@ -44,6 +48,7 @@ class ServiceListView(PageMixin, TemplateView):
     template_name = "control_plane/service_list.html"
     page_title = "Services"
 
+    @override
     def get_page_actions(self):
         # "Add" on the services board starts a service, not the resource picker.
         return (
@@ -54,6 +59,7 @@ class ServiceListView(PageMixin, TemplateView):
             ),
         )
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.pins import SERVICE, ordered
         from hq.platform.application.service_facets import RUNTIME_FACET
@@ -69,9 +75,7 @@ class ServiceListView(PageMixin, TemplateView):
         pinned = [item for item in found if item.pinned]
         rest = [item for item in found if not item.pinned]
         context["service_groups"] = tuple(
-            group
-            for group in (("Favorites", pinned, True), ("Other services", rest, False))
-            if group[1]
+            group for group in (("Favorites", pinned, True), ("Other services", rest, False)) if group[1]
         )
         # One answer for both groups, which share the table's columns.
         context["service_projects"] = any(item.project for item in found)
@@ -82,9 +86,7 @@ class ServiceListView(PageMixin, TemplateView):
         # The column headers come from the providers, so a provider that
         # declares a new facet gets a column without this template being
         # touched, and a facet no provider supplies yet gets none.
-        context["facets"] = [
-            facet for facet in service_facets() if facet[0] != RUNTIME_FACET
-        ]
+        context["facets"] = [facet for facet in service_facets() if facet[0] != RUNTIME_FACET]
         # Everything the providers hold that no declaration accounts for. Shown
         # beside the managed services rather than on a page of its own: a
         # hostname HQ does not manage is still a hostname that is serving, and
@@ -106,6 +108,7 @@ class ServiceDetailView(PageMixin, TemplateView):
 
     template_name = "control_plane/service_detail.html"
 
+    @override
     def get(self, request, *args, **kwargs):
         """An alias goes to the service it is an alias of.
 
@@ -150,12 +153,15 @@ class ServiceDetailView(PageMixin, TemplateView):
         # here: the board builds every service and needs none of it.
         return sections_for(self.service)
 
+    @override
     def get_page_title(self):
         return self.service.hostname
 
+    @override
     def get_page_trail(self):
         return (("Services", reverse("control_plane:services")),)
 
+    @override
     def get_page_navigation(self):
         return PageNavigation(
             (
@@ -163,19 +169,12 @@ class ServiceDetailView(PageMixin, TemplateView):
                 PageSection("path", "Path"),
                 *((PageSection("parts", "Not set up"),) if self.missing_facets else ()),
                 *(PageSection(section.id, section.label) for section in self.sections),
-                *(
-                    (PageSection("relationships", "Relationships"),)
-                    if self.relationships.groups
-                    else ()
-                ),
-                *(
-                    (PageSection("resources", "Other names"),)
-                    if self.service.alias_claims
-                    else ()
-                ),
+                *((PageSection("relationships", "Relationships"),) if self.relationships.groups else ()),
+                *((PageSection("resources", "Other names"),) if self.service.alias_claims else ()),
             )
         )
 
+    @override
     def get_page_actions(self):
         """The container's verbs, then the way to the domain.
 
@@ -190,9 +189,7 @@ class ServiceDetailView(PageMixin, TemplateView):
         container = self.service.container
         actions = []
         watcher = (
-            ManagedResource.objects.filter(key=container.watcher).first()
-            if container and container.watcher
-            else None
+            ManagedResource.objects.filter(key=container.watcher).first() if container and container.watcher else None
         )
         if watcher is not None:
             capabilities = resource_capabilities(watcher, running=container.verbs)
@@ -220,11 +217,10 @@ class ServiceDetailView(PageMixin, TemplateView):
                 )
             )
         if self.service.zone_key:
-            actions.append(
-                PageAction("Domain", reverse("zones:detail", args=[self.service.zone_key]))
-            )
+            actions.append(PageAction("Domain", reverse("zones:detail", args=[self.service.zone_key])))
         return tuple(actions)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["service"] = self.service
@@ -245,9 +241,7 @@ class ServiceDetailView(PageMixin, TemplateView):
         context["gate_fixes"] = gate_links(self.service) if exposure.level == OPEN else ()
         context["hq_label"] = HQ_LABEL
         context["runtime_facet"] = RUNTIME_FACET
-        context["hq_machine"] = (
-            entity_link("machine", self.own.machine) if self.own and self.own.machine else None
-        )
+        context["hq_machine"] = entity_link("machine", self.own.machine) if self.own and self.own.machine else None
         return context
 
 

@@ -1,17 +1,16 @@
 """The connections page and asking the controller to read now."""
 
-from __future__ import annotations
+from typing import ClassVar, override
 
-
-from hq.platform.application.routes import reverse
 from django.views import View
 from django.views.generic import TemplateView
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, read_now_payload
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.connection_context import connections_context
-from hq.platform.application.security import web_principal
 from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.routes import reverse
+from hq.platform.application.security import web_principal
 
 
 class ConnectionListView(PageMixin, TemplateView):
@@ -27,11 +26,10 @@ class ConnectionListView(PageMixin, TemplateView):
 
     def _connections(self):
         if not hasattr(self, "_context"):
-            self._context = connections_context(
-                principal=web_principal(self.request.user), request=self.request
-            )
+            self._context = connections_context(principal=web_principal(self.request.user), request=self.request)
         return self._context
 
+    @override
     def get_page_actions(self):
         # Beside the title with every other page's controls, not on a line of
         # their own halfway down the summary.
@@ -44,6 +42,7 @@ class ConnectionListView(PageMixin, TemplateView):
             actions.append(Ask(read_all.label, read_all.url, title=read_all.reason))
         return tuple(actions)
 
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["connections"] = self._connections()
@@ -58,7 +57,7 @@ class ReadNowView(View):
     pull, and ``ReadStatusView`` says how that stands.
     """
 
-    http_method_names = ["post"]
+    http_method_names: ClassVar[list[str]] = ["post"]
 
     def post(self, request):
         from django.utils import timezone
@@ -93,7 +92,7 @@ class ReadStatusView(View):
     of anyone: it reads when each kind was last stored.
     """
 
-    http_method_names = ["get"]
+    http_method_names: ClassVar[list[str]] = ["get"]
 
     def get(self, request):
         from django.http import Http404, JsonResponse

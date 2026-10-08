@@ -1,7 +1,5 @@
 """The machine page with a realistic tailnet: reached-through, the facts panel, relations."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase

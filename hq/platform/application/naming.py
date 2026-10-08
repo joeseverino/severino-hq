@@ -11,11 +11,9 @@ declares. Providers say what they would do with each fact; this is the half that
 goes and gets them.
 """
 
-from __future__ import annotations
-
-from hq.domains.control_plane.names import normalized_hostname, certificate_covers
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.names import certificate_covers, normalized_hostname
 from hq.domains.control_plane.provider_spec import NameContext
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .infrastructure import (
     declared_machines,
@@ -113,12 +111,7 @@ def _load_reported_zones() -> tuple[tuple[str, ...], bool]:
 
     # Which connections hold public zones is derived from the providers that
     # say their effect is public, so this file names no provider.
-    public = {
-        provider
-        for spec in PROVIDERS.values()
-        if spec.public_effect
-        for provider in spec.connection_providers
-    }
+    public = {provider for spec in PROVIDERS.values() if spec.public_effect for provider in spec.connection_providers}
     # Only a connection that answered. One that exists and failed its probe
     # reports no zones, and counted as having reported it would turn an expired
     # token into "no connected account holds a zone for example.com", and HQ
@@ -128,12 +121,7 @@ def _load_reported_zones() -> tuple[tuple[str, ...], bool]:
         for connection in _connection_rows()
         if connection.provider in public and connection.reachable and connection.probed
     ]
-    zones = {
-        normalized_hostname(zone)
-        for connection in reported
-        for zone in connection.reaches
-        if zone
-    }
+    zones = {normalized_hostname(zone) for connection in reported for zone in connection.reaches if zone}
     return tuple(sorted(zones)), bool(reported)
 
 
@@ -151,14 +139,11 @@ def _origin_for(hostname: str) -> str:
         if isinstance(spec, Exception):
             raise spec
         try:
-            names = {
-                normalized_hostname(name)
-                for name in provider.hostnames(spec)
-            }
+            names = {normalized_hostname(name) for name in provider.hostnames(spec)}
             if hostname not in names:
                 continue
             origin = provider.origin(spec)
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
         if origin:
             return origin
@@ -212,7 +197,7 @@ def _covering(hostname: str) -> tuple[str, ...]:
         # does: one rule for what a certificate covers, not two.
         try:
             names = frozenset(provider.hostnames(spec))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
         if certificate_covers(hostname, names):
             found.append(resource.key)

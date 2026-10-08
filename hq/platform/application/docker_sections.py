@@ -5,10 +5,8 @@ record reaches the page by the same keys it reaches the relation graph.
 A record that only says why a part was unreadable is left to the facts.
 """
 
-from __future__ import annotations
-
-from collections.abc import Iterable, Mapping
-from typing import Any, Callable
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any
 
 from hq.domains.control_plane.observations.portainer import (
     ENVIRONMENT_KIND,
@@ -20,9 +18,9 @@ from hq.domains.control_plane.observations.portainer import (
 )
 
 from .docker_estate import IMAGE_BEHIND, image_verdicts
-from .labels import human_bytes
 from .entity_links import entity_link
 from .facts import Subject, readings
+from .labels import human_bytes
 from .service_context import Cell, ServiceSection
 from .timestamps import moment
 from .ui import MISSING, counted
@@ -66,8 +64,7 @@ def _environments(machine) -> ServiceSection | None:
                 _text(record.get("docker_version")),
                 _text(
                     f"{record['containers_running']} of {record['containers_total']} running"
-                    if record.get("containers_total") is not None
-                    and record.get("containers_running") is not None
+                    if record.get("containers_total") is not None and record.get("containers_running") is not None
                     else ""
                 ),
                 Cell.of(entity_link("connection", str(record.get("connection_ref", ""))))

@@ -1,7 +1,5 @@
 """An empty list says why it is empty."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -10,9 +8,7 @@ from django.urls import reverse
 class EmptyListTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.user = get_user_model().objects.create_superuser(
-            "operator", "operator@example.com", "unused-password"
-        )
+        cls.user = get_user_model().objects.create_superuser("operator", "operator@example.com", "unused-password")
 
     def setUp(self):
         self.client.force_login(self.user)

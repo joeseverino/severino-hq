@@ -12,8 +12,6 @@ HQ starts the same work itself when it learns something is due sooner than the
 timer would find it (``start``).
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -23,7 +21,7 @@ from django.conf import settings
 from .ui import counted
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ScheduledWork:
     """``name`` is the job's kind and what a timer asks for; ``run`` is called
     with the job's ``Progress`` and returns what the job stores."""
@@ -45,8 +43,7 @@ def prune_audit(progress: Any = None) -> dict[str, Any]:
     if deleted:
         record_operation(
             "audit.prune",
-            f"Deleted {counted(deleted, 'routine event', 'routine events')} older than "
-            f"{counted(days, 'day')}.",
+            f"Deleted {counted(deleted, 'routine event', 'routine events')} older than {counted(days, 'day')}.",
             action=AuditLog.Action.DELETED,
             metadata={"deleted": deleted, "days": days},
         )

@@ -1,7 +1,5 @@
 """Readings from the tailnet credential."""
 
-from __future__ import annotations
-
 from .contract import ObservationRecord, ObservationSpec, ReadingPart
 
 # The routes that make a device an exit node: everything, in both families.
@@ -47,9 +45,7 @@ class TailnetSettingsRecord(ObservationRecord):
 # key, each a part: Tailscale nulls one the credential may not see.
 SETTING_PARTS = {
     "httpsEnabled": ReadingPart("https", "HTTPS certificates setting", ("networking_settings:read",)),
-    "aclsExternallyManagedOn": ReadingPart(
-        "acl_management", "Policy file management setting", ("policy_file:read",)
-    ),
+    "aclsExternallyManagedOn": ReadingPart("acl_management", "Policy file management setting", ("policy_file:read",)),
 }
 
 
@@ -102,9 +98,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Tailnet user",
         TailnetUserRecord,
         requires=("users:read",),
-        title=lambda record: str(
-            record.get("display_name") or record.get("login_name") or ""
-        ),
+        title=lambda record: str(record.get("display_name") or record.get("login_name") or ""),
         relation="Owner",
     ),
 )

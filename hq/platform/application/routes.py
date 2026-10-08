@@ -15,23 +15,18 @@ Those two are fixed for one request, and asking Django for them costs more than
 the remembered lookup they key, so a projection asks once.
 """
 
-from __future__ import annotations
-
 from functools import lru_cache
 from typing import Any
 
 from django.core.signals import setting_changed
-from django.urls import get_script_prefix, get_urlconf
-from django.urls import reverse as _reverse
+from django.urls import get_script_prefix, get_urlconf, reverse as _reverse
 
 from .projection import read_once
 
 
 @lru_cache(maxsize=4096)
 def _resolved(urlconf: Any, prefix: str, current_app: Any, viewname: Any, args: tuple, kwargs: tuple) -> str:
-    return _reverse(
-        viewname, urlconf=urlconf, args=args or None, kwargs=dict(kwargs) or None, current_app=current_app
-    )
+    return _reverse(viewname, urlconf=urlconf, args=args or None, kwargs=dict(kwargs) or None, current_app=current_app)
 
 
 def _in_force() -> tuple[Any, str]:

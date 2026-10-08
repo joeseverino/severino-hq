@@ -15,14 +15,13 @@ may keep the internal vocabulary. Like ``interface_text``, a gate reads this
 and a running HQ never does.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import override
 
 from .interface_text import TEMPLATE_COMMENT, docstrings
 
@@ -58,15 +57,23 @@ RETIRED_NAMES: tuple[tuple[str, str], ...] = (
 # "Findings" is the name of a page, and stays one.
 _PAGE_NAMES = re.compile(r"\bFindings\b")
 _NEVER = tuple(
-    (re.compile(rf"(?<![\w-])(?:{forms})(?![\w-])", re.IGNORECASE), instead)
-    for forms, instead in NEVER_SHOWN
+    (re.compile(rf"(?<![\w-])(?:{forms})(?![\w-])", re.IGNORECASE), instead) for forms, instead in NEVER_SHOWN
 )
 _TEMPLATE_TAG = re.compile(r"\{%.*?%\}|\{\{.*?\}\}", re.DOTALL)
 _TAG_LITERAL = re.compile(r"""(["'])((?:(?!\1).)*)\1""", re.DOTALL)
 # What a browser shows or reads out from an element, besides its text.
 _SHOWN_ATTRIBUTES = frozenset(
-    {"title", "aria-label", "placeholder", "alt", "data-fragment-failure",
-     "data-fragment-busy", "data-submit-label", "data-empty", "data-tip"}
+    {
+        "title",
+        "aria-label",
+        "placeholder",
+        "alt",
+        "data-fragment-failure",
+        "data-fragment-busy",
+        "data-submit-label",
+        "data-empty",
+        "data-tip",
+    }
 )
 # An identifier, a route, a path or a class list: lower case, no sentence in it.
 _IDENTIFIER = re.compile(r"[a-z0-9_.:/#?&=%\- ]*\Z")
@@ -75,7 +82,7 @@ _ANNOTATION = re.compile(r"[A-Z]\w*(?: \| [A-Za-z]\w*)+")
 _UNSEEN_ELEMENTS = frozenset({"script", "style", "code", "pre", "kbd"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Found:
     path: Path
     line: int
@@ -119,6 +126,7 @@ class _Shown(HTMLParser):
         self.found: list[tuple[int, str]] = []
         self._unseen = 0
 
+    @override
     def handle_starttag(self, tag, attrs):
         if tag in _UNSEEN_ELEMENTS:
             self._unseen += 1
@@ -126,10 +134,12 @@ class _Shown(HTMLParser):
             if name in _SHOWN_ATTRIBUTES and value:
                 self.found.append((self.getpos()[0], value))
 
+    @override
     def handle_endtag(self, tag):
         if tag in _UNSEEN_ELEMENTS and self._unseen:
             self._unseen -= 1
 
+    @override
     def handle_data(self, data):
         if not self._unseen and data.strip():
             self.found.append((self.getpos()[0], data))
@@ -149,9 +159,7 @@ def template_text(source: str) -> list[tuple[int, str]]:
     for tag in _TEMPLATE_TAG.finditer(uncommented):
         line = uncommented.count("\n", 0, tag.start()) + 1
         shown.extend(
-            (line, literal.group(2))
-            for literal in _TAG_LITERAL.finditer(tag.group())
-            if _is_prose(literal.group(2))
+            (line, literal.group(2)) for literal in _TAG_LITERAL.finditer(tag.group()) if _is_prose(literal.group(2))
         )
     parser = _Shown()
     parser.feed(_TEMPLATE_TAG.sub(_blank, uncommented))
@@ -162,10 +170,31 @@ def template_text(source: str) -> list[tuple[int, str]]:
 
 # Calls whose words go to a log or to whoever is writing the code, never to a page.
 _UNSEEN_CALLS = frozenset(
-    {"debug", "info", "warning", "error", "exception", "critical", "log", "getLogger",
-     "ImproperlyConfigured", "RuntimeError", "TypeError", "AssertionError",
-     "NotImplementedError", "KeyError", "LookupError", "compile", "CheckMessage", "Error",
-     "Warning", "add_argument", "CommandError", "SuspiciousOperation", "Http404"}
+    {
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "exception",
+        "critical",
+        "log",
+        "getLogger",
+        "ImproperlyConfigured",
+        "RuntimeError",
+        "TypeError",
+        "AssertionError",
+        "NotImplementedError",
+        "KeyError",
+        "LookupError",
+        "compile",
+        "CheckMessage",
+        "Error",
+        "Warning",
+        "add_argument",
+        "CommandError",
+        "SuspiciousOperation",
+        "Http404",
+    }
 )
 
 
@@ -185,7 +214,7 @@ def python_text(source: str) -> list[tuple[int, str]]:
 
     try:
         tree = ast.parse(source)
-    except (SyntaxError, ValueError):
+    except SyntaxError, ValueError:
         return []
     unseen = _unseen_strings(tree)
     return sorted(
@@ -235,7 +264,5 @@ def read(paths: Iterable[Path], *, root: Path) -> tuple[list[Found], int]:
         shown = template_text(source) if path.suffix == ".html" else python_text(source)
         for line, text in shown:
             for word, instead in words_in(text):
-                found.append(
-                    Found(path.relative_to(root), line, word, instead, " ".join(text.split())[:90])
-                )
+                found.append(Found(path.relative_to(root), line, word, instead, " ".join(text.split())[:90]))
     return found, files

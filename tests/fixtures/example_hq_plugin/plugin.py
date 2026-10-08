@@ -9,6 +9,7 @@ def integration() -> PluginIntegration:
 
     return PluginIntegration(dashboard=dashboard_cards, health=ready, outbound=work)
 
+
 plugin = PluginManifest(
     id="example.notes",
     name="Notes contract example",

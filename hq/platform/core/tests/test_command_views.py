@@ -7,15 +7,14 @@ from urllib.parse import parse_qs, urlsplit
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from hq.domains.control_plane.models import ManagedResource
+from hq.domains.projects.models import Project
+from hq.platform.api.models import IdempotencyRecord
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_targets import capability_target_options
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.ui import MISSING
-from hq.domains.control_plane.models import ManagedResource
 from hq.platform.core.models import AuditLog
-from hq.platform.api.models import IdempotencyRecord
-from hq.domains.projects.models import Project
-
 
 User = get_user_model()
 
@@ -70,8 +69,16 @@ class CommandViewTests(TestCase):
 
         self.assertContains(response, '<button class="btn primary" type="submit">Create project</button>')
         self.assertContains(response, "Add a new project.")
-        for built in ("<code>project.create", "manage_projects", "Handler", "JSON Schema", "Strict input",
-                      "Run command", "Preview", "additionalProperties"):
+        for built in (
+            "<code>project.create",
+            "manage_projects",
+            "Handler",
+            "JSON Schema",
+            "Strict input",
+            "Run command",
+            "Preview",
+            "additionalProperties",
+        ):
             self.assertNotContains(response, built)
 
     def test_a_page_opened_for_one_thing_names_it_instead_of_listing_every_other(self):
@@ -132,13 +139,9 @@ class CommandViewTests(TestCase):
         )
 
         with self.assertNumQueries(1):
-            options = capability_target_options(
-                capability_registry()["certificate.renew"], principal=principal
-            )
+            options = capability_target_options(capability_registry()["certificate.renew"], principal=principal)
 
-        self.assertEqual(
-            [option.value for option in options or ()], ["example-certificate"]
-        )
+        self.assertEqual([option.value for option in options or ()], ["example-certificate"])
 
     def test_discovery_context_filters_and_explains_infrastructure_targets(self):
         ManagedResource.objects.create(
@@ -152,9 +155,7 @@ class CommandViewTests(TestCase):
             spec={},
         )
 
-        response = self.client.get(
-            "/commands/infrastructure.reconcile/", {"kind": "tailscale.device"}
-        )
+        response = self.client.get("/commands/infrastructure.reconcile/", {"kind": "tailscale.device"})
 
         self.assertContains(
             response,
@@ -182,15 +183,11 @@ class CommandViewTests(TestCase):
         self.assertEqual(form["kind"].value(), resource.kind)
         self.assertEqual(json.loads(form["spec"].value()), resource.spec)
         self.assertTrue(form["enabled"].value())
-        self.assertEqual(
-            form["__expected_updated_at"].value(), resource.updated_at.isoformat()
-        )
+        self.assertEqual(form["__expected_updated_at"].value(), resource.updated_at.isoformat())
         self.assertContains(response, "data-command-hydrate-target")
 
     def test_success_uses_prg_and_the_application_audit_boundary(self):
-        response = self.client.post(
-            "/commands/project.create/", self._create_payload(), follow=True
-        )
+        response = self.client.post("/commands/project.create/", self._create_payload(), follow=True)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '<h2 id="command-result-title">Done</h2>')
@@ -202,9 +199,7 @@ class CommandViewTests(TestCase):
 
     def test_a_contextual_command_returns_to_the_workflow_that_offered_it(self):
         source = "/infrastructure/findings/"
-        form = self.client.get(
-            "/commands/project.create/", {"next": source}
-        ).context["form"]
+        form = self.client.get("/commands/project.create/", {"next": source}).context["form"]
         payload = {
             "name": "Contextual command",
             "slug": "contextual-command",
@@ -212,17 +207,13 @@ class CommandViewTests(TestCase):
             "next": form.initial["next"],
         }
 
-        response = self.client.post(
-            "/commands/project.create/", payload, follow=True
-        )
+        response = self.client.post("/commands/project.create/", payload, follow=True)
 
         self.assertContains(response, f'href="{source}"')
         self.assertContains(response, f'href="{source}">Back</a>')
 
     def test_a_command_never_returns_to_an_external_site(self):
-        response = self.client.get(
-            "/commands/project.create/", {"next": "https://attacker.example/"}
-        )
+        response = self.client.get("/commands/project.create/", {"next": "https://attacker.example/"})
 
         self.assertEqual(response.context["form"].initial["next"], "")
         self.assertEqual(response.context["return_url"], "")
@@ -249,16 +240,12 @@ class CommandViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 409)
-        self.assertContains(
-            response, "already used for a different request", status_code=409
-        )
+        self.assertContains(response, "already used for a different request", status_code=409)
         self.assertFalse(Project.objects.filter(slug="changed-request").exists())
 
     def test_unknown_and_repeated_fields_fail_before_execution(self):
         payload = self._create_payload(slug="strict-browser")
-        unknown = self.client.post(
-            "/commands/project.create/", {**payload, "surprise": "no"}
-        )
+        unknown = self.client.post("/commands/project.create/", {**payload, "surprise": "no"})
         repeated = self.client.post(
             "/commands/project.create/",
             {**payload, "name": ["One", "Two"], "__execution_key": "web:repeat"},
@@ -272,15 +259,11 @@ class CommandViewTests(TestCase):
         self.assertEqual(IdempotencyRecord.objects.count(), 0)
 
     def test_result_redirect_is_bound_to_an_unguessable_session_token(self):
-        response = self.client.post(
-            "/commands/project.create/", self._create_payload(slug="result-token")
-        )
+        response = self.client.post("/commands/project.create/", self._create_payload(slug="result-token"))
         query = parse_qs(urlsplit(response["Location"]).query)
 
         hidden = self.client.get("/commands/project.create/", {"result": "wrong"})
-        shown = self.client.get(
-            "/commands/project.create/", {"result": query["result"][0]}
-        )
+        shown = self.client.get("/commands/project.create/", {"result": query["result"][0]})
 
         self.assertNotContains(hidden, 'id="command-result-title"')
         self.assertContains(shown, 'id="command-result-title"')
@@ -301,12 +284,8 @@ class CommandResultProjectionTests(TestCase):
         self.client.force_login(self.user)
 
     def _run(self, name, payload, form_data):
-        key = self.client.get(f"/commands/{name}/").context["form"].initial[
-            "__execution_key"
-        ]
-        with mock.patch(
-            "hq.platform.core.command_views.execute_capability", return_value=payload
-        ) as execute:
+        key = self.client.get(f"/commands/{name}/").context["form"].initial["__execution_key"]
+        with mock.patch("hq.platform.core.command_views.execute_capability", return_value=payload) as execute:
             response = self.client.post(
                 f"/commands/{name}/",
                 {**form_data, "__execution_key": key},
@@ -358,9 +337,7 @@ class CommandResultProjectionTests(TestCase):
     def test_the_projection_is_pure_and_keeps_column_order(self):
         from hq.platform.core.command_views import _result_projection
 
-        facts, table = _result_projection(
-            {"ok": True, "count": 2, "note": None, "rows": [{"b": 1, "a": 2}, {"c": 3}]}
-        )
+        facts, table = _result_projection({"ok": True, "count": 2, "note": None, "rows": [{"b": 1, "a": 2}, {"c": 3}]})
 
         self.assertEqual(facts, (("count", "2"), ("note", MISSING)))
         self.assertEqual(table["columns"], ("b", "a", "c"))

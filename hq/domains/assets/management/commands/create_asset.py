@@ -3,21 +3,20 @@
 Idempotent: re-running with the same slug updates the existing record.
 """
 
-from __future__ import annotations
-
 import json
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
-from hq.platform.application.assets import AssetCommand, save_asset
-from hq.platform.application.security import cli_principal
 from hq.domains.assets.models import (
     ASSET_CATEGORY_CHOICES,
     PAYMENT_METHOD_CHOICES,
     Asset,
 )
+from hq.platform.application.assets import AssetCommand, save_asset
+from hq.platform.application.security import cli_principal
 
 
 def _parse_date(value: str) -> date:
@@ -37,6 +36,7 @@ def _parse_money(value: str) -> Decimal:
 class Command(BaseCommand):
     help = "Create or update an Asset record by slug."
 
+    @override
     def add_arguments(self, parser):
         parser.add_argument("slug", help="URL slug (e.g. home-server).")
         parser.add_argument(
@@ -95,6 +95,7 @@ class Command(BaseCommand):
             help="Print the canonical service result as JSON.",
         )
 
+    @override
     def handle(self, *args, **opts):
         slug = opts["slug"]
         exists = Asset.objects.filter(slug=slug).exists()
@@ -104,24 +105,12 @@ class Command(BaseCommand):
                 slug=slug,
                 vendor=opts["vendor"],
                 category=opts["category"],
-                purchase_date=(
-                    _parse_date(opts["purchase_date"])
-                    if opts["purchase_date"]
-                    else None
-                ),
-                total_cost=(
-                    _parse_money(opts["total_cost"])
-                    if opts["total_cost"] is not None
-                    else Decimal("0.00")
-                ),
+                purchase_date=(_parse_date(opts["purchase_date"]) if opts["purchase_date"] else None),
+                total_cost=(_parse_money(opts["total_cost"]) if opts["total_cost"] is not None else Decimal("0.00")),
                 business_use_percentage=opts["business_use_percentage"],
                 payment_method=opts["payment_method"],
                 serial_number=opts["serial_number"],
-                warranty_date=(
-                    _parse_date(opts["warranty_date"])
-                    if opts["warranty_date"]
-                    else None
-                ),
+                warranty_date=(_parse_date(opts["warranty_date"]) if opts["warranty_date"] else None),
                 status=opts["status"],
                 notes=opts["notes"],
             ),

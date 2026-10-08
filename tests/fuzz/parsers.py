@@ -12,8 +12,6 @@ image references, package URLs, provenance sources and failure logs.
 (``application/tests/test_fuzz_harness.py``), so the harness cannot rot unnoticed.
 """
 
-from __future__ import annotations
-
 import sys
 
 import atheris

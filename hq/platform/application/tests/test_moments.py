@@ -1,7 +1,5 @@
 """One way to write a moment, a date and an age, and one filter that shows them."""
 
-from __future__ import annotations
-
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -73,15 +71,13 @@ class PhrasingTests(SimpleTestCase):
         """Django's own formats are the owner's, so a template that forgot the filter agrees."""
 
         self.assertEqual(formats.date_format(date(2019, 10, 3)), "Oct 3, 2019")
-        self.assertEqual(
-            formats.date_format(datetime(2019, 10, 3, 9, 29), "DATETIME_FORMAT"), "Oct 3, 2019, 9:29 AM"
-        )
+        self.assertEqual(formats.date_format(datetime(2019, 10, 3, 9, 29), "DATETIME_FORMAT"), "Oct 3, 2019, 9:29 AM")
 
 
 @override_settings(TIME_ZONE="America/Chicago")
 class WhenFilterTests(SimpleTestCase):
     def render(self, value, form=None):
-        source = "{{ value|when }}" if form is None else '{{ value|when:"%s" }}' % form
+        source = "{{ value|when }}" if form is None else f'{{{{ value|when:"{form}" }}}}'
         return Template(source).render(Context({"value": value}))
 
     def test_a_moment_is_a_time_element_a_table_can_sort_on(self):
@@ -174,18 +170,18 @@ class DaySpanTests(TestCase):
         self.assertTrue(timezone.is_aware(start))
 
     def test_from_a_day_on_has_no_end_and_a_moment_counts_as_its_local_day(self):
-        from datetime import date, datetime, timezone as tz
+        from datetime import date, datetime
 
         from django.utils import timezone
 
         from ..projection import day_span
 
         self.assertIsNone(day_span(date(2026, 3, 1))[1])
-        late = datetime(2026, 3, 2, 3, 0, tzinfo=tz.utc)
+        late = datetime(2026, 3, 2, 3, 0, tzinfo=UTC)
         self.assertEqual(day_span(late)[0], day_span(timezone.localtime(late).date())[0])
 
     def test_it_matches_what_a_date_cast_would_have_kept(self):
-        from datetime import date, datetime, timedelta, timezone as tz
+        from datetime import date, datetime, timedelta
 
         from hq.platform.core.models import AuditLog
 
@@ -195,7 +191,7 @@ class DaySpanTests(TestCase):
         for hours in range(-30, 54, 3):
             row = AuditLog.objects.create(action=AuditLog.Action.CREATED, object_type="Example")
             AuditLog.objects.filter(pk=row.pk).update(
-                created_at=datetime(2026, 3, 1, 12, tzinfo=tz.utc) + timedelta(hours=hours)
+                created_at=datetime(2026, 3, 1, 12, tzinfo=UTC) + timedelta(hours=hours)
             )
         start, end = day_span(day, day)
 

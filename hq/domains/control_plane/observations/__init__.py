@@ -9,8 +9,6 @@ A reader that cannot read raises; the sweep stores the kind as unreachable with
 the reason, and ``ObservationSpec.requires`` says what the credential needs.
 """
 
-from __future__ import annotations
-
 from importlib import import_module
 from pkgutil import iter_modules
 
@@ -27,9 +25,7 @@ _SPEC_MODULES = tuple(
     if info.name != "contract" and not info.name.startswith(("_", "test"))
 )
 
-OBSERVATIONS = registry(
-    tuple(spec for module in _SPEC_MODULES for spec in module.OBSERVATIONS)
-)
+OBSERVATIONS = registry(tuple(spec for module in _SPEC_MODULES for spec in module.OBSERVATIONS))
 
 __all__ = [
     "OBSERVATIONS",

@@ -1,7 +1,5 @@
 """Each connection's last activity: stored on the event, read in bounded queries."""
 
-from __future__ import annotations
-
 from django.contrib.auth import get_user_model
 from django.db import connection as db_connection
 from django.test import TestCase
@@ -53,21 +51,16 @@ class ConnectionEventTests(TestCase):
     def test_starting_to_manage_is_a_kept_settings_change(self):
         def sweep(manages):
             report_connections(
-                [{"connection_ref": "example-dns", "provider": "cloudflare_dns",
-                  "ok": True, "manages": manages}],
+                [{"connection_ref": "example-dns", "provider": "cloudflare_dns", "ok": True, "manages": manages}],
                 principal=cli_principal(),
                 controller_id="example-controller",
             )
 
         sweep(False)
-        self.assertFalse(
-            AuditLog.objects.filter(action=AuditLog.Action.SETTINGS_CHANGED).exists()
-        )
+        self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.SETTINGS_CHANGED).exists())
         sweep(True)
         sweep(True)
-        changes = AuditLog.objects.filter(
-            connection="example-dns", action=AuditLog.Action.SETTINGS_CHANGED
-        )
+        changes = AuditLog.objects.filter(connection="example-dns", action=AuditLog.Action.SETTINGS_CHANGED)
         self.assertEqual([event.summary for event in changes], ["Allowed to manage its records"])
 
     def test_a_carried_connection_was_not_asked_and_writes_nothing(self):
@@ -109,9 +102,7 @@ class ConnectionEventTests(TestCase):
 
 class LastActivityPageTests(TestCase):
     def setUp(self):
-        user = get_user_model().objects.create_user(
-            username="operator", password="not-a-real-password"
-        )
+        user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(user)
 
     def _connection(self, ref, provider="cloudflare_dns"):
@@ -146,9 +137,7 @@ class LastActivityPageTests(TestCase):
             for index in range(count):
                 ref = f"example-{index}"
                 self._connection(ref)
-                AuditLog.objects.create(
-                    action=AuditLog.Action.UPDATED, connection=ref, message="x"
-                )
+                AuditLog.objects.create(action=AuditLog.Action.UPDATED, connection=ref, message="x")
             with CaptureQueriesContext(db_connection) as captured:
                 self.client.get(reverse("control_plane:connections"))
             return len(captured)

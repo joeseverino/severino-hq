@@ -1,7 +1,5 @@
 """Contact review screens, with the D1 bridge mocked out."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -68,8 +66,7 @@ class ContactViewTests(TestCase):
         response = self.client.get(reverse("contacts:detail", args=[1]))
         body = response.content.decode()
         self.assertIn(
-            'href="mailto:a@example.comBcc%3A%20b@example.com%3Fcc%3Dc@example.com'
-            '?subject=Re%3A%20your%20message"',
+            'href="mailto:a@example.comBcc%3A%20b@example.com%3Fcc%3Dc@example.com?subject=Re%3A%20your%20message"',
             body,
         )
         self.assertNotIn('href="mailto:a@example.com\r', body)
@@ -92,9 +89,7 @@ class ContactViewTests(TestCase):
     @patch("hq.domains.contacts.views.execute_contact_review")
     @patch("hq.domains.contacts.views.get_submission", return_value=dict(SUBMISSION))
     def test_set_status_rejects_unknown_status(self, mock_get, mock_review):
-        self.client.post(
-            reverse("contacts:set_status", args=[1]), {"status": "bogus"}
-        )
+        self.client.post(reverse("contacts:set_status", args=[1]), {"status": "bogus"})
         mock_review.assert_not_called()
 
     @patch("hq.domains.contacts.views.execute_contact_review")
@@ -104,9 +99,7 @@ class ContactViewTests(TestCase):
             reverse("contacts:set_status", args=[1]),
             {"status": "read", "next": "https://evil.example/"},
         )
-        self.assertRedirects(
-            response, reverse("contacts:list"), fetch_redirect_response=False
-        )
+        self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
 
     @patch("hq.domains.contacts.views.get_submission", return_value=dict(SUBMISSION))
     def test_delete_get_shows_confirm(self, mock_get):
@@ -121,9 +114,7 @@ class ContactViewTests(TestCase):
         response = self.client.post(reverse("contacts:delete", args=[1]))
         self.assertEqual(mock_delete.call_args.args[0].confirm, "1")
         self.assertEqual(mock_delete.call_args.kwargs["current_id"], 1)
-        self.assertRedirects(
-            response, reverse("contacts:list"), fetch_redirect_response=False
-        )
+        self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
 
 
 class ContactProjectionTests(TestCase):
@@ -314,9 +305,7 @@ class D1DerivationTests(TestCase):
     def test_configured_ids_are_not_read(self):
         _databases(_db("contacts", "uuid-1"))
 
-        with override_settings(
-            CLOUDFLARE_ACCOUNT_ID="b" * 32, CLOUDFLARE_D1_DATABASE_ID="uuid-set"
-        ):
+        with override_settings(CLOUDFLARE_ACCOUNT_ID="b" * 32, CLOUDFLARE_D1_DATABASE_ID="uuid-set"):
             target = d1.database()
 
         self.assertEqual((target.account, target.database), ("a" * 32, "uuid-1"))
@@ -324,9 +313,11 @@ class D1DerivationTests(TestCase):
     def test_a_name_that_matches_nothing_is_an_error(self):
         _databases(_db("contacts", "uuid-1"))
 
-        with override_settings(CLOUDFLARE_D1_DATABASE_NAME="missing"):
-            with self.assertRaisesMessage(d1.D1Error, "'missing'"):
-                d1.database()
+        with (
+            override_settings(CLOUDFLARE_D1_DATABASE_NAME="missing"),
+            self.assertRaisesMessage(d1.D1Error, "'missing'"),
+        ):
+            d1.database()
 
     def test_an_underivable_database_shows_on_the_connection(self):
         _databases(_db("contacts", "uuid-1"), _db("other", "uuid-2"))
@@ -347,9 +338,9 @@ class D1WriterPermissionTests(TestCase):
 
         lines = [
             line.strip()
-            for line in (
-                Path(settings.BASE_DIR) / "scripts" / "cloudflare-d1-writer-permissions.txt"
-            ).read_text().splitlines()
+            for line in (Path(settings.BASE_DIR) / "scripts" / "cloudflare-d1-writer-permissions.txt")
+            .read_text()
+            .splitlines()
             if line.strip() and not line.lstrip().startswith("#")
         ]
 

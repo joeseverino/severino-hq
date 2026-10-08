@@ -1,7 +1,5 @@
 """Findings about reach: a connection that does not answer, and a certificate consumer HQ cannot get to."""
 
-from __future__ import annotations
-
 from hq.domains.control_plane.provider_adapters.contracts import ADDRESS_FAILURE
 
 from . import credential_findings
@@ -10,10 +8,10 @@ from .finding_model import (
     THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
+    FindingRule,
     fact_values,
     open_the_path,
     reconcile_remedy,
-    FindingRule,
 )
 from .moments import elapsed
 
@@ -25,9 +23,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         if node.kind != "connection":
             continue
-        refusal = next(
-            (value for key, value in node.facts if key == "credential-refused"), None
-        )
+        refusal = next((value for key, value in node.facts if key == "credential-refused"), None)
         refused = refusal is not None
         if node.status != "serious" and not refused:
             continue
@@ -52,11 +48,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 evidence=(
                     ("State", "Refused" if refused else node.status_label or "Unreachable"),
-                    *(
-                        (("Cause", credential_findings.FAILURE_LABELS[failure]),)
-                        if failure and not refused
-                        else ()
-                    ),
+                    *((("Cause", credential_findings.FAILURE_LABELS[failure]),) if failure and not refused else ()),
                     *((("Last checked", elapsed(node.observed_at)),) if node.observed_at else ()),
                 ),
                 steps=mint_steps(node) if refused else credential_findings.answer_steps(node),
@@ -103,8 +95,7 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=(
                     f"Could not check {node.label} on {names[0]}"
                     if len(names) == 1
-                    else f"Could not check {node.label} on {len(names)} of the "
-                    "places it is installed"
+                    else f"Could not check {node.label} on {len(names)} of the places it is installed"
                 ),
                 severity="serious",
                 explanation=(
@@ -114,11 +105,7 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
                         if len(names) == 1
                         else "These did not, so HQ cannot say which certificate they are serving."
                     )
-                    + (
-                        f" The tailnet policy does not allow {', '.join(refused)}."
-                        if refused
-                        else ""
-                    )
+                    + (f" The tailnet policy does not allow {', '.join(refused)}." if refused else "")
                 ),
                 evidence=(
                     *(("Did not answer", name) for name in names),
@@ -137,24 +124,16 @@ RULES: tuple[FindingRule, ...] = (
         "A connection is not answering",
         "attention",
         _connection_not_answering,
-        operator_action=(
-            f"Open the connection and fix what its error says. {THEN_CHECK_AGAIN}"
-        ),
-        no_help_reason=(
-            "HQ cannot change 1Password or your network."
-        ),
+        operator_action=(f"Open the connection and fix what its error says. {THEN_CHECK_AGAIN}"),
+        no_help_reason=("HQ cannot change 1Password or your network."),
     ),
     FindingRule(
         "unreachable-consumer",
         "Could not check a certificate where it is installed",
         "serious",
         _unreachable_consumer,
-        operator_action=(
-            f"Make it reachable from the controller's machine. {THEN_CHECK_AGAIN}"
-        ),
-        no_help_reason=(
-            "HQ cannot reach it any other way."
-        ),
+        operator_action=(f"Make it reachable from the controller's machine. {THEN_CHECK_AGAIN}"),
+        no_help_reason=("HQ cannot reach it any other way."),
         # Says the same thing with the name of the consumer in it. The generic
         # rule would otherwise put this in front of an operator twice.
         subsumes=("reporting-a-fault",),

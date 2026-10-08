@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from unittest import mock
 
 from django.test import SimpleTestCase
@@ -41,17 +39,25 @@ class MatchTests(SimpleTestCase):
         self.assertEqual(len(post.call_args.args[1]["queries"]), 2)
 
     def test_an_unreachable_osv_says_so(self):
-        with mock.patch("hq.platform.application.osv._read", side_effect=OSVReadError("Could not reach OSV")):
-            with self.assertRaises(OSVReadError):
-                matches(["pkg:npm/a@1"])
+        with (
+            mock.patch("hq.platform.application.osv._read", side_effect=OSVReadError("Could not reach OSV")),
+            self.assertRaises(OSVReadError),
+        ):
+            matches(["pkg:npm/a@1"])
 
 
 class FindingTests(SimpleTestCase):
     def test_a_finding_names_what_fixes_it_for_that_package(self):
         vulnerability = {
-            "id": "GHSA-x", "summary": "bad", "aliases": ["CVE-1"], "database_specific": {"severity": "HIGH"},
+            "id": "GHSA-x",
+            "summary": "bad",
+            "aliases": ["CVE-1"],
+            "database_specific": {"severity": "HIGH"},
             "affected": [
-                {"package": {"name": "github.com/docker/cli"}, "ranges": [{"events": [{"introduced": "0"}, {"fixed": "29.2.0"}]}]},
+                {
+                    "package": {"name": "github.com/docker/cli"},
+                    "ranges": [{"events": [{"introduced": "0"}, {"fixed": "29.2.0"}]}],
+                },
                 {"package": {"name": "github.com/other/thing"}, "ranges": [{"events": [{"fixed": "9.9.9"}]}]},
             ],
         }
@@ -63,6 +69,9 @@ class FindingTests(SimpleTestCase):
         self.assertEqual(found["url"], "https://osv.dev/vulnerability/GHSA-x")
 
     def test_an_unrated_distribution_finding_stays_unrated(self):
-        found = finding({"id": "CVE-2", "affected": [{"package": {"name": "busybox"}, "ranges": []}]}, "pkg:apk/alpine/busybox@1.36.1-r0?os_version=3.19")
+        found = finding(
+            {"id": "CVE-2", "affected": [{"package": {"name": "busybox"}, "ranges": []}]},
+            "pkg:apk/alpine/busybox@1.36.1-r0?os_version=3.19",
+        )
 
         self.assertEqual((found["package"], found["severity"], found["fixed"]), ("busybox", "", ()))

@@ -10,15 +10,13 @@ reverse, is a silent hole rather than a failure. The strip, the routing, the
 default and the empty state all derive from one tuple.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from .integrations import integration_graph
 from .security import Principal
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ToolTab:
     """One tool: what it is called, and which capabilities it runs."""
 
@@ -42,11 +40,7 @@ class ToolTab:
         """
 
         specs = integration_graph().capabilities
-        return any(
-            principal.permits(*specs[name].required_capabilities)
-            for name in self.capabilities
-            if name in specs
-        )
+        return any(principal.permits(*specs[name].required_capabilities) for name in self.capabilities if name in specs)
 
 
 TOOL_TABS: tuple[ToolTab, ...] = (

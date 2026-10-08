@@ -9,19 +9,18 @@ Idempotent, keyed by slug. Content type is set on create only, so a manual
 classification in HQ is never clobbered by a sync.
 """
 
-from __future__ import annotations
-
 import json
 import urllib.error
 import urllib.request
+from typing import override
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.utils.text import Truncator
 
-from hq.platform.application.timestamps import moment
 from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
+from hq.platform.application.timestamps import moment
 
 
 class ContentSyncError(RuntimeError):
@@ -41,12 +40,11 @@ class _SameOriginRedirects(urllib.request.HTTPRedirectHandler):
     redirect to another origin, or down to http, is refused instead.
     """
 
+    @override
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         asked, told = urlsplit(req.full_url), urlsplit(newurl)
         if (told.scheme, told.netloc) != (asked.scheme, asked.netloc):
-            raise urllib.error.HTTPError(
-                newurl, code, "Redirect to another origin refused", headers, fp
-            )
+            raise urllib.error.HTTPError(newurl, code, "Redirect to another origin refused", headers, fp)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -98,9 +96,7 @@ def index_project() -> Project | None:
     if not host:
         return None
     matches = [
-        project
-        for project in Project.objects.exclude(public_url="")
-        if urlsplit(project.public_url).hostname == host
+        project for project in Project.objects.exclude(public_url="") if urlsplit(project.public_url).hostname == host
     ]
     return matches[0] if len(matches) == 1 else None
 

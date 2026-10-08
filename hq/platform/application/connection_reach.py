@@ -6,8 +6,6 @@ tailnet peering the machine page shows (``Presence.peer_path``). Nothing is
 probed and nothing is resolved live.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -28,7 +26,7 @@ NETWORK_LABELS = {
 _SPECIAL_USE = (".local", ".home.arpa", ".internal", ".localhost")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionReach:
     """The network a connection is reached over, its machine, and the peering."""
 
@@ -76,11 +74,7 @@ class ConnectionReach:
 
         if not self.label:
             return ""
-        line = (
-            f"{self.label} {self.machine_word} {self.machine.label}"
-            if self.machine
-            else self.label
-        )
+        line = f"{self.label} {self.machine_word} {self.machine.label}" if self.machine else self.label
         return f"{line}, {self.relay}" if self.relay else line
 
     def as_dict(self) -> dict[str, Any]:
@@ -91,9 +85,7 @@ class ConnectionReach:
             "summary": self.summary or None,
             "host": self.host,
             "address": self.address or None,
-            "machine": (
-                {"name": self.machine.label, "url": self.machine.url} if self.machine else None
-            ),
+            "machine": ({"name": self.machine.label, "url": self.machine.url} if self.machine else None),
             "peer_path": self.peer_path or None,
             "direct_endpoint": presence.direct_endpoint or None if presence else None,
             "relay": presence.relay or None if presence else None,
@@ -130,9 +122,7 @@ def connection_reach(connections: Iterable[tuple[str, str]]) -> dict[str, Connec
         host = host_of(endpoint)
         if not ref or not host:
             continue
-        address = host if network_of(host) else next(
-            iter(answers.get(normalized_hostname(host), ())), ""
-        )
+        address = host if network_of(host) else next(iter(answers.get(normalized_hostname(host), ())), "")
         placed = index.resolve(address) if address else index.named(host)
         machine = known.get(placed.lower()) if placed else None
         network = network_of(address) if address else _named_network(host)

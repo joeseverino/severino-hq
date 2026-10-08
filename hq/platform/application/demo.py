@@ -26,17 +26,15 @@ one; this module only offers the substitutions and the switch, and every domain
 reaches them through ``hq_sdk.demo``.
 """
 
-from __future__ import annotations
-
 import hashlib
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Iterator
+from typing import Any
 
 from .money import quantize_money, to_money
-
 
 _SHOWING: ContextVar[bool] = ContextVar("hq_demo_showing", default=False)
 
@@ -49,13 +47,44 @@ _SALT = "severino-hq/demo/v1"
 # announce itself as fiction on a second look; anything evocative gets read as
 # a real name somebody chose.
 _FIRST = (
-    "Amber", "Basalt", "Cedar", "Dover", "Ember", "Fenwick", "Garnet", "Harrow",
-    "Indigo", "Juniper", "Kestrel", "Larkin", "Marlow", "Norwood", "Onyx",
-    "Pembroke", "Quarry", "Rowan", "Sable", "Thistle", "Umber", "Vesper",
+    "Amber",
+    "Basalt",
+    "Cedar",
+    "Dover",
+    "Ember",
+    "Fenwick",
+    "Garnet",
+    "Harrow",
+    "Indigo",
+    "Juniper",
+    "Kestrel",
+    "Larkin",
+    "Marlow",
+    "Norwood",
+    "Onyx",
+    "Pembroke",
+    "Quarry",
+    "Rowan",
+    "Sable",
+    "Thistle",
+    "Umber",
+    "Vesper",
 )
 _SECOND = (
-    "Bridge", "Cove", "Drift", "Field", "Gate", "Hollow", "Ridge", "Row",
-    "Shore", "Terrace", "Vale", "Way", "Wharf", "Yard",
+    "Bridge",
+    "Cove",
+    "Drift",
+    "Field",
+    "Gate",
+    "Hollow",
+    "Ridge",
+    "Row",
+    "Shore",
+    "Terrace",
+    "Vale",
+    "Way",
+    "Wharf",
+    "Yard",
 )
 
 
@@ -105,7 +134,7 @@ def amount(value: Any, *, key: str) -> Decimal:
         return real
     size = abs(real)
     if size < 1:
-        return quantize_money(Decimal("0"))
+        return quantize_money(Decimal(0))
     digits = min(len(str(int(size))), DEMO_MAX_DIGITS)
     floor = Decimal(10) ** (digits - 1)
     span = floor * 9

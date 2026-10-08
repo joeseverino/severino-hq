@@ -1,7 +1,5 @@
 """Application-level principals and capability enforcement."""
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -55,7 +53,7 @@ class Capability(StrEnum):
 INTERACTIVE_INTERFACES = frozenset({"web"})
 
 
-def is_interactive(principal: "Principal") -> bool:
+def is_interactive(principal: Principal) -> bool:
     """Whether this act is a person's, rather than a credential's."""
 
     return principal.interface in INTERACTIVE_INTERFACES
@@ -96,7 +94,7 @@ def host_capabilities() -> frozenset[Capability | str]:
 OPERATOR_CAPABILITIES = host_capabilities()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Principal:
     actor: str
     interface: str
@@ -131,14 +129,9 @@ class Principal:
 
     def require(self, capability: Capability | str) -> None:
         name = capability.value if isinstance(capability, Capability) else capability
-        available = {
-            item.value if isinstance(item, Capability) else item for item in self.capabilities
-        }
+        available = {item.value if isinstance(item, Capability) else item for item in self.capabilities}
         if name not in available:
-            raise AuthorizationError(
-                f"{self.interface} principal {self.actor!r} lacks "
-                f"{name!r}."
-            )
+            raise AuthorizationError(f"{self.interface} principal {self.actor!r} lacks {name!r}.")
 
 
 def require_all(principal: Principal, capabilities: Iterable[Capability | str]) -> None:
@@ -205,9 +198,9 @@ def mcp_principal() -> Principal:
         capabilities.update({Capability.READ_CALENDAR, Capability.WRITE_CALENDAR})
     if getattr(settings, "SEVERINO_MCP_ENABLE_PRUNE", False):
         capabilities.add(Capability.PRUNE_DOCUMENTATION)
-    if getattr(
-        settings, "SEVERINO_MCP_ENABLE_WRITES", False
-    ) and getattr(settings, "SEVERINO_MCP_ENABLE_DELETES", False):
+    if getattr(settings, "SEVERINO_MCP_ENABLE_WRITES", False) and getattr(
+        settings, "SEVERINO_MCP_ENABLE_DELETES", False
+    ):
         capabilities.update(record_permissions("delete"))
         if getattr(settings, "SEVERINO_MCP_ENABLE_CALENDAR", False):
             capabilities.add(Capability.DELETE_CALENDAR)
@@ -243,9 +236,7 @@ def safe_next(request: HttpRequest, *, fallback: str = "", scope: str = "") -> s
     on the result unconditionally instead of re-deciding what "nowhere" means.
     """
 
-    candidate = (
-        request.POST.get("next", "") if request.method == "POST" else ""
-    ) or request.GET.get("next", "")
+    candidate = (request.POST.get("next", "") if request.method == "POST" else "") or request.GET.get("next", "")
     candidate = candidate.strip()
     if (
         candidate

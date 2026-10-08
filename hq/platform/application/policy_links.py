@@ -8,16 +8,15 @@ title. A tag lists the devices carrying it. Users and unresolved names stay as
 the policy writes them.
 """
 
-from __future__ import annotations
-
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Any, Iterable
+from typing import Any
 
 from .entity_links import EntityLink, entity_link
 from .locate import host_of
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PolicyName:
     """One name as a policy writes it, and the entity it stands for if any."""
 
@@ -33,9 +32,7 @@ class PolicyNames:
         from .tailnet import policy
 
         catalog = tuple(machines_once() if machines is None else machines)
-        self._owners = {
-            host_of(str(address)): item.name for item in catalog for address in item.addresses
-        }
+        self._owners = {host_of(str(address)): item.name for item in catalog for address in item.addresses}
         self._hosts = dict(policy().hosts if hosts is None else hosts)
 
     def machine_at(self, address: str) -> str:

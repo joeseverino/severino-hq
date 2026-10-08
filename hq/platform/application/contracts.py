@@ -7,13 +7,10 @@ from django.urls import NoReverseMatch
 
 from hq.platform.application.routes import reverse
 
-
 DOTTED_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
 DJANGO_ROUTE = re.compile(r"(?:[A-Za-z_][\w-]*:)*[A-Za-z_][\w-]*\Z")
 SCOPE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
-EFFECTS = frozenset(
-    {"read", "remote_write", "destructive", "infrastructure_change"}
-)
+EFFECTS = frozenset({"read", "remote_write", "destructive", "infrastructure_change"})
 
 
 def route_url(route: str) -> str:
@@ -49,9 +46,4 @@ def endpoint_has_private_parts(endpoint: str) -> bool:
         parsed = urlsplit(candidate)
     except ValueError:
         return True
-    return bool(
-        parsed.username is not None
-        or parsed.password is not None
-        or parsed.query
-        or parsed.fragment
-    )
+    return bool(parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment)

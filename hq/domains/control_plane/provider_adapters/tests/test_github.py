@@ -5,8 +5,6 @@ delivery; its tests hold the check name, the comment marker and the app's
 registered permissions.
 """
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase
 
 from hq.domains.control_plane.providers import PROVIDERS
@@ -40,7 +38,7 @@ class PipelineReportTests(SimpleTestCase):
         import re
 
         deploy = self.read(".github", "workflows", "deploy.yml")
-        job = re.search(r"\n  deploy:\n(.*?)(?=\n  [a-z]+:\n|\Z)", deploy, re.S).group(1)
+        job = re.search(r"\n  deploy:\n(.*?)(?=\n  [a-z]+:\n|\Z)", deploy, re.DOTALL).group(1)
 
         self.assertIn("self-hosted", job)
         self.assertNotIn("HQ_APP_KEY", job)
@@ -51,8 +49,9 @@ class PipelineReportTests(SimpleTestCase):
 
         workflows = Path(__file__).resolve().parents[5] / ".github" / "workflows"
         hosting = sorted(
-            path.name for path in workflows.glob("*.yml")
-            if re.search(r"^\s*runs-on:.*self-hosted", path.read_text(), re.M)
+            path.name
+            for path in workflows.glob("*.yml")
+            if re.search(r"^\s*runs-on:.*self-hosted", path.read_text(), re.MULTILINE)
         )
         deploy = self.read(".github", "workflows", "deploy.yml")
         triggers = deploy.split("\non:\n", 1)[1].split("\n\n", 1)[0]
@@ -67,7 +66,7 @@ class PipelineReportTests(SimpleTestCase):
         # workflow_run fires for any run of the workflow it watches, a pull
         # request's included, so it can start a deploy of the wrong commit.
         self.assertEqual([path.name for path in workflows.glob("*.yml") if "workflow_run:" in path.read_text()], [])
-        self.assertIn('gh workflow run compose.yml', self.read(".github", "workflows", "ci.yml"))
+        self.assertIn("gh workflow run compose.yml", self.read(".github", "workflows", "ci.yml"))
         self.assertIn('-f commit="$COMMIT"', self.read(".github", "workflows", "ci.yml"))
-        self.assertIn('gh workflow run deploy.yml', self.read(".github", "workflows", "compose.yml"))
+        self.assertIn("gh workflow run deploy.yml", self.read(".github", "workflows", "compose.yml"))
         self.assertIn('-f commit="$COMMIT"', self.read(".github", "workflows", "compose.yml"))

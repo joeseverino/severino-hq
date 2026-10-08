@@ -12,22 +12,18 @@ fingerprint would report itself in sync against a world that moved underneath
 it.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 from collections.abc import Callable
 from typing import Any
 
 from .models import ManagedResource
-from .providers import resolve_provider_spec
 from .provider_spec import ProviderResolutionContext
+from .providers import resolve_provider_spec
 
 
 def _canonical(payload: dict[str, Any]) -> bytes:
-    return json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode()
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
 def desired_fingerprint(
@@ -78,7 +74,7 @@ def desired_fingerprint(
                 names_at=names_at,
             ),
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         resolved = spec
     if resolved != spec:
         desired["resolved"] = resolved

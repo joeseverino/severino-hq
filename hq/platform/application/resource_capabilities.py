@@ -5,20 +5,18 @@ itself, with the same functions the operations enforce. Pages, the topology and
 the resource list read this instead of testing kinds.
 """
 
-from __future__ import annotations
-
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Mapping
 
 from hq.domains.control_plane.models import ManagedResource
-
-from .adoption import OBSERVES_ONLY
 from hq.domains.control_plane.providers import (
     PROVIDERS,
     controller_capability_registry,
     resource_home,
 )
+
+from .adoption import OBSERVES_ONLY
 
 # Actions a person starts from a resource's page, in the order they lead.
 PAGE_VERBS = ("start", "stop", "restart", "reconcile", "renew")
@@ -33,14 +31,14 @@ VERB_LABELS = {
 LIFECYCLE_VERBS = frozenset({"start", "stop", "restart"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Allowed:
     enabled: bool
     reason: str = ""
     automatic: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ResourceCapabilities:
     # Every verb the controller implements for this kind, except delete.
     actions: Mapping[str, Allowed]
@@ -88,9 +86,7 @@ def resource_capabilities(
     asking about many resources; left as None it is built here."""
     provider = PROVIDERS.get(resource.kind)
     if removal_pending is None:
-        removal_pending = resource.pk is not None and resource.key in removals_pending(
-            (resource.pk,)
-        )
+        removal_pending = resource.pk is not None and resource.key in removals_pending((resource.pk,))
     capability = controller_capability_registry().capabilities.get(resource.kind)
     policies = dict(capability.actions) if capability else {}
     if running is None:
@@ -104,9 +100,7 @@ def resource_capabilities(
     actions = {
         verb: _allowed(verb, policy, resource, provider, removal_pending, observes_only)
         for verb, policy in policies.items()
-        if verb != "delete"
-        and policy.mode == "apply"
-        and (verb not in LIFECYCLE_VERBS or verb in running)
+        if verb != "delete" and policy.mode == "apply" and (verb not in LIFECYCLE_VERBS or verb in running)
     }
     removal, removal_reason = _removal(provider, policies, removal_pending, observes_only)
 
@@ -130,12 +124,7 @@ def _allowed(verb, policy, resource, provider, removal_pending, observes_only) -
         return Allowed(False, "It is switched off in HQ.", policy.automatic)
     if observes_only:
         return Allowed(False, OBSERVES_ONLY, policy.automatic)
-    if (
-        verb == "reconcile"
-        and provider is not None
-        and provider.public_effect
-        and not public_dns_enabled()
-    ):
+    if verb == "reconcile" and provider is not None and provider.public_effect and not public_dns_enabled():
         return Allowed(False, "Public DNS changes are off on this server.")
     if verb == "renew":
         renewable, why = certificate_renewal_allowed(resource)
@@ -178,7 +167,5 @@ def _running_verbs(resource: ManagedResource) -> tuple[str, ...]:
     from .machines import container_context
 
     spec = resource.spec or {}
-    running = (container_context(spec.get("host", ""), spec.get("name", "")) or {}).get(
-        "running"
-    )
+    running = (container_context(spec.get("host", ""), spec.get("name", "")) or {}).get("running")
     return tuple(running.verbs) if running else ()

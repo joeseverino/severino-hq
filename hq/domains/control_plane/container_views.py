@@ -1,13 +1,11 @@
 """Every running container, and whether what it runs is current and safe."""
 
-from __future__ import annotations
+from typing import Any, override
 
-from typing import Any
-
-from hq.platform.application.routes import reverse
 from django.views.generic import TemplateView
 
 from hq.platform.application.pages import PageMixin
+from hq.platform.application.routes import reverse
 
 
 def container_detail(resource: Any, request: Any) -> dict[str, Any]:
@@ -51,6 +49,7 @@ class ContainerListView(PageMixin, TemplateView):
     template_name = "control_plane/container_list.html"
     page_title = "Containers"
 
+    @override
     def get_context_data(self, **kwargs):
         from hq.platform.application.container_attention import needs_you
         from hq.platform.application.containers import (

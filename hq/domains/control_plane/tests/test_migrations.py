@@ -8,8 +8,6 @@ The fixture is the shape, not the deployment: names, roles and addresses are
 made up, and the ranges are the ones reserved for writing about addresses.
 """
 
-from __future__ import annotations
-
 from importlib import import_module
 
 from django.db import connection
@@ -20,9 +18,7 @@ from hq.domains.control_plane.models import ManagedResource
 
 # A migration module's name starts with a digit, so it is reached by import
 # rather than named in a from-import.
-own_the_topology = import_module(
-    "hq.domains.control_plane.migrations.0012_hq_owns_the_topology"
-).own_the_topology
+own_the_topology = import_module("hq.domains.control_plane.migrations.0012_hq_owns_the_topology").own_the_topology
 
 
 SNAPSHOT = {
@@ -170,9 +166,7 @@ class TopologyHandoverTests(TestCase):
     def test_a_container_hq_does_not_watch_is_not_created_by_this(self):
         """A port list is not a reason to start watching something."""
 
-        self.assertFalse(
-            ManagedResource.objects.filter(key__endswith="-caddy").exists()
-        )
+        self.assertFalse(ManagedResource.objects.filter(key__endswith="-caddy").exists())
 
     def test_the_certificate_states_its_own_names_and_targets(self):
         self.assertEqual(
@@ -209,9 +203,7 @@ class TopologyHandoverTests(TestCase):
             self.spec("an-edge-certificate-target")["certificate_directory"],
             "/opt/apps/caddy/certs",
         )
-        self.assertTrue(
-            self.spec("a-proxy-certificate-target")["discover_covered_hosts"]
-        )
+        self.assertTrue(self.spec("a-proxy-certificate-target")["discover_covered_hosts"])
 
     def test_a_wildcard_is_dropped_from_what_shared_hosting_installs(self):
         """cPanel takes one certificate per name and will not take a wildcard."""
@@ -240,9 +232,7 @@ class TopologyHandoverTests(TestCase):
         )
 
 
-rename_tailnet_keys = import_module(
-    "hq.domains.control_plane.migrations.0015_tailnet_device_keys_say_what_they_are"
-)
+rename_tailnet_keys = import_module("hq.domains.control_plane.migrations.0015_tailnet_device_keys_say_what_they_are")
 
 
 class _RealApps:
@@ -264,9 +254,7 @@ class TailnetKeyRenameTests(TestCase):
     """
 
     def device(self, key, name):
-        return ManagedResource.objects.create(
-            key=key, kind="tailscale.device", spec={"name": name}
-        )
+        return ManagedResource.objects.create(key=key, kind="tailscale.device", spec={"name": name})
 
     def test_a_suffixed_device_is_renamed_to_say_what_it_is(self):
         ManagedResource.objects.create(key="box", kind="machine", spec={"name": "box"})
@@ -290,23 +278,21 @@ class TailnetKeyRenameTests(TestCase):
 
         self.device("box-2", "box")
         AuditLog.objects.create(
-            action="update", object_type="ManagedResource",
-            object_id="box-2", object_repr="box-2",
+            action="update",
+            object_type="ManagedResource",
+            object_id="box-2",
+            object_repr="box-2",
         )
 
         rename_tailnet_keys.forwards(_RealApps, None)
 
-        self.assertTrue(
-            AuditLog.objects.filter(object_type="ManagedResource", object_id="box-tailnet").exists()
-        )
+        self.assertTrue(AuditLog.objects.filter(object_type="ManagedResource", object_id="box-tailnet").exists())
 
     def test_an_occupied_target_is_left_alone(self):
         """A rename onto an existing key would break the uniqueness it restores."""
 
         self.device("box-2", "box")
-        ManagedResource.objects.create(
-            key="box-tailnet", kind="machine", spec={"name": "something-else"}
-        )
+        ManagedResource.objects.create(key="box-tailnet", kind="machine", spec={"name": "something-else"})
 
         rename_tailnet_keys.forwards(_RealApps, None)
 
@@ -368,16 +354,12 @@ class DerivedReferencesMigrationTests(TransactionTestCase):
     after = ("control_plane", "0033_derived_references")
 
     def tearDown(self):
-        MigrationExecutor(connection).migrate(
-            MigrationExecutor(connection).loader.graph.leaf_nodes()
-        )
+        MigrationExecutor(connection).migrate(MigrationExecutor(connection).loader.graph.leaf_nodes())
 
     def test_every_stored_spec_survives_and_derives_its_links(self):
         executor = MigrationExecutor(connection)
         executor.migrate([self.before])
-        Resource = executor.loader.project_state([self.before]).apps.get_model(
-            "control_plane", "ManagedResource"
-        )
+        Resource = executor.loader.project_state([self.before]).apps.get_model("control_plane", "ManagedResource")
         specs = {
             "a-record": {"zone": "Example.COM.", "connection_ref": " example-dns ", "name": "app.example.com"},
             "no-links": {"name": "example"},
@@ -393,9 +375,7 @@ class DerivedReferencesMigrationTests(TransactionTestCase):
 
         executor = MigrationExecutor(connection)
         executor.migrate([self.after])
-        Resource = executor.loader.project_state([self.after]).apps.get_model(
-            "control_plane", "ManagedResource"
-        )
+        Resource = executor.loader.project_state([self.after]).apps.get_model("control_plane", "ManagedResource")
 
         found = {row.key: (row.spec, row.zone, row.connection_ref) for row in Resource.objects.all()}
         self.assertEqual({key: spec for key, (spec, _, _) in found.items()}, specs)

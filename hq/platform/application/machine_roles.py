@@ -5,25 +5,22 @@ tailnet policy. Each rule is declared once, below; the machine list, the
 machine page and search all read ``roles_of``.
 """
 
-from __future__ import annotations
-
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from hq.domains.control_plane.observations.tailscale import EXIT_ROUTES
 
 from .locate import host_of
 
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoleContext:
     """Tailnet-wide facts a rule compares a machine against."""
 
     nameservers: frozenset[str] = frozenset()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MachineRole:
     id: str
     label: str
@@ -37,9 +34,7 @@ def _exit_node(machine, context: RoleContext) -> bool:
         return False
     # Offered and approved: the machine advertises both default routes and the
     # tailnet hands them out.
-    routed = EXIT_ROUTES <= set(presence.advertised_routes) and EXIT_ROUTES <= set(
-        presence.enabled_routes
-    )
+    routed = set(presence.advertised_routes) >= EXIT_ROUTES and set(presence.enabled_routes) >= EXIT_ROUTES
     return routed or (presence.offers_exit_node and presence.exit_node_approved)
 
 
@@ -70,9 +65,7 @@ def role_context() -> RoleContext:
     from .tailnet import policy
 
     return RoleContext(
-        nameservers=frozenset(
-            host_of(str(server)) for server in policy().dns.get("dns") or () if server
-        )
+        nameservers=frozenset(host_of(str(server)) for server in policy().dns.get("dns") or () if server)
     )
 
 

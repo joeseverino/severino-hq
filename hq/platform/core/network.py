@@ -32,16 +32,14 @@ closest thing to the caller that HQ can prove, and anything further left is
 attacker-controlled text.
 """
 
-from __future__ import annotations
-
-from functools import lru_cache
+from functools import cache
 from ipaddress import ip_address, ip_network
 
 from django.conf import settings
 from django.http import HttpResponseForbidden
 
 
-@lru_cache(maxsize=None)
+@cache
 def _networks(cidrs: tuple[str, ...]) -> tuple:
     parsed = []
     for cidr in cidrs:
@@ -181,8 +179,7 @@ class TrustedNetworkASGI:
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and settings.SEVERINO_ENFORCE_TRUSTED_NETWORK:
             headers = {
-                key.decode("latin-1").lower(): value.decode("latin-1")
-                for key, value in scope.get("headers", [])
+                key.decode("latin-1").lower(): value.decode("latin-1") for key, value in scope.get("headers", [])
             }
             peer = (scope.get("client") or ("", 0))[0]
             request = _FakeScopeRequest(peer, headers.get("x-forwarded-for", ""))

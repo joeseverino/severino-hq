@@ -1,12 +1,10 @@
 """Structured, dependency-free production logging primitives."""
 
-from __future__ import annotations
-
-from contextvars import ContextVar
-from datetime import datetime, timezone
 import json
 import logging
-
+from contextvars import ContextVar
+from datetime import UTC, datetime
+from typing import override
 
 _request_id = ContextVar("severino_request_id", default="-")
 
@@ -28,13 +26,14 @@ class JsonFormatter(logging.Formatter):
 
     fields = ("event", "method", "path", "status", "duration_ms")
 
+    @override
     def format(self, record: logging.LogRecord) -> str:
         request_id = get_request_id()
         request = getattr(record, "request", None)
         if request_id == "-" and request is not None:
             request_id = getattr(request, "request_id", "-")
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname.lower(),
             "logger": record.name,
             "message": record.getMessage(),

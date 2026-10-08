@@ -1,7 +1,5 @@
 """The API reference page: the operator's, under HQ's policy, from a pinned bundle."""
 
-from __future__ import annotations
-
 import hashlib
 import re
 from functools import cache
@@ -23,7 +21,7 @@ def _source(*parts: str) -> str:
 
 
 def _uncommented(source: str) -> str:
-    return re.sub(r"/\*.*?\*/|^\s*//[^\n]*", " ", source, flags=re.S | re.M)
+    return re.sub(r"/\*.*?\*/|^\s*//[^\n]*", " ", source, flags=re.DOTALL | re.MULTILINE)
 
 
 def _directives(policy: str) -> set[str]:
@@ -76,10 +74,7 @@ class ReferencePageTests(TestCase):
         self.assertContains(self.client.get(reverse("dashboard")), f'href="{self.url}"')
 
     def test_the_vendored_bundle_is_the_recorded_one(self):
-        recorded = dict(
-            line.split(": ", 1)
-            for line in (VENDOR / "UPSTREAM").read_text(encoding="utf-8").splitlines()
-        )
+        recorded = dict(line.split(": ", 1) for line in (VENDOR / "UPSTREAM").read_text(encoding="utf-8").splitlines())
         digest = hashlib.sha256((VENDOR / "standalone.js").read_bytes()).hexdigest()
         self.assertEqual(digest, recorded["sha256"])
 
@@ -96,7 +91,7 @@ class ReferenceStyleTests(SimpleTestCase):
         self.assertEqual(re.findall(r"font-size:\s*[\d.]", self.sheet), [])
 
     def test_every_token_it_reads_is_one_app_css_defines(self):
-        tokens = set(re.findall(r"^\s*(--[\w-]+):", _source("css", "app.css"), flags=re.M))
+        tokens = set(re.findall(r"^\s*(--[\w-]+):", _source("css", "app.css"), flags=re.MULTILINE))
         read = set(re.findall(r"var\((--[\w-]+)", self.sheet))
         self.assertGreater(len(read), 20)
         self.assertEqual(read - tokens, set())
@@ -105,14 +100,16 @@ class ReferenceStyleTests(SimpleTestCase):
         """A renamed variable would leave the viewer in the vendor's default."""
 
         bundle = _source("vendor", "scalar", "standalone.js")
-        handed = set(re.findall(r"^\s*(--scalar-[\w-]+):", self.sheet, flags=re.M))
+        handed = set(re.findall(r"^\s*(--scalar-[\w-]+):", self.sheet, flags=re.MULTILINE))
         self.assertGreater(len(handed), 40)
         self.assertEqual({name for name in handed if name not in bundle}, set())
 
     def test_both_modes_take_the_same_tokens(self):
         """One block for the two mode classes: `color-scheme` picks the half."""
 
-        self.assertEqual(re.findall(r"^([^{}\n]*-mode[^{}\n]*)\{", self.sheet, flags=re.M), [".light-mode, .dark-mode "])
+        self.assertEqual(
+            re.findall(r"^([^{}\n]*-mode[^{}\n]*)\{", self.sheet, flags=re.MULTILINE), [".light-mode, .dark-mode "]
+        )
 
 
 class ReferenceConfigurationTests(SimpleTestCase):
@@ -149,7 +146,7 @@ class ReferenceConfigurationTests(SimpleTestCase):
         self.assertEqual(re.findall(r'searchHotKey: "(\w)"', self.script), ["j"])
 
     def test_every_option_is_one_the_bundle_knows(self):
-        options = set(re.findall(r"^    (?:\.\.\.\(theme \? \{ )?(\w+):", self.script, flags=re.M))
+        options = set(re.findall(r"^    (?:\.\.\.\(theme \? \{ )?(\w+):", self.script, flags=re.MULTILINE))
         self.assertGreater(len(options), 12)
         self.assertEqual({name for name in options if f"{name}:" not in self.bundle}, set())
 
@@ -158,10 +155,10 @@ class ReferenceConfigurationTests(SimpleTestCase):
 
         shipped = re.search(r"\{(?:\w+:\[(?:`\w[\w.]*`,?)+\],?)+\}", self.bundle[self.bundle.index("`libcurl`") - 40 :])
         self.assertIsNotNone(shipped)
-        targets = dict(
-            (target, re.findall(r"`([\w.]+)`", clients))
+        targets = {
+            target: re.findall(r"`([\w.]+)`", clients)
             for target, clients in re.findall(r"(\w+):\[([^\]]*)\]", shipped.group(0))
-        )
+        }
         self.assertEqual(targets["shell"][0], "curl")
         hidden = set(re.findall(r'"(\w+)"', self.script[self.script.index("HIDDEN_CLIENTS") :].split("};")[0]))
         self.assertEqual(hidden, (set(targets) - {"shell"}) | set(targets["shell"][1:]))

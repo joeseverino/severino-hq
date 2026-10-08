@@ -1,7 +1,5 @@
 """How a registry's organisation is said."""
 
-from __future__ import annotations
-
 from django.test import SimpleTestCase
 
 from hq.domains.control_plane.names import organisation_name

@@ -8,11 +8,11 @@ from typing import Any
 from django.db import transaction
 
 from hq.domains.assets.models import Asset
-from hq.platform.core.audit import operation_context, record_event
-from hq.platform.core.models import AuditLog
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import validate_receipt_file
+from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.models import AuditLog
 
 from .domains import records_of
 from .security import Principal
@@ -22,7 +22,7 @@ class NotFoundError(ValueError):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ReceiptMetadataCommand:
     vendor: str = ""
     date: Date | None = None
@@ -51,16 +51,8 @@ def serialize_receipt(receipt: Receipt) -> dict[str, Any]:
 
 def _relations(command: ReceiptMetadataCommand):
     try:
-        expense = (
-            Expense.objects.get(pk=command.related_expense)
-            if command.related_expense is not None
-            else None
-        )
-        asset = (
-            Asset.objects.get(slug=command.related_asset)
-            if command.related_asset
-            else None
-        )
+        expense = Expense.objects.get(pk=command.related_expense) if command.related_expense is not None else None
+        asset = Asset.objects.get(slug=command.related_asset) if command.related_asset else None
     except (Expense.DoesNotExist, Asset.DoesNotExist) as exc:
         raise NotFoundError("Related expense or asset was not found.") from exc
     return expense, asset
@@ -76,9 +68,7 @@ def update_receipt(
     upload=None,
 ) -> dict[str, Any]:
     principal.require(records_of("receipts").write)
-    with operation_context(
-        interface=principal.interface, actor=principal.actor, operation="receipt.update"
-    ):
+    with operation_context(interface=principal.interface, actor=principal.actor, operation="receipt.update"):
         try:
             receipt = Receipt.objects.select_for_update().get(pk=current_id)
         except Receipt.DoesNotExist as exc:
@@ -111,9 +101,7 @@ def upload_receipt(
     principal.require(records_of("receipts").write)
     validate_receipt_file(upload)
     expense, asset = _relations(command)
-    with operation_context(
-        interface=principal.interface, actor=principal.actor, operation="receipt.upload"
-    ):
+    with operation_context(interface=principal.interface, actor=principal.actor, operation="receipt.upload"):
         receipt = Receipt(
             file=upload,
             original_filename=upload.name[:255],
@@ -157,8 +145,6 @@ def receipt_command_from_cleaned_data(data) -> ReceiptMetadataCommand:
         date=data["date"],
         amount=data["amount"],
         notes=data["notes"],
-        related_expense=(
-            data["related_expense"].id if data["related_expense"] else None
-        ),
+        related_expense=(data["related_expense"].id if data["related_expense"] else None),
         related_asset=data["related_asset"].slug if data["related_asset"] else None,
     )

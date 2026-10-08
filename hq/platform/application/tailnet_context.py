@@ -7,20 +7,17 @@ findings raised about the tailnet, and each tailnet reading HQ could not read
 with the reason. None of them derives a fact the others cannot return.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 from urllib.parse import urlencode
 
-from hq.domains.control_plane.providers import PROVIDERS
-
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
+from hq.domains.control_plane.providers import PROVIDERS
 
 from .credential_sight import READABLE, Sight, credential_sight
 from .entity_links import EntityLink
-from .findings import estate_findings, serialize_finding
 from .finding_model import Finding
+from .findings import estate_findings, serialize_finding
 from .policy_links import PolicyName, PolicyNames, tagged
 from .projection import projection_scope
 from .routes import reverse
@@ -42,12 +39,10 @@ TAILNET_KINDS = (TAILNET_KIND, TAILNET_POLICY_KIND)
 def tailnet_providers() -> frozenset[str]:
     """The connection providers whose credentials read the tailnet."""
 
-    return frozenset(
-        provider for kind in TAILNET_KINDS for provider in PROVIDERS[kind].connection_providers
-    )
+    return frozenset(provider for kind in TAILNET_KINDS for provider in PROVIDERS[kind].connection_providers)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NamedRule:
     """A grant or shell rule, and the machines its sources and destinations name."""
 
@@ -56,7 +51,7 @@ class NamedRule:
     destinations: tuple[PolicyName, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Setting:
     """One tailnet setting; ``addresses`` when its value names machines."""
 
@@ -67,7 +62,7 @@ class Setting:
     problem_url: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TagRow:
     tag: dict
     devices: tuple[EntityLink, ...]
@@ -75,7 +70,7 @@ class TagRow:
     unworn: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TailnetContext:
     policy: Policy
     declaration: str
@@ -116,8 +111,7 @@ class TailnetContext:
             "grants": [_rule(item, ports=True) for item in self.grants],
             "ssh_rules": [_rule(item) for item in self.ssh_rules],
             "groups": [
-                {"name": group.get("name", ""), "members": list(group.get("members") or ())}
-                for group in found.groups
+                {"name": group.get("name", ""), "members": list(group.get("members") or ())} for group in found.groups
             ],
             "tags": [
                 {
@@ -138,19 +132,13 @@ class TailnetContext:
 
 
 def _names(names: tuple[PolicyName, ...]) -> list[dict[str, Any]]:
-    return [
-        {"text": name.text, "link": asdict(name.link) if name.link else None} for name in names
-    ]
+    return [{"text": name.text, "link": asdict(name.link) if name.link else None} for name in names]
 
 
 def _rule(item: NamedRule, *, ports: bool = False) -> dict[str, Any]:
-    shown = {
-        key: value for key, value in item.rule.items() if key not in ("src", "dst", "ports")
-    }
+    shown = {key: value for key, value in item.rule.items() if key not in ("src", "dst", "ports")}
     if ports:
-        shown["ports"] = [
-            {"entry": entry, "name": name} for entry, name in item.rule.get("ports") or ()
-        ]
+        shown["ports"] = [{"entry": entry, "name": name} for entry, name in item.rule.get("ports") or ()]
     return {
         **shown,
         "src": list(item.rule.get("src") or ()),
@@ -181,8 +169,7 @@ def _findings(principal: Principal) -> tuple[Finding, ...]:
     subjects = {
         node.id
         for node in topology.nodes
-        if (node.kind == "connection" and node.provider in providers)
-        or node.kind_key in TAILNET_KINDS
+        if (node.kind == "connection" and node.provider in providers) or node.kind_key in TAILNET_KINDS
     }
     return tuple(
         finding

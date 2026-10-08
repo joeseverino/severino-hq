@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import ast
 import gzip
 import re
@@ -8,21 +6,28 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import httpx
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, override_settings
-import httpx
 from starlette.middleware.gzip import GZipMiddleware
-from hq.platform.core.network import TrustedNetworkASGI
 from starlette.staticfiles import StaticFiles
 
+from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
-
 
 # Installed or generated trees inside a checkout. With hidden directories
 # (.git, a virtualenv under any name) they are not this project's source.
 NOT_SOURCE = {
-    "venv", "site-packages", "node_modules", "staticfiles", "build", "data",
-    "var", "media", "exports", "backups",
+    "venv",
+    "site-packages",
+    "node_modules",
+    "staticfiles",
+    "build",
+    "data",
+    "var",
+    "media",
+    "exports",
+    "backups",
 }
 
 
@@ -36,10 +41,7 @@ def source_files(root: Path, pattern: str) -> list[Path]:
     return sorted(
         path
         for path in root.rglob(pattern)
-        if not any(
-            part.startswith(".") or part in NOT_SOURCE
-            for part in path.relative_to(root).parts[:-1]
-        )
+        if not any(part.startswith(".") or part in NOT_SOURCE for part in path.relative_to(root).parts[:-1])
     )
 
 
@@ -51,24 +53,20 @@ def view_modules(root: Path) -> list[Path]:
     return sorted(path for path in found if not path.name.startswith("test") and "tests" not in path.parts)
 
 
-
 def _is_address(text: str, found: re.Match[str]) -> bool:
     """Whether a dotted quad in text is an address, not a version or an RFC section."""
 
     if any(int(part) > 255 for part in found.group().split(".")):
         return False
-    return text[max(0, found.start() - 8):found.start()] != "section-"
+    return text[max(0, found.start() - 8) : found.start()] != "section-"
+
 
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
     def test_workflow_models_remain_a_dependency_leaf(self):
         root = Path(__file__).parent.resolve().parent
-        contracts = ast.parse(
-            (root / "workflow_contracts.py").read_text(encoding="utf-8")
-        )
+        contracts = ast.parse((root / "workflow_contracts.py").read_text(encoding="utf-8"))
         relative_imports = [
-            node.module
-            for node in ast.walk(contracts)
-            if isinstance(node, ast.ImportFrom) and node.level
+            node.module for node in ast.walk(contracts) if isinstance(node, ast.ImportFrom) and node.level
         ]
         self.assertEqual(relative_imports, [])
 
@@ -78,11 +76,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         }
         for filename, forbidden in boundaries.items():
             tree = ast.parse((root / filename).read_text(encoding="utf-8"))
-            imported = {
-                node.module
-                for node in ast.walk(tree)
-                if isinstance(node, ast.ImportFrom) and node.level
-            }
+            imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.level}
             self.assertNotIn(forbidden, imported)
 
     def test_asgi_routes_static_assets_before_django(self):
@@ -110,9 +104,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
     def test_versioned_static_assets_are_compressed_and_immutable(self):
         async def request(root):
             transport = httpx.ASGITransport(app=CachedStaticFiles(directory=root))
-            async with httpx.AsyncClient(
-                transport=transport, base_url="http://testserver"
-            ) as client:
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
                 return await client.get(
                     "/bundle.0123456789ab.css",
                     headers={"Accept-Encoding": "gzip"},
@@ -149,9 +141,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
             and (node.module == "models" or node.module.endswith(".models"))
         ]
         manager_access = [
-            node.lineno
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Attribute) and node.attr == "objects"
+            node.lineno for node in ast.walk(tree) if isinstance(node, ast.Attribute) and node.attr == "objects"
         ]
 
         self.assertEqual(model_imports, [])
@@ -173,9 +163,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         for source_path in view_modules(root):
             tree = ast.parse(source_path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
-                if not isinstance(node, ast.Call) or not isinstance(
-                    node.func, ast.Attribute
-                ):
+                if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                     continue
                 is_instance_mutation = node.func.attr in instance_mutations
                 is_manager_mutation = (
@@ -198,21 +186,14 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
                     continue
                 is_paginated = any(
                     isinstance(item, ast.Assign)
-                    and any(
-                        isinstance(target, ast.Name) and target.id == "paginate_by"
-                        for target in item.targets
-                    )
+                    and any(isinstance(target, ast.Name) and target.id == "paginate_by" for target in item.targets)
                     for item in node.body
                 )
-                bases = {
-                    base.id for base in node.bases if isinstance(base, ast.Name)
-                }
+                bases = {base.id for base in node.bases if isinstance(base, ast.Name)}
                 if is_paginated and "TableListMixin" not in bases:
                     violations.append(f"{source_path.relative_to(root)}:{node.name}")
 
         self.assertEqual(violations, [])
-
-
 
     def test_every_module_defining_a_view_is_one_these_checks_read(self):
         """A view split into its own module must not step outside the checks.
@@ -232,8 +213,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
             if any(
                 isinstance(node, ast.ClassDef)
                 and any(
-                    (base.id if isinstance(base, ast.Name) else getattr(base, "attr", ""))
-                    .endswith("View")
+                    (base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")).endswith("View")
                     for base in node.bases
                 )
                 for node in tree.body
@@ -261,7 +241,6 @@ class StyleContractTests(SimpleTestCase):
         scroll box whose containing block lies outside it: a hidden word in the
         last column of a wide table scrolled a phone's whole page sideways."""
 
-
         rule = re.search(r"\.visually-hidden\s*\{([^}]*)\}", self._stylesheet())
         self.assertIsNotNone(rule)
         body = rule.group(1)
@@ -271,7 +250,7 @@ class StyleContractTests(SimpleTestCase):
 
     def test_a_long_word_breaks_rather_than_widening_the_page(self):
 
-        body = re.search(r"@layer base \{.*?\nbody \{([^}]*)\}", self._stylesheet(), re.S)
+        body = re.search(r"@layer base \{.*?\nbody \{([^}]*)\}", self._stylesheet(), re.DOTALL)
         self.assertIsNotNone(body)
         self.assertIn("overflow-wrap: break-word", body.group(1))
 
@@ -305,7 +284,6 @@ class StyleContractTests(SimpleTestCase):
         `.table-scroll`; it does not stack into cards.
         """
 
-
         root = Path(__file__).resolve().parents[4]
         parts = {"table", "thead", "tbody", "tfoot", "tr", "td", "th"}
         cell_classes: set[str] = set()
@@ -322,7 +300,7 @@ class StyleContractTests(SimpleTestCase):
         offences = []
         # Comments first: one sitting above a rule is otherwise read as part of
         # that rule's selector.
-        source = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.S)
+        source = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.DOTALL)
         for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
             declared = re.search(r"(?<![\w-])display\s*:\s*([a-z-]+)", block)
             if not declared or declared.group(1) not in boxes:
@@ -378,7 +356,7 @@ class StyleContractTests(SimpleTestCase):
 
     def test_viewport_breakpoints_only_go_down(self):
 
-        css = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.S)
+        css = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.DOTALL)
         found = [q for q in re.findall(r"@media[^{]*\{", css) if "width" in q]
         self.assertLessEqual(
             len(found),
@@ -399,13 +377,13 @@ class StyleContractTests(SimpleTestCase):
 
         import collections
 
-        css = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group().count("\n"), self._stylesheet(), flags=re.S)
+        css = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group().count("\n"), self._stylesheet(), flags=re.DOTALL)
         seen: dict[str, list[int]] = collections.defaultdict(list)
         stack: list[str] = []
         start = 0
         for match in re.finditer(r"[{}]", css):
             if match.group() == "{":
-                selector = " ".join(css[start:match.start()].split())
+                selector = " ".join(css[start : match.start()].split())
                 stack.append(selector)
                 outer = stack[:-1]
                 top_level = all(s.startswith("@layer") for s in outer)
@@ -436,12 +414,9 @@ class StyleContractTests(SimpleTestCase):
         action cannot reintroduce that split by choosing the wrong element.
         """
 
-
         root = Path(__file__).resolve().parents[4]
         template = (root / "templates" / "base.html").read_text(encoding="utf-8")
-        panel = template.split('<div class="user-menu-panel">', 1)[1].split(
-            "</details>", 1
-        )[0]
+        panel = template.split('<div class="user-menu-panel">', 1)[1].split("</details>", 1)[0]
         rows = re.findall(r"<(?:a|button)\b[^>]*>", panel, re.DOTALL)
 
         self.assertTrue(rows)
@@ -468,9 +443,7 @@ class StyleContractTests(SimpleTestCase):
                 outside.append(f"{number}: {stripped[:60]}")
             depth += line.count("{") - line.count("}")
 
-        self.assertEqual(
-            outside, [], "Rules outside @layer beat every layer. Put them in one."
-        )
+        self.assertEqual(outside, [], "Rules outside @layer beat every layer. Put them in one.")
 
     def test_font_size_comes_from_the_type_scale(self):
         """A font size is one of the type scale's steps, or it is drift.
@@ -482,7 +455,6 @@ class StyleContractTests(SimpleTestCase):
         its label) which is a different statement from choosing a step, and
         one an absolute scale cannot make.
         """
-
 
         literals = re.findall(r"font-size:\s*([0-9.]+(?:px|rem))", self._stylesheet())
 
@@ -506,7 +478,6 @@ class StyleContractTests(SimpleTestCase):
         not a space at all.
         """
 
-
         on_scale = {2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40}
         declaration = re.compile(
             r"\b(?:padding|margin|gap|row-gap|column-gap)(?:-[a-z-]+)?:\s*([^;{}]+)",
@@ -523,39 +494,180 @@ class StyleContractTests(SimpleTestCase):
             }
         )
 
-        self.assertEqual(
-            offenders, [], "This spacing is on the scale; write it as --space-*."
-        )
+        self.assertEqual(offenders, [], "This spacing is on the scale; write it as --space-*.")
 
     # Every CSS named colour and system colour, so `color: tomato` is caught as
     # surely as a hex.
     _NAMED_COLOURS = frozenset(
-        """aliceblue antiquewhite aqua aquamarine azure beige bisque black
-        blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse
-        chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan
-        darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta
-        darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen
-        darkslateblue darkslategray darkslategrey darkturquoise darkviolet
-        deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite
-        forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green
-        greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender
-        lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan
-        lightgoldenrodyellow lightgray lightgreen lightgrey lightpink
-        lightsalmon lightseagreen lightskyblue lightslategray lightslategrey
-        lightsteelblue lightyellow lime limegreen linen magenta maroon
-        mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen
-        mediumslateblue mediumspringgreen mediumturquoise mediumvioletred
-        midnightblue mintcream mistyrose moccasin navajowhite navy oldlace
-        olive olivedrab orange orangered orchid palegoldenrod palegreen
-        paleturquoise palevioletred papayawhip peachpuff peru pink plum
-        powderblue purple rebeccapurple red rosybrown royalblue saddlebrown
-        salmon sandybrown seagreen seashell sienna silver skyblue slateblue
-        slategray slategrey snow springgreen steelblue tan teal thistle tomato
-        turquoise violet wheat white whitesmoke yellow yellowgreen
-        canvas canvastext linktext visitedtext activetext buttonface
-        buttontext buttonborder field fieldtext highlight highlighttext
-        selecteditem selecteditemtext mark marktext graytext accentcolor
-        accentcolortext""".split()
+        [
+            "aliceblue",
+            "antiquewhite",
+            "aqua",
+            "aquamarine",
+            "azure",
+            "beige",
+            "bisque",
+            "black",
+            "blanchedalmond",
+            "blue",
+            "blueviolet",
+            "brown",
+            "burlywood",
+            "cadetblue",
+            "chartreuse",
+            "chocolate",
+            "coral",
+            "cornflowerblue",
+            "cornsilk",
+            "crimson",
+            "cyan",
+            "darkblue",
+            "darkcyan",
+            "darkgoldenrod",
+            "darkgray",
+            "darkgreen",
+            "darkgrey",
+            "darkkhaki",
+            "darkmagenta",
+            "darkolivegreen",
+            "darkorange",
+            "darkorchid",
+            "darkred",
+            "darksalmon",
+            "darkseagreen",
+            "darkslateblue",
+            "darkslategray",
+            "darkslategrey",
+            "darkturquoise",
+            "darkviolet",
+            "deeppink",
+            "deepskyblue",
+            "dimgray",
+            "dimgrey",
+            "dodgerblue",
+            "firebrick",
+            "floralwhite",
+            "forestgreen",
+            "fuchsia",
+            "gainsboro",
+            "ghostwhite",
+            "gold",
+            "goldenrod",
+            "gray",
+            "green",
+            "greenyellow",
+            "grey",
+            "honeydew",
+            "hotpink",
+            "indianred",
+            "indigo",
+            "ivory",
+            "khaki",
+            "lavender",
+            "lavenderblush",
+            "lawngreen",
+            "lemonchiffon",
+            "lightblue",
+            "lightcoral",
+            "lightcyan",
+            "lightgoldenrodyellow",
+            "lightgray",
+            "lightgreen",
+            "lightgrey",
+            "lightpink",
+            "lightsalmon",
+            "lightseagreen",
+            "lightskyblue",
+            "lightslategray",
+            "lightslategrey",
+            "lightsteelblue",
+            "lightyellow",
+            "lime",
+            "limegreen",
+            "linen",
+            "magenta",
+            "maroon",
+            "mediumaquamarine",
+            "mediumblue",
+            "mediumorchid",
+            "mediumpurple",
+            "mediumseagreen",
+            "mediumslateblue",
+            "mediumspringgreen",
+            "mediumturquoise",
+            "mediumvioletred",
+            "midnightblue",
+            "mintcream",
+            "mistyrose",
+            "moccasin",
+            "navajowhite",
+            "navy",
+            "oldlace",
+            "olive",
+            "olivedrab",
+            "orange",
+            "orangered",
+            "orchid",
+            "palegoldenrod",
+            "palegreen",
+            "paleturquoise",
+            "palevioletred",
+            "papayawhip",
+            "peachpuff",
+            "peru",
+            "pink",
+            "plum",
+            "powderblue",
+            "purple",
+            "rebeccapurple",
+            "red",
+            "rosybrown",
+            "royalblue",
+            "saddlebrown",
+            "salmon",
+            "sandybrown",
+            "seagreen",
+            "seashell",
+            "sienna",
+            "silver",
+            "skyblue",
+            "slateblue",
+            "slategray",
+            "slategrey",
+            "snow",
+            "springgreen",
+            "steelblue",
+            "tan",
+            "teal",
+            "thistle",
+            "tomato",
+            "turquoise",
+            "violet",
+            "wheat",
+            "white",
+            "whitesmoke",
+            "yellow",
+            "yellowgreen",
+            "canvas",
+            "canvastext",
+            "linktext",
+            "visitedtext",
+            "activetext",
+            "buttonface",
+            "buttontext",
+            "buttonborder",
+            "field",
+            "fieldtext",
+            "highlight",
+            "highlighttext",
+            "selecteditem",
+            "selecteditemtext",
+            "mark",
+            "marktext",
+            "graytext",
+            "accentcolor",
+            "accentcolortext",
+        ]
     )
 
     @classmethod
@@ -568,11 +680,10 @@ class StyleContractTests(SimpleTestCase):
         at-rule prelude and is skipped, so `.pill-green` cannot read as green.
         """
 
-
         def blank(text: str) -> str:
             return re.sub(r"[^\n]", " ", text)
 
-        css = re.sub(r"/\*.*?\*/", lambda match: blank(match.group()), cls._stylesheet(), flags=re.S)
+        css = re.sub(r"/\*.*?\*/", lambda match: blank(match.group()), cls._stylesheet(), flags=re.DOTALL)
         for opening in reversed([match.start() for match in re.finditer(r"@layer\s+tokens\s*\{", css)]):
             depth, end = 0, len(css)
             for index in range(css.index("{", opening), len(css)):
@@ -604,7 +715,6 @@ class StyleContractTests(SimpleTestCase):
         `currentColor`, `inherit`).
         """
 
-
         literal = re.compile(
             r"#[0-9a-fA-F]{3,8}\b"
             r"|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\("
@@ -618,9 +728,7 @@ class StyleContractTests(SimpleTestCase):
                     offenders.append(f"{line}: {value.strip()[:70]}")
                     break
 
-        self.assertEqual(
-            offenders, [], "Colour belongs in a token in `@layer tokens`, not the component."
-        )
+        self.assertEqual(offenders, [], "Colour belongs in a token in `@layer tokens`, not the component.")
 
     def test_the_colour_guard_reads_declarations(self):
         """The guard above would pass vacuously if its parser found nothing."""
@@ -653,14 +761,13 @@ class StyleContractTests(SimpleTestCase):
             tracked = subprocess.run(
                 # Tracked *and* new-but-not-ignored, so a file is checked by
                 # the commit that first adds it rather than the one after.
-                ["git", "ls-files", "-z", "--cached", "--others",
-                 "--exclude-standard"],
+                ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
                 cwd=root,
                 capture_output=True,
                 text=True,
                 check=True,
             ).stdout.split("\0")
-        except (FileNotFoundError, subprocess.CalledProcessError):
+        except FileNotFoundError, subprocess.CalledProcessError:
             self.skipTest("no git checkout to ask")
 
         # Documentation and private ranges are examples, not places. Anything
@@ -699,7 +806,10 @@ class StyleContractTests(SimpleTestCase):
         terms_file = Path(
             subprocess.run(
                 ["git", "rev-parse", "--git-path", "info/deployment-terms"],
-                cwd=root, capture_output=True, text=True, check=True,
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=True,
             ).stdout.strip()
         )
         if not terms_file.is_absolute():
@@ -715,8 +825,11 @@ class StyleContractTests(SimpleTestCase):
         # Lockfiles and pinned action SHAs are hashes, not hosts. Vendored
         # bundles/specs carry upstream examples, pinned by their UPSTREAM.
         skip = (
-            "package-lock.json", "uv.lock", ".github/",
-            "controller/api/vendor/", "static/vendor/",
+            "package-lock.json",
+            "uv.lock",
+            ".github/",
+            "controller/api/vendor/",
+            "static/vendor/",
         )
 
         findings = []
@@ -728,15 +841,16 @@ class StyleContractTests(SimpleTestCase):
             path = root / name
             try:
                 text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
+            except OSError, UnicodeDecodeError:
                 continue
-            for found in address.finditer(text):
-                if _is_address(text, found) and not reserved.match(found.group()):
-                    findings.append(f"{name}: {found.group()}")
+            findings.extend(
+                f"{name}: {found.group()}"
+                for found in address.finditer(text)
+                if _is_address(text, found) and not reserved.match(found.group())
+            )
             if host_key.search(text):
                 findings.append(f"{name}: ssh host key")
-            for candidate in sorted(set(private_host.findall(text))):
-                findings.append(f"{name}: {candidate}")
+            findings.extend(f"{name}: {candidate}" for candidate in sorted(set(private_host.findall(text))))
             lowered = text.lower()
             for index, term in enumerate(terms):
                 if term in lowered:
@@ -787,14 +901,10 @@ class StyleContractTests(SimpleTestCase):
                 text=True,
                 check=True,
             ).stdout.split("\0")
-        except (FileNotFoundError, subprocess.CalledProcessError):
+        except FileNotFoundError, subprocess.CalledProcessError:
             self.skipTest("not a git checkout; nothing here can be pushed")
         strays = [
-            name
-            for name in tracked
-            if name
-            and Path(name).suffix.lower() in suffixes
-            and not name.startswith(allowed)
+            name for name in tracked if name and Path(name).suffix.lower() in suffixes and not name.startswith(allowed)
         ]
         self.assertEqual(
             sorted(strays),
@@ -828,16 +938,13 @@ class StyleContractTests(SimpleTestCase):
             text = template.read_text(encoding="utf-8")
             # Only the SVG geometry attributes. A viewBox is rendered from the
             # chart's own width and height, so it is read from the model too.
-            for attribute, literal in re.findall(
-                r'\b(x1|x2|y1|y2|cx|cy|width|height)="([0-9.]+)"', text
-            ):
+            for attribute, literal in re.findall(r'\b(x1|x2|y1|y2|cx|cy|width|height)="([0-9.]+)"', text):
                 if literal.split(".")[0] in forbidden:
-                    offenders.append(f"{template.name}: {attribute}=\"{literal}\"")
+                    offenders.append(f'{template.name}: {attribute}="{literal}"')
         self.assertEqual(
             offenders,
             [],
-            "chart templates must read plot coordinates from the chart, "
-            "not restate them",
+            "chart templates must read plot coordinates from the chart, not restate them",
         )
 
     def test_chart_drawings_declare_no_fixed_pixel_floor(self):
@@ -853,15 +960,12 @@ class StyleContractTests(SimpleTestCase):
 
         css = self._stylesheet()
         for rule in ("bar-chart", "line-chart"):
-            block = re.search(
-                r"^\." + rule + r"\s*\{(.*?)\}", css, re.MULTILINE | re.DOTALL
-            )
+            block = re.search(r"^\." + rule + r"\s*\{(.*?)\}", css, re.MULTILINE | re.DOTALL)
             self.assertIsNotNone(block, f".{rule} must exist")
             self.assertNotIn(
                 "min-width",
                 block.group(1),
-                f".{rule} must not declare a fixed floor; it cannot be "
-                "satisfied by a half-width card",
+                f".{rule} must not declare a fixed floor; it cannot be satisfied by a half-width card",
             )
 
     def test_scrollable_boxes_state_both_axes(self):
@@ -876,9 +980,7 @@ class StyleContractTests(SimpleTestCase):
 
         css = self._stylesheet()
         offenders = []
-        for selector, body in re.findall(
-            r"^(\.[a-z0-9-]+)\s*\{([^}]*)\}", css, re.MULTILINE
-        ):
+        for selector, body in re.findall(r"^(\.[a-z0-9-]+)\s*\{([^}]*)\}", css, re.MULTILINE):
             has_x = re.search(r"overflow-x\s*:\s*(auto|scroll)", body)
             if not has_x:
                 continue
@@ -937,9 +1039,7 @@ class SharedPrimitiveStyleTests(SimpleTestCase):
                 # that make them up are checked where they are defined instead.
                 if "{{" in attribute or "{%" in attribute:
                     continue
-                for name in attribute.split():
-                    if name not in defined:
-                        offenders.append(f"{template.name}: .{name}")
+                offenders.extend(f"{template.name}: .{name}" for name in attribute.split() if name not in defined)
         self.assertEqual(sorted(set(offenders)), [])
 
 
@@ -970,9 +1070,7 @@ class TemplateCommentTests(SimpleTestCase):
         with TemporaryDirectory() as root:
             Path(root, "partials").mkdir()
             Path(root, "page.html").write_text("<p>{# fine #}</p>\n", encoding="utf-8")
-            Path(root, "partials", "_row.html").write_text(
-                "<td>\n{# left\n   open #}</td>\n", encoding="utf-8"
-            )
+            Path(root, "partials", "_row.html").write_text("<td>\n{# left\n   open #}</td>\n", encoding="utf-8")
 
             self.assertEqual(unclosed_template_comments(root), ["partials/_row.html:2"])
 
@@ -980,9 +1078,7 @@ class TemplateCommentTests(SimpleTestCase):
         from hq.platform.core import interface_text
         from hq_sdk import testing
 
-        self.assertIs(
-            testing.unclosed_template_comments, interface_text.unclosed_template_comments
-        )
+        self.assertIs(testing.unclosed_template_comments, interface_text.unclosed_template_comments)
 
 
 class PageTitleTests(SimpleTestCase):
@@ -1006,9 +1102,7 @@ class PageTitleTests(SimpleTestCase):
 
     def test_no_page_appends_the_site_name_itself(self):
         offenders = [
-            f"{name}: {leaf}"
-            for name, leaf in self.title_blocks()
-            if "SITE_NAME" in leaf or "Severino HQ" in leaf
+            f"{name}: {leaf}" for name, leaf in self.title_blocks() if "SITE_NAME" in leaf or "Severino HQ" in leaf
         ]
         self.assertEqual(
             offenders,
@@ -1094,9 +1188,7 @@ class WorkflowSecrecyTests(SimpleTestCase):
         # file would put the whole workflow in the output of the check meant to
         # keep things out of it.
         offenders = [
-            path.name
-            for path in self.workflows()
-            if "vars.COMPOSITION_EXTENSIONS" in path.read_text(encoding="utf-8")
+            path.name for path in self.workflows() if "vars.COMPOSITION_EXTENSIONS" in path.read_text(encoding="utf-8")
         ]
 
         self.assertEqual(offenders, [], "read it from secrets, which are masked")
@@ -1111,11 +1203,16 @@ class AssertionPrecisionTests(SimpleTestCase):
     """
 
     SPECIFIC = {
-        "Eq": "assertEqual", "NotEq": "assertNotEqual",
-        "Lt": "assertLess", "LtE": "assertLessEqual",
-        "Gt": "assertGreater", "GtE": "assertGreaterEqual",
-        "Is": "assertIs", "IsNot": "assertIsNot",
-        "In": "assertIn", "NotIn": "assertNotIn",
+        "Eq": "assertEqual",
+        "NotEq": "assertNotEqual",
+        "Lt": "assertLess",
+        "LtE": "assertLessEqual",
+        "Gt": "assertGreater",
+        "GtE": "assertGreaterEqual",
+        "Is": "assertIs",
+        "IsNot": "assertIsNot",
+        "In": "assertIn",
+        "NotIn": "assertNotIn",
     }
 
     def test_no_assertion_hides_a_comparison_inside_a_boolean(self):
@@ -1148,9 +1245,7 @@ class AssertionPrecisionTests(SimpleTestCase):
                 better = self.SPECIFIC.get(operator, "a specific assertion")
                 if name == "assertFalse":
                     better = "the negated form of " + better
-                offenders.append(
-                    f"{path.relative_to(root)}:{node.lineno}: use {better}"
-                )
+                offenders.append(f"{path.relative_to(root)}:{node.lineno}: use {better}")
 
         self.assertEqual(offenders, [])
 
@@ -1203,10 +1298,10 @@ class CommentHistoryTests(SimpleTestCase):
 
     def _comments(self, path: Path, text: str):
         if path.suffix in (".css", ".js"):
-            return re.finditer(r"/\*.*?\*/|//[^\n]*", text, re.S)
+            return re.finditer(r"/\*.*?\*/|//[^\n]*", text, re.DOTALL)
         if path.suffix in (".py", ".sh"):
-            return re.finditer(r"#[^\n]*|\"\"\".*?\"\"\"", text, re.S)
-        return re.finditer(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", text, re.S)
+            return re.finditer(r"#[^\n]*|\"\"\".*?\"\"\"", text, re.DOTALL)
+        return re.finditer(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", text, re.DOTALL)
 
     SUFFIXES = {".py", ".js", ".css", ".html", ".sh"}
     # Generated or installed trees, and anything hidden (.git, .venv). The suite
@@ -1256,9 +1351,7 @@ class CountedTests(SimpleTestCase):
     def test_the_template_filter_is_the_same_rule(self):
         from django.template import Context, Template
 
-        rendered = Template('{{ n|counted:"thing needs you,things need you" }}').render(
-            Context({"n": 1})
-        )
+        rendered = Template('{{ n|counted:"thing needs you,things need you" }}').render(Context({"n": 1}))
         self.assertEqual(rendered, "1 thing needs you")
 
 
@@ -1358,8 +1451,7 @@ PLAIN_WORDS_EXEMPT = (
     (
         "hq/platform/application/capability_policy.py",
         "Capability",
-        "The type name stored on every past audit row for an agent rule; a new "
-        "name would split that history in two.",
+        "The type name stored on every past audit row for an agent rule; a new name would split that history in two.",
     ),
     *(
         (path, word, "Linux's own word for a privilege a container can be given, as Docker's cap_add spells it.")
@@ -1470,9 +1562,7 @@ class PlainWordsTests(SimpleTestCase):
             'title = "Was not in the last sweep"\n'
         )
 
-        self.assertEqual(
-            [text for _line, text in self.words.python_text(source)], ["Was not in the last sweep"]
-        )
+        self.assertEqual([text for _line, text in self.words.python_text(source)], ["Was not in the last sweep"])
 
     def test_a_retired_name_is_found_as_written(self):
         self.assertEqual(
@@ -1485,7 +1575,7 @@ class PlainWordsTests(SimpleTestCase):
         from pathlib import Path
 
         with self.assertRaises(FileNotFoundError):
-            self.words.read([Path("templates/no-such-page.html")], root=Path("."))
+            self.words.read([Path("templates/no-such-page.html")], root=Path())
 
 
 class PostButtonTests(SimpleTestCase):
@@ -1533,7 +1623,9 @@ class OnePrimitiveTests(SimpleTestCase):
         inline = re.compile(r'lower\(\)\s*\.rstrip\("\."\)|rstrip\("\."\)\s*\.lower\(\)')
         found = [
             relative
-            for relative, text in self.sources("hq/platform/application", "hq/domains/control_plane", "hq/platform/core")
+            for relative, text in self.sources(
+                "hq/platform/application", "hq/domains/control_plane", "hq/platform/core"
+            )
             if relative != "hq/domains/control_plane/names.py" and inline.search(text)
         ]
         self.assertEqual(found, [])
@@ -1542,9 +1634,16 @@ class OnePrimitiveTests(SimpleTestCase):
         """One builder, so a target is always encoded the way the form reads
         it: a hand-built ``?target=`` opened a form with nothing chosen."""
 
-
         inline = re.compile(r"""reverse\(\s*["']command["']""")
-        scanned = list(self.sources("hq/platform/application", "hq/domains/control_plane", "hq/platform/core", "hq/platform/api", "hq/platform/mcp"))
+        scanned = list(
+            self.sources(
+                "hq/platform/application",
+                "hq/domains/control_plane",
+                "hq/platform/core",
+                "hq/platform/api",
+                "hq/platform/mcp",
+            )
+        )
         found = [
             relative
             for relative, text in scanned
@@ -1564,7 +1663,9 @@ class OnePrimitiveTests(SimpleTestCase):
         inline = re.compile(r'endswith\(f"\.\{')
         found = [
             relative
-            for relative, text in self.sources("hq/platform/application", "hq/domains/control_plane", "hq/platform/core")
+            for relative, text in self.sources(
+                "hq/platform/application", "hq/domains/control_plane", "hq/platform/core"
+            )
             if relative != "hq/domains/control_plane/names.py" and inline.search(text)
         ]
         self.assertEqual(found, [])
@@ -1606,7 +1707,7 @@ class OnePrimitiveTests(SimpleTestCase):
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
                 if not isinstance(node, ast.JoinedStr):
                     continue
-                for before, after in zip(node.values, node.values[1:]):
+                for before, after in zip(node.values, node.values[1:], strict=False):
                     if (
                         isinstance(before, ast.Constant)
                         and str(before.value).endswith("$")
@@ -1625,8 +1726,7 @@ class OnePrimitiveTests(SimpleTestCase):
         found = [
             path.relative_to(self.ROOT).as_posix()
             for path in sources
-            if path.relative_to(self.ROOT).as_posix() != "hq/platform/application/money.py"
-            and builds_an_amount(path)
+            if path.relative_to(self.ROOT).as_posix() != "hq/platform/application/money.py" and builds_an_amount(path)
         ]
         self.assertEqual(found, [])
 
@@ -1651,7 +1751,7 @@ class OnePrimitiveTests(SimpleTestCase):
         # A button to a page (Cancel, Edit) is an action, not a mention.
         mention = re.compile(
             r'<a href="\{% url \'(control_plane:(detail|machine|service)|zones:detail|'
-            r'projects:detail)\''
+            r"projects:detail)\'"
         )
         found = [
             path.relative_to(self.ROOT).as_posix()
@@ -1688,8 +1788,15 @@ class CognitiveComplexityTests(SimpleTestCase):
     LIMIT = 20
     ROOT = Path(__file__).resolve().parents[4]
     NESTING = (
-        ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith,
-        ast.Try, ast.TryStar, ast.ExceptHandler, ast.Match,
+        ast.For,
+        ast.AsyncFor,
+        ast.While,
+        ast.With,
+        ast.AsyncWith,
+        ast.Try,
+        ast.TryStar,
+        ast.ExceptHandler,
+        ast.Match,
     )
 
     @classmethod
@@ -1703,11 +1810,7 @@ class CognitiveComplexityTests(SimpleTestCase):
                 total += block(node.body, nesting + 1)
                 rest = node.orelse
                 # An elif shares its if's column; an if inside an else does not.
-                while (
-                    len(rest) == 1
-                    and isinstance(rest[0], ast.If)
-                    and rest[0].col_offset == node.col_offset
-                ):
+                while len(rest) == 1 and isinstance(rest[0], ast.If) and rest[0].col_offset == node.col_offset:
                     branch = rest[0]
                     total += 2 + nesting + walk(branch.test, nesting + 1)
                     total += block(branch.body, nesting + 2)
@@ -1733,9 +1836,7 @@ class CognitiveComplexityTests(SimpleTestCase):
         for package in sorted(self.ROOT.glob("*/__init__.py")):
             for path in sorted(package.parent.rglob("*.py")):
                 relative = path.relative_to(self.ROOT)
-                if path.name.startswith("test") or {"tests", "migrations"} & set(
-                    relative.parts
-                ):
+                if path.name.startswith("test") or {"tests", "migrations"} & set(relative.parts):
                     continue
                 tree = ast.parse(path.read_text(encoding="utf-8"))
                 module = ".".join(relative.with_suffix("").parts)
@@ -1745,13 +1846,13 @@ class CognitiveComplexityTests(SimpleTestCase):
     def test_the_score_weighs_nesting(self):
         source = (
             "def f(a):\n"
-            "    for x in a:\n"          # +1
-            "        if x and a:\n"      # +2
+            "    for x in a:\n"  # +1
+            "        if x and a:\n"  # +2
             "            pass\n"
-            "        elif x:\n"          # +3
+            "        elif x:\n"  # +3
             "            pass\n"
             "        else:\n"
-            "            with x:\n"      # +3
+            "            with x:\n"  # +3
             "                pass\n"
             "    return [y for y in a if y] or None\n"
         )
@@ -1760,11 +1861,7 @@ class CognitiveComplexityTests(SimpleTestCase):
 
     def test_no_function_exceeds_the_limit(self):
         # No allowance list: a function over the limit is split, never excused.
-        over = {
-            name: score
-            for name, score in self.scores().items()
-            if score > self.LIMIT
-        }
+        over = {name: score for name, score in self.scores().items() if score > self.LIMIT}
         self.assertEqual(over, {}, "split these into named steps")
 
 
@@ -1861,11 +1958,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
             if "allowed(" not in source:
                 continue
             for node in ast.walk(ast.parse(source)):
-                if not (
-                    isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Name)
-                    and node.func.id == "allowed"
-                ):
+                if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "allowed"):
                     continue
                 argument = node.args[0] if node.args else None
                 name = argument.value if isinstance(argument, ast.Constant) else "<not a literal>"
@@ -1930,8 +2023,7 @@ class FragmentPrimitiveTests(SimpleTestCase):
 
     def scripts(self) -> dict[str, str]:
         found = {
-            path.name: path.read_text(encoding="utf-8")
-            for path in sorted((self.ROOT / "static" / "js").glob("*.js"))
+            path.name: path.read_text(encoding="utf-8") for path in sorted((self.ROOT / "static" / "js").glob("*.js"))
         }
         self.assertIn(self.PRIMITIVE, found)
         self.assertGreater(len(found), 1)
@@ -1967,10 +2059,7 @@ class FragmentPrimitiveTests(SimpleTestCase):
         self.assertEqual(order, sorted(order))
 
     def test_every_part_a_template_names_is_one_a_template_defines(self):
-        sources = [
-            path.read_text(encoding="utf-8")
-            for path in sorted((self.ROOT / "templates").rglob("*.html"))
-        ]
+        sources = [path.read_text(encoding="utf-8") for path in sorted((self.ROOT / "templates").rglob("*.html"))]
         named = {name for text in sources for name in re.findall(r'data-fragment-name="(\w+)"', text)}
         defined = {name for text in sources for name in re.findall(r"{% partialdef (\w+)", text)}
 

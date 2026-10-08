@@ -1,11 +1,9 @@
 """Findings about domain registrations that are about to lapse."""
 
-from __future__ import annotations
-
-from datetime import timezone as dt_timezone
+from datetime import UTC
 
 from .expiry import days_until
-from .finding_model import Finding, FindingEstate, OperatorStep, parse_stamp, FindingRule
+from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, parse_stamp
 from .moments import span, when_day
 
 
@@ -38,7 +36,7 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
         # an aware now that raises rather than answering, so the assumption is
         # made explicit here: a renewal date is a UTC day.
         if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=dt_timezone.utc)
+            expires = expires.replace(tzinfo=UTC)
         days = days_until(expires, estate.now)
         if days > 90:
             continue
@@ -55,20 +53,14 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 severity="serious" if days <= 30 else "attention",
                 explanation=(
-                    f"On {when_day(expires.date())} its "
-                    "records, certificate and every name under it stop working."
+                    f"On {when_day(expires.date())} its records, certificate and every name under it stop working."
                 ),
                 evidence=(
                     ("Expires", when_day(expires.date())),
                     ("Auto-renew", "Off"),
                     ("Registrar", registrar or "Unknown"),
                 ),
-                steps=(
-                    OperatorStep(
-                        label=f"Renew {domain} or turn on auto-renew at "
-                        f"{registrar or 'its registrar'}."
-                    ),
-                ),
+                steps=(OperatorStep(label=f"Renew {domain} or turn on auto-renew at {registrar or 'its registrar'}."),),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
@@ -81,11 +73,7 @@ RULES: tuple[FindingRule, ...] = (
         "Domain registration expiring",
         "serious",
         _registration_lapsing,
-        operator_action=(
-            "Renew the domain or turn on auto-renew at its registrar."
-        ),
-        no_help_reason=(
-            "HQ cannot renew a domain."
-        ),
+        operator_action=("Renew the domain or turn on auto-renew at its registrar."),
+        no_help_reason=("HQ cannot renew a domain."),
     ),
 )

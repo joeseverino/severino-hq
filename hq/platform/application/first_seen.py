@@ -10,13 +10,11 @@ began at a time nobody recorded, and so did one that appears after a gap with
 no look: both are kept with no date, and a card then says none.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from functools import wraps
-from typing import Any, TypeVar
+from typing import Any
 
 from django.utils import timezone
 
@@ -31,8 +29,6 @@ LOOK_EVERY = timedelta(minutes=15)
 # How long before a look the one before it may be for a new item to be dated
 # by this one. Past it the item began somewhere in a gap.
 KNOWN_WITHIN = timedelta(hours=1)
-
-_Item = TypeVar("_Item")
 
 
 def about(item: Any) -> str:
@@ -53,7 +49,7 @@ def _recorded() -> dict[str, datetime]:
     return {key: at for key, at in ((key, moment(stamp)) for key, stamp in seen.items()) if at}
 
 
-def with_first_seen(items: Iterable[_Item]) -> tuple[_Item, ...]:
+def with_first_seen[Item](items: Iterable[Item]) -> tuple[Item, ...]:
     """``items``, each saying since when where it does not already.
 
     A notice reports an occurrence and carries its own date in its words.
@@ -71,14 +67,10 @@ def with_first_seen(items: Iterable[_Item]) -> tuple[_Item, ...]:
     )
 
 
-def dated(provider: Callable[[], Iterable[_Item]]) -> Callable[[], tuple[_Item, ...]]:
+def dated[Item](provider: Callable[[], Iterable[Item]]) -> Callable[[], tuple[Item, ...]]:
     """A queue provider whose items say since when."""
 
-    @wraps(provider)
-    def provide() -> tuple[_Item, ...]:
-        return with_first_seen(provider())
-
-    return provide
+    return wraps(provider)(lambda: with_first_seen(provider()))
 
 
 # When this process last knew of a look, so a report that follows one closely
@@ -112,5 +104,5 @@ def note_open(keys: Iterable[str], *, now: datetime | None = None) -> None:
     known = dict(found.value) if found is not None and isinstance(found.value, dict) else {}
     watched = found is not None and now - found.observed_at <= KNOWN_WITHIN
     stamp = now.isoformat() if watched else None
-    record(READING_KEY, {key: known[key] if key in known else stamp for key in keys}, observed_at=now)
+    record(READING_KEY, {key: known.get(key, stamp) for key in keys}, observed_at=now)
     _looked[:] = [now]

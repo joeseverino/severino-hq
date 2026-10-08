@@ -1,11 +1,14 @@
+from typing import override
+
 from django.apps import AppConfig
 
 
 class CoreConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = 'hq.platform.core'
-    label = 'core'
+    name = "hq.platform.core"
+    label = "core"
 
+    @override
     def ready(self):
         from django.db.models.signals import post_migrate
 

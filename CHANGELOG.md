@@ -24,6 +24,17 @@ contracts are the public surface.
 
 ### Changed
 
+- HQ runs on Python 3.14 only: `requires-python`, `.python-version`, the test
+  matrix, the plugin-check default and the lint and type targets agree. Modules
+  use deferred annotations, `type` parameter syntax and `typing.override`.
+- Ruff also enforces import order, pyupgrade, bugbear, simplify, pathlib,
+  comprehension, performance, Ruff-specific, refurb, Django and blind-except
+  rules, and mypy requires `@override` in the typed modules.
+- Frozen dataclasses declare `slots=True`, except where a cached property needs
+  the instance dictionary.
+- The host image installs its locked dependencies with uv from a digest-pinned
+  image and a BuildKit cache mount, and shares one Python base digest with the
+  composition image.
 - A Cloudflare "Authentication error" under HTTP 401 is a missing permission
   when the token still verifies, and a credential that read any kind is never
   reported as refused outright. Tailscale 403/404 on a scoped read is a missing

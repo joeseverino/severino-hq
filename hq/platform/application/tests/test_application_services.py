@@ -1,9 +1,7 @@
-from __future__ import annotations
-
 import json
-from io import StringIO
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from datetime import date, datetime, timezone
+from io import StringIO
 from unittest import mock
 
 from asgiref.sync import async_to_sync
@@ -15,35 +13,34 @@ from django.urls import reverse
 
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
+from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
+from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
+from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
 from hq.platform.mcp.identity import reset_principal, set_principal
 from hq.platform.mcp.server import mcp
 from hq_sdk.capabilities import StrictCommand
-from hq.domains.projects.models import Project
-from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
-from hq.domains.docs_index.models import DocumentationRecord
 
-from ..documentation import sync_documentation
 from ..assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asset
-from ..content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
 from ..capabilities import (
     CapabilitySpec,
     describe_capabilities,
     execute_capability,
 )
+from ..content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
+from ..documentation import sync_documentation
 from ..expenses import ExpenseCommand, NotFoundError as ExpenseNotFoundError, save_expense
 from ..projects import ConflictError, ProjectCommand, refresh_project, save_project
 from ..security import (
     OPERATOR_CAPABILITIES,
-    Capability,
     AuthorizationError,
+    Capability,
     Principal,
     cli_principal,
     mcp_principal,
 )
-
 
 
 def as_mcp_caller(call):
@@ -58,6 +55,7 @@ def as_mcp_caller(call):
         return async_to_sync(call)()
     finally:
         reset_principal(bound)
+
 
 class CapabilityTests(TestCase):
     def test_plugin_strict_commands_execute_through_the_host(self):
@@ -87,9 +85,7 @@ class CapabilityTests(TestCase):
         second = describe_capabilities()
 
         self.assertEqual(first, second)
-        project = next(
-            item for item in first["capabilities"] if item["name"] == "project.create"
-        )
+        project = next(item for item in first["capabilities"] if item["name"] == "project.create")
         self.assertEqual(project["effect"], "remote_write")
         self.assertEqual(project["resource"], "projects")
         self.assertIn("name", project["input_schema"]["properties"])
@@ -134,9 +130,7 @@ class CapabilityTests(TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(
-            result["error"]["message"], "expense.update requires a integer target."
-        )
+        self.assertEqual(result["error"]["message"], "expense.update requires a integer target.")
 
     def test_an_unauthorized_caller_is_refused_before_its_target_is_read(self):
         result = execute_capability(
@@ -197,9 +191,7 @@ class CapabilityTests(TestCase):
         )
 
         self.assertFalse(result["ok"])
-        self.assertFalse(
-            DocumentationRecord.objects.filter(doc_id="rb-atomic-sync").exists()
-        )
+        self.assertFalse(DocumentationRecord.objects.filter(doc_id="rb-atomic-sync").exists())
 
     def test_syncing_docs_does_not_require_the_whole_control_plane(self):
         """A service account allowed to sync docs and nothing else can.
@@ -208,9 +200,7 @@ class CapabilityTests(TestCase):
         removal or reconcile.
         """
 
-        docs_only = Principal(
-            "docs-bot", "mcp", frozenset({Capability.SYNC_DOCUMENTATION})
-        )
+        docs_only = Principal("docs-bot", "mcp", frozenset({Capability.SYNC_DOCUMENTATION}))
 
         result = execute_capability(
             "hq.sync",
@@ -231,9 +221,7 @@ class CapabilityTests(TestCase):
         )
 
         self.assertTrue(result["ok"], result)
-        self.assertTrue(
-            DocumentationRecord.objects.filter(doc_id="rb-docs-only").exists()
-        )
+        self.assertTrue(DocumentationRecord.objects.filter(doc_id="rb-docs-only").exists())
 
     def test_an_unknown_field_is_refused_by_name(self):
         """A misspelled field is named, not folded into "could not be executed".
@@ -304,9 +292,7 @@ class CapabilityTests(TestCase):
         )
 
     def test_a_missing_field_is_named(self):
-        result = execute_capability(
-            "project.create", {"slug": "missing-name"}, principal=cli_principal()
-        )
+        result = execute_capability("project.create", {"slug": "missing-name"}, principal=cli_principal())
 
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertEqual(result["error"]["message"], "project.create: name is required.")
@@ -317,9 +303,7 @@ class CapabilityTests(TestCase):
 
         error = self._refusal(CountCommand, {"counts": [1, "two"]})
 
-        self.assertEqual(
-            error["message"], "example.decide: counts[1] must be a valid integer."
-        )
+        self.assertEqual(error["message"], "example.decide: counts[1] must be a valid integer.")
 
     def test_a_refusal_never_repeats_the_value_it_refused(self):
         """Field names and choices only: a payload can carry a secret."""
@@ -344,8 +328,7 @@ class CapabilityTests(TestCase):
         self.assertNotIn(secret, json.dumps(error, default=repr))
         self.assertEqual(
             error["message"],
-            "example.decide: verdict must be one of applies, does_not_apply; "
-            "token is invalid.",
+            "example.decide: verdict must be one of applies, does_not_apply; token is invalid.",
         )
         self.assertEqual(
             [detail["msg"] for detail in error["details"]],
@@ -381,9 +364,7 @@ class CapabilityTests(TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "operation_failed")
-        self.assertEqual(
-            result["error"]["message"], "project.delete could not be executed."
-        )
+        self.assertEqual(result["error"]["message"], "project.delete could not be executed.")
         self.assertNotIn("wrong-target", result["error"]["message"])
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
 
@@ -447,9 +428,7 @@ class CapabilityTests(TestCase):
     def test_the_operator_reaches_every_tool_the_cli_uses_without_a_token(self):
         """The CLI's contract is the MCP tool surface, over the host shell."""
 
-        self.assertEqual(
-            self.call_as_operator({"tool": "describe_capabilities"}), describe_capabilities()
-        )
+        self.assertEqual(self.call_as_operator({"tool": "describe_capabilities"}), describe_capabilities())
         created = self.call_as_operator(
             {
                 "tool": "execute_capability",
@@ -467,12 +446,19 @@ class CapabilityTests(TestCase):
     def test_the_operator_call_refuses_a_malformed_request(self):
         from django.core.management.base import CommandError
 
-        for raw in ("not json", "[]", '{"tool": 3}', '{"tool": "no_such_tool"}',
-                    '{"tool": "audit_registry", "arguments": []}'):
-            with self.subTest(raw=raw):
-                with mock.patch("sys.stdin", StringIO(raw)):
-                    with self.assertRaises(CommandError):
-                        call_command("hq_call", stdout=StringIO())
+        for raw in (
+            "not json",
+            "[]",
+            '{"tool": 3}',
+            '{"tool": "no_such_tool"}',
+            '{"tool": "audit_registry", "arguments": []}',
+        ):
+            with (
+                self.subTest(raw=raw),
+                mock.patch("sys.stdin", StringIO(raw)),
+                self.assertRaises(CommandError),
+            ):
+                call_command("hq_call", stdout=StringIO())
 
     def test_receipt_json_capability_updates_metadata_without_file_access(self):
         receipt = Receipt.objects.create(
@@ -518,9 +504,7 @@ class ProjectApplicationServiceTests(TestCase):
 
         self.assertTrue(result["ok"])
         self.assertTrue(result["created"])
-        event = AuditLog.objects.get(
-            object_type="Project", object_id=str(Project.objects.get().pk)
-        )
+        event = AuditLog.objects.get(object_type="Project", object_id=str(Project.objects.get().pk))
         self.assertEqual(
             event.metadata,
             {
@@ -564,7 +548,7 @@ class ProjectApplicationServiceTests(TestCase):
             slug="hq",
             repository_url="https://github.com/joeseverino/severino-hq",
         )
-        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=timezone.utc)
+        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
 
         result = refresh_project(
             project.slug,
@@ -575,9 +559,7 @@ class ProjectApplicationServiceTests(TestCase):
         self.assertTrue(result["github"]["ok"])
         project.refresh_from_db()
         self.assertEqual(project.last_push_at, pushed_at)
-        event = AuditLog.objects.filter(
-            object_type="Project", object_id=str(project.pk)
-        ).latest("created_at")
+        event = AuditLog.objects.filter(object_type="Project", object_id=str(project.pk)).latest("created_at")
         self.assertEqual(event.metadata["operation"], "project.refresh")
         self.assertEqual(event.metadata["interface"], "web")
 
@@ -594,7 +576,7 @@ class ProjectApplicationServiceTests(TestCase):
             repository_url="https://github.com/joeseverino/severino-hq",
         )
         before = project.updated_at
-        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=timezone.utc)
+        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
 
         refresh_project(
             project.slug,
@@ -610,9 +592,7 @@ class ProjectApplicationServiceTests(TestCase):
 @override_settings(SEVERINO_MCP_ENABLE_WRITES=True)
 class AdapterParityTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="joe", password="test-password"
-        )
+        self.user = get_user_model().objects.create_user(username="joe", password="test-password")
 
     def test_web_mcp_and_cli_emit_the_same_project_shape(self):
         self.client.force_login(self.user)
@@ -632,9 +612,7 @@ class AdapterParityTests(TestCase):
                 "notes": "",
             },
         )
-        self.assertRedirects(
-            response, reverse("projects:detail", args=["web-project"])
-        )
+        self.assertRedirects(response, reverse("projects:detail", args=["web-project"]))
 
         async def call_mcp():
             tool = mcp._tool_manager.get_tool("execute_capability")
@@ -716,9 +694,7 @@ class AssetApplicationServiceTests(TestCase):
         self.assertFalse(Asset.objects.filter(slug="invalid").exists())
 
     def test_web_mcp_and_cli_emit_the_same_asset_shape(self):
-        user = get_user_model().objects.create_user(
-            username="asset-operator", password="test-password"
-        )
+        user = get_user_model().objects.create_user(username="asset-operator", password="test-password")
         self.client.force_login(user)
         response = self.client.post(
             reverse("assets:create"),
@@ -875,13 +851,9 @@ class DocumentationSyncTests(TestCase):
                 "related_expenses": [],
             },
         )
-        self.assertRedirects(
-            response, reverse("docs_index:detail", args=["rb-web-doc"])
-        )
+        self.assertRedirects(response, reverse("docs_index:detail", args=["rb-web-doc"]))
         self.assertEqual(
-            AuditLog.objects.get(object_repr="rb-web-doc · Web Doc").metadata[
-                "operation"
-            ],
+            AuditLog.objects.get(object_repr="rb-web-doc · Web Doc").metadata["operation"],
             "documentation.create",
         )
 
@@ -926,9 +898,7 @@ class ContentApplicationServiceTests(TestCase):
                 "related_documentation": [],
             },
         )
-        self.assertRedirects(
-            response, reverse("content:detail", args=["web-content"])
-        )
+        self.assertRedirects(response, reverse("content:detail", args=["web-content"]))
 
         async def call_mcp():
             tool = mcp._tool_manager.get_tool("execute_capability")
@@ -1046,9 +1016,7 @@ class DocumentationSyncCapabilityTests(SimpleTestCase):
     def test_doc_sync_flag_grants_only_documentation_sync(self):
         from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
 
-        with self.settings(
-            SEVERINO_MCP_ENABLE_DOC_SYNC=True, SEVERINO_MCP_ENABLE_WRITES=False
-        ):
+        with self.settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True, SEVERINO_MCP_ENABLE_WRITES=False):
             principal = mcp_principal()
         principal.require(Capability.SYNC_DOCUMENTATION)
         for withheld in (
@@ -1065,19 +1033,17 @@ class DocumentationSyncCapabilityTests(SimpleTestCase):
     def test_broad_writes_still_imply_doc_sync(self):
         from hq.platform.application.security import Capability, mcp_principal
 
-        with self.settings(
-            SEVERINO_MCP_ENABLE_WRITES=True, SEVERINO_MCP_ENABLE_DOC_SYNC=False
-        ):
+        with self.settings(SEVERINO_MCP_ENABLE_WRITES=True, SEVERINO_MCP_ENABLE_DOC_SYNC=False):
             mcp_principal().require(Capability.SYNC_DOCUMENTATION)
 
     def test_both_flags_off_withholds_doc_sync(self):
         from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
 
-        with self.settings(
-            SEVERINO_MCP_ENABLE_WRITES=False, SEVERINO_MCP_ENABLE_DOC_SYNC=False
+        with (
+            self.settings(SEVERINO_MCP_ENABLE_WRITES=False, SEVERINO_MCP_ENABLE_DOC_SYNC=False),
+            self.assertRaises(AuthorizationError),
         ):
-            with self.assertRaises(AuthorizationError):
-                mcp_principal().require(Capability.SYNC_DOCUMENTATION)
+            mcp_principal().require(Capability.SYNC_DOCUMENTATION)
 
 
 class InfrastructureCapabilityTests(SimpleTestCase):
@@ -1193,8 +1159,8 @@ class TableTotalsTests(TestCase):
             )
 
     def _view(self, **attrs):
-        from hq.platform.application.tables import TableListMixin, TableTotal
         from hq.domains.assets.models import Asset
+        from hq.platform.application.tables import TableListMixin, TableTotal
 
         class View(TableListMixin):
             table_totals = (TableTotal("total_cost", "Total cost"),)

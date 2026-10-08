@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0024_provider_inventory_refusal'),
+        ("control_plane", "0024_provider_inventory_refusal"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='providerconnection',
-            name='manages',
+            model_name="providerconnection",
+            name="manages",
             field=models.BooleanField(default=False),
         ),
     ]

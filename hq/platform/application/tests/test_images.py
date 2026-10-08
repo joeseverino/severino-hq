@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from django.test import SimpleTestCase
 
 from ..images import ImageRef, affected, newer, shape, version

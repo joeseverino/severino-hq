@@ -1,7 +1,5 @@
 """Invariants the domain registry has to hold for the composition to be safe."""
 
-from __future__ import annotations
-
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -59,9 +57,7 @@ class DomainRegistryTests(SimpleTestCase):
             try:
                 reverse(item.route)
             except NoReverseMatch:  # pragma: no cover - the assert reports it
-                self.fail(
-                    f"Domain nav route {item.route!r} ({item.label}) does not resolve."
-                )
+                self.fail(f"Domain nav route {item.route!r} ({item.label}) does not resolve.")
 
     def test_host_sections_never_squat_the_extension_order_band(self):
         """Orders below the floor belong to extensions, which lead the bar.
@@ -83,11 +79,7 @@ class DomainRegistryTests(SimpleTestCase):
                 )
 
     def test_machinery_sorts_after_every_section_that_holds_work(self):
-        work = [
-            item.order
-            for item in domain_navigation()
-            if item.order < HOST_ORDER_MACHINERY
-        ]
+        work = [item.order for item in domain_navigation() if item.order < HOST_ORDER_MACHINERY]
         self.assertTrue(work, "Expected at least one section that holds work.")
         self.assertGreater(HOST_ORDER_MACHINERY, max(work))
 
@@ -104,14 +96,11 @@ class DomainRegistryTests(SimpleTestCase):
         hole rather than a failure, so the duplication is worth a test rather
         than a convention.
         """
-        source = (
-            Path(settings.BASE_DIR) / "hq/platform/core" / "context_processors.py"
-        ).read_text()
+        source = (Path(settings.BASE_DIR) / "hq/platform/core" / "context_processors.py").read_text()
         self.assertNotIn(
             "NAV_ITEMS",
             source,
-            "core.context_processors declares sections again; derive them from "
-            "application.domains instead.",
+            "core.context_processors declares sections again; derive them from application.domains instead.",
         )
 
     def test_apps_and_urls_are_read_off_the_declarations(self):
@@ -152,13 +141,9 @@ class ComposedQueueTests(TestCase):
     """The queue has to speak for every domain, not just the host's."""
 
     def test_an_outstanding_item_reaches_the_queue_with_its_own_link(self):
-        ContentItem.objects.create(
-            title="Half-written", slug="half-written", status=ContentItem.Status.DRAFT
-        )
+        ContentItem.objects.create(title="Half-written", slug="half-written", status=ContentItem.Status.DRAFT)
 
-        entry = next(
-            item for item in work_queue() if item["source_id"] == "hq.content"
-        )
+        entry = next(item for item in work_queue() if item["source_id"] == "hq.content")
 
         self.assertEqual(entry["count"], 1)
         # The link the domain supplied, not one this test reconstructs.
@@ -172,9 +157,7 @@ class ComposedQueueTests(TestCase):
         row it sits in, and the row above it is the work queue.
         """
         labels = [card["label"] for card in domain_dashboard_cards()]
-        self.assertFalse(
-            [label for label in labels if label.startswith("Expenses")], labels
-        )
+        self.assertFalse([label for label in labels if label.startswith("Expenses")], labels)
 
         Expense.objects.create(
             date=timezone.localdate(),
@@ -186,17 +169,11 @@ class ComposedQueueTests(TestCase):
 
         # Lights up on its own the moment the section has something to say.
         labels = [card["label"] for card in domain_dashboard_cards()]
-        self.assertTrue(
-            [label for label in labels if label.startswith("Expenses")], labels
-        )
+        self.assertTrue([label for label in labels if label.startswith("Expenses")], labels)
 
     def test_the_card_row_reads_in_the_same_order_as_the_bar(self):
-        ContentItem.objects.create(
-            title="Half-written", slug="half-written", status=ContentItem.Status.DRAFT
-        )
-        Project.objects.create(
-            name="Live", slug="live", status=Project.Status.ACTIVE
-        )
+        ContentItem.objects.create(title="Half-written", slug="half-written", status=ContentItem.Status.DRAFT)
+        Project.objects.create(name="Live", slug="live", status=Project.Status.ACTIVE)
 
         cards = domain_dashboard_cards()
         labels = [card["label"] for card in cards]
@@ -211,22 +188,16 @@ class ComposedQueueTests(TestCase):
         A queue built only from the host's own models would say "no cleanup
         items" while an extension's domain was failing.
         """
-        ContentItem.objects.create(
-            title="Half-written", slug="half-written", status=ContentItem.Status.DRAFT
-        )
+        ContentItem.objects.create(title="Half-written", slug="half-written", status=ContentItem.Status.DRAFT)
         pretend = Domain(
             id="pretend.domain",
             label="Pretend",
             origin="extension",
             navigation=(),
-            integration=PluginIntegration(
-                attention=_pretend_extension_attention
-            ),
+            integration=PluginIntegration(attention=_pretend_extension_attention),
         )
 
-        with patch(
-            "hq.platform.application.domains.extension_domains", return_value=(pretend,)
-        ):
+        with patch("hq.platform.application.domains.extension_domains", return_value=(pretend,)):
             entries = domain_attention_items()
 
         sources = [entry["source_id"] for entry in entries]

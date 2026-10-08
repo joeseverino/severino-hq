@@ -11,8 +11,6 @@ path was requested 412 times" into "that writeup was read 412 times", and it is
 the only reason this is more useful than the dashboard it reads from.
 """
 
-from __future__ import annotations
-
 from datetime import date, timedelta
 from typing import Any
 from urllib.parse import urlparse
@@ -159,17 +157,13 @@ def _restate_vitals(site: AnalyticsSite, reported: list[dict[str, Any]]) -> int:
         if not day:
             continue
         taken += 1
-        days[day] = VitalsDaily(
-            site=site, date=day, **{column: reading[column] for column in _VITALS_COLUMNS}
-        )
+        days[day] = VitalsDaily(site=site, date=day, **{column: reading[column] for column in _VITALS_COLUMNS})
     _restate(VitalsDaily, ("site", "date"), _VITALS_COLUMNS, days)
     return taken
 
 
 @transaction.atomic
-def record_analytics(
-    payload: dict[str, Any], *, principal: Principal, controller_id: str = ""
-) -> dict[str, Any]:
+def record_analytics(payload: dict[str, Any], *, principal: Principal, controller_id: str = "") -> dict[str, Any]:
     """Store one controller's reading of every site it can see.
 
     Accumulates rather than replaces, which is the one way this differs from
@@ -228,7 +222,7 @@ def _as_date(value: Any) -> date | None:
         return value
     try:
         return date.fromisoformat(str(value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -256,19 +250,11 @@ def analytics_plan(sites: list[dict[str, Any]]) -> dict[str, Any]:
     """
 
     identities = tuple(
-        sorted(
-            {
-                (item["connection_ref"][:100], item["site_tag"].strip())
-                for item in sites
-                if item["site_tag"].strip()
-            }
-        )
+        sorted({(item["connection_ref"][:100], item["site_tag"].strip()) for item in sites if item["site_tag"].strip()})
     )
     end = _window(1)[1]
     target_start = end - timedelta(days=BACKFILL_DAYS - 1)
-    covered: dict[tuple[str, str], set[date]] = {
-        identity: set() for identity in identities
-    }
+    covered: dict[tuple[str, str], set[date]] = {identity: set() for identity in identities}
     for connection_ref, site_tag, day in AnalyticsCoverage.objects.filter(
         date__gte=target_start,
         date__lte=end,
@@ -282,8 +268,7 @@ def analytics_plan(sites: list[dict[str, Any]]) -> dict[str, Any]:
         missing = [
             target_start + timedelta(days=offset)
             for offset in range(BACKFILL_DAYS)
-            if target_start + timedelta(days=offset)
-            not in covered[(connection_ref, site_tag)]
+            if target_start + timedelta(days=offset) not in covered[(connection_ref, site_tag)]
         ]
         start = min(missing) if missing else end - timedelta(days=REFRESH_DAYS - 1)
         windows.append(
@@ -317,9 +302,7 @@ def coverage_summary(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
     }
 
 
-def breakdown(
-    dimension: str, *, days: int = DEFAULT_WINDOW_DAYS, limit: int = 50
-) -> list[dict[str, Any]]:
+def breakdown(dimension: str, *, days: int = DEFAULT_WINDOW_DAYS, limit: int = 50) -> list[dict[str, Any]]:
     """One breakdown over a window, biggest first.
 
     Summed across days rather than read per day, because a window is the
@@ -371,9 +354,7 @@ def _traffic_for_locations(
     }
 
 
-def traffic_for_hosts(
-    hosts: set[str], *, days: int = DEFAULT_WINDOW_DAYS
-) -> dict[str, dict[str, int]]:
+def traffic_for_hosts(hosts: set[str], *, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, dict[str, int]]:
     """Traffic for whole hosts in one bounded query.
 
     The host-grain sibling of :func:`_traffic_for_locations`. A service in HQ
@@ -422,18 +403,14 @@ def measured_path_count(*, days: int = DEFAULT_WINDOW_DAYS) -> int:
 
     start, end = _window(days)
     return (
-        RumDaily.objects.filter(
-            dimension=RumDaily.Dimension.PATH, date__gte=start, date__lte=end
-        )
+        RumDaily.objects.filter(dimension=RumDaily.Dimension.PATH, date__gte=start, date__lte=end)
         .values("site_id", "value")
         .distinct()
         .count()
     )
 
 
-def published_traffic(
-    content_types: frozenset[str], *, days: int = CONTENT_TRAFFIC_DAYS
-) -> list[dict[str, Any]]:
+def published_traffic(content_types: frozenset[str], *, days: int = CONTENT_TRAFFIC_DAYS) -> list[dict[str, Any]]:
     """Published items of one half of the registry, with what each earned.
 
     Items with no traffic are kept and sorted last. A writeup nobody read is
@@ -442,9 +419,9 @@ def published_traffic(
     """
 
     items = list(
-        ContentItem.objects.filter(
-            content_type__in=content_types, status=ContentItem.Status.PUBLISHED
-        ).only("title", "slug", "content_type", "published_url", "published_at")
+        ContentItem.objects.filter(content_type__in=content_types, status=ContentItem.Status.PUBLISHED).only(
+            "title", "slug", "content_type", "published_url", "published_at"
+        )
     )
     locations = {location_of(item.published_url) for item in items}
     traffic = _traffic_for_locations(locations, days=days)
@@ -593,20 +570,14 @@ def last_observed_at():
     duplicates its timer.
     """
 
-    return (
-        RumDaily.objects.order_by("-observed_at")
-        .values_list("observed_at", flat=True)
-        .first()
-    )
+    return RumDaily.objects.order_by("-observed_at").values_list("observed_at", flat=True).first()
 
 
 def site_totals(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
     """Headline numbers for the window, and how far they can be trusted."""
 
     start, end = _window(days)
-    totals = RumDaily.objects.filter(
-        dimension=RumDaily.Dimension.PATH, date__gte=start, date__lte=end
-    ).aggregate(
+    totals = RumDaily.objects.filter(dimension=RumDaily.Dimension.PATH, date__gte=start, date__lte=end).aggregate(
         pageviews=Sum("pageviews"),
         visits=Sum("visits"),
         sample_interval=Max("sample_interval"),
@@ -660,10 +631,7 @@ def _with_share(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
 
     largest = max((row["pageviews"] for row in rows), default=0)
-    return [
-        row | {"share": round(row["pageviews"] * 100 / largest, 1) if largest else 0}
-        for row in rows
-    ]
+    return [row | {"share": round(row["pageviews"] * 100 / largest, 1) if largest else 0} for row in rows]
 
 
 def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, Any]:
@@ -702,10 +670,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
         "totals": totals,
         "coverage": coverage,
         "days": days,
-        "windows": [
-            {"days": option, "label": label, "current": option == days}
-            for option, label in WINDOWS
-        ],
+        "windows": [{"days": option, "label": label, "current": option == days} for option, label in WINDOWS],
         "sites": list(AnalyticsSite.objects.all()),
         "latest": latest_reading(),
         "observed_at": last_observed_at(),
@@ -722,9 +687,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
     }
 
 
-def list_analytics(
-    *, dimension: str = "", days: int = DEFAULT_WINDOW_DAYS, limit: int = 50
-) -> dict[str, Any]:
+def list_analytics(*, dimension: str = "", days: int = DEFAULT_WINDOW_DAYS, limit: int = 50) -> dict[str, Any]:
     """One breakdown as a machine-readable collection.
 
     The same numbers the page shows, in the shape every registered resource
@@ -736,8 +699,7 @@ def list_analytics(
     dimension = dimension or RumDaily.Dimension.PATH
     if dimension not in RumDaily.Dimension.values:
         raise ValueError(
-            f"Unknown dimension {dimension!r}; expected one of "
-            f"{', '.join(sorted(RumDaily.Dimension.values))}."
+            f"Unknown dimension {dimension!r}; expected one of {', '.join(sorted(RumDaily.Dimension.values))}."
         )
     rows = breakdown(dimension, days=days, limit=limit)
     window = site_totals(days=days)
@@ -761,33 +723,30 @@ def list_analytics(
         # page: a consumer that treats an extrapolation as a count will
         # eventually publish it as one.
         "sample_interval": window["sample_interval"],
-        "coverage": {
-            key: value.isoformat() if isinstance(value, date) else value
-            for key, value in coverage.items()
-        },
+        "coverage": {key: value.isoformat() if isinstance(value, date) else value for key, value in coverage.items()},
     }
 
 
 __all__ = [
-    "CONTENT_TRAFFIC_DAYS",
-    "HOST_TRAFFIC_DAYS",
-    "DEFAULT_WINDOW_DAYS",
-    "MAX_QUERY_DAYS",
     "BACKFILL_DAYS",
-    "REFRESH_DAYS",
-    "WINDOW_DAYS",
-    "attach_traffic",
-    "analytics_plan",
-    "list_analytics",
+    "CONTENT_TRAFFIC_DAYS",
+    "DEFAULT_WINDOW_DAYS",
+    "HOST_TRAFFIC_DAYS",
+    "MAX_QUERY_DAYS",
     "OVERVIEW_DIMENSIONS",
+    "REFRESH_DAYS",
     "WINDOWS",
-    "overview",
+    "WINDOW_DAYS",
+    "analytics_plan",
+    "attach_traffic",
     "breakdown",
     "coverage_summary",
     "last_observed_at",
     "latest_reading",
+    "list_analytics",
     "location_of",
     "measured_path_count",
+    "overview",
     "page_traffic",
     "path_of",
     "published_traffic",

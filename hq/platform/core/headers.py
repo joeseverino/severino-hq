@@ -32,9 +32,7 @@ class LowercaseHeaders:
             if message["type"] == "http.response.start":
                 message = {
                     **message,
-                    "headers": [
-                        (name.lower(), value) for name, value in message["headers"]
-                    ],
+                    "headers": [(name.lower(), value) for name, value in message["headers"]],
                 }
             await send(message)
 

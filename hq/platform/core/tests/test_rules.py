@@ -1,8 +1,6 @@
 """A row-level rule is declared once and held twice: by ``full_clean`` beside
 its field, and by the database against every writer."""
 
-from __future__ import annotations
-
 import hashlib
 import sqlite3
 import tempfile
@@ -100,9 +98,7 @@ class RuleTests(TestCase):
             "calendar_entry_interval_in_range": changed(entry, interval=367),
             "calendar_entry_weekdays_only_weekly": changed(entry, weekdays="1"),
             "calendar_entry_until_only_repeating": changed(entry, repeat_until=date(2026, 12, 1)),
-            "calendar_entry_until_after_it_starts": changed(
-                entry, repeat="daily", repeat_until=date(2026, 9, 1)
-            ),
+            "calendar_entry_until_after_it_starts": changed(entry, repeat="daily", repeat_until=date(2026, 9, 1)),
             "resource_generation_starts_at_one": changed(resource, generation=0, observed_generation=0),
             "resource_observed_no_later_than_declared": changed(resource, observed_generation=2),
             "operation_state_is_declared": changed(queued, state="paused"),
@@ -257,14 +253,10 @@ class PreflightTests(TestCase):
             (app, name, position, operation.constraint.name)
             for (app, name), migration in sorted(loader.disk_migrations.items())
             for position, operation in enumerate(migration.operations, start=1)
-            if isinstance(operation, AddConstraint)
-            and isinstance(operation.constraint, models.CheckConstraint)
+            if isinstance(operation, AddConstraint) and isinstance(operation.constraint, models.CheckConstraint)
         ]
 
-        listed = [
-            (check.app, check.migration, check.position, check.name)
-            for check in constraint_preflight.checks()
-        ]
+        listed = [(check.app, check.migration, check.position, check.name) for check in constraint_preflight.checks()]
 
         self.assertEqual(listed, added)
         self.assertLessEqual(_rules(), {name for *_rest, name in listed})

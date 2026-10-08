@@ -12,6 +12,7 @@ from django.test import SimpleTestCase
 
 from hq.domains.control_plane import observations
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
+from hq.domains.control_plane.connection_shapes import API_TOKEN, LOGIN
 from hq.domains.control_plane.observations.contract import ObservationRecord, ObservationSpec, registry
 from hq.domains.control_plane.provider_adapters import (
     ADMITTED,
@@ -20,7 +21,6 @@ from hq.domains.control_plane.provider_adapters import (
     admitted_connections,
     undeclared_connections,
 )
-from hq.domains.control_plane.connection_shapes import API_TOKEN, LOGIN
 from hq.domains.control_plane.provider_spec import ConnectionKind
 
 EXAMPLE = ConnectionKind("Example", "scoped", API_TOKEN)
@@ -71,16 +71,17 @@ class ObservationDiscoveryTests(SimpleTestCase):
 
     def test_the_registry_order_is_the_module_names(self):
         providers = [spec.provider for spec in observations.OBSERVATIONS.values()]
-        modules = [
-            module.__name__.rsplit(".", 1)[1] for module in observations._SPEC_MODULES
-        ]
+        modules = [module.__name__.rsplit(".", 1)[1] for module in observations._SPEC_MODULES]
 
         self.assertEqual(modules, sorted(modules))
         self.assertEqual(len(providers), len(observations.OBSERVATIONS))
 
     def test_a_reading_that_connects_must_name_what_it_connects(self):
         spec = ObservationSpec(
-            "example.group", "example", "Example group", ObservationRecord,
+            "example.group",
+            "example",
+            "Example group",
+            ObservationRecord,
             connects=lambda record: True,
         )
 

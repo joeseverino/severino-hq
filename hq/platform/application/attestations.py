@@ -7,10 +7,9 @@ unsigned, so a page says "states" rather than "proves". HQ keeps the package
 URLs and a handful of provenance fields; the statements themselves are dropped.
 """
 
-from __future__ import annotations
-
 import re
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from .github_public import github_repository
 
