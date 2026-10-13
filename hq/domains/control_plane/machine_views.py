@@ -166,30 +166,32 @@ class MachineDetailView(PageMixin, TemplateView):
 
     @override
     def get_page_actions(self):
-        # The machine's declaration is edited from its own page.
         if self.found.declaration:
+            # The machine's declaration is edited from its own page.
             key = self.found.declaration
-            return (
+            actions = [
                 PageAction("Edit machine", reverse("control_plane:edit", args=[key])),
                 PageAction("Remove", reverse("control_plane:remove", args=[key]), danger=True),
+            ]
+        else:
+            # Seeded with what HQ knows, and back here after saving. A machine the
+            # tailnet device declaration already names gets its details added; one
+            # with no declaration at all is declared.
+            seeded = urlencode(
+                {
+                    "kind": MACHINE_KIND,
+                    **declaration_seed(self.found),
+                    "next": self.found.url,
+                },
+                doseq=True,
             )
-        # Seeded with what HQ knows, and back here after saving. A machine the
-        # tailnet device declaration already names gets its details added; one
-        # with no declaration at all is declared.
-        seeded = urlencode(
-            {
-                "kind": MACHINE_KIND,
-                **declaration_seed(self.found),
-                "next": self.found.url,
-            },
-            doseq=True,
-        )
-        return (
-            PageAction(
-                "Add machine details" if self.found.route_approval_key else "Add this machine to HQ",
-                f"{reverse('control_plane:create')}?{seeded}",
-            ),
-        )
+            actions = [
+                PageAction(
+                    "Add machine details" if self.found.route_approval_key else "Add this machine to HQ",
+                    f"{reverse('control_plane:create')}?{seeded}",
+                ),
+            ]
+        return tuple(actions)
 
     @override
     def get_context_data(self, **kwargs):
