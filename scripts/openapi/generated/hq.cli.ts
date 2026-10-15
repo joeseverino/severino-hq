@@ -892,7 +892,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -933,7 +933,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -974,7 +974,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1015,7 +1015,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1056,7 +1056,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1097,7 +1097,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1138,7 +1138,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1179,7 +1179,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1220,7 +1220,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1261,7 +1261,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1302,7 +1302,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1343,7 +1343,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1384,7 +1384,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1425,7 +1425,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1466,7 +1466,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1507,7 +1507,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1548,7 +1548,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1589,7 +1589,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1630,7 +1630,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1671,7 +1671,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1712,7 +1712,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1753,7 +1753,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1794,7 +1794,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1835,7 +1835,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1876,7 +1876,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1917,7 +1917,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1958,7 +1958,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -1999,7 +1999,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2040,7 +2040,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2081,7 +2081,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2122,7 +2122,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2163,7 +2163,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2204,7 +2204,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2245,7 +2245,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2286,7 +2286,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2327,7 +2327,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2368,7 +2368,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2409,7 +2409,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2450,7 +2450,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2491,7 +2491,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2532,7 +2532,7 @@ export const COMMANDS: CliCommand[] = [
     "positionals": [],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {
@@ -2579,7 +2579,7 @@ export const COMMANDS: CliCommand[] = [
     ],
     "flags": [],
     "body": {
-      "required": false
+      "required": true
     },
     "schemas": {
       "request": {

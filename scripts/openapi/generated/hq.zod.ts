@@ -18,7 +18,7 @@ export const AssetCreateRequestSchema = z.object({
         serial_number: z.string().optional(),
         slug: z.string().optional(),
         status: z.string().optional(),
-        total_cost: z.union([z.number(), z.string().regex(new RegExp("^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"))]).optional(),
+        total_cost: z.union([z.number(), z.string()]).optional(),
         vendor: z.string().optional(),
         warranty_date: z.union([z.string(), z.null()]).optional()
     }).optional()
@@ -48,7 +48,7 @@ export const AssetUpdateRequestSchema = z.object({
         serial_number: z.string().optional(),
         slug: z.string().optional(),
         status: z.string().optional(),
-        total_cost: z.union([z.number(), z.string().regex(new RegExp("^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"))]).optional(),
+        total_cost: z.union([z.number(), z.string()]).optional(),
         vendor: z.string().optional(),
         warranty_date: z.union([z.string(), z.null()]).optional()
     }).optional(),
@@ -70,7 +70,7 @@ export const AssetUpsertRequestSchema = z.object({
         serial_number: z.string().optional(),
         slug: z.string().optional(),
         status: z.string().optional(),
-        total_cost: z.union([z.number(), z.string().regex(new RegExp("^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"))]).optional(),
+        total_cost: z.union([z.number(), z.string()]).optional(),
         vendor: z.string().optional(),
         warranty_date: z.union([z.string(), z.null()]).optional()
     }).optional()
@@ -337,7 +337,7 @@ export const ExpenseCreateRequestSchema = z.object({
         related_content: z.union([z.string(), z.null()]).optional(),
         related_documentation: z.union([z.string(), z.null()]).optional(),
         related_project: z.union([z.string(), z.null()]).optional(),
-        total_cost: z.union([z.number(), z.string().regex(new RegExp("^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"))]).optional(),
+        total_cost: z.union([z.number(), z.string()]).optional(),
         vendor: z.string()
     }).optional()
 });
@@ -368,7 +368,7 @@ export const ExpenseUpdateRequestSchema = z.object({
         related_content: z.union([z.string(), z.null()]).optional(),
         related_documentation: z.union([z.string(), z.null()]).optional(),
         related_project: z.union([z.string(), z.null()]).optional(),
-        total_cost: z.union([z.number(), z.string().regex(new RegExp("^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"))]).optional(),
+        total_cost: z.union([z.number(), z.string()]).optional(),
         vendor: z.string()
     }).optional(),
     target: z.union([z.number().int(), z.string().regex(new RegExp("^-?[0-9]+$"))])
@@ -568,7 +568,7 @@ export const ReceiptDeleteRequestSchema = z.object({
 export const ReceiptUpdateRequestSchema = z.object({
     expected_updated_at: z.string().optional(),
     payload: z.object({
-        amount: z.union([z.number(), z.string().regex(new RegExp("^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"))]).optional(),
+        amount: z.union([z.number(), z.string()]).optional(),
         date: z.union([z.string(), z.null()]).optional(),
         idempotency_key: z.string().min(1).max(128).regex(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")).optional(),
         notes: z.string().optional(),

@@ -1124,7 +1124,7 @@ export type AssetCreateV2Headers = {
 };
 
 export type AssetCreateV2Variables = {
-    body?: AssetCreateV2Body;
+    body: AssetCreateV2Body;
     headers: AssetCreateV2Headers;
 };
 
@@ -1144,7 +1144,7 @@ export type AssetDeleteV2Headers = {
 };
 
 export type AssetDeleteV2Variables = {
-    body?: AssetDeleteV2Body;
+    body: AssetDeleteV2Body;
     headers: AssetDeleteV2Headers;
 };
 
@@ -1164,7 +1164,7 @@ export type AssetUpdateV2Headers = {
 };
 
 export type AssetUpdateV2Variables = {
-    body?: AssetUpdateV2Body;
+    body: AssetUpdateV2Body;
     headers: AssetUpdateV2Headers;
 };
 
@@ -1184,7 +1184,7 @@ export type AssetUpsertV2Headers = {
 };
 
 export type AssetUpsertV2Variables = {
-    body?: AssetUpsertV2Body;
+    body: AssetUpsertV2Body;
     headers: AssetUpsertV2Headers;
 };
 
@@ -1204,7 +1204,7 @@ export type CalendarEntryCreateV2Headers = {
 };
 
 export type CalendarEntryCreateV2Variables = {
-    body?: CalendarEntryCreateV2Body;
+    body: CalendarEntryCreateV2Body;
     headers: CalendarEntryCreateV2Headers;
 };
 
@@ -1224,7 +1224,7 @@ export type CalendarEntryDeleteV2Headers = {
 };
 
 export type CalendarEntryDeleteV2Variables = {
-    body?: CalendarEntryDeleteV2Body;
+    body: CalendarEntryDeleteV2Body;
     headers: CalendarEntryDeleteV2Headers;
 };
 
@@ -1244,7 +1244,7 @@ export type CalendarEntryUpdateV2Headers = {
 };
 
 export type CalendarEntryUpdateV2Variables = {
-    body?: CalendarEntryUpdateV2Body;
+    body: CalendarEntryUpdateV2Body;
     headers: CalendarEntryUpdateV2Headers;
 };
 
@@ -1264,7 +1264,7 @@ export type CertificateRenewV2Headers = {
 };
 
 export type CertificateRenewV2Variables = {
-    body?: CertificateRenewV2Body;
+    body: CertificateRenewV2Body;
     headers: CertificateRenewV2Headers;
 };
 
@@ -1284,7 +1284,7 @@ export type ContactSubmissionDeleteV2Headers = {
 };
 
 export type ContactSubmissionDeleteV2Variables = {
-    body?: ContactSubmissionDeleteV2Body;
+    body: ContactSubmissionDeleteV2Body;
     headers: ContactSubmissionDeleteV2Headers;
 };
 
@@ -1304,7 +1304,7 @@ export type ContactSubmissionReviewV2Headers = {
 };
 
 export type ContactSubmissionReviewV2Variables = {
-    body?: ContactSubmissionReviewV2Body;
+    body: ContactSubmissionReviewV2Body;
     headers: ContactSubmissionReviewV2Headers;
 };
 
@@ -1316,7 +1316,7 @@ export type ContactSubmissionsListV2Result = {
 export type ContactSubmissionsListV2Body = ContactSubmissionsListRequest;
 
 export type ContactSubmissionsListV2Variables = {
-    body?: ContactSubmissionsListV2Body;
+    body: ContactSubmissionsListV2Body;
 };
 
 export type ContentCreateV2Result = {
@@ -1335,7 +1335,7 @@ export type ContentCreateV2Headers = {
 };
 
 export type ContentCreateV2Variables = {
-    body?: ContentCreateV2Body;
+    body: ContentCreateV2Body;
     headers: ContentCreateV2Headers;
 };
 
@@ -1355,7 +1355,7 @@ export type ContentDeleteV2Headers = {
 };
 
 export type ContentDeleteV2Variables = {
-    body?: ContentDeleteV2Body;
+    body: ContentDeleteV2Body;
     headers: ContentDeleteV2Headers;
 };
 
@@ -1375,7 +1375,7 @@ export type ContentUpdateV2Headers = {
 };
 
 export type ContentUpdateV2Variables = {
-    body?: ContentUpdateV2Body;
+    body: ContentUpdateV2Body;
     headers: ContentUpdateV2Headers;
 };
 
@@ -1395,7 +1395,7 @@ export type DocumentationCreateV2Headers = {
 };
 
 export type DocumentationCreateV2Variables = {
-    body?: DocumentationCreateV2Body;
+    body: DocumentationCreateV2Body;
     headers: DocumentationCreateV2Headers;
 };
 
@@ -1415,7 +1415,7 @@ export type DocumentationDeleteV2Headers = {
 };
 
 export type DocumentationDeleteV2Variables = {
-    body?: DocumentationDeleteV2Body;
+    body: DocumentationDeleteV2Body;
     headers: DocumentationDeleteV2Headers;
 };
 
@@ -1435,7 +1435,7 @@ export type DocumentationSyncV2Headers = {
 };
 
 export type DocumentationSyncV2Variables = {
-    body?: DocumentationSyncV2Body;
+    body: DocumentationSyncV2Body;
     headers: DocumentationSyncV2Headers;
 };
 
@@ -1455,7 +1455,7 @@ export type DocumentationUpdateV2Headers = {
 };
 
 export type DocumentationUpdateV2Variables = {
-    body?: DocumentationUpdateV2Body;
+    body: DocumentationUpdateV2Body;
     headers: DocumentationUpdateV2Headers;
 };
 
@@ -1475,7 +1475,7 @@ export type ExpenseCreateV2Headers = {
 };
 
 export type ExpenseCreateV2Variables = {
-    body?: ExpenseCreateV2Body;
+    body: ExpenseCreateV2Body;
     headers: ExpenseCreateV2Headers;
 };
 
@@ -1495,7 +1495,7 @@ export type ExpenseDeleteV2Headers = {
 };
 
 export type ExpenseDeleteV2Variables = {
-    body?: ExpenseDeleteV2Body;
+    body: ExpenseDeleteV2Body;
     headers: ExpenseDeleteV2Headers;
 };
 
@@ -1515,7 +1515,7 @@ export type ExpenseUpdateV2Headers = {
 };
 
 export type ExpenseUpdateV2Variables = {
-    body?: ExpenseUpdateV2Body;
+    body: ExpenseUpdateV2Body;
     headers: ExpenseUpdateV2Headers;
 };
 
@@ -1535,7 +1535,7 @@ export type HqImportV2Headers = {
 };
 
 export type HqImportV2Variables = {
-    body?: HqImportV2Body;
+    body: HqImportV2Body;
     headers: HqImportV2Headers;
 };
 
@@ -1555,7 +1555,7 @@ export type HqSyncV2Headers = {
 };
 
 export type HqSyncV2Variables = {
-    body?: HqSyncV2Body;
+    body: HqSyncV2Body;
     headers: HqSyncV2Headers;
 };
 
@@ -1575,7 +1575,7 @@ export type InfrastructureControllerRefreshV2Headers = {
 };
 
 export type InfrastructureControllerRefreshV2Variables = {
-    body?: InfrastructureControllerRefreshV2Body;
+    body: InfrastructureControllerRefreshV2Body;
     headers: InfrastructureControllerRefreshV2Headers;
 };
 
@@ -1595,7 +1595,7 @@ export type InfrastructureReconcileV2Headers = {
 };
 
 export type InfrastructureReconcileV2Variables = {
-    body?: InfrastructureReconcileV2Body;
+    body: InfrastructureReconcileV2Body;
     headers: InfrastructureReconcileV2Headers;
 };
 
@@ -1615,7 +1615,7 @@ export type InfrastructureResourceAcceptObservedV2Headers = {
 };
 
 export type InfrastructureResourceAcceptObservedV2Variables = {
-    body?: InfrastructureResourceAcceptObservedV2Body;
+    body: InfrastructureResourceAcceptObservedV2Body;
     headers: InfrastructureResourceAcceptObservedV2Headers;
 };
 
@@ -1635,7 +1635,7 @@ export type InfrastructureResourceCreateV2Headers = {
 };
 
 export type InfrastructureResourceCreateV2Variables = {
-    body?: InfrastructureResourceCreateV2Body;
+    body: InfrastructureResourceCreateV2Body;
     headers: InfrastructureResourceCreateV2Headers;
 };
 
@@ -1655,7 +1655,7 @@ export type InfrastructureResourceRemoveV2Headers = {
 };
 
 export type InfrastructureResourceRemoveV2Variables = {
-    body?: InfrastructureResourceRemoveV2Body;
+    body: InfrastructureResourceRemoveV2Body;
     headers: InfrastructureResourceRemoveV2Headers;
 };
 
@@ -1675,7 +1675,7 @@ export type InfrastructureResourceUpdateV2Headers = {
 };
 
 export type InfrastructureResourceUpdateV2Variables = {
-    body?: InfrastructureResourceUpdateV2Body;
+    body: InfrastructureResourceUpdateV2Body;
     headers: InfrastructureResourceUpdateV2Headers;
 };
 
@@ -1687,7 +1687,7 @@ export type LookupAddressV2Result = {
 export type LookupAddressV2Body = LookupAddressRequest;
 
 export type LookupAddressV2Variables = {
-    body?: LookupAddressV2Body;
+    body: LookupAddressV2Body;
 };
 
 export type LookupNameV2Result = {
@@ -1698,7 +1698,7 @@ export type LookupNameV2Result = {
 export type LookupNameV2Body = LookupNameRequest;
 
 export type LookupNameV2Variables = {
-    body?: LookupNameV2Body;
+    body: LookupNameV2Body;
 };
 
 export type ProjectCreateV2Result = {
@@ -1717,7 +1717,7 @@ export type ProjectCreateV2Headers = {
 };
 
 export type ProjectCreateV2Variables = {
-    body?: ProjectCreateV2Body;
+    body: ProjectCreateV2Body;
     headers: ProjectCreateV2Headers;
 };
 
@@ -1737,7 +1737,7 @@ export type ProjectDeleteV2Headers = {
 };
 
 export type ProjectDeleteV2Variables = {
-    body?: ProjectDeleteV2Body;
+    body: ProjectDeleteV2Body;
     headers: ProjectDeleteV2Headers;
 };
 
@@ -1757,7 +1757,7 @@ export type ProjectRefreshV2Headers = {
 };
 
 export type ProjectRefreshV2Variables = {
-    body?: ProjectRefreshV2Body;
+    body: ProjectRefreshV2Body;
     headers: ProjectRefreshV2Headers;
 };
 
@@ -1777,7 +1777,7 @@ export type ProjectUpdateV2Headers = {
 };
 
 export type ProjectUpdateV2Variables = {
-    body?: ProjectUpdateV2Body;
+    body: ProjectUpdateV2Body;
     headers: ProjectUpdateV2Headers;
 };
 
@@ -1797,7 +1797,7 @@ export type ProjectUpsertV2Headers = {
 };
 
 export type ProjectUpsertV2Variables = {
-    body?: ProjectUpsertV2Body;
+    body: ProjectUpsertV2Body;
     headers: ProjectUpsertV2Headers;
 };
 
@@ -1817,7 +1817,7 @@ export type ReceiptDeleteV2Headers = {
 };
 
 export type ReceiptDeleteV2Variables = {
-    body?: ReceiptDeleteV2Body;
+    body: ReceiptDeleteV2Body;
     headers: ReceiptDeleteV2Headers;
 };
 
@@ -1837,7 +1837,7 @@ export type ReceiptUpdateV2Headers = {
 };
 
 export type ReceiptUpdateV2Variables = {
-    body?: ReceiptUpdateV2Body;
+    body: ReceiptUpdateV2Body;
     headers: ReceiptUpdateV2Headers;
 };
 
@@ -1857,7 +1857,7 @@ export type TailnetPolicyRemoveEmptyGroupsV2Headers = {
 };
 
 export type TailnetPolicyRemoveEmptyGroupsV2Variables = {
-    body?: TailnetPolicyRemoveEmptyGroupsV2Body;
+    body: TailnetPolicyRemoveEmptyGroupsV2Body;
     headers: TailnetPolicyRemoveEmptyGroupsV2Headers;
 };
 
@@ -1877,7 +1877,7 @@ export type TailnetReachAllowV2Headers = {
 };
 
 export type TailnetReachAllowV2Variables = {
-    body?: TailnetReachAllowV2Body;
+    body: TailnetReachAllowV2Body;
     headers: TailnetReachAllowV2Headers;
 };
 
@@ -1897,7 +1897,7 @@ export type TailnetRoutesApproveV2Headers = {
 };
 
 export type TailnetRoutesApproveV2Variables = {
-    body?: TailnetRoutesApproveV2Body;
+    body: TailnetRoutesApproveV2Body;
     headers: TailnetRoutesApproveV2Headers;
 };
 
@@ -1924,7 +1924,7 @@ export type ExecuteV2Body = {
 
 export type ExecuteV2Variables = {
     path: ExecuteV2Path;
-    body?: ExecuteV2Body;
+    body: ExecuteV2Body;
 };
 
 export type ConnectionsV2Result = {
@@ -2569,284 +2569,284 @@ export type Ops = {
     };
     assetCreateV2: {
         args: {
-            body?: AssetCreateV2Body;
+            body: AssetCreateV2Body;
             headers: AssetCreateV2Headers;
         };
         result: AssetCreateV2Result;
     };
     assetDeleteV2: {
         args: {
-            body?: AssetDeleteV2Body;
+            body: AssetDeleteV2Body;
             headers: AssetDeleteV2Headers;
         };
         result: AssetDeleteV2Result;
     };
     assetUpdateV2: {
         args: {
-            body?: AssetUpdateV2Body;
+            body: AssetUpdateV2Body;
             headers: AssetUpdateV2Headers;
         };
         result: AssetUpdateV2Result;
     };
     assetUpsertV2: {
         args: {
-            body?: AssetUpsertV2Body;
+            body: AssetUpsertV2Body;
             headers: AssetUpsertV2Headers;
         };
         result: AssetUpsertV2Result;
     };
     calendarEntryCreateV2: {
         args: {
-            body?: CalendarEntryCreateV2Body;
+            body: CalendarEntryCreateV2Body;
             headers: CalendarEntryCreateV2Headers;
         };
         result: CalendarEntryCreateV2Result;
     };
     calendarEntryDeleteV2: {
         args: {
-            body?: CalendarEntryDeleteV2Body;
+            body: CalendarEntryDeleteV2Body;
             headers: CalendarEntryDeleteV2Headers;
         };
         result: CalendarEntryDeleteV2Result;
     };
     calendarEntryUpdateV2: {
         args: {
-            body?: CalendarEntryUpdateV2Body;
+            body: CalendarEntryUpdateV2Body;
             headers: CalendarEntryUpdateV2Headers;
         };
         result: CalendarEntryUpdateV2Result;
     };
     certificateRenewV2: {
         args: {
-            body?: CertificateRenewV2Body;
+            body: CertificateRenewV2Body;
             headers: CertificateRenewV2Headers;
         };
         result: CertificateRenewV2Result;
     };
     contactSubmissionDeleteV2: {
         args: {
-            body?: ContactSubmissionDeleteV2Body;
+            body: ContactSubmissionDeleteV2Body;
             headers: ContactSubmissionDeleteV2Headers;
         };
         result: ContactSubmissionDeleteV2Result;
     };
     contactSubmissionReviewV2: {
         args: {
-            body?: ContactSubmissionReviewV2Body;
+            body: ContactSubmissionReviewV2Body;
             headers: ContactSubmissionReviewV2Headers;
         };
         result: ContactSubmissionReviewV2Result;
     };
     contactSubmissionsListV2: {
         args: {
-            body?: ContactSubmissionsListV2Body;
+            body: ContactSubmissionsListV2Body;
         };
         result: ContactSubmissionsListV2Result;
     };
     contentCreateV2: {
         args: {
-            body?: ContentCreateV2Body;
+            body: ContentCreateV2Body;
             headers: ContentCreateV2Headers;
         };
         result: ContentCreateV2Result;
     };
     contentDeleteV2: {
         args: {
-            body?: ContentDeleteV2Body;
+            body: ContentDeleteV2Body;
             headers: ContentDeleteV2Headers;
         };
         result: ContentDeleteV2Result;
     };
     contentUpdateV2: {
         args: {
-            body?: ContentUpdateV2Body;
+            body: ContentUpdateV2Body;
             headers: ContentUpdateV2Headers;
         };
         result: ContentUpdateV2Result;
     };
     documentationCreateV2: {
         args: {
-            body?: DocumentationCreateV2Body;
+            body: DocumentationCreateV2Body;
             headers: DocumentationCreateV2Headers;
         };
         result: DocumentationCreateV2Result;
     };
     documentationDeleteV2: {
         args: {
-            body?: DocumentationDeleteV2Body;
+            body: DocumentationDeleteV2Body;
             headers: DocumentationDeleteV2Headers;
         };
         result: DocumentationDeleteV2Result;
     };
     documentationSyncV2: {
         args: {
-            body?: DocumentationSyncV2Body;
+            body: DocumentationSyncV2Body;
             headers: DocumentationSyncV2Headers;
         };
         result: DocumentationSyncV2Result;
     };
     documentationUpdateV2: {
         args: {
-            body?: DocumentationUpdateV2Body;
+            body: DocumentationUpdateV2Body;
             headers: DocumentationUpdateV2Headers;
         };
         result: DocumentationUpdateV2Result;
     };
     expenseCreateV2: {
         args: {
-            body?: ExpenseCreateV2Body;
+            body: ExpenseCreateV2Body;
             headers: ExpenseCreateV2Headers;
         };
         result: ExpenseCreateV2Result;
     };
     expenseDeleteV2: {
         args: {
-            body?: ExpenseDeleteV2Body;
+            body: ExpenseDeleteV2Body;
             headers: ExpenseDeleteV2Headers;
         };
         result: ExpenseDeleteV2Result;
     };
     expenseUpdateV2: {
         args: {
-            body?: ExpenseUpdateV2Body;
+            body: ExpenseUpdateV2Body;
             headers: ExpenseUpdateV2Headers;
         };
         result: ExpenseUpdateV2Result;
     };
     hqImportV2: {
         args: {
-            body?: HqImportV2Body;
+            body: HqImportV2Body;
             headers: HqImportV2Headers;
         };
         result: HqImportV2Result;
     };
     hqSyncV2: {
         args: {
-            body?: HqSyncV2Body;
+            body: HqSyncV2Body;
             headers: HqSyncV2Headers;
         };
         result: HqSyncV2Result;
     };
     infrastructureControllerRefreshV2: {
         args: {
-            body?: InfrastructureControllerRefreshV2Body;
+            body: InfrastructureControllerRefreshV2Body;
             headers: InfrastructureControllerRefreshV2Headers;
         };
         result: InfrastructureControllerRefreshV2Result;
     };
     infrastructureReconcileV2: {
         args: {
-            body?: InfrastructureReconcileV2Body;
+            body: InfrastructureReconcileV2Body;
             headers: InfrastructureReconcileV2Headers;
         };
         result: InfrastructureReconcileV2Result;
     };
     infrastructureResourceAcceptObservedV2: {
         args: {
-            body?: InfrastructureResourceAcceptObservedV2Body;
+            body: InfrastructureResourceAcceptObservedV2Body;
             headers: InfrastructureResourceAcceptObservedV2Headers;
         };
         result: InfrastructureResourceAcceptObservedV2Result;
     };
     infrastructureResourceCreateV2: {
         args: {
-            body?: InfrastructureResourceCreateV2Body;
+            body: InfrastructureResourceCreateV2Body;
             headers: InfrastructureResourceCreateV2Headers;
         };
         result: InfrastructureResourceCreateV2Result;
     };
     infrastructureResourceRemoveV2: {
         args: {
-            body?: InfrastructureResourceRemoveV2Body;
+            body: InfrastructureResourceRemoveV2Body;
             headers: InfrastructureResourceRemoveV2Headers;
         };
         result: InfrastructureResourceRemoveV2Result;
     };
     infrastructureResourceUpdateV2: {
         args: {
-            body?: InfrastructureResourceUpdateV2Body;
+            body: InfrastructureResourceUpdateV2Body;
             headers: InfrastructureResourceUpdateV2Headers;
         };
         result: InfrastructureResourceUpdateV2Result;
     };
     lookupAddressV2: {
         args: {
-            body?: LookupAddressV2Body;
+            body: LookupAddressV2Body;
         };
         result: LookupAddressV2Result;
     };
     lookupNameV2: {
         args: {
-            body?: LookupNameV2Body;
+            body: LookupNameV2Body;
         };
         result: LookupNameV2Result;
     };
     projectCreateV2: {
         args: {
-            body?: ProjectCreateV2Body;
+            body: ProjectCreateV2Body;
             headers: ProjectCreateV2Headers;
         };
         result: ProjectCreateV2Result;
     };
     projectDeleteV2: {
         args: {
-            body?: ProjectDeleteV2Body;
+            body: ProjectDeleteV2Body;
             headers: ProjectDeleteV2Headers;
         };
         result: ProjectDeleteV2Result;
     };
     projectRefreshV2: {
         args: {
-            body?: ProjectRefreshV2Body;
+            body: ProjectRefreshV2Body;
             headers: ProjectRefreshV2Headers;
         };
         result: ProjectRefreshV2Result;
     };
     projectUpdateV2: {
         args: {
-            body?: ProjectUpdateV2Body;
+            body: ProjectUpdateV2Body;
             headers: ProjectUpdateV2Headers;
         };
         result: ProjectUpdateV2Result;
     };
     projectUpsertV2: {
         args: {
-            body?: ProjectUpsertV2Body;
+            body: ProjectUpsertV2Body;
             headers: ProjectUpsertV2Headers;
         };
         result: ProjectUpsertV2Result;
     };
     receiptDeleteV2: {
         args: {
-            body?: ReceiptDeleteV2Body;
+            body: ReceiptDeleteV2Body;
             headers: ReceiptDeleteV2Headers;
         };
         result: ReceiptDeleteV2Result;
     };
     receiptUpdateV2: {
         args: {
-            body?: ReceiptUpdateV2Body;
+            body: ReceiptUpdateV2Body;
             headers: ReceiptUpdateV2Headers;
         };
         result: ReceiptUpdateV2Result;
     };
     tailnetPolicyRemoveEmptyGroupsV2: {
         args: {
-            body?: TailnetPolicyRemoveEmptyGroupsV2Body;
+            body: TailnetPolicyRemoveEmptyGroupsV2Body;
             headers: TailnetPolicyRemoveEmptyGroupsV2Headers;
         };
         result: TailnetPolicyRemoveEmptyGroupsV2Result;
     };
     tailnetReachAllowV2: {
         args: {
-            body?: TailnetReachAllowV2Body;
+            body: TailnetReachAllowV2Body;
             headers: TailnetReachAllowV2Headers;
         };
         result: TailnetReachAllowV2Result;
     };
     tailnetRoutesApproveV2: {
         args: {
-            body?: TailnetRoutesApproveV2Body;
+            body: TailnetRoutesApproveV2Body;
             headers: TailnetRoutesApproveV2Headers;
         };
         result: TailnetRoutesApproveV2Result;
@@ -2854,7 +2854,7 @@ export type Ops = {
     executeV2: {
         args: {
             path: ExecuteV2Path;
-            body?: ExecuteV2Body;
+            body: ExecuteV2Body;
         };
         result: ExecuteV2Result;
     };

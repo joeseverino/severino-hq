@@ -505,8 +505,9 @@ def _path_parameter(name: str, schema: dict[str, Any], description: str) -> dict
 
 
 def _body(schema: dict[str, Any]) -> dict[str, Any]:
-    # Optional: an empty body is an empty command.
-    return {"required": False, "content": _json_content(schema)}
+    # Required: the view refuses a request that is not application/json, so a
+    # body-less call is a 415, not an empty command. An empty command is `{}`.
+    return {"required": True, "content": _json_content(schema)}
 
 
 def document() -> dict[str, Any]:
