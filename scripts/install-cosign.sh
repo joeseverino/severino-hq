@@ -2,7 +2,7 @@
 # Put a verifier where root can trust it.
 #
 # The deploy verifies the composition's signature twice: once on the runner, so
-# a bad image fails visibly in the workflow, and once inside deploy-image.sh,
+# a bad image fails visibly in the workflow, and once inside hq-host deploy,
 # because the runner is the party the sudoers boundary exists to distrust. The
 # second check is the one that decides, so it cannot use the runner's copy of
 # cosign: that binary is installed by an Action, into a directory the runner

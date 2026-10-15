@@ -2,9 +2,9 @@ package secrets
 
 import (
 	"context"
-	"os"
-	"os/exec"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 // Web is the web container: the one consumer that has to be restarted to load
@@ -17,31 +17,33 @@ type Web interface {
 	Health(ctx context.Context) string
 }
 
-// DockerWeb drives the container through the docker CLI, with fixed arguments
-// and an environment that holds nothing of the renderer's.
-type DockerWeb struct{ Container string }
+// UnitWeb drives HQ through its unit, which is the only thing that runs the
+// container, and reads its health from docker.
+type UnitWeb struct{ Unit, Container string }
 
-func (d DockerWeb) command(ctx context.Context, args ...string) *exec.Cmd {
-	command := exec.CommandContext(ctx, "docker", args...)
-	command.Env = []string{}
-	for _, name := range []string{"PATH", "HOME", "DOCKER_HOST"} {
-		if value, ok := os.LookupEnv(name); ok {
-			command.Env = append(command.Env, name+"="+value)
-		}
+// Installed is whether HQ is running or starting, so may have read an
+// environment this run replaces. A unit that is neither reads the file when
+// it next starts.
+func (u UnitWeb) Installed(ctx context.Context) bool {
+	out, err := host.Command(ctx, "systemctl", "show", "--property", "ActiveState", "--value", u.Unit).Output()
+	if err != nil {
+		return false
 	}
-	return command
+	switch strings.TrimSpace(string(out)) {
+	case "active", "activating", "reloading":
+		return true
+	}
+	return false
 }
 
-func (d DockerWeb) Installed(ctx context.Context) bool {
-	return d.command(ctx, "inspect", "--type", "container", d.Container).Run() == nil
+// Restart returns once HQ is healthy on the new environment, or failed to
+// be: the unit is ready only when HQ answers its health check.
+func (u UnitWeb) Restart(ctx context.Context) error {
+	return host.Command(ctx, "systemctl", "restart", u.Unit).Run()
 }
 
-func (d DockerWeb) Restart(ctx context.Context) error {
-	return d.command(ctx, "restart", d.Container).Run()
-}
-
-func (d DockerWeb) Health(ctx context.Context) string {
-	out, err := d.command(ctx, "inspect", "--format", "{{.State.Health.Status}}", d.Container).Output()
+func (u UnitWeb) Health(ctx context.Context) string {
+	out, err := host.Command(ctx, "docker", "inspect", "--format", "{{.State.Health.Status}}", u.Container).Output()
 	if err != nil {
 		return ""
 	}

@@ -24,6 +24,7 @@ make_image() {
     # The renderer the image build compiles into the tree; no checkout has it.
     mkdir -p "${image}/deploy/bin"
     printf '#!/bin/sh\necho built by the image\n' >"${image}/deploy/bin/hq-secrets"
+    printf '#!/bin/sh\necho built by the image\n' >"${image}/deploy/bin/hq-host"
     sh scripts/root-tree-manifest.sh "${image}" >"${image}/root-tree.sha256"
 }
 
@@ -108,7 +109,7 @@ sh scripts/root-tree-manifest.sh "${image}" >"${image}/root-tree.sha256"
 sync || fail "sync required a file the release no longer ships: $(cat "${work}/err")"
 
 make_image
-printf '# changed after the build\n' >>"${image}/scripts/run-controller.sh"
+printf '# changed after the build\n' >>"${image}/scripts/backup.sh"
 refused "a file that differs from its manifest line"
 
 make_image
@@ -158,7 +159,7 @@ rm "${image}/root-tree.sha256"
 refused "an image with no manifest"
 
 make_image
-rm "${image}/scripts/run-controller.sh"
+rm "${image}/scripts/backup.sh"
 sh scripts/root-tree-manifest.sh "${image}" >"${image}/root-tree.sha256"
 refused "a unit naming a script the tree does not ship"
 
@@ -191,7 +192,7 @@ drift() { # drift <why> <expected message>
 
 check || fail "a current host reported drift: $(cat "${work}/err")"
 
-printf '# edited on the host\n' >>"${lib}/scripts/run-controller.sh"
+printf '# edited on the host\n' >>"${lib}/scripts/backup.sh"
 drift "an edited root script" "no longer reproduces root-tree.sha256"
 sync
 

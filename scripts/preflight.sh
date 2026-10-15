@@ -108,9 +108,11 @@ host_payload() {
     established="$(units_shipped "${work}/main/deploy/systemd" \
         | grep -Fx -f "${work}/release-units" | tr '\n' ' ' || true)"
     manifest="$(sh "${work}/release/scripts/root-tree-manifest.sh" "${work}/release")"
-    min_free="$(sed -n 's/.*available_kb}" -lt \([0-9][0-9]*\).*/\1/p' \
-        "${work}/release/scripts/deploy-image.sh")"
-    [ -n "${min_free}" ] || { echo "Could not read deploy-image.sh's free-space floor." >&2; return 1; }
+    git archive HEAD controller/cmd/hq-host/main.go | tar -x -C "${work}/release"
+    min_free_mib="$(sed -n 's/.*FreeBytes: \([0-9][0-9]*\) << 20,.*/\1/p' \
+        "${work}/release/controller/cmd/hq-host/main.go")"
+    [ -n "${min_free_mib}" ] || { echo "Could not read hq-host's free-space floor." >&2; return 1; }
+    min_free=$((min_free_mib * 1024))
     case "${manifest}${established}" in
         *"'"*) echo "A shipped path contains a quote." >&2; return 1 ;;
     esac

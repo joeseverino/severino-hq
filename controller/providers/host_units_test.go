@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -95,15 +95,7 @@ func TestHostUnitsCarryNoPropertyTheReadingDoesNotName(t *testing.T) {
 
 // The launcher asks systemd for exactly the properties the reading keeps.
 func TestTheLauncherAsksForThePropertiesTheReadingKeeps(t *testing.T) {
-	library, err := os.ReadFile("../../scripts/lib/systemd-units.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	declared := regexp.MustCompile(`(?m)^readonly units_properties='([A-Za-z,]+)'$`).FindSubmatch(library)
-	if declared == nil {
-		t.Fatal("scripts/lib/systemd-units.sh declares no units_properties")
-	}
-	asked := strings.Split(string(declared[1]), ",")
+	asked := slices.Clone(host.UnitProperties)
 	slices.Sort(asked)
 	kept := []string{}
 	for property := range hostUnitProperties {

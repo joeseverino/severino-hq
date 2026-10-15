@@ -19,12 +19,14 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 // Names inside the layout. The application environment keeps the name and
 // format hq/config/settings.py loads.
 const (
-	AppEnvName      = "severino_hq_env"
+	AppEnvName      = host.AppEnvName
 	ConnectionsName = "controller-connections.json"
 	SSHDirName      = "ssh"
 	lockName        = "refresh.lock"
@@ -69,7 +71,7 @@ func ValidateRuntimePath(dir string) error {
 	if !strings.HasPrefix(dir, "/") {
 		return hostError("Controller secret directory must be absolute.")
 	}
-	if dir == "/run/severino-hq" || strings.HasPrefix(dir, "/run/severino-hq/") ||
+	if dir == host.RunDir || strings.HasPrefix(dir, host.RunDir+"/") ||
 		strings.Contains(dir, "//") || strings.Contains(dir, "/../") || strings.Contains(dir, "/./") ||
 		strings.HasSuffix(dir, "/..") || strings.HasSuffix(dir, "/.") || strings.HasSuffix(dir, "/") {
 		return hostError("Unsafe controller secret directory.")
@@ -77,13 +79,7 @@ func ValidateRuntimePath(dir string) error {
 	return nil
 }
 
-func owner(info fs.FileInfo) (uid int, links uint64, ok bool) {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, 0, false
-	}
-	return int(stat.Uid), uint64(stat.Nlink), true
-}
+var owner = host.Ownership
 
 // openPrivate opens a directory that must already be a real directory, not a
 // link, owned by uid with mode 0700, and returns it as a root.

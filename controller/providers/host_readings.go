@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 	"github.com/joeseverino/severino-hq/controller/secretstatus"
 )
@@ -125,14 +126,8 @@ func renderStatusRecord(name, path string) HostRenderStatusRecord {
 	return HostRenderStatusRecord{Renderer: name, State: renderStatusRead, Status: &status}
 }
 
-// HostFirewallRecord is the distilled firewall answer run-controller.sh mounts.
-type HostFirewallRecord struct {
-	Record                  string `json:"record"`
-	Interface               string `json:"interface"`
-	AcceptRequiresInterface bool   `json:"accept_requires_interface"`
-	ForeignInterfaceDropped bool   `json:"foreign_interface_dropped"`
-	ReadAt                  string `json:"read_at"`
-}
+// HostFirewallRecord is the distilled firewall answer the launcher mounts.
+type HostFirewallRecord = host.Firewall
 
 // hostFirewall is whether HQ's port must arrive on the tailnet interface. Root
 // reads the ruleset and mounts one distilled answer; this never reads the rules.

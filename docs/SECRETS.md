@@ -273,7 +273,7 @@ three, or a string that is not a short word is refused.
 ### How HQ reads it
 
 The directory is root-only, so the document takes the path the tailnet and
-firewall readings take. `scripts/run-controller.sh` copies it into the run's
+firewall readings take. `hq-host controller` copies it into the run's
 private directory, gives the copy to the controller's account with mode 0400,
 bind-mounts it read-only at `/run/severino-hq/render-status/<name>.json` and
 passes `SEVERINO_RENDER_STATUS`, a comma-separated list of
@@ -413,74 +413,6 @@ the SDK reaches 1.0 or Connect gains file upload.
 Provisioning, live cutover, credential revocation, and destructive outage tests
 are separate operational steps. Local tests do not establish that these gates
 have passed on a deployed host.
-
-## First deploy from the shell renderer
-
-The deploy that replaces the shell renderer is started by the host's previous
-`deploy-image.sh`. The order of events:
-
-1. The previous deploy script stops the controller and content timers, pulls
-   the image, and takes the new release's compose file and
-   `severino-hq-sync-scripts` out of it.
-2. It starts the new web container and waits for it to be healthy, then backs
-   up the root-owned tree and the host's sync program.
-3. It runs the new release's sync program. That replaces
-   `/usr/local/lib/severino-hq` in one swap, and `deploy/bin/hq-secrets`
-   arrives with it. The previous sync program never runs for this release.
-4. It runs the synced tree's `install-controller.sh`, which installs
-   `severino-hq-secrets.service` and the shipped
-   `severino-hq-secrets.service.d/10-root-owned-exec.conf` over the host's
-   copy (the one whose `ExecStart` named `refresh-secrets.sh`), reloads
-   systemd, and starts the unit. This is the first run of the Go renderer.
-5. The installer requires the connections document, runs the controller
-   preflight, installs and enables the remaining units, and removes the shell
-   renderer's environment file from the tmpfs.
-
-Between steps 3 and 4 the installed unit still names `refresh-secrets.sh`,
-which is gone. If the hourly timer or the controller's path unit fires in that
-window, the unit fails to start and nothing is written; the installer's start
-in step 4 is unaffected. A controller run between the sync and the first
-successful render is refused by the launcher, which requires the document.
-
-One change is required before the deploy: Connect must be on a loopback
-port below 1024. The renderer refuses the endpoint otherwise (`config`, exit
-2), the previous files are kept, and the deploy rolls back as described below.
-Make the change while the shell renderer is still live, which accepts any
-loopback port, in this order, so nothing is broken in between:
-
-1. Publish Connect on `127.0.0.1:<port below 1024>` beside or in place of its
-   current port, and restart it.
-2. Move the firewall guard that admits only uid 0 to Connect to the new port
-   (keep the old rule until step 4 if both ports are published).
-3. Set `OP_CONNECT_HOST=http://127.0.0.1:<port>` in the host's drop-in, change
-   its `Wants=` on the Connect unit to `Requires=`, and `systemctl daemon-reload`.
-4. `systemctl start severino-hq-secrets.service` and confirm the shell
-   renderer succeeds on the new port. Then stop publishing the old port and
-   remove its firewall rule.
-5. Confirm `sysctl net.ipv4.ip_unprivileged_port_start` is above the port
-   (1024 unless the host lowered it).
-6. Deploy.
-
-Nothing else in the host-owned drop-ins needs an edit. The renderer reads
-`SEVERINO_SECRETS_VAULT`, `SEVERINO_ENV_ITEM`, `SEVERINO_CONNECT_CREDENTIAL`,
-`OP_CONNECT_HOST` and the `LoadCredentialEncrypted=` line as they are;
-tolerates `SEVERINO_SECRETS_BACKEND=connect`; and ignores
-`SEVERINO_MCP_SECRET_REF` and a `RuntimeDirectory=severino-hq-op` line. After
-a healthy deploy, remove those three, and any `TimeoutStartSec=` shorter than
-the unit's. It refuses a `SEVERINO_SECRETS_BACKEND` other than `connect`, an
-`OP_CONNECT_TOKEN` or `OP_SERVICE_ACCOUNT_TOKEN` variable, and a
-`SEVERINO_CONTROLLER_ENV` override, and an endpoint that is not IPv4 loopback
-on a port below 1024.
-
-If the first render or the preflight fails, the installer restores the
-previous unit and drop-in, and the previous deploy script restores the
-previous image, the previous tree with `refresh-secrets.sh` in it, the
-previous sync program and the timers. The shell renderer's environment file is
-still on the tmpfs, because it is removed only in step 5, so the restored
-launcher keeps working and the hourly timer renders as before. Files the Go
-renderer wrote before a later step failed (`controller-connections.json`,
-`status.json`, its state file) stay on the tmpfs until a reboot; nothing in
-the previous release reads them.
 
 ## Proving the renderer on a host
 

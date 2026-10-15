@@ -2,7 +2,9 @@
 Description=Create and verify a Severino HQ backup
 Documentation=file:///opt/apps/severino-hq/docs/BACKUP.md
 After=local-fs.target
-ConditionPathExists=/srv/severino-hq/data/severino.sqlite3
+# A missing database fails the backup, and the failure is reported, instead
+# of the run being skipped as if there were nothing to back up.
+AssertPathExists=/srv/severino-hq/data/severino.sqlite3
 
 [Service]
 Type=oneshot

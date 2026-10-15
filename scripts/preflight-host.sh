@@ -7,7 +7,7 @@
 # Inputs, set by scripts/preflight.sh ahead of this text:
 #   PREFLIGHT_MANIFEST       root-tree.sha256 of the branch being released
 #   PREFLIGHT_UNITS          units that branch and main both ship
-#   PREFLIGHT_MIN_FREE_KB    deploy-image.sh's free-space floor
+#   PREFLIGHT_MIN_FREE_KB    hq-host deploy's free-space floor
 # and the functions of scripts/lib/checkout.sh.
 #
 # Prints one "ok", "warn" or "FAIL" line per check and exits 1 on any FAIL.
@@ -75,10 +75,6 @@ EOF
 ok "root tree: ${same} file(s) identical to the release"
 for path in ${changed}; do warn "the release changes ${path}"; done
 for path in ${added}; do warn "the release adds ${path}"; done
-case " ${changed} " in
-    *" scripts/deploy-image.sh "*)
-        warn "the host's deploy-image.sh carries this release up to its sync; the release's runs from the next" ;;
-esac
 
 if [ ! -f "${lib}/root-tree.sha256" ]; then
     warn "${lib} has no root-tree.sha256; the first release that ships one installs it"

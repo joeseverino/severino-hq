@@ -3,6 +3,7 @@
 # root-run Severino HQ units execute, and prove it is the tree the image shipped.
 #
 #   severino-hq-sync-scripts                   # from the running container's image
+#   severino-hq-sync-scripts --image REF       # from REF, already pulled and verified
 #   severino-hq-sync-scripts --from-checkout   # from /opt/apps/severino-hq (UNTRUSTED)
 #
 # The image source is preferred because its content is fixed by digest and was
@@ -26,7 +27,11 @@ readonly MANIFEST=root-tree.sha256
 CONTAINER="${HQ_CONTAINER:-severino-hq}"
 APP_DIR="${SEVERINO_HQ_APP_DIR:-/opt/apps/severino-hq}"
 SOURCE=image
-[ "${1:-}" = "--from-checkout" ] && SOURCE=checkout
+IMAGE=""
+case "${1:-}" in
+    --from-checkout) SOURCE=checkout ;;
+    --image) IMAGE="${2:?--image needs a reference}" ;;
+esac
 
 [ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
 
@@ -44,9 +49,13 @@ abort() { echo "sync aborted: $*" >&2; exit 1; }
 mkdir -p "$stage/hq"
 
 if [ "$SOURCE" = image ]; then
-    image_id="$(docker inspect --format '{{.Image}}' "$CONTAINER")"
-    [ -n "$image_id" ] || abort "could not resolve the running image"
-    cid="$(docker create "$image_id" true)"
+    if [ -n "$IMAGE" ]; then
+        image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
+    else
+        image_id="$(docker inspect --format '{{.Image}}' "$CONTAINER")"
+    fi
+    [ -n "$image_id" ] || abort "could not resolve the image"
+    cid="$(docker create --pull never "$image_id" true)"
     for item in scripts hq/config deploy docker-compose.yml "$MANIFEST"; do
         docker cp "$cid:/app/$item" "$stage/$item" || abort "the image ships no /app/$item"
     done

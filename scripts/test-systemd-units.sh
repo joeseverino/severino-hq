@@ -133,65 +133,7 @@ for f in $(units_shipped deploy/systemd); do
     fi
 done
 
-# 4. What systemd is asked about: every shipped unit that has a state of its
-#    own, and each instance of a shipped template that a shipped file starts.
-#
-# A template has no state, an instance of a template this repository does not
-# ship is another owner's unit, and a name that is not a unit name never
-# reaches systemctl's arguments.
-asked="${fixture}/asked"
-mkdir -p "${asked}/a-.service.d"
-: >"${asked}/a.service"
-: >"${asked}/job@.service"
-printf '[Timer]\nUnit=job@one.service\n' >"${asked}/a.timer"
-printf '[Timer]\nUnit=other@one.service\n' >"${asked}/b.timer"
-printf '[Path]\nUnit=a.service\n' >"${asked}/a.path"
-# shellcheck disable=SC2016  # the substitution is the text under test
-printf '[Unit]\nOnFailure=job@two.service  job@.service job@$(id).service a.service\n' \
-    >"${asked}/a-.service.d/10-failed.conf"
-expected="a.path
-a.service
-a.timer
-b.timer
-job@one.service
-job@two.service"
-[ "$(units_reported "${asked}")" = "${expected}" ] ||
-    fail "units_reported returned: $(units_reported "${asked}" | tr '\n' ' ')"
-if units_reported "${fixture}/absent" >/dev/null 2>&1; then
-    fail "units_reported accepted a directory that does not exist"
-fi
-
-# The state is one block per reported unit, in systemd's own words. A unit
-# that is not installed is a block too, and no answer at all is a failure,
-# never an empty reading.
-state="${fixture}/state"
-mkdir -p "${state}"
-printf 'LoadState=loaded\nActiveState=failed\nSubState=failed\nResult=exit-code\n' >"${state}/a.service"
-answer="$(PATH="${bin}:${PATH}" TEST_UNIT_STATE="${state}" \
-    TEST_SYSTEMCTL_LOG="${fixture}/systemctl-log" units_state "${asked}")" ||
-    fail "units_state failed against a systemd that answers"
-[ "$(printf '%s\n' "${answer}" | grep -c '^Id=')" -eq 6 ] ||
-    fail "units_state answered for $(printf '%s\n' "${answer}" | grep -c '^Id=') units, not 6"
-printf '%s\n' "${answer}" | grep -A2 '^Id=a.service$' | grep -qx 'ActiveState=failed' ||
-    fail "units_state did not carry a unit's state"
-printf '%s\n' "${answer}" | grep -A1 '^Id=job@two.service$' | grep -qx 'LoadState=not-found' ||
-    fail "units_state did not answer for a unit that is not installed"
-grep -qx 'TZ=UTC' "${fixture}/systemctl-log" || fail "units_state did not ask in UTC"
-grep -qx -- "--property=${units_properties}" "${fixture}/systemctl-log" ||
-    fail "units_state asked for other than the declared properties"
-if PATH="${bin}:${PATH}" units_state "${asked}" >/dev/null 2>&1; then
-    fail "units_state succeeded against a systemd that did not answer"
-fi
-# No property asked for is one that carries what a unit runs or is given.
-for property in $(printf '%s' "${units_properties}" | tr ',' ' '); do
-    case "${property}" in
-        ExecMainCode | ExecMainStatus | UnitFileState) ;;
-        *Exec* | *Environment* | *Credential* | *Path* | *Director* | *File* | *Passphrase*)
-            fail "units_properties asks for ${property}" ;;
-    esac
-done
-
-# 5. Every shipped unit that can fail tells HQ when it does, and nothing that
+# 4. Every shipped unit that can fail tells HQ when it does, and nothing that
 #    telling starts can start itself again.
 #
 # The drop-in is in the directory systemd reads for every unit name with this

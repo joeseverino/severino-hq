@@ -21,6 +21,8 @@ cd "${repo_dir}"
 mkdir -p "${repo}/hq"
 cp -R hq/config "${repo}/hq/"
 cp -R deploy docker-compose.yml "${repo}/"
+mkdir -p "${repo}/controller/cmd/hq-host"
+cp controller/cmd/hq-host/main.go "${repo}/controller/cmd/hq-host/"
 find "${repo}" -name __pycache__ -prune -exec rm -rf {} +
 for f in preflight.sh preflight-host.sh root-tree-manifest.sh deploy-image.sh \
     severino-hq-sync-scripts lib/checkout.sh lib/systemd-units.sh upgrade-container.sh; do
@@ -127,7 +129,6 @@ grep -qx "mise run suite:composed REQUIRE_COMPOSED=1" "${TEST_LOG}" ||
 grep -qx "ssh -o BatchMode=yes deploy.example.test sh -s" "${TEST_LOG}" ||
     fail "the host was not reached through ssh as expected"
 says "warn    the release changes scripts/deploy-image.sh"
-says "carries this release up to its sync"
 says "warn    the release adds deploy/systemd/severino-hq-example.timer"
 says "upgrade-container.sh is root's alone and identical to the release"
 if grep -q "secret-marker-example" "${work}/out"; then

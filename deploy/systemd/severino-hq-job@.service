@@ -1,7 +1,10 @@
 [Unit]
 Description=Severino HQ scheduled work: %i
 Wants=network-online.target
-After=network-online.target docker.service severino-hq.service
+After=network-online.target docker.service severino-hq-web.service
+# The work is done by the running HQ: with HQ down the job fails at once
+# instead of waiting, and the timer asks again.
+Requisite=severino-hq-web.service
 
 [Service]
 Type=oneshot

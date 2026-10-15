@@ -66,7 +66,7 @@ that field and writes one typed document,
 `/run/severino-hq-secrets/controller-connections.json`, on tmpfs. The
 controller service requires a root-owned 0700 directory and a root-owned 0400
 file, separate from the web-writable doorbell directory.
-`scripts/run-controller.sh` copies the document into the run's private
+`hq-host controller` copies the document into the run's private
 directory, bind-mounts it read-only into a short-lived controller container
 running from the exact deployed HQ image, and passes only its path. That
 container is given the bridge socket's volume read-only and nothing else of
@@ -182,35 +182,38 @@ on example-host, and routine synchronization requires no SSH access. What HQ
 holds about the infrastructure itself is not synchronized from anywhere: it is
 swept, or declared in HQ.
 
-The gated `main` deployment runs `scripts/install-controller.sh` after the new
-application image is healthy. The installer refreshes controller-only
-credentials, validates the systemd units, authenticates read-only to every
-declared provider in plan mode, and only then enables the apply timer. Missing
-credentials, untrusted TLS, and API failures stop activation. The HQ web
-container never receives the provider environment.
+The gated `main` deployment runs `hq-host install` after the new application
+image is healthy. The installer refreshes controller-only credentials,
+validates the systemd units, authenticates read-only to every declared provider
+in plan mode, and only then enables the apply timer. Missing credentials,
+untrusted TLS, and API failures stop activation. The HQ web container never
+receives the provider environment.
 
 Each release installs itself. Root runs units out of
 `/usr/local/lib/severino-hq`, a root-owned copy of `scripts/`, `hq/config/`,
-`deploy/` and `docker-compose.yml` taken from the running image. Once the new
-image is healthy, `deploy-image.sh` runs the `severino-hq-sync-scripts` that
-image ships (never the host's copy), which replaces the tree and refuses it
-unless it reproduces `root-tree.sha256` exactly: the manifest the image build
-writes with `scripts/root-tree-manifest.sh`. It then installs that sync program
-at `/usr/local/sbin` and runs the installer it just synced, so every step after
-the sync is the new release's code. Run by hand, `install-controller.sh` syncs
-and re-executes its synced copy the same way. A failed activation restores the
-previous tree and sync program exactly. `fix-root-ownership.sh` is the first
+`deploy/` and `docker-compose.yml` taken from the running image. `hq-host
+deploy` verifies and pulls the image, then hands over to the `hq-host` that
+image ships, so every step after the pull is the new release's code. Before
+HQ restarts, that release runs the `severino-hq-sync-scripts` the image ships
+(never the host's copy) against the image, which replaces the tree and refuses
+it unless it reproduces `root-tree.sha256` exactly: the manifest the image
+build writes with `scripts/root-tree-manifest.sh`. It installs the image's web
+unit, so HQ comes up as the release defines it, and once HQ is healthy runs the
+synced `hq-host install`. A failure at any step puts back the previous image,
+tree, units and timers. `fix-root-ownership.sh` is the first
 bring-up, after `sh scripts/severino-hq-sync-scripts --from-checkout`.
 
-The deploy job refuses before its `git pull` when anything under the checkout's
-`.git` is not owned by the runner, and names the `chown` that fixes it. The
-daily `severino-hq-script-drift` check asks the same, and also fails when the
+The deploy job does not `git pull` when anything under the checkout's `.git`
+is not owned by the runner: it warns, names the `chown` that fixes it, and
+deploys from the verified image regardless, since nothing it runs comes from
+the checkout. The daily `severino-hq-script-drift` check asks the same, and also fails when the
 tree no longer reproduces its manifest or the sync program is not the tree's.
 
 What it installs is every unit and drop-in under `deploy/systemd`, found by
-walking the directory (`scripts/lib/systemd-units.sh`); `*.example` templates
+walking the directory (`controller/host/units.go`); `*.example` templates
 are copied into place by hand and never installed. Every shipped timer and path
-is enabled. Adding a unit is adding its file: there is no list to update. The
+is enabled, and every service with an `[Install]` section, which is
+`severino-hq-web.service`. Adding a unit is adding its file: there is no list to update. The
 daily `severino-hq-script-drift` check compares the same set, byte for byte,
 with `/etc/systemd/system`, and names each file that differs. A drop-in the host
 adds beside a shipped one is the host's and is not compared.
@@ -244,7 +247,7 @@ that definition with their inventory, probe, and handlers; the admitted adapter
 compiler refuses mismatched or duplicate surfaces at startup. Providers the
 controller core implements directly are cross-checked against their handler
 table. Its persistent systemd
-timer runs after boot and every five minutes. Each run drains infrastructure
+timer runs after boot and a minute after each run ends. Each run drains infrastructure
 work and derives
 new work from HQ's verified state: it queues
 renewal inside the configured window and reconciliation for new generations or
@@ -278,10 +281,7 @@ operator removes those by hand. The web
 container, the repository and the operator's workstation never hold them.
 Rotating a key is generating a new item, authorizing its public half on the
 target, and pointing the connection's `identity` at it. The same connection
-registry emits each target's host, port and remote user;
-`scripts/controller-ssh.sh` derives strict, batch-only, operation-allowlisted
-SSH invocations from the rendered document. It does not accept arbitrary
-remote commands. Authorize each generated `.pub` key with the narrowest
+registry emits each target's host, port and remote user. Authorize each generated `.pub` key with the narrowest
 remote account or forced command available. Renewal stays locked until both
 deployment paths pass non-mutating preflight, deployment, live-certificate
 verification, and rollback tests. Renewal runs in a disposable container from
@@ -306,17 +306,23 @@ Pull requests run application checks, build the production image, boot it to
 readiness, and scan it with Trivy. A push to `main` publishes and scans the
 image but does **not** deploy it.
 
-Deployment is the composition workflow's job, and it is the only path to
-production. It waits for the host workflow to finish, rebuilds every admitted
-extension onto the new host image, and deploys that. With one path, a host
+Compose builds what is deployed and Deploy deploys it; that is the only path
+to production. Compose waits for the host workflow to finish, rebuilds every
+admitted extension onto the new host image, signs it, and dispatches Deploy. With one path, a host
 release cannot reach production without its extensions.
-`scripts/deploy-image.sh` stops reconciliation, records the currently running
-image and the compose file it was started with, starts the replacement under the
-compose file copied out of that verified image (so a compose change takes effect
-in the same deploy), and restores both the previous image and its compose file
-automatically if the exact SHA-tagged replacement does not become healthy or
-its controller cannot pass activation. After rollback, the units it held are
-started again as they were.
+The deploy job runs `scripts/deploy-image.sh` through its one sudoers rule,
+which hands over to `hq-host deploy`. It records the new image in
+`/var/lib/severino-hq/release` and restarts `severino-hq-web.service`, which
+returns only once HQ answers its health check on that image. If HQ does not
+come up, or its controller cannot pass activation, the previous image and root
+tree are put back and the units it held are started again as they were.
+
+`severino-hq-web.service` is the only thing that runs the web container
+(`controller/host/web.go` declares how); the container has no restart policy.
+A boot starts the unit and the secret render together, and the unit waits for
+the rendered environment before it starts the container, so a boot, a crash
+and a deploy all bring HQ up the same way. `scripts/host-boot-drill.sh` runs
+that boot, a crash and a reboot on every image CI builds.
 
 #### What a deploy holds, and when the bridge is there
 
@@ -327,17 +333,17 @@ answers its health check, and it is gone while the container is stopped or
 being replaced. A controller pass in that gap fails with the reason and the
 next one runs. The order of a deploy keeps a pass out of the gap:
 
-1. `deploy-image.sh` stops every unit that starts release work by itself: the
-   controller's timer and its path unit, the content sync, the secret refresh
-   and the root-tree check. It then waits up to three minutes for a controller
+1. The release's `hq-host` stops every timer and path unit the tree ships that
+   is active. It then waits up to three minutes for a controller
    run or a secret refresh already in flight to end against the release it
    began with.
-2. It pulls the image and replaces the web container under the new release's
-   compose file. The bridge of the previous release is gone from here.
+2. It replaces the root-owned tree with the image's, installs the image's web
+   unit, records the image and restarts `severino-hq-web.service`, which
+   returns once HQ is healthy on it. The bridge of the previous release is
+   gone from here.
 3. The new container migrates, starts, binds the socket and turns healthy. The
    bridge of the new release is there from here.
-4. The new release's sync replaces the root-owned tree, and its installer
-   runs the controller preflight: the new launcher starts the new controller
+4. The new tree's `hq-host install` runs the controller preflight: the new launcher starts the new controller
    against the new bridge, in plan mode. This is the first pass of the release,
    and a bridge it cannot reach fails the deploy and rolls it back.
 5. The installer enables every shipped timer and path unit, and the deploy
@@ -345,19 +351,17 @@ next one runs. The order of a deploy keeps a pass out of the gap:
    timer or the next doorbell.
 
 A unit that was not active before the deploy is not started by it. On any
-failure the previous image, compose file and root tree are put back before
-the held units are started, so the previous launcher only ever meets the
-previous image.
+failure the previous image and root tree are put back before the held units
+are started, so the previous launcher only ever meets the previous image.
 
-A release is installed by the deploy script of the release before it. A
-release whose launcher and image must match (a change to how the controller
-reaches HQ is one) is therefore safe only if the script that deploys it holds
-the units above; on a host whose installed script does not, stop
-`severino-hq-controller.path` and `severino-hq-controller.timer` by hand for
-that one deploy. The installer starts them again.
+The first deploy of a host still running the compose container is made by the
+`deploy-image.sh` that host already has: it brings the release up under
+compose, and the release's `hq-host install` then records that image, removes
+the container and enables `severino-hq-web.service`. If HQ does not come up under
+the unit, the unit is disabled again and that deploy rolls back under compose.
 
-The bridge needs nothing on the host: the volume is created by compose, takes
-its owner and mode from the image, and persists across reboots. HQ refuses to
+The bridge needs nothing on the host: the volume takes its owner and mode from
+the image, and persists across reboots. HQ refuses to
 start if the socket's directory is not its account's alone, which fails the
 health check and rolls the deploy back.
 
@@ -778,22 +782,21 @@ server {
 
 ## Verifying the deployment
 
-For internal provider HTTPS, set `SEVERINO_CONTROLLER_CA_FILE_HOST` to the
-host's public homelab root certificate. Compose mounts it read-only; provider
-requests retain normal public trust and add this CA instead of disabling TLS
-verification.
+`severino-hq-web.service` runs the web container from the definition in
+`controller/host/web.go`; nothing about it is read from the checkout. Its
+environment is the file `hq-secrets` renders to
+`/run/severino-hq-secrets/web/severino_hq_env`, on the noswap tmpfs, in a
+directory only root can enter, as a single-link regular file owned by the web
+user. `hq-host run-web` starts no container until that file is there, and
+refuses anything else at its path; `--mount` refuses a missing bind source
+rather than making a directory at its name. After a reboot the renderer and
+the web unit start together, and HQ comes up once the file is rendered.
+`/run/severino-hq` is made by `/etc/tmpfiles.d/severino-hq.conf` before docker
+starts, owned by the web user.
 
-The deploy checks the three host paths the web container binds before compose
-reads them. The checkout's `.env` is writable by the deploy account, so none of
-them is taken on trust:
-- The app environment is not read from `.env` at all. `hq-secrets`
-  renders it to `/run/severino-hq-secrets/web/severino_hq_env`, on the noswap
-  tmpfs, in a directory only root can enter, as a single-link regular file
-  owned by the web user. The deploy binds that file and nothing else; a copy
-  left in the checkout's `secrets/` is removed once a deploy is healthy.
-- `SEVERINO_CONTROLLER_RUN_DIR` must be `/run/severino-hq`.
-- `SEVERINO_CONTROLLER_CA_FILE_HOST` must be a certificate under
-  `/usr/local/share/ca-certificates/`.
+Provider HTTPS on the private network is the controller's. It trusts every
+root under `/usr/local/share/ca-certificates` in addition to the public ones;
+the web container is given none.
 
 ```bash
 # From the VPS / homelab host (NOT the public internet)

@@ -43,7 +43,8 @@ RUN want="$(sed -n 's/^go \([0-9.]*\)$/\1/p' go.mod)" \
     && go mod download
 COPY controller/ ./
 RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq-controller \
-    && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-secrets ./cmd/hq-secrets
+    && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-secrets ./cmd/hq-secrets \
+    && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-host ./cmd/hq-host
 
 
 FROM python:3.14-slim-bookworm@sha256:c8137f4c460908c8763f281c8f22c431eb5c538514ba9553fc3a89c06b7cfb88 AS runtime
@@ -80,7 +81,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install Python deps from the build stage.
 COPY --from=build /install /usr/local
-# The controller run-controller.sh starts in a container of this image.
+# The controller hq-host starts in a container of this image.
 COPY --from=controller /out/hq-controller /usr/local/bin/hq-controller
 
 WORKDIR /app
@@ -88,7 +89,7 @@ COPY . /app
 # The renderer root runs on the host. It ships in the root-run tree, beside
 # the units that name it, so the manifest below covers it: the host's copy is
 # the signed image's, byte for byte, and checked daily like every script.
-COPY --from=controller /out/hq-secrets /app/deploy/bin/hq-secrets
+COPY --from=controller /out/hq-secrets /out/hq-host /app/deploy/bin/
 # What severino-hq-sync-scripts verifies the root-run tree against on the host.
 RUN sh scripts/root-tree-manifest.sh /app > /app/root-tree.sha256
 

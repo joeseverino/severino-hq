@@ -1,4 +1,6 @@
-# Severino HQ: homelab Docker Compose.
+# Severino HQ under compose, for running it locally. A host runs HQ under
+# severino-hq-web.service instead (controller/host/web.go says how); a deploy
+# uses this file once, to bring a compose-run host up to that unit.
 #
 # Uses host networking so the MCP boundary receives the real socket peer
 # instead of Docker's bridge gateway address. Nginx Proxy Manager reaches the
@@ -12,8 +14,8 @@
 #
 # Static assets are not a volume: the image carries them, collected at build.
 #
-# No env_file: production secrets come from the 1Password-rendered file the
-# entrypoint sources (see docs/SECRETS.md). The on-host .env holds
+# No env_file: production secrets come from the 1Password-rendered file
+# settings read (see docs/SECRETS.md). The on-host .env holds
 # only non-secret compose interpolation values (the two *_FILE_HOST paths).
 #
 # The image runs as UID/GID 10001. `chown -R 10001:10001` the host bind
@@ -99,16 +101,23 @@ services:
         source: ${SEVERINO_CONTROLLER_RUN_DIR:-/run/severino-hq}
         target: /run/severino-hq
       # Production app env, rendered from 1Password by hq-secrets.
-      # The entrypoint sources it when present; /dev/null keeps local dev on
+      # Settings read it when present; /dev/null keeps local dev on
       # plain shell/compose env without a real secrets mount.
+      #
+      # Both sources are files: a missing one fails the start rather than
+      # docker creating a directory at its name.
       - type: bind
         source: ${SEVERINO_APP_ENV_FILE_HOST:-/dev/null}
         target: /run/secrets/severino_hq_env
         read_only: true
+        bind:
+          create_host_path: false
       - type: bind
         source: ${SEVERINO_CONTROLLER_CA_FILE_HOST:-/dev/null}
         target: /run/secrets/severino_controller_ca.pem
         read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health/ready/',timeout=3)"]
       interval: 30s

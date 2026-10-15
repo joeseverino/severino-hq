@@ -202,18 +202,19 @@ class OneDeclarationTests(SimpleTestCase):
         main = self.source("controller", "cmd", "hq-secrets", "main.go")
 
         self.assertIn("OnUnitActiveSec=1h\n", timer)
-        self.assertIn("RandomizedDelaySec=5min\n", timer)
+        self.assertIn("RandomizedDelaySec=30s\n", timer)
         self.assertIn("FullEvery:       24 * time.Hour,", main)
+        # Read from the timer, not restated beside it.
         self.assertEqual(rules.RENDER_EVERY, timedelta(hours=1))
-        self.assertEqual(rules.RENDER_DELAY, timedelta(minutes=5))
+        self.assertEqual(rules.RENDER_DELAY, timedelta(seconds=30))
         self.assertEqual(rules.FULL_READ_EVERY, timedelta(hours=24))
-        self.assertEqual(rules.CONFIRMED_WITHIN, timedelta(hours=3, minutes=15))
-        self.assertEqual(rules.RENDERED_WITHIN, timedelta(hours=27, minutes=15))
+        self.assertEqual(rules.CONFIRMED_WITHIN, timedelta(hours=3, seconds=90))
+        self.assertEqual(rules.RENDERED_WITHIN, timedelta(hours=27, seconds=90))
 
     def test_every_renderer_the_launcher_names_has_its_unit(self):
-        launcher = self.source("scripts", "run-controller.sh")
-        block = launcher[launcher.index("done <<EOF\n") + len("done <<EOF\n") :]
-        named = [line.partition("=")[0] for line in block[: block.index("\nEOF\n")].splitlines()]
+        layout = self.source("controller", "host", "layout.go")
+        block = layout[layout.index("var Renderers = ") :]
+        named = re.findall(r'^\t\{"([^"]+)", "[^"]+"\},$', block[: block.index("\n}\n")], re.MULTILINE)
 
         self.assertEqual(named, list(rules.RENDERER_UNITS))
         for name, unit in rules.RENDERER_UNITS.items():
@@ -349,7 +350,7 @@ class StaleTests(TestCase):
 
         self.assertEqual(finding["severity"], "serious")
         self.assertIn("example-controller has not refreshed its credentials since ", finding["title"])
-        self.assertIn({"label": "Last refreshed", "value": "3\xa0hours, 16\xa0minutes ago"}, finding["evidence"])
+        self.assertIn({"label": "Last refreshed", "value": "3\xa0hours, 2\xa0minutes ago"}, finding["evidence"])
         self.assertEqual(
             [step["command"] for step in finding["operator_steps"]],
             [

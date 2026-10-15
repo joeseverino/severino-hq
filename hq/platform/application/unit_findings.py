@@ -3,8 +3,8 @@ a unit that is not installed or not enabled, a timer that is not starting its
 unit, and a machine whose units nobody could read.
 
 The launcher asks systemd about every unit this repository ships and the
-controller reports the answer as the ``host.unit`` reading (``units_state`` in
-``scripts/lib/systemd-units.sh``). A unit that fails stays failed in that
+controller reports the answer as the ``host.unit`` reading (``UnitProperties`` in
+``controller/host/layout.go``). A unit that fails stays failed in that
 machine's journal and nothing else notices, so the reading is one fact per unit
 on the node of the controller that took it, and the rules here read those
 facts. They name no unit: one added to ``deploy/systemd`` is covered when it

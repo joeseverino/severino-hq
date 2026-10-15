@@ -17,12 +17,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/secrets"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
-
-// The web container's account, which owns the application environment.
-const webUID, webGID = 10001, 10001
 
 // exitCodes gives each failure class its own status, so a unit's result says
 // which kind of failure it was without anyone reading a message.
@@ -77,8 +75,8 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 		}
 		return fallback
 	}
-	runtime := value("SEVERINO_CONTROLLER_SECRET_DIR", "/run/severino-hq-secrets")
-	container := value("HQ_CONTAINER", "severino-hq")
+	runtime := value("SEVERINO_CONTROLLER_SECRET_DIR", host.SecretDir)
+	container := value("HQ_CONTAINER", host.Container)
 	if !containerName.MatchString(container) {
 		return secrets.Config{}, "", configError("HQ_CONTAINER is not a container name.")
 	}
@@ -92,7 +90,7 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 			SecretDir:  value("SEVERINO_HQ_SECRET_DIR", "/opt/apps/severino-hq/secrets"),
 			RuntimeDir: runtime,
 			WebDir:     value("SEVERINO_HQ_WEB_SECRET_DIR", runtime+"/web"),
-			RootUID:    0, RootGID: 0, WebUID: webUID, WebGID: webGID,
+			RootUID:    0, RootGID: 0, WebUID: host.WebUID, WebGID: host.WebGID,
 		},
 		RegistryPath:    *registry,
 		MinAppVariables: 15,
@@ -119,7 +117,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 		return fail(configError("hq-secrets must run as root."))
 	}
 	runner := &secrets.Runner{
-		Config: config, Mounts: install.SystemMounts, PortFloor: portFloor, Web: secrets.DockerWeb{Container: container},
+		Config: config, Mounts: install.SystemMounts, PortFloor: portFloor, Web: secrets.UnitWeb{Unit: host.WebUnit, Container: container},
 		Log: log, Now: time.Now,
 		Sleep: func(ctx context.Context, d time.Duration) error {
 			timer := time.NewTimer(d)

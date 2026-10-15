@@ -1,0 +1,55 @@
+[Unit]
+Description=Severino HQ
+Documentation=https://github.com/joeseverino/severino-hq/blob/main/docs/DEPLOYMENT.md
+# The unit is the only thing that runs HQ: the container has no restart
+# policy, so a boot, a crash and a deploy all start it the same way.
+Requires=docker.service
+After=docker.service network-online.target
+# Not ordered after the renderer, which restarts this unit when the
+# environment changes: an ordering would have that restart wait for the
+# render that asked for it. hq-host waits for the rendered file instead, so a
+# boot starts both at once and HQ comes up as soon as its environment is there.
+Wants=network-online.target
+# Try for as long as it takes: a boot whose render failed is retried.
+StartLimitIntervalSec=0
+
+[Service]
+# Ready means healthy: hq-host notifies only when HQ answers its health
+# check, so a start or restart that returns has a healthy HQ behind it.
+Type=notify
+NotifyAccess=main
+User=root
+ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host run-web
+# The wait for the environment (four minutes) and the image's start period.
+TimeoutStartSec=6min
+# HQ is given 30 seconds to stop before docker kills it.
+TimeoutStopSec=60s
+Restart=always
+RestartSec=5s
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=tmpfs
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+# It talks to docker over its socket and to nothing else.
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+ReadOnlyPaths=/usr/local/lib/severino-hq
+
+[Install]
+WantedBy=multi-user.target

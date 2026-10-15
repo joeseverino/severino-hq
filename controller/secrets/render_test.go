@@ -64,8 +64,8 @@ func (w *fakeWeb) Health(context.Context) string {
 	return next
 }
 
-// host is a machine: a Connect, the directories, the unit's credentials.
-type host struct {
+// machine is a machine: a Connect, the directories, the unit's credentials.
+type machine struct {
 	t        *testing.T
 	fake     *connecttest.Fake
 	runner   *Runner
@@ -99,13 +99,13 @@ func sshConnection(n int, ref, prefix, identity string) item {
 	}}
 }
 
-func newHost(t *testing.T, items ...item) *host {
+func newHost(t *testing.T, items ...item) *machine {
 	t.Helper()
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &host{t: t, web: &fakeWeb{}, log: &bytes.Buffer{}, now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC),
+	h := &machine{t: t, web: &fakeWeb{}, log: &bytes.Buffer{}, now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC),
 		creds: filepath.Join(root, "credentials")}
 	h.fake = connecttest.New(t, append(items, envItem())...)
 	runtime := filepath.Join(root, "runtime")
@@ -136,7 +136,7 @@ func newHost(t *testing.T, items ...item) *host {
 	return h
 }
 
-func (h *host) credential(name, value string) {
+func (h *machine) credential(name, value string) {
 	h.t.Helper()
 	if err := os.WriteFile(filepath.Join(h.creds, name), []byte(value), 0o400); err != nil {
 		os.Chmod(filepath.Join(h.creds, name), 0o600)
@@ -146,8 +146,8 @@ func (h *host) credential(name, value string) {
 	}
 }
 
-func (h *host) layout() install.Layout { return h.runner.Config.Layout }
-func (h *host) appEnv() string         { return filepath.Join(h.layout().WebDir, install.AppEnvName) }
+func (h *machine) layout() install.Layout { return h.runner.Config.Layout }
+func (h *machine) appEnv() string         { return filepath.Join(h.layout().WebDir, install.AppEnvName) }
 
 // connection is the document's connection held under ref, or one that holds nothing.
 func connection(document connections.Document, ref string) connections.Connection {
@@ -159,21 +159,21 @@ func connection(document connections.Document, ref string) connections.Connectio
 	return connections.Connection{}
 }
 
-func (h *host) document() string {
+func (h *machine) document() string {
 	return filepath.Join(h.layout().RuntimeDir, install.ConnectionsName)
 }
-func (h *host) ssh(name string) string {
+func (h *machine) ssh(name string) string {
 	return filepath.Join(h.layout().RuntimeDir, install.SSHDirName, name)
 }
 
-func (h *host) run() (Result, error) {
+func (h *machine) run() (Result, error) {
 	h.t.Helper()
 	result, err := h.runner.Run(context.Background())
 	h.noLeak(err)
 	return result, err
 }
 
-func (h *host) ok() Result {
+func (h *machine) ok() Result {
 	h.t.Helper()
 	result, err := h.run()
 	if err != nil {
@@ -184,7 +184,7 @@ func (h *host) ok() Result {
 
 // noLeak asserts that no credential reached the log, the error, the status
 // document, or a file the renderer leaves readable beyond its own.
-func (h *host) noLeak(err error) {
+func (h *machine) noLeak(err error) {
 	h.t.Helper()
 	surfaces := map[string]string{"log": h.log.String()}
 	if err != nil {
@@ -205,7 +205,7 @@ func (h *host) noLeak(err error) {
 	}
 }
 
-func (h *host) status() secretstatus.Status {
+func (h *machine) status() secretstatus.Status {
 	h.t.Helper()
 	data, err := os.ReadFile(filepath.Join(h.layout().RuntimeDir, secretstatus.Name))
 	if err != nil {
@@ -218,7 +218,7 @@ func (h *host) status() secretstatus.Status {
 	return status
 }
 
-func (h *host) staging() []string {
+func (h *machine) staging() []string {
 	found, _ := filepath.Glob(filepath.Join(h.layout().RuntimeDir, ".refresh.*"))
 	return found
 }
@@ -552,47 +552,47 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 	cases := []struct {
 		name   string
 		class  string
-		change func(*host)
+		change func(*machine)
 	}{
-		{"Connect unavailable", "connect_unavailable", func(h *host) {
+		{"Connect unavailable", "connect_unavailable", func(h *machine) {
 			h.runner.Config.ConnectTimeout = 100 * time.Millisecond
 			h.fake.Unavailable = 1 << 30
 		}},
-		{"Connect not listening", "connect_unavailable", func(h *host) {
+		{"Connect not listening", "connect_unavailable", func(h *machine) {
 			h.runner.Config.ConnectTimeout = 100 * time.Millisecond
 			h.fake.Server.Close()
 		}},
-		{"token refused", "connect_denied", func(h *host) { h.credential("op_connect_example", "another.token\n") }},
-		{"empty token", "config", func(h *host) { h.credential("op_connect_example", "\n") }},
-		{"malformed token", "config", func(h *host) { h.credential("op_connect_example", "two words\n") }},
-		{"missing credential", "config", func(h *host) { os.Remove(filepath.Join(h.creds, "op_connect_example")) }},
-		{"no credentials directory", "config", func(h *host) { h.runner.Config.CredentialsDir = "" }},
-		{"credential name leaves the directory", "config", func(h *host) { h.runner.Config.ConnectCredential = "../op_connect_example" }},
-		{"remote endpoint", "config", func(h *host) { h.runner.Config.Endpoint = "https://example.com" }},
-		{"listing fails", "connect_unavailable", func(h *host) { h.fake.Intercept = answer(listing, 500, `{}`) }},
-		{"listing denied", "connect_denied", func(h *host) { h.fake.Intercept = answer(listing, 403, `{}`) }},
-		{"listing malformed", "connect_response", func(h *host) { h.fake.Intercept = answer(listing, 200, `{"not":"a list"}`) }},
-		{"listing empty", "content", func(h *host) { h.fake.Intercept = answer(listing, 200, `[]`) }},
-		{"an item fails", "connect_unavailable", func(h *host) { h.fake.Intercept = answer(oneItem, 502, `{}`) }},
-		{"an item is missing", "connect_response", func(h *host) { h.fake.Intercept = answer(oneItem, 404, `{}`) }},
-		{"an item is malformed", "connect_response", func(h *host) { h.fake.Intercept = answer(oneItem, 200, `{"id":7}`) }},
-		{"the vault is not in scope", "connect_response", func(h *host) { h.runner.Config.Vault = "Another Vault" }},
-		{"no connections", "content", func(h *host) { h.fake.Items = []item{envItem()} }},
-		{"no environment item", "content", func(h *host) { h.fake.Items = h.fake.Items[:3] }},
-		{"a small environment", "content", func(h *host) {
+		{"token refused", "connect_denied", func(h *machine) { h.credential("op_connect_example", "another.token\n") }},
+		{"empty token", "config", func(h *machine) { h.credential("op_connect_example", "\n") }},
+		{"malformed token", "config", func(h *machine) { h.credential("op_connect_example", "two words\n") }},
+		{"missing credential", "config", func(h *machine) { os.Remove(filepath.Join(h.creds, "op_connect_example")) }},
+		{"no credentials directory", "config", func(h *machine) { h.runner.Config.CredentialsDir = "" }},
+		{"credential name leaves the directory", "config", func(h *machine) { h.runner.Config.ConnectCredential = "../op_connect_example" }},
+		{"remote endpoint", "config", func(h *machine) { h.runner.Config.Endpoint = "https://example.com" }},
+		{"listing fails", "connect_unavailable", func(h *machine) { h.fake.Intercept = answer(listing, 500, `{}`) }},
+		{"listing denied", "connect_denied", func(h *machine) { h.fake.Intercept = answer(listing, 403, `{}`) }},
+		{"listing malformed", "connect_response", func(h *machine) { h.fake.Intercept = answer(listing, 200, `{"not":"a list"}`) }},
+		{"listing empty", "content", func(h *machine) { h.fake.Intercept = answer(listing, 200, `[]`) }},
+		{"an item fails", "connect_unavailable", func(h *machine) { h.fake.Intercept = answer(oneItem, 502, `{}`) }},
+		{"an item is missing", "connect_response", func(h *machine) { h.fake.Intercept = answer(oneItem, 404, `{}`) }},
+		{"an item is malformed", "connect_response", func(h *machine) { h.fake.Intercept = answer(oneItem, 200, `{"id":7}`) }},
+		{"the vault is not in scope", "connect_response", func(h *machine) { h.runner.Config.Vault = "Another Vault" }},
+		{"no connections", "content", func(h *machine) { h.fake.Items = []item{envItem()} }},
+		{"no environment item", "content", func(h *machine) { h.fake.Items = h.fake.Items[:3] }},
+		{"a small environment", "content", func(h *machine) {
 			env := envItem()
 			env.Fields = env.Fields[:14]
 			h.fake.Items[3] = env
 		}},
-		{"duplicate connection", "content", func(h *host) { h.fake.Items = append(h.fake.Items, apiToken(5, "example", "OTHER")) }},
-		{"identity halves differ", "content", func(h *host) {
+		{"duplicate connection", "content", func(h *machine) { h.fake.Items = append(h.fake.Items, apiToken(5, "example", "OTHER")) }},
+		{"identity halves differ", "content", func(h *machine) {
 			h.fake.Items[2] = connecttest.KeyItem(id(3), "Edge deploy key", key.PKCS8, other.Public)
 		}},
-		{"a credential too large for the controller to read", "content", func(h *host) {
+		{"a credential too large for the controller to read", "content", func(h *machine) {
 			value := strings.Repeat("a", connections.MaxBytes)
 			h.fake.Items[0].Fields[3].Value = &value
 		}},
-		{"a multi-line credential", "content", func(h *host) {
+		{"a multi-line credential", "content", func(h *machine) {
 			value := secretToken + "\nINJECTED=x"
 			h.fake.Items[0].Fields[3].Value = &value
 		}},
@@ -647,18 +647,18 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 }
 
 func TestAnUnsafeHostIsRefusedBeforeAnythingIsRead(t *testing.T) {
-	for name, change := range map[string]func(*host){
-		"disk-backed runtime": func(h *host) {
+	for name, change := range map[string]func(*machine){
+		"disk-backed runtime": func(h *machine) {
 			h.mountErr = errors.Join(install.ErrHost, errors.New("Controller secret directory must be on tmpfs."))
 		},
-		"swappable runtime": func(h *host) {
+		"swappable runtime": func(h *machine) {
 			h.runner.Mounts = func(dir string) error {
 				return install.CheckMountInfo([]byte("90 25 0:50 / "+dir+" rw - tmpfs tmpfs rw,nosuid,noswapfile\n"), dir)
 			}
 		},
-		"runtime open to others":   func(h *host) { os.Chmod(h.layout().RuntimeDir, 0o755) },
-		"shared with the doorbell": func(h *host) { h.runner.Config.Layout.RuntimeDir = "/run/severino-hq" },
-		"private keys left on disk": func(h *host) {
+		"runtime open to others":   func(h *machine) { os.Chmod(h.layout().RuntimeDir, 0o755) },
+		"shared with the doorbell": func(h *machine) { h.runner.Config.Layout.RuntimeDir = "/run/severino-hq" },
+		"private keys left on disk": func(h *machine) {
 			legacy := filepath.Join(h.layout().SecretDir, "ssh")
 			os.MkdirAll(legacy, 0o700)
 			os.WriteFile(filepath.Join(legacy, "edge"), []byte("-----BEGIN OPENSSH PRIVATE KEY-----\nexample\n"), 0o600)
@@ -690,15 +690,15 @@ func TestAnUnsafeHostIsRefusedBeforeAnythingIsRead(t *testing.T) {
 }
 
 func TestDestinationsThatAreNotTheRenderersOwnAreRefused(t *testing.T) {
-	for name, plant := range map[string]func(h *host, system string){
-		"a symlinked app environment": func(h *host, system string) { os.Symlink(system, h.appEnv()) },
-		"a hard-linked app environment": func(h *host, system string) {
+	for name, plant := range map[string]func(h *machine, system string){
+		"a symlinked app environment": func(h *machine, system string) { os.Symlink(system, h.appEnv()) },
+		"a hard-linked app environment": func(h *machine, system string) {
 			if err := os.Link(system, h.appEnv()); err != nil {
 				h.t.Fatal(err)
 			}
 		},
-		"a directory at the app environment": func(h *host, _ string) { os.Mkdir(h.appEnv(), 0o700) },
-		"a symlinked checkout copy": func(h *host, system string) {
+		"a directory at the app environment": func(h *machine, _ string) { os.Mkdir(h.appEnv(), 0o700) },
+		"a symlinked checkout copy": func(h *machine, system string) {
 			os.Symlink(system, filepath.Join(h.layout().SecretDir, install.AppEnvName))
 		},
 	} {
@@ -808,14 +808,14 @@ func TestTheWebContainerIsRestartedOnlyForItsOwnEnvironment(t *testing.T) {
 }
 
 // rotate changes one application variable in the vault.
-func (h *host) rotate() {
+func (h *machine) rotate() {
 	h.fake.Edit(func(fake *connecttest.Fake) {
 		value := "rotated-" + strconv.Itoa(fake.ContentVersion)
 		fake.Items[len(fake.Items)-1].Fields[1].Value = &value
 	})
 }
 
-func (h *host) owed() bool {
+func (h *machine) owed() bool {
 	_, err := os.Lstat(filepath.Join(h.layout().RuntimeDir, pendingName))
 	return err == nil
 }
@@ -1209,7 +1209,7 @@ func TestTheWritersTokenReachesTheDocumentByProjection(t *testing.T) {
 // Outside a test the client is connect.New: a port below 1024, on a host that
 // reserves those ports for root.
 func TestTheConnectPortMustBeOneOnlyRootCanListenOn(t *testing.T) {
-	production := func(endpoint string, floor func() (int, error)) (*host, error) {
+	production := func(endpoint string, floor func() (int, error)) (*machine, error) {
 		h := newHost(t, apiToken(1, "example", "EXAMPLE"))
 		h.runner.open = nil
 		h.runner.Config.Endpoint = endpoint
@@ -1303,35 +1303,41 @@ func TestClassesAreDistinct(t *testing.T) {
 	}
 }
 
-func TestDockerWebDrivesTheContainerByFixedArguments(t *testing.T) {
+func TestUnitWebDrivesHQThroughItsUnit(t *testing.T) {
 	dir := t.TempDir()
-	script := `#!/bin/sh
-printf '%s\n' "$*" >> "` + dir + `/calls"
+	for _, name := range []string{"docker", "systemctl"} {
+		script := `#!/bin/sh
+printf '%s %s\n' "` + name + `" "$*" >> "` + dir + `/calls"
 env > "` + dir + `/env"
 case "$1" in
     inspect) [ "$2" = --format ] && echo healthy; exit 0 ;;
+    show) echo activating; exit 0 ;;
     restart) exit 0 ;;
 esac
 exit 1
 `
-	if err := os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o700); err != nil {
-		t.Fatal(err)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	t.Setenv("CREDENTIALS_DIRECTORY", "/run/credentials/example")
 	t.Setenv("SEVERINO_SECRETS_VAULT", connecttest.VaultName)
-	web := DockerWeb{Container: "severino-hq"}
+	web := UnitWeb{Unit: "severino-hq-web.service", Container: "severino-hq"}
 	if !web.Installed(context.Background()) || web.Restart(context.Background()) != nil || web.Health(context.Background()) != "healthy" {
-		t.Fatal("the container was not driven")
+		t.Fatal("HQ was not driven")
 	}
-	if calls := read(t, filepath.Join(dir, "calls")); calls != "inspect --type container severino-hq\nrestart severino-hq\ninspect --format {{.State.Health.Status}} severino-hq\n" {
-		t.Fatalf("docker was called with: %s", calls)
+	want := "systemctl show --property ActiveState --value severino-hq-web.service\n" +
+		"systemctl restart severino-hq-web.service\n" +
+		"docker inspect --format {{.State.Health.Status}} severino-hq\n"
+	if calls := read(t, filepath.Join(dir, "calls")); calls != want {
+		t.Fatalf("called: %s", calls)
 	}
 	if env := read(t, filepath.Join(dir, "env")); strings.Contains(env, "CREDENTIALS_DIRECTORY") || strings.Contains(env, "SEVERINO_") {
 		t.Fatalf("the child inherited the renderer's environment: %s", env)
 	}
 	t.Setenv("PATH", t.TempDir())
 	if web.Installed(context.Background()) || web.Health(context.Background()) != "" {
-		t.Fatal("a host without docker reported a container")
+		t.Fatal("a host without systemd or docker reported HQ up")
 	}
 }

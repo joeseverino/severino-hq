@@ -58,14 +58,14 @@ elif [ -n "$drifted" ]; then
     for f in $drifted; do
         echo "drift: $SYSTEMD_DIR/$f does not match $LIB/deploy/systemd/$f" >&2
     done
-    echo "drift: install-controller.sh installs the shipped set; the next deploy runs it" >&2
+    echo "drift: hq-host install installs the shipped set; the next deploy runs it" >&2
     rc=1
 fi
 if retired="$(units_retired "$LIB/deploy/systemd" "$SYSTEMD_DIR")" && [ -n "$retired" ]; then
     for f in $retired; do
         echo "drift: $SYSTEMD_DIR/$f is not shipped by this release" >&2
     done
-    echo "drift: install-controller.sh removes what a release drops; the next deploy runs it" >&2
+    echo "drift: hq-host install removes what a release drops; the next deploy runs it" >&2
     rc=1
 fi
 

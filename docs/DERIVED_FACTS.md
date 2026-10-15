@@ -163,7 +163,7 @@ of `npm.certificate` (which names each certificate serves) and of
 ### The controller's own machine
 
 Three readings are of the machine a controller runs on and need no credential:
-root reads a fact on the host and `scripts/run-controller.sh` mounts the
+root reads a fact on the host and `hq-host controller` mounts the
 answer into the controller read-only, naming it in an environment variable.
 The controller never holds the ruleset or the directory the fact came from. A
 fact the launcher does not name is a kind that reads `Not connected`
@@ -185,7 +185,7 @@ into; see `docs/SECRETS.md`, "How HQ reads it".
 
 `host.unit` is the state of every systemd unit the repository ships, as
 systemd holds it (`SEVERINO_HOST_UNITS`): one record per unit. The set is
-derived, never listed. `units_reported` in `scripts/lib/systemd-units.sh` walks
+derived, never listed. `Reported` in `controller/host/readings.go` walks
 `deploy/systemd` in the root-owned tree: each shipped unit that is not a
 template, and each instance of a shipped template that a shipped file starts
 through `Unit=` or `OnFailure=`. A unit added to the directory is read the day

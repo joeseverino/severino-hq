@@ -7,23 +7,8 @@ from unittest import skipUnless
 from django.test import SimpleTestCase
 
 ROOT = Path(__file__).resolve().parents[4]
-SCRIPT = ROOT / "scripts" / "run-controller.sh"
+LAUNCHER = ROOT / "controller" / "host" / "controller.go"
 DOCKERFILE = ROOT / "Dockerfile"
-
-
-class ControllerIsolationTests(SimpleTestCase):
-    def test_the_controller_runs_unprivileged_with_a_private_tmp(self):
-        script = SCRIPT.read_text()
-
-        for flag in (
-            "--user 10001:10001",
-            "--cap-drop ALL",
-            "--security-opt no-new-privileges:true",
-            # A key validated in /tmp lives in memory, and nothing there runs.
-            "--tmpfs /tmp:size=64m,noexec,nosuid,nodev",
-        ):
-            with self.subTest(flag=flag):
-                self.assertIn(flag, script)
 
 
 # The image is built without its Dockerfile, so these run from a checkout.
@@ -36,7 +21,7 @@ class ControllerBinaryTests(SimpleTestCase):
         built = re.search(r"^COPY --from=controller /out/hq-controller (\S+)$", dockerfile, re.MULTILINE)
 
         self.assertIsNotNone(built)
-        self.assertIn(f"--entrypoint {built.group(1)} ", SCRIPT.read_text())
+        self.assertIn(f'"--entrypoint", "{built.group(1)}"', LAUNCHER.read_text())
 
     def test_the_binary_is_static_and_carries_no_build_paths(self):
         dockerfile = DOCKERFILE.read_text()
@@ -45,16 +30,6 @@ class ControllerBinaryTests(SimpleTestCase):
         self.assertIn("go build -trimpath", dockerfile)
         self.assertIn("./cmd/hq-controller", dockerfile)
         self.assertIn("GOTOOLCHAIN=local", dockerfile)
-
-    def test_the_container_reaches_hq_through_the_bridge_socket_and_holds_nothing_of_its_own(self):
-        script = SCRIPT.read_text()
-
-        self.assertIn('--env "SEVERINO_BRIDGE_SOCKET=${bridge_socket}"', script)
-        # No interpreter is started to reach HQ, and nothing of HQ's is mounted
-        # for one to read: not its database, not its application environment.
-        for absent in ("HQ_IN_PROCESS", "manage.py", "target=/data", "severino_hq_env", "docker exec"):
-            with self.subTest(absent=absent):
-                self.assertNotIn(absent, script)
 
 
 @skipUnless(DOCKERFILE.exists(), "the Dockerfile is not in the image")
@@ -88,3 +63,26 @@ class BridgeSocketDeliveryTests(SimpleTestCase):
         self.assertNotIn("--uds", command)
         self.assertNotIn("--fd", command)
         self.assertNotIn("bridge", command)
+
+
+class SecretFileBindTests(SimpleTestCase):
+    """A bind whose source is a file never has docker create it.
+
+    The restart policy starts the web container at boot, before hq-secrets has
+    rendered the environment onto the emptied tmpfs. A bind left to create its
+    source makes a directory at the file's name, which the renderer refuses to
+    write through, and HQ stays down until it is removed by hand.
+    """
+
+    def test_every_secret_file_bind_refuses_a_missing_source(self):
+        compose = (ROOT / "docker-compose.yml").read_text()
+        # Each long-syntax mount: its `- type:` line and the deeper lines under it.
+        mounts = re.findall(r"(?m)^( +)- type: bind\n((?:\1  .*\n)+)", compose)
+        files = {
+            re.search(r"target: (\S+)", body).group(1): body for _, body in mounts if "target: /run/secrets/" in body
+        }
+
+        self.assertEqual(sorted(files), ["/run/secrets/severino_controller_ca.pem", "/run/secrets/severino_hq_env"])
+        for target, body in files.items():
+            with self.subTest(target=target):
+                self.assertRegex(body, r"bind:\n +create_host_path: false\n")

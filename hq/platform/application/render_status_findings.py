@@ -10,10 +10,14 @@ revoked one keeps working. The reading is one fact per renderer on the node of
 the controller that read it, and the rules here read those facts.
 """
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
+
+from django.conf import settings
 
 from hq.domains.control_plane.observations.host import (
     RENDER_READ,
@@ -43,29 +47,46 @@ from .topology_model import TopologyNode
 # to carrying no such word, and what is stale here is said as credentials.
 RENDER_STATUS = "render-status"
 
-# The renderer's timer starts it every hour, up to five minutes late
-# (OnUnitActiveSec and RandomizedDelaySec in
-# deploy/systemd/severino-hq-secrets.timer), and a run that finds the vault
-# unchanged still reads it in full once a day (FullEvery in
-# controller/cmd/hq-secrets/main.go). ``test_render_status`` holds these three
-# to those files.
-RENDER_EVERY = timedelta(hours=1)
-RENDER_DELAY = timedelta(minutes=5)
+# The renderer's timer starts it every OnUnitActiveSec, up to
+# RandomizedDelaySec late, read from the timer itself so the two cannot
+# disagree. A run that finds the vault unchanged still reads it in full once a
+# day (FullEvery in controller/cmd/hq-secrets/main.go, which
+# ``test_render_status`` holds to the value below).
+RENDER_TIMER = Path(settings.BASE_DIR) / "deploy" / "systemd" / "severino-hq-secrets.timer"
+_SPAN = re.compile(r"(\d+)\s*(h|min|s)")
+_UNITS = {"h": timedelta(hours=1), "min": timedelta(minutes=1), "s": timedelta(seconds=1)}
+
+
+def _timer_span(key: str) -> timedelta:
+    """One time span the renderer's timer declares, in systemd's notation."""
+
+    for line in RENDER_TIMER.read_text().splitlines():
+        name, _, value = line.partition("=")
+        if name == key:
+            spans = _SPAN.findall(value)
+            if not spans or _SPAN.sub("", value).strip():
+                raise ValueError(f"{RENDER_TIMER.name}: {key} is not a span this reads: {value!r}")
+            return sum((int(count) * _UNITS[unit] for count, unit in spans), timedelta())
+    raise ValueError(f"{RENDER_TIMER.name} declares no {key}")
+
+
+RENDER_EVERY = _timer_span("OnUnitActiveSec")
+RENDER_DELAY = _timer_span("RandomizedDelaySec")
 FULL_READ_EVERY = timedelta(hours=24)
 # How many runs may pass without a success before the secrets are stale. Three,
 # as for a kind no sweep reaches: one missed run is a restart or a held lock,
 # two is a slow Connect.
 MISSED_RUNS = 3
 # The installed files are stale once nothing has confirmed them current for
-# this long: 3 hours 15 minutes, three runs at their latest.
+# this long: three runs at their latest.
 CONFIRMED_WITHIN = MISSED_RUNS * (RENDER_EVERY + RENDER_DELAY)
 # A full read is overdue once the daily one and that same allowance have both
-# passed: 27 hours 15 minutes. Never sooner than ``CONFIRMED_WITHIN`` after a
+# passed. Never sooner than ``CONFIRMED_WITHIN`` after a
 # full read falls due, so a renderer two runs behind raises one claim, not two.
 RENDERED_WITHIN = FULL_READ_EVERY + CONFIRMED_WITHIN
 
 # The unit that runs each renderer the launcher names
-# (scripts/run-controller.sh), for the exact command. A renderer with no unit
+# (Renderers in controller/host/layout.go), for the exact command. A renderer with no unit
 # here gets its rule's steps in words.
 RENDERER_UNITS = {"hq": "severino-hq-secrets.service"}
 

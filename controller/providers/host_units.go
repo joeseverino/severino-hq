@@ -14,8 +14,8 @@ import (
 )
 
 // The state of the systemd units this repository ships, on the machine the
-// controller runs on. Root asks systemd (`units_state` in
-// scripts/lib/systemd-units.sh) and run-controller.sh mounts the answer; this
+// controller runs on. Root asks systemd (host.UnitProperties) and the
+// launcher mounts the answer; this
 // reads that text and never talks to systemd.
 
 // hostUnitsMaxBytes bounds the answer. A unit is about a dozen short lines.
