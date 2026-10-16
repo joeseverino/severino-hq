@@ -6,7 +6,7 @@ cannot express, the primitive grows (in `static/css/app.css` and its partial),
 and every page that uses it gets the improvement. Extensions ship no CSS for
 the same reason: they render host classes and inherit every fix.
 
-The rules below are enforced where they can be. Each names its gate.
+Each rule names its gate where one enforces it.
 
 ## Rules
 
@@ -36,12 +36,12 @@ must change shape, it asks its own container (`@container`), not the screen,
 so it reads the same in a narrow card as on a phone. A viewport breakpoint is
 for what the viewport decides (the header, a full-screen modal) and says why
 in a comment. Content uses the window up to `--content-max`; prose keeps
-`--measure`.
-One caveat: never make an element holding buttons a size container. Chrome
+`--measure`. Never make an element holding buttons a size container: Chrome
 restyles its contents once the container is measured and runs their
 transitions from nothing, so every button fades in on load.
-*Gates:* the overflow sweep at 375, 820 and 1360;
-`test_viewport_breakpoints_only_go_down`, a ceiling that only falls.
+*Gates:* the overflow sweep at a phone's width (402), 820 and 1360
+(`OVERFLOW_WIDTHS`); `test_viewport_breakpoints_only_go_down`, a ceiling that
+only falls.
 
 **A table fits its box, at every width, by one mechanism.** No screen width
 is asked anywhere in the table primitive. A table takes its box's width and
@@ -236,9 +236,8 @@ Filters that match nothing offer a way back; they never imply a healthy estate.
 
 **Overview figures have a hierarchy.** The shared KPI partial accepts
 `featured=True`: a four-fact overview leads with its contributor's first fact,
-then presents the three supporting facts together. Values, context and links
-still render once from the original KPI collection. Other counts retain their
-even band. Overview cards fit their available width, placing three domains
+then the three supporting facts together. Values, context and links render
+once from the KPI collection. Other counts keep their even band. Overview cards fit their available width, placing three domains
 side by side when space permits; empty contributors take no space.
 
 **A figure may be drawn as well as said.** `Kpi` takes one `drawing`, or none:

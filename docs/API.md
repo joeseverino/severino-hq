@@ -1,12 +1,12 @@
 # API
 
-The fourth delivery adapter, after the web UI, the CLI, and MCP. It exists so a
-phone, a Shortcut, or a cron job can run an HQ capability over HTTP.
+The machine API is a delivery adapter beside the web UI, the CLI and MCP
+([Architecture](Architecture.md)). It lets a phone, a Shortcut or a cron job run
+an HQ capability over HTTP.
 
-It adds **no capability, no domain model, and no business rule**. Every command
-comes from `hq/platform/application/capabilities.py`, and every read comes from
-`hq/platform/application/resources.py`. That keeps four adapters from drifting into four
-behaviours.
+It adds no capability, no domain model and no business rule. Every command
+comes from `hq/platform/application/capabilities.py` and every read from
+`hq/platform/application/resources.py`.
 
 ```
 hq/platform/api/security.py   verify a token HQ did not issue
@@ -72,7 +72,10 @@ An operator can allow, hold, or deny each capability per client. Handle all thre
 | Held | `status: "awaiting_approval"`, with `approval.review_url` | report it and stop; retrying returns the same request |
 | Refused | error code `denied_by_policy` | stop |
 
-With no rules set, only changes to gated infrastructure are held.
+With no rules set, changes to gated infrastructure are held, and so is
+anything destructive, because an API client is an agent
+(`capability_policy.decide`). The rules themselves are in
+[Security](Security.md#what-hq-enforces).
 
 ## Using it
 
@@ -122,6 +125,11 @@ curl -s https://hq.example.com/api/v2/capabilities/example.import/ \
 | `GET` | `/api/v2/topology/` | The permitted live graph, optionally narrowed by lens or a bounded dependency trace |
 | `GET` | `/api/v2/findings/` | Evidence-backed claims with stable IDs, causal rollups, authorized remedies, and derived understand → act → verify workflows |
 
+`/api/` is exempt from the session-login redirect but **not** from
+authentication. An anonymous request gets `401` with a `WWW-Authenticate`
+header, never a 302 to an HTML login page: a Shortcut cannot fill one in, and
+would record the redirect as success while importing nothing.
+
 ### The reference
 
 `/api/docs/` (System > API) renders the document for the signed-in operator in
@@ -152,10 +160,7 @@ the bundle (every option and variable is one the bundle reads, every sample
 target it ships is hidden but curl), and `ReferenceBrowserTests` in the browser
 gate holds what is drawn. After replacing the bundle, both say what moved.
 
-`/api/` is exempt from the session-login redirect but **not** from
-authentication. An anonymous request gets `401` with a `WWW-Authenticate`
-header, never a 302 to an HTML login page: a Shortcut cannot fill one in, and
-would record the redirect as success while importing nothing.
+### Descriptions
 
 Each capability description includes the domain `input_schema` and the complete
 HTTP `request_schema`, including target and optimistic-concurrency fields,
@@ -164,21 +169,24 @@ can therefore generate and validate requests from the deployed composition's
 actual registry; a plugin does not maintain a parallel API document.
 The optional `resource` field names the `ResourceSpec` the operation acts on,
 giving clients a stable way to connect discovery, reads, and available writes.
-Targeted capabilities may also publish `target_label`, `target_help`, and a
-strict `target_query`. These let generated operator surfaces name the target in
-domain language and derive eligible choices from the capability's registered
-resource without provider I/O; `target` remains the machine identifier
-contract. Optional `execution_notes` explain the registered steps an operator
-is authorizing without creating a second execution plan. Optional
-`target_initial_fields` declare which same-named command fields the browser may
-hydrate from an authorized target detail; this is presentation metadata and
-does not change the machine payload contract.
+Targeted capabilities may also publish `target_label`, `target_help`,
+`target_query`, `execution_notes` and `target_initial_fields`
+([Plugins](Plugins.md#the-integration)); they are presentation metadata, and
+`target` remains the machine identifier contract.
 
-`infrastructure.controller.refresh` is the deliberate freshness loop. It marks
-HQ active, rings the credential-free controller doorbell, and lets the
-privileged pull-based controller apply the same cadence contract it always
-uses. The web/API process receives no provider authority, and callers receive
-the due decision that made the request meaningful.
+Resource descriptions follow the same rule. A `ResourceSpec` declares its
+label, summary, required permissions, list-query model, stable identifier, and
+optional search projection once. HQ derives the API catalog and read routes,
+the generic MCP tools, and global-search registration from that declaration.
+Unknown filters, repeated URL parameters, unregistered resources, unsupported
+operations, and insufficient grants fail before a domain query runs.
+
+### Read now
+
+`infrastructure.controller.refresh` is the freshness loop. It marks HQ active,
+rings the credential-free controller doorbell, and lets the pull-based
+controller apply its usual cadence. The API process gets no provider
+authority, and the caller gets the due decision behind the request.
 
 With a subject it is "read now": `connection_ref` forces every kind that
 connection's credential reads (derived from the observation registry through
@@ -190,53 +198,45 @@ whatever the cadence says; when only requests make it due, `only_kinds` names
 every kind the controller reads. A request is answered once each forced reading
 is stored after it, and stops forcing after `SEVERINO_READ_REQUEST_SECONDS`.
 The web form is `POST /infrastructure/connections/read/`; a GET is refused. A
-finding whose evidence is a reading offers "Check again" as its
-verification; one no reading involves offers "Check again".
-
-Each serialized finding may include a domain-neutral `workflow`: ordered steps
-whose actions are canonical `ActionLink` contracts, plus a `claim_absent`
-outcome keyed to the finding's stable claim ID. The workflow is guidance, not a
-second executor; every mutation still names and enters a registered capability.
-
-Resource descriptions follow the same rule. A `ResourceSpec` declares its
-label, summary, required permissions, list-query model, stable identifier, and
-optional search projection once. HQ derives the API catalog and read routes,
-the generic MCP tools, and global-search registration from that declaration.
-Unknown filters, repeated URL parameters, unregistered resources, unsupported
-operations, and insufficient grants fail before a domain query runs.
+finding offers "Check again" as its verification: where a reading is involved
+it reads now and runs the check on what the controller reports; otherwise it
+runs the check against current data.
 
 ### What each surface exposes
 
-Every derived read is a `ResourceSpec` in `hq/platform/application/resources.py`. One
-registration serves the API (`/api/v2/resources/<name>/`), MCP (`list_resource`,
-`get_resource`), the CLI (`manage.py hq_call` over those tools) and the SDK
-(`hq_sdk.resources.list_resource` / `get_resource`). Each handler calls the
-function its page calls. All need `read`, which every MCP principal holds;
-the `SEVERINO_MCP_ENABLE_*` switches gate writes, not these reads.
+Every derived read is a `ResourceSpec` in `hq/platform/application/resources.py`.
+One registration serves the API (`/api/v2/resources/<name>/`), MCP
+(`list_resource`, `get_resource`), the CLI (`manage.py hq_call` over those
+tools) and the SDK (`hq_sdk.resources.list_resource` / `get_resource`). Each
+handler calls the function its page calls. All need `read`, which every MCP
+principal holds; the `SEVERINO_MCP_ENABLE_*` switches gate writes, not reads.
 
-| Derived feature | Page | Resource | API | MCP | CLI | SDK |
-|---|---|---|---|---|---|---|
-| Estate reading (`estate.cards`) | Dashboard | `estate` | yes | yes | yes | yes |
-| Action items (`dashboard.work_queue`, estate items included) | Action items | `action.items` | yes | yes | yes | yes |
-| Machine catalogue, roles, HQ's own machine | Machines | `machines` | yes | yes | yes | yes |
-| Running containers: standing, runtime, posture, supply chain (`containers.containers`) | Containers | `containers` (`get <machine:container>`) | yes | yes | no | no |
-| Upgrade plans, read-only (`upgrades.plans`) | Containers, container page | `upgrades` (`get <machine:container>`) | yes | yes | no | no |
-| Domains, their services and registration | Domains | `domains` | yes | yes | yes | yes |
-| Services and their facets | Services | `services` | yes | yes | yes | yes |
-| Request path per hostname (`paths.path_to`) | Service page, connections | `paths` (`get <hostname>`), inside `services` get | yes | yes | yes | yes |
-| How the calling request reached HQ (`request_path.request_path`) | This connection | `request.path` (the caller's own request; empty, saying why, without one) | yes | yes | no | no |
-| `relationships_for`, with `entity_link` names | Entity pages | `relationships` (`get <node id>`) | yes | yes | yes | yes |
-| Readings, schema-filtered (`hq/domains/control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) | yes | yes | yes | yes |
-| Join engine (`facts.readings`) | Entity pages | inside `relationships`, `services`, `domains` | yes | yes | yes | yes |
-| Credential access | Connections | `credentials` (`get <provider>`) | yes | yes | yes | yes |
-| Connections page (`connection_context.connections_context`): rows with sight, freshness, refusals, what more scope would show, credential fix, reach (network, machine, tailnet peering), last activity, pending read now; summary counts; estate posture; HQ's path | Connections | `connection.standing` (`get <connection_ref>`) | yes | yes | yes | yes |
-| Tailnet page (`tailnet_context.tailnet_context`): settings, grants, shell rules, groups, tags with machines, services, app connectors, tests, findings, unread readings and why | Tailnet | `tailnet` | yes | yes | yes | yes |
-| Estate and record search (command center) | Search | `search` | yes | yes | yes | yes |
-| Topology and impact trace | Topology | `/topology/`, `get_topology` | yes | yes | yes | no |
-| Findings | Findings | `/findings/`, `get_findings` | yes | yes | yes | no |
-| Connections | Connections | `/connections/`, `list_connections` | yes | yes | yes | no |
-| Registry import | none | `hq.import` capability | yes | yes | yes | yes |
-| Public registry refresh | none | the scheduled `registry.refresh` job; `manage.py refresh_public_registry --force` by hand | no | no | yes | no |
+| Derived feature | Page | Resource |
+|---|---|---|
+| Estate reading (`estate.cards`) | Dashboard | `estate` |
+| Action items (`dashboard.work_queue`, estate items included) | Action items | `action.items` |
+| Machine catalogue, roles, HQ's own machine | Machines | `machines` |
+| Running containers: standing, runtime, posture, supply chain (`containers.containers`) | Containers | `containers` (`get <machine:container>`) |
+| Upgrade plans, read-only (`upgrades.plans`) | Containers, container page | `upgrades` (`get <machine:container>`) |
+| Domains, their services and registration | Domains | `domains` |
+| Services and their facets | Services | `services` |
+| Request path per hostname (`paths.path_to`) | Service page, connections | `paths` (`get <hostname>`), inside `services` get |
+| How the calling request reached HQ (`request_path.request_path`) | This connection | `request.path` (the caller's own request; empty, saying why, without one) |
+| `relationships_for`, with `entity_link` names | Entity pages | `relationships` (`get <node id>`) |
+| Readings, schema-filtered (`hq/domains/control_plane/observations`) | Connections, entity pages | `readings` (`get <kind>`) |
+| Join engine (`facts.readings`) | Entity pages | inside `relationships`, `services`, `domains` |
+| Credential access | Connections | `credentials` (`get <provider>`) |
+| Connections page (`connection_context.connections_context`): rows with sight, freshness, refusals, what more scope would show, credential fix, reach, last activity, pending read now; summary counts; estate posture; HQ's path | Connections | `connection.standing` (`get <connection_ref>`) |
+| Tailnet page (`tailnet_context.tailnet_context`): settings, grants, shell rules, groups, tags with machines, services, app connectors, tests, findings, unread readings and why | Tailnet | `tailnet` |
+| Estate and record search (command center) | Search | `search` |
+
+Three projections have their own routes and MCP tools instead of resources, and
+the SDK does not re-export them: topology and impact trace (`/topology/`,
+`get_topology`), findings (`/findings/`, `get_findings`) and connections
+(`/connections/`, `list_connections`). The registry import is the `hq.import`
+capability. The public registry refresh is the scheduled `registry.refresh`
+job (`manage.py refresh_public_registry --force` by hand): it runs daily and
+when a sweep finds an image it has not read, and no caller triggers it.
 
 `connection.standing` returns the estate half of the connections page. The
 page also shows how the request being answered reached HQ (network admission,
@@ -247,10 +247,8 @@ renders, and a parity test holds the two equal.
 Readings leave only through their schema: `ObservationSpec.admitted` drops any
 field the record model does not name. Node ids are the topology's:
 `machine:<name>`, `service:<hostname>`, `zone:<domain>`, `resource:<key>`.
-Topology, findings and connections are served by their own routes and tools
-rather than resources; the SDK does not re-export them. The public registry
-refreshes daily and when a sweep finds an image it has not read, by design, and
-is never triggered by a caller.
+
+### Connections, topology and findings
 
 Connection descriptions are generated by `describe_connections` from
 `ConnectionSpec`. The response's `connections` array is the complete static
@@ -260,21 +258,11 @@ includes ability availability, granted and missing scope names, targets,
 dependencies, status, and an ISO 8601 observation time. It never contains
 secret material; URL userinfo, query strings, and fragments are rejected before
 a controller endpoint is stored, and again at the output contract for
-plugin-provided instances. HQ's connection providers expose observations of
-credentials held by their own source systems, not the credentials themselves.
-An ability may name its governed resource catalog and kinds, or one exact
-capability. Command Center joins those declarations to the capability catalog;
-scope coverage reports availability but does not synthesize unregistered API
-operations.
-
-Host domains and extensions use the same provider contract. Each external
-gateway owns its `ConnectionSpec`, and every emitted ability points to a
-registered capability or resource. Consequently the connection, its reachable
-records, the executable process, and that process's schema and execution notes
-are joinable without adapter-specific inventories. Keyless and anonymous modes
-may be emitted explicitly; adding a credential changes readiness/scope state,
-not the shape of the API contract. Instance discovery remains a local read and
-never spends an external API call.
+plugin-provided instances. Scope coverage reports availability but never
+synthesizes an unregistered operation. Adding a credential changes readiness and scope state, never the shape of the
+contract, and instance discovery never spends an external API call. The
+connection contract itself is in
+[Architecture](Architecture.md#emit-once-derive-everywhere).
 
 The topology endpoint joins those connection observations to the deployed
 ability registry and HQ's managed resources. It is a derived projection, not a
@@ -292,17 +280,22 @@ follow declared edges, and `depth=1..5` limits traversal. The response's
 `trace.hops` records every selected node's shortest distance from the focus.
 Tracing composes with `lens`, costs no provider reads beyond deriving the
 original authorized projection, and unknown focus values leave the projection
-whole with `trace: null`. This makes “show what depends on this” and “show what
-this reaches” available to generated clients without creating a second graph.
+whole with `trace: null`. That is "what depends on this" and "what this
+reaches" for generated clients, from the one graph.
 
 Findings are another projection of that same authorized topology. General
 reads collapse several stale resource kinds onto their shared controller when
 the graph proves one, and expose the explained kinds in `affected_scopes`.
 Clients that need the underlying machine facts can request one declared
 `rule`; causal presentation never destroys the exact observations. Remedies
-remain references to registered capabilities, while read-only “what HQ can do
-now” links come from the subject node's canonical actions rather than a second
+remain references to registered capabilities, while read-only "what HQ can do
+now" links come from the subject node's canonical actions rather than a second
 workflow registry.
+
+Each serialized finding may include a domain-neutral `workflow`: ordered steps
+whose actions are canonical `ActionLink` contracts, plus a `claim_absent`
+outcome keyed to the finding's stable claim ID. The workflow is guidance, not a
+second executor; every mutation still names and enters a registered capability.
 
 The `analytics` resource reports `coverage` for the requested completed-day
 window. Coverage is recorded even when a healthy site had zero traffic, so
@@ -412,7 +405,7 @@ translation is applied. Resource filters emit individual query parameters;
 Install the locked contract tools with `npm --prefix scripts/openapi ci`.
 `scripts/check-openapi.sh` validates both descriptions against the specification
 and checks generated client freshness and runtime behavior. The TypeScript
-client and CLI are generated from the host description. Redocly currently marks
+client and CLI are generated from the host description. Redocly marks
 its client generator experimental; generated artifacts are pinned and checked
 rather than assumed compatible across upgrades.
 
