@@ -1,0 +1,40 @@
+# What the image is built from, named rather than everything but a list: a
+# file nobody tracks (an agent's worktree, a local note, a scratch database)
+# cannot reach the image because nobody thought to exclude it. These are the
+# tracked paths the image needs; a new top-level path is added here on purpose.
+*
+!.editorconfig
+!.env.example
+!.gitattributes
+!.github/
+!.node-version
+!AGENTS.md
+!CHANGELOG.md
+!CLAUDE.md
+!LICENSE
+!composition/
+!controller/
+!deploy/
+!entrypoint.sh
+!hq/
+!hq_sdk/
+!manage.py
+!mise.lock
+!mise.toml
+!policy/
+!pyproject.toml
+!scripts/
+!static/
+!templates/
+!tests/
+!uv.lock
+
+# Inside those, what a checkout builds or caches.
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.venv*/
+**/node_modules
+**/*.sqlite3
+**/*.sqlite3-journal
+deploy/bin/

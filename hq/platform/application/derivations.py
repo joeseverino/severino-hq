@@ -42,7 +42,6 @@ triggers, the cache cannot be read or a stored value does not load, the
 function runs and its answer is used.
 """
 
-import copyreg
 import hashlib
 import logging
 import math
@@ -56,7 +55,6 @@ from contextvars import Context, ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from functools import wraps
-from types import MappingProxyType
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
@@ -66,14 +64,6 @@ from .projection import projection_scope, read_once, seeded
 
 logger = logging.getLogger("severino.derivations")
 
-
-# A read-only mapping has no pickle of its own. A stored value carries it as a
-# dict and loads it read-only again.
-def _read_only(mapping: dict[Any, Any]) -> MappingProxyType[Any, Any]:
-    return MappingProxyType(mapping)
-
-
-copyreg.pickle(MappingProxyType, lambda mapping: (_read_only, (dict(mapping),)))
 
 # The clock, as the module holds it. Derivations reach it only through the
 # functions below, which is what lets a test forbid every other way in.

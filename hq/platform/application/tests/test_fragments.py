@@ -107,6 +107,17 @@ class UnchangedPartTests(TestCase):
         self.assertEqual(again.status_code, 304)
         self.assertEqual(again.content, b"")
 
+    def test_a_validator_the_compressor_weakened_still_answers_304(self):
+        first = self.client.get(self.url, headers={"Accept-Encoding": "gzip"})
+        validator = first["ETag"]
+        # Compressed, so weakened: what the browser holds and sends back.
+        self.assertEqual(first["Content-Encoding"], "gzip")
+        self.assertTrue(validator.startswith('W/"'))
+
+        again = self.client.get(self.url, headers={"If-None-Match": validator, "Accept-Encoding": "gzip"})
+
+        self.assertEqual(again.status_code, 304)
+
     def test_any_write_ends_it(self):
         validator = self.client.get(self.url)["ETag"]
         get_user_model().objects.create_user("another", password="y" * 20)

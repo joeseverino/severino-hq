@@ -97,6 +97,7 @@ jobs:
           set -euo pipefail
           . ./scripts/toolchain.env
           echo "cordon-commit=$CORDON_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "trivy=$TRIVY_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Read the composition set
         # A secret, and never interpolated into the script body. Actions
@@ -236,7 +237,7 @@ jobs:
       # below, every extension admission is verified with it before install,
       # and the published composition is signed with it at the end.
       - name: Install Cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: ./.github/actions/cosign
 
       - name: Verify the host image was built by this repository
         # Every extension wheel is verified against a declared signer before it
@@ -288,7 +289,7 @@ jobs:
       # so no private repository's name is written into this public log.
       - name: Mint a token that can only read the extensions
         id: reader
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           private-key: ${{ secrets.HQ_APP_KEY }}
@@ -423,7 +424,7 @@ jobs:
       - name: Mint a token for HQ's production row
         id: production
         if: env.IS_RELEASE == 'true' && steps.fingerprint.outputs.build == 'true'
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           private-key: ${{ secrets.HQ_APP_KEY }}
@@ -708,6 +709,7 @@ jobs:
           steps.fingerprint.outputs.build == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: ${{ steps.pins.outputs.trivy }}
           image-ref: ${{ steps.candidate.outputs.image }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
@@ -777,7 +779,7 @@ jobs:
         run: echo "version=$(sed -n 's/^min_version = "\(.*\)"$/\1/p' mise.toml)" >> "$GITHUB_OUTPUT"
       - name: Install the pinned age
         if: failure()
-        uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5.1.0
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
         env:
           MISE_LOCKED: "1"
         with:
@@ -793,7 +795,7 @@ jobs:
 
       - name: Upload the sealed output
         if: failure() && steps.seal.outputs.sealed == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: failure-logs
           path: failure-logs.tar.age

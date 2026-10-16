@@ -13,7 +13,6 @@ packs are refused while other zones read.
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from ipaddress import ip_address
-from types import MappingProxyType
 from typing import Any
 
 from .names import in_zone, normalized_hostname
@@ -43,7 +42,7 @@ def parts_of(kind: str) -> Mapping[str, ReadingPart]:
         provider = PROVIDERS.get(kind)
         whole = ReadingPart(WHOLE, (provider.label if provider else "") or kind)
         declared = provider.parts if provider else ()
-    return MappingProxyType({WHOLE: whole, **{part.name: part for part in declared}})
+    return frozendict({WHOLE: whole, **{part.name: part for part in declared}})
 
 
 @dataclass(frozen=True, slots=True)

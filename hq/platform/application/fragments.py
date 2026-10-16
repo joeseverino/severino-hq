@@ -38,7 +38,8 @@ HEADER = "X-Fragment"
 _NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 # A validator: what the answer was derived from, then the second it stops holding.
-_VALIDATOR = re.compile(r'^"([0-9a-f]{64})-(\d{1,12})"$')
+# Weak when it comes back, because the compressor weakens what it compresses.
+_VALIDATOR = re.compile(r'^(?:W/)?"([0-9a-f]{64})-(\d{1,12})"$')
 
 # An answer with no moment of its own is asked about again within the day.
 LONGEST = 24 * 60 * 60

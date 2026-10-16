@@ -163,10 +163,10 @@ func keys(input Input, document connections.Document) ([]File, int, int, error) 
 			if problem != "" {
 				return nil, 0, 0, refuse("Connection ", ref, ": the signing key ", problem, ".")
 			}
-			// PKCS#8, for openssl, and read by nothing else.
+			// PKCS#8 PEM, which the controller reads to sign the app's JWT.
 			der, err := x509.MarshalPKCS8PrivateKey(raw)
 			if err != nil {
-				return nil, 0, 0, refuse("Connection ", ref, ": the signing key cannot be written for openssl.")
+				return nil, 0, 0, refuse("Connection ", ref, ": the signing key cannot be written as PKCS#8.")
 			}
 			files[ref+".key"] = File{Name: ref + ".key", Data: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), Mode: 0o400}
 			files[ref+".key.pub"] = File{Name: ref + ".key.pub", Data: ssh.MarshalAuthorizedKey(public), Mode: 0o444}

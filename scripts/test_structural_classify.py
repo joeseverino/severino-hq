@@ -1,6 +1,7 @@
 """Adversarial examples for conservative structural classifications."""
 
 import importlib.util
+import json
 import os
 import subprocess
 import tempfile
@@ -87,17 +88,28 @@ class ClassificationTests(unittest.TestCase):
         self.put("a.go", 'package example\nconst token = "global"\n' + GO.split("package example\n", 1)[1])
         self.assertIsNone(self.classifier.pair(("a.go", "app"), ("a.go", "installation")))
 
-    def test_malformed_graph_rows_fail_closed(self):
-        header = "rows: 1  (cols: a.file_path b.file_path a.name b.name)"
-        valid = {"content": [{"text": header + "\n a.py b.py alpha beta\ntotal: 1"}]}
-        self.assertEqual(module.graph_pairs(valid), [(("a.py", "alpha"), ("b.py", "beta"))])
-        for text in (
-            header + "\n a.py alpha beta\ntotal: 1",
-            header + "\n a.py b.py alpha beta\ntotal: 2",
-            "unexpected\ntotal: 0",
+    def test_malformed_or_partial_graph_answers_fail_closed(self):
+        columns = ["a.file_path", "b.file_path", "a.name", "b.name"]
+
+        def page(rows, total, more=False, relation="eq", cols=columns):
+            answer = {"columns": cols, "rows": rows, "total": total, "total_relation": relation, "has_more": more}
+            return {"content": [{"text": json.dumps(answer)}]}
+
+        row = ["a.py", "b.py", "alpha", "beta"]
+        self.assertEqual(module.graph_pairs([page([row], 1)]), [(("a.py", "alpha"), ("b.py", "beta"))])
+        # Two pages that add up are one whole answer.
+        self.assertEqual(len(module.graph_pairs([page([row], 2, more=True), page([row], 2)])), 2)
+        for pages in (
+            [page([row[:3]], 1)],
+            [page([row], 2)],
+            [page([row], 1, more=True)],
+            [page([row], 1, relation="gte")],
+            [page([row], 1, cols=columns[:3])],
+            [page([row], 2, more=True), page([row], 3)],
+            [],
         ):
             with self.assertRaises(ValueError):
-                module.graph_pairs({"content": [{"text": text}]})
+                module.graph_pairs(pages)
 
     def test_same_typed_signature_with_renamed_producer_fails(self):
         self.put(

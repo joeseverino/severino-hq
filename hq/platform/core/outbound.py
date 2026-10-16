@@ -25,7 +25,6 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from types import MappingProxyType
 from typing import Any
 
 from django.conf import settings
@@ -33,7 +32,7 @@ from django.conf import settings
 logger = logging.getLogger("severino.request")
 
 # Where a request may wait on something outside the process, and why.
-ALLOWED = MappingProxyType(
+ALLOWED = frozendict(
     {
         "oidc": (
             "Signing in is an exchange with the sign-in service: the token, "

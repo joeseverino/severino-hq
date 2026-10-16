@@ -1,7 +1,5 @@
 """Contract tests for the one compiled integration graph."""
 
-from types import MappingProxyType
-
 from django.test import TestCase
 
 from hq.domains.projects.models import Project
@@ -44,10 +42,10 @@ class IntegrationGraphTests(TestCase):
         with self.assertNumQueries(0):
             graph = integration_graph()
 
-        self.assertIsInstance(graph.capabilities, MappingProxyType)
-        self.assertIsInstance(graph.resources, MappingProxyType)
-        self.assertIsInstance(graph.connections, MappingProxyType)
-        self.assertIsInstance(graph.search, MappingProxyType)
+        self.assertIsInstance(graph.capabilities, frozendict)
+        self.assertIsInstance(graph.resources, frozendict)
+        self.assertIsInstance(graph.connections, frozendict)
+        self.assertIsInstance(graph.search, frozendict)
         with self.assertRaises(TypeError):
             graph.connections["example.mutable"] = graph.connections["hq.cloudflare_d1"]
 

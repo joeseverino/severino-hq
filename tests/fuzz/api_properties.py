@@ -24,6 +24,10 @@ from hq.platform.application.integrations import (
 )
 from hq_sdk.capabilities import StrictCommand
 
+# Bodies are read as the document describes them. This in-process client does
+# not decode gzip; compression is the transport's, tested end to end on its own.
+UNCOMPRESSED = {"Accept-Encoding": "identity"}
+
 
 @override_settings(
     ALLOWED_HOSTS=["localhost", "testserver"],
@@ -64,7 +68,7 @@ class APIPropertyTests(TestCase):
             "client_id": "example-properties",
             "scope": "read",
         }
-        headers = {"Authorization": "Bearer example-properties"}
+        headers = {"Authorization": "Bearer example-properties", **UNCOMPRESSED}
         checks = [
             not_a_server_error,
             status_code_conformance,
@@ -140,6 +144,7 @@ class APIPropertyTests(TestCase):
         headers = {
             "Authorization": "Bearer example-properties",
             "Idempotency-Key": "example-property",
+            **UNCOMPRESSED,
         }
         with (
             override_integration_graph(graph),

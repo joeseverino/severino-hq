@@ -21,6 +21,13 @@ command -v "${cbm}" >/dev/null 2>&1 || {
     echo "codebase-memory-mcp is not installed; the structural bar did not run." >&2
     exit 3
 }
+# The answer's shape is the pinned release's; another release would be misread.
+want="$(sed -n '/^\[tools."github:DeusData\/codebase-memory-mcp"\]$/{n;s/^version = "\(.*\)"$/\1/p;}' "${repo}/mise.toml")"
+have="$("${cbm}" --version 2>/dev/null | awk '{print $2}')"
+if [ "${have}" != "${want}" ]; then
+    echo "codebase-memory-mcp ${have:-unknown} is not the pinned ${want}; run it through mise (mise run checks:structural)." >&2
+    exit 1
+fi
 
 cli() { # cli <tool> <json args>
     printf '%s' "$2" | "${cbm}" cli --json "$1" 2>"${errors}"
@@ -42,7 +49,18 @@ trap 'rm -f "${current}" "${graph}" "${inspector}" "${errors}"' EXIT
 go build -o "${inspector}" "${repo}/scripts/structural_go.go"
 STRUCTURAL_INSPECTOR="${inspector}" python3 "${repo}/scripts/test_structural_classify.py"
 
-cli query_graph "{\"project\":\"${project}\",\"query\":\"MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name\"}" >"${graph}"
+# Every page of the answer, one JSON answer per line: the graph pages a large
+# result, and the classifier refuses one that does not add up to its total.
+query='MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name'
+cursor=""
+: >"${graph}"
+while :; do
+    page="$(cli query_graph "$(jq -nc --arg p "${project}" --arg q "${query}" --arg c "${cursor}" \
+        '{project: $p, query: $q, format: "json", max_rows: 99998} + (if $c == "" then {} else {cursor: $c} end)')")"
+    printf '%s\n' "${page}" >>"${graph}"
+    cursor="$(printf '%s' "${page}" | jq -r '.content[0].text | fromjson | if .has_more then .next_cursor else "" end')"
+    [ -n "${cursor}" ] || break
+done
 python3 "${repo}/scripts/structural_classify.py" "${repo}" "${inspector}" <"${graph}" >"${current}"
 
 cd "${repo}"

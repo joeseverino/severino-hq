@@ -5,7 +5,7 @@
 # Every stage pins its base by digest; Dependabot bumps it on these lines.
 # uv comes from its own image, as in composition/Dockerfile.
 FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
-FROM python:3.15-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc79de952555b8a474e1d0a5d53 AS build
+FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS build
 COPY --from=uv /uv /usr/local/bin/uv
 # The cache mount and /install are different filesystems, so files are copied.
 ENV UV_COMPILE_BYTECODE=1 \
@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # -trimpath, so the runtime image carries no Go toolchain and the binaries no
 # build paths. Their Go is go.mod's go directive; the build fails if this
 # pinned image drifts from it.
-FROM golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 AS controller
+FROM golang:1.27.2-trixie@sha256:47667934874913a449b96faa7ef4777fa285d9ec29126ee80ed61c45b7cccf0e AS controller
 ENV CGO_ENABLED=0 \
     GOTOOLCHAIN=local \
     GOFLAGS=-mod=readonly
@@ -51,7 +51,7 @@ RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq
         -o /out/hq-host ./cmd/hq-host
 
 
-FROM python:3.15-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc79de952555b8a474e1d0a5d53 AS runtime
+FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base
@@ -70,7 +70,7 @@ RUN python -m pip uninstall --yes pip \
                 --home /app --shell /usr/sbin/nologin severino \
     && apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-        sqlite3 ca-certificates openssh-client openssl \
+        sqlite3 ca-certificates openssh-client \
         certbot python3-certbot-dns-cloudflare \
     && rm -rf /var/lib/apt/lists/*
 

@@ -36,10 +36,9 @@ host_apps = import_module("hq.platform.application.domains").host_apps
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-# The rendered app env (shell-quoted KEY='value' lines), where hq-host mounts
-# it and says so in SEVERINO_APP_ENV_PATH. Loading it here, not only in the
-# entrypoint, gives it to every process in the container, `docker exec`
-# sessions included. setdefault: real environment variables always win.
+# The rendered app env (shell-quoted KEY='value' lines), mounted by hq-host at
+# SEVERINO_APP_ENV_PATH and loaded here so every process in the container has it,
+# `docker exec` sessions included. setdefault: real environment variables win.
 _APP_ENV_FILE = Path(os.environ.get("SEVERINO_APP_ENV_PATH") or os.devnull)
 if _APP_ENV_FILE.is_file():
     for _token in shlex.split(_APP_ENV_FILE.read_text(encoding="utf-8")):
@@ -359,6 +358,8 @@ MIDDLEWARE = [
     # the session store, the login form, or the audit log.
     "hq.platform.core.network.TrustedNetworkMiddleware",
     "hq.platform.core.middleware.RequestContextMiddleware",
+    # Outside whatever writes the body; it weakens a compressed ETag (fragments accept that).
+    "django.middleware.gzip.GZipMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

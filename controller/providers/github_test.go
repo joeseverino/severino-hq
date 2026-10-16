@@ -2,10 +2,15 @@ package providers
 
 import (
 	"context"
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"io"
 	"maps"
@@ -144,9 +149,8 @@ func (t toFake) RoundTrip(req *http.Request) (*http.Response, error) {
 
 type githubHarness struct {
 	*githubFake
-	r        *Registry
-	signedMu sync.Mutex
-	signed   [][]string // argv of every openssl call, then its input
+	r   *Registry
+	key *rsa.PrivateKey // the app's signing key, as the renderer writes it
 }
 
 func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Environment) *githubHarness {
@@ -167,19 +171,22 @@ func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Envi
 	h := &githubHarness{githubFake: fake}
 	h.r = New(env, held, &runtime.HTTPClient{Transport: toFake{server}})
 	h.r.Now = func() time.Time { return time.Unix(1_900_000_000, 0) }
-	h.r.Commands = &Commands{Env: env, Supplied: held, Exec: func(_ context.Context, argv []string, stdin []byte, _ []string) ([]byte, []byte, int, error) {
-		if argv[0] != "openssl" {
-			return nil, nil, 0, errors.New("unexpected command")
-		}
-		h.signedMu.Lock()
-		h.signed = append(h.signed, append(append([]string{}, argv...), string(stdin)))
-		h.signedMu.Unlock()
-		return []byte("signature"), nil, 0, nil
+	h.r.Commands = &Commands{Env: env, Supplied: held, Exec: func(context.Context, []string, []byte, []string) ([]byte, []byte, int, error) {
+		return nil, nil, 0, errors.New("a GitHub App connection starts no process")
 	}}
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, _ := x509.MarshalPKCS8PrivateKey(key)
+	if err := os.WriteFile(filepath.Join(env.SSHDir, "hq-app.key"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	h.key = key
 	return h
 }
 
-func TestGitHubAppJWTIsSignedByOpenSSLWithTheConnectionsKey(t *testing.T) {
+func TestGitHubAppJWTIsSignedWithTheConnectionsKey(t *testing.T) {
 	h := newGitHubHarness(t, nil, runtime.Environment{})
 	c, err := h.r.githubConnection("")
 	if err != nil {
@@ -190,7 +197,7 @@ func TestGitHubAppJWTIsSignedByOpenSSLWithTheConnectionsKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	parts := strings.Split(jwt, ".")
-	if len(parts) != 3 || parts[2] != base64URL([]byte("signature")) {
+	if len(parts) != 3 {
 		t.Fatalf("jwt %q", jwt)
 	}
 	var header, claims map[string]any
@@ -201,12 +208,27 @@ func TestGitHubAppJWTIsSignedByOpenSSLWithTheConnectionsKey(t *testing.T) {
 	if header["alg"] != "RS256" || claims["iss"] != "12345" || claims["iat"] != float64(1_900_000_000-60) || claims["exp"] != float64(1_900_000_000+540) {
 		t.Fatalf("header %v claims %v", header, claims)
 	}
-	h.signedMu.Lock()
-	argv := h.signed[0]
-	h.signedMu.Unlock()
-	want := []string{"openssl", "dgst", "-sha256", "-sign", filepath.Join(h.r.Env.SSHDir, "hq-app.key")}
-	if !slices.Equal(argv[:5], want) || argv[5] != parts[0]+"."+parts[1] {
-		t.Fatalf("signed %v", argv)
+	// The signature verifies against the key the connection names: what
+	// GitHub checks, rather than which program was asked to sign.
+	signature, _ := base64.RawURLEncoding.DecodeString(parts[2])
+	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
+	if err := rsa.VerifyPKCS1v15(&h.key.PublicKey, crypto.SHA256, digest[:], signature); err != nil {
+		t.Fatalf("the JWT does not verify: %v", err)
+	}
+}
+
+func TestGitHubAppJWTRefusesAKeyItCannotRead(t *testing.T) {
+	h := newGitHubHarness(t, nil, runtime.Environment{})
+	c, _ := h.r.githubConnection("")
+	path := filepath.Join(h.r.Env.SSHDir, "hq-app.key")
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("not a key"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.r.githubJWT(t.Context(), c); err == nil || strings.Contains(err.Error(), "not a key") {
+		t.Fatalf("an unreadable key is refused without its contents: %v", err)
 	}
 }
 

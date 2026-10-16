@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
-	"slices"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
@@ -201,16 +200,10 @@ func npmID(id *npmapi.Id, what string) (int, error) {
 	return int(*id), nil
 }
 
-func sortedNames(names []string) []string {
-	out := append([]string{}, names...)
-	slices.Sort(out)
-	return out
-}
-
 func matchingHosts(hosts []npmapi.ProxyHostObject, domains []string) []npmapi.ProxyHostObject {
 	out := []npmapi.ProxyHostObject{}
 	for _, host := range hosts {
-		if reflect.DeepEqual(sortedNames(host.DomainNames), domains) {
+		if reflect.DeepEqual(sortedCopy(host.DomainNames), domains) {
 			out = append(out, host)
 		}
 	}
@@ -243,7 +236,7 @@ func npmDesired(spec NPMProxyHostSpec, domains []string) npmProxyHostRequest {
 // npmHeld is the request that would leave a proxy host as NPM holds it.
 func npmHeld(host npmapi.ProxyHostObject) npmProxyHostRequest {
 	return npmProxyHostRequest{
-		DomainNames:           sortedNames(host.DomainNames),
+		DomainNames:           sortedCopy(host.DomainNames),
 		CertificateID:         int(host.CertificateId),
 		Locations:             host.Locations,
 		Meta:                  host.Meta,
@@ -283,10 +276,10 @@ func (r *Registry) npmReconcile(ctx context.Context, spec NPMProxyHostSpec, obse
 	if err != nil {
 		return Result{}, err
 	}
-	domains := sortedNames(spec.DomainNames)
+	domains := sortedCopy(spec.DomainNames)
 	matches := matchingHosts(hosts, domains)
 	if len(matches) == 0 {
-		previous := sortedNames(observed.DomainNames)
+		previous := sortedCopy(observed.DomainNames)
 		if len(previous) > 0 && !reflect.DeepEqual(previous, domains) {
 			matches = matchingHosts(hosts, previous)
 		}
@@ -344,7 +337,7 @@ func (r *Registry) npmDelete(ctx context.Context, spec NPMProxyHostSpec, _ struc
 	if err != nil {
 		return Result{}, err
 	}
-	domains := sortedNames(spec.DomainNames)
+	domains := sortedCopy(spec.DomainNames)
 	matches := matchingHosts(hosts, domains)
 	status := NPMProxyHostDeleteStatus{DomainNames: domains, Removed: true}
 	if len(matches) > 1 {

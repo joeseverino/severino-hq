@@ -2,7 +2,6 @@
 
 import re
 from collections.abc import Callable, Mapping
-from types import MappingProxyType
 from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
@@ -320,7 +319,7 @@ def _resolve_tls(authored: dict[str, Any], context: ProviderResolutionContext) -
 
 
 # Delivery target kinds an uploaded certificate cannot go to, and why.
-UPLOADED_CERTIFICATE_REFUSALS: Mapping[str, str] = MappingProxyType(
+UPLOADED_CERTIFICATE_REFUSALS: Mapping[str, str] = frozendict(
     {
         "cpanel": (
             "Uploaded certificates cannot be installed on cPanel. It rejects certificates signed by a private CA."

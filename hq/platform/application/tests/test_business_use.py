@@ -108,8 +108,8 @@ class ServiceTests(TestCase):
 class MCPTests(TestCase):
     def _call(self, name: str, payload: dict) -> dict:
         async def call():
-            tool = mcp._tool_manager.get_tool("execute_capability")
-            return await tool.run({"name": name, "payload": payload})
+            tool = mcp.tools.get("execute_capability")
+            return await tool.call({"name": name, "payload": payload})
 
         bound = set_principal(mcp_principal())
         try:

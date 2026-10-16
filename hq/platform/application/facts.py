@@ -19,7 +19,7 @@ nothing: it is not a failed read.
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from types import MappingProxyType, SimpleNamespace
+from types import SimpleNamespace
 from typing import Any
 
 from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
@@ -723,7 +723,7 @@ def _partial(
 
 
 def _frozen(record: Mapping[str, Any]) -> Mapping[str, Any]:
-    return MappingProxyType(dict(record))
+    return frozendict(dict(record))
 
 
 def _reading_facts(subject: Subject) -> Iterator[Fact]:

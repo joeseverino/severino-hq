@@ -8,7 +8,6 @@ whether it is secret are stated here and nowhere else.
 """
 
 from collections.abc import Mapping
-from types import MappingProxyType
 from typing import Any
 
 from .provider_spec import ConnectionShape, Setting
@@ -77,7 +76,7 @@ def _shapes(*shapes: ConnectionShape) -> Mapping[str, ConnectionShape]:
         if shape.name in found:
             raise ValueError(f"Two connection shapes are named {shape.name!r}.")
         found[shape.name] = shape
-    return MappingProxyType(dict(sorted(found.items())))
+    return frozendict(dict(sorted(found.items())))
 
 
 # Every shape, by name. ``acme`` belongs to no provider: it is the certificate

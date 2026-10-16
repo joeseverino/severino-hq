@@ -1,0 +1,3 @@
+# The composition copies the extension wheels the workflow staged, and nothing else.
+*
+!build/composition/

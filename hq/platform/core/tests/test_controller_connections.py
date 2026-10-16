@@ -24,9 +24,19 @@ class RendererDeliveryTests(unittest.TestCase):
         self.assertEqual(started, ["ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-secrets"])
 
     def test_a_locally_built_binary_cannot_enter_the_repository_or_the_image(self):
-        for name in (".gitignore", ".dockerignore"):
+        for name in (".gitignore", "Dockerfile.dockerignore"):
             with self.subTest(name=name):
                 self.assertIn("deploy/bin/", (ROOT / name).read_text().splitlines())
+
+    def test_the_image_is_built_from_named_paths_only(self):
+        lines = [
+            line for line in (ROOT / "Dockerfile.dockerignore").read_text().splitlines() if line and line[0] != "#"
+        ]
+        admitted = [line.removeprefix("!").rstrip("/") for line in lines if line.startswith("!")]
+
+        # Everything is excluded first, so an untracked file cannot slip in.
+        self.assertEqual(lines[0], "*")
+        self.assertEqual([path for path in admitted if not (ROOT / path).exists()], [])
 
     def test_the_unit_keeps_its_hardening(self):
         unit = UNIT.read_text()

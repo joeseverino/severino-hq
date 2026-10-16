@@ -152,24 +152,31 @@ class Classifier:
         return None
 
 
-def graph_pairs(payload):
-    if payload.get("isError"):
-        raise ValueError("graph query failed")
-    text = payload["content"][0]["text"]
-    lines = text.splitlines()
-    header = re.fullmatch(r"rows: (\d+)  \(cols: a\.file_path b\.file_path a\.name b\.name\)", lines[0])
-    if not header or not re.fullmatch(r"total: \d+", lines[-1]):
-        raise ValueError("unexpected graph header/footer")
-    count = int(header[1])
-    rows = lines[1:-1]
-    if len(rows) != count or int(lines[-1].split()[1]) != count:
+def graph_pairs(pages):
+    """The similarity rows of one query, from every page of its answer, refused
+    unless the pages are whole: a partial answer would read as fewer duplicates
+    than there are."""
+
+    rows, total = [], None
+    for payload in pages:
+        if payload.get("isError"):
+            raise ValueError("graph query failed")
+        answer = json.loads(payload["content"][0]["text"])
+        if answer.get("columns") != ["a.file_path", "b.file_path", "a.name", "b.name"]:
+            raise ValueError("unexpected graph columns")
+        if answer.get("total_relation") != "eq" or total not in (None, answer.get("total")):
+            raise ValueError("graph total is not exact")
+        total = answer["total"]
+        rows += answer["rows"]
+    if total is None or not pages or (pages[-1] and json.loads(pages[-1]["content"][0]["text"]).get("has_more")):
+        raise ValueError("graph answer is not whole")
+    if len(rows) != total:
         raise ValueError("graph row count mismatch")
     result = []
     for row in rows:
-        cells = row.split()
-        if len(cells) != 4:
+        if len(row) != 4 or not all(isinstance(cell, str) and cell for cell in row):
             raise ValueError("malformed similarity row")
-        result.append(((cells[0], cells[2]), (cells[1], cells[3])))
+        result.append(((row[0], row[2]), (row[1], row[3])))
     return result
 
 
@@ -178,7 +185,7 @@ def main():
     classifier = Classifier(root, inspector)
     pairs = set()
     test = re.compile(r"(^|/)(test_[^/]*|tests|[^/]*_tests)\.py$|(^|/)tests/|_test\.go$")
-    for a, b in graph_pairs(json.load(sys.stdin)):
+    for a, b in graph_pairs([json.loads(line) for line in sys.stdin if line.strip()]):
         if test.search(a[0]) or test.search(b[0]):
             continue
         reason = classifier.pair(a, b)

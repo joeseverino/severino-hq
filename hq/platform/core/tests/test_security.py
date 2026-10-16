@@ -644,7 +644,7 @@ class PrecompressedStaticTests(SimpleTestCase):
         from pathlib import Path
         from unittest.mock import patch
 
-        import httpx
+        import httpx2
         from asgiref.sync import async_to_sync
         from starlette.applications import Starlette
         from starlette.routing import Mount
@@ -654,8 +654,8 @@ class PrecompressedStaticTests(SimpleTestCase):
         async def request(root):
             # Mounted, as production mounts it, so a refusal is a response.
             app = Starlette(routes=[Mount("/", app=CachedStaticFiles(directory=root))])
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            transport = httpx2.ASGITransport(app=app)
+            async with httpx2.AsyncClient(transport=transport, base_url="http://testserver") as client:
                 return await client.get(path, headers={"Accept-Encoding": "identity", **headers})
 
         manifest = SimpleNamespace(hashed_files={"app.css": "app.0123456789ab.css"})

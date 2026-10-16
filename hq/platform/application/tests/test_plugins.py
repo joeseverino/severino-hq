@@ -106,7 +106,9 @@ class PluginContractTests(TestCase):
             *(root / ".github" / "workflows").glob("*.yml"),
         )
         named = {
-            path for source in sources for path in re.findall(r"\bhost/([A-Za-z0-9_./-]+\.[a-z]+)", source.read_text())
+            path
+            for source in sources
+            for path in re.findall(r"(?<![\w/])host/([A-Za-z0-9_./-]+\.[a-z]+)", source.read_text())
         }
         self.assertIn("hq/platform/application/plugins.py", named)
         for path in sorted(named):

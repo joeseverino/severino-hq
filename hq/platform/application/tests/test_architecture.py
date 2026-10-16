@@ -6,10 +6,9 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import httpx
+import httpx2
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, override_settings
-from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
 
 from hq.platform.core.network import TrustedNetworkASGI
@@ -80,6 +79,9 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
             self.assertNotIn(forbidden, imported)
 
     def test_asgi_routes_static_assets_before_django(self):
+        from django.conf import settings
+
+        from hq.config import asgi
         from hq.config.asgi import application
 
         static_route, django_route = application.routes[-2:]
@@ -92,7 +94,9 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         self.assertIsInstance(static_route.app.app, StaticFiles)
         self.assertIsInstance(static_route.app.app, CachedStaticFiles)
         self.assertEqual(django_route.path, "")
-        self.assertIsInstance(django_route.app, GZipMiddleware)
+        # Django's own stack, compressed by Django's own middleware.
+        self.assertIs(django_route.app, asgi.django_application)
+        self.assertIn("django.middleware.gzip.GZipMiddleware", settings.MIDDLEWARE)
 
     def test_static_assets_have_one_server(self):
         from django.conf import settings
@@ -103,8 +107,8 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
     @override_settings(STATIC_LIVE=False)
     def test_versioned_static_assets_are_compressed_and_immutable(self):
         async def request(root):
-            transport = httpx.ASGITransport(app=CachedStaticFiles(directory=root))
-            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            transport = httpx2.ASGITransport(app=CachedStaticFiles(directory=root))
+            async with httpx2.AsyncClient(transport=transport, base_url="http://testserver") as client:
                 return await client.get(
                     "/bundle.0123456789ab.css",
                     headers={"Accept-Encoding": "gzip"},

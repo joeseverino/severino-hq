@@ -434,6 +434,8 @@ func nonNil(values []string) []string {
 	return values
 }
 
+// sortedCopy is values in order, leaving them as they were: never nil, so an
+// empty list is encoded as [] rather than null.
 func sortedCopy(values []string) []string {
 	out := append([]string{}, values...)
 	slices.Sort(out)

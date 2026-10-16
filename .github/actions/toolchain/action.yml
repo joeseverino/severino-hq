@@ -21,6 +21,9 @@ outputs:
   oldest-python:
     description: The oldest version the matrix runs.
     value: ${{ steps.read.outputs.oldest-python }}
+  trivy:
+    description: The Trivy release every image scan runs.
+    value: ${{ steps.read.outputs.trivy }}
 
 runs:
   using: composite
@@ -37,6 +40,7 @@ runs:
           # shellcheck disable=SC2086
           echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"
           echo "mise=$(sed -n 's/^min_version = "\(.*\)"$/\1/p' mise.toml)"
+          echo "trivy=$TRIVY_VERSION"
         } >> "$GITHUB_OUTPUT"
         # Nothing installs that mise.lock does not record. The CodeQL bundle is
         # the local mirror of codeql.yml and age belongs to Compose; neither is
@@ -55,12 +59,12 @@ runs:
       run: |
         python scripts/dependency_config.py uv-requirements > "$RUNNER_TEMP/uv-bootstrap.txt"
         pip install --require-hashes --no-deps --ignore-installed -r "$RUNNER_TEMP/uv-bootstrap.txt"
-    - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5.1.0
+    - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
       with:
         version: ${{ steps.read.outputs.mise }}
         cache_save_post: true
     # uv verifies every artifact against uv.lock; the cache only saves the download.
-    - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/uv
         key: uv-${{ runner.os }}-${{ inputs.python || steps.read.outputs.oldest-python }}-${{ hashFiles('uv.lock') }}

@@ -429,6 +429,9 @@ values and stringified JSON objects are rejected; validation errors do not
 include rejected input values. Authorization and thread-sensitive execution
 remain on the shared service path.
 
-The input-schema override uses a narrow, tested FastMCP Tool metadata seam in
-`hq/platform/mcp/binding.py`; an MCP SDK upgrade must retain those registration
-and validation tests.
+HQ serves these tools on the SDK's low-level server
+(`hq/platform/mcp/server.py`): it lists the document's schemas and dispatches
+to `hq/platform/mcp/binding.py`, which validates and calls the handler. Each
+argument model is built from the handler's signature
+(`hq/platform/mcp/declarations.py`), so nothing depends on the SDK's internals,
+and an upgrade is held by the registration and validation tests.

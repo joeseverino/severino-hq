@@ -71,8 +71,8 @@ class ServiceTests(TestCase):
 
     def test_registered_tools_are_async_safe(self):
         async def call_health():
-            tool = mcp._tool_manager.get_tool("system_health")
-            return await tool.run({})
+            tool = mcp.tools.get("system_health")
+            return await tool.call({})
 
         result = async_to_sync(call_health)()
 
@@ -153,10 +153,10 @@ class ServiceTests(TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["orphan_projects"], ["unreferenced"])
-        self.assertIsNotNone(mcp._tool_manager.get_tool("audit_registry"))
+        self.assertIsNotNone(mcp.tools.get("audit_registry"))
 
     def test_operating_snapshot_is_a_registered_read_tool(self):
-        self.assertIsNotNone(mcp._tool_manager.get_tool("dashboard_snapshot"))
+        self.assertIsNotNone(mcp.tools.get("dashboard_snapshot"))
 
     def test_resource_kinds_are_derived_from_the_live_document(self):
         from hq.platform.api.openapi import document
@@ -166,15 +166,15 @@ class ServiceTests(TestCase):
         contract = resource_contract(document())
         listable = [resource.name for resource in contract.listable]
         addressable = [resource.name for resource in contract.addressable]
-        tools = {tool.name: tool for tool in mcp._tool_manager.list_tools()}
+        tools = {tool.name: tool for tool in mcp.tools.values()}
 
-        self.assertEqual(tools["list_resource"].parameters["properties"]["name"]["enum"], listable)
-        self.assertEqual(tools["get_resource"].parameters["properties"]["name"]["enum"], addressable)
+        self.assertEqual(tools["list_resource"].input_schema["properties"]["name"]["enum"], listable)
+        self.assertEqual(tools["get_resource"].input_schema["properties"]["name"]["enum"], addressable)
         self.assertIn(catalogue(contract.listable), tools["list_resource"].description)
         self.assertIn(catalogue(contract.addressable), tools["get_resource"].description)
 
     def test_resource_reads_have_one_path(self):
-        names = {tool.name for tool in mcp._tool_manager.list_tools()}
+        names = {tool.name for tool in mcp.tools.values()}
 
         self.assertEqual(len(names), 15)
         for wrapper in (
@@ -206,9 +206,9 @@ class ServiceTests(TestCase):
         self.assertEqual(project_create["resource"], "projects")
         self.assertEqual(listed["items"][0]["slug"], project.slug)
         self.assertEqual(detail["slug"], project.slug)
-        self.assertIsNotNone(mcp._tool_manager.get_tool("describe_resources"))
-        self.assertIsNotNone(mcp._tool_manager.get_tool("list_resource"))
-        self.assertIsNotNone(mcp._tool_manager.get_tool("get_resource"))
+        self.assertIsNotNone(mcp.tools.get("describe_resources"))
+        self.assertIsNotNone(mcp.tools.get("list_resource"))
+        self.assertIsNotNone(mcp.tools.get("get_resource"))
 
     def test_connections_are_discoverable_without_credential_material(self):
         described = services.describe_connections()
@@ -219,8 +219,8 @@ class ServiceTests(TestCase):
             [item["name"] for item in described["connections"]],
         )
         self.assertTrue(listed["ok"])
-        self.assertIsNotNone(mcp._tool_manager.get_tool("describe_connections"))
-        self.assertIsNotNone(mcp._tool_manager.get_tool("list_connections"))
+        self.assertIsNotNone(mcp.tools.get("describe_connections"))
+        self.assertIsNotNone(mcp.tools.get("list_connections"))
 
     def test_derived_topology_is_a_registered_safe_read_tool(self):
         from hq.domains.control_plane.models import ManagedResource
@@ -236,7 +236,7 @@ class ServiceTests(TestCase):
         self.assertIn("resource:mcp-zone", {node["id"] for node in topology["nodes"]})
         self.assertEqual(topology["trace"]["focus"], "resource:mcp-zone")
         self.assertEqual(topology["trace"]["direction"], "inbound")
-        self.assertIsNotNone(mcp._tool_manager.get_tool("get_topology"))
+        self.assertIsNotNone(mcp.tools.get("get_topology"))
         self.assertNotIn("secret", json.dumps(topology).lower())
 
     def test_an_agent_can_ask_the_topology_one_standing_question(self):
@@ -258,7 +258,7 @@ class ServiceTests(TestCase):
             found = services.get_findings()
         self.assertTrue(found["ok"])
         self.assertTrue(found["rules"])
-        self.assertIsNotNone(mcp._tool_manager.get_tool("get_findings"))
+        self.assertIsNotNone(mcp.tools.get("get_findings"))
         self.assertNotIn("secret", json.dumps(found).lower())
 
     def test_an_unknown_payload_field_is_named_to_the_agent(self):
@@ -295,13 +295,11 @@ class ServiceTests(TestCase):
         self.assertNotIn("hunter2", json.dumps(result, default=repr))
 
     def test_an_invalid_resource_filter_is_named_by_the_tool(self):
-        from mcp.server.fastmcp.exceptions import ToolError
-
         async def call():
-            tool = mcp._tool_manager.get_tool("list_resource")
-            return await tool.run({"name": "projects", "filters": {"limti": "hunter2-not-for-logs"}})
+            tool = mcp.tools.get("list_resource")
+            return await tool.call({"name": "projects", "filters": {"limti": "hunter2-not-for-logs"}})
 
-        with self.assertRaises(ToolError) as refused:
+        with self.assertRaises(ValueError) as refused:
             async_to_sync(call)()
 
         self.assertIn("projects: limti is not a known field.", str(refused.exception))
@@ -759,7 +757,7 @@ class TheCallerReachesTheToolTests(TestCase):
     """
 
     def test_a_tool_call_runs_as_the_agent_that_presented_the_token(self):
-        import httpx
+        import httpx2
         from starlette.applications import Starlette
         from starlette.routing import Mount
 
@@ -770,17 +768,15 @@ class TheCallerReachesTheToolTests(TestCase):
             seen["actor"] = principal.actor
             return {"connections": []}
 
-        # A fresh manager for this run: FastMCP's can be started only once,
-        # and the original put back, so nothing here leaks into another test.
-        original_manager = mcp._session_manager
-        mcp._session_manager = None
-        self.addCleanup(setattr, mcp, "_session_manager", original_manager)
+        # An application and session manager of this run's own: a manager is
+        # started once, and the one the ASGI module mounts is left alone.
+        served = mcp.served()
         application = Starlette(
             routes=[
                 Mount(
                     "/mcp",
                     app=MCPBoundary(
-                        mcp.streamable_http_app(),
+                        served.application,
                         allowed_hosts=("testserver",),
                         allowed_networks=("100.64.0.0/10",),
                         verifier=lambda bearer: agent,
@@ -789,17 +785,17 @@ class TheCallerReachesTheToolTests(TestCase):
             ],
         )
 
-        # Driven over httpx's own ASGI transport, as the static-asset tests are,
+        # Driven over httpx2's own ASGI transport, as the static-asset tests are,
         # rather than Starlette's TestClient: that one wants a second HTTP
         # client installed, and a test is no reason to ship one. The session
         # manager is entered first and by hand, which is all an app lifespan
         # does, so its task group still exists before any caller is bound,
         # the order that makes a lost context observable.
         async def call():
-            transport = httpx.ASGITransport(app=application, client=("100.64.0.10", 50000))
+            transport = httpx2.ASGITransport(app=application, client=("100.64.0.10", 50000))
             async with (
-                mcp.session_manager.run(),
-                httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
+                served.sessions.run(),
+                httpx2.AsyncClient(transport=transport, base_url="http://testserver") as client,
             ):
                 return await client.post(
                     "/mcp/",

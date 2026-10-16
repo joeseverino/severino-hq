@@ -2,10 +2,15 @@ package providers
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -21,8 +26,9 @@ import (
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// A GitHub App as a connection. The app's private key never reaches this
-// process: it is rendered beside the SSH identities and openssl signs the JWT.
+// A GitHub App as a connection. The app's private key is rendered beside the
+// SSH identities, root's and readable by this account alone, and read only to
+// sign the JWT.
 // Every installation token is minted for exactly the repositories and
 // permissions a call names, and reused only by calls naming the same ones
 // within the same sweep.
@@ -88,12 +94,16 @@ func (r *Registry) signingKey(ref string, public bool) (string, error) {
 
 func base64URL(data []byte) string { return base64.RawURLEncoding.EncodeToString(data) }
 
-// jwt is a short-lived JWT naming the app, signed by openssl with the key the
-// connection's name points at; this process sees only the signature.
-func (r *Registry) githubJWT(ctx context.Context, c githubConnection) (string, error) {
-	key, err := r.signingKey(c.ref, false)
+// githubJWT is a short-lived JWT naming the app, signed RS256 with the key the
+// connection's name points at.
+func (r *Registry) githubJWT(_ context.Context, c githubConnection) (string, error) {
+	path, err := r.signingKey(c.ref, false)
 	if err != nil {
 		return "", err
+	}
+	key, err := readSigningKey(path)
+	if err != nil {
+		return "", &ProviderError{Message: "the signing key for " + c.ref + " cannot be read"}
 	}
 	now := r.Now()
 	header, _ := json.Marshal(map[string]string{"alg": "RS256", "typ": "JWT"})
@@ -103,11 +113,34 @@ func (r *Registry) githubJWT(ctx context.Context, c githubConnection) (string, e
 		Issuer   string `json:"iss"`
 	}{now.Add(githubJWTLifetime).Unix(), now.Add(-githubJWTBackdate).Unix(), c.appID})
 	input := base64URL(header) + "." + base64URL(claims)
-	signature, err := r.commands().Run(ctx, []string{"openssl", "dgst", "-sha256", "-sign", key}, []byte(input), "sign for "+c.ref, c.ref, nil)
+	digest := sha256.Sum256([]byte(input))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 	if err != nil {
-		return "", err
+		return "", &ProviderError{Message: "the JWT for " + c.ref + " could not be signed"}
 	}
 	return input + "." + base64URL(signature), nil
+}
+
+// readSigningKey is the RSA key a PKCS#8 PEM file holds, as the secrets
+// renderer writes it.
+func readSigningKey(path string) (*rsa.PrivateKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil || block.Type != "PRIVATE KEY" {
+		return nil, errors.New("not a PKCS#8 PEM key")
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	key, ok := parsed.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("not an RSA key")
+	}
+	return key, nil
 }
 
 func githubHeaders(token string) map[string]string {

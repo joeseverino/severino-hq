@@ -3,7 +3,6 @@
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
-from types import MappingProxyType
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -213,7 +212,7 @@ def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec
             raise ValueError(f"{spec.kind!r}: connects needs the containers it names.")
         _check_parts(spec)
         found[spec.kind] = spec
-    return MappingProxyType(found)
+    return frozendict(found)
 
 
 def _check_parts(spec: ObservationSpec) -> None:

@@ -1,0 +1,23 @@
+name: Cosign
+description: >-
+  The cosign release the host verifies with (CosignVersion in
+  controller/host/verifier.go), so the release that signs or checks here is
+  the one that checks again as root on the host.
+runs:
+  using: composite
+  steps:
+    - name: Read the host's cosign release
+      id: pinned
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="$(sed -nE 's/^\tCosignVersion = "(v[0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' controller/host/verifier.go)"
+        if [ -z "$version" ]; then
+          echo "::error title=No cosign release::controller/host/verifier.go declares no CosignVersion."
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+    - name: Install it
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: ${{ steps.pinned.outputs.version }}

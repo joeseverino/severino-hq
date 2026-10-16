@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cache
-from types import MappingProxyType
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
@@ -47,10 +46,10 @@ class IntegrationGraph:
     search: Mapping[str, SearchDefinition]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "capabilities", MappingProxyType(dict(self.capabilities)))
-        object.__setattr__(self, "resources", MappingProxyType(dict(self.resources)))
-        object.__setattr__(self, "connections", MappingProxyType(dict(self.connections)))
-        object.__setattr__(self, "search", MappingProxyType(dict(self.search)))
+        object.__setattr__(self, "capabilities", frozendict(dict(self.capabilities)))
+        object.__setattr__(self, "resources", frozendict(dict(self.resources)))
+        object.__setattr__(self, "connections", frozendict(dict(self.connections)))
+        object.__setattr__(self, "search", frozendict(dict(self.search)))
 
 
 def _index[Spec](

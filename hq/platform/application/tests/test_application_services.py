@@ -615,8 +615,8 @@ class AdapterParityTests(TestCase):
         self.assertRedirects(response, reverse("projects:detail", args=["web-project"]))
 
         async def call_mcp():
-            tool = mcp._tool_manager.get_tool("execute_capability")
-            return await tool.run(
+            tool = mcp.tools.get("execute_capability")
+            return await tool.call(
                 {
                     "name": "project.create",
                     "payload": {
@@ -717,8 +717,8 @@ class AssetApplicationServiceTests(TestCase):
         self.assertRedirects(response, reverse("assets:detail", args=["web-asset"]))
 
         async def call_mcp():
-            tool = mcp._tool_manager.get_tool("execute_capability")
-            return await tool.run(
+            tool = mcp.tools.get("execute_capability")
+            return await tool.call(
                 {
                     "name": "asset.create",
                     "payload": {
@@ -799,8 +799,8 @@ class DocumentationSyncTests(TestCase):
 
     def test_mcp_exposes_sync_through_the_same_service(self):
         async def call_sync():
-            tool = mcp._tool_manager.get_tool("execute_capability")
-            return await tool.run(
+            tool = mcp.tools.get("execute_capability")
+            return await tool.call(
                 {
                     "name": "documentation.sync",
                     "payload": {"manifest": self.manifest},
@@ -901,8 +901,8 @@ class ContentApplicationServiceTests(TestCase):
         self.assertRedirects(response, reverse("content:detail", args=["web-content"]))
 
         async def call_mcp():
-            tool = mcp._tool_manager.get_tool("execute_capability")
-            return await tool.run(
+            tool = mcp.tools.get("execute_capability")
+            return await tool.call(
                 {
                     "name": "content.create",
                     "payload": {
@@ -979,8 +979,8 @@ class ExpenseApplicationServiceTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
         async def call_mcp():
-            tool = mcp._tool_manager.get_tool("execute_capability")
-            return await tool.run(
+            tool = mcp.tools.get("execute_capability")
+            return await tool.call(
                 {
                     "name": "expense.create",
                     "payload": {

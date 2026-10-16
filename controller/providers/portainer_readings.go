@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strconv"
@@ -244,12 +245,6 @@ func (r *Registry) siteContainers(ctx context.Context, at portainerSite) ([]dock
 	return found, nil
 }
 
-func sortedStrings(values []string) []string {
-	out := append([]string{}, values...)
-	slices.Sort(out)
-	return out
-}
-
 // nonEmpty is the values that are not blank.
 func nonEmpty(values []string) []string {
 	found := []string{}
@@ -290,7 +285,7 @@ func (r *Registry) portainerNetworks(ctx context.Context, at portainerSite) ([]a
 		found = append(found, PortainerNetworkRecord{
 			portainerSite: at, ID: network.ID, Name: network.Name,
 			Driver: network.Driver, Scope: network.Scope, Internal: network.Internal, Subnets: subnets,
-			Containers: sortedStrings(attached[network.Name]),
+			Containers: sortedCopy(attached[network.Name]),
 		})
 	}
 	return found, nil
@@ -459,7 +454,7 @@ func runtimeRecord(at portainerSite, container dockerContainer, inspect dockerIn
 		mounts = append(mounts, PortainerRuntimeMount{Type: mount.Type, Source: mount.key(), Destination: mount.Destination, ReadOnly: mount.readOnly()})
 	}
 	bindings := []PortainerPortBinding{}
-	for _, port := range sortedStrings(mapKeys(host.PortBindings)) {
+	for _, port := range slices.Sorted(maps.Keys(host.PortBindings)) {
 		for _, bound := range host.PortBindings[port] {
 			bindings = append(bindings, PortainerPortBinding{ContainerPort: port, HostIP: bound.HostIP, HostPort: bound.HostPort})
 		}
@@ -512,14 +507,6 @@ func runtimeRecord(at portainerSite, container dockerContainer, inspect dockerIn
 		RestartCount:   inspect.RestartCount,
 		StartedAt:      inspect.State.StartedAt,
 	}
-}
-
-func mapKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	return keys
 }
 
 // portainerRuntime is how each container is run, one inspect per container.
@@ -585,9 +572,9 @@ func (r *Registry) portainerStacksReading(ctx context.Context, at portainerSite)
 		project.Source, project.Status, project.EntryPoint = "portainer", &status, &entry
 	}
 	found := []any{}
-	for _, name := range sortedStrings(mapKeys(projects)) {
+	for _, name := range slices.Sorted(maps.Keys(projects)) {
 		project := *projects[name]
-		project.Containers = sortedStrings(project.Containers)
+		project.Containers = sortedCopy(project.Containers)
 		found = append(found, project)
 	}
 	return found, nil

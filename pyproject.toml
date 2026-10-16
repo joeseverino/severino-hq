@@ -7,18 +7,17 @@ requires-python = ">=3.15,<3.16"
 dependencies = [
     "argon2-cffi>=25.1,<26",
     "cryptography>=50.0.2,<51",
-    "defusedxml>=0.7,<0.8",
     "django>=6.1.2,<6.2",
-    "httpx>=0.28,<1",
+    "httpx2>=2.13,<3",
     # Imported directly: the bridge and MCP hold payloads to their schemas.
     "jsonschema>=4.26.0,<5",
-    "mcp>=1.30.0,<2",
+    "mcp>=2.3.0,<3",
     "mozilla-django-oidc>=5.0.2,<6.0",
     "pydantic>=2.14.0,<3",
     "pyjwt>=2.15.1,<3",
     "referencing>=0.37.0,<1",
     # Imported directly: the ASGI application, its static mount and the bridge.
-    "starlette>=1.7.0,<2",
+    "starlette>=1.8.0,<2",
     "tblib>=3,<4",
     "uvicorn>=0.54.0,<1",
     "whitenoise>=6.12.0",
@@ -35,16 +34,16 @@ dev = [
 tools = [
     "coverage==7.16.2",
     "django-stubs==6.1.2",
-    "hypothesis==6.168.5",
+    "hypothesis==6.170.0",
     "mypy==2.4.0",
     "openapi-spec-validator==0.9.0",
-    "ruff==0.17.0",
-    "schemathesis==4.30.1",
+    "ruff==0.17.1",
+    "schemathesis==4.31.1",
     "types-jsonschema==4.26.0.20261006",
     "uv==0.13.1",
 ]
 browser = [
-    "playwright==1.63.0",
+    "playwright==1.64.0",
 ]
 # Run by `mise run checks:audit`; never installed into the development environment.
 audit = [

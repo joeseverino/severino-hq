@@ -72,7 +72,7 @@ jobs:
       - name: Mint a token for HQ's check
         id: app
         if: steps.find.outputs.image != ''
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           private-key: ${{ secrets.HQ_APP_KEY }}
@@ -149,8 +149,17 @@ jobs:
           auth="$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_TOKEN" | base64 -w0)"
           printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' "$auth" > "$HOME/.docker/config.json"
           chmod 600 "$HOME/.docker/config.json"
+      - name: Read the host's cosign release
+        # Two files, not the repository: this runner keeps no checkout.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions/cosign
+            controller/host/verifier.go
+          sparse-checkout-cone-mode: false
       - name: Install Cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: ./.github/actions/cosign
       - name: Verify the image was composed by Compose
         # On the host, before anything privileged: hq-host deploy verifies
         # again as root, and this answers first with a clear message.
@@ -215,7 +224,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Mint a token for HQ's check and comment
         id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           private-key: ${{ secrets.HQ_APP_KEY }}

@@ -10,10 +10,8 @@ import os
 from django.conf import settings
 from django.core.asgi import get_asgi_application
 from starlette.applications import Starlette
-from starlette.middleware.gzip import GZipMiddleware
 from starlette.routing import Mount
 
-from hq.platform.core.headers import LowercaseHeaders
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
 
@@ -25,13 +23,6 @@ django_application = get_asgi_application()
 # No compressor: the image build compressed each asset once and the mount sends
 # that copy.
 static_application = TrustedNetworkASGI(CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False))
-# LowercaseHeaders inside the compressor, not outside it: the compressor has to
-# see names it can match, and by the time the response leaves it the damage
-# would already be two Content-Lengths.
-compressed_django_application = GZipMiddleware(
-    LowercaseHeaders(django_application),
-    minimum_size=1000,
-)
 
 from asgiref.sync import sync_to_async
 
@@ -70,8 +61,9 @@ async def observe_agent(principal) -> None:
     await sync_to_async(observe)(principal)
 
 
+mcp_served = mcp.served()
 mcp_application = MCPBoundary(
-    mcp.streamable_http_app(),
+    mcp_served.application,
     allowed_hosts=settings.SEVERINO_MCP_ALLOWED_HOSTS,
     allowed_networks=settings.SEVERINO_MCP_ALLOWED_NETWORKS,
     allowed_origins=settings.SEVERINO_MCP_ALLOWED_ORIGINS,
@@ -114,7 +106,7 @@ async def deriving_ahead():
 
 @contextlib.asynccontextmanager
 async def lifespan(app):
-    async with mcp.session_manager.run(), bridge_serving(), deriving_ahead():
+    async with mcp_served.sessions.run(), bridge_serving(), deriving_ahead():
         yield
 
 
@@ -123,7 +115,7 @@ application = Starlette(
         Mount("/mcp", app=mcp_application),
         # Collected assets, on the native async path and before the Django stack.
         Mount(settings.STATIC_URL.rstrip("/"), app=static_application),
-        Mount("/", app=compressed_django_application),
+        Mount("/", app=django_application),
     ],
     lifespan=lifespan,
 )

@@ -4,9 +4,7 @@ One registry, so every page that shows who issued a certificate names the
 authority the same way. A code not listed is shown as reported.
 """
 
-from types import MappingProxyType
-
-AUTHORITIES = MappingProxyType(
+AUTHORITIES = frozendict(
     {
         "digicert": "DigiCert",
         "google": "Google Trust Services",

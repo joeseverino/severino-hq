@@ -348,7 +348,7 @@ document.addEventListener("click", (event) => {
       }
     })
     // Whatever went wrong, the plain form still works.
-    .catch(() => { button.setAttribute("form", form.id); form.requestSubmit ? form.requestSubmit(button) : form.submit(); })
+    .catch(() => { button.setAttribute("form", form.id); form.requestSubmit(button); })
     .finally(() => { button.disabled = false; });
 });
 

@@ -38,13 +38,13 @@ class Command(BaseCommand):
         arguments = request.get("arguments", {})
         if not isinstance(arguments, dict):
             raise CommandError('"arguments" must be a JSON object.')
-        tool = mcp._tool_manager.get_tool(request["tool"])
+        tool = mcp.tools.get(request["tool"])
         if tool is None:
             raise CommandError(f"There is no tool named {request['tool']!r}.")
 
         bound = set_principal(cli_principal())
         try:
-            result = async_to_sync(tool.run)(arguments)
+            result = async_to_sync(tool.call)(arguments)
         except Exception as exc:  # reported, never swallowed
             raise CommandError(str(exc)) from exc
         finally:

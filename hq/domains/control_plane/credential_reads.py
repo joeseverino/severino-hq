@@ -10,7 +10,6 @@ entries are bare scope names.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from types import MappingProxyType
 
 from .observations import OBSERVATIONS
 
@@ -20,7 +19,7 @@ REGISTRAR_READ = "Registrar: Domains Read (account)"
 # Reads an observer credential needs that neither a registered reading nor a
 # resource kind's declared parts state: what the sweep asks for on the way to
 # them. Everything else is derived from those declarations.
-UNREGISTERED_READS: Mapping[str, tuple[tuple[str, str], ...]] = MappingProxyType(
+UNREGISTERED_READS: Mapping[str, tuple[tuple[str, str], ...]] = frozendict(
     {
         "cloudflare_api": (
             ("Account Settings Read (account)", "The account and its analytics sites"),
@@ -76,7 +75,7 @@ class Minter:
     account_flag: str = ""
 
 
-MINTERS: Mapping[str, Minter] = MappingProxyType(
+MINTERS: Mapping[str, Minter] = frozendict(
     {
         "cloudflare_api": Minter(
             script="scripts/mint-cloudflare-token.sh",
