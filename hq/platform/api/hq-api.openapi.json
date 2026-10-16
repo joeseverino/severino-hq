@@ -11456,6 +11456,10 @@
   ],
   "x-hq-mcp-tools": {
     "audit_registry": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Report Project and Asset rows with no documentation references.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11465,6 +11469,10 @@
       }
     },
     "dashboard_snapshot": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Return HQ's canonical KPI, priority queue, and recent activity snapshot.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11474,6 +11482,10 @@
       }
     },
     "describe_capabilities": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Describe every JSON-executable HQ capability and its canonical schema.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11483,6 +11495,10 @@
       }
     },
     "describe_connections": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Describe installed connection families, abilities, scopes, and routes.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11492,6 +11508,10 @@
       }
     },
     "describe_resources": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Describe every readable HQ resource and its supported operations.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11501,6 +11521,10 @@
       }
     },
     "documentation_status": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Summarize AI-safe documentation pointers; sensitive records are excluded.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11510,6 +11534,9 @@
       }
     },
     "execute_capability": {
+      "annotations": {
+        "readOnlyHint": false
+      },
       "description": "Execute one allowlisted capability from a schema-validated JSON payload.\n\nSome changes are held for a person. A result carrying\n`status: \"awaiting_approval\"` is not a failure and not something to retry:\nthe request is recorded, nothing has been written, and an operator has to\napprove it in HQ's web interface, which this interface cannot do. Report the\napproval id from `approval.id` to whoever asked, and stop.\n\nEvery capability whose effect is not `read` accepts an optional\n`idempotency_key` in its payload. Send one when a call may be retried: a\nrepeat carrying the same key returns the first result instead of acting a\nsecond time. A `read` takes none.\n",
       "inputSchema": {
         "additionalProperties": false,
@@ -11560,6 +11587,10 @@
       }
     },
     "export_year_summary": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Export one safe year summary as Markdown or JSON.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11582,6 +11613,10 @@
       }
     },
     "get_findings": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "What HQ currently claims is wrong, with evidence and suggested remedies.\n\nEach remedy names an existing capability and target; run one with\n`execute_capability`. A remedy absent means this principal cannot run it.\n",
       "inputSchema": {
         "additionalProperties": false,
@@ -11597,6 +11632,10 @@
       }
     },
     "get_resource": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Get one record from any registered addressable resource.\nKinds:\n- `assets`: Assets and their safe cross-domain relationships. Identifier: `slug`.\n- `calendar`: Everything on the calendar over a span of days, and your own events. Identifier: `uid`.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path. Identifier: `connection_ref`.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ. Identifier: `id`.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard. Identifier: `address`.\n- `credentials`: What each connection's credential can read, and what it would need to read more. Identifier: `provider`.\n- `domains`: Every domain HQ manages or has read, its services and registration. Identifier: `name`.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live. Identifier: `key`.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it. Identifier: `name`.\n- `paths`: The path a request for a hostname takes, hop by hop, with each hop's reading and certificate. Identifier: `hostname`.\n- `projects`: Projects and their safe cross-domain relationships. Identifier: `slug`.\n- `readings`: Each type of reading, when it was last read, and the records it holds. Identifier: `kind`.\n- `relationships`: One machine, service, domain or record and everything related to it. Identifier: `node`.\n- `services`: Every service name and the state of its DNS, proxy and certificate. Identifier: `hostname`.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only. Identifier: `address`.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11643,6 +11682,10 @@
       }
     },
     "get_topology": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Return the live infrastructure graph with safe canonical actions.\n\nPass a lens name for a standing question. To inspect dependencies or blast\nradius, pass a node id as ``focus`` and trace ``inbound``, ``outbound``, or\n``both`` up to five hops. Every node retains its canonical safe actions.\n",
       "inputSchema": {
         "additionalProperties": false,
@@ -11673,6 +11716,10 @@
       }
     },
     "list_connections": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "List safe cached connection state available to the MCP principal.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11682,6 +11729,10 @@
       }
     },
     "list_resource": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "List any registered resource with schema-validated filters.\nKinds:\n- `action.items`: The composed action queue: what needs doing, from every domain.\n- `analytics`: What the published site was asked for, by any breakdown HQ records.\n- `assets`: Assets and their safe cross-domain relationships.\n- `calendar`: Everything on the calendar over a span of days, and your own events.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard.\n- `credentials`: What each connection's credential can read, and what it would need to read more.\n- `domains`: Every domain HQ manages or has read, its services and registration.\n- `estate`: Machines online, services, domains, next renewals and connections needing attention.\n- `expenses`: Expense records with stable relationship identifiers.\n- `hq`: HQ itself: the release it runs and whether its branch is ahead, the machine and container it runs in, its background jobs, what it can read and its open problems.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it.\n- `projects`: Projects and their safe cross-domain relationships.\n- `readings`: Each type of reading, when it was last read, and the records it holds.\n- `receipts`: Receipt metadata without file contents, storage paths, or URLs.\n- `request.path`: How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.\n- `search`: Machines, services and domains, then records, matching a query.\n- `services`: Every service name and the state of its DNS, proxy and certificate.\n- `tailnet`: The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11736,6 +11787,10 @@
       }
     },
     "recent_activity": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Return recent HQ audit events without their free-form metadata payloads.",
       "inputSchema": {
         "additionalProperties": false,
@@ -11751,6 +11806,10 @@
       }
     },
     "system_health": {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Check database access and return non-sensitive record counts.",
       "inputSchema": {
         "additionalProperties": false,

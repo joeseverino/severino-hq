@@ -13,6 +13,7 @@ change to it reaches every surface.
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import date, datetime
 from typing import Any
 
 from django.conf import settings
@@ -78,7 +79,7 @@ def read_once[T](key: str, loader: Callable[[], T]) -> T:
     return found
 
 
-def day_span(first, last=None):
+def day_span(first: date, last: date | None = None) -> tuple[datetime, datetime | None]:
     """A run of local days as the moments a datetime column is filtered by.
 
     Returns ``(start, end)``: the first day's midnight and the midnight after
@@ -91,14 +92,14 @@ def day_span(first, last=None):
     row: the slow part of a read that returns a few hundred rows of thousands.
     """
 
-    from datetime import date as _date, datetime, time, timedelta
+    from datetime import time, timedelta
 
     from django.utils import timezone
 
-    def day(value):
+    def day(value: date) -> date:
         if isinstance(value, datetime):
             return timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
-        if not isinstance(value, _date):
+        if not isinstance(value, date):
             raise TypeError("day_span takes dates")
         return value
 

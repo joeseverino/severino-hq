@@ -173,6 +173,17 @@ class ServiceTests(TestCase):
         self.assertIn(catalogue(contract.listable), tools["list_resource"].description)
         self.assertIn(catalogue(contract.addressable), tools["get_resource"].description)
 
+    def test_the_listed_tools_carry_their_annotations(self):
+        from hq.platform.mcp.server import mcp as served
+
+        async def listed():
+            return await served._list(None, None)
+
+        tools = {tool.name: tool for tool in async_to_sync(listed)().tools}
+
+        self.assertTrue(tools["system_health"].annotations.read_only_hint)
+        self.assertFalse(tools["execute_capability"].annotations.read_only_hint)
+
     def test_resource_reads_have_one_path(self):
         names = {tool.name for tool in mcp.tools.values()}
 

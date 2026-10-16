@@ -67,6 +67,17 @@ class JobRunnerTests(TransactionTestCase):
 
         self.assertEqual(second.state, Job.State.SUCCEEDED)
 
+    def test_a_job_is_recorded_against_a_person_or_nobody(self):
+        from django.contrib.auth.models import AnonymousUser
+
+        person = get_user_model().objects.create_user("operator", password="unused-password")
+
+        signed_in = self.wait(start("test.person", "Person", lambda progress: {}, requested_by=person))
+        signed_out = self.wait(start("test.nobody", "Nobody", lambda progress: {}, requested_by=AnonymousUser()))
+
+        self.assertEqual(signed_in.requested_by, person)
+        self.assertIsNone(signed_out.requested_by)
+
     def test_how_it_ended_is_audited_and_attributed(self):
         user = get_user_model().objects.create_user("operator", password="x" * 14)
         job = self.wait(start("test.audited", "Audited", lambda p: {"rows": 3}, requested_by=user))

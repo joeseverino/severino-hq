@@ -19,7 +19,7 @@ exactly one state of the tables. The cache is a database table: a value stored
 inside a transaction commits or rolls back with the rows it was derived from.
 
 The clock is an input too. A derivation never reads it directly: it asks
-``reached``, ``passed``, ``since``, ``whole`` or ``today`` here, and each answer also
+``reached``, ``passed``, ``since``, ``whole``, ``today`` or ``this_year`` here, and each answer also
 records the moment it stops being true. A stored value is good until the
 earliest such moment and is derived again after it, so a threshold is crossed
 on time and no age is served stale.
@@ -206,6 +206,15 @@ def today() -> date:
     local = timezone.localtime(_clock())
     holds_until(_midnight_after(local))
     return local.date()
+
+
+def this_year() -> int:
+    """The local year, which holds until the next local New Year: an answer that
+    only asks the year is not derived again every midnight."""
+
+    local = timezone.localtime(_clock())
+    holds_until(timezone.make_aware(datetime(local.year + 1, 1, 1), timezone.get_current_timezone()))
+    return local.year
 
 
 def _midnight_after(local: datetime) -> datetime:

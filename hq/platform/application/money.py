@@ -21,7 +21,7 @@ def quantize_money(value: Decimal) -> Decimal:
     return value.quantize(CENTS, rounding=ROUND_HALF_UP)
 
 
-def to_money(value, default: Decimal | None = None) -> Decimal | None:
+def to_money(value: object, default: Decimal | None = None) -> Decimal | None:
     """Coerce an untrusted number to a quantized ``Decimal``, or ``default``.
 
     For values arriving as JSON, where a float has already lost precision and

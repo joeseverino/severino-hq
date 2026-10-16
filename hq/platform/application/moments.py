@@ -5,7 +5,7 @@ time the same way. ``hq_sdk.ui`` hands these to extensions, and
 ``core.templatetags.value_tags`` owns the one filter that puts them in a page.
 """
 
-from datetime import UTC
+from datetime import UTC, date
 
 from .timestamps import moment
 
@@ -24,7 +24,7 @@ def elapsed(stamp: str) -> str:
     return ago(found)
 
 
-def ago(moment) -> str:
+def ago(moment: date) -> str:
     """How long ago something happened, in the one phrasing HQ uses: "5 days ago".
 
     One unit. An age is read at a glance, and "5 days, 15 hours ago" beside
@@ -69,7 +69,7 @@ def _written(value, layout: str) -> str:
     return written(value, layout)
 
 
-def when_day(value) -> str:
+def when_day(value: date) -> str:
     """A date as HQ writes one: "Oct 3", and "Oct 3, 2025" outside this year.
 
     The year is said only when it is not the one being lived in, the same
@@ -78,15 +78,14 @@ def when_day(value) -> str:
 
     from datetime import datetime
 
-    from .derivations import today
+    from .derivations import this_year
 
     if isinstance(value, datetime):
         value = _local(value)
-    this_year = value.year == today().year
-    return _written(value, DAY_FORMAT if this_year else DAY_YEAR_FORMAT)
+    return _written(value, DAY_FORMAT if value.year == this_year() else DAY_YEAR_FORMAT)
 
 
-def when(value) -> str:
+def when(value: date) -> str:
     """A moment as HQ writes one: "Oct 3, 9:29 AM", "Oct 3, 2025, 9:29 AM".
 
     Twelve-hour clock, in the timezone HQ is read in. A bare date has no time
@@ -101,7 +100,7 @@ def when(value) -> str:
     return f"{when_day(value)}, {_written(value, CLOCK_FORMAT)}"
 
 
-def when_exact(value) -> str:
+def when_exact(value: date) -> str:
     """A moment in full: "Oct 3, 2026, 9:29:15 AM CDT".
 
     Always the year, the seconds and the zone: what a ``title`` says behind an
@@ -118,7 +117,7 @@ def when_exact(value) -> str:
     return f"{exact} {zone}".strip()
 
 
-def when_range(start, end) -> str:
+def when_range(start: date, end: date) -> str:
     """A run of days as HQ writes one: "Oct 3 – Oct 9", "Oct 3 – Oct 9, 2025".
 
     Each end reads as ``when_day`` writes it. A year both ends share is said

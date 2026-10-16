@@ -10,7 +10,9 @@ Class-based views mix in ``PageMixin``; function views pass ``page_context``
 to ``render``.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Any
 
 from .fragments import FragmentMixin
 from .ui import PageNavigation
@@ -78,9 +80,9 @@ def page_context(
     title: str,
     lede: str = "",
     *,
-    actions=(),
+    actions: Iterable[PageAction] = (),
     navigation: PageNavigation | None = None,
-    trail=(),
+    trail: Iterable[tuple[str, str]] = (),
 ) -> dict[str, Page]:
     """``{"page": Page(...)}``, for a function view's ``render`` context."""
     return {
@@ -128,7 +130,7 @@ class PageMixin(FragmentMixin):
     def get_page_trail(self) -> tuple[tuple[str, str], ...]:
         return ()
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         context.update(
             page_context(

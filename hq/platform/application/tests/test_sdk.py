@@ -23,6 +23,45 @@ from hq_sdk.web import CapabilityRequiredMixin
 
 
 class SdkContractTests(SimpleTestCase):
+    def test_every_export_is_fully_typed(self):
+        """An extension type-checks its calls into the SDK. An unannotated
+        parameter or return there is a ``type: ignore`` in every extension that
+        calls it, so the whole surface is typed or the suite fails."""
+
+        import importlib
+        import inspect
+        from annotationlib import Format
+
+        from hq_sdk.contract import exports, module_names
+
+        def untyped(name, routine):
+            try:
+                signature = inspect.signature(routine, annotation_format=Format.STRING)
+            except TypeError, ValueError:
+                return []
+            gaps = [
+                f"{name}({parameter.name})"
+                for parameter in signature.parameters.values()
+                if parameter.name not in ("self", "cls") and parameter.annotation is inspect.Parameter.empty
+            ]
+            if signature.return_annotation is inspect.Signature.empty:
+                gaps.append(f"{name} -> ?")
+            return gaps
+
+        gaps = []
+        for module_name in module_names():
+            module = importlib.import_module(f"hq_sdk.{module_name}")
+            for export in exports(module):
+                value = getattr(module, export)
+                qualified = f"{module_name}.{export}"
+                if inspect.isroutine(value):
+                    gaps += untyped(qualified, value)
+                elif inspect.isclass(value) and not issubclass(value, BaseException):
+                    for member, function in vars(value).items():
+                        if not member.startswith("_") and inspect.isfunction(function):
+                            gaps += untyped(f"{qualified}.{member}", function)
+        self.assertEqual(gaps, [])
+
     def test_style_validation_reads_the_host_bundle_after_package_moves(self):
         from hq_sdk.testing import undefined_style_classes
 

@@ -2,8 +2,8 @@
 name = "severino-hq"
 version = "0.0.0"
 requires-python = ">=3.15,<3.16"
-# Host-owned plugin libraries stay here: admitted wheels install with --no-deps.
-# tblib lets composed parallel suites report real tracebacks.
+# Each is imported by host code, or listed under [tool.severino-hq.unimported]
+# with the reason it is installed anyway (a test holds that).
 dependencies = [
     "argon2-cffi>=25.1,<26",
     "cryptography>=50.0.2,<51",
@@ -22,6 +22,11 @@ dependencies = [
     "uvicorn>=0.54.0,<1",
     "whitenoise>=6.12.0",
 ]
+
+# Runtime dependencies no host code imports, and why each is installed anyway.
+[tool.severino-hq.unimported]
+httpx2 = "The HTTP client extensions import: admitted wheels install with --no-deps, so the host provides it."
+tblib = "Django's parallel test runner pickles a failure's traceback with it, in the image as well."
 
 [tool.uv]
 package = false

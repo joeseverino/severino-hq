@@ -24,7 +24,14 @@ the view to rebuild the URL itself, which duplicates knowledge the model
 already owns. One query at the boundary is the cheaper trade.
 """
 
-from typing import override
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, override
+
+if TYPE_CHECKING:
+    from django.forms import BaseForm
+    from django.http import HttpResponse
+
+    from .security import Principal
 
 from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured, ValidationError
@@ -84,7 +91,7 @@ class ServiceWriteMixin:
     #: the attribute, rather than a blank in a sentence.
     REQUIRED = ("service", "noun", "result_key", "identity_attr")
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         # A plain function assigned to a class attribute becomes a bound method
         # on access, so ``self.service(command, ...)`` would silently pass the
         # view as the command. Caught at class creation, where the fix is
@@ -102,26 +109,27 @@ class ServiceWriteMixin:
         if missing:
             raise ImproperlyConfigured(f"{cls.__name__} writes through a service and declares no {', '.join(missing)}.")
 
-    def write_principal(self):
+    def write_principal(self) -> Principal:
         return web_principal(self.request.user)
 
-    def current_identity(self):
+    def current_identity(self) -> Any:
         return getattr(self.get_object(), self.identity_attr)
 
-    def reload(self, result):
+    # The record is the subclass's own model, which this mixin cannot name.
+    def reload(self, result: Mapping[str, Any]) -> Any:
         """The saved record, as a model instance the URL can be taken from."""
 
         key = getattr(self, "identity_result_key", "") or self.identity_attr
         return self.model._default_manager.get(**{self.identity_attr: result[self.result_key][key]})
 
-    def announce(self, template: str, target) -> None:
+    def announce(self, template: str, target: object) -> None:
         messages.success(self.request, template.format(noun=self.noun, target=target))
 
 
 class ServiceCreateMixin(ServiceWriteMixin):
     """Create through a service, then go to what was created."""
 
-    def form_valid(self, form):
+    def form_valid(self, form: BaseForm) -> HttpResponse:
         result = self.service(
             self.command_from_cleaned_data(form.cleaned_data),
             principal=self.write_principal(),
@@ -138,7 +146,7 @@ class ServiceUpdateMixin(ServiceWriteMixin):
     a rename changes the slug, and redirecting to the old one 404s.
     """
 
-    def form_valid(self, form):
+    def form_valid(self, form: BaseForm) -> HttpResponse:
         result = self.service(
             self.command_from_cleaned_data(form.cleaned_data),
             principal=self.write_principal(),
@@ -156,7 +164,7 @@ class ServiceDeleteMixin(ServiceWriteMixin):
     time there is something to announce the record is gone.
     """
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         # What confirm_page.html needs: one button that posts here, and a way
         # back to the record being deleted.
         context = super().get_context_data(**kwargs)
@@ -168,7 +176,7 @@ class ServiceDeleteMixin(ServiceWriteMixin):
         }
         return context
 
-    def form_valid(self, form):
+    def form_valid(self, form: BaseForm) -> HttpResponse:
         identity = self.current_identity()
         result = self.service(
             DeleteCommand(confirm=str(identity)),
@@ -193,7 +201,7 @@ class RecordFormMixin:
     ``updated_message`` may reword the announcement.
     """
 
-    def form_valid(self, form):
+    def form_valid(self, form: BaseForm) -> HttpResponse:
         adding = form.instance._state.adding
         try:
             self.object = save_form(form, principal=web_principal(self.request.user))
@@ -215,7 +223,7 @@ class RecordDeleteMixin(ServiceDeleteMixin):
     """
 
     @override
-    def form_valid(self, form):
+    def form_valid(self, form: BaseForm) -> HttpResponse:
         noun = display_noun(records_for(type(self.object)))
         result = delete_instance(self.object, principal=web_principal(self.request.user))
         template = getattr(self, "deleted_message", DELETED)
@@ -252,19 +260,19 @@ class CommandFormMixin:
     # form error and hides it.
     domain_errors: tuple[type[Exception], ...] = (ValueError,)
 
-    def build_command(self, form):
+    def build_command(self, form: BaseForm) -> Any:
         return self.command(**form.cleaned_data) if self.command else form.cleaned_data
 
     def get_success_url(self) -> str:
         return reverse(self.success_url_name)
 
-    def get_success_message(self, result) -> str:
+    def get_success_message(self, result: Any) -> str:
         return self.success_message
 
-    def run(self, command):
+    def run(self, command: Any) -> Any:
         return self.service(command, principal=web_principal(self.request.user))
 
-    def form_valid(self, form):
+    def form_valid(self, form: BaseForm) -> HttpResponse:
         try:
             result = self.run(self.build_command(form))
         except self.domain_errors as error:

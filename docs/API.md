@@ -434,4 +434,7 @@ HQ serves these tools on the SDK's low-level server
 to `hq/platform/mcp/binding.py`, which validates and calls the handler. Each
 argument model is built from the handler's signature
 (`hq/platform/mcp/declarations.py`), so nothing depends on the SDK's internals,
-and an upgrade is held by the registration and validation tests.
+and an upgrade is held by the registration and validation tests. Each tool's
+entry also carries its annotations: every tool but `execute_capability` is
+`readOnlyHint` and closed-world (`openWorldHint: false`), which a client may use
+to call reads without asking.

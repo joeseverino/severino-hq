@@ -63,6 +63,7 @@ class ToolServer:
                     description=tool.description,
                     input_schema=dict(tool.input_schema),
                     output_schema=tool.output_schema,
+                    annotations=types.ToolAnnotations.model_validate(dict(tool.annotations)),
                 )
                 for tool in self.tools.values()
             ]

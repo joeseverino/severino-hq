@@ -2,6 +2,7 @@
 
 from dataclasses import asdict, dataclass
 from hashlib import sha256
+from typing import Any
 
 from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 
@@ -66,7 +67,7 @@ def claim_resolution_plan(
     )
 
 
-def serialize_workflow(plan: WorkflowPlan | None):
+def serialize_workflow(plan: WorkflowPlan | None) -> dict[str, Any] | None:
     """JSON-safe contract shared by API and MCP finding adapters."""
 
     return asdict(plan) if plan is not None else None

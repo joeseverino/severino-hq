@@ -14,7 +14,7 @@ at `running` forever.
 import threading
 import traceback
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import close_old_connections, connection, transaction
 from django.utils import timezone
@@ -25,6 +25,10 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest, off_request, serving_request
 
 from .models import Job
+
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
+    from django.contrib.auth.models import AnonymousUser
 
 # How often progress reaches the database, at most. Work may report per
 # record; at a few million records the reporting would cost more than the work.
@@ -100,7 +104,7 @@ def start(
     work: Callable[[Progress], dict[str, Any]],
     *,
     actor: str = "",
-    requested_by=None,
+    requested_by: AbstractBaseUser | AnonymousUser | None = None,
     request: dict | None = None,
 ) -> Job:
     """Record the job, then run it on a thread. Returns once recorded.
@@ -108,7 +112,10 @@ def start(
     `work` is called with a `Progress`; whatever it returns is stored as the
     job's result.
     """
-    job = _record(kind, label, actor=actor, requested_by=requested_by, request=request)
+    # Recorded against a person only: nobody signed in is nobody, as an
+    # audit event treats them.
+    person = requested_by if requested_by is not None and requested_by.is_authenticated else None
+    job = _record(kind, label, actor=actor, requested_by=person, request=request)
     thread = threading.Thread(target=_run, args=(job.pk, work), name=f"job:{kind}", daemon=True)
     thread.start()
     return job

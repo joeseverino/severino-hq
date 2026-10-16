@@ -85,3 +85,20 @@ class DocumentToolTests(SimpleTestCase):
             with self.subTest(tool=name), self.assertRaises(ValueError) as error:
                 async_to_sync(tools[name].call)(arguments)
             self.assertNotIn("synthetic-sensitive-input", str(error.exception))
+
+    def test_every_tool_says_whether_it_can_change_anything(self):
+        tools = bind_tools(document())
+
+        changes = {name for name, tool in tools.items() if not tool.annotations["readOnlyHint"]}
+        self.assertEqual(changes, {"execute_capability"})
+        for name, tool in tools.items():
+            with self.subTest(tool=name):
+                # A read stays inside what HQ holds; running a capability may not.
+                self.assertEqual(tool.annotations.get("openWorldHint", True), name == "execute_capability")
+
+    def test_a_tool_that_states_no_annotations_is_refused(self):
+        value = document()
+        del value["x-hq-mcp-tools"]["system_health"]["annotations"]
+
+        with self.assertRaises(ValueError):
+            bind_tools(value)

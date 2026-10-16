@@ -27,6 +27,19 @@ HANDLERS: tuple[Callable[..., Any], ...] = (
     services.dashboard_snapshot,
 )
 
+# The one tool that can change anything: it runs a capability, and a capability
+# may write or reach a provider. Every other tool reads what HQ already holds.
+CHANGES = frozenset({services.execute_capability})
+
+
+def hints(handler: Callable[..., Any]) -> dict[str, bool]:
+    """What a client may assume of a call: the protocol's tool annotations."""
+
+    if handler in CHANGES:
+        return {"readOnlyHint": False}
+    return {"readOnlyHint": True, "openWorldHint": False}
+
+
 # Closed and strict: an argument the handler does not take, or one of the wrong
 # type, is refused rather than dropped or coerced, and the refusal never quotes
 # what was sent.
@@ -59,7 +72,7 @@ def tool_contract(document: dict[str, Any]) -> dict[str, Any]:
             kinds = resources.listable if name == "list_resource" else resources.addressable
             schema["properties"]["name"]["enum"] = [resource.name for resource in kinds]
             description += "\nKinds:\n" + catalogue(kinds)
-        entries[name] = {"description": description, "inputSchema": schema}
+        entries[name] = {"description": description, "inputSchema": schema, "annotations": hints(handler)}
     if len(entries) != len(HANDLERS):
         raise ValueError("MCP handler names must be unique.")
     return entries

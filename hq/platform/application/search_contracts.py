@@ -2,7 +2,12 @@
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from django.db.models import Model
 
 
 def search_lines(value: Any) -> Iterator[str]:
@@ -52,27 +57,27 @@ class SearchDefinition:
     # A property holding readable text for the result; blank uses the indexed body.
     snippet_field: str = ""
 
-    def object_id(self, instance) -> str:
+    def object_id(self, instance: Model) -> str:
         return str(getattr(instance, self.identifier_field))
 
-    def body(self, instance) -> str:
+    def body(self, instance: Model) -> str:
         return "\n".join(line for field in self.fields for line in search_lines(getattr(instance, field, None)))
 
-    def title(self, instance) -> str:
+    def title(self, instance: Model) -> str:
         return str(getattr(instance, self.title_field)) if self.title_field else str(instance)
 
-    def badge(self, instance) -> str:
+    def badge(self, instance: Model) -> str:
         return str(getattr(instance, self.badge_field)) if self.badge_field else ""
 
-    def timestamp(self, instance):
+    def timestamp(self, instance: Model) -> datetime | None:
         return getattr(instance, self.timestamp_field, None)
 
-    def snippet_text(self, instance) -> str:
+    def snippet_text(self, instance: Model) -> str:
         """What a result shows under its title, or "" to cut it from the body."""
 
         if not self.snippet_field:
             return ""
         return " ".join(str(getattr(instance, self.snippet_field, "") or "").split())
 
-    def url(self, instance) -> str:
+    def url(self, instance: Model) -> str:
         return instance.get_absolute_url() if hasattr(instance, "get_absolute_url") else ""

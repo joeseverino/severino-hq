@@ -2100,3 +2100,38 @@ class TestPlacementTests(SimpleTestCase):
             if "tests" not in path.parts and path.name != "test_runner.py"
         )
         self.assertEqual(misplaced, [])
+
+
+class RuntimeDependencyTests(SimpleTestCase):
+    """Every runtime dependency earns its place: host code imports it, or
+    pyproject.toml says why it is installed without being imported."""
+
+    def test_every_runtime_dependency_is_imported_or_explained(self):
+        import ast
+        import importlib.metadata
+        import tomllib
+
+        root = Path(__file__).resolve().parents[4]
+        project = tomllib.loads((root / "pyproject.toml").read_text())
+        explained = set(project["tool"]["severino-hq"]["unimported"])
+        imported: set[str] = set()
+        for package in ("hq", "hq_sdk"):
+            for path in (root / package).rglob("*.py"):
+                if "tests" in path.parts:
+                    continue
+                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                    if isinstance(node, ast.Import):
+                        imported |= {alias.name.split(".")[0] for alias in node.names}
+                    elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                        imported.add(node.module.split(".")[0])
+        providers = importlib.metadata.packages_distributions()
+        used = {distribution.lower() for name in imported for distribution in providers.get(name, ())}
+        declared = {
+            re.split(r"[<>=!~\[ ;]", requirement, maxsplit=1)[0].lower()
+            for requirement in project["project"]["dependencies"]
+        }
+
+        self.assertEqual(sorted(declared - used - explained), [])
+        # A reason for something that is imported, or no longer installed, is stale.
+        self.assertEqual(sorted(explained & used), [])
+        self.assertEqual(sorted(explained - declared), [])

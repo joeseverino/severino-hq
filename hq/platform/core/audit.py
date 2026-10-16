@@ -7,13 +7,13 @@ to the current request user (via CurrentUserMiddleware).
 """
 
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 from uuid import UUID
 
 from django.db.models.signals import post_delete, post_init, post_save
@@ -23,6 +23,12 @@ from . import speculation
 from .facets import as_metadata as facet_metadata
 from .middleware import get_current_user
 from .models import AuditLog
+
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
+    from django.db.models import Model, QuerySet
+
+    from .facets import Facet
 
 logger = logging.getLogger("severino.audit")
 
@@ -155,7 +161,7 @@ class OperationContext:
 
 
 @contextmanager
-def operation_context(*, interface: str, actor: str, operation: str, operation_id: str = ""):
+def operation_context(*, interface: str, actor: str, operation: str, operation_id: str = "") -> Iterator[None]:
     """Attach adapter-neutral attribution to audit events in this operation."""
 
     token = _operation_context.set(
@@ -173,7 +179,7 @@ def operation_context(*, interface: str, actor: str, operation: str, operation_i
 
 
 @contextmanager
-def audit_operation(*, operation: str, principal=None, operation_id: str = ""):
+def audit_operation(*, operation: str, principal: object | None = None, operation_id: str = "") -> Iterator[None]:
     """Attribute a plugin operation without restating adapter fallbacks."""
 
     with operation_context(
@@ -186,7 +192,7 @@ def audit_operation(*, operation: str, principal=None, operation_id: str = ""):
 
 
 @contextmanager
-def audit_connection(connection_ref: str):
+def audit_connection(connection_ref: str) -> Iterator[None]:
     """Name the connection the events in this block went through."""
 
     token = _connection_context.set(str(connection_ref or "").strip())
@@ -203,7 +209,7 @@ def audited_labels() -> dict[type, str]:
 
 
 def register_audit(
-    model,
+    model: type[Model],
     type_label: str,
     *,
     redact: Iterable[str] = (),
@@ -292,7 +298,7 @@ def _connection_of(extract: Callable[[Any], str] | None, instance) -> str:
         return ""
 
 
-def audit_events():
+def audit_events() -> QuerySet[AuditLog]:
     """Queryable audit history without exposing the host model as plugin API."""
 
     return AuditLog.objects.all()
@@ -304,12 +310,12 @@ def audit_events():
 def record_event(
     *,
     action: str,
-    obj=None,
+    obj: Model | None = None,
     type_label: str | None = None,
     message: str = "",
     metadata: dict | None = None,
-    facets=(),
-    user=None,
+    facets: Iterable[Facet] = (),
+    user: AbstractBaseUser | None = None,
     required: Literal[True],
     connection: str = "",
 ) -> AuditLog: ...
@@ -319,12 +325,12 @@ def record_event(
 def record_event(
     *,
     action: str,
-    obj=None,
+    obj: Model | None = None,
     type_label: str | None = None,
     message: str = "",
     metadata: dict | None = None,
-    facets=(),
-    user=None,
+    facets: Iterable[Facet] = (),
+    user: AbstractBaseUser | None = None,
     required: bool = False,
     connection: str = "",
 ) -> AuditLog | None: ...
@@ -333,12 +339,12 @@ def record_event(
 def record_event(
     *,
     action: str,
-    obj=None,
+    obj: Model | None = None,
     type_label: str | None = None,
     message: str = "",
     metadata: dict | None = None,
-    facets=(),
-    user=None,
+    facets: Iterable[Facet] = (),
+    user: AbstractBaseUser | None = None,
     required: bool = False,
     connection: str = "",
 ) -> AuditLog | None:
@@ -403,7 +409,7 @@ def record_operation(
     *,
     action: str = AuditLog.Action.UPDATED,
     metadata: dict | None = None,
-    facets=(),
+    facets: Iterable[Facet] = (),
     required: Literal[True],
 ) -> AuditLog: ...
 
@@ -415,7 +421,7 @@ def record_operation(
     *,
     action: str = AuditLog.Action.UPDATED,
     metadata: dict | None = None,
-    facets=(),
+    facets: Iterable[Facet] = (),
     required: bool = False,
 ) -> AuditLog | None: ...
 
@@ -426,7 +432,7 @@ def record_operation(
     *,
     action: str = AuditLog.Action.UPDATED,
     metadata: dict | None = None,
-    facets=(),
+    facets: Iterable[Facet] = (),
     required: bool = False,
 ) -> AuditLog | None:
     """Record one summary event for a bulk or multi-row operation.

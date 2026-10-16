@@ -44,7 +44,7 @@ from .ui import Insight
 SIBLING_PREFIX = "example."
 
 
-def undefined_style_classes(template_root) -> list[str]:
+def undefined_style_classes(template_root: str | Path) -> list[str]:
     """Class names an extension's templates use that the host does not define.
 
     An extension that invents a class gets no error and no styling: the page
@@ -183,7 +183,7 @@ class ComposedPluginTestCase:
 
     siblings: tuple = ()
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._composition = ExitStack()
         self.addCleanup(self._composition.close)

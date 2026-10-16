@@ -51,6 +51,8 @@ class Tool:
     # The document's schema, advertised and enforced; the model is the
     # handler's own signature, which the schema must agree with.
     input_schema: Mapping[str, Any]
+    # The protocol's tool annotations, as the document states them.
+    annotations: Mapping[str, bool]
     arguments: type[BaseModel]
     handler: Callable[..., Any]
     validator: Draft202012Validator = field(init=False)
@@ -94,8 +96,11 @@ def bind_tools(document: dict[str, Any]) -> dict[str, Tool]:
         if not isinstance(description, str) or not description:
             raise ValueError(f"MCP tool {name!r} must have a description.")
         Draft202012Validator.check_schema(schema)
+        annotations = entry.get("annotations")
+        if not isinstance(annotations, dict) or not all(isinstance(value, bool) for value in annotations.values()):
+            raise ValueError(f"MCP tool {name!r} must state its annotations.")
         arguments = argument_model(handler)
         if _signature_shape(schema) != _signature_shape(arguments.model_json_schema(by_alias=True)):
             raise ValueError(f"MCP tool {name!r} schema disagrees with its execution signature.")
-        tools[name] = Tool(name, description, schema, arguments, handler)
+        tools[name] = Tool(name, description, schema, frozendict(annotations), arguments, handler)
     return tools

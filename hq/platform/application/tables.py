@@ -211,7 +211,7 @@ class TableListMixin:
             "querystring": query_params.urlencode(),
         }
 
-    def table_totals_for(self, queryset) -> dict[str, Any]:
+    def table_totals_for(self, queryset: QuerySet[Any]) -> dict[str, Any]:
         """Sum the declared columns over the whole filtered set.
 
         Over the queryset, deliberately, and never over the page. A total that
@@ -232,7 +232,7 @@ class TableListMixin:
             for index, spec in enumerate(self.table_totals)
         }
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         context["table"] = self.table_context()
         # `object_list` is the filtered, ordered queryset before the paginator

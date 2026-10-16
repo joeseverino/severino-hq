@@ -76,4 +76,6 @@ what its owner reads; `hq/platform/core/plain_words.py` holds the words and
 what to say instead), `PostButtonTests` (the shared post button),
 `WorkflowSecrecyTests` (no secret interpolated into a workflow script),
 `ComposedQueueTests` (a domain's attention items and cards reach the shared queue),
-`TestPlacementTests` (every test module is in its package's `tests/`).
+`TestPlacementTests` (every test module is in its package's `tests/`),
+`RuntimeDependencyTests` (every runtime dependency is imported by host code or
+says in `pyproject.toml` why it is installed).
