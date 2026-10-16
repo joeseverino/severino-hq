@@ -3,7 +3,7 @@
 import threading
 import time
 from datetime import UTC, datetime, timedelta
-from typing import override
+from typing import Any, override
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
@@ -493,22 +493,24 @@ class KeeperThreadTests(TransactionTestCase):
         # The window opened again for the write that landed in it, then closed.
         self.assertEqual(keeper._woken.waits, 2)
         self.assertFalse(keeper._woken.is_set())
-        self.assertFalse(keeper._woken_again())
-        keeper.wake()
-        self.assertTrue(keeper._woken_again())
-        self.assertFalse(keeper._woken_again())
 
-    def test_a_write_during_a_pass_is_answered_before_a_waiting_request_is_let_go(self):
-        passes = []
+    def test_while_writes_keep_landing_each_pass_waits_longer_for_them_to_settle(self):
+        keeper = ahead._Keeper()
 
-        def more():
-            passes.append(derivations._NO_PASS.is_set())
-            return len(passes) < 3
+        windows = []
+        for _ in range(6):
+            keeper.interrupted(True)
+            windows.append(keeper.within)
+        keeper.interrupted(False)
 
-        derive_ahead(more)
+        self.assertEqual(windows, [1.0, 2.0, 4.0, ahead.SETTLES_LONGEST, ahead.SETTLES_LONGEST, ahead.SETTLES_LONGEST])
+        self.assertEqual(keeper.within, ahead.SETTLES_WITHIN)
 
-        self.assertEqual(passes, [False, False, False])
+    def test_a_pass_is_one_round_and_lets_requests_go_when_it_ends(self):
+        self.assertEqual(derive_ahead(), [])
         self.assertTrue(derivations._NO_PASS.is_set())
+        self.assertEqual(derivations._PASS_ASKED, {})
+        self.assertEqual(derivations._PASS_PENDING, set())
 
     def test_it_waits_for_the_earliest_moment_and_no_less_than_its_rest(self):
         with mock.patch.object(derivations, "next_due", return_value=None):
@@ -751,3 +753,177 @@ class OneThreadDerivesTests(TransactionTestCase):
         self.assertEqual(order, ["slow", "wanted", "early"])
         self.assertEqual(found, [1])
         self.assertEqual(derivations._PASS_STORED, set())
+
+    def test_a_request_stops_waiting_once_the_pass_has_asked_its_question(self):
+        # A write lands while the pass derives, as an import's batches do: the
+        # pass stores the answer under the revisions it began at, which are not
+        # the request's, and goes on to its next question. The request does not
+        # wait for the whole pass to end; it derives its own answer.
+        asked, release = threading.Event(), threading.Event()
+        busy, done = threading.Event(), threading.Event()
+
+        def moved():
+            if derivations.asked_ahead():
+                asked.set()
+                release.wait(10)
+            return _readings()
+
+        def next_question():
+            if derivations.asked_ahead():
+                busy.set()
+                done.wait(10)
+            return _readings()
+
+        with (
+            declared("test.flight.moved", reads=(READING,)) as (register_moved, _),
+            declared("test.flight.next", reads=(READING,)) as (register_next, _calls),
+        ):
+            read = register_moved(moved)
+            other = register_next(next_question)
+            with projection_scope():
+                read()
+                other()
+            _write()
+
+            def run_pass():
+                try:
+                    derive_ahead()
+                finally:
+                    connection.close()
+
+            passing = threading.Thread(target=run_pass)
+            passing.start()
+            try:
+                self.assertTrue(asked.wait(10))
+                _write("two")
+                found: list[int] = []
+                asking = self._ask_from_another_thread(read, found)
+                deadline = time.monotonic() + 10
+                while not derivations._WANTED["test.flight.moved"] and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                started = time.monotonic()
+                release.set()
+                self.assertTrue(busy.wait(10))
+                asking.join(derivations.WAITS)
+                waited = time.monotonic() - started
+            finally:
+                release.set()
+                done.set()
+                passing.join(10)
+
+        self.assertEqual(found, [2])
+        self.assertLess(waited, derivations.WAITS / 2)
+
+
+class WaitsOnlyForThePassTests(TransactionTestCase):
+    """A request waits for the pass only where the pass will answer it."""
+
+    def setUp(self):
+        derivations.forget()
+        self.addCleanup(derivations.forget)
+
+    def _passing(self):
+        def run_pass():
+            try:
+                derive_ahead()
+            finally:
+                connection.close()
+
+        thread = threading.Thread(target=run_pass)
+        thread.start()
+        return thread
+
+    def _asked(self, read) -> tuple[list[Any], float]:
+        found: list[Any] = []
+
+        def ask():
+            try:
+                with projection_scope():
+                    found.append(read())
+            finally:
+                connection.close()
+
+        started = time.monotonic()
+        thread = threading.Thread(target=ask)
+        thread.start()
+        thread.join(derivations.WAITS * 2)
+        return found, time.monotonic() - started
+
+    def _busy(self, signal: threading.Event, release: threading.Event):
+        def read():
+            if derivations.asked_ahead():
+                signal.set()
+                release.wait(10)
+            return _readings()
+
+        return read
+
+    def test_a_question_the_pass_will_not_ask_is_not_waited_for(self):
+        busy, release = threading.Event(), threading.Event()
+        with (
+            declared("test.waits.busy", reads=(READING,)) as (register_busy, _),
+            declared("test.waits.unasked", reads=(READING,)) as (register_unasked, _calls),
+        ):
+            first = register_busy(self._busy(busy, release))
+            unasked = register_unasked(_readings)
+            with projection_scope():
+                first()
+            _write()
+            passing = self._passing()
+            try:
+                self.assertTrue(busy.wait(10))
+                found, waited = self._asked(unasked)
+            finally:
+                release.set()
+                passing.join(10)
+
+        self.assertEqual(found, [1])
+        self.assertLess(waited, derivations.WAITS / 2)
+
+    def test_a_question_that_fails_in_the_pass_lets_its_waiter_go(self):
+        asked, release = threading.Event(), threading.Event()
+
+        def failing():
+            if derivations.asked_ahead():
+                asked.set()
+                release.wait(10)
+                raise ValueError("the pass could not answer")
+            return _readings()
+
+        with declared("test.waits.failing", reads=(READING,)) as (register, _calls):
+            read = register(failing)
+            with projection_scope():
+                read()
+            _write()
+            passing = self._passing()
+            found: list[Any] = []
+
+            def ask():
+                try:
+                    with projection_scope():
+                        found.append(read())
+                finally:
+                    connection.close()
+
+            try:
+                self.assertTrue(asked.wait(10))
+                # A write lands, so the request waits on the pass, not on the
+                # derivation in flight under the key it began at.
+                _write("two")
+                asking = threading.Thread(target=ask)
+                asking.start()
+                deadline = time.monotonic() + 10
+                while not derivations._WANTED["test.waits.failing"] and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                with self.assertLogs("severino.derivations", level="ERROR"):
+                    started = time.monotonic()
+                    release.set()
+                    asking.join(derivations.WAITS)
+                    waited = time.monotonic() - started
+                    passing.join(10)
+            finally:
+                release.set()
+                passing.join(10)
+
+        self.assertEqual(found, [2])
+        self.assertLess(waited, derivations.WAITS / 2)

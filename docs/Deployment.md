@@ -36,6 +36,17 @@ self-hosted runner. The runner dials out to GitHub; nothing inbound is opened.
 To redeploy or roll back, run **Deploy** with the commit to put back. To
 rebuild the current set, run **Compose**.
 
+A release that fails is undone whole. Its boot keeps a copy of the database
+before migrating it (`manage.py boot_migrate`, at the path `hq-host run-web`
+names), and the rollback stops HQ, puts that copy back and starts the previous
+image on the schema it was built with; what the failed release wrote is lost
+with it. A rollback by hand, to a release that already stood, keeps the
+schema the newer release left: nothing unapplies a migration. So a migration is
+one the release before it can run on (add a table or a column with a default,
+remove one only in a later release), or that rollback starts from a backup
+([Backup](Backup.md)). `scripts/host-boot-drill.sh` deploys a migrating
+release that cannot serve and proves the previous one comes back on its schema.
+
 ### Checked once
 
 When a pull request merges, the push to `main` asks
@@ -139,7 +150,7 @@ from the tree, and every unit and the deploy call it.
 | `run-web` | runs the web container (`severino-hq-web.service`); waits for the rendered environment, notifies systemd once HQ is healthy |
 | `controller [--apply]` | one controller pass: plan, or claim and apply queued work |
 | `deploy IMAGE` | verifies the signature, pulls, and hands over to the image's own `hq-host release` |
-| `release IMAGE` | syncs the tree, installs the web unit, restarts HQ on the image, then `install`; rolls back on any failure |
+| `release IMAGE` | syncs the tree, installs the web unit, restarts HQ on the image, then `install`; rolls back on any failure, the database with it when the release migrated it |
 | `install` | installs every shipped unit, renders secrets, preflights the controller and the content index, enables every timer and path |
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
 | `verify` | reports where the host differs from its release: tree, units, and anything retired (`severino-hq-script-drift.timer`, daily) |

@@ -1,6 +1,7 @@
 # Structural Gate
 
-The gate retains the executable near-duplicate baseline and largest-file limits.
+The gate retains the executable near-duplicate baseline; file size is
+`FileSizeTests`, a fixed ceiling in the suite.
 Source-derived classifications remove only these forms from the executable-pair
 check; there are no pair, symbol, or source-path exemption lists.
 

@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,13 +21,13 @@ var backupSettings = []string{
 func (m *Machine) Backup(ctx context.Context, getenv func(string) string) error {
 	at := map[string]string{}
 	for _, volume := range Volumes {
-		out, err := m.Command(ctx, "docker", "volume", "inspect", "--format", "{{.Mountpoint}}", volume.Name).Output()
+		mountpoint, err := m.mountpoint(ctx, volume)
 		if err != nil {
-			return fmt.Errorf("docker knows no volume %s", volume.Name)
+			return err
 		}
-		at[volume.Target] = strings.TrimSpace(string(out))
+		at[volume.Target] = mountpoint
 	}
-	database := filepath.Join(at["/data"], "severino.sqlite3")
+	database := filepath.Join(at["/data"], Database)
 	if _, err := os.Stat(database); err != nil {
 		return fmt.Errorf("there is no database at %s to back up", database)
 	}
@@ -43,4 +44,24 @@ func (m *Machine) Backup(ctx context.Context, getenv func(string) string) error 
 	}
 	command.Stdout, command.Stderr = m.Out, m.Out
 	return command.Run()
+}
+
+// mountpoint is where docker keeps a volume on this host.
+func (m *Machine) mountpoint(ctx context.Context, volume Volume) (string, error) {
+	out, err := m.Command(ctx, "docker", "volume", "inspect", "--format", "{{.Mountpoint}}", volume.Name).Output()
+	if err != nil {
+		return "", fmt.Errorf("docker knows no volume %s", volume.Name)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// schemaSnapshot is where a boot keeps the database before migrating it.
+func (m *Machine) schemaSnapshot(ctx context.Context) (string, error) {
+	for _, volume := range Volumes {
+		if volume.Target == "/data" {
+			data, err := m.mountpoint(ctx, volume)
+			return filepath.Join(data, SchemaSnapshot), err
+		}
+	}
+	return "", errors.New("HQ declares no data volume")
 }

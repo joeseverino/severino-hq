@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 # Severino HQ container entrypoint.
 #
-# - Applies any pending migrations on boot.
+# - Applies any pending migrations on boot, keeping the database first where
+#   the host says, so a release that fails can put it back.
 # - Then exec's whatever CMD was passed (Uvicorn by default).
 #
 # Static assets and bytecode are the image's, made when it was built.
@@ -22,7 +23,7 @@ if [ -n "${TMPDIR:-}" ] && [ "${TMPDIR}" != /tmp ]; then
 fi
 
 echo "[severino-hq] applying migrations…"
-python manage.py migrate --noinput
+python manage.py boot_migrate
 
 # A new image is the moment production changes what it runs, so delivery is
 # read now rather than found later. Best effort: nothing about serving may

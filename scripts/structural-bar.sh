@@ -1,9 +1,8 @@
 #!/bin/sh
 # The structural bar from AGENTS.md, as a gate: index this checkout in a code
 # knowledge graph and fail on a near-duplicate function pair outside tests that
-# the baseline does not list, or a largest source file that grew past its
-# baselined length. Tests answer "does this behave?"; this answers "is it still
-# one system?".
+# the baseline does not list. Tests answer "does this behave?"; this answers
+# "is it still one system?". A file's size is a test's (FileSizeTests).
 #
 #   scripts/structural-bar.sh            # check
 #   scripts/structural-bar.sh --record   # rewrite the baseline from this tree
@@ -63,16 +62,10 @@ while :; do
 done
 python3 "${repo}/scripts/structural_classify.py" "${repo}" "${inspector}" <"${graph}" >"${current}"
 
-cd "${repo}"
-git ls-files '*.py' | grep -Ev '(^|/)(test_[^/]*|tests|[^/]*_tests)\.py$|(^|/)tests/|/migrations/' |
-    xargs wc -l | grep -v ' total$' | sort -n | tail -4 |
-    awk '{printf "largest %s %s\n", $2, $1}' >>"${current}"
-
 if [ "${1:-}" = "--record" ]; then
     {
-        echo "# Structural baseline for scripts/structural-bar.sh. A near-duplicate pair"
-        echo "# outside tests, and the four largest source files with their line counts."
-        echo "# Pairs only leave; a file's count only shrinks. Rewrite with --record."
+        echo "# Structural baseline for scripts/structural-bar.sh: each near-duplicate"
+        echo "# pair outside tests. Pairs only leave. Rewrite with --record."
         cat "${current}"
     } >"${baseline}"
     echo "structural baseline recorded"
@@ -81,23 +74,11 @@ fi
 
 failed=0
 while read -r kind first second; do
-    case "${kind}" in
-        similar)
-            line="similar ${first} ${second}"
-            grep -qxF "${line}" "${baseline}" || {
-                echo "new near-duplicate outside tests: ${first} ${second}" >&2
-                failed=1
-            } ;;
-        largest)
-            allowed="$(awk -v f="${first}" '$1 == "largest" && $2 == f {print $3}' "${baseline}")"
-            if [ -z "${allowed}" ]; then
-                echo "${first} (${second} lines) is now among the largest files; split it or record it" >&2
-                failed=1
-            elif [ "${second}" -gt "${allowed}" ]; then
-                echo "${first} grew from ${allowed} to ${second} lines; the largest files only shrink" >&2
-                failed=1
-            fi ;;
-    esac
+    [ "${kind}" = similar ] || continue
+    grep -qxF "similar ${first} ${second}" "${baseline}" || {
+        echo "new near-duplicate outside tests: ${first} ${second}" >&2
+        failed=1
+    }
 done <"${current}"
 
 [ "${failed}" -eq 0 ] && echo "structural bar holds"

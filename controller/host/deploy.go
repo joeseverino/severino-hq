@@ -162,9 +162,19 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		return err
 	}
 	defer os.RemoveAll(tree)
+	kept, err := d.schemaSnapshot(ctx)
+	if err != nil {
+		d.restart(held)
+		return err
+	}
+	// One left by an earlier release is not the database this one finds.
+	if err := os.Remove(kept); err != nil && !errors.Is(err, os.ErrNotExist) {
+		d.restart(held)
+		return err
+	}
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, d.rollBack(strings.TrimSpace(string(previous)), tree, units, held))
+			err = errors.Join(err, d.rollBack(strings.TrimSpace(string(previous)), tree, units, kept, held))
 		}
 	}()
 
@@ -189,6 +199,10 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		return err
 	}
 	d.restart(held)
+	// The release stands, so the copy is not needed; the backups hold that state.
+	if err := os.Remove(kept); err != nil && !errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintf(d.Out, "The database kept before migrating is still at %s: %v\n", kept, err)
+	}
 	fmt.Fprintf(d.Out, "Deployed %s.\n", image)
 	return nil
 }
@@ -209,13 +223,44 @@ func (d *Deployer) installWebUnit(ctx context.Context) error {
 	return d.run(ctx, "systemctl", "daemon-reload")
 }
 
-func (d *Deployer) rollBack(previous, tree string, units func() error, held []string) error {
+func (d *Deployer) rollBack(previous, tree string, units func() error, kept string, held []string) error {
 	ctx := context.Background()
 	fmt.Fprintf(d.Out, "Restoring %s.\n", previous)
-	errs := []error{d.Record(previous), d.restoreTree(tree), units()}
-	errs = append(errs, d.run(ctx, "systemctl", "daemon-reload"), d.run(ctx, "systemctl", "restart", WebUnit))
+	errs := []error{d.Record(previous), d.restoreTree(tree), units(), d.run(ctx, "systemctl", "daemon-reload")}
+	// The previous image knows only the schema it was built with, so the
+	// database goes back first; an error here leaves HQ stopped, not running
+	// on a schema it cannot read.
+	if err := d.restoreSchema(ctx, kept); err != nil {
+		errs = append(errs, err)
+	} else {
+		errs = append(errs, d.run(ctx, "systemctl", "restart", WebUnit))
+	}
 	d.restart(held)
 	return errors.Join(errs...)
+}
+
+// restoreSchema puts back the database a boot of the failed release kept
+// before migrating it. What that release wrote after its boot is discarded:
+// it never became healthy.
+func (d *Deployer) restoreSchema(ctx context.Context, kept string) error {
+	if _, err := os.Stat(kept); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err := d.run(ctx, "systemctl", "stop", WebUnit); err != nil {
+		return fmt.Errorf("could not stop HQ to restore its database: %w", err)
+	}
+	database := filepath.Join(filepath.Dir(kept), Database)
+	if err := os.Rename(kept, database); err != nil {
+		return err
+	}
+	// The log of the migrated database is not this one's.
+	for _, log := range []string{database + "-wal", database + "-shm"} {
+		if err := os.Remove(log); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	fmt.Fprintln(d.Out, "Restored the database as it was before the release migrated it.")
+	return nil
 }
 
 // hold stops every timer and path unit the tree ships that is active, so

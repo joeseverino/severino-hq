@@ -16,10 +16,11 @@ import traceback
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from django.db import close_old_connections, connection, transaction
+from django.db import IntegrityError, close_old_connections, connection, transaction
 from django.utils import timezone
 
 from hq.platform.core.audit import operation_context, record_event
+from hq.platform.core.database import gives_way
 from hq.platform.core.facets import Counts, Failure, Timing
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest, off_request, serving_request
@@ -47,7 +48,7 @@ class Progress:
         self._last = 0.0
         self._note = ""
 
-    def __call__(self, note: str = "", percent: int | None = None, *, force=False):
+    def __call__(self, note: str = "", percent: int | None = None, *, force: bool = False) -> None:
         now = timezone.now()
         # A changed note always writes. The limit is for a step repeating
         # itself, not for the work moving on: swallowing the transition
@@ -84,18 +85,24 @@ class Failed(RuntimeError):
 
 
 def _record(kind, label, *, actor, requested_by, request) -> Job:
+    # Recorded against a person only: nobody signed in is nobody, as an
+    # audit event treats them.
+    person = requested_by if requested_by is not None and requested_by.is_authenticated else None
     try:
         with transaction.atomic():
             return Job.objects.create(
                 kind=kind,
                 label=label,
                 actor=actor,
-                requested_by=requested_by,
+                requested_by=person,
                 request=request or {},
                 state=Job.State.QUEUED,
             )
-    except Exception as exc:  # unique constraint: one live job per kind
-        raise JobConflict(f"A {kind} job is already running.") from exc
+    except IntegrityError as exc:
+        # The one-live-job rule, and only that: any other refusal is itself.
+        if Job.objects.filter(kind=kind, state__in=(Job.State.QUEUED, Job.State.RUNNING)).exists():
+            raise JobConflict(f"A {kind} job is already running.") from exc
+        raise
 
 
 def start(
@@ -112,13 +119,28 @@ def start(
     `work` is called with a `Progress`; whatever it returns is stored as the
     job's result.
     """
-    # Recorded against a person only: nobody signed in is nobody, as an
-    # audit event treats them.
-    person = requested_by if requested_by is not None and requested_by.is_authenticated else None
-    job = _record(kind, label, actor=actor, requested_by=person, request=request)
-    thread = threading.Thread(target=_run, args=(job.pk, work), name=f"job:{kind}", daemon=True)
-    thread.start()
+    job = _record(kind, label, actor=actor, requested_by=requested_by, request=request)
+    # Once the row is committed: a thread has a connection of its own, which
+    # cannot see a job an enclosing transaction has not committed yet.
+    _after_commit(lambda: _launch(job, work))
     return job
+
+
+# Where a job's start waits for its row to be committed; held_jobs answers it
+# at once, since a test's transaction never commits.
+_after_commit = transaction.on_commit
+
+
+def _launch(job: Job, work: Callable[[Progress], dict[str, Any]]) -> None:
+    """Start the job's thread; a thread that cannot start ends the job failed."""
+
+    try:
+        threading.Thread(target=_run, args=(job.pk, work), name=f"job:{job.kind}", daemon=True).start()
+    except RuntimeError as exc:
+        ended = timezone.now()
+        _audit(job, AuditLog.Action.FAILED, "could not start", {"error": str(exc)}, ended)
+        Job.objects.filter(pk=job.pk).update(state=Job.State.FAILED, error=f"Could not start: {exc}", finished_at=ended)
+        raise
 
 
 def run(
@@ -127,7 +149,7 @@ def run(
     work: Callable[[Progress], dict[str, Any]],
     *,
     actor: str = "",
-    requested_by=None,
+    requested_by: AbstractBaseUser | AnonymousUser | None = None,
     request: dict | None = None,
 ) -> Job:
     """Record the job and run it to its end on the calling thread.
@@ -170,11 +192,16 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=
     # Around the whole try/except, not inside each branch: a
     # `@contextmanager` is a single-use generator, and a second `with` would
     # raise on the failure path.
-    with operation_context(
-        interface="job",
-        actor=job.actor or "local-operator",
-        operation=job.kind,
-        operation_id=str(job.pk),
+    # An import writes transaction after transaction; this lets the
+    # controller's report and a person saving a form have the lock between them.
+    with (
+        gives_way(),
+        operation_context(
+            interface="job",
+            actor=job.actor or "local-operator",
+            operation=job.kind,
+            operation_id=str(job.pk),
+        ),
     ):
         # The audit row is written before the state changes, both ways round:
         # anything that sees a job finished can rely on the record of how it
@@ -278,7 +305,7 @@ def reap(kind: str | None = None) -> int:
     job only blocks the next job of its kind, so the moment somebody looks is
     when the answer is needed.
     """
-    live = Job.objects.filter(state=Job.State.RUNNING).select_related("requested_by")
+    live = Job.objects.filter(state__in=(Job.State.QUEUED, Job.State.RUNNING)).select_related("requested_by")
     if kind:
         live = live.filter(kind=kind)
     lost = [job for job in live if job.is_stale]
@@ -292,7 +319,7 @@ def reap(kind: str | None = None) -> int:
             job,
             AuditLog.Action.FAILED,
             "was lost",
-            {"last_said": job.note, "last_beat": job.heartbeat_at.isoformat()},
+            {"last_said": job.note, "last_beat": job.heartbeat_at.isoformat() if job.heartbeat_at else None},
             ended,
         )
     return Job.objects.filter(pk__in=[job.pk for job in lost]).update(

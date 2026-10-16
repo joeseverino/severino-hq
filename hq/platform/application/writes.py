@@ -112,7 +112,7 @@ class ServiceWriteMixin:
     def write_principal(self) -> Principal:
         return web_principal(self.request.user)
 
-    def current_identity(self) -> Any:
+    def current_identity(self) -> object:
         return getattr(self.get_object(), self.identity_attr)
 
     # The record is the subclass's own model, which this mixin cannot name.

@@ -27,6 +27,9 @@ type fakeHost struct {
 	running string
 	out     bytes.Buffer
 	machine *Machine
+	// boot is what starting the web unit does to the host, as an image's
+	// entrypoint would.
+	boot func()
 }
 
 // program is what each command an install or a deploy runs does here: it is
@@ -36,6 +39,9 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 	f.mu.Lock()
 	f.log = append(f.log, call)
 	f.mu.Unlock()
+	if f.boot != nil && call == "systemctl restart "+WebUnit {
+		f.boot()
+	}
 	answer := func(out string, code int) *exec.Cmd {
 		return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"; exit "$2"`, "sh", out, strconv.Itoa(code))
 	}

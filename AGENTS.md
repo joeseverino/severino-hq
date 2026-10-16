@@ -174,7 +174,11 @@ same review, and should fail when its path matches nothing rather than pass.
 - The shape of `hq_sdk` is committed in `hq_sdk/contract.json` and a test holds
   the exports to it. A change there is a fleet change: regenerate with
   `manage.py sdk_contract`, review the diff, and decide whether
-  `PLUGIN_API_VERSION` moves.
+  `PLUGIN_API_VERSION` moves. What the annotations promise is held from an
+  extension's side by `tests/sdk_consumer/consumer.py`, which mypy checks: a
+  valid call pins its return with `assert_type`, and a call an extension must
+  not make carries the `# type: ignore[code]` mypy must report for it. Give a
+  new export a case there; an annotation that slides to `Any` fails it.
 - The machine API's OpenAPI 3.2 document is derived (`hq/platform/api/openapi.py`) and
   served at `/api/v2/openapi.json`; `hq/platform/api/hq-api.openapi.json` is the host's
   copy for clients. Regenerate it with `manage.py api_openapi` after changing a
@@ -268,7 +272,6 @@ so ask a graph. With the repository indexed in a code knowledge graph, ask:
 | Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` | no new executable pair outside tests; AST classifications below |
 | Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | every hit bounded by a fixed or small input |
 | Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | no new confirmed cycle |
-| Is one file becoming the system? | `git ls-files '*.py' \| grep -v test \| xargs wc -l \| sort -n \| tail -4` | the largest files do not grow; split by provider before adding one |
 
 Write the queries exactly as given, and mind two traps in this engine.
 `is_test` is **not** reliable: test classes carry `is_test: false`, so a filter
@@ -280,9 +283,11 @@ exclude test paths by eye.
 Re-index after a change and re-run them; a result that moved the wrong way is a
 finding whether or not the suite is green.
 
-`scripts/structural-bar.sh` runs the duplicate and largest-file checks as a
-gate (`checks:structural`, part of `mise run ci`) against
-`scripts/structural-baseline.txt`. Index
+`scripts/structural-bar.sh` runs the duplicate check as a gate
+(`checks:structural`, part of `mise run ci`) against
+`scripts/structural-baseline.txt`. File size is a test, not a graph question:
+`FileSizeTests` holds every source file under 1,000 lines: a file grows freely
+below that and is split by responsibility past it. Index
 the checkout you work in before asking the graph anything; a worktree is its
 own checkout.
 

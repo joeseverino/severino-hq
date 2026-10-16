@@ -65,7 +65,8 @@ package.
 Rules that hold for every change, not a domain in particular; the class docstring
 is the rule. `StyleContractTests` and `SharedPrimitiveStyleTests` (CSS, tokens,
 layers, spacing, colour), `TemplateCommentTests` (what a `{# #}` comment left open is),
-`CognitiveComplexityTests` (score 20 per function), `CommentHistoryTests` (comments
+`CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
+file past 1,000 lines), `CommentHistoryTests` (comments
 describe the present), `AssertionPrecisionTests` (`assertEqual(a, b)`, not
 `assertTrue(a == b)`), `SourceEscapeTests` (no invalid string escapes),
 `CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,

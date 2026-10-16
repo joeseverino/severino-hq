@@ -24,7 +24,7 @@ from annotationlib import Format
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import BaseModel, ConfigDict
@@ -33,6 +33,10 @@ from .asks import FAILED, Ask, Standing, job_standing
 from .contracts import DOTTED_NAME
 from .integration_specs import CapabilitySpec
 from .security import Principal
+
+if TYPE_CHECKING:
+    from hq.domains.jobs.models import Job
+    from hq.domains.jobs.runner import Progress
 
 # What outbound work may be: a change somewhere else, never a read of HQ.
 EFFECTS = frozenset({"remote_write", "destructive", "infrastructure_change"})
@@ -191,7 +195,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> d
     if reason:
         return {"ok": False, "error": {"code": "precondition", "message": reason}}
 
-    def job_work(progress: Any) -> dict[str, Any]:
+    def job_work(progress: Progress) -> dict[str, Any]:
         return work.run(progress, subject=subject, principal=principal) or {}
 
     waited = principal.interface == "cli"
@@ -226,7 +230,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> d
     return {"ok": True, "started": True, "job": str(job.pk), "message": standing.note, "result": job.result}
 
 
-def run_now(name: str, subject: str = "", *, principal: Principal) -> Any:
+def run_now(name: str, subject: str = "", *, principal: Principal) -> Job:
     """Do declared work to its end on the calling thread, and return its job.
 
     For a command a timer runs: the same job row, one-at-a-time rule and audit
@@ -289,7 +293,7 @@ def ask(
     again. Work that ended well stands idle: the page shows what it stored.
     """
 
-    from django.urls import reverse
+    from .routes import reverse
 
     work = _named(name)
     job = last_job(name, subject)

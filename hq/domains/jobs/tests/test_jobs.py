@@ -78,6 +78,53 @@ class JobRunnerTests(TransactionTestCase):
         self.assertEqual(signed_in.requested_by, person)
         self.assertIsNone(signed_out.requested_by)
 
+    def test_a_job_started_inside_a_transaction_runs_once_it_commits(self):
+        from django.db import transaction
+
+        with transaction.atomic():
+            job = start("test.later", "Later", lambda progress: {"rows": 1})
+            # Not yet: its thread could not see the row.
+            self.assertEqual(Job.objects.get(pk=job.pk).state, Job.State.QUEUED)
+
+        self.assertEqual(self.wait(job).state, Job.State.SUCCEEDED)
+
+    def test_a_thread_that_cannot_start_ends_the_job_failed(self):
+        from unittest import mock
+
+        with (
+            mock.patch("hq.domains.jobs.runner.threading.Thread.start", side_effect=RuntimeError("no threads")),
+            self.assertRaises(RuntimeError),
+        ):
+            start("test.nothread", "No thread", lambda progress: {})
+
+        job = Job.objects.get(kind="test.nothread")
+        self.assertEqual(job.state, Job.State.FAILED)
+        self.assertIn("no threads", job.error)
+        # The kind is free again: a job that never ran does not hold it.
+        self.assertEqual(self.wait(start("test.nothread", "Again", lambda progress: {})).state, Job.State.SUCCEEDED)
+
+    def test_a_database_failure_is_not_called_a_conflict(self):
+        from unittest import mock
+
+        from django.db import IntegrityError
+
+        with (
+            mock.patch.object(Job.objects, "create", side_effect=IntegrityError("disk I/O error")),
+            self.assertRaises(IntegrityError),
+        ):
+            start("test.broken", "Broken", lambda progress: {})
+
+    def test_a_queued_job_whose_process_stopped_is_reaped(self):
+        job = Job.objects.create(kind="test.orphan", label="Orphan")
+        Job.objects.filter(pk=job.pk).update(created_at=timezone.now() - HEARTBEAT_GRACE - timedelta(seconds=1))
+
+        self.assertEqual(reap(), 1)
+
+        job.refresh_from_db()
+        self.assertEqual(job.state, Job.State.LOST)
+        # And the kind can run again.
+        self.assertEqual(self.wait(start("test.orphan", "Again", lambda progress: {})).state, Job.State.SUCCEEDED)
+
     def test_how_it_ended_is_audited_and_attributed(self):
         user = get_user_model().objects.create_user("operator", password="x" * 14)
         job = self.wait(start("test.audited", "Audited", lambda p: {"rows": 3}, requested_by=user))

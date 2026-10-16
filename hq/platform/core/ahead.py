@@ -15,7 +15,11 @@ when the earliest remembered answer's moment comes.
 Writes that land together are one change: the pass starts once none has landed
 for a moment. Writes that land while it is deriving are answered by one more
 pass, not one each: a pass asks only what does not stand at the revisions it
-reads, so a question is derived at most once per state of its tables.
+reads, so a question is derived at most once per state of its tables. While
+writes keep landing (an import), what a pass derives is unsettled before it is
+read, so each pass waits twice as long for them to settle, up to
+``SETTLES_LONGEST``, and a request derives what it asks for itself, as it would
+with no pass at all. The first pass that nothing interrupts restores the wait.
 
 A request and the pass never derive side by side, where each would run at half
 speed. A request that is deriving for itself goes first, and the pass waits
@@ -54,6 +58,8 @@ RESTS = 1.0
 # for this long, in seconds, and no later than ``SETTLES_WITHIN`` after the first.
 SETTLES = 0.05
 SETTLES_WITHIN = 0.5
+# The longest that wait grows to while writes keep landing during passes.
+SETTLES_LONGEST = 5.0
 # How long stopping waits for a pass in flight, in seconds.
 STOPS_WITHIN = 5.0
 
@@ -68,6 +74,8 @@ class _Keeper:
         # Derive in the caller's thread as soon as it is woken: for a test,
         # whose rows another thread's connection cannot see.
         self.inline = False
+        # How long the next pass may wait for writes to settle.
+        self.within = SETTLES_WITHIN
 
     def wake(self) -> None:
         if self.inline:
@@ -97,29 +105,27 @@ class _Keeper:
             # before the pass and released after it, as the request signals would.
             close_old_connections()
             try:
-                derivations.derive_ahead(self._woken_again)
+                derivations.derive_ahead()
             except Exception:  # the next pass tries again
                 logger.exception("ahead.pass_failed")
             finally:
                 close_old_connections()
+            self.interrupted(self._woken.is_set())
+
+    def interrupted(self, written: bool) -> None:
+        """A pass ended, with or without writes landing while it derived."""
+
+        self.within = min(self.within * 2, SETTLES_LONGEST) if written else SETTLES_WITHIN
 
     def _settle(self) -> None:
-        """Wait until no write has landed for ``SETTLES``."""
+        """Wait until no write has landed for ``SETTLES``, or for ``within``."""
 
-        latest = monotonic() + SETTLES_WITHIN
+        latest = monotonic() + self.within
         while monotonic() < latest:
             self._woken.clear()
             if not self._woken.wait(SETTLES) or self._stopping.is_set():
                 return
         self._woken.clear()
-
-    def _woken_again(self) -> bool:
-        """Whether a write landed since the pass began; asked once per pass."""
-
-        if not self._woken.is_set() or self._stopping.is_set():
-            return False
-        self._woken.clear()
-        return True
 
     @staticmethod
     def _pause() -> float | None:

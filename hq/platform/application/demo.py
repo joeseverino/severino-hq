@@ -32,7 +32,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any
 
 from .money import quantize_money, to_money
 
@@ -119,7 +118,7 @@ def _fraction(key: str, stream: str = "") -> float:
 DEMO_MAX_DIGITS = 4
 
 
-def amount(value: Any, *, key: str) -> Decimal:
+def amount(value: object, *, key: str) -> Decimal:
     """A stand-in with the same sign, or the real value.
 
     Small amounts keep their size, because the shape of a page depends on it:
@@ -142,7 +141,7 @@ def amount(value: Any, *, key: str) -> Decimal:
     return quantize_money(-stand_in if real < 0 else stand_in)
 
 
-def label(value: Any, *, key: str) -> str:
+def label(value: object, *, key: str) -> str:
     """A stable stand-in name, or the real one.
 
     Two neutral words rather than a scrambled original: a partially masked name
@@ -166,7 +165,7 @@ def label(value: Any, *, key: str) -> str:
 _DAY_OFFSET = timedelta(days=int(_fraction("calendar", "day") * 90) - 45)
 
 
-def day(value: Any, *, key: str = "") -> Any:
+def day[T](value: T, *, key: str = "") -> T:
     """The date, moved with every other date, or the real one.
 
     Shifted rather than invented so the shape survives: what falls due before

@@ -36,6 +36,7 @@ func (w Web) Args() []string {
 		"--env", "TMPDIR=/data/tmp",
 		"--env", "SEVERINO_CONTROLLER_DOORBELL=" + RunDir + "/controller-doorbell",
 		"--env", "SEVERINO_BRIDGE_SOCKET=" + BridgeSocket,
+		"--env", "SEVERINO_SCHEMA_SNAPSHOT=/data/" + SchemaSnapshot,
 	}
 	for _, volume := range Volumes {
 		args = append(args, "--mount", "type=volume,source="+volume.Name+",target="+volume.Target)

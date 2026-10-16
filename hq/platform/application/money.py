@@ -12,6 +12,7 @@ re-derives the quantize with ``Decimal("0.01")`` gets the other rounding mode.
 """
 
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import overload
 
 CENTS = Decimal("0.01")
 
@@ -19,6 +20,16 @@ CENTS = Decimal("0.01")
 def quantize_money(value: Decimal) -> Decimal:
     """Round to cents, half away from zero."""
     return value.quantize(CENTS, rounding=ROUND_HALF_UP)
+
+
+@overload
+def to_money(value: object, default: Decimal) -> Decimal:
+    pass
+
+
+@overload
+def to_money(value: object, default: None = None) -> Decimal | None:
+    pass
 
 
 def to_money(value: object, default: Decimal | None = None) -> Decimal | None:

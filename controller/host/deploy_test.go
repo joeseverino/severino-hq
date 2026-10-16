@@ -252,3 +252,90 @@ func TestNoRecordedReleaseNoDeploy(t *testing.T) {
 		t.Error("touched the host with nothing to roll back to")
 	}
 }
+
+// data is the fake data volume, where the database and its kept copy live.
+func (f *fakeHost) data() string {
+	dir := filepath.Join(f.root, "volumes", "severino-hq_severino_data")
+	os.MkdirAll(dir, 0o755)
+	return dir
+}
+
+func TestAReleaseThatMigratedAndFailedPutsTheDatabaseBack(t *testing.T) {
+	f := newFakeHost(t)
+	f.machine.Record(running)
+	database := filepath.Join(f.data(), Database)
+	os.WriteFile(database, []byte("previous schema"), 0o600)
+	// The new image's boot keeps the database, migrates it, then never
+	// becomes healthy. The previous image's boot finds nothing to migrate.
+	booted := false
+	f.boot = func() {
+		if booted {
+			return
+		}
+		booted = true
+		data, _ := os.ReadFile(database)
+		os.WriteFile(filepath.Join(f.data(), SchemaSnapshot), data, 0o600)
+		os.WriteFile(database, []byte("migrated schema"), 0o600)
+		os.WriteFile(database+"-wal", []byte("migrated log"), 0o600)
+	}
+	f.fail = []string{"systemctl restart " + WebUnit}
+	d, _ := newDeployer(f)
+
+	if err := d.Release(context.Background(), next); err == nil {
+		t.Fatal("an unhealthy release deployed")
+	}
+
+	if data, _ := os.ReadFile(database); string(data) != "previous schema" {
+		t.Errorf("the previous image was left on %q", data)
+	}
+	for _, gone := range []string{database + "-wal", filepath.Join(f.data(), SchemaSnapshot)} {
+		if _, err := os.Stat(gone); err == nil {
+			t.Errorf("%s was left behind", filepath.Base(gone))
+		}
+	}
+	// Stopped before the database moved, started again only after.
+	calls := strings.Join(f.calls(), "\n")
+	stop := strings.LastIndex(calls, "systemctl stop "+WebUnit)
+	restart := strings.LastIndex(calls, "systemctl restart "+WebUnit)
+	if stop < 0 || restart < stop {
+		t.Errorf("HQ was not stopped while its database was restored:\n%s", calls)
+	}
+}
+
+func TestAReleaseThatFailedWithoutMigratingLeavesTheDatabase(t *testing.T) {
+	f := newFakeHost(t)
+	f.machine.Record(running)
+	database := filepath.Join(f.data(), Database)
+	os.WriteFile(database, []byte("current"), 0o600)
+	// Kept by an earlier release: not the database this one found.
+	os.WriteFile(filepath.Join(f.data(), SchemaSnapshot), []byte("stale"), 0o600)
+	f.fail = []string{"systemctl restart " + WebUnit}
+	d, _ := newDeployer(f)
+
+	if err := d.Release(context.Background(), next); err == nil {
+		t.Fatal("an unhealthy release deployed")
+	}
+
+	if data, _ := os.ReadFile(database); string(data) != "current" {
+		t.Errorf("the database became %q", data)
+	}
+	if f.called("systemctl stop " + WebUnit) {
+		t.Error("HQ was stopped with no database to restore")
+	}
+}
+
+func TestAReleaseThatStandsDropsTheDatabaseItKept(t *testing.T) {
+	f := newFakeHost(t)
+	f.machine.Record(running)
+	kept := filepath.Join(f.data(), SchemaSnapshot)
+	f.boot = func() { os.WriteFile(kept, []byte("before"), 0o600) }
+	d, _ := newDeployer(f)
+
+	if err := d.Release(context.Background(), next); err != nil {
+		t.Fatalf("%v\n%s", err, f.out.String())
+	}
+
+	if _, err := os.Stat(kept); err == nil {
+		t.Error("the database kept before migrating outlived the release")
+	}
+}

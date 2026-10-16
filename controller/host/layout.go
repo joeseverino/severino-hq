@@ -96,6 +96,13 @@ var Volumes = []Volume{
 	{"severino-hq_severino_bridge", "/run/hq-bridge"},
 }
 
+// On the data volume: the database, and the copy of it a boot keeps before
+// changing its schema, which a release that fails puts back.
+const (
+	Database       = "severino.sqlite3"
+	SchemaSnapshot = Database + ".before-migrate"
+)
+
 // pinned is an image reference that names its content: a repository and an
 // optional tag, then the digest. A tag alone could be moved under a host.
 var pinned = regexp.MustCompile(`^[a-z0-9]+(?:[._/-][a-z0-9]+)*(?::[0-9]+)?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}$`)

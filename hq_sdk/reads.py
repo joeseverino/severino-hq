@@ -63,9 +63,9 @@ from hq.platform.application.derivations import (
 from hq.platform.application.projection import day_span, read_once
 
 
-def derivation[T](
+def derivation[**P, T](
     name: str, *, reads: tuple[str, ...], vary: Callable[..., Any] | None = None
-) -> Callable[[Callable[..., T]], Callable[..., T]]:
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Declare an extension's function as a derived fact of the tables it reads.
 
     The host's own, declared as one whose reads of the clock it cannot see.

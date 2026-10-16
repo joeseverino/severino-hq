@@ -137,3 +137,60 @@ sudo systemctl restart severino-hq-web.service || fail "Rollback: the previous r
 curl --fail --silent --max-time 5 http://127.0.0.1:8000/health/ready/ >/dev/null \
   || fail "Rollback: the unit is active but HQ does not answer."
 echo "Rollback: a release that cannot serve failed its start, and the previous one came back."
+
+# A release that changes the schema, then cannot serve: its boot keeps the
+# database before migrating, and a rollback puts that back (as hq-host's
+# restoreSchema does) so the previous release runs on the schema it knows.
+data=$(sudo docker volume inspect --format '{{.Mountpoint}}' severino-hq_severino_data)
+# One number read from the database on the data volume.
+query() {
+  sudo docker run --rm --mount type=volume,source=severino-hq_severino_data,target=/data \
+    --entrypoint python "$pinned" -c 'import sqlite3, sys
+from contextlib import closing
+with closing(sqlite3.connect("/data/severino.sqlite3")) as db:
+    print(db.execute(sys.argv[1]).fetchone()[0])' "$1"
+}
+migrated() { [ "$(query "SELECT count(*) FROM sqlite_master WHERE name = 'drill_schema_change'")" = 1 ]; }
+applied() { query "SELECT count(*) FROM django_migrations"; }
+context=$(mktemp -d)
+latest=$(sudo docker run --rm --entrypoint sh "$pinned" -c 'ls hq/platform/core/migrations | grep -E "^[0-9]{4}_.*\.py$" | sort | tail -n 1')
+cat >"$context/9999_drill_schema_change.py" <<EOF
+from django.db import migrations
+
+
+class Migration(migrations.Migration):
+    dependencies = [("core", "${latest%.py}")]
+    operations = [migrations.RunSQL("CREATE TABLE drill_schema_change (id integer)")]
+EOF
+cat >"$context/Dockerfile" <<EOF
+FROM $pinned
+COPY 9999_drill_schema_change.py hq/platform/core/migrations/
+HEALTHCHECK --interval=2s --timeout=2s --retries=1 CMD ["false"]
+EOF
+sudo docker build --quiet --tag localhost:5000/severino-hq:migrating "$context" >/dev/null
+rm -rf "$context"
+sudo docker push --quiet localhost:5000/severino-hq:migrating >/dev/null
+migrating=$(registry_digest localhost:5000/severino-hq:migrating)
+sudo systemctl stop severino-hq-web.service
+before=$(applied)
+# As Release does: a copy an earlier boot kept (the first boot kept the empty
+# database) is not this release's, and restoring it would restore nothing.
+sudo rm -f "$data/severino.sqlite3.before-migrate"
+printf '%s\n' "$migrating" | sudo tee /var/lib/severino-hq/release >/dev/null
+if sudo systemctl restart severino-hq-web.service; then
+  fail "Schema rollback: a release that cannot serve started."
+fi
+sudo systemctl stop severino-hq-web.service
+sudo test -f "$data/severino.sqlite3.before-migrate" \
+  || fail "Schema rollback: the release migrated without keeping the database first."
+migrated || fail "Schema rollback: the release did not migrate, so the drill proves nothing."
+sudo mv "$data/severino.sqlite3.before-migrate" "$data/severino.sqlite3"
+sudo rm -f "$data/severino.sqlite3-wal" "$data/severino.sqlite3-shm"
+if migrated || [ "$(applied)" != "$before" ]; then
+  fail "Schema rollback: the database kept before migrating is not the one the release found."
+fi
+printf '%s\n' "$pinned" | sudo tee /var/lib/severino-hq/release >/dev/null
+sudo systemctl restart severino-hq-web.service || fail "Schema rollback: the previous release did not come back."
+curl --fail --silent --max-time 5 http://127.0.0.1:8000/health/ready/ >/dev/null \
+  || fail "Schema rollback: the unit is active but HQ does not answer."
+echo "Schema rollback: a release that migrated and could not serve was undone, schema and all."

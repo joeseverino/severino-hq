@@ -1,0 +1,193 @@
+"""HQ's own work: the units it ships and its credentials renderers, as the
+``host.unit`` and ``host.render_status`` readings of its machine say."""
+
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from typing import Any
+
+from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
+
+from ..projection import read_once
+from ..timestamps import moment
+from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, iso
+
+
+@dataclass(frozen=True, slots=True)
+class Job:
+    """One unit HQ ships, as its own work: what it runs, when and how it last
+    ran, and when it runs next."""
+
+    unit: str
+    runs: str
+    last_run: datetime | None
+    result: str
+    tone: str
+    next_run: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Renderer:
+    """One credentials renderer's account of its own runs."""
+
+    name: str
+    result: str
+    tone: str
+    attempted: datetime | None = None
+    succeeded: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Work:
+    """The ``host.unit`` and ``host.render_status`` readings, or why not."""
+
+    jobs: tuple[Job, ...] = ()
+    renderers: tuple[Renderer, ...] = ()
+    read_at: datetime | None = None
+    # Why the units could not be read, in a sentence; "" when they were.
+    unread: str = ""
+    renderers_unread: str = ""
+
+    @property
+    def services(self) -> tuple[Job, ...]:
+        """What keeps running rather than running on a schedule: the unit that
+        serves HQ is one of these."""
+
+        return tuple(job for job in self.jobs if job.next_run is None and job.result == "Running")
+
+
+def work() -> Work:
+    """The units HQ ships and its credentials renderers, as last read."""
+
+    return read_once("hq_context.work", _work)
+
+
+def _work() -> Work:
+    from ..facts import stored_snapshots
+
+    stored = stored_snapshots()
+    units = next(iter(stored.get(UNIT_KIND, ())), None)
+    renders = next(iter(stored.get(RENDER_STATUS_KIND, ())), None)
+    jobs, unread = _jobs(units)
+    renderers, renderers_unread = _renderers(renders)
+    return Work(
+        jobs=jobs,
+        renderers=renderers,
+        read_at=units.observed_at if units is not None and units.connected else None,
+        unread=unread,
+        renderers_unread=renderers_unread,
+    )
+
+
+def _unread(snapshot: Any, noun: str) -> str:
+    """Why a reading of HQ's own machine says nothing, or ""."""
+
+    if snapshot is None:
+        return f"No controller has reported {noun} yet."
+    if not snapshot.connected:
+        return f"The controller on HQ's machine is not given {noun} to read."
+    if not snapshot.reachable:
+        reason = f": {snapshot.error}" if snapshot.error else "."
+        return f"The controller could not read {noun}{reason}"
+    if snapshot.error and not snapshot.records:
+        return f"The controller's answer about {noun} could not be understood."
+    return ""
+
+
+def _jobs(snapshot: Any) -> tuple[tuple[Job, ...], str]:
+    from ..unit_findings import unit_state
+
+    unread = _unread(snapshot, "HQ's background jobs")
+    if unread:
+        return (), unread
+    units = [unit_state(record) for record in snapshot.records or () if isinstance(record, dict)]
+    by_name = {unit.unit: unit for unit in units}
+    started = {unit.activates for unit in units if unit.starter}
+    jobs = [_scheduled(unit, by_name.get(unit.activates)) for unit in units if unit.starter]
+    jobs.extend(_standing(unit) for unit in units if not unit.starter and unit.unit not in started)
+    return tuple(sorted(jobs, key=lambda job: job.unit)), ""
+
+
+def _runs(unit: str) -> str:
+    """What a unit runs, in the words HQ has for it: the scheduled work an
+    instance of the job template names, else the unit's own name."""
+
+    from ..scheduled_work import SCHEDULED
+
+    instance = unit.partition("@")[2].rpartition(".")[0]
+    return next((work.label for work in SCHEDULED if instance and work.name == instance), unit)
+
+
+def _scheduled(starter: Any, target: Any) -> Job:
+    """A timer or path, as the work it starts."""
+
+    result, tone = _result(starter) if target is None or starter.absent else _result(target)
+    return Job(
+        unit=starter.unit,
+        runs=_runs(starter.activates) if starter.activates else "Nothing",
+        last_run=moment(starter.last_trigger_at) or (moment(target.started_at) if target is not None else None),
+        result=result,
+        tone=tone,
+        next_run=moment(starter.next_elapse_at),
+    )
+
+
+def _standing(unit: Any) -> Job:
+    result, tone = _result(unit)
+    return Job(unit=unit.unit, runs=_runs(unit.unit), last_run=moment(unit.started_at), result=result, tone=tone)
+
+
+def _result(unit: Any) -> tuple[str, str]:
+    """How a unit's last run went, in words, and its tone."""
+
+    if unit.absent:
+        return unit.absent, SERIOUS
+    if unit.failed:
+        return f"Failed: {unit.result or 'unknown'}", SERIOUS
+    if unit.active in ("activating", "reloading"):
+        return "Running now", NEUTRAL
+    if unit.active == "active" and unit.sub == "running":
+        return "Running", GOOD
+    if unit.condition == "no":
+        return "Skipped: its condition did not hold", NEUTRAL
+    if unit.result == "success":
+        return "Succeeded", GOOD
+    if unit.result:
+        return f"Ended: {unit.result}", ATTENTION
+    return ("Waiting", GOOD) if unit.starter else ("Not run since the machine started", NEUTRAL)
+
+
+def _renderers(snapshot: Any) -> tuple[tuple[Renderer, ...], str]:
+    from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering
+
+    unread = _unread(snapshot, "how credentials were refreshed")
+    if unread:
+        return (), unread
+    found = []
+    for record in snapshot.records or ():
+        if not isinstance(record, dict):
+            continue
+        run = rendering(record, snapshot.observed_at)
+        if run.reason:
+            result, tone = UNREAD_REASONS.get(run.reason, run.reason), ATTENTION
+        elif run.failed:
+            result, tone = f"Failed: {FAILURE_CLASSES.get(run.failure, UNKNOWN_FAILURE)}", SERIOUS
+        else:
+            result, tone = ("Refreshed" if run.outcome == "rendered" else "Already current"), GOOD
+        found.append(Renderer(run.name, result, tone, moment(run.attempted_at), moment(run.confirmed_at)))
+    return tuple(found), ""
+
+
+def _plain(row: Job | Renderer) -> dict[str, Any]:
+    """A row of words and moments as JSON: every field, each moment in ISO 8601."""
+
+    return {name: iso(value) if isinstance(value, datetime) else value for name, value in asdict(row).items()}
+
+
+def work_json(work: Work) -> dict[str, Any]:
+    return {
+        "read_at": iso(work.read_at),
+        "unread": work.unread,
+        "jobs": [_plain(job) for job in work.jobs],
+        "credentials_unread": work.renderers_unread,
+        "credentials": [_plain(item) for item in work.renderers],
+    }

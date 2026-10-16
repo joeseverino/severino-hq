@@ -1869,18 +1869,45 @@ class CognitiveComplexityTests(SimpleTestCase):
         self.assertEqual(over, {}, "split these into named steps")
 
 
+class FileSizeTests(SimpleTestCase):
+    """No source file is longer than ``LIMIT`` lines.
+
+    A file grows freely below it; one past it is split by responsibility.
+    Tests and migrations are not counted.
+    """
+
+    LIMIT = 1000
+    ROOT = Path(__file__).resolve().parents[4]
+
+    def test_no_source_file_exceeds_the_ceiling(self):
+        sizes = {
+            str(path.relative_to(self.ROOT)): len(path.read_text(encoding="utf-8").splitlines())
+            for path in source_files(self.ROOT, "*.py")
+            if not path.name.startswith("test")
+            and not path.name.endswith("_tests.py")
+            and not {"tests", "migrations", "node_modules"} & set(path.relative_to(self.ROOT).parts)
+        }
+        self.assertGreater(len(sizes), 100, "the walk found almost nothing; its root is wrong")
+        over = {path: lines for path, lines in sizes.items() if lines > self.LIMIT}
+        self.assertEqual(over, {}, "split these by responsibility")
+
+
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 
     def test_the_application_resolves_routes_through_its_one_owner(self):
         root = Path(__file__).resolve().parents[4]
+        modules = [
+            path
+            for package in ("hq/platform/application", "hq/domains/control_plane")
+            for path in (root / package).rglob("*.py")
+            if "tests" not in path.parts and path.name != "routes.py"
+        ]
+        self.assertGreater(len(modules), 50, "the walk found almost nothing; its packages are not where it looks")
         offenders = [
             str(path.relative_to(root))
-            for package in ("application", "control_plane")
-            for path in (root / package).rglob("*.py")
-            if "tests" not in path.parts
-            and path.name != "routes.py"
-            and re.search(r"django\.urls import[^\n]*\breverse\b", path.read_text(encoding="utf-8"))
+            for path in modules
+            if re.search(r"django\.urls import[^\n]*\breverse\b", path.read_text(encoding="utf-8"))
         ]
 
         self.assertEqual(offenders, [], "import reverse from application.routes")

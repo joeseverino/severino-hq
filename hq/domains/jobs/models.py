@@ -104,10 +104,14 @@ class Job(models.Model):
 
     @property
     def is_stale(self) -> bool:
-        """Running, but nothing has been heard from it for too long."""
-        if self.state != self.State.RUNNING or self.heartbeat_at is None:
-            return False
-        return timezone.now() - self.heartbeat_at > HEARTBEAT_GRACE
+        """Live, but nothing has been heard from it for too long: running with
+        no heartbeat since, or queued and never started (the process that
+        recorded it stopped before its thread ran)."""
+        if self.state == self.State.RUNNING and self.heartbeat_at is not None:
+            return timezone.now() - self.heartbeat_at > HEARTBEAT_GRACE
+        if self.state == self.State.QUEUED:
+            return timezone.now() - self.created_at > HEARTBEAT_GRACE
+        return False
 
     @property
     def duration_seconds(self) -> float | None:

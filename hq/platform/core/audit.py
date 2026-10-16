@@ -318,7 +318,8 @@ def record_event(
     user: AbstractBaseUser | None = None,
     required: Literal[True],
     connection: str = "",
-) -> AuditLog: ...
+) -> AuditLog:
+    pass
 
 
 @overload
@@ -333,7 +334,8 @@ def record_event(
     user: AbstractBaseUser | None = None,
     required: bool = False,
     connection: str = "",
-) -> AuditLog | None: ...
+) -> AuditLog | None:
+    pass
 
 
 def record_event(
@@ -411,7 +413,8 @@ def record_operation(
     metadata: dict | None = None,
     facets: Iterable[Facet] = (),
     required: Literal[True],
-) -> AuditLog: ...
+) -> AuditLog:
+    pass
 
 
 @overload
@@ -423,7 +426,8 @@ def record_operation(
     metadata: dict | None = None,
     facets: Iterable[Facet] = (),
     required: bool = False,
-) -> AuditLog | None: ...
+) -> AuditLog | None:
+    pass
 
 
 def record_operation(

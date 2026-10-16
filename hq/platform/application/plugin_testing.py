@@ -37,7 +37,7 @@ from .plugins import (
     PluginManifest,
     clear_plugin_composition_cache,
 )
-from .ui import Insight
+from .ui import DomainOverview, Insight
 
 # Deliberately not a name any real extension would take. A synthetic sibling
 # that collided with a real id would silently displace it.
@@ -82,7 +82,7 @@ def sibling(
     name: str = "Alpha",
     cards: Iterable[dict[str, Any]] = (),
     attention: Iterable[Insight] = (),
-    overview: Any = None,
+    overview: DomainOverview | None = None,
     **manifest_fields: Any,
 ) -> tuple[PluginManifest, PluginIntegration]:
     """One synthetic extension: a manifest plus what it reports.

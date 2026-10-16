@@ -22,10 +22,10 @@ from django.contrib import messages
 from django.core import signing
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
-from django.urls import reverse
 from django.utils import timezone
 
 from .moments import duration
+from .routes import reverse
 
 IDLE = "idle"
 QUEUED = "queued"

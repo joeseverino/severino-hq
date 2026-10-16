@@ -486,7 +486,7 @@ def stored_name(value: str, *, principal: Principal) -> str:
     return link.label if link is not None else reference.identity
 
 
-def authored(value: Any, *, principal: Principal) -> str:
+def authored(value: object, *, principal: Principal) -> str:
     """A reference as a person wrote it, as the one HQ stores.
 
     A person names a kind by its noun: ``domain:example.com`` for a zone, and
@@ -510,7 +510,7 @@ def authored(value: Any, *, principal: Principal) -> str:
     return str(Reference(kind, reference.identity))
 
 
-def as_stored(value: Any) -> tuple[str, str]:
+def as_stored(value: object) -> tuple[str, str]:
     """``(reference, name)`` to store for one a person wrote outside HQ.
 
     For a sync that copies records in: it has no viewer, and what it copies
@@ -561,7 +561,7 @@ def bind(form: forms.BaseForm, *, principal: Principal) -> None:
 class ReferencePickerMixin:
     """For a view of a form with a reference on it: its pickers offer what this viewer may choose."""
 
-    def get_form(self, form_class: Any = None) -> Any:
+    def get_form(self, form_class: type[forms.BaseForm] | None = None) -> forms.BaseForm:
         from .security import web_principal
 
         form = super().get_form(form_class)

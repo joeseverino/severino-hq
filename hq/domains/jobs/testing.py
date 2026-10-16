@@ -41,5 +41,9 @@ class HeldJobs:
 @contextmanager
 def held_jobs() -> Iterator[HeldJobs]:
     held = HeldJobs()
-    with mock.patch.object(runner.threading, "Thread", held._thread):
+    # As a request leaves it: committed, so the job's start is held at once.
+    with (
+        mock.patch.object(runner, "_after_commit", lambda launch: launch()),
+        mock.patch.object(runner.threading, "Thread", held._thread),
+    ):
         yield held

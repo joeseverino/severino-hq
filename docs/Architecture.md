@@ -64,7 +64,7 @@ every adapter:
 | A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | `derived` on the `infrastructure.resources` detail |
 | The tailnet page | `tailnet_context.py` | the `tailnet` resource |
 | The connections page | `connection_context.py` | the `connection.standing` resource |
-| HQ's own page: release, machine and container, units, readings, problems | `hq_context.py` | the `hq` resource |
+| HQ's own page: release, machine and container, units, readings, problems | `hq_context/` (`release`, `work`, `sight`, composed in `__init__`) | the `hq` resource |
 | How HQ reaches a connection: network, machine, tailnet peering | `connection_reach.py` | inside `connection.standing` |
 | Days left on anything | `expiry.py` | every page that says it |
 
@@ -185,6 +185,39 @@ is listed under "Not benched". An empty database hides every cost that grows
 with rows, which is why the bench seeds first. Timings move with the machine;
 query counts do not, so compare two trees back to back and read the counts
 first.
+
+### A page while HQ writes
+
+SQLite has one write lock, so the cost that matters is a page's while
+something else writes. `manage.py bench_contention` seeds the same estate and
+browses every page from several threads twice: alone, then beside the two
+writers production has, the controller's report (`--sweep-every` seconds) and
+an import job run by the runner, batches back to back. It times every
+statement, so it reports the lock waits behind each page, report and batch
+against the busy timeout, what each writes, derivations, and the slowest pages.
+
+```bash
+DJANGO_STATIC_ROOT=/tmp/hq-static python manage.py bench_contention
+python manage.py bench_contention --no-ahead --seconds 10
+```
+
+Three rules keep a page from waiting on a writer:
+
+- A request stores an answer it derived only if the write lock is free
+  (`database.without_waiting`). It already has the answer; the pass stores it
+  once the writer commits.
+- SQLite keeps no queue for its write lock. A waiting connection retries every
+  100 ms, and a job that begins its next transaction within a millisecond of
+  the last would win every time, so a job lets go after each second of
+  writing (`database.gives_way`, applied by the runner to every job).
+- A request waits on the derive-ahead pass only for a question the pass has
+  yet to ask, and only until it has asked it. While writes keep landing during
+  passes, the pass waits longer for them to settle (`ahead.SETTLES_LONGEST`),
+  since what it derives would be unsettled before anyone read it.
+
+Measured on 2026-10-16 (an M3, Python 3.15, four readers, a 500-row import, a
+report every 5 s): during the import, page p95 1.1 s, and the report's worst
+wait for the lock 0.7 s.
 
 A running HQ reports the same per request. Every response carries
 `Server-Timing: app;dur=<ms>`, and the access log line (`severino.request`,

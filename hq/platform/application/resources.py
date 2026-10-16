@@ -458,7 +458,7 @@ def list_resource(
     return result
 
 
-def get_resource(name: str, identifier: Any, *, principal: Principal, strict: bool = True) -> dict[str, Any]:
+def get_resource(name: str, identifier: object, *, principal: Principal, strict: bool = True) -> dict[str, Any]:
     spec = _resource(name)
     _authorize(spec, principal)
     if not spec.detail_handler or not spec.identifier:
