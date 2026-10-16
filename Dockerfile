@@ -4,8 +4,8 @@
 
 # Every stage pins its base by digest; Dependabot bumps it on these lines.
 # uv comes from its own image, as in composition/Dockerfile.
-FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 AS uv
-FROM python:3.14-slim-bookworm@sha256:c8137f4c460908c8763f281c8f22c431eb5c538514ba9553fc3a89c06b7cfb88 AS build
+FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
+FROM python:3.15-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc79de952555b8a474e1d0a5d53 AS build
 COPY --from=uv /uv /usr/local/bin/uv
 # The cache mount and /install are different filesystems, so files are copied.
 ENV UV_COMPILE_BYTECODE=1 \
@@ -47,7 +47,7 @@ RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq
     && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-host ./cmd/hq-host
 
 
-FROM python:3.14-slim-bookworm@sha256:c8137f4c460908c8763f281c8f22c431eb5c538514ba9553fc3a89c06b7cfb88 AS runtime
+FROM python:3.15-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc79de952555b8a474e1d0a5d53 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base

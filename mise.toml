@@ -448,11 +448,11 @@ set -eu
 '''
 
 [tasks."image:verify:python"]
-description = "It runs Python 3.14 without package managers"
+description = "It runs Python 3.15 without package managers"
 depends = ["image:build"]
 run = '''
 docker run --rm --entrypoint python "${IMAGE:-severino-hq:ci-local}" -c \
-    "import importlib.util, shutil, sys; sys.exit(0 if sys.version_info[:2] == (3, 14) and importlib.util.find_spec('pip') is None and shutil.which('pip') is None and shutil.which('uv') is None else 1)"
+    "import importlib.util, shutil, sys; sys.exit(0 if sys.version_info[:2] == (3, 15) and importlib.util.find_spec('pip') is None and shutil.which('pip') is None and shutil.which('uv') is None else 1)"
 '''
 
 [tasks."image:verify:healthy"]

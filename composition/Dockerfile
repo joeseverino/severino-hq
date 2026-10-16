@@ -12,8 +12,8 @@
 ARG HQ_IMAGE=scratch
 # The installer uses the same Python ABI as HQ. uv is pinned to the toolchain
 # version and to the Linux amd64 image digest used by the composition runner.
-FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 AS uv
-FROM python:3.14-slim-bookworm@sha256:c8137f4c460908c8763f281c8f22c431eb5c538514ba9553fc3a89c06b7cfb88 AS installer-base
+FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
+FROM python:3.15-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc79de952555b8a474e1d0a5d53 AS installer-base
 COPY --from=uv /uv /usr/local/bin/uv
 # Every wheel an installer of this base installs carries its bytecode, as the
 # host's own packages do: the image is read-only to the account HQ runs as.

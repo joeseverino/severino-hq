@@ -374,7 +374,7 @@ docker compose run --rm app python manage.py createsuperuser
 docker compose up -d
 ```
 
-The host and composed images run Python 3.14. The host installs its locked
+The host and composed images run Python 3.15. The host installs its locked
 dependencies in a build stage; composition installs hash-verified extension
 wheels in a separate installer stage. Neither production image contains pip or
 uv.
