@@ -506,36 +506,9 @@ if RUNNING_TESTS:
 
     _enforce_warning_policy(BASE_DIR)
 
-    # Tests upload receipts and write exports as real files. Without this they
-    # landed in var/ inside the working tree. One directory each per run, made by
-    # the process that starts it and inherited by parallel workers through the
-    # environment, removed when the run ends. An explicit setting still wins.
-    import atexit as _atexit
-    import shutil as _shutil
+    from hq.config.sandbox import isolate as _isolate_test_run
 
-    for _variable, _kind in (
-        ("SEVERINO_MEDIA_ROOT", "media"),
-        ("SEVERINO_EXPORTS_ROOT", "exports"),
-    ):
-        if _variable not in os.environ:
-            os.environ[_variable] = tempfile.mkdtemp(prefix=f"severino-test-{_kind}-")
-            _atexit.register(_shutil.rmtree, os.environ[_variable], True)
-
-    # The markers default beside the database, and the test database sits in
-    # the shared temporary directory: there a heartbeat one run wrote decides
-    # whether the next run's controller is arriving, silent or never seen, and
-    # macOS keeps that directory where a CI runner starts empty. Each run's
-    # markers start unwritten, in a directory of its own.
-    _markers = os.environ.get("SEVERINO_TEST_MARKERS") or tempfile.mkdtemp(prefix="severino-test-markers-")
-    if "SEVERINO_TEST_MARKERS" not in os.environ:
-        os.environ["SEVERINO_TEST_MARKERS"] = _markers
-        _atexit.register(_shutil.rmtree, _markers, True)
-    for _variable, _marker in (
-        ("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat"),
-        ("SEVERINO_CONTROLLER_DOORBELL", "controller-doorbell"),
-        ("SEVERINO_ACTIVITY_MARKER", "hq-activity"),
-    ):
-        os.environ.setdefault(_variable, str(Path(_markers) / _marker))
+    _isolate_test_run()
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
