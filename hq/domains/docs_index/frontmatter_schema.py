@@ -10,7 +10,7 @@ Do not hand-edit ``schema.json``: regenerate it:
 
     severino-vault-mcp schema --json > docs_index/schema.json
 
-Two guards keep it honest (see ``docs_index/tests.py``): one asserts the
+Two guards keep it honest (see ``docs_index/tests/test_docs_index.py``): one asserts the
 committed JSON still matches the installed MCP, the other asserts the
 ``DocumentationRecord`` choice members still cover these sets.
 """

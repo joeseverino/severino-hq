@@ -7,6 +7,7 @@ from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
+from hq.domains.expenses.models import DEFAULT_CATEGORY
 from hq.platform.application.expenses import ExpenseCommand, save_expense
 from hq.platform.application.security import cli_principal
 
@@ -19,7 +20,7 @@ class Command(BaseCommand):
         parser.add_argument("--date", required=True)
         parser.add_argument("--vendor", required=True)
         parser.add_argument("--item", required=True)
-        parser.add_argument("--category", default="miscellaneous")
+        parser.add_argument("--category", default=DEFAULT_CATEGORY)
         parser.add_argument("--cost", required=True)
         parser.add_argument("--business-use", type=int, default=100)
         parser.add_argument("--payment", default="")

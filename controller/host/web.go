@@ -27,25 +27,27 @@ func (w Web) Args() []string {
 		"--memory", "1g",
 		// Checked every 2s while starting, not at the image's 30s interval, so
 		// the unit is ready when HQ is.
-		"--health-start-period", "60s",
+		"--health-start-period", HealthStartPeriod.String(),
 		"--health-start-interval", "2s",
-		"--env", "SEVERINO_DATABASE_PATH=/data/severino.sqlite3",
-		// A request body is spooled whole and an upload written again, so the
-		// temporary space is on the data volume, not the RAM-backed /tmp.
+		// Where the database, uploads and exports live is the image's to say
+		// (Dockerfile). A request body is spooled whole and an upload written
+		// again, so the temporary space is on the data volume, not the
+		// RAM-backed /tmp.
 		"--env", "TMPDIR=/data/tmp",
-		"--env", "SEVERINO_MEDIA_ROOT=/media",
-		"--env", "SEVERINO_EXPORTS_ROOT=/exports",
 		"--env", "SEVERINO_CONTROLLER_DOORBELL=" + RunDir + "/controller-doorbell",
 		"--env", "SEVERINO_BRIDGE_SOCKET=" + BridgeSocket,
 	}
 	for _, volume := range Volumes {
 		args = append(args, "--mount", "type=volume,source="+volume.Name+",target="+volume.Target)
 	}
+	appEnv := "/run/secrets/" + AppEnvName
 	// A bind's source must exist: --mount refuses a missing one instead of
 	// creating a directory where a file belongs.
 	args = append(args,
 		"--mount", "type=bind,source="+RunDir+",target="+RunDir,
-		"--mount", "type=bind,source="+filepath.Join(WebSecretDir, AppEnvName)+",target=/run/secrets/"+AppEnvName+",readonly",
+		"--mount", "type=bind,source="+filepath.Join(WebSecretDir, AppEnvName)+",target="+appEnv+",readonly",
+		// HQ reads its environment from where it is mounted, told here once.
+		"--env", "SEVERINO_APP_ENV_PATH="+appEnv,
 	)
 	// No certificate authority: HQ reads none. Provider HTTPS on the private
 	// network is the controller's, which builds its bundle from the host's store.

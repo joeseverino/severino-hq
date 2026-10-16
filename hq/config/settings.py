@@ -36,12 +36,11 @@ host_apps = import_module("hq.platform.application.domains").host_apps
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-# Production mounts the 1Password-rendered app env (shell-quoted KEY='value'
-# lines) at this path. Loading it here (not only in the entrypoint) means
-# every process in the container gets it, including `docker compose exec`
-# sessions (hq sync / shell / superuser), which never run the entrypoint.
-# setdefault: real environment variables always win.
-_APP_ENV_FILE = Path(os.environ.get("SEVERINO_APP_ENV_PATH", "/run/secrets/severino_hq_env"))
+# The rendered app env (shell-quoted KEY='value' lines), where hq-host mounts
+# it and says so in SEVERINO_APP_ENV_PATH. Loading it here, not only in the
+# entrypoint, gives it to every process in the container, `docker exec`
+# sessions included. setdefault: real environment variables always win.
+_APP_ENV_FILE = Path(os.environ.get("SEVERINO_APP_ENV_PATH") or os.devnull)
 if _APP_ENV_FILE.is_file():
     for _token in shlex.split(_APP_ENV_FILE.read_text(encoding="utf-8")):
         _key, _sep, _value = _token.partition("=")
@@ -540,7 +539,7 @@ LOGIN_REDIRECT_URL = "/"
 # The marker matters. Without it, signing out under SSO-only redirects
 # straight back into a still-valid Pocket ID session and signs the operator
 # back in: a sign-out button that visibly does nothing.
-LOGOUT_REDIRECT_URL = "/accounts/login/?signed_out=1"
+LOGOUT_REDIRECT_URL = f"{LOGIN_URL}?signed_out=1"
 
 # The commit this build is, and the repository it came from: stamped into the
 # image by CI (and set from the checkout by the dev stack). Empty for a build
@@ -601,7 +600,7 @@ OIDC_OP_JWKS_ENDPOINT = f"{OIDC_ISSUER}/.well-known/jwks.json"
 OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
 # Where a sign-in that did not finish lands: the login page, told to stop and
 # say why rather than going straight back to the provider in a loop.
-LOGIN_REDIRECT_URL_FAILURE = "/accounts/login/?sso_failed=1"
+LOGIN_REDIRECT_URL_FAILURE = f"{LOGIN_URL}?sso_failed=1"
 OIDC_USE_PKCE = True
 # Signing in waits on the provider, and nothing waits without a bound: every
 # call the exchange makes (token, keys, userinfo) gives up after this long.

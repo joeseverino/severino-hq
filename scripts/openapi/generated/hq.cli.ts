@@ -3549,6 +3549,38 @@ export const COMMANDS: CliCommand[] = [
     }
   },
   {
+    "group": "hq.self",
+    "name": "listHqV2",
+    "summary": "List HQ",
+    "method": "GET",
+    "path": "/api/v2/resources/hq/",
+    "positionals": [],
+    "flags": [],
+    "schemas": {
+      "response": {
+        "kind": "object",
+        "properties": [
+          {
+            "name": "data",
+            "schema": {
+              "kind": "ref",
+              "name": "ResourceCollection"
+            },
+            "required": true
+          },
+          {
+            "name": "ok",
+            "schema": {
+              "kind": "literal",
+              "value": true
+            },
+            "required": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "group": "hq.infrastructure",
     "name": "listInfrastructureResourcesV2",
     "summary": "List Records",

@@ -7,6 +7,7 @@ from django.test import TestCase
 
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, gather
 from hq.platform.application.dashboard import dashboard_highlights, work_queue
+from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import DERIVATIONS, counting
 from hq.platform.application.domains import (
     all_domains,
@@ -66,6 +67,7 @@ class ComposedTests(ComposedPluginTestCase, TestCase):
 
     def setUp(self):
         super().setUp()
+        self.enterContext(frozen())
         ((manifest, contribution),) = self.siblings
         # The kit's sibling declares no calendar; this one does.
         with_calendar = PluginIntegration(

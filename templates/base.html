@@ -36,7 +36,7 @@
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body data-sign-in="{% url 'login' %}">
   {% comment %}
   The header is a dozen tab stops wide, and better than thirty with the
   sections menu open. Visible only while focused, so it costs a pointer

@@ -889,6 +889,9 @@ export const operationSchemas: {
     listExpensesV2: {
         response: z.ZodType;
     };
+    listHqV2: {
+        response: z.ZodType;
+    };
     listInfrastructureResourcesV2: {
         response: z.ZodType;
     };
@@ -1217,6 +1220,10 @@ export const operationSchemas: {
         ok: z.literal(true)
     }) },
     listExpensesV2: { response: z.object({
+        data: z.lazy(() => ResourceCollectionSchema),
+        ok: z.literal(true)
+    }) },
+    listHqV2: { response: z.object({
         data: z.lazy(() => ResourceCollectionSchema),
         ok: z.literal(true)
     }) },

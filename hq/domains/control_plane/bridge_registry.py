@@ -15,6 +15,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from pydantic import TypeAdapter
+from pydantic.json_schema import JsonSchemaMode
 
 from .connection_shapes import SHAPES
 from .observations import _SPEC_MODULES, OBSERVATIONS
@@ -165,14 +166,14 @@ def components(
     name: str,
     schema: Any,
     *,
-    mode: str = "validation",
+    mode: JsonSchemaMode = "validation",
     description: str = "",
     owner: str = "",
 ) -> dict[str, dict[str, Any]]:
     """One type as component schemas: itself under ``name``, and each type it
     is built from under the owner's name followed by its own."""
 
-    raw = TypeAdapter(schema).json_schema(mode=mode, ref_template=REFERENCE + "{model}")  # type: ignore[arg-type]
+    raw = TypeAdapter(schema).json_schema(mode=mode, ref_template=REFERENCE + "{model}")
     nested = raw.pop("$defs", {})
     prefix = owner or name
     rename = {inner: prefix + inner for inner in nested}

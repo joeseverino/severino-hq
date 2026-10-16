@@ -64,6 +64,7 @@ every adapter:
 | A managed resource's allowed actions, removal mode, machines, services, readout, certificate expiry | `resource_context.py` | `derived` on the `infrastructure.resources` detail |
 | The tailnet page | `tailnet_context.py` | the `tailnet` resource |
 | The connections page | `connection_context.py` | the `connection.standing` resource |
+| HQ's own page: release, machine and container, units, readings, problems | `hq_context.py` | the `hq` resource |
 | How HQ reaches a connection: network, machine, tailnet peering | `connection_reach.py` | inside `connection.standing` |
 | Days left on anything | `expiry.py` | every page that says it |
 

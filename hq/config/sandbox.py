@@ -22,6 +22,9 @@ def _directory(variable: str, kind: str) -> str:
 def isolate() -> None:
     # Tests upload receipts and write exports as real files.
     _directory("SEVERINO_MEDIA_ROOT", "media")
+    # What a test builds to run, such as a controller from this checkout:
+    # this run's, so no build outlives it or is mistaken for a later one's.
+    _directory("SEVERINO_TEST_BUILDS", "builds")
     _directory("SEVERINO_EXPORTS_ROOT", "exports")
     # The controller's markers otherwise sit beside the test database, in the
     # shared temporary directory, where a heartbeat one run wrote decides

@@ -5,7 +5,6 @@ from typing import override
 
 from django.db import models
 from django.urls import reverse
-from django.utils.text import slugify
 
 from hq.platform.application import business_use
 
@@ -14,7 +13,7 @@ from hq.platform.application import business_use
 # which extensions can reach through hq_sdk and a domain app cannot.
 from hq.platform.application.money import quantize_money
 from hq.platform.application.references import CERTIFICATE, Referable, ReferenceField
-from hq.platform.core.models import TimestampedModel
+from hq.platform.core.models import TimestampedModel, free_slug
 
 PAYMENT_METHOD_CHOICES = [
     ("cash", "Cash"),
@@ -101,13 +100,7 @@ class Asset(TimestampedModel):
     @override
     def save(self, *args, **kwargs):
         if not self.slug:
-            base = slugify(self.item_name) or "asset"
-            slug = base
-            n = 2
-            while Asset.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base}-{n}"
-                n += 1
-            self.slug = slug
+            self.slug = free_slug(self, self.item_name, "asset")
         cost = self.total_cost or Decimal("0.00")
         self.estimated_deductible_amount = quantize_money(cost * Decimal(self.business_use_percentage) / Decimal(100))
         super().save(*args, **kwargs)

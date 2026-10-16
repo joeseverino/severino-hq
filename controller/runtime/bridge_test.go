@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -394,22 +395,28 @@ func TestABridgeWithNoSocketNamedIsNotBuilt(t *testing.T) {
 	refusedWith(t, err, "SEVERINO_BRIDGE_SOCKET")
 }
 
-// The budget a per-call process would break: a bridge call is a request on a
-// local socket, so a hundred of them fit in the time one interpreter takes to
-// start.
-const callBudget = 10 * time.Millisecond
-
+// A bridge call is one request on one checked connection, never a process
+// (the test below holds that no file here can start one): counted, not timed,
+// so a loaded machine cannot fail it.
 func TestACallCostsARequestNotAProcess(t *testing.T) {
-	b := served(t, answer(`{"ok": true}`))
+	path := filepath.Join(socketDir(t), "bridge.sock")
+	var opened atomic.Int32
+	server := &http.Server{Handler: answer(`{"ok": true}`), ConnState: func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			opened.Add(1)
+		}
+	}}
+	go server.Serve(listen(t, path))
+	t.Cleanup(func() { server.Close() })
+	b := bridgeAt(t, path)
 	const calls = 200
-	started := time.Now()
 	for range calls {
 		if err := b.Schedule(t.Context(), "example-controller"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if each := time.Since(started) / calls; each > callBudget {
-		t.Fatalf("a bridge call took %s, over the %s budget", each, callBudget)
+	if n := opened.Load(); n != calls {
+		t.Fatalf("%d calls opened %d connections, want one each", calls, n)
 	}
 }
 

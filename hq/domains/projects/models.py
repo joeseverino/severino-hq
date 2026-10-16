@@ -4,10 +4,9 @@ from typing import override
 
 from django.db import models
 from django.urls import reverse
-from django.utils.text import slugify
 
 from hq.platform.application.references import Referable
-from hq.platform.core.models import TimestampedModel
+from hq.platform.core.models import TimestampedModel, free_slug
 
 PROJECT_CATEGORY_CHOICES = [
     ("wordpress_security", "WordPress security"),
@@ -71,13 +70,7 @@ class Project(TimestampedModel):
     @override
     def save(self, *args, **kwargs):
         if not self.slug:
-            base = slugify(self.name) or "project"
-            slug = base
-            n = 2
-            while Project.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base}-{n}"
-                n += 1
-            self.slug = slug
+            self.slug = free_slug(self, self.name, "project")
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:

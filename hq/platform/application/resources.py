@@ -19,6 +19,7 @@ from . import (
     connection_context,
     container_reads,
     derived_reads,
+    hq_context,
     infrastructure,
     resource_context,
     service_list,
@@ -250,6 +251,16 @@ CORE_RESOURCE_SPECS = (
         derived_reads.list_request_path,
         EmptyQuery,
         web_route="connection",
+    ),
+    ResourceSpec(
+        "hq",
+        "HQ",
+        "HQ itself: the release it runs and whether its branch is ahead, the machine and "
+        "container it runs in, its background jobs, what it can read and its open problems.",
+        Capability.READ,
+        hq_context.read_hq,
+        EmptyQuery,
+        web_route="hq_self",
     ),
     ResourceSpec(
         "readings",

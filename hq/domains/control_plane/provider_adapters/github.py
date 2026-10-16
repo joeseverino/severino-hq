@@ -76,7 +76,7 @@ class GitHubDeliverySpec(ProviderModel):
         title="Deploy workflow",
     )
     branch: str = Field(default=MAIN_BRANCH, pattern=r"^[A-Za-z0-9_./-]+$", title="Branch")
-    production: Literal[CURRENT] = Field(  # type: ignore[valid-type]
+    production: Literal[CURRENT] = Field(  # type: ignore[valid-type]  # the shared constant, which mypy reads as a value
         default=CURRENT, title="Production"
     )
 

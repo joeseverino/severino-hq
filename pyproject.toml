@@ -40,6 +40,7 @@ tools = [
     "openapi-spec-validator==0.9.0",
     "ruff==0.17.0",
     "schemathesis==4.30.1",
+    "types-jsonschema==4.26.0.20261006",
     "uv==0.13.1",
 ]
 browser = [
@@ -79,11 +80,11 @@ ignore = [
 "**/forms.py" = ["RUF012"]
 # Test classes hold fixtures as plain class attributes.
 "**/tests/**" = ["RUF012"]
-"**/tests.py" = ["RUF012"]
-"**/test_*.py" = ["RUF012"]
 "hq/platform/core/browser_tests.py" = ["RUF012"]
 # Pydantic copies a field default for each instance.
 "hq/domains/control_plane/observations/*.py" = ["RUF012"]
+# The MCP and bridge modules load models, so they are imported after Django is set up.
+"hq/config/asgi.py" = ["E402"]
 # Runs on the 3.6 interpreter shared hosting ships; newer idioms would not run there.
 "deploy/targets/severino-hq-cpanel-controller" = ["UP", "SIM", "PTH", "PERF", "FURB", "B", "RUF", "C4"]
 
@@ -127,7 +128,7 @@ source = ["."]
 parallel = true
 concurrency = ["multiprocessing", "thread"]
 sigterm = true
-omit = ["*/migrations/*", "*/tests/*", "*/tests.py", "manage.py", "hq/config/*", ".venv/*"]
+omit = ["*/migrations/*", "*/tests/*", "manage.py", "hq/config/*", ".venv/*"]
 
 [tool.coverage.report]
 show_missing = false

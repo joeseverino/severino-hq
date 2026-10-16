@@ -372,7 +372,7 @@ class Standing(StandingWords):
         if self.build is not None and self.build.get("signed"):
             return CURRENT
         if self.repository is not None:
-            return CURRENT if self.repository.production_verified else UNKNOWN
+            return CURRENT if self.repository.deployed_cleanly else UNKNOWN
         if self.unread or not version(self.tag) or self.read_at is None:
             return UNKNOWN
         return CURRENT

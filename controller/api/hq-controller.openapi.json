@@ -3353,7 +3353,7 @@
           "unit": {
             "description": "Id: the unit's name.",
             "maxLength": 255,
-            "pattern": "^[A-Za-z0-9:_.@-]+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
+            "pattern": "^(?:[A-Za-z0-9:_.@-]|\\\\x[0-9a-f]{2})+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
             "type": "string"
           },
           "load": {
@@ -3435,7 +3435,7 @@
             "default": "",
             "description": "Unit: the unit a timer or path starts.",
             "maxLength": 255,
-            "pattern": "^(?:|[A-Za-z0-9:_.@-]+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice))$",
+            "pattern": "^(?:|(?:[A-Za-z0-9:_.@-]|\\\\x[0-9a-f]{2})+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice))$",
             "type": "string"
           },
           "read_at": {

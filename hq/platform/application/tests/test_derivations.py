@@ -19,6 +19,7 @@ from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.platform.application import derivations
+from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import DERIVATIONS, counting, derivation
 from hq.platform.application.expiry import days_until
 from hq.platform.application.projection import projection_scope
@@ -527,6 +528,7 @@ class ActionItemCountTests(TestCase):
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
+        self.enterContext(frozen())
         self.url = reverse("action_item_count")
 
     def test_an_unchanged_count_is_answered_not_modified_from_one_stored_number(self):

@@ -152,7 +152,8 @@ const hqFragment = (() => {
       new DOMParser().parseFromString(policy.createHTML(html), "text/html");
   })();
 
-  const SIGN_IN = "/accounts/login/";
+  // Where an expired session is sent: the page says, from the route itself.
+  const SIGN_IN = document.body.dataset.signIn;
   const POLL_LIMIT_MS = 180_000;
   // What a request in flight is keyed by -> its abort. A newer request for
   // the same thing ends the older one, so answers never land out of order.

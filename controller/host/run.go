@@ -54,7 +54,7 @@ func (r *WebRunner) Run(ctx context.Context) error {
 	// A container left by a crash, or by the compose deployment this
 	// replaces, holds the name. It is stopped as a deploy would stop it,
 	// then removed. Nothing else may run as HQ.
-	_ = r.Docker(ctx, "stop", "--time", "30", Container).Run()
+	_ = r.Docker(ctx, "stop", "--time", StopSeconds, Container).Run()
 	_ = r.Docker(ctx, "rm", "--force", Container).Run()
 
 	// Not ctx: cancelling it would kill the client; the stop below ends HQ.
@@ -82,7 +82,7 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 			return fmt.Errorf("the container stopped on its own: %w", err)
 		case <-ctx.Done():
 			_ = r.Notify("STOPPING=1")
-			_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", "30", Container).Run()
+			_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, Container).Run()
 			<-exited
 			return nil
 		case <-ticker.C:
@@ -99,7 +99,7 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 			case "unhealthy":
 				// Past its start period and failing: the start fails now,
 				// so a deploy of an image that cannot serve rolls back.
-				_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", "30", Container).Run()
+				_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, Container).Run()
 				<-exited
 				return errors.New("HQ did not become healthy")
 			}

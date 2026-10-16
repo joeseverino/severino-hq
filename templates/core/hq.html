@@ -1,0 +1,196 @@
+{% extends "page.html" %}
+{% block page %}
+{% comment %}
+HQ as a subject (application.hq_context): the same projection the `hq`
+resource returns. Each part is one fact HQ already holds, and a part with
+nothing to say is not drawn.
+{% endcomment %}
+{% with release=hq.release container=hq.container machine=hq.machine work=hq.work sight=hq.sight %}
+<p class="muted">
+  <span class="pill pill-{{ hq.status.0 }}">{{ hq.status.1 }}</span>
+  {% if release.revision %} · <code>{{ release.short }}</code>{% endif %}
+  {% if machine %} · on {% entity machine.link %}{% endif %}
+  {% if container %} · {{ container.uptime }}{% endif %}
+</p>
+
+{% with problems=hq.problems %}{% include "partials/_problems.html" %}{% endwith %}
+
+<div class="fact-band">
+  {% for tile in hq.tiles %}
+  <div class="band-fact tone-{{ tile.tone }}">
+    {% if tile.icon %}<span class="band-icon">{% include "partials/_icon.html" with name=tile.icon %}</span>{% endif %}
+    <div>
+      <span class="band-label">{{ tile.label }}</span>
+      <strong>{% if tile.url %}<a href="{{ tile.url }}">{{ tile.value }}</a>{% else %}{{ tile.value }}{% endif %}</strong>
+      {% if tile.detail %}<small>{{ tile.detail }}</small>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<section aria-labelledby="hq-release-heading">
+  <h2 id="hq-release-heading">Release</h2>
+  <div class="table-scroll">
+    <table class="data-table compact-table">
+      <tbody>
+        <tr>
+          <th scope="row">Commit</th>
+          <td>{% if release.commit_url %}<a class="external-link" href="{{ release.commit_url }}" rel="noopener"><code>{{ release.short }}</code></a>{% elif release.revision %}<code>{{ release.short }}</code>{% else %}<span class="muted">This build does not say which commit it is.</span>{% endif %}</td>
+        </tr>
+        {% if release.repository %}{% with repository=release.repository %}
+        <tr>
+          <th scope="row">{{ repository.default_branch|default:"Branch"|capfirst }}</th>
+          <td>
+            {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7" }}</code>, production runs <code>{{ release.deployed|slice:":7" }}</code>
+            {% elif release.behind is False %}Production runs its head, <code>{{ release.head|slice:":7" }}</code>
+            {% else %}<span class="muted">Its head or its production deploy has not been read.</span>{% endif %}
+            {% if release.runs_deployed is False %}<br><strong>This process is not the commit production last deployed.</strong>{% endif %}
+            <br>{% if repository.url|web_url %}<a class="external-link" href="{{ repository.url|web_url }}" rel="noopener">{{ repository.name }}</a>{% else %}{{ repository.name }}{% endif %}{% if repository.observed_at %} <span class="muted">· read {{ repository.observed_at|when:"ago" }}</span>{% endif %}
+          </td>
+        </tr>
+        {% endwith %}{% endif %}
+        {% if release.image %}
+        <tr>
+          <th scope="row">Image</th>
+          <td>
+            <code title="{{ release.image }}">{{ container.standing.image.short }}</code>{% if release.digest %} <span class="muted" tabindex="0" data-tip="{{ release.digest }}">locked to an exact build</span>{% endif %}
+            {% if release.built %}<br><span class="muted">Built {{ release.built|when:"ago" }}</span>{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Signature</th>
+          <td>{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}</td>
+        </tr>
+        <tr>
+          <th scope="row">Vulnerabilities</th>
+          <td>{{ release.vulnerabilities|capfirst }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %} · <a class="external-link" href="{{ repository.url|web_url }}/security" rel="noopener">{% if repository.open_alerts %}{{ repository.open_alerts|counted:"open alert,open alerts" }}{% else %}no open alerts{% endif %}</a>{% endif %}{% endwith %}{% endif %}</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <th scope="row">Extensions</th>
+          <td>{% for name, version in release.extensions %}{{ name }} <span class="muted">{{ version }}</span>{% if not forloop.last %} · {% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if machine %}
+<section aria-labelledby="hq-where-heading">
+  <h2 id="hq-where-heading">Where it runs</h2>
+  <div class="table-scroll">
+    <table class="data-table compact-table">
+      <tbody>
+        <tr><th scope="row">Machine</th><td>{% entity machine.link %} <span class="muted">{{ machine.state.0 }}</span></td></tr>
+        {% if container %}{% with runtime=container.runtime %}
+        <tr>
+          <th scope="row">Container</th>
+          <td><a href="{{ container.url }}">{{ container.running.name }}</a> <span class="muted">{{ container.uptime }}</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Health</th>
+          <td>{{ runtime.health|default:container.running.check|default:container.running.status|capfirst }}{% if runtime %} · {{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}</td>
+        </tr>
+        {% with posture=container.posture %}
+        <tr>
+          <th scope="row">How it is run</th>
+          <td>{{ posture.met }} of {{ posture.measured }} checks met{% for result in posture.unmet %}<br><span class="muted">{{ result.check.label }}</span>{% endfor %}</td>
+        </tr>
+        {% endwith %}
+        {% endwith %}{% else %}
+        <tr><th scope="row">Container</th><td><span class="muted">No container HQ reads is known to be HQ's.</span></td></tr>
+        {% endif %}
+        {% if work.services %}
+        <tr>
+          <th scope="row">Kept running by</th>
+          <td>{% for job in work.services %}<code>{{ job.unit }}</code>{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if hq.request_path %}{% with found=hq.request_path %}
+<section aria-labelledby="hq-reach-heading">
+  <h2 id="hq-reach-heading">How you reached it</h2>
+  <p class="muted">{{ found.connection.channel.label }} · {{ found.proof }}</p>
+  {% include "control_plane/_path_hops.html" with route=found.route label="How this page reached you" %}
+  {% for hop in found.findings %}<p class="notice notice-attention"><strong>{{ hop.label }}</strong> {{ hop.check.detail }} {{ hop.check.step }}</p>{% endfor %}
+</section>
+{% endwith %}{% endif %}
+
+<section aria-labelledby="hq-work-heading">
+  <h2 id="hq-work-heading">Its own work</h2>
+  {% if work.unread %}
+    <p class="notice notice-attention">{{ work.unread }}</p>
+  {% elif work.jobs %}
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Unit</th><th>Runs</th><th>Last run</th><th class="key-col">Result</th><th class="optional-col">Next run</th></tr></thead>
+        <tbody>
+          {% for job in work.jobs %}
+            <tr>
+              <td><code>{{ job.unit }}</code></td>
+              <td>{{ job.runs }}</td>
+              <td>{% if job.last_run %}{{ job.last_run|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
+              <td><span class="pill pill-{{ job.tone }}">{{ job.result }}</span></td>
+              <td class="optional-col">{% if job.next_run %}{{ job.next_run|when }}{% else %}{% empty_value %}{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if work.read_at %}<p class="muted">Read {{ work.read_at|when:"ago" }}</p>{% endif %}
+  {% endif %}
+  {% if work.renderers_unread %}
+    <p class="notice notice-attention">{{ work.renderers_unread }}</p>
+  {% elif work.renderers %}
+    <div class="table-scroll">
+      <table class="data-table compact-table">
+        <thead><tr><th>Credentials refresh</th><th class="key-col">Last run</th><th>Tried</th><th>Last confirmed current</th></tr></thead>
+        <tbody>
+          {% for item in work.renderers %}
+            <tr>
+              <td><code>{{ item.name }}</code></td>
+              <td><span class="pill pill-{{ item.tone }}">{{ item.result }}</span></td>
+              <td>{% if item.attempted %}{{ item.attempted|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
+              <td>{% if item.succeeded %}{{ item.succeeded|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>
+
+{% if sight.groups %}
+<section aria-labelledby="hq-sight-heading">
+  <h2 id="hq-sight-heading">What it can see</h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Reading</th><th class="key-col">State</th><th>Records</th><th class="optional-col">Last read</th></tr></thead>
+      {% for provider, rows in sight.groups %}
+      <tbody>
+        <tr class="row-group"><th colspan="4" scope="rowgroup">{{ provider }} <span class="count">{{ rows|length }}</span></th></tr>
+        {% for row in rows %}
+          <tr>
+            <td>
+              {{ row.label }}
+              {% if row.remedy %}<br><span class="muted">{{ row.remedy }}</span>{% elif row.error and not row.read %}<br><span class="muted">{{ row.error }}</span>{% endif %}
+            </td>
+            <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label }}{% else %}<strong>{{ row.state_label }}</strong>{% endif %}</td>
+            <td>{% if row.read %}{{ row.records }}{% else %}{% empty_value %}{% endif %}</td>
+            <td class="optional-col">{% if row.observed_at %}{{ row.observed_at|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      {% endfor %}
+    </table>
+  </div>
+  {% if sight.unconnected %}<p class="muted">Not connected: {{ sight.unconnected|join:", " }}. <a href="{% url 'control_plane:connections' %}">Connections</a></p>{% endif %}
+</section>
+{% endif %}
+{% endwith %}
+{% endblock %}

@@ -30,7 +30,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       <div>
         <span class="band-label">Production deploy</span>
         <strong>{% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}</strong>
-        {% if deploy %}<small><a class="external-link" href="{{ standing.repository.url }}/commit/{{ deploy.sha }}" rel="noopener"><code>{{ deploy.sha|slice:":7" }}</code></a>{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
+        {% if deploy %}<small><a class="external-link" href="{{ standing.repository.url|web_url }}/commit/{{ deploy.sha }}" rel="noopener"><code>{{ deploy.sha|slice:":7" }}</code></a>{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
         <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name }}.{% endif %}</small>
       </div>
     </div>
@@ -38,7 +38,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       <span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span>
       <div>
         <span class="band-label">Security</span>
-        <strong><a class="external-link" href="{{ standing.repository.url }}/security" rel="noopener">{% if standing.repository.open_alerts %}{{ standing.repository.open_alerts }} open{% else %}Clear{% endif %}</a></strong>
+        <strong><a class="external-link" href="{{ standing.repository.url|web_url }}/security" rel="noopener">{% if standing.repository.open_alerts %}{{ standing.repository.open_alerts }} open{% else %}Clear{% endif %}</a></strong>
         <small>{% for n, level in standing.repository.severities %}{{ n }} {{ level }}{% if not forloop.last %}, {% endif %}{% empty %}No open alerts on the repository.{% endfor %}</small>
       </div>
     </div>

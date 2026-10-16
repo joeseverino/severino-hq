@@ -394,9 +394,7 @@ class ConnectionView(PageMixin, TemplateView):
 
     template_name = "core/connection.html"
     page_title = "Your connection"
-    page_lede = (
-        "How you are connected to HQ right now, who it takes you to be, and the behind every admission decision."
-    )
+    page_lede = "How you are connected to HQ right now, who it takes you to be, and the evidence behind every admission decision."
 
     @override
     def get_context_data(self, **kwargs):
@@ -409,6 +407,24 @@ class ConnectionView(PageMixin, TemplateView):
         found = request_path(self.request)
         context["request_path"] = found
         context["connection"] = found.connection
+        return context
+
+
+class HQView(PageMixin, TemplateView):
+    """HQ as a subject, the way a machine's page presents a machine: what it
+    runs, where, how it is doing, what it can see and what is wrong with it.
+    Everything on it is the ``hq`` resource's one projection."""
+
+    template_name = "core/hq.html"
+    # As the nav names it; the site's own name is HQ's to say on the page.
+    page_title = "HQ"
+
+    @override
+    def get_context_data(self, **kwargs):
+        from hq.platform.application.hq_context import hq_context
+
+        context = super().get_context_data(**kwargs)
+        context["hq"] = hq_context(self.request)
         return context
 
 

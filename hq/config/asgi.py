@@ -33,15 +33,15 @@ compressed_django_application = GZipMiddleware(
     minimum_size=1000,
 )
 
-from asgiref.sync import sync_to_async  # noqa: E402
+from asgiref.sync import sync_to_async
 
-from hq.platform.api import security as api_security  # noqa: E402
-from hq.platform.application.agent_access import agents_paused  # noqa: E402
-from hq.platform.application.agent_registry import observe  # noqa: E402
-from hq.platform.application.denials import record_denial  # noqa: E402
-from hq.platform.mcp.identity import token_principal  # noqa: E402
-from hq.platform.mcp.security import MCPBoundary  # noqa: E402
-from hq.platform.mcp.server import mcp  # noqa: E402
+from hq.platform.api import security as api_security
+from hq.platform.application.agent_access import agents_paused
+from hq.platform.application.agent_registry import observe
+from hq.platform.application.denials import record_denial
+from hq.platform.mcp.identity import token_principal
+from hq.platform.mcp.security import MCPBoundary
+from hq.platform.mcp.server import mcp
 
 
 def verify_agent_token(bearer: str):

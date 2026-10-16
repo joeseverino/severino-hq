@@ -518,7 +518,9 @@ the same shape (`1.31.3-alpine` is compared only with `N.N.N-alpine`), and the
 advisories whose range holds that version, where a stated fix at or below it
 clears an open-ended range and a range that cannot be read is "not known",
 never "not affected". HQ's own image answers from the GitHub App's reading of
-its repository instead: the production deploy and whether it passed its checks.
+its repository instead: the production deploy, whether it passed its checks,
+and, for whether anything is newer, whether the default branch has moved past
+it. Which container is HQ's is derived (`hq_self.own_container`).
 The containers page, each container's page and each machine's container table
 show one `Standing`; the action queue holds one item per affected image and
 version, and one for every image with a newer release. With a `HEAD` of the

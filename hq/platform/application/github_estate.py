@@ -112,6 +112,23 @@ class Repository:
             None,
         )
 
+    @property
+    def deployed_cleanly(self) -> bool:
+        """Whether production has a deploy that did not fail its checks: one
+        that ran none is still the deploy."""
+
+        return bool(self.production) and self.production_verified is not False
+
+    @property
+    def undeployed(self) -> bool | None:
+        """Whether the default branch has moved past what production runs: None
+        when either commit was not read, so an unread deploy is never "current"."""
+
+        head, deployed = str((self.head or {}).get("sha", "")), str((self.production or {}).get("sha", ""))
+        if not head or not deployed:
+            return None
+        return head != deployed
+
     def expiring(self, *, within_days: int = ARTIFACT_ATTENTION_DAYS) -> list[dict[str, Any]]:
         """Admission artifacts that lapse within ``within_days``, soonest first."""
 

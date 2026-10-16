@@ -244,7 +244,7 @@ func (m *Machine) tidy(shipped []string) error {
 	if err := os.Remove(filepath.Join(m.Sbin, "severino-hq-sync-scripts")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	for _, unit := range []string{"severino-hq-backup.service", ControllerUnit, SecretsUnit} {
+	for _, unit := range []string{BackupUnit, ControllerUnit, SecretsUnit} {
 		dropin := unit + ".d/10-root-owned-exec.conf"
 		if slices.Contains(shipped, dropin) {
 			continue

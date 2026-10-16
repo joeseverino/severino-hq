@@ -19,7 +19,7 @@ the contract states, so an action reads a member and never coerces one.
 """
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -28,8 +28,8 @@ from typing import Any
 from django.conf import settings
 
 # jsonschema ships without inline type information.
-from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
-from jsonschema.exceptions import ValidationError, best_match  # type: ignore[import-untyped]
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError, best_match
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
@@ -184,11 +184,14 @@ def _violation(validator: Any, subject: str, value: Any) -> str | None:
         return None
     pointer = "".join("/" + str(part).replace("~", "~0").replace("/", "~1") for part in error.absolute_path)
     expected = error.validator_value
-    if error.validator in ("required", "additionalProperties"):
+    # A best match always names the keyword it failed; an error without one
+    # is still a departure, said without its reason.
+    keyword = error.validator if isinstance(error.validator, str) else ""
+    if keyword in ("required", "additionalProperties"):
         # Member names only, which the contract itself publishes.
-        reason = f"{_REASONS[error.validator]}: {_members(error)}"
+        reason = f"{_REASONS[keyword]}: {_members(error)}"
     else:
-        reason = _REASONS.get(error.validator, "does not match the contract").format(
+        reason = _REASONS.get(keyword, "does not match the contract").format(
             expected=" or ".join(expected) if isinstance(expected, list) else expected
         )
     return f"The {subject} at {pointer or '/'} {reason}."
@@ -199,9 +202,11 @@ def _members(error: ValidationError) -> str:
 
     held = set(error.instance) if isinstance(error.instance, dict) else set()
     if error.validator == "required":
-        names = [name for name in error.validator_value if name not in held]
+        required = error.validator_value if isinstance(error.validator_value, list) else []
+        names = [name for name in required if name not in held]
     else:
-        names = sorted(held - set(error.schema.get("properties", ())))
+        schema = error.schema if isinstance(error.schema, Mapping) else {}
+        names = sorted(held - set(schema.get("properties", ())))
     return ", ".join(str(name)[:80] for name in names[:5])
 
 

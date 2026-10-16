@@ -12,7 +12,7 @@ class CoreConfig(AppConfig):
     def ready(self):
         from django.db.models.signals import post_migrate
 
-        from . import checks, signals  # noqa: F401
+        from . import checks, signals  # noqa: F401 - imported to register checks and receivers
         from .outbound import install
 
         # From here on a request cannot wait on anything outside the process.

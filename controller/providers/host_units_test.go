@@ -236,3 +236,34 @@ ExecMainStatus=0
 		t.Fatalf("unstarted %+v", unstarted)
 	}
 }
+
+// A unit named for a path carries systemd's \xNN escape for a dash in it,
+// exactly as systemctl show prints it for the credential mount.
+func TestHostUnitsReadAUnitNamedForAPath(t *testing.T) {
+	mount := `Id=run-severino\x2dhq\x2dsecrets.mount
+LoadState=loaded
+ActiveState=active
+SubState=mounted
+UnitFileState=enabled
+InactiveExitTimestamp=@1791952705
+InactiveEnterTimestamp=
+ConditionResult=yes
+ConditionTimestamp=@1791952705
+Result=success
+`
+	path := writeHostUnits(t, mount+"\n"+"Id=example.service\nLoadState=loaded\nActiveState=active\nSubState=running\n")
+
+	records, err := hostUnits(t, path)
+
+	if err != nil || len(records) != 2 {
+		t.Fatalf("read %d units: %v", len(records), err)
+	}
+	if unit := records[0].(runtime.HostUnitRecord).Unit; unit != `run-severino\x2dhq\x2dsecrets.mount` {
+		t.Errorf("unit %q", unit)
+	}
+	for _, refused := range []string{`run-a\b.mount`, `run-a\x2.mount`, `run-a\\x2d.mount`} {
+		if _, err := hostUnits(t, writeHostUnits(t, strings.Replace(mount, `run-severino\x2dhq\x2dsecrets.mount`, refused, 1))); err == nil {
+			t.Errorf("accepted %s", refused)
+		}
+	}
+}

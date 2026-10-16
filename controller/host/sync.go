@@ -18,7 +18,7 @@ import (
 var TreeItems = []string{"scripts", "hq/config", "deploy"}
 
 // unitPath is a path under the tree that a unit names.
-var unitPath = regexp.MustCompile(`/usr/local/lib/severino-hq/[A-Za-z0-9_./-]+`)
+var unitPath = regexp.MustCompile(regexp.QuoteMeta(Lib+"/") + `[A-Za-z0-9_./-]+`)
 
 // Sync replaces the root-owned tree with image's, which must already be
 // pulled and verified: nothing is fetched. The copy is made beside the tree,
@@ -114,7 +114,7 @@ func unitsResolve(dir string) error {
 			return err
 		}
 		for _, named := range unitPath.FindAllString(string(data), -1) {
-			if _, err := os.Stat(filepath.Join(dir, strings.TrimPrefix(named, "/usr/local/lib/severino-hq/"))); err != nil {
+			if _, err := os.Stat(filepath.Join(dir, strings.TrimPrefix(named, Lib+"/"))); err != nil {
 				return fmt.Errorf("%s names %s, which the tree does not ship", strings.TrimPrefix(path, dir+"/"), named)
 			}
 		}

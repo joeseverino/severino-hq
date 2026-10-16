@@ -15,6 +15,15 @@ import (
 	"time"
 )
 
+// Where the controller's container finds what it is given: each path is the
+// mount's target and the variable that names it, from one declaration.
+const (
+	controllerConnections = "/run/secrets/controller-connections.json"
+	controllerSSH         = "/run/secrets/controller-ssh"
+	controllerCA          = "/run/secrets/severino_controller_ca.pem"
+	controllerACME        = "/var/lib/severino-hq/acme"
+)
+
 // Controller runs one controller pass in a short-lived container made from
 // the image HQ is running. The web container never receives a provider
 // credential, identity, ACME state or private key; the controller's
@@ -82,12 +91,12 @@ func (c *Controller) Run(ctx context.Context, apply bool) error {
 		"--security-opt", "no-new-privileges:true",
 		"--tmpfs", "/tmp:size=64m,noexec,nosuid,nodev",
 		"--entrypoint", "/usr/local/bin/hq-controller",
-		"--mount", readOnly(filepath.Join(run, "connections.json"), "/run/secrets/controller-connections.json"),
-		"--mount", readOnly(filepath.Join(run, "ssh"), "/run/secrets/controller-ssh"),
-		"--mount", "type=bind,source=" + c.ACME + ",target=/var/lib/severino-hq/acme",
-		"--env", "HQ_CONTROLLER_CONNECTIONS=/run/secrets/controller-connections.json",
-		"--env", "HQ_CONTROLLER_SSH_DIR=/run/secrets/controller-ssh",
-		"--env", "HQ_ACME_DIR=/var/lib/severino-hq/acme",
+		"--mount", readOnly(filepath.Join(run, "connections.json"), controllerConnections),
+		"--mount", readOnly(filepath.Join(run, "ssh"), controllerSSH),
+		"--mount", "type=bind,source=" + c.ACME + ",target=" + controllerACME,
+		"--env", "HQ_CONTROLLER_CONNECTIONS=" + controllerConnections,
+		"--env", "HQ_CONTROLLER_SSH_DIR=" + controllerSSH,
+		"--env", "HQ_ACME_DIR=" + controllerACME,
 		"--env", "HQ_CONTROLLER_IMAGE=" + image,
 		"--env", "SEVERINO_HQ_SOURCE_REPOSITORY=" + source,
 	}
@@ -265,10 +274,10 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 		}
 	}
 	if len(bundle) > 0 {
-		if err := give("ca.pem", bundle, "/run/secrets/severino_controller_ca.pem"); err != nil {
+		if err := give("ca.pem", bundle, controllerCA); err != nil {
 			return nil, err
 		}
-		args = append(args, "--env", "HQ_CONTROLLER_CA_FILE=/run/secrets/severino_controller_ca.pem")
+		args = append(args, "--env", "HQ_CONTROLLER_CA_FILE="+controllerCA)
 	}
 
 	// The 1Password CLI, lent for the run rather than built into an image the

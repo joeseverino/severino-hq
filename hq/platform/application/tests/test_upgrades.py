@@ -389,6 +389,19 @@ class HelperInstallTests(TestCase):
         # The helper holds the stacks root the rule names; neither moves alone.
         self.assertIn(f"\nSTACKS_ROOT={STACKS_ROOT}\n", shipped.read_text())
 
+    def test_the_rule_admits_each_argument_by_the_helpers_own_pattern(self):
+        import re
+        from pathlib import Path
+
+        from ..upgrades import ARGUMENTS, HELPER
+
+        helper = (Path(__file__).resolve().parents[4] / "scripts" / Path(HELPER).name).read_text()
+        patterns = dict(re.findall(r"matches \"\$\{(\w+)\}\" '\^(.+?)\$'", helper))
+
+        for argument in ("operation", "service", "from", "to", "tag", "wait", "name"):
+            with self.subTest(argument=argument):
+                self.assertIn(patterns[argument], ARGUMENTS)
+
 
 class ExposureOrderTests(TestCase):
     def test_what_the_internet_reaches_is_planned_first(self):

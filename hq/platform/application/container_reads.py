@@ -34,7 +34,7 @@ def _repository(repo: Any) -> dict[str, Any] | None:
         "default_branch": repo.default_branch,
         "head": head.get("sha", ""),
         "deployed": deploy.get("sha", ""),
-        "undeployed": bool(head.get("sha") and deploy.get("sha") and head.get("sha") != deploy.get("sha")),
+        "undeployed": bool(repo.undeployed),
         "verified": repo.production_verified,
         "open_pull_requests": [
             {

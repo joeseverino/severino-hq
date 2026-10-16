@@ -595,6 +595,12 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(calendars=_provider("hq.platform.application.calendar_sources:history_sources")),
     ),
     DomainDescriptor(
+        id="hq.self",
+        label="HQ",
+        # HQ itself, after what configures it: the page that says how it is doing.
+        navigation=(NavigationItem("HQ", "hq_self", "", HOST_ORDER_MACHINERY + 3, "System"),),
+    ),
+    DomainDescriptor(
         id="hq.agents",
         label="Agents",
         navigation=(NavigationItem("Agents", "agent_policy", "", HOST_ORDER_MACHINERY + 1, "System"),),

@@ -18,8 +18,8 @@ import subprocess
 
 from django.test import SimpleTestCase, TestCase
 
-from . import frontmatter_schema
-from .models import DocumentationRecord
+from .. import frontmatter_schema
+from ..models import DocumentationRecord
 
 
 def _values(choices) -> set[str]:

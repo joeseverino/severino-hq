@@ -159,6 +159,16 @@ class AdGuardJoinTests(TestCase):
         self.assertEqual(unused.title, "No device looked up idle.example.com")
         self.assertNotIn("app.example.com", {f.title for f in found if f.rule == "dns-name-unused"})
 
+    def test_protection_switched_off_is_its_own_finding(self):
+        store(DNS_KIND, {"connection_ref": ADGUARD, "protection_enabled": False, "filtering_enabled": True})
+
+        found = derive_findings(derive_topology(principal=READ), principal=READ)
+        (off,) = (finding for finding in found if finding.rule == "dns-protection-off")
+
+        self.assertTrue(off.title.startswith("AdGuard protection is off on "))
+        self.assertEqual(off.evidence, (("Protection", "Off"),))
+        self.assertNotIn("dns-filtering-off", {finding.rule for finding in found})
+
     def test_a_healthy_resolver_raises_nothing(self):
         store(
             DNS_KIND,

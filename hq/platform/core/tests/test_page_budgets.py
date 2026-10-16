@@ -15,6 +15,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.expenses.models import Expense
 from hq.domains.reports.exports import year_summary
 from hq.platform.application import routes
+from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import counting, uncached
 from hq.platform.application.projection import projection_scope, years_of
 from hq.platform.application.services import service_catalog
@@ -172,6 +173,7 @@ class StoredPageBudgetTests(TestCase):
         with (
             mock.patch("hq.platform.application.domains.extension_domains", return_value=()),
             mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
+            frozen(),
         ):
             with counting() as (first, _served):
                 for name in STORED_PAGE_COSTS:

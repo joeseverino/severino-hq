@@ -1,13 +1,14 @@
 """The controller's own page: what HQ knows of it, from what it left behind."""
 
 import os
+import re
 import tempfile
 import time
 from datetime import timedelta
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -120,3 +121,23 @@ class ControllerPageTests(TestCase):
         self.client.force_login(user)
 
         self.assertContains(self.client.get("/"), f'href="{reverse("control_plane:controller")}"')
+
+
+class HostLayoutTests(SimpleTestCase):
+    """The unit names HQ tells an operator to inspect are the host's own."""
+
+    def test_the_controller_unit_is_the_one_the_host_declares(self):
+        from ..controller_findings import CONTROLLER_UNIT
+
+        layout = (Path(__file__).resolve().parents[4] / "controller" / "host" / "layout.go").read_text()
+
+        self.assertIn(f'ControllerUnit = "{CONTROLLER_UNIT}"', layout)
+
+    def test_the_upgrade_helper_is_in_the_tree_the_host_installs(self):
+        from ..upgrades import HELPER
+
+        layout = (Path(__file__).resolve().parents[4] / "controller" / "host" / "layout.go").read_text()
+        (lib,) = re.findall(r'^\tLib = "([^"]+)"$', layout, re.MULTILINE)
+
+        self.assertEqual(HELPER, f"{lib}/scripts/upgrade-container.sh")
+        self.assertTrue((Path(__file__).resolve().parents[4] / "scripts" / "upgrade-container.sh").is_file())

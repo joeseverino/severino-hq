@@ -664,6 +664,16 @@ jobs:
           USER severino
           DOCKERFILE
 
+      - name: Name the composed image the checks below run
+        # The candidate a coordinated change built here, else the composition
+        # of the host commit: named once, for every check after it.
+        id: candidate
+        if: >-
+          steps.fingerprint.outputs.build == 'true'
+        env:
+          IMAGE: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
+        run: echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
       - name: Verify the composition as one application
         # Skipped only by an admission's dispatch that found nothing to do.
         if: >-
@@ -677,7 +687,7 @@ jobs:
         # The log gets totals and failing host test ids only: an extension's
         # tests name its models, routes and fixtures (scripts/composed-suite.sh).
         env:
-          IMAGE: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
+          IMAGE: ${{ steps.candidate.outputs.image }}
         run: scripts/composed-suite.sh "$IMAGE"
 
       - name: The composed image comes up healthy
@@ -686,7 +696,7 @@ jobs:
         if: >-
           steps.fingerprint.outputs.build == 'true'
         env:
-          IMAGE: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
+          IMAGE: ${{ steps.candidate.outputs.image }}
         run: scripts/image-health.sh "$IMAGE"
 
       - name: Scan composed image
@@ -698,7 +708,7 @@ jobs:
           steps.fingerprint.outputs.build == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
+          image-ref: ${{ steps.candidate.outputs.image }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           format: json

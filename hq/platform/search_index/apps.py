@@ -10,4 +10,4 @@ class SearchIndexConfig(AppConfig):
 
     @override
     def ready(self):
-        from . import signals  # noqa: F401
+        from . import signals  # noqa: F401 - imported to register its receivers

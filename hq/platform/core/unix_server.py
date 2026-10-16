@@ -115,7 +115,7 @@ class PeerCheckedProtocol(H11Protocol):
     """HTTP/1.1 for peers that are this account; anyone else is disconnected unheard."""
 
     @override
-    def connection_made(self, transport: asyncio.Transport) -> None:  # type: ignore[override]
+    def connection_made(self, transport: asyncio.Transport) -> None:  # type: ignore[override]  # uvicorn narrows the transport too
         super().connection_made(transport)
         peer = peer_uid(transport.get_extra_info("socket"))
         if peer != os.geteuid():

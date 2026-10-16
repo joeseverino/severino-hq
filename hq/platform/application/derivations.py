@@ -79,6 +79,7 @@ copyreg.pickle(MappingProxyType, lambda mapping: (_read_only, (dict(mapping),)))
 # functions below, which is what lets a test forbid every other way in.
 _clock = timezone.now
 
+
 # The longest a stored value is kept, in seconds; its key outlives its use.
 _LONGEST = 24 * 60 * 60
 # The longest an answer stands when its computation may read the clock where
@@ -312,7 +313,7 @@ def derivation[T](
             _tell(declared, until)
             return value
 
-        answer.derivation = declared  # type: ignore[attr-defined]
+        answer.derivation = declared  # type: ignore[attr-defined]  # a function carries its declaration
         return answer
 
     return declare
@@ -780,7 +781,7 @@ def _again(ask: _Ask) -> tuple[bool, str]:
     """Ask once more as it was first asked: whether there was anything to
     derive, and the key the answer stands under ("" when none is kept)."""
 
-    declared: Derivation = ask.answer.derivation  # type: ignore[attr-defined]
+    declared: Derivation = ask.answer.derivation  # type: ignore[attr-defined]  # set by @derivation
     token = _AHEAD.set(True)
     try:
         with projection_scope(ask.seed, apart=True):

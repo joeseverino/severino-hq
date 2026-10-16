@@ -209,6 +209,37 @@ class ConnectionSecurityPostureTests(TestCase):
         self.assertEqual(missing.state, "serious")
         self.assertEqual(public.state, "serious")
 
+    def test_full_account_access_counts_and_names_the_credentials(self):
+        from dataclasses import replace
+
+        (group,) = _groups()
+        view = group.connections[0]
+        coarse = tuple(replace(state, evidence="coarse") for state in view.abilities * 3)
+        views = (
+            replace(view, abilities=coarse),
+            replace(view, instance=replace(view.instance, label="Another"), abilities=coarse[:1]),
+        )
+        posture = connection_security_posture((replace(group, connections=views),), request=self.request())
+
+        scope = next(control for control in posture.controls if control.id == "scope")
+        self.assertEqual(scope.evidence, "2 credentials with full account access")
+        self.assertIn("Full account access: Another, Example.", scope.detail)
+
+    def test_a_connection_never_read_asks_to_be_checked(self):
+        from dataclasses import replace
+
+        (group,) = _groups()
+        view = group.connections[0]
+        read = replace(view, instance=replace(view.instance, observed_at=timezone.now()))
+
+        for connections, state in (((view,), "attention"), ((read,), "good"), ((), "neutral")):
+            with self.subTest(state=state):
+                posture = connection_security_posture(
+                    (replace(group, connections=connections),), request=self.request()
+                )
+                freshness = next(control for control in posture.controls if control.id == "freshness")
+                self.assertEqual(freshness.state, state)
+
     def test_deriving_the_posture_costs_no_queries(self):
         with self.assertNumQueries(0):
             connection_security_posture(_groups(), request=self.request())

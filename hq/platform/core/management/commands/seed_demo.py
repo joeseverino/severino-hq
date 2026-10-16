@@ -8,9 +8,10 @@ or doc_id). Safe to run on a fresh DB or one with existing data.
 
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import override
+from typing import Any, override
 
 from django.core.management.base import BaseCommand
+from django.db import models, transaction
 from django.utils import timezone
 
 from hq.domains.assets.models import Asset
@@ -20,10 +21,31 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 
 
+def _seed[Record: models.Model](
+    model: type[Record], key: str, plan: list[dict[str, Any]], **related: dict[str, models.Model]
+) -> dict[str, Record]:
+    """Each planned record by its ``key``, created only where none has it.
+
+    ``related`` names a many-to-many field and the records its planned keys
+    may point at; a record already there keeps the links it has.
+    """
+
+    seeded: dict[str, Record] = {}
+    for entry in plan:
+        links = {field: entry.pop(field, ()) for field in related}
+        record, created = model._default_manager.get_or_create(**{key: entry[key]}, defaults=entry)
+        if created:
+            for field, keys in links.items():
+                getattr(record, field).set(related[field][name] for name in keys if name in related[field])
+        seeded[entry[key]] = record
+    return seeded
+
+
 class Command(BaseCommand):
     help = "Populate the database with demo projects, content, docs, assets, expenses."
 
     @override
+    @transaction.atomic
     def handle(self, *args, **options):
         today = timezone.localdate()
         year = today.year
@@ -34,6 +56,8 @@ class Command(BaseCommand):
         docs = self._seed_docs(today, projects=projects, assets=assets)
         expenses = self._seed_expenses(year=year, projects=projects, assets=assets, docs=docs, content=content)
 
+        if not options["verbosity"]:
+            return
         self.stdout.write(
             self.style.SUCCESS(
                 f"Demo seed complete: "
@@ -69,11 +93,7 @@ class Command(BaseCommand):
                 "technologies_used": "Cloudflare, WordPress",
             },
         ]
-        out: dict[str, Project] = {}
-        for entry in plan:
-            obj, _ = Project.objects.get_or_create(slug=entry["slug"], defaults=entry)
-            out[entry["slug"]] = obj
-        return out
+        return _seed(Project, "slug", plan)
 
     def _seed_assets(self, today: date) -> dict[str, Asset]:
         plan = [
@@ -108,11 +128,7 @@ class Command(BaseCommand):
                 "status": Asset.Status.ACTIVE,
             },
         ]
-        out: dict[str, Asset] = {}
-        for entry in plan:
-            obj, _ = Asset.objects.get_or_create(slug=entry["slug"], defaults=entry)
-            out[entry["slug"]] = obj
-        return out
+        return _seed(Asset, "slug", plan)
 
     def _seed_content(
         self, today: date, *, projects: dict[str, Project], assets: dict[str, Asset]
@@ -125,8 +141,8 @@ class Command(BaseCommand):
                 "status": ContentItem.Status.DRAFT,
                 "topic": "Homelab DNS",
                 "tags": "homelab, dns, adguard, unbound",
-                "_related_projects": ["homelab-dns"],
-                "_related_assets": ["mini-pc", "unifi-flex-mini"],
+                "related_projects": ["homelab-dns"],
+                "related_assets": ["mini-pc", "unifi-flex-mini"],
             },
             {
                 "slug": "vps-tailscale-only",
@@ -135,19 +151,10 @@ class Command(BaseCommand):
                 "status": ContentItem.Status.DRAFT,
                 "topic": "VPS / Tailscale",
                 "tags": "tailscale, vps, caddy, hardening",
-                "_related_projects": ["vps-baseline"],
+                "related_projects": ["vps-baseline"],
             },
         ]
-        out: dict[str, ContentItem] = {}
-        for entry in plan:
-            rel_projects = entry.pop("_related_projects", [])
-            rel_assets = entry.pop("_related_assets", [])
-            obj, created = ContentItem.objects.get_or_create(slug=entry["slug"], defaults=entry)
-            if created:
-                obj.related_projects.set(projects[s] for s in rel_projects if s in projects)
-                obj.related_assets.set(assets[s] for s in rel_assets if s in assets)
-            out[entry["slug"]] = obj
-        return out
+        return _seed(ContentItem, "slug", plan, related_projects=projects, related_assets=assets)
 
     def _seed_docs(
         self, today: date, *, projects: dict[str, Project], assets: dict[str, Asset]
@@ -163,8 +170,8 @@ class Command(BaseCommand):
                 "sensitivity": DocumentationRecord.Sensitivity.SENSITIVE,
                 "obsidian_path": "Infra/DNS/AdGuard Home.md",
                 "last_reviewed": today - timedelta(days=20),
-                "_projects": ["homelab-dns"],
-                "_assets": ["mini-pc"],
+                "related_projects": ["homelab-dns"],
+                "related_assets": ["mini-pc"],
             },
             {
                 "doc_id": "dr-vps-tailnet-001",
@@ -177,19 +184,10 @@ class Command(BaseCommand):
                 "obsidian_path": "Infra/VPS/Tailnet-only Deploy.md",
                 "github_path": "infra-notes/vps-tailnet.md",
                 "last_reviewed": today - timedelta(days=210),
-                "_projects": ["vps-baseline"],
+                "related_projects": ["vps-baseline"],
             },
         ]
-        out: dict[str, DocumentationRecord] = {}
-        for entry in plan:
-            rel_projects = entry.pop("_projects", [])
-            rel_assets = entry.pop("_assets", [])
-            obj, created = DocumentationRecord.objects.get_or_create(doc_id=entry["doc_id"], defaults=entry)
-            if created:
-                obj.related_projects.set(projects[s] for s in rel_projects if s in projects)
-                obj.related_assets.set(assets[s] for s in rel_assets if s in assets)
-            out[entry["doc_id"]] = obj
-        return out
+        return _seed(DocumentationRecord, "doc_id", plan, related_projects=projects, related_assets=assets)
 
     def _seed_expenses(
         self,

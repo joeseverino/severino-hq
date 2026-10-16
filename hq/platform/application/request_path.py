@@ -671,9 +671,9 @@ class RequestPath:
 
     @property
     def hops(self) -> tuple[Hop, ...]:
-        """The hops the page draws: forwarding addresses are detail."""
+        """The hops the page draws: each machine once, forwarding addresses as detail."""
 
-        return tuple(hop for hop in self.route.hops if hop.step != "upstream")
+        return self.route.line_hops
 
     @property
     def chain(self) -> tuple[Evidence, ...]:

@@ -125,7 +125,7 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 		Poll:   2 * time.Second,
 		// The renderer's own bound on a run, so a slow boot render is waited
 		// out and a failed one retried when the unit restarts.
-		Await:  4 * time.Minute,
+		Await:  host.RenderBound,
 		Stdout: stdout, Stderr: stderr, Log: log,
 	}
 	return runner.Run(ctx)
@@ -145,7 +145,7 @@ func release(ctx context.Context, args []string, stdout io.Writer) error {
 
 func machine(stdout io.Writer) *host.Machine {
 	return &host.Machine{
-		Lib:      "/usr/local/lib/severino-hq",
+		Lib:      host.Lib,
 		Systemd:  "/etc/systemd/system",
 		Tmpfiles: "/etc/tmpfiles.d",
 		LogDir:   "/var/log/severino-hq",

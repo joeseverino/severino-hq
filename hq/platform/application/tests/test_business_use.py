@@ -12,7 +12,7 @@ from django.urls import reverse
 
 from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
-from hq.platform.api.tests import ISSUER, RESOURCE, _serving, _token
+from hq.platform.api.tests.test_api import ISSUER, RESOURCE, _serving, _token
 from hq.platform.mcp.identity import reset_principal, set_principal
 from hq.platform.mcp.server import mcp
 

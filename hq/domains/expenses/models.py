@@ -24,13 +24,15 @@ EXPENSE_CATEGORY_CHOICES = [
     ("professional_services", "Professional services"),
     ("miscellaneous", "Miscellaneous"),
 ]
+# What an expense nobody categorised is filed under.
+DEFAULT_CATEGORY = "miscellaneous"
 
 
 class Expense(TimestampedModel):
     date = models.DateField()
     vendor = models.CharField(max_length=160)
     item = models.CharField(max_length=200)
-    category = models.CharField(max_length=32, choices=EXPENSE_CATEGORY_CHOICES, default="miscellaneous")
+    category = models.CharField(max_length=32, choices=EXPENSE_CATEGORY_CHOICES, default=DEFAULT_CATEGORY)
     total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     business_use_percentage = models.PositiveSmallIntegerField(
         default=100,

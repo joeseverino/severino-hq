@@ -8,8 +8,8 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.platform.application.security import AuthorizationError
 
-from . import security, views
-from .testing import ContractClient
+from .. import security, views
+from ..testing import ContractClient
 
 ISSUER = "https://sso.example.test"
 RESOURCE = "https://hq.example.test/api"
@@ -149,7 +149,7 @@ class CompositionCheckTests(SimpleTestCase):
             IntegrationViolation,
         )
 
-        from .checks import capability_contract_check
+        from ..checks import capability_contract_check
 
         failure = IntegrationGraphError(
             (
@@ -176,7 +176,7 @@ class CompositionCheckTests(SimpleTestCase):
         )
         from hq.platform.application.resources import EmptyQuery, ResourceSpec
 
-        from .checks import capability_contract_check
+        from ..checks import capability_contract_check
 
         resource = ResourceSpec(
             "example.records",
@@ -201,7 +201,7 @@ class CompositionCheckTests(SimpleTestCase):
             override_integration_graph,
         )
 
-        from .checks import capability_contract_check
+        from ..checks import capability_contract_check
 
         connection = ConnectionSpec(
             "example.finance",
@@ -756,6 +756,18 @@ class TransportTests(TestCase):
         self.assertEqual(listed.json()["data"]["items"][0]["slug"], project.slug)
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["data"]["slug"], project.slug)
+
+    def test_hq_answers_how_it_is_over_the_api(self):
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with _serving():
+            response = self.client.get("/api/v2/resources/hq/", **headers)
+        self.assertEqual(response.status_code, 200)
+        found = response.json()["data"]
+        self.assertEqual(found["count"], len(found["items"]))
+        self.assertIn(found["status"], ("good", "attention", "serious"))
+        self.assertIn("release", found)
+        # A request reached it, so its path is said.
+        self.assertIsNotNone(found["reached"])
 
     def test_resource_queries_reject_unknown_and_repeated_fields(self):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}

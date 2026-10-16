@@ -27,34 +27,34 @@ def _connections(estate: Any):
     return (node for node in estate.nodes() if node.kind == "connection")
 
 
-def protection_off(estate: Any) -> tuple[dict[str, Any], ...]:
-    return tuple(
-        {
-            "rule": "dns-protection-off",
-            "subject": node.id,
-            "title": f"AdGuard protection is off on {node.label}",
-            "severity": "attention",
-            "explanation": ("AdGuard is answering every lookup without blocklists, safe browsing or client rules."),
-            "evidence": (("Protection", "Off"),),
-        }
-        for node in _connections(estate)
-        if _values(node, PROTECTION_OFF)
-    )
+def _switched_off(fact: str, rule: str, setting: str, explanation: str):
+    """The detector for one AdGuard setting a connection reports off: a finding
+    per connection, named for the setting."""
+
+    def detect(estate: Any) -> tuple[dict[str, Any], ...]:
+        return tuple(
+            {
+                "rule": rule,
+                "subject": node.id,
+                "title": f"AdGuard {setting.lower()} is off on {node.label}",
+                "severity": "attention",
+                "explanation": explanation,
+                "evidence": ((setting, "Off"),),
+            }
+            for node in _connections(estate)
+            if _values(node, fact)
+        )
+
+    return detect
 
 
-def filtering_off(estate: Any) -> tuple[dict[str, Any], ...]:
-    return tuple(
-        {
-            "rule": "dns-filtering-off",
-            "subject": node.id,
-            "title": f"AdGuard filtering is off on {node.label}",
-            "severity": "attention",
-            "explanation": "No blocklist applies to any lookup.",
-            "evidence": (("Filtering", "Off"),),
-        }
-        for node in _connections(estate)
-        if _values(node, FILTERING_OFF)
-    )
+protection_off = _switched_off(
+    PROTECTION_OFF,
+    "dns-protection-off",
+    "Protection",
+    "AdGuard is answering every lookup without blocklists, safe browsing or client rules.",
+)
+filtering_off = _switched_off(FILTERING_OFF, "dns-filtering-off", "Filtering", "No blocklist applies to any lookup.")
 
 
 def plain_upstream(estate: Any) -> tuple[dict[str, Any], ...]:

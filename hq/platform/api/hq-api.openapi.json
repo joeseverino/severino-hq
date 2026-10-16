@@ -9392,6 +9392,68 @@
         "x-hq-resource": "expenses"
       }
     },
+    "/api/v2/resources/hq/": {
+      "get": {
+        "description": "HQ itself: the release it runs and whether its branch is ahead, the machine and container it runs in, its background jobs, what it can read and its open problems.",
+        "operationId": "listHqV2",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ResourceCollection"
+                    },
+                    "ok": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "List HQ",
+        "tags": [
+          "hq.self",
+          "api.v2"
+        ],
+        "x-hq-query-schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "title": "EmptyQuery",
+          "type": "object"
+        },
+        "x-hq-resource": "hq"
+      }
+    },
     "/api/v2/resources/infrastructure.resources/": {
       "get": {
         "description": "Everything HQ manages: what HQ expects and what is live.",
@@ -11375,6 +11437,17 @@
       "summary": "Tailnet"
     },
     {
+      "kind": "nav",
+      "name": "nav.system",
+      "summary": "System"
+    },
+    {
+      "kind": "nav",
+      "name": "hq.self",
+      "parent": "nav.system",
+      "summary": "HQ"
+    },
+    {
       "kind": "badge",
       "name": "api.v2",
       "summary": "v2",
@@ -11609,7 +11682,7 @@
       }
     },
     "list_resource": {
-      "description": "List any registered resource with schema-validated filters.\nKinds:\n- `action.items`: The composed action queue: what needs doing, from every domain.\n- `analytics`: What the published site was asked for, by any breakdown HQ records.\n- `assets`: Assets and their safe cross-domain relationships.\n- `calendar`: Everything on the calendar over a span of days, and your own events.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard.\n- `credentials`: What each connection's credential can read, and what it would need to read more.\n- `domains`: Every domain HQ manages or has read, its services and registration.\n- `estate`: Machines online, services, domains, next renewals and connections needing attention.\n- `expenses`: Expense records with stable relationship identifiers.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it.\n- `projects`: Projects and their safe cross-domain relationships.\n- `readings`: Each type of reading, when it was last read, and the records it holds.\n- `receipts`: Receipt metadata without file contents, storage paths, or URLs.\n- `request.path`: How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.\n- `search`: Machines, services and domains, then records, matching a query.\n- `services`: Every service name and the state of its DNS, proxy and certificate.\n- `tailnet`: The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
+      "description": "List any registered resource with schema-validated filters.\nKinds:\n- `action.items`: The composed action queue: what needs doing, from every domain.\n- `analytics`: What the published site was asked for, by any breakdown HQ records.\n- `assets`: Assets and their safe cross-domain relationships.\n- `calendar`: Everything on the calendar over a span of days, and your own events.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.\n- `contact.submissions`: Contact requests held in Cloudflare D1 and reviewed through HQ.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard.\n- `credentials`: What each connection's credential can read, and what it would need to read more.\n- `domains`: Every domain HQ manages or has read, its services and registration.\n- `estate`: Machines online, services, domains, next renewals and connections needing attention.\n- `expenses`: Expense records with stable relationship identifiers.\n- `hq`: HQ itself: the release it runs and whether its branch is ahead, the machine and container it runs in, its background jobs, what it can read and its open problems.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it.\n- `projects`: Projects and their safe cross-domain relationships.\n- `readings`: Each type of reading, when it was last read, and the records it holds.\n- `receipts`: Receipt metadata without file contents, storage paths, or URLs.\n- `request.path`: How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.\n- `search`: Machines, services and domains, then records, matching a query.\n- `services`: Every service name and the state of its DNS, proxy and certificate.\n- `tailnet`: The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -11639,6 +11712,7 @@
               "domains",
               "estate",
               "expenses",
+              "hq",
               "infrastructure.resources",
               "machines",
               "projects",

@@ -29,6 +29,7 @@ from hq.platform.core.views import (
     AvatarView,
     ConnectionView,
     DemoModeView,
+    HQView,
     PublicAddressView,
     SearchView,
     ThemeView,
@@ -64,7 +65,7 @@ urlpatterns = [
         name="csp_report",
     ),
     path(
-        "accounts/login/",
+        settings.LOGIN_URL.lstrip("/"),
         ThrottledLoginView.as_view(),
         name="login",
     ),
@@ -94,6 +95,7 @@ urlpatterns = [
     path("avatar/<str:digest>/", AvatarView.as_view(), name="avatar"),
     path("agents/", AgentPolicyView.as_view(), name="agent_policy"),
     path("connection/", ConnectionView.as_view(), name="connection"),
+    path("hq/", HQView.as_view(), name="hq_self"),
     path(
         "connection/address/",
         PublicAddressView.as_view(),

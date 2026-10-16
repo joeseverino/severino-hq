@@ -41,7 +41,7 @@ class FastGateMappingTests(SimpleTestCase):
 
     def test_mypy_is_given_only_the_typed_python_it_checks(self):
         targets = fast_gate.mypy_targets(
-            ["hq/platform/mcp/tests.py", "hq_sdk/contract.json", "hq/platform/application/domains.py"]
+            ["hq/platform/mcp/tests/test_mcp.py", "hq_sdk/contract.json", "hq/platform/application/domains.py"]
         )
         self.assertEqual(targets, ["hq/platform/application/domains.py"])
 

@@ -521,11 +521,11 @@ func TestGitHubRepositoryParts(t *testing.T) {
 func TestGitHubImagesOfTheComposition(t *testing.T) {
 	routes := githubRepositoryRoutes()
 	routes[githubFakeRegistry+" /token?scope=repository%3Aexample%2Fapp%3Apull&service=ghcr.io"] = `{"token":"pull-app"}`
-	routes[githubFakeRegistry+" /v2/example/app/tags/list?n=1000"] = `{"tags":["v1","v2","sha256-abc.sig","sha256-def.att","sha256-012.sig"]}`
+	routes[githubFakeRegistry+" /v2/example/app/tags/list?n=1000"] = `{"tags":["v1","v2","sha256-abc.sig","sha256-def.att","sha256-012.sig","sha256-345","sha256-abc"]}`
 	h := newGitHubHarness(t, routes, runtime.Environment{SourceRepository: "example/app", Image: "ghcr.io/example/app-composed:v9@sha256:0000"})
 	h.refuse(githubFakeRegistry, "/token?scope=repository%3Aexample%2Fapp-composed%3Apull&service=ghcr.io", 403)
 	record, refused := readRepository(t, h)
-	if encoded, _ := json.Marshal(record.Images); string(encoded) != `[{"name":"example/app","tags":2,"signed":["012","abc"]}]` {
+	if encoded, _ := json.Marshal(record.Images); string(encoded) != `[{"name":"example/app","tags":2,"signed":["012","345","abc"]}]` {
 		t.Fatalf("images %s", encoded)
 	}
 	if len(refused) != 1 || refused[0].Part != runtime.PartImages || refused[0].Scope != "example/app:example/app-composed" {

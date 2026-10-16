@@ -3,6 +3,7 @@
 import threading
 import time
 from datetime import UTC, datetime, timedelta
+from typing import override
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
@@ -471,15 +472,26 @@ class KeeperThreadTests(TransactionTestCase):
             self.assertEqual(dict(ran), {})
 
     def test_writes_that_land_together_are_one_pass(self):
-        keeper = ahead._Keeper()
-        with mock.patch.object(ahead, "SETTLES", 0.05):
-            keeper.wake()
-            threading.Timer(0.02, keeper.wake).start()
-            began = time.monotonic()
-            keeper._settle()
-            waited = time.monotonic() - began
+        class Landing(threading.Event):
+            """A second write lands while the first window is open."""
 
-        self.assertGreaterEqual(waited, 0.06)
+            waits = 0
+
+            @override
+            def wait(self, timeout: float | None = None) -> bool:
+                self.waits += 1
+                if self.waits == 1:
+                    self.set()
+                return super().wait(timeout)
+
+        keeper = ahead._Keeper()
+        keeper._woken = Landing()
+        with mock.patch.object(ahead, "SETTLES", 0.01):
+            keeper.wake()
+            keeper._settle()
+
+        # The window opened again for the write that landed in it, then closed.
+        self.assertEqual(keeper._woken.waits, 2)
         self.assertFalse(keeper._woken.is_set())
         self.assertFalse(keeper._woken_again())
         keeper.wake()

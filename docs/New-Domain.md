@@ -57,8 +57,8 @@ this page in the same commit as the rule. Extensions take a different path:
 
 Outside the architecture tests, `mise run check` also needs its migrations
 committed (`makemigrations --check`), the API document regenerated
-(`manage.py api_openapi`; `api_openapi --check`), and its tests in a `tests/`
-package or a `test*.py` module.
+(`manage.py api_openapi`; `api_openapi --check`), and its tests in its `tests/`
+package.
 
 ## Always on
 
@@ -75,4 +75,5 @@ system check reads source), `PlainWordsTests` (no word HQ keeps to itself in
 what its owner reads; `hq/platform/core/plain_words.py` holds the words and
 what to say instead), `PostButtonTests` (the shared post button),
 `WorkflowSecrecyTests` (no secret interpolated into a workflow script),
-`ComposedQueueTests` (a domain's attention items and cards reach the shared queue).
+`ComposedQueueTests` (a domain's attention items and cards reach the shared queue),
+`TestPlacementTests` (every test module is in its package's `tests/`).

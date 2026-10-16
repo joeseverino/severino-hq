@@ -12,9 +12,9 @@ from hq.domains.projects.models import Project
 from hq.platform.application import projection
 from hq.platform.application.security import Capability, Principal, is_interactive
 
-from . import services
-from .security import MCPBoundary
-from .server import mcp
+from .. import services
+from ..security import MCPBoundary
+from ..server import mcp
 
 TOKEN = "a" * 48
 
@@ -64,7 +64,7 @@ class ServiceTests(TestCase):
     def setUp(self):
         from hq.platform.application.security import mcp_principal
 
-        from .identity import reset_principal, set_principal
+        from ..identity import reset_principal, set_principal
 
         bound = set_principal(mcp_principal())
         self.addCleanup(reset_principal, bound)
@@ -104,7 +104,7 @@ class ServiceTests(TestCase):
     def test_a_caller_that_may_read_nothing_is_answered_by_no_read_tool(self):
         from hq.platform.application.security import AuthorizationError
 
-        from .identity import reset_principal, set_principal
+        from ..identity import reset_principal, set_principal
 
         bound = set_principal(Principal("example-writer", "mcp", frozenset({"write_projects"})))
         self.addCleanup(reset_principal, bound)
@@ -161,7 +161,7 @@ class ServiceTests(TestCase):
     def test_resource_kinds_are_derived_from_the_live_document(self):
         from hq.platform.api.openapi import document
 
-        from .contract import catalogue, resource_contract
+        from ..contract import catalogue, resource_contract
 
         contract = resource_contract(document())
         listable = [resource.name for resource in contract.listable]
@@ -266,7 +266,7 @@ class ServiceTests(TestCase):
 
         from hq.platform.application.security import mcp_principal
 
-        from .identity import reset_principal, set_principal
+        from ..identity import reset_principal, set_principal
 
         with override_settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True):
             bound = set_principal(mcp_principal())
@@ -282,7 +282,7 @@ class ServiceTests(TestCase):
 
         from hq.platform.application.security import mcp_principal
 
-        from .identity import reset_principal, set_principal
+        from ..identity import reset_principal, set_principal
 
         with override_settings(SEVERINO_MCP_ENABLE_DOC_SYNC=True):
             bound = set_principal(mcp_principal())
@@ -480,7 +480,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         seen: dict = {}
 
         async def app(scope, receive, send):
-            from .identity import current_principal
+            from ..identity import current_principal
 
             seen["principal"] = current_principal()
             await self._allowed_app(scope, receive, send)
@@ -562,7 +562,7 @@ class AgentIdentityTests(MCPBoundaryTests):
         self.assertEqual(status, 204)
 
     def test_the_caller_does_not_outlive_the_request(self):
-        from .identity import current_principal
+        from ..identity import current_principal
 
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
         self._request(token=self.A_JWT, verifier=self._verifier_returning(agent))
@@ -635,7 +635,7 @@ class GrantCeilingTests(TestCase):
     def test_a_grant_the_deployment_withholds_is_not_held(self):
         from django.test import override_settings
 
-        from .identity import token_principal
+        from ..identity import token_principal
 
         with override_settings(SEVERINO_MCP_ENABLE_WRITES=False):
             agent = token_principal(self._claims("read", "write_projects"))
@@ -646,7 +646,7 @@ class GrantCeilingTests(TestCase):
     def test_a_grant_the_deployment_allows_is_held(self):
         from django.test import override_settings
 
-        from .identity import token_principal
+        from ..identity import token_principal
 
         with override_settings(SEVERINO_MCP_ENABLE_WRITES=True):
             agent = token_principal(self._claims("read", "write_projects"))
@@ -656,7 +656,7 @@ class GrantCeilingTests(TestCase):
     def test_the_ceiling_never_widens_a_grant(self):
         from django.test import override_settings
 
-        from .identity import token_principal
+        from ..identity import token_principal
 
         with override_settings(SEVERINO_MCP_ENABLE_WRITES=True):
             agent = token_principal(self._claims("read"))
@@ -853,7 +853,7 @@ class ResourceContractTests(SimpleTestCase):
         }
 
     def test_an_injected_document_owns_the_catalog(self):
-        from .contract import catalogue, resource_contract
+        from ..contract import catalogue, resource_contract
 
         with mock.patch(
             "hq.platform.application.resources.resource_registry", side_effect=AssertionError("registry walk")
@@ -864,7 +864,7 @@ class ResourceContractTests(SimpleTestCase):
         self.assertIn("`example.notes`: Synthetic notes. Identifier: `slug`.", catalogue(contract.addressable))
 
     def test_altering_the_document_changes_the_catalog(self):
-        from .contract import resource_contract
+        from ..contract import resource_contract
 
         document = self._document()
         operation = document["paths"]["/resources/example.events/"]["get"]
@@ -875,7 +875,7 @@ class ResourceContractTests(SimpleTestCase):
         self.assertEqual(contract.listable[0].summary, "Changed summary.")
 
     def test_missing_metadata_and_duplicate_operations_fail_closed(self):
-        from .contract import resource_contract
+        from ..contract import resource_contract
 
         for field in ("description", "x-hq-identifier"):
             document = self._document()
@@ -888,7 +888,7 @@ class ResourceContractTests(SimpleTestCase):
             resource_contract(document)
 
     def test_external_and_recursive_parameter_references_are_refused(self):
-        from .contract import resource_contract
+        from ..contract import resource_contract
 
         for reference in ("https://example.com/parameter", "#/components/parameters/Identifier"):
             document = self._document()

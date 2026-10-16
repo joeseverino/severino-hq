@@ -2237,6 +2237,11 @@ export type ListExpensesV2Variables = {
     query?: ListExpensesV2Query;
 };
 
+export type ListHqV2Result = {
+    data: ResourceCollection;
+    ok: true;
+};
+
 export type ListInfrastructureResourcesV2Result = {
     data: ResourceCollection;
     ok: true;
@@ -2978,6 +2983,10 @@ export type Ops = {
         };
         result: ListExpensesV2Result;
     };
+    listHqV2: {
+        args: {};
+        result: ListHqV2Result;
+    };
     listInfrastructureResourcesV2: {
         args: {
             query?: ListInfrastructureResourcesV2Query;
@@ -3172,6 +3181,7 @@ export const OPERATIONS = {
     getDomainsV2: { id: "getDomainsV2", method: "GET", path: "/api/v2/resources/domains/{identifier}/", tags: ["hq.zones", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
     listEstateV2: { id: "listEstateV2", method: "GET", path: "/api/v2/resources/estate/", tags: ["hq.dashboard", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
     listExpensesV2: { id: "listExpensesV2", method: "GET", path: "/api/v2/resources/expenses/", tags: ["hq.expenses", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "year", in: "query", style: "form", explode: true }, { name: "category", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listHqV2: { id: "listHqV2", method: "GET", path: "/api/v2/resources/hq/", tags: ["hq.self", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
     listInfrastructureResourcesV2: { id: "listInfrastructureResourcesV2", method: "GET", path: "/api/v2/resources/infrastructure.resources/", tags: ["hq.infrastructure", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "kind", in: "query", style: "form", explode: true }, { name: "kinds", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
     getInfrastructureResourcesV2: { id: "getInfrastructureResourcesV2", method: "GET", path: "/api/v2/resources/infrastructure.resources/{identifier}/", tags: ["hq.infrastructure", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
     listMachinesV2: { id: "listMachinesV2", method: "GET", path: "/api/v2/resources/machines/", tags: ["hq.machines", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
@@ -4720,4 +4730,4 @@ const __redoclySetup: { config?: ClientConfig; middleware?: Middleware[] } = { c
 export const client = createClient<Ops, OperationId, OperationPath, OperationTag>(OPERATIONS, mergeSetup({ config: { serverUrl: "/", clientHeader: "redocly-client-generator" } }, mergeSetup(__redoclySetup, {})));
 
 export const { configure, use } = client;
-export const { rootV2, capabilitiesV2, assetCreateV2, assetDeleteV2, assetUpdateV2, assetUpsertV2, calendarEntryCreateV2, calendarEntryDeleteV2, calendarEntryUpdateV2, certificateRenewV2, contactSubmissionDeleteV2, contactSubmissionReviewV2, contactSubmissionsListV2, contentCreateV2, contentDeleteV2, contentUpdateV2, documentationCreateV2, documentationDeleteV2, documentationSyncV2, documentationUpdateV2, expenseCreateV2, expenseDeleteV2, expenseUpdateV2, hqImportV2, hqSyncV2, infrastructureControllerRefreshV2, infrastructureReconcileV2, infrastructureResourceAcceptObservedV2, infrastructureResourceCreateV2, infrastructureResourceRemoveV2, infrastructureResourceUpdateV2, lookupAddressV2, lookupNameV2, projectCreateV2, projectDeleteV2, projectRefreshV2, projectUpdateV2, projectUpsertV2, receiptDeleteV2, receiptUpdateV2, tailnetPolicyRemoveEmptyGroupsV2, tailnetReachAllowV2, tailnetRoutesApproveV2, executeV2, connectionsV2, findingsV2, openapiV2, resourcesV2, listActionItemsV2, listAnalyticsV2, listAssetsV2, getAssetsV2, listCalendarV2, getCalendarV2, listConnectionStandingV2, getConnectionStandingV2, listContactSubmissionsV2, getContactSubmissionsV2, listContainersV2, getContainersV2, listCredentialsV2, getCredentialsV2, listDomainsV2, getDomainsV2, listEstateV2, listExpensesV2, listInfrastructureResourcesV2, getInfrastructureResourcesV2, listMachinesV2, getMachinesV2, getPathsV2, listProjectsV2, getProjectsV2, listReadingsV2, getReadingsV2, listReceiptsV2, getRelationshipsV2, listRequestPathV2, listSearchV2, listServicesV2, getServicesV2, listTailnetV2, listUpgradesV2, getUpgradesV2, resourceListV2, resourceDetailV2, topologyV2 } = client;
+export const { rootV2, capabilitiesV2, assetCreateV2, assetDeleteV2, assetUpdateV2, assetUpsertV2, calendarEntryCreateV2, calendarEntryDeleteV2, calendarEntryUpdateV2, certificateRenewV2, contactSubmissionDeleteV2, contactSubmissionReviewV2, contactSubmissionsListV2, contentCreateV2, contentDeleteV2, contentUpdateV2, documentationCreateV2, documentationDeleteV2, documentationSyncV2, documentationUpdateV2, expenseCreateV2, expenseDeleteV2, expenseUpdateV2, hqImportV2, hqSyncV2, infrastructureControllerRefreshV2, infrastructureReconcileV2, infrastructureResourceAcceptObservedV2, infrastructureResourceCreateV2, infrastructureResourceRemoveV2, infrastructureResourceUpdateV2, lookupAddressV2, lookupNameV2, projectCreateV2, projectDeleteV2, projectRefreshV2, projectUpdateV2, projectUpsertV2, receiptDeleteV2, receiptUpdateV2, tailnetPolicyRemoveEmptyGroupsV2, tailnetReachAllowV2, tailnetRoutesApproveV2, executeV2, connectionsV2, findingsV2, openapiV2, resourcesV2, listActionItemsV2, listAnalyticsV2, listAssetsV2, getAssetsV2, listCalendarV2, getCalendarV2, listConnectionStandingV2, getConnectionStandingV2, listContactSubmissionsV2, getContactSubmissionsV2, listContainersV2, getContainersV2, listCredentialsV2, getCredentialsV2, listDomainsV2, getDomainsV2, listEstateV2, listExpensesV2, listHqV2, listInfrastructureResourcesV2, getInfrastructureResourcesV2, listMachinesV2, getMachinesV2, getPathsV2, listProjectsV2, getProjectsV2, listReadingsV2, getReadingsV2, listReceiptsV2, getRelationshipsV2, listRequestPathV2, listSearchV2, listServicesV2, getServicesV2, listTailnetV2, listUpgradesV2, getUpgradesV2, resourceListV2, resourceDetailV2, topologyV2 } = client;

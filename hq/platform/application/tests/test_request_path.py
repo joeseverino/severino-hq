@@ -115,7 +115,8 @@ class RequestPathTests(TestCase):
 
         self.assertEqual(
             [hop.step for hop in found.hops],
-            ["device", "dns", "network", "machine", "ingress", "machine", "hq"],
+            # The proxy forwards to its own machine, which is named once.
+            ["device", "dns", "network", "machine", "ingress", "hq"],
         )
         states = {hop.step: hop.check.state for hop in found.hops if hop.check}
         for step in ("device", "dns", "network", "ingress", "hq"):

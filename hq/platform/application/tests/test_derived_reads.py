@@ -13,7 +13,7 @@ from django.test.utils import CaptureQueriesContext
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.platform.api.tests import ISSUER, RESOURCE, _serving, _token
+from hq.platform.api.tests.test_api import ISSUER, RESOURCE, _serving, _token
 from hq.platform.mcp import services as mcp_services
 from hq.platform.mcp.identity import reset_principal, set_principal
 from hq_sdk import resources as sdk_resources

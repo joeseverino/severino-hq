@@ -4,9 +4,8 @@ from typing import override
 
 from django.db import models
 from django.urls import reverse
-from django.utils.text import slugify
 
-from hq.platform.core.models import TimestampedModel
+from hq.platform.core.models import TimestampedModel, free_slug
 
 
 class ContentItem(TimestampedModel):
@@ -66,13 +65,7 @@ class ContentItem(TimestampedModel):
     @override
     def save(self, *args, **kwargs):
         if not self.slug:
-            base = slugify(self.title) or "content-item"
-            slug = base
-            n = 2
-            while ContentItem.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base}-{n}"
-                n += 1
-            self.slug = slug
+            self.slug = free_slug(self, self.title, "content-item")
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:

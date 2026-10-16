@@ -11,4 +11,4 @@ import os
 os.environ.setdefault("DJANGO_SECRET_KEY", "type-checker-only-key-0123456789abcdef0123456789abcdef")
 os.environ["SEVERINO_HQ_PLUGINS"] = ""
 
-from hq.config.settings import *  # noqa: F403
+from hq.config.settings import *  # noqa: F403 - every setting, as the host defines it

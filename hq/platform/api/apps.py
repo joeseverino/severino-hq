@@ -14,4 +14,4 @@ class HQAPIConfig(AppConfig):
         # Register the composed capability-contract check after every model has
         # loaded. ``migrate`` and deployment checks then reject a bad extension
         # before the server accepts its first request.
-        from . import checks  # noqa: F401
+        from . import checks  # noqa: F401 - imported to register its checks

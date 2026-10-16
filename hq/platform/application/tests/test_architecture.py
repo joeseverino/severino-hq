@@ -1218,7 +1218,7 @@ class AssertionPrecisionTests(SimpleTestCase):
     def test_no_assertion_hides_a_comparison_inside_a_boolean(self):
         root = Path(__file__).resolve().parents[4]
         offenders = []
-        for path in sorted(root.rglob("test*.py")) + sorted(root.rglob("tests.py")):
+        for path in sorted(root.rglob("test*.py")):
             # Any virtualenv in the tree, whatever it happens to be called, and
             # anything installed into one. Matching only ".venv" would miss a
             # sibling such as `.venv312` and report third-party test files as
@@ -1720,7 +1720,7 @@ class OnePrimitiveTests(SimpleTestCase):
             path
             for package in ("hq", "hq_sdk")
             for path in sorted((self.ROOT / package).rglob("*.py"))
-            if "tests" not in path.parts and path.name != "tests.py"
+            if "tests" not in path.parts
         ]
         self.assertTrue(sources)
         found = [
@@ -2074,3 +2074,25 @@ class FragmentPrimitiveTests(SimpleTestCase):
             for retired in self.RETIRED:
                 with self.subTest(file=name, retired=retired):
                     self.assertNotIn(retired, text)
+
+
+class TestPlacementTests(SimpleTestCase):
+    """Every test lives in its package's tests/ directory (CLAUDE.md), so
+    coverage, discovery and the fast gate's selection see the same tree."""
+
+    def test_no_test_module_lives_outside_a_tests_directory(self):
+        root = Path(__file__).resolve().parents[4]
+        modules = [
+            path
+            for package in ("hq", "hq_sdk")
+            for path in (root / package).rglob("test*.py")
+            if path.name.startswith("test_") or path.name == "tests.py"
+        ]
+        self.assertTrue(modules)
+
+        misplaced = sorted(
+            path.relative_to(root).as_posix()
+            for path in modules
+            if "tests" not in path.parts and path.name != "test_runner.py"
+        )
+        self.assertEqual(misplaced, [])

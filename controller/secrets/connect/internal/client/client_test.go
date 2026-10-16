@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -427,19 +429,33 @@ func TestDenialIsFinalAndUnavailabilityIsRetriedUnderTheDeadline(t *testing.T) {
 }
 
 func TestNothingListeningIsUnavailable(t *testing.T) {
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	address := listener.Addr().String()
-	listener.Close()
-	c, err := New("http://"+address, token(t), AnyPort)
+	c, err := New("http://"+refusingAddress(t), token(t), AnyPort)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Vaults(context.Background()); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("a closed port was not unavailable: %v", err)
 	}
+}
+
+// refusingAddress is a loopback port held for the test and never listened on:
+// a connection to it is refused, and no other process can take the port the
+// way it could between closing a listener and dialing its address.
+func refusingAddress(t *testing.T) string {
+	t.Helper()
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { syscall.Close(fd) })
+	if err := syscall.Bind(fd, &syscall.SockaddrInet4{Addr: [4]byte{127, 0, 0, 1}}); err != nil {
+		t.Fatal(err)
+	}
+	bound, err := syscall.Getsockname(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(bound.(*syscall.SockaddrInet4).Port))
 }
 
 func TestASlowAnswerIsCutOffByTheContext(t *testing.T) {

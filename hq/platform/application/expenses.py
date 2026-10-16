@@ -11,7 +11,7 @@ from django.db.models import Sum
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
-from hq.domains.expenses.models import Expense
+from hq.domains.expenses.models import DEFAULT_CATEGORY, Expense
 from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context
 
@@ -100,7 +100,7 @@ class ExpenseCommand:
     date: date
     vendor: str
     item: str
-    category: str = "miscellaneous"
+    category: str = DEFAULT_CATEGORY
     total_cost: Decimal = Decimal("0.00")
     business_use_percentage: int = 100
     payment_method: str = ""

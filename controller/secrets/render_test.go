@@ -992,7 +992,9 @@ func TestNothingInstalledIsTouchedWhileALauncherHoldsTheLock(t *testing.T) {
 		rotated := secretToken + "-rotated"
 		fake.Items[0].Fields[3].Value = &rotated
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	// Long enough for the read before the lock on a loaded machine; the run
+	// then waits on the lock until this ends.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if _, err := h.runner.Run(ctx); Class(err) != "host" {
 		t.Fatalf("the renderer went ahead under a launcher's lock: %v", err)

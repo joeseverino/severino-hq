@@ -137,6 +137,7 @@ def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None 
 
     from django.utils import timezone
 
+    from .derivation_testing import frozen
     from .derivations import counting
     from .plugins import DERIVED_PROVIDERS, installed_integrations
     from .projection import projection_scope
@@ -157,16 +158,19 @@ def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None 
             asked[f"calendar {source.id}"] = partial(source.events, first, last)
         return asked
 
-    with projection_scope():
-        stored = {name: ask() for name, ask in questions().items()}
-    again: list[str] = []
-    for name, ask in questions().items():
-        with projection_scope(), counting() as (ran, served):
-            answer = ask()
-        if ran or not served:
-            again.append(f"{name}: derived again, its answer was not kept")
-        elif answer != stored[name]:
-            again.append(f"{name}: the stored answer is not equal to the one derived")
+    # Held, so an answer that lapses with the clock is not mistaken for one
+    # that was never kept.
+    with frozen():
+        with projection_scope():
+            stored = {name: ask() for name, ask in questions().items()}
+        again: list[str] = []
+        for name, ask in questions().items():
+            with projection_scope(), counting() as (ran, served):
+                answer = ask()
+            if ran or not served:
+                again.append(f"{name}: derived again, its answer was not kept")
+            elif answer != stored[name]:
+                again.append(f"{name}: the stored answer is not equal to the one derived")
     return again
 
 

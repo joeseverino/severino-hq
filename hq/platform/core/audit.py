@@ -13,7 +13,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal, overload
 from uuid import UUID
 
 from django.db.models.signals import post_delete, post_init, post_save
@@ -298,6 +298,24 @@ def audit_events():
     return AuditLog.objects.all()
 
 
+# A required event raises rather than return nothing, so its caller is told it
+# has a row; any other may be skipped by a failed write.
+@overload
+def record_event(
+    *,
+    action: str,
+    obj=None,
+    type_label: str | None = None,
+    message: str = "",
+    metadata: dict | None = None,
+    facets=(),
+    user=None,
+    required: Literal[True],
+    connection: str = "",
+) -> AuditLog: ...
+
+
+@overload
 def record_event(
     *,
     action: str,
@@ -309,7 +327,21 @@ def record_event(
     user=None,
     required: bool = False,
     connection: str = "",
-) -> AuditLog:
+) -> AuditLog | None: ...
+
+
+def record_event(
+    *,
+    action: str,
+    obj=None,
+    type_label: str | None = None,
+    message: str = "",
+    metadata: dict | None = None,
+    facets=(),
+    user=None,
+    required: bool = False,
+    connection: str = "",
+) -> AuditLog | None:
     """Write an audit row, optionally failing the surrounding transaction.
 
     Signals and informational events remain best-effort so an unavailable
@@ -361,7 +393,31 @@ def record_event(
         logger.exception("Failed to write AuditLog entry")
         if required:
             raise
-        return None  # type: ignore[return-value]
+        return None
+
+
+@overload
+def record_operation(
+    operation: str,
+    message: str,
+    *,
+    action: str = AuditLog.Action.UPDATED,
+    metadata: dict | None = None,
+    facets=(),
+    required: Literal[True],
+) -> AuditLog: ...
+
+
+@overload
+def record_operation(
+    operation: str,
+    message: str,
+    *,
+    action: str = AuditLog.Action.UPDATED,
+    metadata: dict | None = None,
+    facets=(),
+    required: bool = False,
+) -> AuditLog | None: ...
 
 
 def record_operation(
@@ -372,7 +428,7 @@ def record_operation(
     metadata: dict | None = None,
     facets=(),
     required: bool = False,
-) -> AuditLog:
+) -> AuditLog | None:
     """Record one summary event for a bulk or multi-row operation.
 
     ``facets`` is the typed form and the one to prefer: a bulk operation is

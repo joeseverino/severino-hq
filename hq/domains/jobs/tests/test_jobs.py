@@ -10,8 +10,8 @@ from django.utils import timezone
 
 from hq.platform.core.models import AuditLog
 
-from .models import HEARTBEAT_GRACE, Job
-from .runner import Failed, JobConflict, Progress, reap, run, start
+from ..models import HEARTBEAT_GRACE, Job
+from ..runner import Failed, JobConflict, Progress, reap, run, start
 
 
 class JobRunnerTests(TransactionTestCase):

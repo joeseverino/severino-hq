@@ -6,8 +6,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from . import d1
-from .d1 import get_dashboard_state
+from .. import d1
+from ..d1 import get_dashboard_state
 
 SUBMISSION = {
     "id": 1,
@@ -150,7 +150,7 @@ class InboxTests(TestCase):
     """The unread count is stored; only requests made after a page read D1."""
 
     def test_a_fresh_count_is_not_read_again(self):
-        from . import inbox
+        from .. import inbox
 
         with patch("hq.domains.contacts.d1.get_dashboard_state", return_value=([], 3)):
             inbox.refresh()
@@ -160,7 +160,7 @@ class InboxTests(TestCase):
         self.assertEqual(inbox.unread(), (3, "ok"))
 
     def test_a_write_reads_the_stored_state_again(self):
-        from . import inbox
+        from .. import inbox
 
         with patch("hq.domains.contacts.d1.get_dashboard_state", return_value=([], 3)):
             inbox.refresh()
@@ -176,7 +176,7 @@ class InboxTests(TestCase):
     def test_an_outage_keeps_the_last_count_and_says_so(self):
         from hq.platform.application import readings
 
-        from . import inbox
+        from .. import inbox
 
         readings.record(d1.UNREAD, {"count": 4, "status": "ok"})
         readings.expire(d1.UNREAD)
@@ -188,7 +188,7 @@ class InboxTests(TestCase):
     def test_the_rows_come_from_the_same_read_and_survive_an_outage(self):
         from hq.platform.application import readings
 
-        from . import inbox
+        from .. import inbox
 
         row = {"id": 7, "name": "Jane", "status": "unread", "created_at": "2026-08-23"}
         with patch("hq.domains.contacts.d1.get_dashboard_state", return_value=([row], 1)) as read:
@@ -213,7 +213,7 @@ class InboxTests(TestCase):
     def test_the_scheduled_read_reads_d1_even_when_fresh(self):
         from hq.platform.application import scheduled_work
 
-        from . import inbox
+        from .. import inbox
 
         with patch("hq.domains.contacts.d1.get_dashboard_state", return_value=([], 3)):
             inbox.refresh()
@@ -225,7 +225,7 @@ class InboxTests(TestCase):
         self.assertEqual(answer["state"], "succeeded")
 
     def test_search_matches_stored_names_without_reading_d1(self):
-        from . import inbox
+        from .. import inbox
 
         rows = [
             {"id": 9, "name": "Example Person", "status": "unread", "created_at": "2026-09-02"},

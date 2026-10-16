@@ -24,6 +24,16 @@ from .workflow_contracts import ActionLink, WorkflowPlan
 # rendered with its own text so state is never carried by colour alone.
 STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
 
+
+def _one_of(name: str, value: str, allowed: frozenset[str], *, or_empty: bool = False) -> None:
+    """Refuse a state outside its vocabulary, naming the vocabulary."""
+
+    if value in allowed or (or_empty and not value):
+        return
+    empty = " or empty" if or_empty else ""
+    raise ValueError(f"{name} must be one of {', '.join(sorted(allowed))}{empty}; got {value!r}.")
+
+
 # What a value that is not there looks like, everywhere: in a template through
 # the built-in `or_empty` filter, in a view model through this constant.
 MISSING = "–"
@@ -191,8 +201,7 @@ class Insight:
     since: datetime | None = None
 
     def __post_init__(self) -> None:
-        if self.status not in STATUS_VALUES:
-            raise ValueError(f"Insight status must be one of {', '.join(sorted(STATUS_VALUES))}; got {self.status!r}.")
+        _one_of("Insight status", self.status, STATUS_VALUES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,10 +231,7 @@ class ListRow:
     badge: str = ""
 
     def __post_init__(self) -> None:
-        if self.status and self.status not in STATUS_VALUES:
-            raise ValueError(
-                f"ListRow status must be one of {', '.join(sorted(STATUS_VALUES))} or empty; got {self.status!r}."
-            )
+        _one_of("ListRow status", self.status, STATUS_VALUES, or_empty=True)
         if self.status and not self.badge:
             raise ValueError("ListRow status needs a badge: state is never carried by colour alone.")
 
@@ -247,10 +253,7 @@ class TimelineItem:
     badge: str = ""
 
     def __post_init__(self) -> None:
-        if self.status not in STATUS_VALUES:
-            raise ValueError(
-                f"TimelineItem status must be one of {', '.join(sorted(STATUS_VALUES))}; got {self.status!r}."
-            )
+        _one_of("TimelineItem status", self.status, STATUS_VALUES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -726,10 +729,7 @@ class CalendarDay:
     filler: bool = False
 
     def __post_init__(self) -> None:
-        if self.state not in CALENDAR_STATES:
-            raise ValueError(
-                f"CalendarDay state must be one of {', '.join(sorted(CALENDAR_STATES))}; got {self.state!r}."
-            )
+        _one_of("CalendarDay state", self.state, CALENDAR_STATES)
         if self.state in ("missed", "planned") and not self.planned:
             raise ValueError(f"A {self.state!r} day is by definition planned; set planned=True.")
 

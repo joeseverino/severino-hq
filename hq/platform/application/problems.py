@@ -10,6 +10,7 @@ estate, answered from one stored value until the estate changes; an
 extension's items are composed on every request and are about its own records.
 """
 
+from collections.abc import Iterable
 from typing import Any
 
 from .derivations import derivation
@@ -48,6 +49,34 @@ def problems_about(url: str) -> tuple[dict[str, Any], ...]:
     """
 
     return _by_subject().get(url, ()) if url else ()
+
+
+def problems_among(
+    urls: Iterable[str] = (), *, keys: Iterable[str] = (), under: Iterable[str] = ()
+) -> tuple[dict[str, Any], ...]:
+    """The open problems about any of several things, in the queue's order:
+    an item whose subject is the page at one of ``urls``, whose key is one of
+    ``keys`` (a finding about a part with no page, such as a controller), or
+    whose own link is at or below one of ``under`` (an item about a repository
+    links into it)."""
+
+    from .dashboard import queue_item
+
+    pages, named = set(filter(None, urls)), set(filter(None, keys))
+    roots = tuple(root.rstrip("/") for root in under if root)
+    found = []
+    for entry in _host_entries():
+        item = queue_item(entry["source_id"], entry["source"], entry["item"])
+        link = str(item["url"] or "")
+        if item["notice"]:
+            continue
+        if (
+            (item["subject"] or {}).get("url") in pages
+            or getattr(entry["item"], "key", "") in named
+            or any(link == root or link.startswith(f"{root}/") for root in roots)
+        ):
+            found.append(item)
+    return tuple(found)
 
 
 def problem_counts() -> dict[str, int]:

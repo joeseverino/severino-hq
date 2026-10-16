@@ -13,9 +13,9 @@ from hq.platform.application.search import apply_search, global_search, search_i
 from hq.platform.application.security import AuthorizationError, cli_principal, mcp_principal
 from hq.platform.core.models import AuditLog
 
-from .backends import _fts_query, search_backend, snippet_parts
-from .models import SearchDocument
-from .services import rebuild_search_index
+from ..backends import _fts_query, search_backend, snippet_parts
+from ..models import SearchDocument
+from ..services import rebuild_search_index
 
 OPERATOR = cli_principal()
 

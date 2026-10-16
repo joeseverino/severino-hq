@@ -55,10 +55,14 @@ class StandingWords:
 
         if self.newer:
             return UPDATE_AVAILABLE
+        if self.repository is not None:
+            # Built by a repository HQ reads: its registry may refuse an
+            # anonymous read, and its release pipeline, not a tag, says what
+            # is newer. Newer is the default branch moving past production.
+            behind = self.repository.undeployed
+            return UPDATE_UNKNOWN if behind is None else UPDATE_AVAILABLE if behind else UP_TO_DATE
         if self.build is not None and self.build.get("signed"):
             return UP_TO_DATE
-        if self.repository is not None:
-            return UP_TO_DATE if self.repository.production_verified else UPDATE_UNKNOWN
         return UP_TO_DATE if self.newest else UPDATE_UNKNOWN
 
     @property
@@ -66,6 +70,8 @@ class StandingWords:
         """The update state in a few words."""
 
         state = self.update_state
+        if state == UPDATE_AVAILABLE and self.repository is not None and not self.newer:
+            return f"{self.repository.default_branch or 'its branch'} is ahead"
         if state == UPDATE_AVAILABLE:
             return f"{self.latest} available"
         return "up to date" if state == UP_TO_DATE else "unknown"
@@ -77,7 +83,7 @@ class StandingWords:
         if self.update_state != UPDATE_UNKNOWN:
             return ""
         if self.repository is not None:
-            return "Its last deploy has not been verified."
+            return "Its repository's head or its production deploy has not been read."
         if self.unread:
             return self.unread
         if not self.tag:

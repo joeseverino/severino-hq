@@ -114,8 +114,9 @@ class HostRenderStatusRecord(ObservationRecord):
 
 # A unit's name, one of systemd's state words and an instant in UTC. The
 # controller reads each pattern from this record's schema in the bridge
-# contract and checks it first.
-UNIT_NAME = r"^[A-Za-z0-9:_.@-]+\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$"
+# contract and checks it first. A name may carry systemd's \xNN escape, which
+# a unit named for a path uses for a dash in it (run-a\x2db.mount).
+UNIT_NAME = r"^(?:[A-Za-z0-9:_.@-]|\\x[0-9a-f]{2})+\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$"
 UNIT_WORD = r"^[a-z][a-z0-9-]{0,31}$"
 UNIT_INSTANT = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
 UNIT_NAME_LENGTH = 255

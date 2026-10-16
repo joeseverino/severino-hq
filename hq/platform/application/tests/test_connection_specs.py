@@ -553,6 +553,30 @@ class ConnectionWorkspaceTests(TestCase):
         self.assertContains(response, "Security checks")
         self.assertContains(response, "The proxy lets in tailnet addresses only")
 
+    def page_for(self, credential_model):
+        spec = _finance_spec()
+        instance = replace(spec.instance_provider()[0], credential_model=credential_model)
+        if credential_model == "none":
+            instance = replace(instance, granted_scopes=(), scopes_known=False)
+        spec = replace(spec, secret_store="", instance_provider=lambda: (instance,))
+        with (
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
+            mock.patch("hq.domains.control_plane.connection_views.web_principal", return_value=FINANCE),
+        ):
+            return self.client.get(reverse("control_plane:connections"))
+
+    def test_a_keyless_connection_with_no_store_needs_no_key(self):
+        response = self.page_for("none")
+
+        self.assertContains(response, "No key needed")
+        self.assertNotContains(response, "Does not say where its secret is kept")
+
+    def test_a_connection_with_a_key_and_no_store_does_not_claim_none(self):
+        response = self.page_for("scoped")
+
+        self.assertContains(response, "Does not say where its secret is kept")
+        self.assertNotContains(response, "No key needed")
+
     def test_a_plugin_unclassified_kind_does_not_trigger_controller_prose(self):
         spec = _finance_spec()
         instance = replace(spec.instance_provider()[0], kind="unclassified")

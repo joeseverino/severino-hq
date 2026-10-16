@@ -354,6 +354,9 @@ set -eu
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
 status=0
+# A run judges only its own data: a worker's file left by a run that was
+# stopped would otherwise be combined into this one's total.
+uv run --locked coverage erase
 uv run --locked coverage run manage.py test --noinput --parallel auto --durations 10 >"$log" 2>&1 || status=$?
 cat "$log"
 [ "$status" -eq 0 ]

@@ -1004,8 +1004,11 @@ func (g *githubRepository) images(ctx context.Context) ([]GitHubImage, error) {
 	return found, nil
 }
 
-// image is an image's tags, and which digests carry a cosign signature: cosign
-// names its signature sha256-<digest>.sig, so the tag list alone says which.
+// image is an image's tags, and which digests carry a cosign signature, which
+// the tag list alone says. Cosign 2 tags its signature sha256-<digest>.sig.
+// Cosign 3 attaches a referrer, and on a registry without the referrers API
+// (GHCR) the referrers index is tagged sha256-<digest>. Either is the
+// signature's presence, not its verification, which the deploy does.
 func (g *githubRepository) image(ctx context.Context, image, token string) (GitHubImage, error) {
 	basic := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
 	query := url.Values{"scope": {"repository:" + image + ":pull"}, "service": {githubRegistry}}
@@ -1031,10 +1034,14 @@ func (g *githubRepository) image(ctx context.Context, image, token string) (GitH
 			record.Tags++
 			continue
 		}
-		if digest, ok := strings.CutSuffix(strings.TrimPrefix(tag, "sha256-"), ".sig"); ok {
+		digest := strings.TrimPrefix(tag, "sha256-")
+		if signature, ok := strings.CutSuffix(digest, ".sig"); ok {
+			record.Signed = append(record.Signed, signature)
+		} else if !strings.Contains(digest, ".") {
 			record.Signed = append(record.Signed, digest)
 		}
 	}
 	slices.Sort(record.Signed)
+	record.Signed = slices.Compact(record.Signed)
 	return record, nil
 }

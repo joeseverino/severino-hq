@@ -1,6 +1,7 @@
 """Core models: AuditLog and shared mixins."""
 
 import functools
+import itertools
 import re
 from typing import override
 
@@ -94,6 +95,25 @@ class TimestampedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+def free_slug(record: models.Model, text: str, fallback: str) -> str:
+    """The first slug no other row of ``record``'s model holds: ``text``
+    slugified (``fallback`` when nothing of it survives), then ``-2``, ``-3``.
+
+    One query for every slug that could collide, so a crowded name costs the
+    same as a fresh one; the column's uniqueness still decides a race.
+    """
+    from django.utils.text import slugify
+
+    length = type(record)._meta.get_field("slug").max_length or 50
+    base = (slugify(text) or fallback)[: length - 4].rstrip("-") or fallback
+    taken = set(
+        type(record)._default_manager.filter(slug__startswith=base).exclude(pk=record.pk).values_list("slug", flat=True)
+    )
+    if base not in taken:
+        return base
+    return next(slug for n in itertools.count(2) if (slug := f"{base}-{n}") not in taken)
 
 
 class AuditLog(models.Model):

@@ -115,7 +115,9 @@ class UnitState(FactRow):
         return then is not None and read is not None and read - then > by
 
 
-def _unit(record: dict[str, Any]) -> UnitState:
+def unit_state(record: dict[str, Any]) -> UnitState:
+    """One `host.unit` record as the rules read it."""
+
     def said(name: str) -> str:
         return str(record.get(name, "") or "")
 
@@ -145,7 +147,7 @@ def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
         nodes,
         machine,
         UNIT_KIND,
-        lambda snapshot: rows_of(snapshot, _unit, lambda reason: UnitState(reason=reason)),
+        lambda snapshot: rows_of(snapshot, unit_state, lambda reason: UnitState(reason=reason)),
     )
 
 

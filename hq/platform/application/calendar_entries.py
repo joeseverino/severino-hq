@@ -365,6 +365,10 @@ def upcoming(entry: Entry, *, count: int = 5, today: date | None = None) -> tupl
     return tuple(found)
 
 
+def _meridiem(value: Any) -> str:
+    return "AM" if value.hour < 12 else "PM"
+
+
 def _clock(value: time) -> str:
     return f"{value.hour % 12 or 12}{f':{value.minute:02d}' if value.minute else ''}"
 
@@ -379,10 +383,9 @@ def when_label(entry: Entry) -> str:
         days = first
     if entry.starts_at is None:
         return days
-    meridiem = lambda value: "AM" if value.hour < 12 else "PM"  # noqa: E731
     if entry.ends_at is None:
-        return f"{days} · {_clock(entry.starts_at)} {meridiem(entry.starts_at)}"
+        return f"{days} · {_clock(entry.starts_at)} {_meridiem(entry.starts_at)}"
     start = _clock(entry.starts_at)
-    if meridiem(entry.starts_at) != meridiem(entry.ends_at):
-        start += f" {meridiem(entry.starts_at)}"
-    return f"{days} · {start}–{_clock(entry.ends_at)} {meridiem(entry.ends_at)}"
+    if _meridiem(entry.starts_at) != _meridiem(entry.ends_at):
+        start += f" {_meridiem(entry.starts_at)}"
+    return f"{days} · {start}–{_clock(entry.ends_at)} {_meridiem(entry.ends_at)}"

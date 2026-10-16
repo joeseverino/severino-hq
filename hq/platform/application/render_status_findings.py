@@ -182,7 +182,9 @@ class Rendering(FactRow):
         return read - when > within
 
 
-def _rendering(record: dict[str, Any], read_at: datetime | None = None) -> Rendering:
+def rendering(record: dict[str, Any], read_at: datetime | None = None) -> Rendering:
+    """One `host.render_status` record as the rules read it."""
+
     status = record.get("status") or {}
     attempt = status.get("last_attempt") or {}
     success = status.get("last_success") or {}
@@ -221,7 +223,7 @@ def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
         RENDER_STATUS_KIND,
         lambda snapshot: rows_of(
             snapshot,
-            lambda record: _rendering(record, snapshot.observed_at),
+            lambda record: rendering(record, snapshot.observed_at),
             lambda reason: Rendering(reason=reason),
         ),
     )

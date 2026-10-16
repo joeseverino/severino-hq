@@ -23,9 +23,9 @@ from hq.platform.application.capabilities import capability_registry, describe_c
 from hq.platform.application.domains import all_domains
 from hq.platform.application.resources import resource_registry
 
-from . import openapi, views
-from .testing import Contract, ContractClient
-from .tests import _OTHER_KEY as OTHER_KEY, ISSUER, RESOURCE, _serving, _token
+from .. import openapi, views
+from ..testing import Contract, ContractClient
+from .test_api import _OTHER_KEY as OTHER_KEY, ISSUER, RESOURCE, _serving, _token
 
 VALIDATOR = importlib.util.find_spec("openapi_spec_validator") is not None
 

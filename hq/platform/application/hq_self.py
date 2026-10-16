@@ -227,6 +227,50 @@ def hq_service(request: Any = None, *, catalog: Iterable[Any] | None = None) -> 
     return SelfService(hostnames=hostnames, machine=found.name if found else "")
 
 
+def own_machine() -> Any | None:
+    """The catalogue's machine HQ runs on, or None where no address names one."""
+
+    from .connections import machines_once
+
+    return next((item for item in machines_once() if item.runs_hq), None)
+
+
+def own_container() -> Any | None:
+    """HQ's own running container (``containers.Container``), or None.
+
+    The strongest evidence first: the container Docker started this process
+    in, by its ID. Then, on HQ's machine, the one container serving HQ's
+    names, and last the one built from the repository this build says it came
+    from (``SEVERINO_HQ_SOURCE``). Each answers only when it names exactly
+    one, so two candidates are "not known", never the first of them.
+    """
+
+    from .projection import read_once
+
+    return read_once("hq_self.own_container", _own_container)
+
+
+def _own_container() -> Any | None:
+    from .containers import containers
+    from .request_path import own_container_id
+
+    running = containers()
+    here = own_container_id()
+    # Docker's short ID: twelve characters, whichever length a reading stored.
+    by_id = [item for item in running if here and item.running.id and item.running.id[:12] == here[:12]]
+    if len(by_id) == 1:
+        return by_id[0]
+    machine = own_machine()
+    near = [item for item in running if machine is not None and item.machine.name == machine.name]
+    names = set(hq_hostnames())
+    serving = [item for item in near if names.intersection(item.serves)]
+    if len(serving) == 1:
+        return serving[0]
+    source = str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or "").lower()
+    built = [item for item in serving or near if source and item.standing.source.lower() == source]
+    return built[0] if len(built) == 1 else None
+
+
 def _matchable(text: str) -> bool:
     """Whether an address can name a machine: an address, neither loopback nor link-local."""
 

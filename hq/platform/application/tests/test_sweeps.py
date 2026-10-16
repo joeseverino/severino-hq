@@ -1,8 +1,10 @@
 """A page a person loads is answered from what is stored, sweeps or not."""
 
+import tempfile
+from pathlib import Path
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
@@ -35,6 +37,12 @@ class SweepTests(TestCase):
         derivations.forget()
         self.addCleanup(derivations.forget)
         self.client.force_login(self.seeded.user)
+        # A marker of its own, fresh: whether HQ is in use is part of what an
+        # estate answer is keyed on, and asked ahead it is always in use. Left
+        # to whatever an earlier test wrote, a request here would ask as idle.
+        marker = Path(self.enterContext(tempfile.TemporaryDirectory())) / "hq-activity"
+        marker.touch()
+        self.enterContext(override_settings(SEVERINO_ACTIVITY_MARKER=str(marker)))
         patch = mock.patch("hq.platform.application.cadence._touch")
         patch.start()
         self.addCleanup(patch.stop)

@@ -30,7 +30,7 @@ class Facet:
 
     def as_metadata(self) -> dict:
         data = {}
-        for field in fields(self):  # type: ignore[arg-type]
+        for field in fields(self):  # type: ignore[arg-type]  # every facet subclass is a dataclass
             value = getattr(self, field.name)
             if value is None or value == ():
                 continue

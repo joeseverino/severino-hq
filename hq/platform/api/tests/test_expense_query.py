@@ -2,8 +2,8 @@
 
 from django.test import TestCase, override_settings
 
-from .testing import ContractClient
-from .tests import ISSUER, RESOURCE, _serving, _token
+from ..testing import ContractClient
+from .test_api import ISSUER, RESOURCE, _serving, _token
 
 
 @override_settings(OIDC_ISSUER=ISSUER, SEVERINO_API_RESOURCE=RESOURCE)

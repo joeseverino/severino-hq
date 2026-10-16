@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 
 from django.http import HttpResponse
 from django.test import Client
-from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
+from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 

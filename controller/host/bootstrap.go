@@ -134,7 +134,7 @@ User=%s
 // sudoers.d stops sudo for every account.
 func (m *Machine) sudoRule(ctx context.Context, user string) error {
 	rule := fmt.Sprintf("# Rendered by hq-host bootstrap: the runner deploys, and may do nothing else as root.\n%s ALL=(root) NOPASSWD: %s\n",
-		user, "/usr/local/lib/severino-hq/scripts/deploy-image.sh")
+		user, DeployEntry)
 	staged, err := os.CreateTemp(m.Sudoers, ".severino-hq-deploy.")
 	if err != nil {
 		return err

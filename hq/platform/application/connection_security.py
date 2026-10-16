@@ -450,45 +450,53 @@ def _custody_control(groups: tuple[ConnectionGroup, ...]) -> SecurityControl:
     )
 
 
-def _scope_control(evidence: Counter, any_abilities: bool) -> SecurityControl:
-    """Whether each thing HQ does through a credential is within checked permissions."""
+def _scope_control(evidence: Counter, connections: tuple) -> SecurityControl:
+    """Whether each thing HQ does through a credential is within checked permissions.
+
+    Each ability is judged on its own, but the credentials with full account
+    access are counted and named, because that is the list an operator acts on.
+    """
 
     unchecked = evidence["undeclared"] + evidence["unverified"]
     unknown = evidence["unknown"]
     missing = evidence["missing"] + evidence["revoked"]
-    coarse = evidence["coarse"]
+    whole = sorted(
+        {
+            connection.instance.label
+            for connection in connections
+            if any(state.evidence == "coarse" for state in connection.abilities)
+        }
+    )
     if missing:
         state, detail = "serious", "A credential lacks a permission HQ needs."
     elif unchecked or unknown:
-        state, detail = (
-            "attention",
-            "HQ cannot confirm these credentials are limited to what it needs.",
-        )
-    elif coarse:
-        state, detail = (
-            "neutral",
-            "These services offer nothing narrower than full account access.",
-        )
+        state, detail = "attention", "HQ cannot confirm these credentials are limited to what it needs."
+    elif whole:
+        state, detail = "neutral", "These services offer nothing narrower than full account access."
     else:
         state, detail = "good", "Each service confirmed the permissions HQ needs."
+    if whole:
+        detail = f"{detail} Full account access: {', '.join(whole)}."
     return SecurityControl(
         "scope",
         "Every credential is limited to what HQ needs",
         state,
         " · ".join(
-            f"{count} {words}"
-            for count, words in (
-                (evidence["verified"], "checked"),
-                (coarse, "with full account access"),
-                (evidence["not_applicable"], "need no key"),
-                (unchecked, "not checked"),
-                (unknown, "not reported"),
-                (missing, "missing"),
+            phrase
+            for count, phrase in (
+                (evidence["verified"], f"{evidence['verified']} checked"),
+                (whole, counted(len(whole), "credential") + " with full account access"),
+                (evidence["not_applicable"], f"{evidence['not_applicable']} need no key"),
+                (unchecked, f"{unchecked} not checked"),
+                (unknown, f"{unknown} not reported"),
+                (missing, f"{missing} missing"),
             )
             if count
         )
         or "Nothing to check",
-        detail if any_abilities else "No connection reads or changes anything yet.",
+        detail
+        if any(connection.abilities for connection in connections)
+        else "No connection reads or changes anything yet.",
     )
 
 
@@ -503,7 +511,7 @@ def _freshness_control(connections: tuple) -> SecurityControl:
     return SecurityControl(
         "freshness",
         "Every connection has been read",
-        "good" if connections and not unread else "neutral",
+        "attention" if unread else "good" if connections else "neutral",
         (f"Oldest reading {ago(oldest.instance.observed_at)}" if oldest is not None else "Nothing read yet"),
         f"{counted(unread, 'connection has', 'connections have')} no reading."
         if unread
@@ -555,7 +563,7 @@ def connection_security_posture(
         tailnet_policy_control,
         *((admission.transport, admission.proxy) if admission else ()),
         _custody_control(groups),
-        _scope_control(evidence, bool(states)),
+        _scope_control(evidence, connections),
         _freshness_control(connections),
         edge_control,
     )
