@@ -35,6 +35,7 @@ import functools
 import json
 import re
 import statistics
+import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable, Iterator
@@ -265,6 +266,22 @@ def _held_outside() -> Iterator[None]:
         yield
 
 
+@contextmanager
+def _controller_arriving() -> Iterator[None]:
+    """A controller that arrived a moment ago, as on any estate being read.
+
+    Whether one is arriving is a file's mtime, not a row, so the seed cannot
+    say it. Without one an open page asks for nothing, and its cost is the
+    cost of declining.
+    """
+
+    with tempfile.TemporaryDirectory(prefix="severino-bench-") as directory:
+        heartbeat = Path(directory) / "controller-heartbeat"
+        heartbeat.touch()
+        with override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(heartbeat)):
+            yield
+
+
 def _post(client: Client, url: str, action: Action, seeded: Seeded):
     """One post of an action over the seeded estate, undone afterwards."""
 
@@ -484,7 +501,7 @@ class Command(BaseCommand):
                         headers = {**headers, "If-None-Match": held["ETag"]}
                     for name, value in _swept(client, url, options["rounds"], headers, not options["no_ahead"]).items():
                         setattr(result, name, value)
-            with _held_outside():
+            with _held_outside(), _controller_arriving():
                 results += [
                     self._said(options, *_measure_action(client, name, url, action, seeded, options["rounds"]))
                     for name, url, action in actions

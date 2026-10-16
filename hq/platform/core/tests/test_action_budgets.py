@@ -12,7 +12,14 @@ from django.test import Client, TestCase
 from hq.domains.control_plane.models import ProviderInventory, ReadRequest
 from hq.domains.jobs.models import Job
 from hq.platform.core.bench import seed
-from hq.platform.core.management.commands.bench_pages import ACTIONS, UNSAFE, _actions, _held_outside, _post
+from hq.platform.core.management.commands.bench_pages import (
+    ACTIONS,
+    UNSAFE,
+    _actions,
+    _controller_arriving,
+    _held_outside,
+    _post,
+)
 
 SMALL, LARGE = 0.05, 0.25
 SCRIPT = {"X-Requested-With": "XMLHttpRequest"}
@@ -41,7 +48,7 @@ class ActionBudgetTests(TestCase):
         exercised, _left = _actions(seeded)
         costs = {}
         first, second = _extensions_out()
-        with first, second, _held_outside():
+        with first, second, _held_outside(), _controller_arriving():
             for name, url, action in exercised:
                 if name not in BUDGETS:
                     continue
