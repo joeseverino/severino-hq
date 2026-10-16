@@ -1,8 +1,8 @@
 # Derived Facts
 
 HQ learns the estate from its connections. An operator adds credentials; HQ
-reads what they can see, joins it, and says where each fact came from. Anything
-HQ can read is not typed in.
+reads what they can see, joins it, and says where each fact came from. Nothing
+HQ can read is typed in.
 
 ## Kinds of fact
 
@@ -15,7 +15,7 @@ HQ can read is not typed in.
 
 ## Readings
 
-A reading is registered once, in the module for its provider under
+A reading is registered once, in its provider's module under
 `hq/domains/control_plane/observations/`:
 
 ```python
@@ -37,97 +37,100 @@ ObservationSpec(
 )
 ```
 
-and read by one Go reader in the controller's integration
-(`controller/providers/`), registered in its `admit` function:
+and read by one Go reader in the controller (`controller/providers/`),
+registered in its provider's `admit…` function:
 
 ```go
 r.reader(runtime.ResourceKindCloudflarePagesProject, r.cloudflarePagesProjects)
 ```
 
-The contract's `SweptKind` names every kind read this way and is derived from
-the registry: every reading a controller takes, and every resource kind that
-does not say why nothing reads it. A Go test holds it equal to the registered
-readers. A reader iterates the provider's connections (`r.Supplied.Refs`) and
-stamps each record with its `connection_ref`, so a reading is attributed to the
-connection that took it.
+The contract's `SweptKind` is derived from the registry: every reading a
+controller takes, and every resource kind that does not say why nothing reads
+it. A Go test holds it equal to the registered readers. A reader iterates its
+provider's connections (`r.Supplied.Refs`) and stamps each record with its
+`connection_ref`, so a reading is attributed to the connection that took it.
 
 Rules:
 
 - **The schema is the allowlist.** Only fields the record model names are
-  stored. A provider response is never stored whole. Fields that carry secret
-  material (tokens, client secrets, environment values, private keys) are never
-  named.
-- **A refused read is an error.** The sweep stores the kind as unreachable
-  with the reason, and the page shows the reason with `requires`. Returning no
-  records means the provider has none.
-- **A partial read says so, as a part.** A reading read in pieces declares
-  them in `parts` (`ReadingPart(name, label, requires)`, each `requires` a
-  subset of the reading's). A reader that cannot read one calls
-  `refuse(ctx, part, connectionRef, scope, err)` or `refuseAt(..., address, err)`
-  (`controller/providers/provider.go`); the sweep reports
-  the kind's `refused_parts` beside its records and HQ stores them
-  (`hq.domains.control_plane.reading_parts`). A refused part is never a record or a record
-  field, so a count never includes it. The whole kind on one zone, or on one
-  machine (`scope` its name, `address` its address), is the part `""`. Resource kinds swept in parts declare them on their provider, `ProviderSpec.parts` (a zone's
-  TLS posture and registration, the tailnet policy's settings, DNS and
-  services). A refused part reads as **Partly read** in credential sight,
-  its permissions join the missing-permissions finding and the mint, it is an
-  unreadable fact on every subject it could hide something about, and a path
-  hop that depends on it says "<part> not read: missing <permissions>". The
-  sweep's own result (`kinds`) names each kind's state in the same words,
-  `Not connected` for a kind no connection reads.
-- **Join keys are declared.** `hostnames` and `addresses` are how a reading
-  attaches to a machine, a service or a zone. Nothing else parses records to
-  join them.
+  stored (`ObservationSpec.admitted`). A provider response is never stored
+  whole, and fields carrying secret material (tokens, client secrets,
+  environment values, private keys) are never named.
+- **A refused read is an error.** The sweep stores the kind as unreachable with
+  the reason, and the page shows it with `requires`. No records means the
+  provider has none.
+- **A partial read says so, as a part.** A reading read in pieces declares them
+  in `parts` (`ReadingPart(name, label, requires)`, each `requires` a subset of
+  the reading's); a resource kind declares them on its provider
+  (`ProviderSpec.parts`: a zone's TLS posture and registration, the tailnet
+  policy's settings, DNS and services). A reader that cannot read one calls
+  `refuse(ctx, part, connectionRef, scope, err)` or `refuseAt(..., address,
+  err)` (`controller/providers/provider.go`); the sweep reports the kind's
+  `refused_parts` beside its records and HQ stores them
+  (`hq.domains.control_plane.reading_parts`). A refused part is never a record
+  or a field, so no count includes it. The whole kind on one zone or one
+  machine (`scope` its name, `address` its address) is the part `""`. A refused
+  part reads **Partly read** in credential sight, its permissions join the
+  missing-permissions finding and the mint, it is an unreadable fact on every
+  subject it could hide something about, and a path hop that depends on it says
+  "<part> not read: missing <permissions>". The sweep's result (`kinds`) uses
+  the same words, and `Not connected` for a kind no connection reads.
+- **Join keys are declared.** `hostnames`, `addresses` and `containers` are how
+  a reading attaches to a machine, a service, a zone or a container. Nothing
+  else parses records to join them.
 - **A reading says what it is to its subject.** `relation` is a short
-  present-tense phrase shown beside the record's title on a subject's page:
-  "Served by Pages project", "Behind Access". `address_relation` replaces it
-  when the record joined through `addresses` rather than `hostnames` (a tunnel
-  publishes a hostname; a machine at its origin address runs its connector).
-  Blank falls back to `relation`, then to the label. Every registered reading
-  sets one; a test enforces it.
-- **A reading can link out.** `console` builds the provider console page for a
-  record from ids the record stores (an account id, a name), never from a
-  secret. A record without them gets no link. A resource kind declares the same
-  hook on its provider (`ProviderSpec.console`): a tailnet device links to the
-  Tailscale admin console by its tailnet address.
+  present-tense phrase shown beside the record's title: "Served by Pages
+  project", "Behind Access". `address_relation` replaces it when the record
+  joined through `addresses` (a tunnel publishes a hostname; a machine at its
+  origin address runs its connector), and `container_relation` from a
+  container's side ("On network"). Blank falls back to `relation`, then to the
+  label. Every registered reading sets one; a test enforces it.
+- **A reading can link out.** `console` builds the provider console page from
+  ids the record stores (an account id, a name), never from a secret; a record
+  without them gets no link. A resource kind declares the same hook as
+  `ProviderSpec.console`: a tailnet device links to the Tailscale admin console
+  by its tailnet address.
 - **A reading can depend on what fronts a name.** `fronted_by` names a resource
   kind whose record must front a hostname for the reading to join it by name:
   an edge certificate serves a name only through a proxied Cloudflare record,
-  which says so through `ProviderSpec.fronts`. A zone subject is not narrowed:
-  a domain holds its certificates whatever each record does.
-- **A reading can say what it supplies.** `facet` is one of the service facets
+  which says so through `ProviderSpec.fronts`. A zone subject is not narrowed: a
+  domain holds its certificates whatever each record does.
+- **A reading can say what it supplies.** `facet` is a service facet
   (`runtime`, `dns`, `proxy`, `certificate`) or `registration` or `network`: an
   edge certificate supplies a name's certificate, a Pages project its runtime,
   an address registration who holds the network. `expires` and `issuer` read
-  those two facts off a record; an issuer is named through
-  `hq.domains.control_plane.certificate_authorities`. `short_label` is the label under a
-  column that already names the facet ("Edge" under Certificate).
+  those facts off a record; an issuer is named through
+  `hq.domains.control_plane.certificate_authorities`. `short_label` is the
+  label under a column that already names the facet ("Edge" under
+  Certificate). `describe` puts a few words beside a record on every
+  relationship row (a network's driver and subnets).
 - **A reading can name services and route them.** `names_services` makes each
   of a record's hostnames a service, marked observed when nothing declares it
   (a Pages custom domain, an Access application, a tunnel ingress, a redirect).
-  `redirects_to` reads the host a record sends its names to (the
-  `cloudflare.redirect` reading of zone redirect rules and forwarding page
-  rules), which becomes a `redirects_to` edge between the two services.
-  `upstream` reads where a record hands one hostname on (a tunnel's ingress
-  service).
-- **A reading can say something about the connection that took it.** `facts`
-  returns `(key, value)` pairs that land on that connection's topology node (a
-  record naming no connection speaks for every connection of its provider),
-  where a finding rule reads them: AdGuard's filtering being off, a plain
-  upstream, a rewritten name nobody looked up.
-- **One reader per kind, one kind per reader.** The contract tests enforce it
-  in both directions. `read_by` is `controller` for a reading a controller
-  takes through a credential, and `hq` for one HQ takes itself from a keyless
-  public registry (see below).
+  `redirects_to` reads the host a record sends its names to, which becomes a
+  `redirects_to` edge between the two services. `upstream` reads where a record
+  hands one hostname on (a tunnel's ingress service). `restricts` marks a gate
+  in front of what it names (Cloudflare Access, an NPM access list).
+- **A reading can speak for its connection.** `facts` returns `(key, value)`
+  pairs that land on the connection's topology node (a record naming no
+  connection speaks for every connection of its provider), where a finding
+  rule reads them: AdGuard's filtering off, a plain upstream, a rewritten name
+  nobody looked up.
+- **One reader per kind, one kind per reader.** The contract tests enforce both
+  directions. `read_by` is `controller` for a reading taken through a
+  credential, and `hq` for one HQ takes itself from a keyless public registry
+  ([below](#readings-hq-takes-itself)).
+- **A rationed reading keeps its own clock.** `every` sets how often a reading
+  whose provider rations calls is due; the sweeps between carry it without a
+  call.
 
 ### The DNS query log
 
-`adguard.query_summary` is the only reading taken from a log of what people do,
-so it is reduced on the controller, in memory, before anything is returned: one
-record per name AdGuard rewrites (the estate's own names), with the count, how
-many were blocked, the distinct clients (the busiest ten kept), when it was last
-seen and the span covered (up to a day, bounded by pages read). A rewritten name
+`adguard.query_summary` is the only reading taken from a log of what people
+do, so the controller reduces it in memory before anything leaves: one record
+per name AdGuard rewrites (the estate's own names), with the count, how many
+were blocked, the distinct clients (the busiest ten kept), when it was last seen
+and the span covered (up to a day, bounded by pages read). A rewritten name
 nobody looked up gets a record with a count of zero. No other queried name, no
 per-query time, answer or upstream leaves the controller, and the schema admits
 nothing else. It joins services by name only, never a device by address, so no
@@ -139,65 +142,57 @@ endpoint `adguard.dns` cannot read is that part refused (`upstreams`,
 ### Docker and proxy readings
 
 The Portainer credential feeds `portainer.environment` (each environment as a
-machine: type, status, agent and Docker versions), and per reachable
-environment `portainer.network`, `portainer.volume` (named volumes and bind
-mounts, with the containers mounting each), `portainer.image` (tags, digests
-and the containers running each, with the reference each was started from) and
-`portainer.compose_project` (Portainer stacks and compose labels). Each record
-names `host` and `host_address`, so it joins the machine by either. One
-container list per environment feeds all of them within a sweep
-(`controller/providers/portainer_readings.go`). An environment that cannot be read is the whole reading
-refused on that machine (`scope` the machine, `address` its address), so it
-shows on that machine's page; every environment refusing raises.
+machine: type, status, agent and Docker versions) and, per reachable
+environment, `portainer.network`, `portainer.volume` (named volumes and bind
+mounts, with the containers mounting each), `portainer.image` (tags, digests,
+the containers running each and the reference each was started from),
+`portainer.compose_project` (stacks and compose labels) and `portainer.runtime`
+([below](#containers-and-images)). Each record names `host` and
+`host_address`, so it joins the machine by either. One container list per
+environment feeds all of them within a sweep
+(`controller/providers/portainer_readings.go`). An environment that cannot be
+read is the whole reading refused on that machine (`scope` the machine,
+`address` its address), shown on its page; every environment refusing raises.
 
 The NPM login feeds `npm.certificate` (joined to the names NPM serves with it,
 not every name it covers), `npm.redirect` (the same `redirects_to` as
-`cloudflare.redirect`, answered at the ingress: `facet` `proxy`),
-`npm.stream`, `npm.access_list` (address rules and login names, never
-passwords) and `npm.dead_host` (`controller/providers/npm.go`). `requires` names NPM's own permission areas
-(`certificates: view`). A host list the login may not see is a refused part:
-of `npm.certificate` (which names each certificate serves) and of
-`npm.access_list` (which names it guards). A 401 is a refused credential and a
-403 a missing permission (`runtime.StatusFailure`).
+`cloudflare.redirect`, answered at the ingress: `facet` `proxy`), `npm.stream`,
+`npm.access_list` (address rules and login names, never passwords) and
+`npm.dead_host` (`controller/providers/npm.go`). `requires` names NPM's own
+permission areas (`certificates: view`). A host list the login may not see is a
+refused part of `npm.certificate` and of `npm.access_list`. A 401 is a refused
+credential and a 403 a missing permission (`runtime.StatusFailure`).
 
 ### The controller's own machine
 
 Three readings are of the machine a controller runs on and need no credential:
-root reads a fact on the host and `hq-host controller` mounts the
-answer into the controller read-only, naming it in an environment variable.
-The controller never holds the ruleset or the directory the fact came from. A
-fact the launcher does not name is a kind that reads `Not connected`
-(`hasSource` in `controller/providers/controller.go`).
+root reads a fact on the host and `hq-host controller` mounts the answer into
+the controller read-only, naming it in an environment variable. The controller
+never holds the ruleset or directory the fact came from. A fact the launcher
+does not name is a kind that reads `Not connected` (`hasSource` in
+`controller/providers/controller.go`).
 
 `host.firewall` is whether HQ's port must arrive on the tailnet interface, one
 distilled record (`SEVERINO_HOST_FIREWALL`).
 
-`host.render_status` is what each secret renderer on the machine says about
-its own runs (`SEVERINO_RENDER_STATUS`, a list of `<name>=<path>`
-pairs): one record per renderer the launcher names, holding the renderer's
-status document as `controller/secretstatus` declares it, or `state`
-`unreadable` with one reason word when there is no document to read. The
-record holds times, versions, counts and short words, and the schema stores
-any other string as `unreadable`. Its findings (`render-failing`,
-`render-stale`, `connect-sync-stalled`, `render-status-unread`) sit on
-the node of the controller that took the reading, or the machine it folded
-into; see `docs/Secrets.md`, "How HQ reads it".
+`host.render_status` is what each secret renderer says about its own runs
+(`SEVERINO_RENDER_STATUS`). Its record, its findings and why the mount is safe
+are in [Secrets](Secrets.md#how-hq-reads-it).
 
-`host.unit` is the state of every systemd unit the repository ships, as
-systemd holds it (`SEVERINO_HOST_UNITS`): one record per unit. The set is
-derived, never listed. `Reported` in `controller/host/readings.go` walks
-`deploy/systemd` in the root-owned tree: each shipped unit that is not a
-template, and each instance of a shipped template that a shipped file starts
-through `Unit=` or `OnFailure=`. A unit added to the directory is read the day
-it is installed. The launcher asks `systemctl show` for a fixed list of
-properties (`units_properties`, where each is explained) and mounts what it
-printed; the controller parses that text, keeps exactly those properties and
-refuses a value that is not a unit name, one of systemd's state words, a
-number or an instant. `HostUnitRecord` in the bridge contract is the record,
-emitted from the model of the same name (`observations/host.py`):
-it holds no command line, environment or path, and a unit that is not
-installed is a record saying so. Each record carries when it was read, and a
-unit's state is judged as of then.
+`host.unit` is the state of every systemd unit the repository ships
+(`SEVERINO_HOST_UNITS`): one record per unit. The set is derived, never listed:
+`Reported` in `controller/host/readings.go` walks `deploy/systemd` in the
+root-owned tree, taking each shipped unit that is not a template and each
+instance of a shipped template that a shipped file starts through `Unit=` or
+`OnFailure=`, so a unit added to the directory is read once installed. The
+launcher asks `systemctl show` for a fixed list of properties
+(`units_properties`, where each is explained) and mounts what it printed; the
+controller keeps exactly those properties and refuses a value that is not a
+unit name, a systemd state word, a number or an instant. `HostUnitRecord` in
+the bridge contract is emitted from the model of that name
+(`observations/host.py`): it holds no command line, environment or path, and a
+unit that is not installed is a record saying so. Each record carries when it
+was read, and a unit's state is judged as of then.
 
 `hq/platform/application/unit_findings.py` raises, on the same node:
 
@@ -209,22 +204,20 @@ unit's state is judged as of then.
 | `unit-state-unread` | the launcher mounted no answer, or the answer was refused | attention |
 
 The rules name no unit. A renderer whose own status says its run failed is
-`render-failing`'s to report, with the class of the failure, so `unit-failed`
-leaves that unit out and one failure is one finding. `host.render_status`
-stays a reading of its own for what systemd cannot know: why a render failed,
-when the installed files were last confirmed, and whether Connect is syncing.
+`render-failing`'s to report, with the failure's class, so `unit-failed` leaves
+that unit out and one failure is one finding. `host.render_status` stays a
+reading of its own for what systemd cannot know: why a render failed, when the
+installed files were last confirmed, and whether Connect is syncing.
 
-A unit that fails does not wait for the next sweep. Every shipped unit carries
-`OnFailure=severino-hq-job@units.read.service` through one drop-in per unit
-type in the directory systemd reads for every name with the repository's
-prefix (`deploy/systemd/severino-hq-.service.d/`). That starts the scheduled
-work `units.read`, which stores a read request for `host.unit` and rings the
-controller's doorbell, so the sweep that follows reads that one kind.
+A unit that fails does not wait for the next sweep: its `OnFailure=` starts the
+`units.read` job ([Deployment](Deployment.md#units)), which stores a read
+request for `host.unit` and rings the doorbell, so the next sweep reads that
+one kind.
 
 ## Facts about a subject
 
-`hq.platform.application.facts` is the join engine. Every page that attaches a reading to
-a subject calls it; nothing else parses a record to join it.
+`hq.platform.application.facts` is the join engine. Every page that attaches a
+reading to a subject calls it; nothing else parses a record to join it.
 
 ```python
 from hq.platform.application.facts import Subject, readings, inventory_about
@@ -234,37 +227,34 @@ subject = Subject.of(hostnames=names, addresses=addrs)  # a machine
 subject = Subject.of(zones=("example.com",))  # a domain: every name under it
 
 index = readings()  # every connected reading, indexed once per projection
-index.about(subject, facets=("certificate",))  # Joined records: relation, title, expires, issuer, age
+index.about(subject, facets=("certificate",))  # joined records: relation, title, expires, issuer, age
 index.unread(facets=("certificate",))  # refused kinds, with the reason and requires
-inventory_about("cloudflare.zone", subject)  # resource inventory records joined the same way
+inventory_about("cloudflare.zone", subject)  # resource inventory, joined the same way
 ```
 
-A hostname key joins exactly, a wildcard key joins one label below it, and a
-zone joins every name under it. `facts_about` projects the same joins into
-facts. The domain page's cards, the service list and pages, and
-the topology's reading edges read `readings()`.
+A hostname key joins exactly, a wildcard key one label below it, and a zone
+every name under it. The domain page's cards, the service list and pages, and
+the topology's reading edges read `readings()`. Each kind's inventory is read
+once per page, not once per subject.
 
-`facts_about` projects every reading and resource onto a subject (a
-machine, a hostname, a zone) through the declared join keys. Each fact carries
-its source kind, the connection that read it, and when. Where two sources
-disagree the page shows both. A kind that could not be read appears as not
-readable, with its reason. A kind no connection could read (`connected` false on
-its inventory row) yields nothing: it is not a failed read.
-
-Only the join keys that name the subject are echoed as facts: a resolver list
-naming two machines gives each only its own address.
+`facts_about` projects every reading and resource onto a subject's hostnames
+and addresses through the same keys. Each fact carries its source kind, the
+connection that read it, and when. Where two sources disagree the page shows
+both. A kind that could not be read appears as not readable, with its reason; a
+kind no connection could read (`connected` false on its inventory row) yields
+nothing, since it is not a failed read. Only the join keys that name the
+subject are echoed as facts: a resolver list naming two machines gives each
+only its own address.
 
 A covering certificate declaration applies to a name only where the ingress
-serving the name names it (`ProviderSpec.certificate`, today a proxy host's
-`certificate_resource`). An ingress that names none leaves every certificate
-covering the name.
+serving the name names it (`ProviderSpec.certificate`, a proxy host's
+`certificate_resource`). An ingress that names none leaves every covering
+certificate.
 
 A machine in the tailnet device reading is reached through the tailnet
 connection that read it: the record's `connection_ref`, else the tailnet
 connections of the controller that took the reading. `machine_catalog` derives
 this once; the machine list, the machine page and the connections page read it.
-
-Each kind's inventory is read once per page, not once per subject.
 
 ## Request paths
 
@@ -280,81 +270,85 @@ declared. A hop HQ cannot see reads "not read: <kind>, because <reason>".
 
 A redirect reading with the `proxy` facet (NPM) answers at the machine's
 ingress; one with no facet (Cloudflare) at the edge. A `proxy` reading that
-neither redirects nor forwards (an NPM 404 host) ends the path at "Answers 404".
-A reading with `upstream` and no facet (an NPM stream) is a route of its own
-beside the web route, one per forward on the same connection's ingress, with
-its `port`; `depends_on` leaves those routes out, since a second way in is not
-a part the name needs.
+neither redirects nor forwards (an NPM 404 host) ends the path at "Answers
+404". A reading with `upstream` and no facet (an NPM stream) is a route of its
+own beside the web route, one per forward on the same connection's ingress,
+with its `port`; `depends_on` leaves those routes out, since a second way in is
+not a part the name needs.
 
 The certificate is per hop: a proxied name shows the edge certificate, then the
 origin certificate the proxy behind it serves; a tailnet name shows the
 certificate the proxy serves. A Caddy route states the certificate it serves
 when the edge loads one from a file whose names cover the route (the edge
-target's read-only `certificates` operation hands over the public leaf of
-every file the edge loads, and each route names the one covering it, a
-certificate naming the host before one covering it by wildcard), and
-otherwise why it cannot (`ServedCertificate.unread`). A Caddy route whose
-upstream is a placeholder (`{http.request.host}:443`) forwards to whichever
-host the request names: its record keeps the placeholder and it has no origin,
-so its path ends at the proxy. A route no declaration accounts for is in the
-edge's own Caddyfile and is observed, never adopted. A container name an
-ingress forwards to resolves on the ingress's own machine first. HQ's own names end at HQ, with the address and
-port the request reached it on. `paths.hq_path(request)` starts from the
-caller's device and joins each hop to the request (`request_path.joined`): the
-address it came from, the proxy that forwarded it and its own headers, the name
-it asked for, an Access assertion. Each hop is proven, contradicted (a finding
-with its fix) or not shown by the request, and carries the admission layers
-decided there. `request_path.request_path(request)` is the connection page's
-one projection and the `request.path` read. HQ also records which devices
-reached it (`hq.request_path`, read by `request`: per source device, how it
-arrived, last seen and a seven-day count, written at most once per source per
-`SEVERINO_REQUEST_PATH_SECONDS`); machine pages show it. The `paths` read resource returns
-the same path to every adapter, and the service page renders it: a summary, the
-path hop by hop, what it depends on and what depends on it, then the parts and
-raw readings.
+target's read-only `certificates` operation hands over the public leaf of every
+file the edge loads, and each route names the one covering it, an exact name
+before a wildcard), and otherwise why it cannot (`ServedCertificate.unread`). A
+Caddy route whose upstream is a placeholder (`{http.request.host}:443`)
+forwards to whichever host the request names: its record keeps the placeholder
+and has no origin, so its path ends at the proxy. A route no declaration
+accounts for is in the edge's own Caddyfile and is observed, never adopted. A
+container name an ingress forwards to resolves on the ingress's own machine
+first.
+
+HQ's own names end at HQ, with the address and port the request reached it on.
+`paths.hq_path(request)` starts from the caller's device and joins each hop to
+the request (`request_path.joined`): the address it came from, the proxy that
+forwarded it and its headers, the name it asked for, an Access assertion. Each
+hop is proven, contradicted (a finding with its fix) or not shown by the
+request, and carries the admission layers decided there.
+`request_path.request_path(request)` is the connection page's projection and
+the `request.path` read. HQ also records which devices reached it
+(`hq.request_path`, read by `request`: per source device, how it arrived, last
+seen and a seven-day count, written at most once per source per
+`SEVERINO_REQUEST_PATH_SECONDS`); machine pages show it.
+
+The `paths` resource returns the same path to every adapter, and the service
+page renders it: a summary, the path hop by hop, what it depends on and what
+depends on it, then the parts and raw readings.
 
 ## Exposure
 
-`exposure.exposure_of_name(hostname)` reads each route `path_to` walked and says
-who it admits, worst first:
+`exposure.exposure_of_name(hostname)` reads each route `path_to` walked and
+says who it admits, worst first:
 
-- **open**: the internet reaches it and nothing in front asks who is asking. The
-  route starts at a record a public provider holds (`public_effect`) and meets
-  the edge, or its answer is a public address.
-- **gated**: it is reachable from the internet, but a reading that `restricts` names
-  it (Cloudflare Access, an NPM access list). HQ reads that the gate exists, not
-  what its policy admits.
+- **open**: the internet reaches it and nothing in front asks who is asking.
+  The route starts at a record a public provider holds (`public_effect`) and
+  meets the edge, or its answer is a public address.
+- **gated**: reachable from the internet, but a reading that `restricts` names
+  it. HQ reads that the gate exists, not what its policy admits.
 - **private**: the answer is on the tailnet or the local network.
 - **unrouted**: nothing HQ reads routes a name to it.
-- **unknown**: nothing routes to it that HQ saw, but HQ has not read every kind
-  that could (`paths.reads_every_route`), or the container publishes ports and no
+- **unknown**: nothing HQ saw routes to it, but HQ has not read every kind that
+  could (`paths.reads_every_route`), or the container publishes ports and no
   perimeter check has run on its machine. Unknown ranks next to open: a gap in
   what HQ read is not evidence that the internet cannot reach something.
 
-A container's exposure is the worst of the names routed to it (`serves`), of any
-port it publishes that the host's perimeter check saw answer publicly, and, for
-the container on a machine's front door (it publishes 80 or 443, or on the host
-network its image exposes them), of every route entering that machine through an
-ingress. A route passes through a proxy rather than ending at it, so without that
-last clause the one container every public name crosses would read as reached by
-none. A problem is as urgent as the worst exposure of what it is about
-(`exposure.status_at`):
+A container's exposure is the worst of the names routed to it (`serves`), of
+any port it publishes that the host's perimeter check saw answer publicly, and,
+for the container on a machine's front door (it publishes 80 or 443, or on the
+host network its image exposes them), of every route entering that machine
+through an ingress. A route passes through a proxy rather than ending at it, so
+without that last clause the one container every public name crosses would read
+as reached by none. A problem is as urgent as the worst exposure of what it is
+about (`exposure.status_at`):
 
 | Status | Open or unknown | Gated or private | Unrouted |
 | --- | --- | --- | --- |
 | Serious | serious | attention | information |
 | Attention | attention | attention | information |
 
-This applies to container advisories and to container posture failures, and the
+This applies to container advisories and container posture failures, and the
 item says which container is most exposed and how. Information stays off the
 action queue. The services list gives each name its reach in one word, with the
-route as its title, and a name open to the internet offers, on its page, the fix
+route as its title, and a name open to the internet offers on its page the fix
 HQ can run: an access list on the proxy host it declares.
 
 ## History
 
-The audit log (`/audit/`) is the one history. `hq.platform.application.history` lays what
-each source dates on it, newest first, and its Source filter picks them apart:
+The audit log (`/audit/`) is the one history.
+`hq.platform.application.history` lays what each source dates on it, newest
+first, and its Source filter picks them apart:
+
 - Through HQ: what anyone did through HQ, from the audit log.
 - Outside HQ: when a reading's records changed between two sweeps. The sweep
   writes a `Reading` audit event with counts only, comparing each record as its
@@ -370,19 +364,20 @@ each event behind it, and each deploy or container start lands on the page its
 time falls on. A search, another sort, an action filter or `?awaiting=1` lists
 the audit rows one by one.
 
-Every condition a resource reports carries `since`, which is kept while the
-condition holds the same way (`hq.platform.application.conditions`). So a drift keeps the
+Every condition a resource reports carries `since`, kept while the condition
+holds the same way (`hq.platform.application.conditions`), so a drift keeps the
 moment it was first seen. The topology gives a drifted declaration that moment
-and what the same history holds within six hours of it
-(`hq.platform.application.history.near`), and the drift findings show both beside the
-key-level difference. That way "Keep the live version" or "Restore HQ's
+and what the history holds within six hours of it
+(`hq.platform.application.history.near`), and the drift findings show both
+beside the key-level difference, so "Keep the live version" or "Restore HQ's
 version" is decided next to the deploy, recreate or edit that likely caused it.
 
 ## Contradictions
 
 Each connection reports alone, and each report can be healthy while together
-they describe something that cannot work. `hq/platform/application/contradiction_findings.py`
-reads the walked paths and stored readings for these, polling nothing:
+they describe something that cannot work.
+`hq/platform/application/contradiction_findings.py` reads the walked paths and
+stored readings for these, polling nothing:
 
 | Rule | Two sides that disagree | Fix HQ offers |
 | --- | --- | --- |
@@ -398,6 +393,41 @@ A machine where a container publishes 80 or 443 itself is never called
 unserved, since HQ cannot enumerate what it answers for. Removal is
 destructive, so a finding never offers it as a remedy.
 
+## Topology
+
+Machines, services and domains are nodes of their own
+(`hq.platform.application.topology_estate`). A controller or target that names
+one folds into it; anything else a connection reaches stays a target. A machine
+is reached through the connections the machine catalogue names. A domain's join
+keys are every name under it. HQ's own service is a service node, running on
+the machine the catalogue names (`hq.platform.application.hq_self`), the same
+answer as the machine page and the services list.
+
+Nothing in the topology names a provider to draw its edges. They follow from
+the declarations:
+
+- A reading joins its subject through the `hostnames`, `addresses` and
+  `containers` its spec declares. The edge comes from the connection that read
+  it, labelled with the reading's `relation` and carrying its kind, its age and
+  each record as a linked entity; it exists only while the reading does. A
+  tailnet device is a subject by its addresses too. A reading HQ takes itself
+  comes from its public registry's node; one whose connection no controller
+  reports now comes from a node naming that connection.
+- A kind that mirrors live records (`from_record`) is used by the connection
+  holding its record, matched by the identity adoption uses and read through
+  the record's `connection_ref`, or else the kind's `connection_providers`.
+- A reading whose spec `connects` makes the declared containers it names talk
+  to each other. Two declared containers on a user-defined Docker network (not
+  `bridge`, `host` or `none`) have a `talks_to` edge naming the network
+  (`hq/platform/application/docker_estate.py`).
+- A declaration whose spec has a `host` field runs on that machine.
+
+An estate node's last observed time is the newest of what describes it: the
+zone record for a domain, the device reading, telemetry and containers for a
+machine, and for every node its joined readings and the declarations that name
+it. A node no sweep or reading can observe says so; one that can but has not
+been read says it is not observed yet.
+
 ## Relationships
 
 Entity pages are views of one relation graph. `topology.relation_graph` builds
@@ -406,36 +436,30 @@ the topology's own node and edge code, once per projection, without what only
 the topology page needs (health, actions, traffic).
 `relationships.relationships_for(node_id)` returns one node's edges in both
 directions, grouped by the phrase each says from that node: a service "Runs on"
-a machine, the machine "Serves" it, from one edge. `topology_model.RELATIONS` states
-each structural edge kind's phrase, inverse and rank once; a reading edge takes
-its phrase from the reading's `relation` and its rank from its facet
-(`READING_RANKS`), so what serves a name comes first and an overlay with no
-facet (Access) last. Each item is a linked entity, with the connection that
-read it and when.
+a machine, the machine "Serves" it, from one edge.
+`topology_model.RELATIONS` states each structural edge kind's phrase, inverse
+and rank once; a reading edge takes its phrase from the reading's `relation`
+and its rank from its facet (`READING_RANKS`), so what serves a name comes first
+and an overlay with no facet (Access) last. Each item is a linked entity, with
+the connection that read it and when.
 
-A reading can name containers as well as hostnames and addresses (`containers`
-on its `ObservationSpec`, keyed by `contract.container_key`), and a declared
-container is a subject with that key, so every Docker reading that names one
-(its networks, mounts, image, runtime and compose project) joins to it as it
-joins to its machine, phrased from the container's side (`container_relation`:
-"On network"). A reading may describe a record in a few words (`describe`: a
-network's driver and subnets), shown beside it on every relationship row. Two
-declared containers on a user-defined Docker network (not `bridge`, `host` or
-`none`) also have a `talks_to` edge naming the network
-(`hq/platform/application/docker_estate.py`). The machine page's Docker bands (environment,
-compose projects, networks, where data lives, images) and the service page's
-"Who is allowed" band read the same joined records
-(`hq/platform/application/docker_sections.py`, `hq/platform/application/npm_sections.py`).
+A declared container is a subject keyed by `contract.container_key`, so every
+Docker reading that names it (its networks, mounts, image, runtime and compose
+project) joins to it as it joins to its machine. The machine page's Docker
+bands (environment, compose projects, networks, where data lives, images) and
+the service page's "Who is allowed" band read the same joined records
+(`hq/platform/application/docker_sections.py`,
+`hq/platform/application/npm_sections.py`).
 
 Findings from these readings: `container-image-behind` (the machine's own tag
 now names a different image than the container runs; no registry is asked),
 `container-image-untagged`, and `certificate-expiring` for any
-certificate-facet reading within 21 days of expiry, by `expiry.days_until`,
-on the connection that read it (`hq/platform/application/certificate_expiry.py`).
+certificate-facet reading within 21 days of expiry, by `expiry.days_until`, on
+the connection that read it (`hq/platform/application/certificate_expiry.py`).
 
-The machine, service, domain and declaration pages render the section from
-it, with "See in topology" (`?focus=<node>`), one "Not readable" line linking
-to the connections page, and each source's raw records under a disclosure.
+The machine, service, domain and declaration pages render the section, with
+"See in topology" (`?focus=<node>`), one "Not readable" line linking to the
+connections page, and each source's raw records under a disclosure.
 
 ## Links
 
@@ -451,107 +475,109 @@ machine answering at its address (`policy_links`).
 
 RDAP needs no credential, so HQ reads it rather than a controller:
 `registry.address` (who holds a public address) and `registry.domain` (a
-domain's registrar and expiry), in `hq/domains/control_plane/observations/public_registry.py`.
+domain's registrar and expiry), in
+`hq/domains/control_plane/observations/public_registry.py`.
 `hq.platform.application.public_registry.refresh` runs as the scheduled
-`registry.refresh` job, never from a page: a timer asks for it once a day, and
-HQ starts it at once when a sweep found an image or a digest HQ has not read.
-It reads only subjects that are due, a bounded number at a
-time, and stores them through the same ingest as a sweep, so a run with nothing
-due makes no request. Each reading stands as long as what it reads is slow to
-change (`READ_EVERY`): who holds an address or registers a domain, a week; tags,
-releases and vulnerabilities, a day; a digest's attestations, forever, since a
-digest never changes. A subject that could not be read is retried after an
-hour. Each record carries `read_at`, which is its age. An unconfigured registry is stored as not
-connected; one that cannot be reached, as a refused read.
+`registry.refresh` job, never from a page: a timer asks for it daily, and HQ
+starts it at once when a sweep found an image or digest HQ has not read. It
+reads only subjects that are due, a bounded number at a time, through the same
+ingest as a sweep, so a run with nothing due makes no request. Each reading
+stands as long as what it reads is slow to change (`READ_EVERY`): who holds an
+address or registers a domain, a week; tags, releases and vulnerabilities, a
+day; a digest's attestations, forever, since a digest never changes. A subject
+that could not be read is retried after an hour. Each record carries `read_at`,
+its age. An unconfigured registry is stored as not connected; one that cannot
+be reached, as a refused read.
 
-Address subjects are service origins, declared machine addresses and the
-public addresses a machine's tailnet client reports among its `endpoints`
-(not private, tailnet or documentation). The machine page names each one's
-holder. The service list names the holder of a public origin address from this
-reading, and the domain page falls back to it for a registration's expiry when
-the registrar is not read. Auto-renew is then unknown, and the page says so.
+Address subjects are service origins, declared machine addresses and the public
+addresses a machine's tailnet client reports among its `endpoints` (not
+private, tailnet or documentation). The machine page names each one's holder.
+The service list names the holder of a public origin address, and the domain
+page falls back to this reading for a registration's expiry when the registrar
+is not read; auto-renew is then unknown, and the page says so.
 
-The same refresh reads what a running container's image is and whether it is
-current, also keyless. `registry.image` is each image a container runs, read
-from its own registry over the OCI distribution API with an anonymous pull
-token (`hq.platform.application.oci_registry`): the tags that carry a version, and the
-build labels naming the repository it is built from. `registry.upstream` is
-each GitHub repository an image names that way, or lives under in `ghcr.io`:
-its recent releases and its published security advisories with their version
-ranges and fixes (`hq.platform.application.github_public`). Upstreams are chosen from the
-images just read, and fewer are read per run, because GitHub allows an address
-few anonymous calls an hour. Every host a registry read touches is named by someone
-else (the image, the registry's token challenge, a redirect to a CDN), so each
-request is HTTPS to a name resolving only to public addresses, a token never
-follows a redirect to another host, and a response is size-capped.
+### Containers and images
 
-`hq.platform.application.containers` joins them per running container: the version it runs
-(the tag, or the tag its digest was pulled as), newer tags of the same shape
-(`1.31.3-alpine` is compared only with `N.N.N-alpine`), and the advisories whose
-range holds that version, where a stated fix at or below it clears an
-open-ended range and a range that cannot be read is "not known", never "not
-affected". HQ's own image answers from the GitHub App's reading of its
-repository instead: the production deploy and whether it passed its checks.
+The same refresh reads, keyless, what a running container's image is and
+whether it is current. `registry.image` is each image a container runs, read
+from its registry over the OCI distribution API with an anonymous pull token
+(`hq.platform.application.oci_registry`): the tags that carry a version, and
+the build labels naming the source repository. `registry.upstream` is each
+GitHub repository an image names that way, or lives under in `ghcr.io`: its
+recent releases and published security advisories with their version ranges
+and fixes (`hq.platform.application.github_public`). Upstreams are chosen from
+the images just read, and fewer per run, because GitHub allows an address few
+anonymous calls an hour. Every host a registry read touches is named by someone
+else (the image, the token challenge, a redirect to a CDN), so each request is
+HTTPS to a name resolving only to public addresses, a token never follows a
+redirect to another host, and a response is size-capped.
+
+`hq.platform.application.containers` joins them per running container: the
+version it runs (the tag, or the tag its digest was pulled as), newer tags of
+the same shape (`1.31.3-alpine` is compared only with `N.N.N-alpine`), and the
+advisories whose range holds that version, where a stated fix at or below it
+clears an open-ended range and a range that cannot be read is "not known",
+never "not affected". HQ's own image answers from the GitHub App's reading of
+its repository instead: the production deploy and whether it passed its checks.
 The containers page, each container's page and each machine's container table
 show one `Standing`; the action queue holds one item per affected image and
-version, and one for every image with a newer release. The same refresh
-resolves, with a `HEAD` of the manifest, the digest each running tag names now
-and the digest of the newest tag of its shape: what an upgrade would pin, and
+version, and one for every image with a newer release. With a `HEAD` of the
+manifest, the refresh also resolves the digest each running tag names now and
+the digest of the newest tag of its shape: what an upgrade would pin, and
 whether a running tag has been rebuilt since it was pulled (`moved_to`). A
 digest that could not be read makes its image due again on the next run.
 
 `registry.digest` is what the publisher attached to each of those digests, read
-once (`hq.platform.application.oci_registry.attestations`, `hq.platform.application.attestations`): the
-in-toto statements BuildKit puts beside a platform's manifest, from which HQ
-keeps the SBOM's package URLs and the SLSA provenance's source, commit, builder
-and base images. Metadata beside the image, never a layer of it: nothing is
-pulled and nothing runs. The statements are the publisher's word and unsigned,
-and the page says "states", not "proves". `registry.vulnerabilities` is those
-packages checked against OSV (`hq.platform.application.osv`), keyless, one batch per
-thousand packages, each vulnerability's detail read once and kept until OSV
-modifies it: the id, the package and version installed, the versions that fix
-it, and a severity where the database gives one.
+once (`hq.platform.application.oci_registry.attestations`,
+`hq.platform.application.attestations`): the in-toto statements BuildKit puts
+beside a platform's manifest, from which HQ keeps the SBOM's package URLs and
+the SLSA provenance's source, commit, builder and base images. They are
+metadata beside the image, never a layer of it: nothing is pulled and nothing
+runs. The statements are the publisher's unsigned word, and the page says
+"states", not "proves". `registry.vulnerabilities` is those packages checked
+against OSV (`hq.platform.application.osv`), keyless, one batch per thousand
+packages, each vulnerability's detail read once and kept until OSV modifies
+it: the id, the package and installed version, the fixing versions, and a
+severity where the database gives one.
 
 What an image is built from is known, most trusted first, from the container's
 declaration (`source`, for an image that does not say), the image's label, its
 provenance's stated source, then the GitHub registry it lives in
-(`containers.source_of`); the page says which. The upstream reads follow it.
-An image is vulnerable when an advisory on its source matches its version, or
-when a critical or high vulnerability in its packages has a fix published; an
+(`containers.source_of`); the page says which, and the upstream reads follow
+it. An image is vulnerable when an advisory on its source matches its version,
+or when a critical or high vulnerability in its packages has a published fix; an
 unrated or unfixed one is shown, never raised.
 
 `portainer.runtime` is how each container is run, from Docker's inspect through
 Portainer: user, privilege, capabilities, host namespaces, security options,
 devices, mounts, port bindings, limits, restart policy and health check. It is
-built field by field, so the environment, the command line and labels, which
-the inspect document also carries, are never stored. `hq.platform.application.container_standard`
-holds each container to a standard over it (`hq.platform.application.standards`, the same
-primitive as the GitHub posture): reach over the machine (privilege, the Docker
-socket, the host's process namespace, confinement off, a writable system path,
-a machine-level capability) is serious and queued, one item per check naming
+built field by field, so the environment, command line and labels the inspect
+document also carries are never stored.
+`hq.platform.application.container_standard` holds each container to a
+standard over it (`hq.platform.application.standards`, the primitive the GitHub
+posture uses too): reach over the machine (privilege, the Docker socket, the
+host's process namespace, confinement off, a writable system path, a
+machine-level capability) is serious and queued, one item per check naming
 every container that fails it; hardening (a non-root user, no-new-privileges,
 its own network, bound ports, a memory limit, a health check) is shown and not
-queued. `hq.platform.application.supply_chain` holds the image to a second standard on the
-same primitive: pinned to a digest, its source known, its build described, its
+queued. `hq.platform.application.supply_chain` holds the image to a second
+standard: pinned to a digest, its source known, its build described, its
 packages listed, no fixable serious vulnerability, no advisory against its
 version, its tag still naming what runs. A check HQ could not read is
 unavailable, never failed.
 
-`hq.platform.application.upgrades` plans an upgrade for every container something newer is
-published for, and changes nothing: the target by digest, the size of the move,
-the advisories and package vulnerabilities it clears or would bring (the two
-digests' OSV readings compared), the writable mounts that would be
-snapshotted, what would verify it (its health check, a request to each name it
-serves), the steps an upgrade would take, and every reason it cannot go ahead
-yet as an id and a reason (`not-declared`, `runtime-unread`, `no-target-digest`,
-`no-apply-path`, `target-affected`, `own-pipeline` for HQ's own image). A
-separate list says what keeps it from applying without a person: what is not
-known about the target (`target-unread`, `no-provenance`, `no-package-list`,
-`not-scanned`), and anything but a vetted patch waits.
-
-Both are registered read resources, so an agent asks what the pages ask:
-`containers` (`machine:container`) and `upgrades` (the same address), through
-the API and the MCP like every other resource.
+`hq.platform.application.upgrades` plans an upgrade for every container with
+something newer published, and changes nothing: the target by digest, the size
+of the move, the advisories and package vulnerabilities it clears or would
+bring (the two digests' OSV readings compared), the writable mounts that would
+be snapshotted, what would verify it (its health check, a request to each name
+it serves), the steps, and every reason it cannot go ahead yet as an id and a
+reason (`not-declared`, `runtime-unread`, `no-target-digest`, `no-apply-path`,
+`target-affected`, `own-pipeline` for HQ's own image). A separate list says what
+keeps it from applying without a person: what is not known about the target
+(`target-unread`, `no-provenance`, `no-package-list`, `not-scanned`); anything
+but a vetted patch waits. The program an upgrade runs is in
+[Deployment](Deployment.md#container-upgrades).
 
 ## GitHub
 
@@ -561,96 +587,67 @@ read. A record is a repository's head and its checks, open pull requests,
 workflows waiting on an approval, deployments and the steps each ran before
 deploying whose names begin "Verify", branch rules, environments, runners,
 alert counts by severity, admission artifacts, who has access (collaborators,
-deploy keys, the default workflow token, Actions settings), and the names of its
-Actions variables. Each part is refused on its own where the repository's plan
-offers none, and says so.
+deploy keys, the default workflow token, Actions settings), and the names of
+its Actions variables. Each part is refused on its own where the repository's
+plan offers none, and says so.
 
-`hq.platform.application.github_estate` joins a project to its repository by URL and puts
-what waits on a person on the action queue: a deploy held for approval, a
-failing default branch, a deploy that failed its own verification, serious
-alerts, an admission about to lapse.
+`hq.platform.application.github_estate` joins a project to its repository by
+URL and queues what waits on a person: a deploy held for approval, a failing
+default branch, a deploy that failed its own verification, serious alerts, an
+admission about to lapse.
 
-`hq.platform.application.github_posture` holds every repository to a standard derived from
-the same record: what every repository is held to (only you have access, deploy
-keys read-only and in use, a read-only workflow token that approves nothing,
-actions pinned to a commit, Dependabot security fixes, no Actions variables),
-and, for a public one, what GitHub gives it besides (pull requests required,
-the default branch protected from force pushes and deletion, secret scanning,
-push protection, code scanning). What a plan does not offer is "not
-available", never a failure. The action queue holds one item per check not
-met, naming every repository that misses it.
+`hq.platform.application.github_posture` holds every repository to a standard
+derived from the same record: what every repository is held to (only you have
+access, deploy keys read-only and in use, a read-only workflow token that
+approves nothing, actions pinned to a commit, Dependabot security fixes, no
+Actions variables) and, for a public one, what GitHub gives it besides (pull
+requests required, the default branch protected from force pushes and
+deletion, secret scanning, push protection, code scanning). What a plan does
+not offer is "not available", never a failure. The queue holds one item per
+check not met, naming every repository that misses it.
 
-The `workflow_pins` part reads the `uses:` lines that are not pinned to a commit, in
-each workflow and in each local composite action (`.github/actions/*/action.yml`), and
-the commit each tag or branch names now. It uses the same token, with
-`contents: read`, and resolves each action and tag once per sweep: a commit read for
-one repository serves the rest, a ref one repository could not read is asked again by
-the next. A repository with no `.github/workflows` (GitHub answers 404) has nothing to
-pin, which is not a failed read. It also names each workflow called from another
-repository (`owner/repo/.github/workflows/x.yml@ref`), pinned or not. The pinning item
-then offers one `perl -pi` per file (the same on macOS and Linux, where `sed -i`
-differs). Each edit replaces only a line whose key is `uses:`, never a commented one,
-with `owner/action@<sha> # <tag>`, keeping its indentation and line ending. The
-command that requires pinning follows only when every line could be resolved and no
-workflow is called from another repository: requiring pinning first would stop every
-run that still uses a tag, and the setting applies as much to what a called workflow
-uses, which HQ does not read, so the item says to check those first. A repository
-whose workflows were not read gets the reason instead.
+The `workflow_pins` part reads the `uses:` lines not pinned to a commit, in
+each workflow and each local composite action (`.github/actions/*/action.yml`),
+and the commit each tag or branch names now. It uses the same token with
+`contents: read` and resolves each action and tag once per sweep: a commit read
+for one repository serves the rest, and a ref one repository could not read is
+asked again by the next. A repository with no `.github/workflows` (GitHub
+answers 404) has nothing to pin, which is not a failed read. It also names each
+workflow called from another repository (`owner/repo/.github/workflows/x.yml@ref`).
+The pinning item offers one `perl -pi` per file (the same on macOS and Linux,
+where `sed -i` differs); each edit replaces only an uncommented line whose key
+is `uses:`, with `owner/action@<sha> # <tag>`, keeping its indentation and line
+ending. The command that requires pinning follows only when every line could be
+resolved and no workflow is called from another repository: requiring it first
+would stop every run that still uses a tag, and it applies to what a called
+workflow uses, which HQ does not read, so the item says to check those first. A
+repository whose workflows were not read gets the reason instead.
 
-Watching shows the signed-in person's own GitHub profile and the repositories
-they star: the controller's `github.profile` reading, taken from GitHub's
-public API without a credential. Whose profile is the login their sign-in
-claims (`hq.platform.application.linked_accounts`), never one typed into HQ:
+Watching shows the signed-in person's GitHub profile and the repositories they
+star: the controller's `github.profile` reading, from GitHub's public API
+without a credential. Whose profile is the login their sign-in claims
+(`hq.platform.application.linked_accounts`), never one typed into HQ;
 `hq.platform.application.github_profile.plan` hands the controller those
-accounts and says when the reading is due, since it keeps a slower clock than
-the sweep. Refresh asks for a read now; no request reads GitHub.
+accounts and says when the reading is due. Refresh asks for a read now; no
+request reads GitHub.
 
 ## Machine roles
 
 What a machine does for the estate is derived from the tailnet readings by the
-rules in `hq.platform.application.machine_roles.ROLES`: an exit node offers and has approved
-both default routes; the tailnet DNS server holds an address the policy names as
-a nameserver. The machine list, the machine page's Serves card and search read
-`Machine.roles`.
+rules in `hq.platform.application.machine_roles.ROLES`: an exit node offers and
+has approved both default routes; the tailnet DNS server holds an address the
+policy names as a nameserver. The machine list, the machine page's Serves card
+and search read `Machine.roles`.
 
 ## The estate at a glance
 
-`hq.platform.application.estate.estate_reading` reads the machine catalogue, the service
-catalogue, the zone names, the connection rows and the joined readings once per
-projection. The dashboard's estate card, the estate action items (offline
-machines, managed certificates in their renewal window) and the command
-center's estate results read it.
-
-## Machine surfaces
-
-Each derived read is also a registered resource (`hq.platform.application.derived_reads`):
-`estate`, `action.items`, `machines`, `domains`, `relationships`, `readings`,
-`credentials` and `search`. Each handler calls the function its page calls, so
-the API, MCP, CLI and SDK answer what the page shows. See `docs/API.md`.
-
-## Topology
-
-Machines, services and domains are nodes of their own (`hq.platform.application.topology_estate`).
-A controller or target that names one folds into it; anything else a
-connection reaches stays a target. A machine is reached through the
-connections the machine catalogue names. A domain's join keys are every name
-under it. Each reading joined to an estate node is an edge from the connection
-that read it (a tailnet device is a subject by its addresses too), labelled
-with the reading's relation, carrying the reading kind,
-its age and each record as a linked entity. It exists only while the reading
-does. A reading HQ takes itself comes from its public registry's node; one
-whose connection no controller reports now comes from a node naming that
-connection.
-
-An estate node's last observed time is the newest of what describes it: the
-zone record for a domain, the device reading, telemetry and containers for a
-machine, and for every estate node its joined readings and the declarations
-that name it. A node no sweep or reading can observe says so; one that can but
-has not been read says it is not observed yet.
-
-HQ's own service is a service node too, running on the machine the machine
-catalogue names (`hq.platform.application.hq_self`), the same answer as the machine page
-and the services list.
+`hq.platform.application.estate.estate_reading` reads the machine catalogue,
+the service catalogue, the zone names, the connection rows and the joined
+readings once per projection. The dashboard's estate card, the estate action
+items (offline machines, managed certificates in their renewal window) and the
+command center's estate results read it. Every derived read is a registered
+resource, so the API, MCP, CLI and SDK answer what the page shows
+([API](API.md#what-each-surface-exposes)).
 
 ## Trust
 
@@ -662,76 +659,20 @@ finding. Everything else is derived and shown directly.
 ## Credentials
 
 Each connection's credential is least privilege, read-only unless the
-connection acts, and HQ manages through it only when its item says so (see
-Adoption). `requires` on each reading is the list of what a credential can
-be given to see more. Probing is how HQ learns what a credential can read: a
+connection acts, and HQ manages through it only when its item says so
+([Adoption](#adoption)). Probing is how HQ learns what a credential can read: a
 refused kind is a missing permission.
 
-## Adoption
-
-A connection observes unless its 1Password item has a `manages` field set to
-`1`, rendered as `<PREFIX>_MANAGES=1`. The controller reports it with each
-connection. Whether a credential can write is not read from the provider:
-Cloudflare says so only with API Tokens Read.
-
-Only a record read through a connection that manages is adopted, by a sweep or
-by an operator. A record that names its connection needs that connection to
-manage; one that names none needs every connection of its kind's providers to
-manage. Anything else shows everywhere as observed and is never declared.
-
-Stopping managing an adopted record ("Stop managing") stores a `NotManaged` row:
-kind, record token, who, when. Sweeps skip it. Managing it again ("Manage this
-domain", or adopting the record) clears the row. Both are audited.
-
-A deployment that relies on a sweep adopting sets `manages` to `1` on each
-connection it adopts through; for Cloudflare that is the production Cloudflare
-DNS connection. Without it nothing new is adopted. Declarations that already
-exist are kept.
-
-## One-time import
-
-Facts no connection knows (costs, purchase dates, notes) enter through a single
-import: atomic, audited per record, idempotent by slug, with a dry run.
-
-The `hq.import` capability, or `manage.py import_registry`, takes
-`{"projects": [...], "assets": [...]}`. Each record carries the fields of
-`project.upsert` or `asset.upsert` and a slug. The whole document is validated
-before anything is written, every record is upserted through those use cases
-in one transaction, and a record refused while writing rolls back the rest.
-`--check-only` runs the import and rolls it back. A field a record leaves out
-keeps its stored value; an unchanged record is not saved. Each record gets one
-`imported` audit event, and the import one more with the counts. It requires
-what both upserts require.
-
-### Precedence of derived fields
-
-A derived value wins over an imported one. `Project.public_url` is the case
-today: it is how `hq.platform.application.published_sites.projects_by_hostname` ties a project to
-a service and how `hq.domains.content.content_sync.index_project` finds the site that
-serves the content index, and a Pages project can supply it.
-
-- The import sets a derivable field only when the stored value is blank or
-  already equal.
-- A stored value that differs is kept. The import reports it per record as
-  `kept` (field, kept value, offered value), in the summary and in the audit
-  event, and does not fail.
-- A derivation writes over an imported value. Where a reading and a stored
-  value disagree, the facts panel shows both.
-
-Derivable fields are listed in `hq.platform.application.registry_import.DERIVED_FIELDS`.
-A field a connection starts to derive is added there.
-
-## Credential lists
-
-`requires` is a tuple of exact permission names, as the minting scripts use
-them: Cloudflare as `<permission group name> (<account|zone>)`, Tailscale as the
-bare scope name. A part of a reading names the subset it needs in `parts`.
+`requires` on each reading is a tuple of exact permission names, as the minting
+scripts use them: Cloudflare as `<permission group name> (<account|zone>)`,
+Tailscale as the bare scope name; a part names its subset in `parts`.
 `scripts/cloudflare-observer-permissions.txt` and
 `scripts/tailscale-observer-scopes.txt` hold every reading's `requires` plus
-the reads in `hq.domains.control_plane.credential_reads` that are not readings yet; a test
-keeps them equal.
+the reads in `hq.domains.control_plane.credential_reads` that are not readings
+yet; a test keeps them equal. Minting is in
+[Secrets](Secrets.md#minting-observer-credentials).
 
-## What a credential can see
+### What a credential can see
 
 Each connection's row folds in what its provider's credential can see: every
 reading it feeds and every resource kind a sweep reads. A kind with an
@@ -743,24 +684,79 @@ reading it feeds and every resource kind a sweep reads. A kind with an
   see <label>"; `credential` when it refused the credential itself (invalid,
   expired, locked out, used from a refused location), and the row says so once
   for the connection.
-- **Partly read**: read, with a declared part refused; the missing
-  permissions and the parts they would show are named.
-- **Could not be read**: the read failed for another reason, shown with its error.
+- **Partly read**: read, with a declared part refused; the missing permissions
+  and the parts they would show are named.
+- **Could not be read**: the read failed for another reason, shown with its
+  error.
 - **Not connected**: the controller holds no connection that can read it.
 - **Never read**.
 
 A readable kind older than its cadence allows reads **Out of date**
-(`hq.platform.application.freshness`). The services page's provider readings use the same
-words, through `credential_sight.standing`.
+(`hq.platform.application.freshness`). The services page's provider readings
+use the same words, through `credential_sight.standing`.
 
-A connection whose probe fails reports why, as `failure`, classified where the
-request failed (`contracts.failure_of`): `credential` or `permission` (HTTP 401
-or 403, or the provider's own refusal), `address` (the address answered with a
-sign-in page, a web page or a redirect elsewhere, not the API), or `network`
-(nothing answered). The `connection-not-answering` finding's fix follows it: the
-mint command, the item field that holds the direct API address, or the machine
-and route to check.
+A connection whose probe fails reports why as `failure`, a class the controller
+assigns where the request failed (`FailureClass`, `controller/runtime`):
+`credential` or `permission` (HTTP 401 or 403, or the provider's own refusal),
+`address` (the address answered with a sign-in page, a web page or a redirect
+elsewhere, not the API), or `network` (nothing answered). The
+`connection-not-answering` finding's fix follows it: the mint command, the item
+field that holds the direct API address, or the machine and route to check.
 
 Providers with no connection are listed once under "Not connected", with the
-readings a connection would let HQ see. Each reading is also listed under the
+readings a connection would let HQ see. Each reading is also listed under its
 connection's "Reads".
+
+## Adoption
+
+A connection observes unless its 1Password item has a `manages` field set to
+`1`, rendered as `<PREFIX>_MANAGES=1`; the controller reports it with each
+connection. Whether a credential can write is not read from the provider:
+Cloudflare says so only with API Tokens Read.
+
+Only a record read through a connection that manages is adopted, by a sweep or
+by an operator. A record that names its connection needs that connection to
+manage; one that names none needs every connection of its kind's providers to
+manage. Anything else shows everywhere as observed and is never declared.
+
+"Stop managing" an adopted record stores a `NotManaged` row (kind, record
+token, who, when), and sweeps skip it. Managing it again ("Manage this domain",
+or adopting the record) clears the row. Both are audited.
+
+A deployment that relies on a sweep adopting sets `manages` to `1` on each
+connection it adopts through; for Cloudflare that is the production Cloudflare
+DNS connection. Without it nothing new is adopted; existing declarations are
+kept.
+
+## One-time import
+
+Facts no connection knows (costs, purchase dates, notes) enter through a single
+import: atomic, audited per record, idempotent by slug, with a dry run.
+
+The `hq.import` capability, or `manage.py import_registry`, takes
+`{"projects": [...], "assets": [...]}`. Each record carries the fields of
+`project.upsert` or `asset.upsert` and a slug. The whole document is validated
+before anything is written, every record is upserted through those use cases in
+one transaction, and a record refused while writing rolls back the rest.
+`--check-only` runs the import and rolls it back. A field a record leaves out
+keeps its stored value; an unchanged record is not saved. Each record gets one
+`imported` audit event, and the import one more with the counts. It requires
+what both upserts require.
+
+A derived value wins over an imported one. `Project.public_url` is the case:
+it is how `hq.platform.application.published_sites.projects_by_hostname` ties a
+project to a service and how `hq.domains.content.content_sync.index_project`
+finds the site that serves the content index, and a Pages project can supply
+it.
+
+- The import sets a derivable field only when the stored value is blank or
+  already equal.
+- A stored value that differs is kept and reported per record as `kept`
+  (field, kept value, offered value), in the summary and the audit event; the
+  import does not fail.
+- A derivation writes over an imported value. Where a reading and a stored
+  value disagree, the facts panel shows both.
+
+Derivable fields are listed in
+`hq.platform.application.registry_import.DERIVED_FIELDS`; a field a connection
+starts to derive is added there.
