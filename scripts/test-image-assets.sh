@@ -11,12 +11,9 @@ trap 'rm -rf "${work}"' EXIT HUP INT TERM
 failures=0
 fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 
-# 1. A start collects nothing, and nothing is mounted over the image's assets.
+# 1. A start collects nothing.
 if grep -v '^[[:space:]]*#' entrypoint.sh | grep -q collectstatic; then
     fail "entrypoint.sh collects static files at container start"
-fi
-if grep -v '^[[:space:]]*#' docker-compose.yml | grep -q '/static'; then
-    fail "docker-compose.yml mounts or names /static; the image's assets must not be covered"
 fi
 
 # 2. Every image build collects, as root, after the last thing it installs.

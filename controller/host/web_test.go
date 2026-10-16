@@ -28,6 +28,10 @@ func TestTheContainerRunsUnprivilegedAndIsTheUnitsToRestart(t *testing.T) {
 			t.Errorf("args lack %q: %s", want, joined)
 		}
 	}
+	// The image carries its collected assets; nothing may cover them.
+	if strings.Contains(joined, "target=/static") {
+		t.Errorf("a mount covers the image's assets: %s", joined)
+	}
 	if strings.Contains(joined, "--restart") {
 		t.Errorf("the unit restarts HQ; the container must have no restart policy: %s", joined)
 	}
