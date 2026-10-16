@@ -24,9 +24,12 @@ contracts are the public surface.
 
 ### Changed
 
-- HQ runs on Python 3.14 only: `requires-python`, the test
-  matrix, the plugin-check default and the lint and type targets agree. Modules
-  use deferred annotations, `type` parameter syntax and `typing.override`.
+- HQ runs on Python 3.15 only: `requires-python`, the test
+  matrix, the plugin-check default, the image bases and the lint and type
+  targets agree. Modules use deferred annotations, `type` parameter syntax and
+  `typing.override`; PyJWT and requests are `lazy` imports, so a management
+  command or test worker that never verifies a token or fetches an avatar does
+  not load them.
 - Ruff also enforces import order, pyupgrade, bugbear, simplify, pathlib,
   comprehension, performance, Ruff-specific, refurb, Django and blind-except
   rules, and mypy requires `@override` in the typed modules.

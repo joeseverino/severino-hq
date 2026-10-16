@@ -15,9 +15,12 @@ import logging
 from functools import cache
 from typing import Any
 
-import jwt
 from django.conf import settings
-from jwt import PyJWKClient
+
+# PyJWT drags in cryptography's backends; only a bearer request needs them, and
+# every command and test worker imports this module through the URLconf.
+lazy import jwt
+lazy from jwt import PyJWKClient
 
 from hq.platform.application.security import AuthorizationError, Principal
 
