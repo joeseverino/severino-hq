@@ -1,4 +1,4 @@
-# One HQ brain, every interface
+# Architecture
 
 Severino HQ presents three faces: a fast operator web UI, typed MCP tools for
 agents, and a dependable CLI for shell workflows and recovery. They are not
@@ -293,7 +293,7 @@ A page that changes one region does not fetch itself to do it. The region
 asks for its part by name (`X-Fragment`), the view renders that
 `{% partialdef %}` of the page's template, and a part whose inputs are known
 by revision answers "unchanged" with 304 (`hq.platform.application.fragments`;
-`docs/DESIGN.md` has the contract). `bench_pages` reads each page it requests
+`docs/Design.md` has the contract). `bench_pages` reads each page it requests
 for the parts it names and the validator it hands out, and measures those
 beside the page, so a new part is measured without being listed.
 
@@ -456,7 +456,7 @@ costs nobody:
 The request that asks answers at once, in one shape for both
 (`hq.platform.application.asks`): how the work stands, and while it is live
 the address of a status resource, with 202. `partials/_ask.html` draws the
-control and one script behaviour follows it; `docs/DESIGN.md` has the
+control and one script behaviour follows it; `docs/Design.md` has the
 interaction.
 
 The rule is held by the interpreter rather than by review
@@ -816,7 +816,8 @@ an in-process recovery path.
 
 ## Security model
 
-The service boundary complements the existing network boundary:
+The service boundary complements the network boundary. The whole security
+design and the production checklist are in [Security](Security.md). Inside HQ:
 
 1. The MCP endpoint exists only on the tailnet.
 2. `MCPBoundary` validates the direct peer, Host, and Origin, then the caller:
@@ -893,6 +894,10 @@ from a record the provider already holds. Everything derived from that (the
 service view, the generated create-and-edit forms, adoption) is written once
 and names no provider, so a provider added to the registry appears on all of it
 without another file being edited.
+
+![Provider registry: one declaration derives the schema, validation, controller contract, forms, service view, and adoption](diagrams/provider-registry.png)
+
+<sup>Diagram source: [`diagrams/provider-registry.mmd`](diagrams/provider-registry.mmd).</sup>
 
 Each provider is one module in `hq/domains/control_plane/provider_adapters/`: its spec
 models, its kind constants, the functions its declaration names, and the
@@ -1068,7 +1073,7 @@ may name what HQ only reads; the `names-nothing` finding
 (`hq/platform/application/reference_findings.py`) reports a record whose
 connection no controller has, or whose domain HQ neither expects nor has read.
 
-The homelab controller is a separate root-owned systemd oneshot, not a web
+The controller is a separate root-owned systemd oneshot, not a web
 process. It starts a disposable, capability-dropped container from the exact
 scanned HQ image, whose `/usr/local/bin/hq-controller` is the static Go binary
 built in the image's `controller` stage, so the host needs no toolchain and
@@ -1129,7 +1134,7 @@ in each fails if a call comes to cost a process again.
   answers how it ended, so a failed job is a failed unit and every run has a
   row. A timer asks on its schedule. A unit that fails asks for `units.read`
   through `OnFailure=`, which has the controller read `host.unit` at once
-  (`docs/DERIVED_FACTS.md`, "The controller's own machine"). No unit starts a
+  (`docs/Derived-Facts.md`, "The controller's own machine"). No unit starts a
   Python process, a test holds the shipped units to the declared names, and HQ
   starts the same job itself when it learns something is due sooner.
 

@@ -2,7 +2,7 @@
 
 Severino HQ is a single-user internal application. It is intended to run
 **only over a private Tailscale network** behind authentication. The
-project's security model is documented in [`docs/SECURITY.md`](../docs/SECURITY.md).
+project's security model is documented in [`docs/Security.md`](../docs/Security.md).
 
 ## Reporting a vulnerability
 

@@ -34,7 +34,7 @@ check`, migration and API document drift, and mypy on changed typed modules.
 to a shared layer reaches most of the suite and says so. It reads Python imports
 and app names, so a rule tested only through a string or a template it cannot
 see needs `mise run check`. It never replaces `mise run check`, which also runs
-the suite with `DEBUG` off. A new host domain: `docs/NEW_DOMAIN.md`.
+the suite with `DEBUG` off. A new host domain: `docs/New-Domain.md`.
 
 `mise run check` answers "do my changes work?". `mise run ci` answers "will the
 pipeline accept them?": the aggregates `checks` (ruff and mypy at the locked
@@ -88,8 +88,8 @@ replaced by `cannot pickle 'traceback' object`. `--parallel=1` also works.
 - The machine API's current contract is `/api/v2/`. Writes are capability
   authorized, schema validated, transactionally audited, and idempotent.
 
-The detailed boundaries live in `docs/APPLICATION_ARCHITECTURE.md`,
-`docs/PLUGINS.md`, and `docs/API.md`.
+The detailed boundaries live in `docs/Architecture.md`,
+`docs/Plugins.md`, and `docs/API.md`.
 
 ## The host does not know its extensions
 
@@ -142,7 +142,7 @@ controller half (its readers, actions and probe) is Go, in
 `controller/providers/`, registered in `providers.New`; a provider is handed
 its own connection as a typed value (`r.Supplied.For`), never a setting by name.
 `hq/domains/control_plane/provider_adapters/tests/test_admission.py` shows the contract;
-`docs/APPLICATION_ARCHITECTURE.md` has the detail.
+`docs/Architecture.md` has the detail.
 
 ### Moving code
 
@@ -206,7 +206,7 @@ same review, and should fail when its path matches nothing rather than pass.
 
 ## Frontend quality bar
 
-`docs/DESIGN.md` is the design language: the primitives a page is built from
+`docs/Design.md` is the design language: the primitives a page is built from
 and the rules they keep. Read it before adding UI; grow a primitive rather
 than styling a page.
 
@@ -217,7 +217,7 @@ than styling a page.
 - Keep interactions immediate, keyboard accessible, responsive, and stable
   under partial replacement. Preserve focus and browser history intentionally.
 - A part of a page that is fetched, refreshed or polled is a `data-fragment`
-  region answered from a `{% partialdef %}` (`docs/DESIGN.md`, "A read is a
+  region answered from a `{% partialdef %}` (`docs/Design.md`, "A read is a
   fragment"). No script parses a response or keeps a timer of its own.
 - A GET has no effect. Pages are prefetched on press, and a speculative
   request is refused wherever HQ records or reaches out
@@ -329,4 +329,4 @@ exits 2, never 0.
 - Do not commit, push, deploy, or modify private repositories unless the user
   explicitly asks for that operation.
 
-Structural similarity classifications are derived from parsed source, never symbol/path allowances. `scripts/structural_classify.py` distinguishes tracked generated provenance, immutable ResourceSpec/SearchDefinition declarations, and tiny typed delegation to distinct local credential producers. Unknown/malformed/unreadable source fails the gate; ambiguous executable similarities remain gated. Generated classification requires the controller regeneration/no-diff gate independently. See `docs/STRUCTURAL_GATE.md` for exact criteria and limitations.
+Structural similarity classifications are derived from parsed source, never symbol/path allowances. `scripts/structural_classify.py` distinguishes tracked generated provenance, immutable ResourceSpec/SearchDefinition declarations, and tiny typed delegation to distinct local credential producers. Unknown/malformed/unreadable source fails the gate; ambiguous executable similarities remain gated. Generated classification requires the controller regeneration/no-diff gate independently. See `docs/Structural-Gate.md` for exact criteria and limitations.

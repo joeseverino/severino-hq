@@ -1,4 +1,4 @@
-# Derived facts
+# Derived Facts
 
 HQ learns the estate from its connections. An operator adds credentials; HQ
 reads what they can see, joins it, and says where each fact came from. Anything
@@ -181,7 +181,7 @@ record holds times, versions, counts and short words, and the schema stores
 any other string as `unreadable`. Its findings (`render-failing`,
 `render-stale`, `connect-sync-stalled`, `render-status-unread`) sit on
 the node of the controller that took the reading, or the machine it folded
-into; see `docs/SECRETS.md`, "How HQ reads it".
+into; see `docs/Secrets.md`, "How HQ reads it".
 
 `host.unit` is the state of every systemd unit the repository ships, as
 systemd holds it (`SEVERINO_HOST_UNITS`): one record per unit. The set is

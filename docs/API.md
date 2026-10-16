@@ -1,4 +1,4 @@
-# Severino HQ: machine-client API
+# API
 
 The fourth delivery adapter, after the web UI, the CLI, and MCP. It exists so a
 phone, a Shortcut, or a cron job can run an HQ capability over HTTP.

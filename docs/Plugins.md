@@ -1,4 +1,4 @@
-# Plugin Architecture
+# Plugins
 
 Severino HQ exposes a versioned extension contract for trusted, installable
 Django packages. A plugin declares its integration once; HQ derives application
@@ -166,6 +166,10 @@ deployment.
 
 ## Composition
 
+![How the public host and its private extensions become one application: extensions import only hq_sdk and release signed wheels; Compose assembles them with the scanned host image and a runtime-supplied extension list](diagrams/host-and-extensions.png)
+
+<sup>Diagram source: [`diagrams/host-and-extensions.mmd`](diagrams/host-and-extensions.mmd).</sup>
+
 Production runs **one image carrying every admitted plugin**. Plugins do not
 build or deploy images: each verifies and admits itself and publishes its signed
 bundle, and the host composes them, so deploying one never replaces the others.
@@ -226,7 +230,7 @@ before either merges:
 
 Merge the host first; each extension then checks and admits against `main`.
 
-The declared set lives in a repository variable rather than a committed file:
+The declared set lives in the `COMPOSITION_EXTENSIONS` repository secret rather than a committed file:
 this repository is public and the extensions it composes are not.
 `composition/extensions.json` documents the shape.
 
@@ -419,7 +423,7 @@ responsive rules, accessibility states, and visual evolution. A new shared
 pattern belongs in HQ first; copying host CSS or markup into every plugin is a
 contract failure. The rules those classes follow (one frame per thing, tables
 sized to content, one head, menu, disclosure and filter bar) are in
-`docs/DESIGN.md`.
+`docs/Design.md`.
 
 An amount is written by `{{ amount|money }}` in a template and
 `hq_sdk.money.money` in Python: "$1,234.50", a true minus sign before the

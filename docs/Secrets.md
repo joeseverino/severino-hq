@@ -1,4 +1,10 @@
-# Secret delivery
+# Secrets
+
+HQ reads every credential from one 1Password vault, through a 1Password
+Connect server on the host's loopback. `hq-secrets` renders two things from it
+onto a root-only tmpfs: the web container's application environment, and the
+controller's connections document. Neither the web container nor the
+controller talks to Connect, and neither holds the other's secrets.
 
 Connect is a local read path for secrets already intended for the host. It is
 not a new ingress for applications, a replacement for disk encryption, or a
@@ -6,6 +12,15 @@ boundary against host root. The certificate publisher uses a separate cloud
 service account because Connect's file API does not support uploads.
 
 ## Bootstrap and ownership
+
+The host's own values live in `/etc/severino-hq/host.json`
+([`deploy/host.example.json`](../deploy/host.example.json)): the vault, the
+application-environment item, the Connect unit and loopback URL, and the name of
+the encrypted credential holding the reader token. `hq-host bootstrap` renders
+them into drop-ins for `severino-hq-secrets.service` (`10-estate.conf`,
+`20-connect.conf`), and refuses a value systemd would read as something else
+or a Connect that is not on `127.0.0.1`. The tmpfs is
+`deploy/systemd/run-severino\x2dhq\x2dsecrets.mount`, root-only, `noswap`.
 
 Keep recovery copies of Connect credentials and reader tokens in an
 operator-only 1Password vault that this Connect installation cannot access.
@@ -16,12 +31,13 @@ Do not fetch a bootstrap token from Connect itself or require cloud access on
 every boot. GitHub Actions does not need the runtime token.
 
 Store each encrypted credential under `/etc/credstore.encrypted/`, root-owned
-and mode 0600. Its embedded credential name must match the unit's
-`LoadCredentialEncrypted=` name. systemd supplies the plaintext runtime file in
-`CREDENTIALS_DIRECTORY`. Provision Connect's server credential and each client
-token separately. Reader tokens have read-only access to the necessary vaults.
+and mode 0600. Its embedded credential name must match the `connect.credential`
+in `host.json`, which becomes the unit's `LoadCredentialEncrypted=` name.
+systemd supplies the plaintext runtime file in `CREDENTIALS_DIRECTORY`.
+Provision Connect's server credential and each client token separately. Reader
+tokens have read-only access to the necessary vaults.
 
-Use TPM-backed credentials where the actual host supports them and test recovery
+Use TPM-backed credentials where the host supports them and test recovery
 after firmware and boot-policy changes. Host-key-only encryption cannot protect
 against theft of a disk containing both ciphertext and the host key. Disk and
 backup encryption remain separate requirements. Running root can obtain runtime
@@ -30,9 +46,9 @@ secrets with either approach.
 The certificate publisher's service-account token is an item in the vault the
 reader token reads, projected like any other connection (`service_account`).
 A holder of the reader token can therefore read it, and that token is write
-authority over the vault the publisher writes to. This is the operator's
-accepted decision: every credential the controller uses is one item in one
-vault, delivered one way. Credentials that can mint other credentials are the
+authority over the vault the publisher writes to. This is a deliberate
+decision: every credential the controller uses is one item in one vault,
+delivered one way. Credentials that can mint other credentials are the
 exception and stay out of that vault; see "Minting observer credentials".
 
 ## Network and execution boundaries
@@ -71,7 +87,7 @@ exception and stay out of that vault; see "Minting observer credentials".
   and results. The socket's directory is a volume only the web account can
   enter, mounted read-only into the controller's container; each side checks
   the directory, the socket and the peer's uid before a byte is exchanged
-  (`docs/APPLICATION_ARCHITECTURE.md`). The controller's container is given
+  ([Architecture](Architecture.md#infrastructure-control-plane)). The controller's container is given
   neither HQ's database nor its application environment, so the process that
   holds every provider credential holds none of HQ's, and the reverse.
 
@@ -84,7 +100,7 @@ per consumer and an emergency local shutdown procedure.
 
 `hq-secrets` (`controller/cmd/hq-secrets`) is a static Go binary. Root runs the
 copy in the root-owned tree, `/usr/local/lib/severino-hq/deploy/bin/hq-secrets`,
-which the image build compiles and `root-tree.sha256` covers. It holds no
+which the image build compiles and `hq-host sync` installs. It holds no
 provider code. It reads through Connect and nothing else: there is no
 service-account read path and no fallback. A host still configured with
 `SEVERINO_SECRETS_BACKEND` set to anything but `connect` is refused.
@@ -100,7 +116,10 @@ Connect stays locked after a restart until an authenticated request arrives, so
 readiness is the authenticated vault listing, never `/health`. No answer, a
 timeout and a 5xx are retried with backoff under one deadline
 (`-connect-timeout`, 75 seconds); a refused token and a malformed answer are
-final. The unit's `TimeoutStartSec` is the outer bound.
+final. The unit's `TimeoutStartSec` is the outer bound. A change to the item is live
+at the next hourly run, or at once with `systemctl start
+severino-hq-secrets.service`; the web container restarts only when its
+environment changed.
 
 One render is one consistent read: the vault's content version is read before
 and after the items, and an item's version is checked against its listing. A
@@ -221,21 +240,17 @@ The application environment keeps its name, format and place
 the existing Docker bind mount. Its update is in place, and the install as a
 whole is not a multi-file transaction: an interruption can leave mixed or
 partial files. A destination that is not a regular single-link file owned by
-the web account is refused, not written through. The MCP token file earlier
-releases kept is removed: nothing accepts one.
+the web account is refused, not written through.
 
 SSH identities and signing keys are written beside the document, in `ssh/`:
 `<ref>` and `<ref>.pub`, `<ref>.key` and `<ref>.key.pub`, and `known_hosts`.
 Halves are parsed and proven to be one key before anything is written. An
 identity is written in OpenSSH format, a signing key as PKCS#8 for `openssl`.
 
-The controller installer installs and reloads the renderer unit from the
-root-owned image copy before refreshing secrets. Failed activation restores
-the prior renderer unit; deployment rollback restores the prior tree. After
-activation, the installer removes what earlier releases left: any controller
-credential under `/run/severino-hq`, and the shell renderer's environment file
-on the tmpfs. Copies on disk or in backups are outside its reach and need
-separate cleanup and credential rotation.
+`hq-host install` installs the renderer's units first and alone, starts a
+render, and checks the connections document before anything that reads it.
+A failed install restores the prior units; a deploy's rollback restores the
+prior tree.
 
 ## Status document
 
@@ -313,6 +328,56 @@ now and not against when the reading was taken: a controller that cannot start
 because its secrets are gone still raises them. Each finding names the command
 to run on the machine for a renderer whose unit HQ knows (`RENDERER_UNITS`).
 
+## Connections
+
+A connection is a vault item and nothing else. `connection_ref`, `projection`
+and `env_prefix` on the item are what make it one, and the renderer reads them,
+so no file in this repository names a connection. Connection shapes are
+declared once, in `hq/domains/control_plane/connection_shapes.py`;
+`manage.py bridge_contract` emits `hq/config/controller-connections.json` from
+them, and the renderer derives each connection's settings from it. Built-in
+1Password fields may be selected by stable ID; custom fields by their unique
+label, since 1Password assigns an opaque ID per item.
+
+The provider comes from the env prefix (`ADGUARD_*` is AdGuard), unless the
+item carries a `provider` field, which lets two of a kind coexist
+(`PORTAINER_HOME` and `PORTAINER_CLOUD`). A connection only observes unless
+the item carries `manages` set to `1`; HQ adopts what a sweep finds only
+through a connection that manages ([Derived Facts](Derived-Facts.md#adoption)).
+
+On each pass the controller probes every connection it was handed and reports
+what answered and what it can act on: the machines behind a Portainer, the
+zones a DNS token may edit. HQ stores the report, not the credential, and
+`/infrastructure/connections/` shows it. OAuth probes exchange the client
+credential for a short-lived token and discard it at once.
+
+The controller trusts internal provider TLS through the host trust store
+(`/usr/local/share/ca-certificates`) or a deployment-provided
+`HQ_CONTROLLER_CA_FILE`. Never disable TLS verification.
+
+### SSH identities
+
+Deployment identities are SSH Key items in the vault, generated by 1Password,
+so no private key is created on or written to a host's disk. Each SSH
+connection names its key item in an `identity` field. The renderer writes the
+private half, the public half and a `known_hosts` pinned from the connection's
+Ed25519 host key into `ssh/` on the tmpfs, refuses an item whose halves do not
+match, and installs the set with the connections document as one generation.
+It refuses to run while private keys remain in a `secrets/ssh/` directory on
+disk. Authorize each public key with the narrowest remote account or forced
+command available ([Deployment](Deployment.md#remote-targets)). Rotating a key
+is generating a new item, authorizing its public half, and pointing the
+connection's `identity` at it.
+
+### `SEVERINO_SECRET_STORE_KEY`
+
+The one secret HQ holds rather than reads, a field on the
+application-environment item. It seals a certificate an operator generated and
+asked HQ to install. Any value of 32 characters or more works; generate it with
+the 1Password generator so it never reaches a shell history. Unset, HQ refuses
+to accept a private key and says so. Rotating it makes everything already
+sealed unreadable, and unsealing reports that.
+
 ## Minting observer credentials
 
 HQ holds no credential that can create tokens. When a connection lacks a
@@ -320,7 +385,7 @@ permission, is refused, or nears expiry, its row and finding show one command
 for the operator's machine, for example:
 
 ```sh
-CLOUDFLARE_BOOTSTRAP_TOKEN='op://Operator Vault/Cloudflare bootstrap/credential' \
+CLOUDFLARE_BOOTSTRAP_TOKEN='op://Example Bootstrap/cloudflare/credential' \
   op run -- ./scripts/mint-cloudflare-token.sh --account 0123abcd \
   --store 'op://Example Vault/exampleitem01/credential'
 ```
@@ -337,6 +402,22 @@ from the connection item's optional `bootstrap` field, an `op://<vault>/<item>`
 reference shaped like the connection. The renderer refuses a bootstrap in the
 vault it reads, because a reader of that vault could then mint.
 
+Two scripts mint read-only credentials. Both take the bootstrap credential
+from the environment. Without `--print-secret` (or `--store`) they print what
+they would create and create nothing.
+
+- `scripts/mint-cloudflare-token.sh` needs a bootstrap token with API Tokens
+  Write. It resolves the names in `scripts/cloudflare-observer-permissions.txt`
+  and creates a user-owned token with an expiry and optional client IP ranges.
+  `--list-groups` prints the current names.
+- `scripts/mint-tailscale-client.sh` creates an OAuth client with the scopes in
+  `scripts/tailscale-observer-scopes.txt`, all `:read`. The bootstrap needs the
+  `oauth_keys` scope: an API access token, or an OAuth client given as
+  `TAILSCALE_BOOTSTRAP_CLIENT_ID` and `TAILSCALE_BOOTSTRAP_CLIENT_SECRET`.
+
+Both lists are the `requires` of every reading for that provider plus
+`hq.domains.control_plane.credential_reads`, and a test fails when they differ.
+
 ## Why it is built this way
 
 These are the constraints behind the renderer's shape, so a later change does
@@ -344,8 +425,8 @@ not remove a line that is load-bearing.
 
 **There is one backend.** `OP_CONNECT_HOST` and `OP_CONNECT_TOKEN` take
 precedence over `OP_SERVICE_ACCOUNT_TOKEN` everywhere inside `op`, and a process
-holding both uses Connect, which is read-only. The renderer no longer runs `op`
-and refuses a token in its environment, so the two can no longer be confused.
+holding both uses Connect, which is read-only. The renderer does not run `op`
+and refuses a token in its environment, so the two cannot be confused.
 The publisher is the only `op` caller left, and it is given one token.
 
 **The credential is named for the consumer, not the protocol.** A host may run
@@ -386,79 +467,17 @@ its API is pre-1.0. It would also put a vault client inside the image the web
 container shares, which lending the host's `op` to one run avoids. Revisit when
 the SDK reaches 1.0 or Connect gains file upload.
 
-## Cutover gates
+## Checking the renderer on a host
 
-1. Inventory consumers, vault scope, read/write authority, credential owner,
-   destination, expiry, and recovery procedure using metadata only. Record real
-   identifiers in private operational documentation.
-2. Remove human, signing-authority, remote-host, and bootstrap credentials from
-   the proposed sync scope. The publisher's token stays in the vault, as above.
-3. Validate the reader token and warm every required item. An unauthenticated
-   health endpoint is insufficient evidence of usable cached secrets.
-4. Install a host-specific version of
-   `deploy/systemd/severino-hq-secrets-connect.conf.example`: Connect on a
-   loopback port below 1024, the unit requiring Connect and ordered after it
-   without requiring cloud readiness. Validate the effective systemd unit.
-5. Compare rendered results privately without printing values. Exercise denied
-   tokens, missing items, malformed responses, unavailable Connect, unchanged
-   refreshes, and writer operation.
-6. Test a full host boot with WAN unavailable and an independently armed
-   recovery mechanism. Verify DNS, systemd ordering, firewall startup, cached
-   reads, and application readiness. A container restart alone is insufficient.
-7. Observe a defined soak period with off-host logging, collection heartbeats,
-   sync-age monitoring, and renderer failure alerts. Then revoke the retired
-   reader service account and remove its local credential. Rollback during the
-   soak is an explicit operator action, never a silent authentication fallback.
+The Go tests run against an in-process Connect and cannot show these.
 
-Provisioning, live cutover, credential revocation, and destructive outage tests
-are separate operational steps. Local tests do not establish that these gates
-have passed on a deployed host.
-
-## Proving the renderer on a host
-
-The Go tests run against an in-process Connect and cannot show these. Probe
-each before the live unit is trusted with it.
-
-1. **The hardening, in a transient unit.** Copy the binary out of the image and
-   run it with the unit's properties and the host's own drop-in values, against
-   a scratch tmpfs mounted `noswap`, so nothing live is written:
-   `systemd-run --wait --pipe -p LoadCredentialEncrypted=... -p ProtectSystem=strict -p ReadWritePaths=... -p CapabilityBoundingSet='CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE' -p RestrictAddressFamilies='AF_UNIX AF_INET' -p IPAddressDeny=any -p IPAddressAllow=127.0.0.1 -p SocketBindDeny=any -p SystemCallFilter=@system-service -p SystemCallErrorNumber=EPERM -p SystemCallArchitectures=native -p ProtectProc=invisible -p PrivateIPC=yes -p MemorySwapMax=0 -p MemoryMax=512M -p TasksMax=128 -p LimitCORE=0 -p MemoryDenyWriteExecute=yes ...`
-   with `SEVERINO_CONTROLLER_SECRET_DIR` and `SEVERINO_HQ_SECRET_DIR` pointed at
-   the scratch directories. Each directive the shell renderer's unit did not
-   have is one to remove and retry if the probe fails:
-   - `CapabilityBoundingSet` (the in-place rewrite of a 0400 file the web
-     account owns);
-   - `RestrictAddressFamilies` without `AF_INET6`;
-   - `IPAddressDeny=any` with `IPAddressAllow=127.0.0.1`;
-   - `SocketBindDeny=any`;
-   - `SystemCallFilter=@system-service` with `SystemCallErrorNumber` and
-     `SystemCallArchitectures`;
-   - `ProtectProc=invisible` and `PrivateIPC=yes`;
-   - `MemorySwapMax=0`, `MemoryMax=512M`, `TasksMax=128`, `LimitCORE=0`. Run
-     the probe with a changed application variable too, so the docker CLI's
-     restart runs under the memory and task bounds.
-   The renderer also reads `/proc/sys/net/ipv4/ip_unprivileged_port_start`
-   under `ProtectKernelTunables=yes`, which leaves `/proc/sys` readable;
-   confirm the probe gets past that read.
-2. **Connect after a restart.** Restart Connect, start the unit, and read the
-   journal: `secrets.connect.ready attempts=N` shows the retries. If Connect
-   answers a locked first request with 401 or 403 rather than no answer or 5xx,
-   the run ends as `connect_denied`; that is the one classification this
-   repository could not confirm.
-3. **Key formats over REST.** An SSH Key item's `private key` field is expected
-   as PKCS#8 or OpenSSH PEM. Confirm `ssh -i` accepts a rendered identity and
+1. **Connect after a restart.** Restart Connect, start the unit, and read the
+   journal: `secrets.connect.ready attempts=N` shows the retries.
+2. **Key formats.** `ssh -i` accepts a rendered identity and
    `openssl pkey -in <ref>.key -noout` a rendered signing key.
-4. **The application environment is unchanged.** Before the upgrade:
-   `sha256sum /run/severino-hq-secrets/web/severino_hq_env`. After the first
-   render, the same digest means byte-identical and no web restart. A different
-   digest with the same sorted lines means Connect returned the fields in
-   another order than `op` printed them: harmless, one restart.
-5. **No credential in the container's configuration.** While a controller run
-   is up: `docker inspect $(docker ps -q --filter label=severino-hq.role=controller) --format '{{json .Config.Env}}'`
+3. **No credential in the container's configuration.** While a controller run
+   is up, `docker inspect $(docker ps -q --filter label=severino-hq.role=controller) --format '{{json .Config.Env}}'`
    lists only paths, names and the run nonce.
-6. **Rollback.** Redeploy the previous image. Its installer restores the
-   previous unit and tree, and its renderer rewrites the shell environment file
-   on its first run. Nothing the Go renderer wrote is read by it.
 
 ## References
 

@@ -28,7 +28,7 @@ it loads no connection and links into no provider call.
 
 `cmd/hq-secrets` is a separate binary: the renderer root runs on the host to
 read the vault through 1Password Connect and install what the consumers read
-(`docs/SECRETS.md`). It links no provider code. Connections reach the
+(`docs/Secrets.md`). It links no provider code. Connections reach the
 controller in one document whose types both sides share (`connections/`),
 mounted read-only and named by `HQ_CONTROLLER_CONNECTIONS`; none is an
 environment variable of the container. Those types are generated from

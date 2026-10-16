@@ -1,16 +1,19 @@
-flowchart LR
-    operator[Operator]
-    vault[(Obsidian vault)]
-    mcp[severino-vault-mcp]
-    hq[Severino HQ]
-    ci["CI: lint, test, security, scan"]
-    ghcr[(GHCR image)]
-    runner["self-hosted runner (homelab)"]
+flowchart TB
+    pr["Host pull request"]
+    ext["Extension merge<br/>its CI admits a signed wheel"]
+    ci["CI<br/>checks · tests · browser · controller · image"]
+    ready{"Ready<br/>HQ's review"}
+    compose["Compose<br/>host image + admitted extensions<br/>verified as one application"]
+    registry[("Signed composition<br/>ghcr.io/…/composition")]
+    approve{"Deploy<br/>approval in production"}
+    runner["Self-hosted runner<br/>no Docker, one sudo rule"]
+    host["hq-host deploy → release<br/>verify · sync · restart · install"]
+    web["severino-hq-web.service<br/>HQ, healthy on the new image"]
 
-    operator -->|edit frontmatter| vault
-    operator -->|hq sync| mcp -->|manifest| cli["hq MCP wrapper"] -->|one atomic capability| hq
-    operator -->|git push or hq ship| ci -->|on green| ghcr --> runner -->|pull and restart| hq
+    pr --> ci --> ready
+    ready -->|"merge to main"| compose
+    ext -->|"dispatch"| compose
+    compose --> registry --> approve --> runner --> host --> web
 
-    %% the destination every path converges on
     classDef anchor stroke-width:2px;
-    class hq anchor;
+    class compose,host,web anchor;

@@ -1,4 +1,4 @@
-# Design language
+# Design
 
 HQ has one look, built from a small set of primitives. A page is assembled
 from them; it does not style itself. If a page needs something the primitives

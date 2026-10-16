@@ -1,4 +1,4 @@
-# Adding a host domain
+# New Domain
 
 A new host domain is its own Django app (such as `hq/domains/expenses/`) plus one
 `DomainDescriptor` in `HOST_DOMAINS` (`hq/platform/application/domains.py`). No other
@@ -27,7 +27,7 @@ smallest one.
 What a new host domain has to do before the gate passes. Every row names the test that enforces it, in `Class.method` form.
 `hq/platform/application/tests/test_new_domain.py` fails if an architecture rule exists that
 this page does not name, or names one that is gone, so edit this page in the
-same commit as the rule. Extensions are a different path: `docs/PLUGINS.md`.
+same commit as the rule. Extensions are a different path: `docs/Plugins.md`.
 
 ## Steps
 

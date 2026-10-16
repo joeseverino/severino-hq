@@ -1,4 +1,4 @@
-# Structural similarity policy
+# Structural Gate
 
 The gate retains the executable near-duplicate baseline and largest-file limits.
 Source-derived classifications remove only these forms from the executable-pair
