@@ -521,6 +521,22 @@ if RUNNING_TESTS:
             os.environ[_variable] = tempfile.mkdtemp(prefix=f"severino-test-{_kind}-")
             _atexit.register(_shutil.rmtree, os.environ[_variable], True)
 
+    # The markers default beside the database, and the test database sits in
+    # the shared temporary directory: there a heartbeat one run wrote decides
+    # whether the next run's controller is arriving, silent or never seen, and
+    # macOS keeps that directory where a CI runner starts empty. Each run's
+    # markers start unwritten, in a directory of its own.
+    _markers = os.environ.get("SEVERINO_TEST_MARKERS") or tempfile.mkdtemp(prefix="severino-test-markers-")
+    if "SEVERINO_TEST_MARKERS" not in os.environ:
+        os.environ["SEVERINO_TEST_MARKERS"] = _markers
+        _atexit.register(_shutil.rmtree, _markers, True)
+    for _variable, _marker in (
+        ("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat"),
+        ("SEVERINO_CONTROLLER_DOORBELL", "controller-doorbell"),
+        ("SEVERINO_ACTIVITY_MARKER", "hq-activity"),
+    ):
+        os.environ.setdefault(_variable, str(Path(_markers) / _marker))
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
@@ -708,6 +724,7 @@ SEVERINO_REQUEST_PATH_SECONDS = env_int("SEVERINO_REQUEST_PATH_SECONDS", 300)
 # Where HQ leaves each marker. The doorbell has to be somewhere the host can
 # watch; the in-use marker is read only by HQ and defaults beside the database.
 SEVERINO_CONTROLLER_DOORBELL = os.environ.get("SEVERINO_CONTROLLER_DOORBELL", "")
+SEVERINO_CONTROLLER_HEARTBEAT = os.environ.get("SEVERINO_CONTROLLER_HEARTBEAT", "")
 SEVERINO_ACTIVITY_MARKER = os.environ.get("SEVERINO_ACTIVITY_MARKER", "")
 # The Unix socket the controller bridge is served on, in a directory only this
 # account can enter. Unset, the process serves no bridge; set, it serves one or
