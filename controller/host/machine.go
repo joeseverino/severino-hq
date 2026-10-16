@@ -21,12 +21,18 @@ type Machine struct {
 	LogDir string
 	// State holds the release record.
 	State string
-	// Sbin holds the sync program the next deploy runs first.
+	// Sbin held programs earlier releases installed; none is installed now.
 	Sbin string
 	// Runtime is /run, where the deploy stages what it must not leave behind.
 	Runtime string
+	// Sudoers is where the runner's sudo rule is installed.
+	Sudoers string
+	// Verifier installs the signature verifier a deploy uses.
+	Verifier func(ctx context.Context) error
 	// Command builds a command; a test substitutes its own.
 	Command func(ctx context.Context, name string, args ...string) *exec.Cmd
+	// Own makes a path in the tree root's; a test, run unprivileged, does not.
+	Own func(path string) error
 	// Out is the public log: one line per step, nothing a host is made of.
 	Out io.Writer
 }

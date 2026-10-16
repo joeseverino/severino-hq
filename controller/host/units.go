@@ -68,7 +68,7 @@ func Retired(shipped []string, installed string) ([]string, error) {
 }
 
 // Enabled is the shipped units to enable: every timer and path, which start
-// work, and every service with an [Install] section, which runs at boot.
+// work, and every other unit with an [Install] section, which starts at boot.
 func Enabled(dir string, shipped []string) ([]string, error) {
 	var enabled []string
 	for _, name := range shipped {

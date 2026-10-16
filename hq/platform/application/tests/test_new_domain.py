@@ -1,4 +1,4 @@
-"""docs/NEW_DOMAIN.md names every architecture rule and nothing that is gone."""
+"""docs/New-Domain.md names every architecture rule and nothing that is gone."""
 
 import ast
 import re
@@ -8,7 +8,7 @@ from unittest import skipUnless
 from django.test import SimpleTestCase
 
 ROOT = Path(__file__).resolve().parents[4]
-CHECKLIST = ROOT / "docs" / "NEW_DOMAIN.md"
+CHECKLIST = ROOT / "docs" / "New-Domain.md"
 RULE_FILES = ("test_architecture.py", "test_domains.py", "test_domain_declaration.py")
 CITATION = re.compile(r"\b([A-Z]\w*Tests)\.(test_\w+)\b")
 
@@ -46,7 +46,7 @@ class NewDomainChecklistTests(SimpleTestCase):
 
     def test_every_rule_class_is_named(self):
         missing = [c for c in sorted(self.rules) if not re.search(rf"\b{c}\b", self.text)]
-        self.assertEqual(missing, [], "name these in docs/NEW_DOMAIN.md")
+        self.assertEqual(missing, [], "name these in docs/New-Domain.md")
 
     def test_a_class_the_steps_cite_is_cited_method_by_method(self):
         missing = [
@@ -55,7 +55,7 @@ class NewDomainChecklistTests(SimpleTestCase):
             if cls in self.rules
             for method in sorted(self.rules[cls] - cited)
         ]
-        self.assertEqual(missing, [], "add these to the steps in docs/NEW_DOMAIN.md")
+        self.assertEqual(missing, [], "add these to the steps in docs/New-Domain.md")
 
     def test_no_citation_names_a_rule_that_is_gone(self):
         gone = [
@@ -63,4 +63,4 @@ class NewDomainChecklistTests(SimpleTestCase):
             for cls, cited in sorted(self.cited.items())
             for method in sorted(cited - self.rules.get(cls, set()))
         ]
-        self.assertEqual(gone, [], "remove these from docs/NEW_DOMAIN.md")
+        self.assertEqual(gone, [], "remove these from docs/New-Domain.md")

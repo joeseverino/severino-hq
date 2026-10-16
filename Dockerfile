@@ -42,9 +42,13 @@ RUN want="$(sed -n 's/^go \([0-9.]*\)$/\1/p' go.mod)" \
     esac \
     && go mod download
 COPY controller/ ./
+# hq-host deploys only what its source repository's compose workflow signed,
+# so it is told that repository here, from the source the image is labelled with.
+ARG HQ_SOURCE=""
 RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq-controller \
     && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-secrets ./cmd/hq-secrets \
-    && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-host ./cmd/hq-host
+    && go build -trimpath -ldflags="-s -w -buildid= -X github.com/joeseverino/severino-hq/controller/host.BuildSource=${HQ_SOURCE#https://github.com/}" \
+        -o /out/hq-host ./cmd/hq-host
 
 
 FROM python:3.15-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc79de952555b8a474e1d0a5d53 AS runtime
@@ -90,8 +94,6 @@ COPY . /app
 # the units that name it, so the manifest below covers it: the host's copy is
 # the signed image's, byte for byte, and checked daily like every script.
 COPY --from=controller /out/hq-secrets /out/hq-host /app/deploy/bin/
-# What severino-hq-sync-scripts verifies the root-run tree against on the host.
-RUN sh scripts/root-tree-manifest.sh /app > /app/root-tree.sha256
 
 # Mounted volumes; create empty so the container can boot before a host mount.
 # The bridge socket's directory is this account's alone: a volume first mounted

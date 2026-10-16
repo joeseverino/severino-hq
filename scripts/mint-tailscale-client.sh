@@ -111,7 +111,7 @@ elif [ "${print_secret}" -eq 0 ]; then
     echo "Would create OAuth client ${description} with scopes:" >&2
     jq -r '.[] | "  " + .' <"${work}/scopes" >&2
     echo "Nothing created. Rerun with --print-secret and pipe stdout into the" >&2
-    echo "tailscale connection's CLIENT_SECRET field (docs/SECRETS.md), or create" >&2
+    echo "tailscale connection's CLIENT_SECRET field (docs/Secrets.md), or create" >&2
     echo "the client under Trust credentials in the admin console with these scopes." >&2
     exit 0
 fi

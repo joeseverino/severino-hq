@@ -9,7 +9,7 @@ Idempotent by slug. A field a record leaves out keeps its stored value.
 
 Derived fields: a connection can derive ``Project.public_url``. The import sets
 it only where the stored value is blank or equal; a different stored value is
-kept and reported, never overwritten. See docs/DERIVED_FACTS.md.
+kept and reported, never overwritten. See docs/Derived-Facts.md.
 """
 
 from dataclasses import asdict, dataclass, field, fields

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -23,7 +24,7 @@ func (m *Machine) Install(ctx context.Context, connections func() error) (err er
 	if err != nil {
 		return err
 	}
-	if err := m.private(ctx, "Verifier install", "verifier-install", filepath.Join(m.Lib, "scripts", "install-cosign.sh")); err != nil {
+	if err := m.Verifier(ctx); err != nil {
 		return err
 	}
 	var units []string
@@ -103,7 +104,7 @@ func (m *Machine) Install(ctx context.Context, connections func() error) (err er
 	if err := m.run(ctx, "systemctl", append([]string{"enable", "--now"}, enabled...)...); err != nil {
 		return err
 	}
-	if err := m.tidy(); err != nil {
+	if err := m.tidy(shipped); err != nil {
 		return err
 	}
 	committed = true
@@ -225,7 +226,7 @@ func (m *Machine) installedUnits() (map[string][]byte, error) {
 
 // tidy removes what earlier releases left that nothing reads, and installs
 // the tmpfiles rule that makes the doorbell directory at every boot.
-func (m *Machine) tidy() error {
+func (m *Machine) tidy(shipped []string) error {
 	for _, leftover := range []string{
 		filepath.Join(m.Runtime, filepath.Base(RunDir), "severino_controller_env"),
 		filepath.Join(m.Runtime, filepath.Base(SecretDir), "severino_controller_env"),
@@ -236,6 +237,21 @@ func (m *Machine) tidy() error {
 	}
 	if err := os.RemoveAll(filepath.Join(m.Runtime, "severino-hq-op")); err != nil {
 		return err
+	}
+	// What earlier releases installed that this one does not: the shell sync
+	// program, and drop-ins that restated each unit's own ExecStart. A name
+	// this release ships is its own again and is left alone.
+	if err := os.Remove(filepath.Join(m.Sbin, "severino-hq-sync-scripts")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	for _, unit := range []string{"severino-hq-backup.service", ControllerUnit, SecretsUnit} {
+		dropin := unit + ".d/10-root-owned-exec.conf"
+		if slices.Contains(shipped, dropin) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(m.Systemd, dropin)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	rule, err := os.ReadFile(filepath.Join(m.Lib, "deploy", "tmpfiles", "severino-hq.conf"))
 	if err != nil {

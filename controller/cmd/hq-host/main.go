@@ -6,6 +6,10 @@
 //	hq-host install          install the release in the root-owned tree
 //	hq-host deploy IMAGE     verify and pull IMAGE, then hand over to its hq-host
 //	hq-host release IMAGE    switch HQ to IMAGE, install it, or roll back
+//	hq-host sync IMAGE       replace the root-owned tree with IMAGE's
+//	hq-host verify           report where the host differs from its release
+//	hq-host bootstrap        write the host's own configuration from host.json
+//	hq-host backup           back up HQ's volumes with scripts/backup.sh
 package main
 
 import (
@@ -15,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -26,7 +31,10 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply] | install | deploy IMAGE | release [--stage DIR] IMAGE"
+const usage = "usage: hq-host run-web | controller [--apply] | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup"
+
+// hostConfig is the host's own configuration, which bootstrap reads.
+const hostConfig = "/etc/severino-hq/host.json"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -66,6 +74,33 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 		err = deployer(stdout).Deploy(ctx, args[1], piped(stdin))
 	case "release":
 		err = release(ctx, args[1:], stdout)
+	case "sync":
+		if len(args) != 2 {
+			fmt.Fprintln(stderr, usage)
+			return 2
+		}
+		err = machine(stdout).Sync(ctx, args[1])
+	case "verify":
+		var drift []string
+		if drift, err = machine(stdout).Verify(ctx); err == nil && len(drift) > 0 {
+			for _, line := range drift {
+				fmt.Fprintln(stderr, "drift:", line)
+			}
+			return 1
+		}
+		if err == nil {
+			fmt.Fprintln(stdout, "The host is its release: the tree, the units and nothing else.")
+		}
+	case "backup":
+		err = machine(stdout).Backup(ctx, getenv)
+	case "bootstrap":
+		var data []byte
+		if data, err = os.ReadFile(hostConfig); err == nil {
+			var config host.HostConfig
+			if config, err = host.ReadHostConfig(data); err == nil {
+				err = machine(stdout).Bootstrap(ctx, config)
+			}
+		}
 	default:
 		fmt.Fprintln(stderr, usage)
 		return 2
@@ -117,10 +152,19 @@ func machine(stdout io.Writer) *host.Machine {
 		State:    host.StateDir,
 		Sbin:     "/usr/local/sbin",
 		Runtime:  "/run",
+		Sudoers:  "/etc/sudoers.d",
 		Command:  host.Command,
-		Out:      stdout,
+		Own:      func(path string) error { return os.Lchown(path, 0, 0) },
+		Verifier: func(ctx context.Context) error {
+			client := &http.Client{Timeout: 3 * time.Minute}
+			return host.InstallVerifier(ctx, client, host.CosignURL, cosign)
+		},
+		Out: stdout,
 	}
 }
+
+// cosign is root's own verifier, outside the tree a deploy replaces.
+const cosign = "/usr/local/lib/severino-hq-verifier/cosign"
 
 func controller(stdout, stderr io.Writer) *host.Controller {
 	return &host.Controller{
@@ -145,7 +189,8 @@ func requireConnections() error {
 func deployer(stdout io.Writer) *host.Deployer {
 	return &host.Deployer{
 		Machine:   machine(stdout),
-		Cosign:    "/usr/local/lib/severino-hq-verifier/cosign",
+		Source:    host.Source(host.BuildSource),
+		Cosign:    cosign,
 		Exec:      syscall.Exec,
 		Drain:     3 * time.Minute,
 		Poll:      5 * time.Second,

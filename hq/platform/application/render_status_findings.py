@@ -4,7 +4,7 @@ nobody could read.
 
 Each secret renderer writes a status document after every run, and the
 controller on that machine reports it as the ``host.render_status`` reading
-(``docs/SECRETS.md``). Cached files keep everything running while a renderer
+(``docs/Secrets.md``). Cached files keep everything running while a renderer
 fails, so nothing else notices: a rotated credential never arrives and a
 revoked one keeps working. The reading is one fact per renderer on the node of
 the controller that read it, and the rules here read those facts.
@@ -94,7 +94,7 @@ RENDERER_UNITS = {"hq": "severino-hq-secrets.service"}
 UNKNOWN_FAILURE = "an error HQ does not recognise"
 
 # What each word a failed run is filed under means (``Class`` in
-# controller/secrets/render.go, and the table in docs/SECRETS.md).
+# controller/secrets/render.go, and the table in docs/Secrets.md).
 FAILURE_CLASSES = {
     "config": "the job's configuration was refused",
     "host": "a folder, mount, lock file or destination on the machine is not as it should be",

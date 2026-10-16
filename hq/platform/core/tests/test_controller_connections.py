@@ -12,16 +12,14 @@ UNIT = ROOT / "deploy/systemd/severino-hq-secrets.service"
 # The image is built without its Dockerfile, so these run from a checkout.
 @unittest.skipUnless(DOCKERFILE.exists(), "the Dockerfile is not in the image")
 class RendererDeliveryTests(unittest.TestCase):
-    """Root runs the renderer the signed image built, from the manifested tree."""
+    """Root runs the programs the signed image built, from the tree synced out of it."""
 
     def test_the_unit_runs_the_binary_the_image_ships_in_the_root_tree(self):
         dockerfile = DOCKERFILE.read_text()
         self.assertIn("-o /out/hq-secrets ./cmd/hq-secrets", dockerfile)
         copied = "COPY --from=controller /out/hq-secrets /out/hq-host /app/deploy/bin/"
-        # After the checkout is copied, so a checkout cannot supply it, and
-        # before the manifest is written, so the manifest covers it.
+        # After the checkout is copied, so a checkout cannot supply them.
         self.assertLess(dockerfile.index("COPY . /app"), dockerfile.index(copied))
-        self.assertLess(dockerfile.index(copied), dockerfile.index("root-tree-manifest.sh /app"))
         started = [line for line in UNIT.read_text().splitlines() if line.startswith("ExecStart=")]
         self.assertEqual(started, ["ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-secrets"])
 

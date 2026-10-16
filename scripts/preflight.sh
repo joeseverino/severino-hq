@@ -12,8 +12,8 @@
 #      commit must be pushed.
 #   2. `mise run suite:composed`, required (SEVERINO_HQ_PLUGINS set)
 #   3. scripts/preflight-host.sh on the deploy host over SSH: read-only checks
-#      of the checkout's ownership, the runner's sudo rule, the root-owned
-#      programs against this commit, the installed units and free disk.
+#      of the runner's sudo rule, the host against the release it runs
+#      (`hq-host verify`), the installed units and free disk.
 #
 # The host is SEVERINO_HQ_DEPLOY_HOST, an SSH destination, set in the
 # environment or in mise.local.toml (see scripts/mise.local.example.toml). The release is
@@ -101,25 +101,22 @@ gate "the suite composed with the extensions" env REQUIRE_COMPOSED=1 mise run su
 host_payload() {
     work="$1"
     mkdir -p "${work}/release" "${work}/main"
-    git archive HEAD scripts hq/config deploy docker-compose.yml | tar -x -C "${work}/release"
+    git archive HEAD scripts/preflight-host.sh deploy/systemd controller/cmd/hq-host/main.go | tar -x -C "${work}/release"
     git archive "${PREFLIGHT_BASE_REF:-origin/main}" deploy/systemd | tar -x -C "${work}/main"
     units_shipped "${work}/release/deploy/systemd" >"${work}/release-units"
     # Shipped by main and by this release: already installed, if the host is current.
     established="$(units_shipped "${work}/main/deploy/systemd" \
         | grep -Fx -f "${work}/release-units" | tr '\n' ' ' || true)"
-    manifest="$(sh "${work}/release/scripts/root-tree-manifest.sh" "${work}/release")"
-    git archive HEAD controller/cmd/hq-host/main.go | tar -x -C "${work}/release"
     min_free_mib="$(sed -n 's/.*FreeBytes: \([0-9][0-9]*\) << 20,.*/\1/p' \
         "${work}/release/controller/cmd/hq-host/main.go")"
     [ -n "${min_free_mib}" ] || { echo "Could not read hq-host's free-space floor." >&2; return 1; }
     min_free=$((min_free_mib * 1024))
-    case "${manifest}${established}" in
-        *"'"*) echo "A shipped path contains a quote." >&2; return 1 ;;
+    case "${established}" in
+        *"'"*) echo "A shipped unit name contains a quote." >&2; return 1 ;;
     esac
-    printf "PREFLIGHT_MANIFEST='%s'\n" "${manifest}"
     printf "PREFLIGHT_UNITS='%s'\n" "${established}"
     printf 'PREFLIGHT_MIN_FREE_KB=%s\n' "${min_free}"
-    cat "${work}/release/scripts/lib/checkout.sh" "${work}/release/scripts/preflight-host.sh"
+    cat "${work}/release/scripts/preflight-host.sh"
 }
 
 host_check() {

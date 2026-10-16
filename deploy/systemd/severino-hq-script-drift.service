@@ -1,15 +1,14 @@
 [Unit]
-Description=Check that root-run Severino HQ scripts, units and checkout ownership match the deployed image
-Documentation=file:///usr/local/lib/severino-hq/scripts/severino-hq-check-scripts
+Description=Check that the host is its release: the root-owned tree, the units and nothing else
+Documentation=https://github.com/joeseverino/severino-hq/blob/main/docs/Deployment.md
 
 [Service]
 Type=oneshot
-# From the root-owned tree every deploy refreshes. Through /bin/sh because the
-# sync leaves only *.sh executable.
-ExecStart=/bin/sh /usr/local/lib/severino-hq/scripts/severino-hq-check-scripts
-# The check reads files and one image. A oneshot has no start timeout of its own, and one
-# that hangs keeps its timer from ever firing again.
+ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host verify
+# Reads the tree, the units and one image. A oneshot has no start timeout of
+# its own, and one that hangs keeps its timer from firing again.
 TimeoutStartSec=10min
 NoNewPrivileges=yes
 ProtectHome=yes
+ProtectSystem=strict
 PrivateTmp=yes

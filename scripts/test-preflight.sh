@@ -5,7 +5,7 @@
 set -eu
 # Hermetic: none of what the gates are asked for comes from the caller.
 unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST \
-    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_FREE_KB
+    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_FREE_KB TEST_DRIFT TEST_SUDO_PASSWORD
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 work="$(mktemp -d)"
@@ -13,19 +13,15 @@ trap 'rm -rf "${work}"' EXIT HUP INT TERM
 failures=0
 fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 
-# The fixture repository: the real preflight, host half, libraries and root
-# tree, with mise stubbed to report how the gates were called.
+# The fixture repository: the real preflight, host half and unit library,
+# with mise stubbed to report how the gates were called.
 repo="${work}/repo"
 mkdir -p "${repo}/scripts/lib"
 cd "${repo_dir}"
-mkdir -p "${repo}/hq"
-cp -R hq/config "${repo}/hq/"
-cp -R deploy docker-compose.yml "${repo}/"
+cp -R deploy "${repo}/"
 mkdir -p "${repo}/controller/cmd/hq-host"
 cp controller/cmd/hq-host/main.go "${repo}/controller/cmd/hq-host/"
-find "${repo}" -name __pycache__ -prune -exec rm -rf {} +
-for f in preflight.sh preflight-host.sh root-tree-manifest.sh deploy-image.sh \
-    severino-hq-sync-scripts lib/checkout.sh lib/systemd-units.sh upgrade-container.sh; do
+for f in preflight.sh preflight-host.sh deploy-image.sh lib/systemd-units.sh upgrade-container.sh; do
     cp "scripts/${f}" "${repo}/scripts/${f}"
 done
 # Hermetic: the fixture is a throwaway repository, so no signing and no hooks.
@@ -40,18 +36,14 @@ git_ update-ref refs/remotes/origin/main HEAD
 # The release adds a unit main does not ship: the release installs it, so the
 # host is not expected to have it yet.
 printf '[Timer]\nOnCalendar=daily\n' >"${repo}/deploy/systemd/severino-hq-example.timer"
-printf '# the release changes this\n' >>"${repo}/scripts/deploy-image.sh"
 git_ add -A
 git_ commit -q -m release
 
 # The deploy host as the previous release left it.
 host="${work}/host"
 lib="${host}/lib"
-mkdir -p "${lib}" "${host}/sbin" "${host}/app/.git/objects" "${host}/etc" "${host}/bin"
-git_ archive HEAD~1 scripts hq/config deploy docker-compose.yml | tar -x -C "${lib}"
-sh "${lib}/scripts/root-tree-manifest.sh" "${lib}" >"${lib}/root-tree.sha256"
-cp "${lib}/scripts/severino-hq-sync-scripts" "${host}/sbin/"
-: >"${host}/app/.git/HEAD"
+mkdir -p "${lib}" "${host}/etc" "${host}/bin"
+git_ archive HEAD~1 scripts deploy | tar -x -C "${lib}"
 (cd "${lib}/deploy/systemd" && find . -type f ! -name '*.example') | while IFS= read -r f; do
     mkdir -p "${host}/etc/$(dirname "${f}")"
     cp "${lib}/deploy/systemd/${f}" "${host}/etc/${f}"
@@ -62,16 +54,19 @@ mkdir -p "${bin}"
 cat >"${bin}/ssh" <<EOF
 #!/bin/sh
 echo "ssh \$*" >>"\${TEST_LOG}"
-PATH="${host}/bin:\${PATH}" PREFLIGHT_LIB="${lib}" PREFLIGHT_SBIN="${host}/sbin" \\
-    PREFLIGHT_APP="${host}/app" PREFLIGHT_SYSTEMD="${host}/etc" PREFLIGHT_ROOT_UID="$(id -u)" exec sh -s
+PATH="${host}/bin:\${PATH}" PREFLIGHT_LIB="${lib}" \\
+    PREFLIGHT_SYSTEMD="${host}/etc" PREFLIGHT_ROOT_UID="$(id -u)" exec sh -s
 EOF
 # sudo refuses to run unless its stdin is empty: stdin is the host script.
 cat >"${host}/bin/sudo" <<'EOF'
 #!/bin/sh
 if IFS= read -r _; then echo "sudo read the host script from stdin" >&2; exit 99; fi
-case "$1" in
-    -l) [ "$2" = "-U" ] || exit 98; printf '%s\n' "${TEST_SUDO_RULES}" ;;
-    sha256sum) exec "$@" ;;
+case "$1 ${2##*/} $3" in
+    "-l -U "*) printf '%s\n' "${TEST_SUDO_RULES}" ;;
+    "-n hq-host verify")
+        if [ -n "${TEST_SUDO_PASSWORD:-}" ]; then echo "sudo: a password is required" >&2; exit 1; fi
+        if [ -n "${TEST_DRIFT:-}" ]; then echo "drift: ${TEST_DRIFT}" >&2; exit 1; fi
+        echo "The host is its release." ;;
     *) exit 98 ;;
 esac
 EOF
@@ -128,9 +123,8 @@ grep -qx "mise run suite:composed REQUIRE_COMPOSED=1" "${TEST_LOG}" ||
     fail "the composed suite ran without being required"
 grep -qx "ssh -o BatchMode=yes deploy.example.test sh -s" "${TEST_LOG}" ||
     fail "the host was not reached through ssh as expected"
-says "warn    the release changes scripts/deploy-image.sh"
-says "warn    the release adds deploy/systemd/severino-hq-example.timer"
-says "upgrade-container.sh is root's alone and identical to the release"
+says "ok      the host is the release it runs"
+says "upgrade-container.sh is root's alone"
 if grep -q "secret-marker-example" "${work}/out"; then
     fail "the host check printed the sudo rules"
 fi
@@ -209,22 +203,21 @@ rm "${host}/etc/severino-hq-controller.timer"
 host_fault "an established unit missing" "severino-hq-controller.timer is not installed"
 cp "${lib}/deploy/systemd/severino-hq-controller.timer" "${host}/etc/"
 
-printf '\n' >>"${lib}/hq/config/controller-connections.json"
-host_fault "a root tree changed on the host" "does not reproduce its own root-tree.sha256"
-git_ show HEAD~1:hq/config/controller-connections.json >"${lib}/hq/config/controller-connections.json"
+export TEST_DRIFT="scripts/backup.sh differs from the image's"
+host_fault "a host that is not its release" "FAIL    scripts/backup.sh differs from the image's"
+unset TEST_DRIFT
 
-: >"${host}/sbin/severino-hq-check-scripts"
-host_fault "a hand-installed program no release updates" "severino-hq-check-scripts is not shipped by this release"
-rm "${host}/sbin/severino-hq-check-scripts"
+export TEST_SUDO_PASSWORD=1
+expect 0 "a verify that needs a password is a warning, not a pass of it"
+says "warn    could not run hq-host verify without a password"
+unset TEST_SUDO_PASSWORD
 
 chmod g+w "${lib}/scripts/upgrade-container.sh"
 host_fault "a helper sudo runs as root that others can write" "upgrade-container.sh is writable by its group or others"
 chmod g-w "${lib}/scripts/upgrade-container.sh"
 
-TEST_ACCOUNT=nobody
-host_fault "a checkout .git not owned by the runner's account" "not owned by nobody; fix: sudo chown -R nobody:"
 TEST_ACCOUNT=root
-host_fault "a runner that runs as root" "The Actions runner runs as 'root'"
+host_fault "a runner that runs as root" "the Actions runner runs as 'root'"
 TEST_ACCOUNT="$(id -un)"
 
 expect 0 "the repaired host"

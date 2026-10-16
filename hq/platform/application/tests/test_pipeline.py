@@ -61,20 +61,6 @@ def named(steps_: list[str], name: str) -> int:
     raise AssertionError(f"no step named {name!r}")
 
 
-class DeployCheckoutOwnershipTests(SimpleTestCase):
-    def test_a_checkout_git_cannot_pull_warns_and_never_holds_the_release(self):
-        deploy = steps(jobs((WORKFLOWS / "deploy.yml").read_text())["deploy"])
-        sync = deploy[named(deploy, "Sync the deploy checkout")]
-        self.assertIn("set -uo pipefail", sync)
-        self.assertIn('! -user "$(id -un)"', sync)
-        self.assertIn("elif ! git -C", sync)
-        self.assertNotIn("::error", sync)
-        self.assertLess(
-            named(deploy, "Sync the deploy checkout"),
-            named(deploy, "Deploy exact image with health rollback"),
-        )
-
-
 class PromotionTests(SimpleTestCase):
     """A push to main stands on its pull request's run only with proof."""
 
@@ -228,7 +214,7 @@ class CoordinatedBranchTests(SimpleTestCase):
     def test_host_commit_pinning_is_retired(self):
         tracked = [
             path for path in (ROOT / ".github").rglob("*") if path.is_file() and path.suffix in {".yml", ".yaml"}
-        ] + [ROOT / "docs" / "PLUGINS.md", ROOT / "README.md", ROOT / "AGENTS.md"]
+        ] + [ROOT / "docs" / "Plugins.md", ROOT / "README.md", ROOT / "AGENTS.md"]
         # The image ships no docs; the workflows are the part that must hold.
         offenders = [
             str(path.relative_to(ROOT))

@@ -1,7 +1,6 @@
 #!/bin/sh
-# The systemd files the repository ships, and the check that the host still has
-# them. These cases hold the set to one derivation and the check to byte
-# equality, so neither half can narrow.
+# The systemd files the repository ships: the set the preflight expects, the
+# drop-ins that would override a unit's command, and failure reporting.
 
 set -eu
 
@@ -35,89 +34,7 @@ if units_shipped "${fixture}/absent" >/dev/null 2>&1; then
     fail "units_shipped accepted a directory that does not exist"
 fi
 
-# What an earlier release left: this repository's prefix, a unit suffix, top
-# level, and not shipped. Another owner's unit and a host's drop-in are not.
-left="${fixture}/left"
-mkdir -p "${left}/a.service.d" "${left}/severino-hq-old.service.d"
-for f in a.service a.timer other.service severino-hq-old.service severino-hq-old.path \
-    severino-hq-notes.txt a.service.d/10-x.conf severino-hq-old.service.d/10-host.conf; do
-    : >"${left}/${f}"
-done
-[ "$(units_retired "${walk}" "${left}" | tr '\n' ' ')" = "severino-hq-old.path severino-hq-old.service " ] ||
-    fail "units_retired returned: $(units_retired "${walk}" "${left}" | tr '\n' ' ')"
-
-# 2. The drift check, run as the host runs it, against a relocated host.
-lib="${fixture}/lib"
-etc="${fixture}/etc"
-bin="${fixture}/bin"
-sbin="${fixture}/sbin"
-app="${fixture}/app"
-mkdir -p "${lib}" "${etc}" "${bin}" "${sbin}" "${app}/.git"
-tar --exclude=node_modules --exclude=__pycache__ \
-    -cf "${fixture}/root-tree.tar" scripts hq/config deploy docker-compose.yml
-tar -xf "${fixture}/root-tree.tar" -C "${lib}"
-sh scripts/root-tree-manifest.sh "${lib}" >"${lib}/root-tree.sha256"
-cp scripts/severino-hq-sync-scripts "${sbin}/"
-# Relocate fixed host paths in the test copy, not in the production interface.
-checker="${fixture}/severino-hq-check-scripts"
-sed -e "s|/usr/local/lib/severino-hq|${lib}|g" \
-    -e "s|/etc/systemd/system|${etc}|g" \
-    -e "s|/usr/local/sbin|${sbin}|g" \
-    -e "s|/opt/apps/severino-hq|${app}|g" \
-    scripts/severino-hq-check-scripts >"${checker}"
-printf 'image sha256:test\n' >"${lib}/.source"
-printf '#!/bin/sh\necho sha256:test\n' >"${bin}/docker"
-chmod 0755 "${bin}/docker"
-cp scripts/fixtures/systemctl "${bin}/systemctl"
-TEST_ACCOUNT="$(id -un)"
-export TEST_ACCOUNT
-
-check() {
-    PATH="${bin}:${PATH}" sh "${checker}" \
-        >"${fixture}/out" 2>"${fixture}/err"
-}
-
-# A host as a correct deploy leaves it, plus the files it owns by design:
-# templates were never installed, and a drop-in for this host's naming or its
-# credential mount lives beside the shipped ones without being drift.
-(cd deploy/systemd && find . -type f ! -name '*.example') | while IFS= read -r f; do
-    mkdir -p "${etc}/$(dirname "${f}")"
-    cp "deploy/systemd/${f}" "${etc}/${f}"
-done
-for extra in 10-estate.conf 20-connect.conf 20-credential-mount.conf; do
-    printf '[Service]\n' >"${etc}/severino-hq-secrets.service.d/${extra}"
-done
-if ! check; then
-    fail "a current host reported drift: $(cat "${fixture}/err")"
-fi
-
-# A changed unit, a changed drop-in, and a unit that never arrived are each
-# named: by path, since "something differs" sends a person to diff eleven files.
-printf '# edited on the host\n' >>"${etc}/severino-hq-audit-prune.timer"
-printf '# edited on the host\n' >>"${etc}/severino-hq-backup.service.d/10-root-owned-exec.conf"
-rm "${etc}/severino-hq-script-drift.timer"
-if check; then
-    fail "a drifted host passed the check"
-fi
-for drifted in severino-hq-audit-prune.timer \
-    severino-hq-backup.service.d/10-root-owned-exec.conf \
-    severino-hq-script-drift.timer; do
-    grep -qF "${etc}/${drifted}" "${fixture}/err" || fail "drift in ${drifted} was not reported"
-done
-# A unit this release dropped is named too: it would keep running.
-: >"${etc}/severino-hq-retired.service"
-if check; then
-    fail "a unit no release ships passed the check"
-fi
-grep -qF "${etc}/severino-hq-retired.service is not shipped" "${fixture}/err" ||
-    fail "a retired unit was not reported"
-for ignored in 10-estate.conf 20-connect.conf 20-credential-mount.conf .example; do
-    if grep -qF "${ignored}" "${fixture}/err"; then
-        fail "${ignored} was reported as drift"
-    fi
-done
-
-# 3. A shipped drop-in that replaces ExecStart must replace it with what the
+# 2. A shipped drop-in that replaces ExecStart must replace it with what the
 #    unit itself runs.
 #
 # The drop-in wins, so a change to the unit's ExecStart that the drop-in does
@@ -133,7 +50,7 @@ for f in $(units_shipped deploy/systemd); do
     fi
 done
 
-# 4. Every shipped unit that can fail tells HQ when it does, and nothing that
+# 3. Every shipped unit that can fail tells HQ when it does, and nothing that
 #    telling starts can start itself again.
 #
 # The drop-in is in the directory systemd reads for every unit name with this
@@ -161,6 +78,14 @@ done
 for f in ${shipped}; do
     case "${f}" in */*) continue ;; esac
     type="${f##*.}"
+    # A mount's name is its path, so no prefix drop-in can reach it. It fails
+    # through the unit that requires it: that unit cannot start without it.
+    if [ "${type}" = mount ]; then
+        where="$(sed -n 's/^Where=//p' "deploy/systemd/${f}")"
+        grep -lx "RequiresMountsFor=${where}" deploy/systemd/severino-hq-*.service >/dev/null ||
+            fail "${f}: nothing that reports its failure requires ${where}"
+        continue
+    fi
     case "${type}" in service | timer | path) ;; *) fail "${f}: no failure drop-in covers a ${type}"; continue ;; esac
     case "${f}" in severino-hq-*) ;; *) fail "${f} is outside the prefix the failure drop-in covers"; continue ;; esac
     [ "$(handler "severino-hq-.${type}.d/${on_failure}")" = "${started}" ] ||

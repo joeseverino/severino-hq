@@ -82,12 +82,12 @@ version = "0.10.8"
 backend = "github:DeusData/codebase-memory-mcp"
 
 [tools."github:DeusData/codebase-memory-mcp".options]
-asset_pattern = "codebase-memory-mcp-linux-amd64-portable.tar.gz"
+asset_pattern = "codebase-memory-mcp-linux-arm64-portable.tar.gz"
 
-[tools."github:DeusData/codebase-memory-mcp"."platforms.linux-x64"]
-checksum = "sha256:6eef49652bc0c7820f43114125044d40bf7f4d97c11b2592f6b0f6a307702325"
-url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.10.8/codebase-memory-mcp-linux-amd64-portable.tar.gz"
-url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/520282432"
+[tools."github:DeusData/codebase-memory-mcp"."platforms.linux-arm64"]
+checksum = "sha256:5697d986d9716c913163b4bff7b3a294287f3b843e993bc1ff71e78dcdc21781"
+url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.10.8/codebase-memory-mcp-linux-arm64-portable.tar.gz"
+url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/520282427"
 provenance = "github-attestations"
 
 [[tools."github:DeusData/codebase-memory-mcp"]]
@@ -95,12 +95,12 @@ version = "0.10.8"
 backend = "github:DeusData/codebase-memory-mcp"
 
 [tools."github:DeusData/codebase-memory-mcp".options]
-asset_pattern = "codebase-memory-mcp-linux-arm64-portable.tar.gz"
+asset_pattern = "codebase-memory-mcp-linux-amd64-portable.tar.gz"
 
-[tools."github:DeusData/codebase-memory-mcp"."platforms.linux-arm64"]
-checksum = "sha256:5697d986d9716c913163b4bff7b3a294287f3b843e993bc1ff71e78dcdc21781"
-url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.10.8/codebase-memory-mcp-linux-arm64-portable.tar.gz"
-url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/520282427"
+[tools."github:DeusData/codebase-memory-mcp"."platforms.linux-x64"]
+checksum = "sha256:6eef49652bc0c7820f43114125044d40bf7f4d97c11b2592f6b0f6a307702325"
+url = "https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.10.8/codebase-memory-mcp-linux-amd64-portable.tar.gz"
+url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/assets/520282432"
 provenance = "github-attestations"
 
 [[tools."github:github/codeql-action"]]
@@ -129,10 +129,9 @@ version = "2.26.4"
 backend = "github:github/codeql-action"
 
 [tools."github:github/codeql-action".options]
-asset_pattern = "codeql-bundle-linux64.tar.zst"
 version_prefix = "codeql-bundle-v"
 
-[tools."github:github/codeql-action"."platforms.linux-x64"]
+[tools."github:github/codeql-action"."platforms.linux-arm64"]
 checksum = "sha256:a9872c9075f85374a8d03546263c6dc01fde50a29baea9fc08dcc6b25cc2efd5"
 url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.26.4/codeql-bundle-linux64.tar.zst"
 url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/523665811"
@@ -143,9 +142,10 @@ version = "2.26.4"
 backend = "github:github/codeql-action"
 
 [tools."github:github/codeql-action".options]
+asset_pattern = "codeql-bundle-linux64.tar.zst"
 version_prefix = "codeql-bundle-v"
 
-[tools."github:github/codeql-action"."platforms.linux-arm64"]
+[tools."github:github/codeql-action"."platforms.linux-x64"]
 checksum = "sha256:a9872c9075f85374a8d03546263c6dc01fde50a29baea9fc08dcc6b25cc2efd5"
 url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.26.4/codeql-bundle-linux64.tar.zst"
 url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/523665811"
@@ -181,25 +181,25 @@ url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/453012782"
 provenance = "github-attestations"
 
 [[tools.node]]
-version = "24.21.0"
+version = "24.22.0"
 backend = "core:node"
-specifiers = ["24.21.0"]
+specifiers = ["24.22.0"]
 
 [tools.node."platforms.linux-arm64"]
-checksum = "sha256:724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5"
-url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.gz"
+checksum = "sha256:b7e7991d5407815adfa74a2a9cd4db683552c8ce32ff4a295c22e972849c3f5d"
+url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-arm64.tar.gz"
 
 [tools.node."platforms.linux-x64"]
-checksum = "sha256:6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff"
-url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz"
+checksum = "sha256:28ea0a438de9a13bd7891fd758eee6c7819ee8af5442dfd8d45bd65e56d4228c"
+url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.gz"
 
 [tools.node."platforms.macos-arm64"]
-checksum = "sha256:bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057"
-url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz"
+checksum = "sha256:6a9724d9b50a5f22b4816cded441b5a8d9ddae546191a5e5b7efa5a5e2ee26d5"
+url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-darwin-arm64.tar.gz"
 
 [tools.node."platforms.macos-x64"]
-checksum = "sha256:1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097"
-url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-x64.tar.gz"
+checksum = "sha256:495e3f273c645f3c4677d438304cdfc701729ea5dec5728f5c8e76a2dece4b91"
+url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-darwin-x64.tar.gz"
 
 [[tools.scorecard]]
 version = "5.6.0"

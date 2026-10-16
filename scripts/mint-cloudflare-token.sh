@@ -190,7 +190,7 @@ elif [ "${print_secret}" -eq 0 ]; then
         + (if .condition then ", from \(.condition["request.ip"].in | join(", "))" else "" end)
         + "."' <"${work}/body" >&2
     echo "Nothing created. Rerun with --print-secret and pipe stdout into the" >&2
-    echo "cloudflare_api connection's API_TOKEN field (docs/SECRETS.md)." >&2
+    echo "cloudflare_api connection's API_TOKEN field (docs/Secrets.md)." >&2
     exit 0
 fi
 

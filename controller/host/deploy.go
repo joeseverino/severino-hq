@@ -16,25 +16,38 @@ import (
 	"time"
 )
 
-// Composition is the repository a deploy accepts: this project's composed
-// image, which the compose workflow signs. A different repository would be
-// someone else's code.
-const Composition = "ghcr.io/joeseverino/severino-hq/composition"
-
-// SignerIdentity is the certificate identity a deployable image is signed
-// with: the compose workflow, on main.
-const SignerIdentity = `^https://github\.com/joeseverino/severino-hq/\.github/workflows/compose\.yml@refs/heads/main$`
+// BuildSource is the repository this program was built from, owner/name,
+// set by the image build from the source it labels the image with. What a
+// deploy accepts is derived from it, so a fork deploys its own images and a
+// build that names no source deploys nothing.
+var BuildSource string
 
 const signerIssuer = "https://token.actions.githubusercontent.com"
 
-var composition = regexp.MustCompile(`^` + regexp.QuoteMeta(Composition) + `@sha256:[0-9a-f]{64}$`)
+var sourceNamed = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
+
+// Source is a repository a deploy accepts images from.
+type Source string
+
+// Composition is the source's composed image, which its compose workflow
+// signs. A different repository would be someone else's code.
+func (s Source) Composition() string { return "ghcr.io/" + strings.ToLower(string(s)) + "/composition" }
+
+// Signer is the certificate identity a deployable image is signed with: the
+// source's compose workflow, on main.
+func (s Source) Signer() string {
+	return `^https://github\.com/` + regexp.QuoteMeta(string(s)) + `/\.github/workflows/compose\.yml@refs/heads/main$`
+}
 
 // Deployable returns image when it is a digest-pinned reference to the
-// composition. The sudoers rule lets the caller choose this argument, and it
-// decides what root runs as a container.
-func Deployable(image string) (string, error) {
-	if !composition.MatchString(image) {
-		return "", fmt.Errorf("refusing to deploy %q: not a digest-pinned reference to %s", image, Composition)
+// source's composition. The sudoers rule lets the caller choose this
+// argument, and it decides what root runs as a container.
+func (s Source) Deployable(image string) (string, error) {
+	if !sourceNamed.MatchString(string(s)) {
+		return "", errors.New("this build names no source repository, so it deploys nothing")
+	}
+	if !regexp.MustCompile(`^` + regexp.QuoteMeta(s.Composition()) + `@sha256:[0-9a-f]{64}$`).MatchString(image) {
+		return "", fmt.Errorf("refusing to deploy %q: not a digest-pinned reference to %s", image, s.Composition())
 	}
 	return image, nil
 }
@@ -42,6 +55,8 @@ func Deployable(image string) (string, error) {
 // Deployer holds what a deploy needs beyond the machine.
 type Deployer struct {
 	*Machine
+	// Source is the repository whose signed composition is deployable.
+	Source Source
 	// Cosign is root's own verifier, outside the tree a deploy replaces.
 	Cosign string
 	// Exec replaces this process with another program: the release's own
@@ -62,7 +77,7 @@ type Deployer struct {
 // so the release being installed is the one that installs it.
 // credentials holds "user\ntoken\n", or nothing for a host with its own.
 func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Reader) error {
-	image, err := Deployable(image)
+	image, err := d.Source.Deployable(image)
 	if err != nil {
 		return err
 	}
@@ -88,7 +103,7 @@ func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Read
 	// above is exactly what a stolen registry token could also push.
 	if err := d.run(ctx, d.Cosign, "verify",
 		"--certificate-oidc-issuer", signerIssuer,
-		"--certificate-identity-regexp", SignerIdentity, image); err != nil {
+		"--certificate-identity-regexp", d.Source.Signer(), image); err != nil {
 		cleanup()
 		return fmt.Errorf("refusing to deploy %s: not signed by the compose workflow", image)
 	}
@@ -123,7 +138,7 @@ func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Read
 // once HQ is healthy it installs the rest. If any of it fails, the previous
 // image, tree and units are put back and HQ restarted on them.
 func (d *Deployer) Release(ctx context.Context, image string) (err error) {
-	image, err = Deployable(image)
+	image, err = d.Source.Deployable(image)
 	if err != nil {
 		return err
 	}
@@ -153,9 +168,10 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		}
 	}()
 
-	if err := d.sync(ctx, image); err != nil {
+	if err := d.Sync(ctx, image); err != nil {
 		return err
 	}
+	fmt.Fprintln(d.Out, "Tree synced from the image.")
 	if err := d.installWebUnit(ctx); err != nil {
 		return err
 	}
@@ -175,20 +191,6 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	d.restart(held)
 	fmt.Fprintf(d.Out, "Deployed %s.\n", image)
 	return nil
-}
-
-// sync replaces the root-owned tree with the image's, using the sync program
-// the image ships, and installs that program as the host's.
-func (d *Deployer) sync(ctx context.Context, image string) error {
-	program := filepath.Join(d.Runtime, "severino-hq-sync."+fmt.Sprint(os.Getpid()))
-	defer os.Remove(program)
-	if err := d.copyOut(ctx, image, "/app/scripts/severino-hq-sync-scripts", program); err != nil {
-		return err
-	}
-	if err := d.private(ctx, "Tree sync", "tree-sync", "sh", program, "--image", image); err != nil {
-		return err
-	}
-	return copyFile(program, filepath.Join(d.Sbin, "severino-hq-sync-scripts"), 0o755)
 }
 
 // installWebUnit installs the synced tree's web unit and its drop-ins.

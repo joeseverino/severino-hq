@@ -172,19 +172,6 @@ jobs:
               "^https://github\.com/${REPOSITORY}/\.github/workflows/compose\.yml@refs/heads/main$" \
             "$IMAGE" > /dev/null
           echo "composition signature verified"
-      - name: Sync the deploy checkout
-        # The deploy runs from the verified image and the root-owned scripts,
-        # not from this checkout, so a checkout git cannot pull is a warning to
-        # fix, not a reason to hold a verified release. severino-hq-check-scripts
-        # asks the same ownership question daily (scripts/lib/checkout.sh).
-        run: |
-          set -uo pipefail
-          checkout=/opt/apps/severino-hq
-          if [ -n "$(find "$checkout/.git" ! -user "$(id -un)" -print -quit)" ]; then
-            echo "::warning title=Checkout not synced::Part of the checkout's .git is not owned by the runner. Fix on the host: sudo chown -R \"\$(id -un)\": $checkout/.git"
-          elif ! git -C "$checkout" pull --ff-only --quiet; then
-            echo "::warning title=Checkout not synced::git pull --ff-only failed; the deploy continues from the verified image."
-          fi
       - name: Deploy exact image with health rollback
         # Same deploy path and rollback as a host release: it pulls, recreates,
         # waits for health, activates the controller, and restores the previous

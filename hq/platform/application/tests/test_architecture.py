@@ -362,7 +362,7 @@ class StyleContractTests(SimpleTestCase):
             len(found),
             self.VIEWPORT_BREAKPOINTS,
             "A new viewport breakpoint: make the layout fluid or ask its container "
-            "(docs/DESIGN.md, 'Size to content, fit the window').",
+            "(docs/Design.md, 'Size to content, fit the window').",
         )
 
     def test_a_selector_is_styled_in_one_place(self):

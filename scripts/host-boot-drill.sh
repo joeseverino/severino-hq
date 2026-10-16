@@ -6,7 +6,9 @@
 #
 # A boot starts HQ before its environment is rendered: the unit must wait,
 # start nothing, and leave the file's path alone, then come up healthy once
-# the file is there. A crash and a reboot must bring it back the same way.
+# the file is there. A crash and a reboot must bring it back the same way. A
+# release that cannot serve must fail its start, and the previous release
+# must come back, as a deploy's rollback brings it back.
 #
 # Needs systemd as PID 1, docker, and passwordless sudo: a CI runner, not a
 # laptop. Elsewhere it says it did not run and passes, unless CI is set.
@@ -86,11 +88,17 @@ boot() {
   echo "$1: HQ waited for its environment and came up healthy."
 }
 
+# The digest the local registry holds for $1: an image can carry several, and
+# only this one resolves from the registry.
+registry_digest() {
+  sudo docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$1" | grep '^localhost:5000/' | head -n 1
+}
+
 # A digest-pinned reference, as a deploy records: pushed to a local registry.
 sudo docker run --detach --name "$registry" --publish 127.0.0.1:5000:5000 "$registry_image" >/dev/null
 sudo docker tag "$image" localhost:5000/severino-hq:drill
 for _ in $(seq 30); do sudo docker push --quiet localhost:5000/severino-hq:drill >/dev/null 2>&1 && break; sleep 1; done
-pinned=$(sudo docker inspect --format '{{index .RepoDigests 0}}' localhost:5000/severino-hq:drill)
+pinned=$(registry_digest localhost:5000/severino-hq:drill)
 
 # Installed as a deploy installs it: the image's own hq-host and the
 # repository's unit and tmpfiles rule.
@@ -113,3 +121,19 @@ echo "Crash: the unit brought HQ back."
 
 sudo systemctl stop severino-hq-web.service
 boot "Reboot"
+
+# A release whose health check fails: the restart onto it fails, then the
+# previous release is recorded and comes back.
+printf 'FROM %s\nHEALTHCHECK --interval=2s --timeout=2s --retries=1 CMD ["false"]\n' "$pinned" |
+  sudo docker build --quiet --tag localhost:5000/severino-hq:broken - >/dev/null
+sudo docker push --quiet localhost:5000/severino-hq:broken >/dev/null
+broken=$(registry_digest localhost:5000/severino-hq:broken)
+printf '%s\n' "$broken" | sudo tee /var/lib/severino-hq/release >/dev/null
+if sudo systemctl restart severino-hq-web.service; then
+  fail "Rollback: a release that cannot serve started."
+fi
+printf '%s\n' "$pinned" | sudo tee /var/lib/severino-hq/release >/dev/null
+sudo systemctl restart severino-hq-web.service || fail "Rollback: the previous release did not come back."
+curl --fail --silent --max-time 5 http://127.0.0.1:8000/health/ready/ >/dev/null \
+  || fail "Rollback: the unit is active but HQ does not answer."
+echo "Rollback: a release that cannot serve failed its start, and the previous one came back."

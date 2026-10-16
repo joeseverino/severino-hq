@@ -12,6 +12,6 @@ def database_path(root: Path, override: str | None) -> Path:
         raise ImproperlyConfigured(
             "An existing database uses the old local default. Set "
             "SEVERINO_DATABASE_PATH to select it or a verified backup under var/db. "
-            "See docs/REPOSITORY_LAYOUT.md."
+            "See docs/Development.md."
         )
     return root / "var" / "db" / "severino.sqlite3"

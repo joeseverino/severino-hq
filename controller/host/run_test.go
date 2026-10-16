@@ -33,8 +33,9 @@ func (h *harness) docker(scenario string) func(context.Context, ...string) *exec
 		switch args[0] {
 		case "inspect":
 			health := "starting"
-			if scenario == "healthy" {
-				health = "healthy"
+			switch scenario {
+			case "healthy", "unhealthy":
+				health = scenario
 			}
 			return exec.CommandContext(ctx, "/bin/sh", "-c", "echo "+health)
 		case "run":
@@ -207,5 +208,21 @@ func TestAStopWhileWaitingIsNotAFailure(t *testing.T) {
 
 	if err := h.runner.Run(ctx); err != nil {
 		t.Fatalf("a stop while waiting failed the unit: %v", err)
+	}
+}
+
+func TestAnUnhealthyContainerFailsTheStart(t *testing.T) {
+	h := newHarness(t, "unhealthy")
+
+	err := h.runner.Run(context.Background())
+
+	if err == nil || !strings.Contains(err.Error(), "did not become healthy") {
+		t.Fatalf("got %v", err)
+	}
+	if h.ready() {
+		t.Error("an unhealthy container was reported ready")
+	}
+	if !strings.Contains(h.calls(), "stop --time 30 "+Container) {
+		t.Errorf("the unhealthy container was not stopped:\n%s", h.calls())
 	}
 }

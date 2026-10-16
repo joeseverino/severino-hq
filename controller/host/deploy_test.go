@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const source Source = "joeseverino/severino-hq"
+
 const next = "ghcr.io/joeseverino/severino-hq/composition@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
 
 type handover struct {
@@ -21,6 +23,7 @@ func newDeployer(f *fakeHost) (*Deployer, *handover) {
 	exec := &handover{}
 	return &Deployer{
 		Machine: f.machine,
+		Source:  source,
 		Cosign:  "/verifier/cosign",
 		Exec: func(argv0 string, argv, env []string) error {
 			exec.argv0, exec.argv, exec.env = argv0, argv, env
@@ -33,7 +36,7 @@ func newDeployer(f *fakeHost) (*Deployer, *handover) {
 }
 
 func TestOnlyTheCompositionByDigestIsDeployable(t *testing.T) {
-	if _, err := Deployable(next); err != nil {
+	if _, err := source.Deployable(next); err != nil {
 		t.Errorf("refused %s: %v", next, err)
 	}
 	for _, image := range []string{
@@ -42,8 +45,28 @@ func TestOnlyTheCompositionByDigestIsDeployable(t *testing.T) {
 		"ghcr.io/someone-else/severino-hq/composition@sha256:" + strings.Repeat("a", 64),
 		next + "\n--privileged",
 	} {
-		if _, err := Deployable(image); err == nil {
+		if _, err := source.Deployable(image); err == nil {
 			t.Errorf("accepted %q", image)
+		}
+	}
+}
+
+func TestAForkDeploysItsOwnImagesAndAnUnnamedBuildNone(t *testing.T) {
+	fork := Source("Someone-Else/hq-fork")
+	own := "ghcr.io/someone-else/hq-fork/composition@sha256:" + strings.Repeat("b", 64)
+
+	if _, err := fork.Deployable(own); err != nil {
+		t.Errorf("a fork refused its own image: %v", err)
+	}
+	if _, err := fork.Deployable(next); err == nil {
+		t.Error("a fork accepted this repository's image")
+	}
+	if fork.Signer() != `^https://github\.com/Someone-Else/hq-fork/\.github/workflows/compose\.yml@refs/heads/main$` {
+		t.Errorf("signer %s", fork.Signer())
+	}
+	for _, unnamed := range []Source{"", "no-slash", "owner/name/extra", "owner/na me"} {
+		if _, err := unnamed.Deployable(next); err == nil {
+			t.Errorf("a build naming %q deployed", unnamed)
 		}
 	}
 }
@@ -56,7 +79,7 @@ func TestADeployVerifiesPullsAndHandsOverToTheRelease(t *testing.T) {
 		t.Fatalf("%v\n%s", err, f.out.String())
 	}
 
-	f.before(t, "/verifier/cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp "+SignerIdentity+" "+next, "docker pull "+next)
+	f.before(t, "/verifier/cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp "+source.Signer()+" "+next, "docker pull "+next)
 	f.before(t, "docker pull "+next, "docker create --pull never "+next)
 	if filepath.Base(exec.argv0) != "hq-host" || strings.Join(exec.argv[1:], " ") != "release --stage "+filepath.Dir(exec.argv0)+" "+next {
 		t.Fatalf("handed over as %s %v", exec.argv0, exec.argv)
@@ -129,20 +152,20 @@ func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	if strings.TrimSpace(string(data)) != next {
 		t.Errorf("the release is %q", data)
 	}
-	f.before(t, "systemctl stop", "sh ")
+	f.before(t, "systemctl stop", "docker create --pull never "+imageID)
 	// The new tree and its web unit are in place before HQ restarts, so HQ
 	// comes up as the release being deployed defines it.
-	f.before(t, "sh ", "systemctl restart "+WebUnit)
-	if !f.called("sh " + filepath.Join(f.machine.Runtime, "severino-hq-sync.")) {
-		t.Error("the sync program is not the image's")
+	f.before(t, "docker create --pull never "+imageID, "systemctl restart "+WebUnit)
+	if _, err := os.Stat(filepath.Join(f.machine.Lib, "scripts", "synced-release")); err != nil {
+		t.Error("the tree is not the image's")
 	}
 	if _, err := os.Stat(filepath.Join(f.machine.Systemd, WebUnit)); err != nil {
 		t.Error("the release's web unit was not installed")
 	}
 	f.before(t, "systemctl restart "+WebUnit, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install")
 	f.before(t, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install", "systemctl start severino-hq-controller.path")
-	if _, err := os.Stat(filepath.Join(f.machine.Sbin, "severino-hq-sync-scripts")); err != nil {
-		t.Error("the release's sync program was not installed")
+	if leftovers, _ := filepath.Glob(filepath.Join(f.machine.Sbin, "severino-hq-*")); len(leftovers) != 0 {
+		t.Errorf("a program was installed outside the tree: %v", leftovers)
 	}
 }
 
@@ -169,7 +192,7 @@ func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 	if _, err := os.Stat(marker); err != nil {
 		t.Error("the previous tree was not restored")
 	}
-	if _, err := os.Stat(filepath.Join(f.machine.Lib, "synced-release")); err == nil {
+	if _, err := os.Stat(filepath.Join(f.machine.Lib, "scripts", "synced-release")); err == nil {
 		t.Error("the unhealthy release's tree was left in place")
 	}
 	if _, err := os.Stat(filepath.Join(f.machine.Systemd, WebUnit)); err == nil {
@@ -213,7 +236,7 @@ func TestAFailedInstallRollsTheTreeAndImageBack(t *testing.T) {
 	if _, err := os.Stat(marker); err != nil {
 		t.Error("the previous tree was not restored")
 	}
-	if _, err := os.Stat(filepath.Join(f.machine.Lib, "synced-release")); err == nil {
+	if _, err := os.Stat(filepath.Join(f.machine.Lib, "scripts", "synced-release")); err == nil {
 		t.Error("the failed release's tree was left in place")
 	}
 }

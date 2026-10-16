@@ -89,12 +89,19 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 			if ready {
 				continue
 			}
-			if health := r.health(ctx); health == "healthy" {
+			switch r.health(ctx) {
+			case "healthy":
 				ready = true
 				if err := r.Notify("READY=1\nSTATUS=HQ is healthy."); err != nil {
 					return fmt.Errorf("the service manager was not told HQ is ready: %w", err)
 				}
 				r.Log.Info("HQ is healthy.", slog.String("event", "host.web.ready"))
+			case "unhealthy":
+				// Past its start period and failing: the start fails now,
+				// so a deploy of an image that cannot serve rolls back.
+				_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", "30", Container).Run()
+				<-exited
+				return errors.New("HQ did not become healthy")
 			}
 		}
 	}

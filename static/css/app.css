@@ -4514,7 +4514,7 @@ textarea.code {
 .topology-stage { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 /* A viewport query, not a container one: the workspace holds buttons, and
    inside a size container Chrome restyles them once the container is measured
-   and runs their transitions from nothing (docs/DESIGN.md). */
+   and runs their transitions from nothing (docs/Design.md). */
 @media (min-width: 1180px) {
   .topology-stage.has-detail { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
   .topology-stage.has-detail .topology-detail {

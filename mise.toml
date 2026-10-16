@@ -498,21 +498,22 @@ docker run --rm --entrypoint python \
 '''
 
 [tasks."image:verify:secrets"]
-description = "It carries the secret renderer, inside the manifested root tree"
+description = "It carries the host programs, which refuse to run unprivileged"
 depends = ["image:build"]
 run = '''
 set -eu
 image="${IMAGE:-severino-hq:ci-local}"
-listed="$(docker run --rm --entrypoint sh "$image" -c \
-    'test -x /app/deploy/bin/hq-secrets && grep -c "  deploy/bin/hq-secrets$" /app/root-tree.sha256')"
-[ "$listed" = 1 ]
-# The image's user is not root, so it must refuse and say why.
-if said="$(docker run --rm --entrypoint /app/deploy/bin/hq-secrets "$image" 2>&1)"; then
-    echo "hq-secrets ran as an unprivileged user." >&2
-    exit 1
-fi
-case "$said" in
-    *"hq-secrets must run as root."*) ;;
-    *) echo "$said" >&2; exit 1 ;;
-esac
+# The image's user is not root, so each must refuse and say why.
+for command in hq-secrets "hq-host verify"; do
+    program="${command%% *}"
+    # shellcheck disable=SC2086  # the command's argument is meant to split off
+    if said="$(docker run --rm --entrypoint "/app/deploy/bin/$program" "$image" ${command#"$program"} 2>&1)"; then
+        echo "$program ran as an unprivileged user." >&2
+        exit 1
+    fi
+    case "$said" in
+        *"$program must run as root."*) ;;
+        *) echo "$program: $said" >&2; exit 1 ;;
+    esac
+done
 '''

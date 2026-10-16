@@ -1,11 +1,10 @@
 # Severino HQ under compose, for running it locally. A host runs HQ under
-# severino-hq-web.service instead (controller/host/web.go says how); a deploy
-# uses this file once, to bring a compose-run host up to that unit.
+# severino-hq-web.service instead (controller/host/web.go says how).
 #
 # Uses host networking so the MCP boundary receives the real socket peer
-# instead of Docker's bridge gateway address. Nginx Proxy Manager reaches the
-# browser UI at <host-LAN-IP>:8000; MCP clients connect directly to the host's
-# Tailscale IP on the same port.
+# instead of Docker's bridge gateway address. A reverse proxy reaches the
+# browser UI on port 8000; MCP clients connect directly to the host's
+# Tailscale address on the same port.
 #
 # Volumes:
 #   data/    SQLite DB
@@ -15,7 +14,7 @@
 # Static assets are not a volume: the image carries them, collected at build.
 #
 # No env_file: production secrets come from the 1Password-rendered file
-# settings read (see docs/SECRETS.md). The on-host .env holds
+# settings read (see docs/Secrets.md). The on-host .env holds
 # only non-secret compose interpolation values (the two *_FILE_HOST paths).
 #
 # The image runs as UID/GID 10001. `chown -R 10001:10001` the host bind
@@ -25,10 +24,8 @@
 services:
   app:
     build: .
-    # Local dev builds severino-hq:latest. CI/CD overrides this to the GHCR
-    # image (SEVERINO_IMAGE=ghcr.io/joeseverino/severino-hq:sha-…) so the
-    # homelab `docker compose pull && up -d --no-build` deploys the exact,
-    # already-tested-and-scanned artifact instead of rebuilding on the box.
+    # Builds severino-hq:latest. SEVERINO_IMAGE runs a published image
+    # instead, without rebuilding it.
     image: ${SEVERINO_IMAGE:-severino-hq:latest}
     container_name: severino-hq
     network_mode: host

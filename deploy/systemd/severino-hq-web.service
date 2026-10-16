@@ -1,6 +1,6 @@
 [Unit]
 Description=Severino HQ
-Documentation=https://github.com/joeseverino/severino-hq/blob/main/docs/DEPLOYMENT.md
+Documentation=https://github.com/joeseverino/severino-hq/blob/main/docs/Deployment.md
 # The unit is the only thing that runs HQ: the container has no restart
 # policy, so a boot, a crash and a deploy all start it the same way.
 Requires=docker.service
@@ -49,7 +49,6 @@ IPAddressDeny=any
 CapabilityBoundingSet=
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
-ReadOnlyPaths=/usr/local/lib/severino-hq
 
 [Install]
 WantedBy=multi-user.target

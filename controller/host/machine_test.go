@@ -12,9 +12,14 @@ import (
 	"testing"
 )
 
+// imageID is the fake image's ID, which docker reports for every image.
+const imageID = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+
 type fakeHost struct {
-	t       *testing.T
-	root    string
+	t    *testing.T
+	root string
+	// image is /app in the image being deployed.
+	image   string
 	mu      sync.Mutex
 	log     []string
 	fail    []string
@@ -49,16 +54,25 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 		return answer("", 3)
 	case strings.HasPrefix(call, "docker inspect --format {{.Config.Image}}"):
 		return answer(f.running+"\n", 0)
+	case strings.HasPrefix(call, "docker inspect --format {{.Image}}"):
+		return answer(imageID+"\n", 0)
 	case strings.HasPrefix(call, "docker create"):
 		return answer("c0ffee\n", 0)
+	case strings.HasPrefix(call, "docker volume inspect"):
+		return answer(filepath.Join(f.root, "volumes", args[len(args)-1])+"\n", 0)
+	case strings.HasSuffix(name, "backup.sh"):
+		return exec.CommandContext(ctx, "/bin/sh", "-c", `env > "$1"`, "sh", filepath.Join(f.root, "backup-env"))
+	case strings.HasPrefix(call, "docker image inspect"):
+		return answer(imageID+"\n", 0)
 	case strings.HasPrefix(call, "docker cp"):
+		// A path under /app is the fake image's; anything else is one file.
+		from := args[len(args)-2]
+		if item, ok := strings.CutPrefix(from[strings.Index(from, ":")+1:], "/app/"); ok {
+			return exec.CommandContext(ctx, "cp", "-R", filepath.Join(f.image, item), args[len(args)-1])
+		}
 		os.WriteFile(args[len(args)-1], []byte("#!/bin/sh\n"), 0o700)
 	case name == "cp":
 		return exec.CommandContext(ctx, "cp", args...)
-	case name == "sh":
-		// The sync replaces the tree with the release's.
-		os.Remove(filepath.Join(f.machine.Lib, "previous-release"))
-		os.WriteFile(filepath.Join(f.machine.Lib, "synced-release"), nil, 0o644)
 	}
 	return answer("", 0)
 }
@@ -66,7 +80,7 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 func newFakeHost(t *testing.T) *fakeHost {
 	t.Helper()
 	root := t.TempDir()
-	f := &fakeHost{t: t, root: root}
+	f := &fakeHost{t: t, root: root, image: filepath.Join(root, "image", "app")}
 	lib := filepath.Join(root, "lib")
 	f.machine = &Machine{
 		Lib:      lib,
@@ -79,7 +93,10 @@ func newFakeHost(t *testing.T) *fakeHost {
 		Out:      &f.out,
 	}
 	f.machine.Command = f.program
-	for _, dir := range []string{"systemd", "sbin", "run", "run/severino-hq", "run/severino-hq-secrets"} {
+	f.machine.Own = func(string) error { return nil }
+	f.machine.Verifier = func(context.Context) error { return nil }
+	f.machine.Sudoers = filepath.Join(root, "sudoers.d")
+	for _, dir := range []string{"systemd", "sbin", "run", "run/severino-hq", "run/severino-hq-secrets", "sudoers.d", "image/app"} {
 		os.MkdirAll(filepath.Join(root, dir), 0o755)
 	}
 	f.ship("severino-hq-web.service", "[Service]\nExecStart=/bin/true\n\n[Install]\nWantedBy=multi-user.target\n")
@@ -91,6 +108,18 @@ func newFakeHost(t *testing.T) *fakeHost {
 	f.ship("severino-hq-connect.conf.example", "[Service]\n")
 	os.MkdirAll(filepath.Join(lib, "deploy", "tmpfiles"), 0o755)
 	os.WriteFile(filepath.Join(lib, "deploy", "tmpfiles", "severino-hq.conf"), []byte("d /run/severino-hq 0755 10001 10001 -\n"), 0o644)
+	// The image ships the same tree, its programs and a marker of its own.
+	exec.Command("cp", "-R", filepath.Join(lib, "deploy"), filepath.Join(f.image, "deploy")).Run()
+	for name, body := range map[string]string{
+		"deploy/bin/hq-host":        "#!/bin/sh\n",
+		"scripts/backup.sh":         "#!/bin/sh\n",
+		"scripts/synced-release":    "",
+		"hq/config/controller.json": "{}\n",
+	} {
+		path := filepath.Join(f.image, name)
+		os.MkdirAll(filepath.Dir(path), 0o755)
+		os.WriteFile(path, []byte(body), 0o644)
+	}
 	return f
 }
 
