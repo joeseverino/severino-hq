@@ -620,7 +620,9 @@ def public_answers_for(hostname: str) -> tuple[str, ...]:
     if not wanted:
         return ()
     found: list[str] = []
-    for snapshot in ProviderInventory.objects.filter(kind=RECORD_KIND):
+    from .facts import stored_inventory
+
+    for snapshot in stored_inventory(RECORD_KIND)[RECORD_KIND]:
         for record in snapshot.records:
             if normalized_hostname(str(record.get("name", ""))) != wanted:
                 continue

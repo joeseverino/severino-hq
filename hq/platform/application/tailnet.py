@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from ipaddress import ip_address
 
-from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 
 from .projection import read_once
@@ -439,11 +438,10 @@ def snapshots() -> dict[str, list]:
 
     from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
+    from .facts import stored_inventory
+
     def load() -> dict[str, list]:
-        found: dict[str, list] = {TAILNET_KIND: [], POLICY_KIND: [], ARRIVAL_KIND: []}
-        for snapshot in ProviderInventory.objects.filter(kind__in=(TAILNET_KIND, POLICY_KIND, ARRIVAL_KIND)):
-            found.setdefault(snapshot.kind, []).append(snapshot)
-        return found
+        return {kind: list(rows) for kind, rows in stored_inventory(TAILNET_KIND, POLICY_KIND, ARRIVAL_KIND).items()}
 
     return read_once("tailnet.snapshots", load)
 
