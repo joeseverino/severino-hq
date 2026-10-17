@@ -101,6 +101,13 @@ def env_secret(name: str) -> str:
 
 # ----- Core security -----------------------------------------------------------
 
+# What production cannot run without. Below, the settings refuse to load
+# without the signing key, and with no allowed host every request is answered
+# 400, the healthcheck's included. The secret renderer refuses an application
+# environment that lacks one and names it: `manage.py bridge_contract` writes
+# this list into the registry it reads.
+REQUIRED_APP_VARIABLES = ("DJANGO_ALLOWED_HOSTS", "DJANGO_SECRET_KEY")
+
 DEBUG = env_bool("DJANGO_DEBUG", default=False)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
@@ -453,7 +460,12 @@ DATABASES = {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": str(database_path(BASE_DIR, os.environ.get("SEVERINO_DATABASE_PATH"))),
         "OPTIONS": {
-            "init_command": ("PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA foreign_keys=ON;"),
+            # No foreign_keys pragma: Django turns it on for every connection.
+            # synchronous=FULL so a power cut cannot undo a save HQ already
+            # reported; NORMAL in WAL mode can lose the last commits, and HQ
+            # commits too rarely for the wait to matter. temp_store=MEMORY:
+            # HQ's sorts are small.
+            "init_command": "PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;PRAGMA temp_store=MEMORY;",
             "transaction_mode": "IMMEDIATE",
             # How long a writer waits for another writer before giving up.
             # WAL lets readers carry on through a write, but writers are still
@@ -582,6 +594,12 @@ SEVERINO_PASSWORD_LOGIN_ENABLED = env_bool("SEVERINO_PASSWORD_LOGIN_ENABLED", de
 AUTHENTICATION_BACKENDS = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend"] + (
     ["django.contrib.auth.backends.ModelBackend"] if SEVERINO_PASSWORD_LOGIN_ENABLED else []
 )
+
+# "advanced" lists each unmet check of HQ's standard in Needs you
+# (docs/Posture.md). Any other value refuses to start.
+SEVERINO_POSTURE = os.environ.get("SEVERINO_POSTURE", "").strip()
+if SEVERINO_POSTURE not in {"", "advanced"}:
+    raise RuntimeError('SEVERINO_POSTURE must be "advanced" or unset.')
 
 SEVERINO_OIDC_ALLOWED_EMAILS = {email.lower() for email in env_list("SEVERINO_OIDC_ALLOWED_EMAILS")}
 SEVERINO_OIDC_ALLOWED_GROUPS = set(env_list("SEVERINO_OIDC_ALLOWED_GROUPS"))
@@ -752,6 +770,10 @@ STORAGES = {
     },
 }
 
+# Every reference goes through the manifest, so nothing asks for the unhashed
+# originals.
+WHITENOISE_KEEP_ONLY_HASHED_FILES = True
+
 # Media (uploaded receipts) lives OUTSIDE the app code in production.
 # Receipt files are served only through an auth-protected view, never via MEDIA_URL.
 MEDIA_ROOT = Path(os.environ.get("SEVERINO_MEDIA_ROOT", str(BASE_DIR / "var" / "media")))
@@ -795,6 +817,11 @@ LOGGING = {
 # ----- App-specific ------------------------------------------------------------
 
 SEVERINO_SITE_NAME = os.environ.get("SEVERINO_SITE_NAME", "Severino HQ")
+# True only for a saved copy of HQ's pages (the public demo): what a page says
+# about the reader's connection then describes the visit the copy was rendered
+# for. Set in code by hq.platform.core.example_estate.as_production, never from
+# the environment, so a live HQ cannot be switched into it.
+SEVERINO_RENDERED_COPY = False
 SEVERINO_FISCAL_YEAR_START_MONTH = env_int("SEVERINO_FISCAL_YEAR_START_MONTH", 1, minimum=1, maximum=12)
 SEVERINO_DOC_REVIEW_INTERVAL_DAYS = env_int("SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180, minimum=1)
 
@@ -819,8 +846,10 @@ SEVERINO_LOOKUP_TIMEOUT_SECONDS = env_int("SEVERINO_LOOKUP_TIMEOUT_SECONDS", 6)
 # to whichever regional registry actually holds the block.
 SEVERINO_RDAP_ENDPOINT = os.environ.get("SEVERINO_RDAP_ENDPOINT", "https://rdap.org")
 
+# Which D1 database is the contact inbox, when the controller finds the
+# contact table in more than one. Not a credential: the controller reads and
+# writes the inbox through its cloudflare_api connection.
 CLOUDFLARE_D1_DATABASE_NAME = os.environ.get("CLOUDFLARE_D1_DATABASE_NAME", "")
-CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 
 
 # Ensure the directories HQ depends on exist at startup.

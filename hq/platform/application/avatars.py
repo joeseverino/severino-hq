@@ -17,12 +17,9 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
+import requests
 from django.db import transaction
 from django.utils import timezone
-
-# Only a sign-in fetches a picture; every command and test worker imports this
-# module through the URLconf, and requests costs it most of its import.
-lazy import requests
 
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog, Avatar

@@ -16,6 +16,9 @@ dependencies = [
     "pydantic>=2.14.0,<3",
     "pyjwt>=2.15.1,<3",
     "referencing>=0.37.0,<1",
+    # Strips comments from collected scripts (hq/platform/core/static.py); a
+    # regex cannot tell a comment from a string or regex literal.
+    "rjsmin>=1.2,<2",
     # Imported directly: the ASGI application, its static mount and the bridge.
     "starlette>=1.8.0,<2",
     "tblib>=3,<4",
