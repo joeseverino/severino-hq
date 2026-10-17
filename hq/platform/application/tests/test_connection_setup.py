@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest import skipUnless
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -7,6 +8,7 @@ from django.utils.html import escape
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.credential_reads import MINTERS, observer_permissions
+from hq.domains.control_plane.management.commands.connections_reference import reference_path
 
 from ..connection_setup import setups
 from .host_only import host_only
@@ -59,6 +61,9 @@ class SetupTests(TestCase):
 
 
 class ReferenceTests(TestCase):
+    # The image ships no docs/ (Dockerfile.dockerignore); the checks gate holds
+    # the file in the repository.
+    @skipUnless(reference_path().exists(), "docs/ is not shipped in this tree")
     def test_the_committed_reference_is_what_the_providers_declare(self):
         from django.core.management import call_command
 
