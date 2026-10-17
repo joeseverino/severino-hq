@@ -104,7 +104,7 @@ names nothing about the extension:
 ```yaml
 jobs:
   checks:
-    uses: OWNER/severino-hq/.github/workflows/plugin-checks.yml@main
+    uses: joeseverino/severino-hq/.github/workflows/plugin-checks.yml@main
   admit:
     name: Admit
     if: github.event_name != 'pull_request'
@@ -115,7 +115,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: OWNER/severino-hq/.github/actions/admit-plugin@main
+      - uses: joeseverino/severino-hq/.github/actions/admit-plugin@main
         with:
           app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           app-private-key: ${{ secrets.HQ_APP_KEY }}
@@ -212,7 +212,16 @@ approved inventories must be identical or the host refuses to start.
 
 The declared set is the `COMPOSITION_EXTENSIONS` repository secret rather than
 a committed file, because this repository is public and the extensions are not.
-`composition/extensions.json` documents its shape.
+`composition/extensions.json` documents its shape. An empty `extensions` list
+composes the host with none; a missing secret or list fails Compose.
+
+An extension leaves production only by being named. `hq-host deploy` reads the
+lock in the running image and in the one being deployed, both covered by the
+signature over their digests, and refuses an image that drops an extension the
+running release carries unless the image's composition lists its id under
+`retired` (shipped in the image as `/opt/severino/plugin-retired.json`).  To remove one, move
+its id from `extensions` to `retired`, run Compose and deploy; once production
+runs without it, the `retired` entry may go.
 
 ### Coordinated changes
 
@@ -476,7 +485,7 @@ context["lookup"] = ask("notes.lookup", note.slug, refresh="#note-listing")
 `refresh` names the part of the page the result shows in, fetched again when
 the work ends; without one the page loads again.
 
-Work about no one record can also keep itself current. Declared with
+Work that is not about one record can run on a cadence. Declared with
 `every=timedelta(days=1)`, it is done by the host once that long has passed
 since it last succeeded: the hourly `due` timer asks for each piece
 whose cadence has come round, as its own job, recorded against the timer. A

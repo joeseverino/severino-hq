@@ -44,8 +44,7 @@ check, `pip-audit`, the structural bar, Scorecard), `tests` on every Python in
 (CodeQL) and `image`: the image build and what an image must pass (it comes
 up healthy and under its unit, carries the host programs and the controller,
 runs Python without package managers and cannot import development layers).
-The suite inside an image runs once, in Compose, on the composed image
-production deploys. Each CI job runs the aggregate of its name, so the
+The suite inside an image runs once, in Compose, on the composed image that production runs. Each CI job runs the aggregate of its name, so the
 gate list exists once: a gate is added in `mise.toml`, never in a workflow. A
 gate that cannot run fails. `mise run -c ci` keeps going past a failure and
 names every gate that failed.

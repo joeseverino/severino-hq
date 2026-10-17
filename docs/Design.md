@@ -6,7 +6,10 @@ cannot express, the primitive grows (in `static/css/app.css` and its partial),
 and every page that uses it gets the improvement. Extensions ship no CSS for
 the same reason: they render host classes and inherit every fix.
 
-Each rule names its gate where one enforces it.
+Each rule names its gate where one enforces it. A lower-case gate without
+`test_` is a rule of `LayoutBrowserTests` (`hq/platform/core/browser_tests.py`), held on
+every page at every width it applies to, each a subtest named for the rule,
+the page and the width.
 
 ## Rules
 
@@ -27,7 +30,7 @@ one radius, one background, one shadow, drawn by the single surface rule in
 declares only its layout. A surface inside a surface draws no frame and no
 inset: the outer one already says "these belong together". Nesting is handled
 by inheritance, so nobody has to remember it.
-*Gate:* `test_nothing_is_framed_inside_a_frame` (browser).
+*Gate:* `nothing_is_framed_inside_a_frame` (browser).
 
 **Size to content, fit the window.** Layouts are intrinsic: grids fit as many
 columns as their content allows (`repeat(auto-fit, minmax(min(100%, X), 1fr))`),
@@ -55,14 +58,16 @@ one whose heading is marked `key-col` (`TableColumn(..., css="key-col")` on a
 list view), or the closing figure of a table that marks none. What leaves is
 in the row's toggle. A table in a narrow box, a phone or half a page beside a
 chart, is marked by its box's width and gets roomier rows and holds back what
-is marked `narrow-more`. A page says only which columns are key or optional;
+is marked `narrow-more`. A column with nothing but dashes in every row is not
+drawn, and a column's minimum width is rounded up so a short word like "Runbook" is not split. A page says only which columns are key or optional;
 the rest is the table primitive's (`app.css`, `tables.js`). A table never
 stacks into cards and is not swiped through. A key/value table (row headers,
 no `thead`) sizes its label column to its longest label. Rows that belong to
 sections share one table as a `tbody` per group with a `.row-group` heading
 row, never two tables kept aligned by hand.
-*Gates:* `test_a_table_fits_its_box_at_every_width`,
-`test_only_a_table_scrolls_sideways`, the row height budget, and the page
+*Gates:* `a_table_fits_its_box_at_every_width`,
+`test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split`,
+`only_a_table_scrolls_sideways`, the row height budget, and the page
 crawl, which fails any `.data-table` outside `.table-scroll`.
 
 **Opening a row moves nothing.** What an open row was holding back, the
@@ -74,7 +79,7 @@ held at their widths for as long as any row is open, so every other row keeps
 its place. The toggle stands in a gutter that every row of the table keeps,
 so names share one edge whether or not a given row opens.
 *Gates:* `test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing`,
-`test_a_tables_names_share_one_edge_whether_or_not_a_row_opens`.
+`a_tables_names_share_one_edge_whether_or_not_a_row_opens`.
 
 **Every table sorts.** A list its server sorts has links in its headings.
 Any other table with headings gets the same control, looking the same, from
@@ -95,12 +100,22 @@ That toggle is the row's only disclosure: what a row holds back is marked
 **One band.** A row of facts, readings or choices is a band: one surface,
 cells divided by hairlines each cell draws itself, so a wrapped row keeps its
 dividers at any width and a short last row ends in plain surface. A band of a
-fixed count lays out as whole even rows (never 3+1): a grid band reads its
-own count and takes `--tracks-4-2-1` or `--tracks-3-1`, and a lone cell takes
+fixed count lays out as whole even rows (never 3+1): a band counts its own
+cells (not a dialog a cell opens, not its note) and takes the tracks for that
+count, two to six (`--tracks-2-1` up to `--tracks-6-3-1`), and a lone cell takes
 the band, so no page says how many it holds. A band is listed once, in the band rule in `app.css`; its
 cells keep their own padding. Too narrow for two cells, a band reads as a
-list: label left, value right.
-*Gate:* `test_a_band_cell_keeps_its_padding`.
+list: label left, value right. A list of short steps (`.step-list`) is read
+down its columns, so its columns end within a step of each other. The
+dashboard's readings are one row when each has room and a list when not.
+*Gates:* `a_band_cell_keeps_its_padding`, `a_band_lays_out_as_whole_rows`.
+
+**A route reads in one direction.** A path from one thing to another
+(`control_plane/_path_hops.html`) is one surface, each hop a stop on one
+line with its icon on the line. It runs across its box when every hop has
+room for its kind and an address with its port, and down it otherwise, as
+the connection panel draws its route; it never wraps onto a second row.
+*Gate:* `a_route_is_one_row_or_one_column`.
 
 **One main-and-aside.** Content with a narrower companion (`.split`) shares a
 row while both keep a readable width and wraps to a column when they cannot.
@@ -124,9 +139,12 @@ action); controls that only make sense over data wait for the data.
 **One head.** `partials/_page_head.html`: trail, title, controls, lede, laid
 out the same at every width. The title and its controls share a row (the title
 wraps before the controls move); the lede runs the full width under both. On a
-narrow screen the lead control (the page's primary, else its first
-non-destructive) stays and the rest go behind the overflow menu.
-*Gate:* `test_a_narrow_head_keeps_its_lead_control_beside_the_title`.
+narrow screen the lead control stays and the rest go behind the overflow menu.
+The lead is chosen by what each control is for, never by where it stands: not
+a destructive one while another is offered, then one that can be pressed, then
+the page's primary (`lead_action`). A destructive verb (a stop) is a link to
+its confirmation, which names what it stops.
+*Gate:* `a_narrow_head_keeps_its_lead_control_beside_the_title`.
 
 **A lede earns its line.** Most pages have none. A lede says what the page
 cannot show: a fact that changes how you read it ("Lookups run from outside
@@ -154,7 +172,9 @@ when anything is set. No chip walls.
 
 **Values read as what they are.** `|readout` puts identifiers (keys, hosts,
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
-Numbers are never chips.
+Numbers are never chips. An address, a path or a command breaks only where
+`|breakable` lets it (after a dot or a slash, before a port), never inside a
+hyphenated name; a length of time keeps each count with its unit.
 
 A moment, a date and an age are each written one way, by `hq/platform/application/moments.py`:
 `when` ("Oct 3, 9:29 AM"), `when_day` ("Oct 3"), `ago` ("5 days ago", one
@@ -198,8 +218,9 @@ and one card partial (`partials/_work_queue.html`). A card reads, in order:
 - the pages that help look into it (`Insight(links=...)`), quiet links, the
   topology's as icons with HQ's tooltip.
 
-Buttons and links stand at the card's end, beside what it says, so neither
-takes a row of its own. The queue, a thing's own page and the findings page
+Buttons and links stand right after what the card says (which is as wide as
+its words, up to a readable line length), so neither takes a row of its own nor stands at
+the far edge of a wide card. The queue, a thing's own page and the findings page
 draw this one card; a command is `partials/_command.html`, with its copy
 button in its corner. Its urgency is `partials/_urgency_pill.html`: a Cmd- or
 Ctrl-click opens what raised it (the finding rule, its severity and the line
@@ -218,13 +239,15 @@ same cards. A longer one is a count and a link to its page.
 
 **A frame is filled.** Facts are `.kv`: each label beside its value, as many
 pairs to a row as the width holds, never a two-column table stretched to the
-page. A thing's state and what it is at a glance sit on its title's line
-(`page_aside`), as words or as tiles, each as wide as it is. The sections that
+page. A thing's state sits on its title's line (`page_aside`), as words; the
+facts about it at a glance are a band under the head, as a service, a machine
+and HQ's own page open. A line that dates or sources a section goes beside its
+heading (`.heading-aside`), not loose under it. The sections that
 close a thing's page are `.section-flow`: each a card holding its own heading,
 two to a row at one height, with a wide one (four columns or more, or folded)
 across the row and the short ones collected to pair. The browser gate fails a
 frame across the page whose content stops short of half of it
-(`test_a_wide_frame_is_filled`).
+(`a_wide_frame_is_filled`).
 
 **Only what is urgent is framed.** A thing's page draws the problems about it
 from `partials/_problems.html`. An urgent one is the queue's card in a box
@@ -293,6 +316,13 @@ that runs out shows the date, not a bar across an invented span.
 In a card, a row of figures shares its lines: labels start level and values
 stand level however a label wraps, and a label wraps beside its mark, never
 under it.
+
+**A saved copy never says "you" about someone else.** Anything that describes
+the reader's own connection includes `partials/_example_connection.html`. On a live
+HQ it renders nothing; on a saved copy (`SEVERINO_RENDERED_COPY`, set only in
+code by whatever renders the copy, as the demo does) it marks the line as an
+example connection, not the reader's. *Gate:* `hq/platform/core/tests/test_example_connection.py`, and
+`demo/check.py` on the built demo.
 
 **The dashboard says how you reached it.** Beside the at-a-glance readings
 sits one for the request itself: the channel, the path, the encryption and

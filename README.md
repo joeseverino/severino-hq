@@ -30,6 +30,11 @@ rest, and acts only through a connection that declares it `manages` what it
 touches. How is in [Derived Facts](docs/Derived-Facts.md) and
 [Architecture](docs/Architecture.md).
 
+## Install
+
+[Install](docs/Install.md) takes a Linux host with Docker to HQ running and
+the controller reading its first connection, step by step.
+
 ## Stack
 
 | | |
@@ -109,7 +114,7 @@ docs/          architecture, operations and guides
 
 ```sh
 mise install
-export DJANGO_DEBUG=1     # local work; a production key is not needed
+export DJANGO_DEBUG=1
 uv run --locked python manage.py migrate
 uv run --locked python manage.py createsuperuser
 mise run dev              # the ASGI server on 127.0.0.1:8000, with reload
@@ -126,6 +131,8 @@ boundary, frontend standards and the definition of done.
 
 | | |
 | :--- | :--- |
+| [Install](docs/Install.md) | self-hosting HQ, from a new host to its first reading |
+| [Connections](docs/Connections.md) | what to create for each provider, and the 1Password item it goes in |
 | [Glossary](docs/Glossary.md) | the words these docs use for HQ's own parts |
 | [Architecture](docs/Architecture.md) | one application core, every interface, and the infrastructure control plane |
 | [Derived Facts](docs/Derived-Facts.md) | readings, joins, relationships, adoption |

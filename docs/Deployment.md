@@ -25,7 +25,7 @@ waits on a schedule.
 Each CI job runs the `mise` aggregate of its name, so the gates are declared
 once, in [`mise.toml`](../mise.toml) ([Development](Development.md)).
 
-Production runs the composed image (`ghcr.io/<owner>/<repo>/composition`),
+Production runs the composed image (`ghcr.io/joeseverino/severino-hq/composition`),
 never the host image alone. How Compose admits, fingerprints and assembles
 the extensions is in [Plugins](Plugins.md#composition). It stamps the released
 commit into the image (`SEVERINO_HQ_REVISION`), so production reports the
@@ -34,7 +34,9 @@ commit it runs.
 A pull request never starts Deploy, so no pull request's code reaches the
 self-hosted runner. The runner dials out to GitHub; nothing inbound is opened.
 To redeploy or roll back, run **Deploy** with the commit to put back. To
-rebuild the current set, run **Compose**.
+rebuild the current set, run **Compose**. A rollback to a composition from
+before an extension was added drops it, so Deploy refuses it; run Compose at
+that commit instead, which composes today's extensions onto that host commit.
 
 A release that fails is undone whole. Its boot keeps a copy of the database
 before migrating it (`manage.py boot_migrate`, at the path `hq-host run-web`
@@ -138,7 +140,7 @@ fingerprint, then delete the old key on GitHub.
 | `/run/severino-hq/` | the doorbell HQ rings when it queues controller work | `deploy/tmpfiles/severino-hq.conf` |
 | `/opt/apps/severino-hq/secrets/` | the renderer's lock and the controller's ACME state | `hq-secrets`, the controller |
 | docker volumes `severino-hq_severino_{data,media,exports,bridge}` | the database, uploads, exports and the bridge socket | HQ |
-| `/var/log/severino-hq/` | output a deploy keeps off the public log | `hq-host` |
+| `/var/log/severino-hq/` | output a deploy keeps off the public log, and `extensions.log`: which extensions a refused deploy would have dropped | `hq-host` |
 
 ### hq-host
 
@@ -149,7 +151,7 @@ from the tree, and every unit and the deploy call it.
 | :--- | :--- |
 | `run-web` | runs the web container (`severino-hq-web.service`); waits for the rendered environment, notifies systemd once HQ is healthy |
 | `controller [--apply]` | one controller pass: plan, or claim and apply queued work |
-| `deploy IMAGE` | verifies the signature, pulls, and hands over to the image's own `hq-host release` |
+| `deploy IMAGE` | verifies the signature, refuses an image that drops an extension production runs, pulls, and hands over to the image's own `hq-host release` |
 | `release IMAGE` | syncs the tree, installs the web unit, restarts HQ on the image, then `install`; rolls back on any failure, the database with it when the release migrated it |
 | `install` | installs every shipped unit, renders secrets, preflights the controller and the content index, enables every timer and path |
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
@@ -169,7 +171,7 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | :--- | :--- |
 | `severino-hq-web.service` | the web container; the only thing that starts it |
 | `severino-hq-secrets.service` / `.timer` | `hq-secrets`, hourly ([Secrets](Secrets.md)) |
-| `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, a minute after each run ends and when HQ rings the doorbell |
+| `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends |
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
@@ -185,24 +187,32 @@ shipped units to those rules.
 
 ## A deploy
 
-The Deploy job verifies the composition's signature on the runner, then pipes
-the registry token to `sudo /usr/local/lib/severino-hq/scripts/deploy-image.sh
-IMAGE`, the one command the runner may run as root. That script runs
-`hq-host deploy`, which:
+The Deploy job pipes the registry token to `sudo
+/usr/local/lib/severino-hq/scripts/deploy-image.sh IMAGE`, the one command the
+runner may run as root. The runner checks nothing itself and keeps no
+checkout or credential: root does not trust it, so a check there would protect
+nothing. That script runs `hq-host deploy`, which:
 
 1. Refuses anything but a digest-pinned reference to the composition, and
-   verifies its signature again as root, against the Compose workflow on
-   `main`.
-2. Prunes unused images, checks free space, pulls, and copies the image's own
-   `hq-host` out, so every step after the pull is the new release's code.
-3. Stops every active timer and path the tree ships and waits up to three
+   verifies its signature as root, against the Compose workflow on `main`
+   (`Source.Signer` in `controller/host/deploy.go`, the one copy of that
+   identity).
+2. Reads the extensions the running release carries, from the lock in its
+   image (pulled again by digest if the host no longer has it).
+3. Prunes unused images, checks free space, pulls, and refuses the image if it
+   drops an extension the running release carries that its composition does
+   not declare retired ([Plugins](Plugins.md#composition)). The public log
+   says how many; `/var/log/severino-hq/extensions.log` says which.
+4. Copies the image's own `hq-host` out, so every step after the pull is the
+   new release's code.
+5. Stops every active timer and path the tree ships and waits up to three
    minutes for a controller run or secret render already in flight.
-4. Replaces the tree with the image's, installs its web unit, records the
+6. Replaces the tree with the image's, installs its web unit, records the
    image and restarts `severino-hq-web.service`, which returns once HQ is
    healthy on it.
-5. Runs the new tree's `hq-host install`: the controller preflight is the
+7. Runs the new tree's `hq-host install`: the controller preflight is the
    release's first pass against the new bridge.
-6. Starts what step 3 stopped.
+8. Starts what step 5 stopped.
 
 A failure at any step puts back the previous image, tree and units, then
 restarts what was held. A unit that was not active before the deploy is not
@@ -220,28 +230,10 @@ directory is not its account's alone. The design is in
 
 ## A new host
 
-The host needs Docker, systemd with `noswap` tmpfs support, and:
-
-- 1Password Connect on `127.0.0.1` at a port below 1024, and its reader token
-  as an encrypted credential ([Secrets](Secrets.md)).
-- A self-hosted Actions runner with the `severino-hq` label, running as an
-  unprivileged account with no Docker access.
-- `/etc/severino-hq/host.json`, from
-  [`deploy/host.example.json`](../deploy/host.example.json)
-  ([Blueprint Setup](Blueprint-Setup.md#hostjson)).
-
-Then, as root, with a composition `IMAGE` pinned by digest:
-
-1. Verify it with cosign against the Compose identity, pull it, and copy
-   `/app/deploy/bin/hq-host` out of it.
-2. `hq-host sync IMAGE` installs the tree.
-3. `/usr/local/lib/severino-hq/deploy/bin/hq-host bootstrap` renders the
-   renderer's and runner's drop-ins and the sudo rule.
-4. Write `IMAGE` to `/var/lib/severino-hq/release`, install the mount unit,
-   `severino-hq-secrets.service`, `severino-hq-web.service` and the tmpfiles
-   rule, and start them. `scripts/host-boot-drill.sh` does the same on every
-   image CI builds.
-5. Once HQ is healthy, `hq-host install` installs and enables the rest.
+[Install](Install.md) brings up a new host, step by step: Connect, the
+encrypted credential, the runner, `host.json`, the vault items and the first
+start. `scripts/host-boot-drill.sh` does the web unit's part of it on every
+image CI builds.
 
 Every later change arrives through Deploy. Rerun `hq-host bootstrap` when
 `host.json` changes.
