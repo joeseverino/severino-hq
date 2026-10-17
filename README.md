@@ -109,8 +109,9 @@ docs/          architecture, operations and guides
 
 ```sh
 mise install
-cp .env.example .env
+export DJANGO_DEBUG=1     # local work; a production key is not needed
 uv run --locked python manage.py migrate
+uv run --locked python manage.py createsuperuser
 mise run dev              # the ASGI server on 127.0.0.1:8000, with reload
 mise run fast             # what the change reaches
 mise run check            # the suite three ways: DEBUG on, off, and composed
@@ -125,6 +126,7 @@ boundary, frontend standards and the definition of done.
 
 | | |
 | :--- | :--- |
+| [Glossary](docs/Glossary.md) | the words these docs use for HQ's own parts |
 | [Architecture](docs/Architecture.md) | one application core, every interface, and the infrastructure control plane |
 | [Derived Facts](docs/Derived-Facts.md) | readings, joins, relationships, adoption |
 | [API](docs/API.md) | the machine API: tokens, routes, errors, safe retries |

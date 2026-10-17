@@ -13,7 +13,7 @@ Install [mise](https://mise.jdx.dev) and uv. mise reads the uv pin from
 git clone https://github.com/<owner>/severino-hq.git
 cd severino-hq
 mise install
-cp .env.example .env
+export DJANGO_DEBUG=1
 uv run --locked python manage.py migrate
 uv run --locked python manage.py createsuperuser
 uv run --locked python manage.py seed_demo
@@ -23,8 +23,11 @@ mise run dev
 Open <http://127.0.0.1:8000/> and sign in. `seed_demo` is optional demo data.
 `mise run dev` collects versioned assets and runs Uvicorn with reload, on the
 same ASGI path as production, so local browser checks exercise compression,
-cache headers and routing. Set `DJANGO_DEBUG=1` in `.env`, or a real
-`DJANGO_SECRET_KEY`: with debug off, settings refuse to load without a key.
+cache headers and routing. With `DJANGO_DEBUG` off, settings refuse to load
+without a real `DJANGO_SECRET_KEY`, which is why local commands set it on;
+`mise run dev` sets it itself. Nothing reads a `.env` file: `.env.example` is
+the production template, rendered by the host and named by
+`SEVERINO_APP_ENV_PATH` ([Deployment](Deployment.md)).
 
 Python dependencies come from `uv.lock` through `uv run --locked`, which every
 task uses; no virtualenv is made by hand. The default groups are `dev` and

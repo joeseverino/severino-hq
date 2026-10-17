@@ -266,40 +266,15 @@ it; a `# type: ignore[code]` is for a stub that is wrong, with the reason beside
 it. To widen it, add a module to `files` and to the strict section in
 `pyproject.toml` and fix what it finds.
 
-Tests answer "does this behave?". They do not answer "is this still one system?":
-duplication and tangling are green all the way down. Those are graph questions,
-so ask a graph. With the repository indexed in a code knowledge graph, ask:
-
-| Question | Query | Bar |
-| --- | --- | --- |
-| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` | no new executable pair outside tests; AST classifications below |
-| Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | every hit bounded by a fixed or small input |
-| Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | no new confirmed cycle |
-
-Write the queries exactly as given, and mind two traps in this engine.
-`is_test` is **not** reliable: test classes carry `is_test: false`, so a filter
-on it silently counts the whole suite. And `NOT <prop> CONTAINS "..."` returns
-**no rows at all** rather than the complement, so a negated filter reads as a
-clean bar when it measured nothing. Filter positively, or return the rows and
-exclude test paths by eye.
-
-Re-index after a change and re-run them; a result that moved the wrong way is a
-finding whether or not the suite is green.
-
-`scripts/structural-bar.sh` runs the duplicate check as a gate
-(`checks:structural`, part of `mise run ci`) against
-`scripts/structural-baseline.txt`. File size is a test, not a graph question:
-`FileSizeTests` holds every source file under 1,000 lines: a file grows freely
-below that and is split by responsibility past it. Index
-the checkout you work in before asking the graph anything; a worktree is its
-own checkout.
-
-Confirm a cycle before believing it. Python's `.get()` on a dict resolves to any
-class method named `get`, so view classes turn up in cycles they have nothing to
-do with: read the function and check it really calls into the loop. The same
-caution applies to `trace_path`: its first hop is exact, deeper hops resolve
-generic names (`get`, `handle`, `search`) optimistically. Use it for blast
-radius, verify before acting on a three-hop claim.
+Tests answer "does this behave?". They do not answer "is this still one
+system?": duplication and tangling are green all the way down. Those are graph
+questions. `scripts/structural-bar.sh` asks one as a gate (`checks:structural`,
+part of `mise run ci`): no new near-duplicate pair outside tests, against
+`scripts/structural-baseline.txt`. The other questions, the exact queries and
+the traps in the graph engine are in [Structural Gate](docs/Structural-Gate.md);
+index the checkout you work in before asking it anything. File size is a test,
+not a graph question: `FileSizeTests` holds every source file under 1,000
+lines, and a file past that is split by responsibility.
 
 One thing the graph cannot see: an extension's use of `hq_sdk` is an in-process
 import from another repository, so no edge exists for it. Changing
@@ -336,5 +311,3 @@ exits 2, never 0.
   enter the diff.
 - Do not commit, push, deploy, or modify private repositories unless the user
   explicitly asks for that operation.
-
-Structural similarity classifications are derived from parsed source, never symbol/path allowances. `scripts/structural_classify.py` distinguishes tracked generated provenance, immutable ResourceSpec/SearchDefinition declarations, and tiny typed delegation to distinct local credential producers. Unknown/malformed/unreadable source fails the gate; ambiguous executable similarities remain gated. Generated classification requires the controller regeneration/no-diff gate independently. See `docs/Structural-Gate.md` for exact criteria and limitations.

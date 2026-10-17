@@ -8,12 +8,14 @@ cd "$repo_root"
 
 # Run as `mise run dev`: mise supplies mise.local.toml, which is where the
 # extensions are named and found. Without it this serves the host alone.
-if [ -z "${DJANGO_SECRET_KEY:-}" ] && command -v op >/dev/null 2>&1; then
-    DJANGO_SECRET_KEY=$(op read "${HQ_DEV_SECRET_REF:-op://Infrastructure/HQ Local/django secret key}" 2>/dev/null) || true
+# A signing key that outlives a restart, read from 1Password when
+# HQ_DEV_SECRET_REF names one (an op:// reference, in mise.local.toml).
+if [ -z "${DJANGO_SECRET_KEY:-}" ] && [ -n "${HQ_DEV_SECRET_REF:-}" ] && command -v op >/dev/null 2>&1; then
+    DJANGO_SECRET_KEY=$(op read "${HQ_DEV_SECRET_REF}" 2>/dev/null) || true
     export DJANGO_SECRET_KEY
 fi
 if [ -z "${DJANGO_SECRET_KEY:-}" ]; then
-    echo "No signing key: sessions will use the constant in hq/config/settings.py." >&2
+    echo "No signing key: one is made for this run, so sessions end when it stops." >&2
 fi
 
 export DJANGO_DEBUG="${DJANGO_DEBUG:-1}"
@@ -45,15 +47,13 @@ if [ "${host}" = "tailnet" ]; then
 fi
 port=${HQ_DEV_PORT:-8000}
 
-# Refuse rather than race. This binds loopback by default while the personal
-# `hq-dev serve` command serves the proxied development host, and the two use
-# different databases, so a second server started here is not a second view
-# of the same state, it is a different estate answering on a nearby port. The
-# symptom is data that appears and disappears depending on which one answered.
+# Refuse rather than race. Another development server on this port may use a
+# different database, so a second one started here is not a second view of the
+# same state, it is a different estate answering on a nearby port. The symptom
+# is data that appears and disappears depending on which one answered.
 if command -v lsof >/dev/null 2>&1 \
     && lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "Something already serves port ${port}. If that is \`hq-dev serve\`, leave it." >&2
-    echo "Otherwise stop it, or pass HQ_DEV_PORT to use another port." >&2
+    echo "Something already serves port ${port}. Stop it, or pass HQ_DEV_PORT to use another port." >&2
     exit 3
 fi
 

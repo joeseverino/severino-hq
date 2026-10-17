@@ -48,3 +48,33 @@ Run `go build -o /tmp/structural-inspector scripts/structural_go.go`, then
 `STRUCTURAL_INSPECTOR=/tmp/structural-inspector python3 scripts/test_structural_classify.py`
 for focused adversarial tests. `STRUCTURAL_REVIEW_ROOT` optionally adds read-only
 checks of the actual reviewed declaration, generated, delegation and NPM pairs.
+
+## Asking the graph
+
+With the repository indexed in a code knowledge graph, ask:
+
+| Question | Query | Bar |
+| --- | --- | --- |
+| Did I re-implement something? | `MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name` | no new executable pair outside tests; the classifications above |
+| Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | every hit bounded by a fixed or small input |
+| Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | no new confirmed cycle |
+
+Write the queries exactly as given, and mind two traps in this engine.
+`is_test` is **not** reliable: test classes carry `is_test: false`, so a filter
+on it silently counts the whole suite. And `NOT <prop> CONTAINS "..."` returns
+**no rows at all** rather than the complement, so a negated filter reads as a
+clean bar when it measured nothing. Filter positively, or return the rows and
+exclude test paths by eye.
+
+Re-index after a change and re-run them; a result that moved the wrong way is a
+finding whether or not the suite is green.
+
+Confirm a cycle before believing it. Python's `.get()` on a dict resolves to any
+class method named `get`, so view classes turn up in cycles they have nothing to
+do with: read the function and check it really calls into the loop. The same
+caution applies to `trace_path`: its first hop is exact, deeper hops resolve
+generic names (`get`, `handle`, `search`) optimistically. Use it for blast
+radius, verify before acting on a three-hop claim.
+
+Index the checkout you work in before asking the graph anything; a worktree is
+its own checkout.

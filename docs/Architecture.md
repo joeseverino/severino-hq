@@ -216,76 +216,12 @@ Three rules keep a page from waiting on a writer:
   (`ahead.SETTLES_LONGEST`), since what it derives would be unsettled before
   anyone read it.
 
-Measured on 2026-10-17 (an M3, Python 3.15, four readers, a 500-row import, a
-report every 5 s): during the import, page p95 about 1 s, and the report's
-worst wait for the lock under 1 s.
-
 A running HQ reports the same per request. Every response carries
 `Server-Timing: app;dur=<ms>`, and the access log line (`severino.request`,
 `duration_ms`) is written from the same measurement. A request at or over
 `SLOW_REQUEST_MS` (`hq/platform/core/middleware.py`) logs a warning.
-`hq/platform/core/tests/test_page_budgets.py` pins the counts below against the
-same seed, at two sizes where a per-row read would show.
-
-Reading each repeated input once per projection (the container sweep once per
-catalogue, the URL configuration, each spec validator, the year summary's
-prefetch) measured as follows on 2026-10-04, an 8 GB M3, Python 3.14, the lower
-of two paired runs (median ms, queries). Pages not listed did not move beyond
-run-to-run spread.
-
-| Page | Before | After | Queries before | Queries after |
-| --- | ---: | ---: | ---: | ---: |
-| Dashboard (`/`) | 140.0 | 121.3 | 97 | 53 |
-| Action items | 158.4 | 141.2 | 71 | 27 |
-| Action item count (header) | 104.9 | 85.2 | 69 | 25 |
-| Findings | 133.6 | 113.6 | 61 | 17 |
-| Topology | 121.3 | 96.8 | 61 | 17 |
-| Services | 74.2 | 59.2 | 60 | 16 |
-| One service | 79.8 | 63.7 | 65 | 21 |
-| One machine | 72.1 | 56.7 | 65 | 21 |
-| One resource | 68.0 | 51.7 | 64 | 20 |
-| Tailnet | 92.5 | 72.7 | 63 | 19 |
-| Calendar | 51.6 | 36.7 | 60 | 16 |
-| Search (`?q=example`) | 139.2 | 124.4 | 76 | 32 |
-| Year summary export | 100.1 | 31.4 | 617 | 27 |
-| Expenses | 11.2 | 9.0 | 8 | 8 |
-| API `findings` | 98.3 | 77.7 | 61 | 17 |
-| API `topology` | 86.3 | 68.6 | 61 | 17 |
-| API `action.items` | 104.9 | 84.8 | 70 | 26 |
-
-Storing derivations ([below](#derived-once-per-change)), taking the audit
-capture lazily and reading the search index once measured as follows, same
-machine and date: two paired runs of 15 rounds, the lower median of each side.
-Two runs of one tree differed by a median of 1 ms; pages not listed moved by
-less than twice their own spread. "Derived" is how many derivations the
-measured request ran: between two changes of the estate, none, where each page
-ran the topology, catalogue, findings and queue it needed.
-
-| Page | Before | After | Queries before | Queries after | Derived after |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Dashboard (`/`) | 118.6 | 45.0 | 53 | 44 | 0 |
-| Action items | 140.2 | 62.1 | 27 | 7 | 0 |
-| Action item count (header) | 83.8 | 7.4 | 25 | 5 | 0 |
-| Action item count, validator presented (304) | 83.8 | 0.6 | 25 | 3 | 0 |
-| Findings | 113.2 | 45.8 | 17 | 6 | 0 |
-| Topology | 96.3 | 41.1 | 17 | 6 | 0 |
-| Topology node | 79.8 | 20.9 | 15 | 4 | 0 |
-| Services | 59.8 | 47.3 | 16 | 14 | 0 |
-| One service | 64.2 | 26.8 | 21 | 19 | 0 |
-| One machine | 57.0 | 19.5 | 21 | 20 | 0 |
-| One resource | 51.4 | 12.7 | 20 | 18 | 0 |
-| One domain | 59.2 | 23.2 | 25 | 22 | 0 |
-| Tailnet | 73.2 | 15.2 | 19 | 14 | 0 |
-| Calendar | 36.5 | 20.8 | 16 | 14 | 0 |
-| Search (`?q=example`) | 123.3 | 47.2 | 32 | 22 | 0 |
-| Search (`?q=purchase`) | 79.6 | 27.7 | 25 | 15 | 0 |
-| Expenses, searched | 35.5 | 17.8 | 9 | 8 | 0 |
-| Audit log, searched | 47.3 | 34.0 | 8 | 7 | 0 |
-| Expenses CSV | 173.2 | 114.7 | 10 | 10 | 0 |
-| New receipt | 162.8 | 125.9 | 6 | 6 | 0 |
-| API `findings` | 78.4 | 12.4 | 17 | 6 | 0 |
-| API `topology` | 68.9 | 13.8 | 17 | 6 | 0 |
-| API `action.items` | 85.8 | 7.5 | 26 | 6 | 0 |
+`hq/platform/core/tests/test_page_budgets.py` pins each page's queries against
+the same seed, at two sizes where a per-row read would show.
 
 The first request after a change derives what it needs and stores it, about
 five statements per derivation on top of the reads. One change of the estate
@@ -309,19 +245,6 @@ part whose inputs are known by revision answers "unchanged" with 304
 [Design](Design.md), "A read is a fragment"). `bench_pages` measures each part
 and validator a page names beside the page, so a new part is measured without
 being listed.
-
-Measured 2026-10-04 on an 8 GB M3, Python 3.13, scale 1.0, 15 rounds (median
-ms, queries, kilobytes). "Page" is what the same interaction cost when it took
-the whole document.
-
-| Interaction | Page | Part | Queries | KB |
-| --- | ---: | ---: | --- | --- |
-| Dashboard: page the month | 53.8 | 20.6 | 44 to 12 | 166.6 to 72.5 |
-| Dashboard: save the links | 53.8 | 9.6 | 44 to 9 | 166.6 to 31.9 |
-| Dashboard: a glance poll that finds nothing written | 2.7 | 0.6 (304) | 6 to 3 | 1.8 to 0 |
-| Calendar: page the month, check a source | 27.0 | 21.2 | 14 to 12 | 92.7 to 77.5 |
-| Connection dialog | 14.2 | 10.2 | 12 to 10 | 43.9 to 29.0 |
-| Policy test, asked again | 21.5 | 14.3 | 14 to 12 | 18.1 to 0.1 |
 
 `hq/platform/application/tests/test_fragments.py` holds the dashboard to
 composing only the part asked for, and the poll to answering 304 until
@@ -474,15 +397,6 @@ transaction, with the doorbell unrung and a job's work held, so the time is the
 request's own. `hq/platform/core/tests/test_action_budgets.py` pins each
 converted action's queries at two estate sizes and asserts it answers before
 the work it asked for.
-
-Measured 2026-10-04 on an 8 GB M3, Python 3.13, scale 0.25 (median ms, queries):
-
-| Action | Before | After | Queries after |
-| --- | ---: | ---: | ---: |
-| Watching: Refresh | 30,031 (production, read in the request) | 3.7 | 23 |
-| Project: Refresh | one GitHub call, and a site fetch for the index project, in the request | 2.2 | 13 |
-| Connections: Read now | answered with a redirect | 3.4 | 20 |
-| A page asking for its readings | answered as JSON | 9.5 | 17 |
 
 ## Search
 
@@ -901,11 +815,9 @@ database and application environment never do.
 
 The binary reaches HQ through the bridge: the contract's actions as HTTP on a
 Unix socket HQ's running process serves (`SEVERINO_BRIDGE_SOCKET`). Django is
-already started, so a call costs the work it asks for. Measured with the real
-Django side on a development machine, one call takes about a millisecond and an
-idle applying pass of ten calls about 40 ms, where a process per call took 2.8
-seconds and the same pass 20 to 29; on a host where starting Django takes seven
-seconds the gap is larger. `go test -bench BridgeCall ./runtime` and the pass in
+already started, so a call costs the work it asks for: with the real Django
+side on a development machine, about a millisecond, and an idle applying pass
+of ten calls about 40 ms. `go test -bench BridgeCall ./runtime` and the pass in
 `hq/domains/control_plane/tests/test_bridge_live.py` reproduce it, and a budget
 in each fails if a call comes to cost a process again.
 
