@@ -1333,30 +1333,47 @@ class LayoutBrowserTests(BrowserGate):
 
         self.across(check)
 
+    def card_rows(self, key):
+        """The cards of one dashboard grid, grouped by the row they sit on."""
+        rows = {}
+        for box in self.page.locator(SELECTORS[key]).evaluate_all(
+            "elements => elements.map(e => { const r = e.getBoundingClientRect(), "
+            "edge = e.parentElement.getBoundingClientRect().right; "
+            "return {top: r.top, bottom: r.bottom, left: r.left, right: r.right, edge}; })"
+        ):
+            rows.setdefault(round(box["top"]), []).append(box)
+        return list(rows.values())
+
+    def assert_rows_filled(self, key):
+        # Cards in a row are the same height, and the last one reaches the
+        # grid's right edge.
+        for row in self.card_rows(key):
+            self.assertEqual({round(box["bottom"]) for box in row}, {round(row[0]["bottom"])}, row)
+            self.assertAlmostEqual(row[-1]["right"], row[-1]["edge"], delta=1)
+
     def test_the_dashboard_pairs_its_cards_on_a_wide_screen(self):
         self.open("dashboard", 1280)
         for key in ("highlights", "patterns"):
             with self.subTest(cards=key):
-                first, second = self.boxes(key)
-                self.assertAlmostEqual(first["top"], second["top"], delta=1)
-                self.assertAlmostEqual(first["bottom"], second["bottom"], delta=1)
+                self.assertGreater(max(len(row) for row in self.card_rows(key)), 1)
+                self.assert_rows_filled(key)
 
     def test_the_dashboard_stacks_its_cards_on_a_phone(self):
         for width in (320, PHONE_SCREEN[0]):
             self.open("dashboard", width)
             for key in ("highlights", "patterns"):
                 with self.subTest(cards=key, width=width):
-                    first, second = self.boxes(key)
-                    self.assertGreater(second["top"], first["bottom"])
-                    self.assertAlmostEqual(first["left"], second["left"], delta=1)
+                    rows = self.card_rows(key)
+                    self.assertGreater(len(rows), 1)
+                    self.assertEqual({len(row) for row in rows}, {1})
+                    self.assertEqual({round(row[0]["left"]) for row in rows}, {round(rows[0][0]["left"])})
 
     def test_a_dashboard_without_contributors_draws_no_empty_pairs(self):
         self.open("dashboard-bare", 1280)
-        # The dashboard's card rows, not every selector the gate knows: a
-        # bare dashboard still has buttons and labels.
+        # Without extensions, the cards that remain still fill their rows.
         for key in ("highlights", "patterns"):
             with self.subTest(cards=key):
-                self.assertEqual(self.boxes(key), [])
+                self.assert_rows_filled(key)
 
     def test_a_row_toggle_is_owed_only_to_what_a_reader_cannot_see(self):
         """The row expander measures what is cut off, so it runs with script on.

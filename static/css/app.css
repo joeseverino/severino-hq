@@ -2152,6 +2152,8 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .card-columns { columns: 22rem 2; column-gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .card-columns > * { break-inside: avoid; margin: 0 0 var(--layout-gap); display: block; width: 100%; }
 .dashboard-patterns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
+/* Four cards are two rows of two, never three and one left alone. */
+.dashboard-patterns:has(> :nth-child(4):last-child) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); }
 /* Overview cards share the available width, so three contributing domains
    stay in one scan on a desktop. Narrow containers naturally stack them. */
 /* As many overviews to a row as fit, sharing it evenly, and a row's cards the
@@ -2160,7 +2162,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
    the third across the full width, not in half of it beside nothing. */
 .dashboard-highlights { display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
 .dashboard-highlights > .highlight-card { flex: 1 1 320px; }
-.highlight-card.card { display: flex; flex-direction: column; min-width: 0; padding: var(--space-8); }
+.highlight-card.card { display: flex; flex-direction: column; min-width: 0; padding: var(--space-8); container: featured / inline-size; }
 .highlight-card > .kpi-grid { flex: 1; }
 /* A card holding a band of stats is the container its columns are measured
    against, so the same count-aware columns hold in any card, not only the
@@ -2197,7 +2199,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .dashboard-counts .kpi .value { font-size: var(--text-md); order: -1; }
 .dashboard-counts .kpi .label { font-size: var(--text-xs); text-transform: none; letter-spacing: 0; }
 .dashboard-counts .kpi .muted { font-size: var(--text-2xs); }
-.dashboard-patterns > .card { min-width: 0; margin: 0; padding: var(--space-6); }
+.dashboard-patterns > .card { display: flex; flex-direction: column; min-width: 0; margin: 0; padding: var(--space-6); }
 .dashboard-patterns .chart-card figcaption p { min-height: 0; }
 /* A pair ends together, so a chart's data opens inside its card rather than
    growing it and stretching the card beside it: a pane of its own height. */
@@ -2214,7 +2216,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
    stacking margin is dead space. Declared after the section rules above so it
    wins on source order at equal specificity. */
 .two-col > *,
-.dash-row > *,
+.dashboard-patterns > *,
 .search-results > * { margin-bottom: 0; }
 
 /* What sits beside the heading takes the next line when the two do not fit. */
@@ -2603,7 +2605,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .section-foot { margin: var(--space-6) 0 0; font-size: var(--text-sm); }
 .section-foot a { color: var(--muted); font-weight: 500; }
 .section-foot a:hover { color: var(--accent); }
-.dash-row .section-foot { margin-top: auto; padding-top: var(--space-6); text-align: right; }
+.dashboard-patterns .section-foot { margin-top: auto; padding-top: var(--space-6); text-align: right; }
 
 /* Empty state: make zero panels feel intentional, not broken */
 .empty {
@@ -4992,8 +4994,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 }
 .dash-connection-checks { color: var(--muted-2); font-size: var(--text-3xs); white-space: nowrap; }
 .dash-connection-checks.is-attention { color: var(--attn); font-weight: 650; }
-.dash-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
-.dash-row > .card, .dash-cell > .card { display: flex; flex-direction: column; min-width: 0; margin: 0; }
+.dash-cell > .card { display: flex; flex-direction: column; min-width: 0; margin: 0; }
 .dash-cell { display: contents; }
 .section-period { margin-left: var(--space-3); color: var(--muted-2); font-weight: 500; letter-spacing: 0; text-transform: none; }
 .empty-value { color: var(--muted-2); }
@@ -5280,6 +5281,13 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
     font-size: var(--text-2xl);
     color: var(--ink);
     overflow-wrap: anywhere;
+  }
+  /* A lone overview card across the page (an HQ with one contributor) puts
+     its four figures on one row, the first still the largest: led from a row
+     of its own, the three under it would sit beside a page width of nothing. */
+  @container featured (min-width: 46rem) {
+    .kpi-grid.is-featured:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
+    .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { grid-column: auto; padding-bottom: 0; border-bottom: 0; }
   }
 
   /* The last thing in a card ends the card: its own bottom margin would be

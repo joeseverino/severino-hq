@@ -57,11 +57,11 @@ a count and a link, so the dashboard keeps its shape.
 </section>{% endif %}
 
 {% comment %}
-Each domain's leading chart, then the month of every checked calendar source.
-A domain's own calendar stays on its pages.
+Charts, the calendar, then Projects, Publishing and Contacts, in one grid so
+the cards pair up however many there are. A domain's own calendar stays on its
+pages.
 {% endcomment %}
-{% if dashboard_charts or not calendar.empty %}
-<section class="dashboard-patterns" aria-label="Trends and the month">
+<section class="dashboard-patterns" aria-label="Trends, the month and the work">
   {% for chart in dashboard_charts %}{% include "partials/_stacked_bar_chart.html" with chart=chart %}{% endfor %}
   {% partialdef calendar inline %}
   {% if not calendar.empty %}
@@ -78,10 +78,7 @@ A domain's own calendar stays on its pages.
   </section>
   {% endif %}
   {% endpartialdef %}
-</section>
-{% endif %}
 
-<div class="dash-row">
   <section class="card">
     <div class="section-head">
       <h2>Projects</h2>
@@ -127,7 +124,7 @@ A domain's own calendar stays on its pages.
   or it is not: nothing arrives after the page to appear or vanish.
   {% endcomment %}
   {% include "core/_dashboard_contacts.html" %}
-</div>
+</section>
 
 {% if external_links or external_choices %}
 <section class="dash-links" aria-label="Links">

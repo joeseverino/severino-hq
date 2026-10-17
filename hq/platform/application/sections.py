@@ -200,8 +200,15 @@ def expenses() -> tuple[Card, ...]:
         label=f"Expenses {reading['year']}",
         value=money(reading["total"]),
         url=reverse("expenses:list"),
-        detail=f"{money(reading['deductible'])} deductible est.",
+        detail=_deductible(reading),
     )
+
+
+def _deductible(reading: dict[str, Any]) -> str:
+    # Don't repeat the total when all of it is deductible.
+    if reading["deductible"] == reading["total"]:
+        return "All deductible est."
+    return f"{money(reading['deductible'])} deductible est."
 
 
 # ----- Recent rows -----------------------------------------------------------
@@ -211,6 +218,9 @@ def expenses() -> tuple[Card, ...]:
 # read, so a field added to a summary is one edit in the section that owns it.
 
 ROW_LIMIT = 4
+# The Projects card sits beside the calendar, which always shows six weeks,
+# so six rows fill the card.
+PROJECT_ROWS = 6
 
 
 def _project(project: Project) -> dict[str, Any]:
@@ -245,7 +255,7 @@ def _documentation(record: DocumentationRecord) -> dict[str, Any]:
 
 
 def recent_active_projects() -> list[dict[str, Any]]:
-    return [_project(project) for project in active_projects().order_by("-updated_at")[:ROW_LIMIT]]
+    return [_project(project) for project in active_projects().order_by("-updated_at")[:PROJECT_ROWS]]
 
 
 def recent_draft_content() -> list[dict[str, Any]]:

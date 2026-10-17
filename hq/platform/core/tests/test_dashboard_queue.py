@@ -161,7 +161,7 @@ class DashboardQueueTests(TestCase):
         ):
             response = self.client.get("/")
         self.assertNotContains(response, 'id="dashboard-calendar"')
-        self.assertNotContains(response, 'class="dashboard-patterns"')
+        self.assertNotContains(response, 'class="card calendar-month')
 
     def test_each_domain_leads_with_its_chart_and_the_month_is_composed_once(self):
         from django.utils import timezone
