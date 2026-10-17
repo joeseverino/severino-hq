@@ -505,17 +505,6 @@ depends = ["image:build"]
 wait_for = ["image:verify:healthy"]
 run = 'scripts/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'
 
-[tasks."image:verify:suite"]
-description = "The suite passes inside it"
-depends = ["image:build"]
-# After the health check: the suite takes every core, and health has a deadline.
-wait_for = ["image:verify:healthy"]
-run = '''
-docker run --rm --entrypoint python \
-    --env DJANGO_SECRET_KEY=ci-only-composition-key-0123456789abcdef0123456789abcdef \
-    --env DJANGO_ALLOWED_HOSTS=localhost "${IMAGE:-severino-hq:ci-local}" manage.py test --verbosity 0
-'''
-
 [tasks."image:verify:secrets"]
 description = "It carries the host programs, which refuse to run unprivileged"
 depends = ["image:build"]

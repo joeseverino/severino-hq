@@ -41,8 +41,11 @@ pipeline accept them?": the aggregates `checks` (ruff and mypy at the locked
 versions, the lockfile, the workflows, the shell gates, the Django deployment
 check, `pip-audit`, the structural bar, Scorecard), `tests` on every Python in
 `PYTHON_VERSIONS` (`scripts/toolchain.env`), `browser`, `controller`, `scan`
-(CodeQL) and `image`: the image build and the suite *inside* that image, which
-is where composition runs it. Each CI job runs the aggregate of its name, so the
+(CodeQL) and `image`: the image build and what an image must pass (it comes
+up healthy and under its unit, carries the host programs and the controller,
+runs Python without package managers and cannot import development layers).
+The suite inside an image runs once, in Compose, on the composed image
+production deploys. Each CI job runs the aggregate of its name, so the
 gate list exists once: a gate is added in `mise.toml`, never in a workflow. A
 gate that cannot run fails. `mise run -c ci` keeps going past a failure and
 names every gate that failed.

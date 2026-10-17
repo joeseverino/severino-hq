@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -21,7 +21,7 @@ from ..github_posture import (
     postures,
 )
 from ..item_help import COMMAND, item_help
-from ..standards import MET, UNAVAILABLE, UNMET
+from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
 from .test_github_estate import store
 
 # What a well-kept repository reads as: only its owner, one read-only key in
@@ -389,3 +389,48 @@ class PostureHelpTests(TestCase):
         for check in STANDARD:
             with self.subTest(check=check.id):
                 self.assertTrue(check.id in COMMANDS or REASONS.get(check.id))
+
+
+def pin(uses: str) -> dict[str, str]:
+    action, _, ref = uses.rpartition("@")
+    return {"path": ".github/workflows/ci.yml", "uses": uses, "action": action, "ref": ref, "sha": "a" * 40}
+
+
+@override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/host")
+class FollowingTheHostTests(TestCase):
+    """A repository that calls HQ's own workflows at main misses pinning on purpose."""
+
+    def state(self, name="example/alpha", *uses):
+        store(
+            repository=name,
+            url=f"https://github.com/{name}",
+            private=True,
+            access=kept(pinning_required=False),
+            variables=[],
+            pins=[pin(line) for line in uses],
+        )
+        return {item.subject.name: item for item in postures()}[name].state_of("actions-pinned")
+
+    def test_only_the_hosts_own_workflows_left_unpinned_is_intended(self):
+        state = self.state(
+            "example/alpha",
+            "example/host/.github/workflows/plugin-checks.yml@main",
+            "example/host/.github/actions/admit-plugin@main",
+        )
+
+        self.assertEqual(state, INTENDED)
+        self.assertNotIn("github-posture:actions-pinned", {item.key for item in attention()})
+
+    def test_another_action_left_unpinned_is_still_a_gap(self):
+        state = self.state(
+            "example/alpha", "example/host/.github/workflows/plugin-checks.yml@main", "actions/checkout@v4"
+        )
+
+        self.assertEqual(state, UNMET)
+
+    def test_the_host_is_held_to_pinning_itself(self):
+        self.assertEqual(self.state("example/host", "example/host/.github/actions/admit-plugin@main"), UNMET)
+
+    @override_settings(SEVERINO_HQ_SOURCE="")
+    def test_a_host_that_names_no_source_excuses_nothing(self):
+        self.assertEqual(self.state("example/alpha", "example/host/.github/actions/admit-plugin@main"), UNMET)

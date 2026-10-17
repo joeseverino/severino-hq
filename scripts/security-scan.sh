@@ -10,7 +10,8 @@
 #              .github/codeql/codeql-config.yml one rule that config filters
 #   scorecard  .github/workflows/scorecard.yml  every check local mode can
 #                                               answer, at 10 (scripts/scorecard_report.py)
-#   trivy      .github/workflows/ci.yml         HIGH,CRITICAL, fixable only
+#   trivy      .github/workflows/compose.yml    HIGH,CRITICAL, fixable only,
+#                                               on the composed image
 #
 # CodeQL and Scorecard are the versions mise.toml pins and mise.lock verifies,
 # installed by `mise install`. Both read an export of the files

@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -143,6 +144,16 @@ func release(ctx context.Context, args []string, stdout io.Writer) error {
 	return deployer(stdout).Release(ctx, options.Arg(0))
 }
 
+// runtimeDir is where this run stages what it must not leave behind: the
+// directory systemd gives a unit that asks for one (RuntimeDirectory=), which
+// a sandboxed unit can write, else /run.
+func runtimeDir() string {
+	if dir, _, _ := strings.Cut(os.Getenv("RUNTIME_DIRECTORY"), ":"); dir != "" {
+		return dir
+	}
+	return "/run"
+}
+
 func machine(stdout io.Writer) *host.Machine {
 	return &host.Machine{
 		Lib:      host.Lib,
@@ -151,7 +162,7 @@ func machine(stdout io.Writer) *host.Machine {
 		LogDir:   "/var/log/severino-hq",
 		State:    host.StateDir,
 		Sbin:     "/usr/local/sbin",
-		Runtime:  "/run",
+		Runtime:  runtimeDir(),
 		Sudoers:  "/etc/sudoers.d",
 		Command:  host.Command,
 		Own:      func(path string) error { return os.Lchown(path, 0, 0) },

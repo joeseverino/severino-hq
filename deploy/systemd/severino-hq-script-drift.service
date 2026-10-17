@@ -11,4 +11,6 @@ TimeoutStartSec=10min
 NoNewPrivileges=yes
 ProtectHome=yes
 ProtectSystem=strict
+# Where verify stages the image's tree: /run itself is read-only here.
+RuntimeDirectory=severino-hq-verify
 PrivateTmp=yes

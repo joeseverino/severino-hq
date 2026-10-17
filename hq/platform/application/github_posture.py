@@ -477,8 +477,37 @@ def _left_out(check: _Check, missing: list[Repository]) -> str:
     return " ".join(parts)
 
 
+# Why a repository whose only unpinned lines call HQ's own workflows is left
+# unpinned: requiring pinning would refuse them.
+FOLLOWS_HOST = "It calls HQ's own workflows at their main branch, which requiring pinning would refuse."
+
+
+def _host() -> str:
+    """``owner/name`` of the repository HQ is built from; "" when it says none."""
+
+    from django.conf import settings
+
+    from .github_public import github_repository
+
+    parts = github_repository(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
+    return "/".join(parts).lower() if parts else ""
+
+
+def _intended(repo: Repository) -> dict[str, str]:
+    """Checks a repository misses on purpose: pinning, when every line left
+    unpinned names a workflow or action of the host's own repository."""
+
+    host = _host()
+    pins = repo.record.get("pins") or ()
+    if not host or repo.name.lower() == host or not pins:
+        return {}
+    if all(str(pin.get("uses", "")).lower().startswith(f"{host}/") for pin in pins):
+        return {"actions-pinned": FOLLOWS_HOST}
+    return {}
+
+
 def posture_of(repo: Repository) -> Posture:
-    return measure(repo, STANDARD)
+    return measure(repo, STANDARD, intended=_intended(repo))
 
 
 def postures() -> list[Posture]:
