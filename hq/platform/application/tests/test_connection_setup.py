@@ -9,6 +9,7 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.credential_reads import MINTERS, observer_permissions
 
 from ..connection_setup import setups
+from .host_only import host_only
 
 
 class DeclarationTests(TestCase):
@@ -105,6 +106,7 @@ class PageTests(TestCase):
         self.assertContains(response, escape(CONNECTION_KINDS["npm"].create))
 
     def test_with_every_provider_connected_a_connection_can_still_be_added(self):
+        self.enterContext(host_only())
         from hq.domains.control_plane.models import ProviderConnection
 
         for provider in CONNECTION_KINDS:

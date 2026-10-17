@@ -31,6 +31,7 @@ from ..projection import projection_scope
 from ..public_registry import wanted_addresses
 from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
+from .host_only import host_only
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
 # 203.0.113.0/24 stands in for a public range here.
@@ -844,6 +845,10 @@ class WatchedTests(TestCase):
 
 class ConnectionFigureTests(TestCase):
     """The dashboard's connections figure is the Connections page's count."""
+
+    def setUp(self):
+        super().setUp()
+        self.enterContext(host_only())
 
     def test_the_figure_counts_every_row_the_connections_page_lists(self):
         from ..connection_context import connections_context

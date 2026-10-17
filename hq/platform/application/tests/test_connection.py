@@ -23,6 +23,7 @@ from ..request_channel import channel_for_request, channel_of
 from ..request_headers import headers_of
 from ..request_path import address_chain
 from ..ui import MISSING
+from .host_only import host_only
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -772,6 +773,8 @@ class CostTests(TestCase):
     """
 
     def setUp(self):
+        # Counts what the host draws; an installed extension adds its own reads.
+        self.enterContext(host_only())
         self.user = get_user_model().objects.create_user(
             username="someone", email="someone@example.test", password="not-used-here"
         )
