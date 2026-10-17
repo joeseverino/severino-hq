@@ -437,6 +437,17 @@ else
 fi
 '''
 
+[tasks."demo:build"]
+description = "Build the public demo into var/demo"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver", HQ_DEMO_OUT = "{{config_root}}/var/demo" }
+run = "uv run --locked python manage.py test demo.build --noinput --parallel 1"
+
+[tasks."browser:demo"]
+description = "Build the demo and check it in WebKit"
+depends = ["setup:webkit", "demo:build"]
+env = { HQ_DEMO_OUT = "{{config_root}}/var/demo" }
+run = "uv run --locked --group browser python -m unittest demo.check -v"
+
 [tasks."browser:layout"]
 description = "Real-browser layout invariants over synthetic pages"
 depends = ["setup:webkit"]
