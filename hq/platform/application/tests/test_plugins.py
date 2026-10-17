@@ -5,11 +5,14 @@ import os
 import re
 import tempfile
 from dataclasses import MISSING, fields, replace
+from datetime import timedelta
 from pathlib import Path
 from unittest import TestCase, mock
 
 from django.core.exceptions import ImproperlyConfigured
 from django.template.loader import render_to_string
+from django.test import SimpleTestCase
+from django.utils import timezone
 
 from ..domains import domain_navigation
 from ..pages import page_context
@@ -23,6 +26,7 @@ from ..plugins import (
     describe_plugins,
     installed_integrations,
     installed_plugins,
+    ordered_attention,
     plugin_capabilities,
     plugin_health,
     plugin_token_authenticated_prefixes,
@@ -873,3 +877,23 @@ class ComposedPluginTestKitTests(TestCase):
         # extension under test with a stub, and the suite would still pass.
         with self.assertRaises(ValueError):
             sibling(identifier="acme.records")
+
+
+class AttentionOrderTests(SimpleTestCase):
+    def entry(self, title, status="attention", *, since=None, notice=False, source="Example"):
+        item = Insight(status, "Example", title, "", "", since=since, notice=notice)
+        return {"item": item, "source": source, "source_id": "example"}
+
+    def test_severity_then_what_needs_doing_then_the_longest_standing(self):
+        now = timezone.now()
+        entries = [
+            self.entry("a notice", notice=True, since=now - timedelta(days=30)),
+            self.entry("undated"),
+            self.entry("newer", since=now - timedelta(days=1)),
+            self.entry("older", since=now - timedelta(days=9), source="Zulu"),
+            self.entry("serious", status="serious"),
+        ]
+
+        order = [entry["item"].title for entry in ordered_attention(entries)]
+
+        self.assertEqual(order, ["serious", "older", "newer", "undated", "a notice"])

@@ -246,7 +246,10 @@ side by side when space permits; empty contributors take no space.
   parts are only a count; `Dots((Dot(...), ...))` when each is something with a
   page of its own, which then names itself when pointed at and links there.
   The figure's own link moves from the cell to its value, since a link cannot
-  hold links. Past a dozen, dots are a texture and are not drawn.
+  hold links. Past a dozen, dots are a texture and are not drawn. A history is
+  `Dots(..., ordered=True)`, drawn in its own order, oldest first, as the HQ
+  page draws a piece of scheduled work's recent runs, each linking to its job.
+  `partials/_dots.html` draws either, wherever it stands.
 - `Trend`, recent readings oldest first, drawn as a line where the card has
   room, each reading saying what it is when pointed at.
 

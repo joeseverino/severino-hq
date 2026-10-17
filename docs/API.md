@@ -228,7 +228,7 @@ principal holds; the `SEVERINO_MCP_ENABLE_*` switches gate writes, not reads.
 | Credential access | Connections | `credentials` (`get <provider>`) |
 | Connections page (`connection_context.connections_context`): rows with sight, freshness, refusals, what more scope would show, credential fix, reach, last activity, pending read now; summary counts; estate posture; HQ's path | Connections | `connection.standing` (`get <connection_ref>`) |
 | Tailnet page (`tailnet_context.tailnet_context`): settings, grants, shell rules, groups, tags with machines, services, app connectors, tests, findings, unread readings and why | Tailnet | `tailnet` |
-| HQ itself (`hq_context.hq_context`): release and whether its branch is ahead of production, extensions composed, its machine and container, its units and credentials refresh, every reading's state and age, its open problems as the items | System > HQ | `hq` |
+| HQ itself (`hq_context.hq_context`): release and whether its branch is ahead of production, extensions composed, its machine and container, its units and credentials refresh, its scheduled work with each piece's recent runs and next due, every reading's state and age, its open problems as the items | System > HQ | `hq` |
 | Estate and record search (command center) | Search | `search` |
 
 Three projections have their own routes and MCP tools instead of resources, and

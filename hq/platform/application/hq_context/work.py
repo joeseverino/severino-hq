@@ -2,13 +2,17 @@
 ``host.unit`` and ``host.render_status`` readings of its machine say."""
 
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
+
+from django.utils import timezone
 
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 
+from ..drawings import Dot, Dots
 from ..projection import read_once
 from ..timestamps import moment
+from ..ui import counted
 from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, iso
 
 
@@ -37,11 +41,30 @@ class Renderer:
 
 
 @dataclass(frozen=True, slots=True)
+class Scheduled:
+    """One piece of work done on a cadence, the host's or an extension's, as
+    its declaration and its jobs say."""
+
+    name: str
+    label: str
+    every: str
+    last_run: datetime | None
+    result: str
+    tone: str
+    # When it is next due; None while it is due now.
+    next_due: datetime | None
+    # Its recent runs, oldest first: filled for each that succeeded.
+    runs: Dots | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Work:
-    """The ``host.unit`` and ``host.render_status`` readings, or why not."""
+    """The ``host.unit`` and ``host.render_status`` readings, or why not, and
+    the work done on a cadence."""
 
     jobs: tuple[Job, ...] = ()
     renderers: tuple[Renderer, ...] = ()
+    scheduled: tuple[Scheduled, ...] = ()
     read_at: datetime | None = None
     # Why the units could not be read, in a sentence; "" when they were.
     unread: str = ""
@@ -75,6 +98,7 @@ def _work() -> Work:
         read_at=units.observed_at if units is not None and units.connected else None,
         unread=unread,
         renderers_unread=renderers_unread,
+        scheduled=_scheduled_work(),
     )
 
 
@@ -183,6 +207,97 @@ def _plain(row: Job | Renderer) -> dict[str, Any]:
     return {name: iso(value) if isinstance(value, datetime) else value for name, value in asdict(row).items()}
 
 
+def _every(span: timedelta) -> str:
+    """A cadence in words: "Hourly", "Daily", "Every 6 hours"."""
+
+    hours = int(span.total_seconds() // 3600)
+    if hours == 1:
+        return "Hourly"
+    if hours == 24:
+        return "Daily"
+    if hours and hours % 24 == 0:
+        return f"Every {counted(hours // 24, 'day')}"
+    return f"Every {counted(hours, 'hour')}" if hours else f"Every {counted(int(span.total_seconds() // 60), 'minute')}"
+
+
+# How a job of a piece of scheduled work ended, in words, with its tone.
+_ENDED = {
+    "succeeded": ("Succeeded", GOOD),
+    "failed": ("Failed", SERIOUS),
+    "queued": ("Running now", NEUTRAL),
+    "running": ("Running now", NEUTRAL),
+}
+# How many recent runs a piece of work shows; more is a texture, not a history.
+RECENT = Dots.LIMIT
+
+
+def _run_dot(job: Any) -> Dot:
+    from ..routes import reverse
+
+    result, _tone = _ENDED.get(job.state, ("Did not finish", ATTENTION))
+    return Dot(
+        filled=job.state == "succeeded",
+        tip=f"{result}, {timezone.localtime(job.created_at):%b %-d %H:%M}",
+        url=reverse("jobs:status", args=[job.pk]),
+    )
+
+
+def _scheduled_work() -> tuple[Scheduled, ...]:
+    """Every piece of work done on a cadence, with its recent runs and when it
+    is next due. Three queries, however many jobs there are."""
+
+    from django.db.models import Max, Q
+
+    from hq.domains.jobs.models import Job as JobRow
+
+    from ..outbound_work import declared_work
+    from ..scheduled_work import SCHEDULED
+
+    declared = [(work.name, work.label, work.every) for work in SCHEDULED if work.every is not None]
+    declared += [(work.name, work.label, work.every) for work in declared_work().values() if work.every is not None]
+    if not declared:
+        return ()
+    now = timezone.now()
+    # Only the window a history is drawn from: twelve cadences of each.
+    window = Q()
+    for name, _label, every in declared:
+        window |= Q(kind=name, created_at__gte=now - every * RECENT)
+    recent: dict[str, list[Any]] = {}
+    for job in JobRow.objects.filter(window).order_by("-created_at"):
+        recent.setdefault(job.kind, []).append(job)
+    names = [name for name, _label, _every in declared]
+    last_seen = dict(
+        JobRow.objects.filter(kind__in=names).values("kind").annotate(at=Max("created_at")).values_list("kind", "at")
+    )
+    succeeded = dict(
+        JobRow.objects.filter(kind__in=names, state=JobRow.State.SUCCEEDED)
+        .values("kind")
+        .annotate(at=Max("finished_at"))
+        .values_list("kind", "at")
+    )
+    found = []
+    for name, label, every in declared:
+        runs = recent.get(name, [])[:RECENT]
+        if runs:
+            result, tone = _ENDED.get(runs[0].state, ("Did not finish", ATTENTION))
+        else:
+            result, tone = ("Not run lately", ATTENTION) if name in last_seen else ("Not done yet", NEUTRAL)
+        last = succeeded.get(name)
+        found.append(
+            Scheduled(
+                name=name,
+                label=label,
+                every=_every(every),
+                last_run=(runs[0].started_at or runs[0].created_at) if runs else last_seen.get(name),
+                result=result,
+                tone=tone,
+                next_due=last + every if last is not None else None,
+                runs=Dots(tuple(_run_dot(job) for job in reversed(runs)), ordered=True) if runs else None,
+            )
+        )
+    return tuple(sorted(found, key=lambda item: item.label))
+
+
 def work_json(work: Work) -> dict[str, Any]:
     return {
         "read_at": iso(work.read_at),
@@ -190,4 +305,17 @@ def work_json(work: Work) -> dict[str, Any]:
         "jobs": [_plain(job) for job in work.jobs],
         "credentials_unread": work.renderers_unread,
         "credentials": [_plain(item) for item in work.renderers],
+        "scheduled": [_scheduled_json(item) for item in work.scheduled],
+    }
+
+
+def _scheduled_json(item: Scheduled) -> dict[str, Any]:
+    return {
+        "name": item.name,
+        "label": item.label,
+        "every": item.every,
+        "last_run": iso(item.last_run),
+        "result": item.result,
+        "next_due": iso(item.next_due),
+        "recent": [dot.tip for dot in item.runs.dots] if item.runs else [],
     }

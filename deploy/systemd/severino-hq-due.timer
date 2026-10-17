@@ -1,0 +1,12 @@
+[Unit]
+Description=Do the scheduled work whose cadence has come round, the host's and the extensions'
+
+[Timer]
+OnBootSec=5min
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=yes
+Unit=severino-hq-job@due.service
+
+[Install]
+WantedBy=timers.target

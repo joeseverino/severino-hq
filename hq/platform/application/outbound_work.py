@@ -23,6 +23,7 @@ import inspect
 from annotationlib import Format
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
@@ -62,6 +63,10 @@ class OutboundWork:
     answers, from what HQ holds, why the work cannot be asked for a subject
     right now ("" when it can): the control is drawn unusable with that reason
     and an ask is refused with it before any job is recorded.
+
+    Work about no one record may declare ``every``: once that long has passed
+    since it last succeeded, the host's ``due`` timer does it, so an
+    extension keeps its data current without shipping a unit of its own.
     """
 
     name: str
@@ -75,6 +80,7 @@ class OutboundWork:
     refuse: Callable[[str], str] | None = None
     effect: str = "remote_write"
     execution_notes: tuple[str, ...] = ()
+    every: timedelta | None = None
 
     @property
     def takes_subject(self) -> bool:
@@ -100,6 +106,17 @@ def validate(work: object) -> OutboundWork:
         raise ImproperlyConfigured(f"Outbound work {work.name!r} has invalid effect {work.effect!r}.")
     if work.refuse is not None and not callable(work.refuse):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} refuse is not callable.")
+    # Checked as what was given: a declaration does not have to respect the annotation.
+    every: object = work.every
+    if every is not None:
+        if not isinstance(every, timedelta) or every <= timedelta(0):
+            raise ImproperlyConfigured(
+                f"Outbound work {work.name!r} declares an every that is not a positive timedelta."
+            )
+        if work.takes_subject:
+            raise ImproperlyConfigured(
+                f"Outbound work {work.name!r} is about one record, so nothing can be due on a cadence."
+            )
     try:
         inspect.signature(work.run, annotation_format=Format.STRING).bind(None, subject="", principal=None)
     except TypeError as exc:
@@ -262,6 +279,22 @@ def _named(name: str) -> OutboundWork:
     if work is None:
         raise LookupError(f"No outbound work named {name!r} is declared.")
     return work
+
+
+def due(now: datetime | None = None) -> tuple[OutboundWork, ...]:
+    """The declared work whose cadence has come round: never done, or last
+    done well longer ago than its ``every``, and not being done now."""
+
+    from django.utils import timezone
+
+    from hq.domains.jobs.runner import due as is_due
+
+    now = now or timezone.now()
+    return tuple(
+        work
+        for work in declared_work().values()
+        if work.every is not None and is_due(work.name, work.every, now=now, subject="")
+    )
 
 
 def last_job(name: str, subject: str = "") -> Any:

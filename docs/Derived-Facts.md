@@ -198,7 +198,7 @@ was read, and a unit's state is judged as of then.
 
 | Finding | When | Severity |
 |---|---|---|
-| `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious |
+| `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious; attention when every failed unit is one a timer or path starts again |
 | `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer or path is not active | serious |
 | `timer-stalled` | an active timer is not running its unit: nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
 | `unit-state-unread` | the launcher mounted no answer, or the answer was refused | attention |

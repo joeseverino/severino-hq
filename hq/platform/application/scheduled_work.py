@@ -2,9 +2,11 @@
 
 A unit asks for one of these by name over the bridge socket and the running
 process does it as a job (``hq.domains.jobs``): one at a time, with a row that
-says how it ended and an audit entry. A timer asks on its schedule, and a unit
-that failed asks through ``OnFailure=``. When it is asked is the unit's; what
-the work is, and that it exists, is declared here and nowhere else. A unit
+says how it ended and an audit entry. Work that declares ``every`` is done on
+that cadence: the one hourly timer asks for ``due``, which does each piece of
+the host's and the extensions' work whose cadence has come round. Work without
+one is asked for by a unit of its own (``units.read``, through ``OnFailure=``).
+What the work is, and how often, is declared here and nowhere else. A unit
 naming anything else is refused, and a test holds the shipped units to this
 list.
 
@@ -14,21 +16,25 @@ timer would find it (``start``).
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from django.conf import settings
+from django.utils import timezone
 
 from .ui import counted
 
 
 @dataclass(frozen=True, slots=True)
 class ScheduledWork:
-    """``name`` is the job's kind and what a timer asks for; ``run`` is called
-    with the job's ``Progress`` and returns what the job stores."""
+    """``name`` is the job's kind; ``run`` is called with the job's
+    ``Progress`` and returns what the job stores; ``every`` is how often it is
+    done, by the ``due`` timer, or None for work a unit asks for itself."""
 
     name: str
     label: str
     run: Callable[[Any], dict[str, Any] | None]
+    every: timedelta | None = None
 
 
 def prune_audit(progress: Any = None) -> dict[str, Any]:
@@ -102,12 +108,41 @@ def _unit_state(progress: Any) -> dict[str, Any]:
     return {"asked": UNIT_KIND, "rung": request_reading(UNIT_KIND)}
 
 
+def _due(progress: Any = None) -> dict[str, Any]:
+    """Do the host's and the extensions' work whose cadence has come round,
+    each as its own job, so each says how it ended."""
+
+    from hq.domains.jobs.runner import JobConflict, due
+
+    from .outbound_work import due as outbound_due, run_now
+    from .security import internal_principal
+
+    now = timezone.now()
+    ended: dict[str, str] = {
+        work.name: run(work.name)["state"]
+        for work in SCHEDULED
+        if work.every is not None and due(work.name, work.every, now=now)
+    }
+    principal = internal_principal(ACTOR)
+    for work in outbound_due(now):
+        try:
+            ended[work.name] = run_now(work.name, principal=principal).state
+        except JobConflict:
+            ended[work.name] = "running"
+        except ValueError as refused:
+            ended[work.name] = f"refused: {refused}"
+    return {"due": len(ended), "ended": ended}
+
+
+DAILY = timedelta(days=1)
+
 SCHEDULED: tuple[ScheduledWork, ...] = (
-    ScheduledWork("audit.prune", "Delete old routine log entries", prune_audit),
-    ScheduledWork("contacts.inbox", "Read the contact inbox", _contacts_inbox),
-    ScheduledWork("content.sync", "Fetch the site's content list", _content_index),
-    ScheduledWork("registry.refresh", "Read domain registration and image data", _public_registry),
-    ScheduledWork("sessions.clear", "Delete expired sessions", _clear_sessions),
+    ScheduledWork("audit.prune", "Delete old routine log entries", prune_audit, every=DAILY),
+    ScheduledWork("contacts.inbox", "Read the contact inbox", _contacts_inbox, every=timedelta(hours=1)),
+    ScheduledWork("content.sync", "Fetch the site's content list", _content_index, every=DAILY),
+    ScheduledWork("due", "Do the work that is due", _due),
+    ScheduledWork("registry.refresh", "Read domain registration and image data", _public_registry, every=DAILY),
+    ScheduledWork("sessions.clear", "Delete expired sessions", _clear_sessions, every=DAILY),
     ScheduledWork("units.read", "Check HQ's own services after a failure", _unit_state),
 )
 

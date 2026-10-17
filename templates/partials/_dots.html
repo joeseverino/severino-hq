@@ -1,0 +1,6 @@
+{% comment %}
+One dot for each of a few things, filled for the ones that count: a part of a
+whole beside a figure, or the recent runs of a piece of work. Dots that only
+repeat the words beside them are not announced; dots that lead somewhere are
+links and are, each by what it names. Takes ``dots``, a ``Dots``.
+{% endcomment %}<span class="kpi-dots"{% if not dots.links %} aria-hidden="true"{% endif %}>{% for dot in dots.shown %}{% if dot.url %}<a class="kpi-dot{% if dot.filled %} is-filled{% endif %}" href="{{ dot.url }}" aria-label="{{ dot.tip }}" data-tip="{{ dot.tip }}"></a>{% else %}<i class="kpi-dot{% if dot.filled %} is-filled{% endif %}"{% if dot.tip %} data-tip="{{ dot.tip }}"{% endif %}></i>{% endif %}{% endfor %}</span>

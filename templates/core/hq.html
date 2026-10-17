@@ -144,6 +144,24 @@ nothing to say is not drawn.
     </div>
     {% if work.read_at %}<p class="muted">Read {{ work.read_at|when:"ago" }}</p>{% endif %}
   {% endif %}
+  {% if work.scheduled %}
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Scheduled work</th><th class="optional-col">How often</th><th>Recent runs</th><th class="key-col">Last result</th><th class="optional-col">Next due</th></tr></thead>
+        <tbody>
+          {% for item in work.scheduled %}
+            <tr>
+              <td>{{ item.label }}</td>
+              <td class="optional-col">{{ item.every }}</td>
+              <td>{% if item.runs %}{% include "partials/_dots.html" with dots=item.runs only %}{% else %}{% empty_value %}{% endif %}</td>
+              <td><span class="pill pill-{{ item.tone }}">{{ item.result }}</span></td>
+              <td class="optional-col">{% if item.next_due %}{{ item.next_due|when }}{% else %}Now{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
   {% if work.renderers_unread %}
     <p class="notice notice-attention">{{ work.renderers_unread }}</p>
   {% elif work.renderers %}

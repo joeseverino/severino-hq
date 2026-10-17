@@ -14,6 +14,7 @@ at `running` forever.
 import threading
 import traceback
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, close_old_connections, connection, transaction
@@ -296,6 +297,26 @@ def _audit(job: Job, action: str, outcome: str, detail: dict, ended, facets=()) 
         metadata={"kind": job.kind, "job": str(job.pk), **detail},
         user=job.requested_by,
     )
+
+
+# The hourly timer that asks for due work fires a few minutes late or early,
+# so work counts as due this much before its cadence comes round: an hourly
+# piece last done 58 minutes ago is done now, not an hour from now.
+SLACK = timedelta(minutes=10)
+
+
+def due(kind: str, every: timedelta, *, now: datetime, subject: str | None = None) -> bool:
+    """Whether work of ``kind`` is due: never done, or last done well at least
+    ``every`` (less ``SLACK``) ago, and not being done now. ``subject``, when
+    given, narrows to the jobs asked about that subject."""
+
+    jobs = Job.objects.filter(kind=kind)
+    if subject is not None:
+        jobs = jobs.filter(request__subject=subject)
+    if jobs.filter(state__in=(Job.State.QUEUED, Job.State.RUNNING)).exists():
+        return False
+    last = jobs.filter(state=Job.State.SUCCEEDED).order_by("-finished_at").values_list("finished_at", flat=True).first()
+    return last is None or now - last >= every - SLACK
 
 
 def reap(kind: str | None = None) -> int:

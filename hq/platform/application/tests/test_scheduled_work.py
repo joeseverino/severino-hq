@@ -1,13 +1,16 @@
 """Scheduled work: declared once, done as a job, asked for by the shipped units."""
 
 import re
+from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
 from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
 
 from hq.domains.control_plane.bridge_actions import ACTIONS
+from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.domains.jobs.runner import Failed
 
@@ -84,8 +87,12 @@ class ShippedUnitTests(TestCase):
             for match in INSTANCE.finditer(unit.read_text())
         }
 
-    def test_every_unit_asks_for_declared_work_and_all_of_it_is_asked_for(self):
-        self.assertEqual(self.asked_for(), {work.name for work in SCHEDULED})
+    def test_the_units_ask_for_exactly_the_work_without_a_cadence(self):
+        self.assertEqual(self.asked_for(), {work.name for work in SCHEDULED if work.every is None})
+
+    def test_work_with_a_cadence_is_asked_for_by_no_unit_of_its_own(self):
+        self.assertTrue({work.name for work in SCHEDULED if work.every is not None} - {"due"})
+        self.assertFalse(self.asked_for() & {work.name for work in SCHEDULED if work.every is not None})
 
     def test_each_timer_starts_work_of_its_own(self):
         started = [match["name"] for timer in UNITS.glob("*.timer") for match in INSTANCE.finditer(timer.read_text())]
@@ -131,3 +138,82 @@ class UnitFailureTests(TestCase):
 
         self.assertEqual(answer["state"], "succeeded")
         self.assertEqual(ReadRequest.objects.count(), 1)
+
+
+class DueTests(TestCase):
+    """The ``due`` timer does the host's work whose cadence has come round."""
+
+    def schedule(self, run, every=timedelta(days=1)):
+        due = next(work for work in SCHEDULED if work.name == "due")
+        return mock.patch.object(
+            scheduled_work,
+            "SCHEDULED",
+            (
+                due,
+                ScheduledWork("example.work", "Example work", run, every=every),
+                ScheduledWork("example.asked", "Asked", run),
+            ),
+        )
+
+    def done(self, kind, ago):
+        Job.objects.create(kind=kind, label=kind, state=Job.State.SUCCEEDED, finished_at=timezone.now() - ago)
+
+    def test_work_never_done_is_done_and_work_a_unit_asks_for_is_not(self):
+        run = mock.Mock(return_value={"read": 1})
+        with self.schedule(run), mock.patch("hq.platform.application.outbound_work.due", return_value=()):
+            answer = scheduled_work.run("due")
+
+        run.assert_called_once()
+        self.assertEqual(Job.objects.get(kind="due").result, {"due": 1, "ended": {"example.work": "succeeded"}})
+        self.assertEqual(answer["state"], "succeeded")
+
+    def test_work_done_within_its_cadence_is_left_alone(self):
+        self.done("example.work", timedelta(hours=3))
+        run = mock.Mock()
+        with self.schedule(run), mock.patch("hq.platform.application.outbound_work.due", return_value=()):
+            scheduled_work.run("due")
+
+        run.assert_not_called()
+
+    def test_the_hosts_own_work_declares_how_often_it_is_done(self):
+        every = {work.name: work.every for work in SCHEDULED}
+
+        self.assertEqual(every["contacts.inbox"], timedelta(hours=1))
+        self.assertEqual(
+            {every[name] for name in ("audit.prune", "content.sync", "registry.refresh", "sessions.clear")},
+            {timedelta(days=1)},
+        )
+        self.assertIsNone(every["units.read"])
+
+
+class CadenceDueTests(TestCase):
+    """When work is due: one check, shared by the host's and the extensions' work."""
+
+    def done(self, ago, state=Job.State.SUCCEEDED, request=None):
+        Job.objects.create(
+            kind="example.work", label="Example", state=state, request=request or {}, finished_at=timezone.now() - ago
+        )
+
+    def due(self, every=timedelta(hours=1), **kwargs):
+        return runner.due("example.work", every, now=timezone.now(), **kwargs)
+
+    def test_a_timer_a_few_minutes_early_still_finds_hourly_work_due(self):
+        self.done(timedelta(minutes=55))
+
+        self.assertTrue(self.due())
+
+    def test_work_done_well_within_its_cadence_is_not_due(self):
+        self.done(timedelta(minutes=30))
+
+        self.assertFalse(self.due())
+
+    def test_a_failure_is_not_the_work_done(self):
+        self.done(timedelta(minutes=5), state=Job.State.FAILED)
+
+        self.assertTrue(self.due())
+
+    def test_a_subject_narrows_to_the_work_about_it(self):
+        self.done(timedelta(minutes=5), request={"subject": "other"})
+
+        self.assertTrue(self.due(subject=""))
+        self.assertFalse(self.due(subject="other"))

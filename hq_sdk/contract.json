@@ -627,7 +627,8 @@
           "subject_resource=",
           "refuse=",
           "effect=",
-          "execution_notes="
+          "execution_notes=",
+          "every="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1560,7 +1561,8 @@
       "Dots": {
         "bases": [],
         "constructor": [
-          "dots"
+          "dots",
+          "ordered="
         ],
         "fields": [],
         "kind": "dataclass",

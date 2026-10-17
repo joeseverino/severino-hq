@@ -695,18 +695,23 @@ def gather_attention(
 
 
 def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
-    """Gathered entries in the one order every surface shows them."""
+    """Gathered entries in the one order every surface shows them: by
+    severity, what needs doing before what only reports, the longest-standing
+    first, then by source and title."""
 
-    return tuple(
-        sorted(
-            entries,
-            key=lambda entry: (
-                ATTENTION_ORDER.index(entry["item"].status),
-                entry["source"],
-                entry["item"].title,
-            ),
+    def order(entry: dict[str, Any]) -> tuple[Any, ...]:
+        item = entry["item"]
+        since = item.since
+        return (
+            ATTENTION_ORDER.index(item.status),
+            item.notice,
+            since is None,
+            since.timestamp() if since is not None else 0.0,
+            entry["source"],
+            item.title,
         )
-    )
+
+    return tuple(sorted(entries, key=order))
 
 
 def plugin_attention_items() -> tuple[dict[str, Any], ...]:

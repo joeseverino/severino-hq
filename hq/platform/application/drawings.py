@@ -31,6 +31,9 @@ class Dots:
     """
 
     dots: tuple[Dot, ...]
+    # Drawn in the order given, as a history is, oldest first; otherwise the
+    # filled ones lead, as a part of a whole reads.
+    ordered: bool = False
 
     kind: ClassVar[str] = "dots"
     # More dots than this is a texture, not a count.
@@ -46,10 +49,12 @@ class Dots:
 
     @property
     def shown(self) -> tuple[Dot, ...]:
-        """The dots as drawn: filled first; none when there are too many to count."""
+        """The dots as drawn: filled first unless ``ordered``; none when there are too many to count."""
 
         if not 0 < len(self.dots) <= self.LIMIT:
             return ()
+        if self.ordered:
+            return self.dots
         return tuple(sorted(self.dots, key=lambda dot: not dot.filled))
 
     @property

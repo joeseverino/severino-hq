@@ -9,6 +9,7 @@ request that reached it would be refused.
 
 import importlib
 import os
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -16,11 +17,13 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase, TestCase, modify_settings, override_settings
 from django.urls import include, path, reverse
+from django.utils import timezone
 
 from hq.config.urls import urlpatterns as host_urlpatterns
 from hq.domains.jobs.models import Job
+from hq.platform.application import scheduled_work
 from hq.platform.application.capabilities import capability_registry, execute_capability
-from hq.platform.application.outbound_work import OutboundWork, capability_for, validate
+from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
 from hq.platform.application.plugins import PluginIntegration, clear_plugin_composition_cache
 from hq.platform.application.security import Principal, cli_principal
 from hq.platform.core.models import AuditLog
@@ -341,3 +344,82 @@ class DeclarationTests(SimpleTestCase):
 
     def test_failed_is_a_sentence_and_not_a_fault(self):
         self.assertEqual(str(Failed("The registry lists nothing.")), "The registry lists nothing.")
+
+
+class DeclaredWorkRunsOnItsCadenceTests(ComposedExample):
+    """Work declared with ``every`` is done by the host's timer once it is due."""
+
+    def setUp(self):
+        super().setUp()
+        # Only the example's declarations, whatever else the composition installs:
+        # an installed extension's cadence is its own suite's to test.
+        own = {work.name: work for work in example.work()}
+        only = mock.patch("hq.platform.application.outbound_work.declared_work", return_value=own)
+        only.start()
+        self.addCleanup(only.stop)
+
+    def done(self, ago, state=Job.State.SUCCEEDED):
+        Job.objects.create(
+            kind=example.REFRESH,
+            label="Refresh",
+            state=state,
+            request={"subject": ""},
+            finished_at=timezone.now() - ago,
+        )
+
+    def test_work_never_done_is_due_and_work_without_a_cadence_never_is(self):
+        self.assertEqual([work.name for work in due()], [example.REFRESH])
+
+    def test_work_done_within_its_cadence_is_not_due(self):
+        self.done(timedelta(hours=2))
+
+        self.assertEqual(due(), ())
+
+    def test_work_last_done_longer_ago_than_its_cadence_is_due(self):
+        self.done(timedelta(days=1, hours=1))
+
+        self.assertEqual([work.name for work in due()], [example.REFRESH])
+
+    def test_a_failed_attempt_is_not_the_work_done(self):
+        self.done(timedelta(days=2))
+        self.done(timedelta(hours=1), state=Job.State.FAILED)
+
+        self.assertEqual([work.name for work in due()], [example.REFRESH])
+
+    def test_work_being_done_is_not_due_again(self):
+        Job.objects.create(kind=example.REFRESH, label="Refresh", state=Job.State.RUNNING, request={"subject": ""})
+
+        self.assertEqual(due(), ())
+
+    def test_the_timer_does_the_due_work_as_a_job_of_its_own(self):
+        # The host's own scheduled work is its suite's to test; here, only the example's.
+        only_due = tuple(work for work in scheduled_work.SCHEDULED if work.every is None)
+        self.enterContext(mock.patch.object(scheduled_work, "SCHEDULED", only_due))
+        ended = scheduled_work.run("due")
+
+        job = Job.objects.get(kind=example.REFRESH)
+        self.assertEqual((job.state, job.actor, job.result), ("succeeded", scheduled_work.ACTOR, {"seen": 4}))
+        self.assertEqual(self.registry.asked, list(example.NOTES))
+        self.assertEqual(Job.objects.get(kind="due").result, {"due": 1, "ended": {example.REFRESH: "succeeded"}})
+        self.assertEqual(ended["state"], "succeeded")
+
+        scheduled_work.run("due")
+
+        self.assertEqual(Job.objects.filter(kind=example.REFRESH).count(), 1)
+
+
+class CadenceDeclarationTests(SimpleTestCase):
+    def declared(self, **fields):
+        return OutboundWork("example.cadence", "Cadence", "Example.", "notes.write", example.refresh, **fields)
+
+    def test_work_about_one_record_cannot_be_due_on_a_cadence(self):
+        with self.assertRaisesMessage(ImproperlyConfigured, "about one record"):
+            validate(self.declared(subject_label="Note", every=timedelta(days=1)))
+
+    def test_a_cadence_is_a_positive_span_of_time(self):
+        for every in (timedelta(0), timedelta(hours=-1), 3600):
+            with self.subTest(every=every), self.assertRaisesMessage(ImproperlyConfigured, "positive timedelta"):
+                validate(self.declared(every=every))
+
+    def test_a_cadence_is_accepted_for_work_about_no_record(self):
+        self.assertEqual(validate(self.declared(every=timedelta(days=1))).every, timedelta(days=1))

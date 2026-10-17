@@ -191,6 +191,9 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
         failed = tuple(unit for unit in units if unit.failed and unit.unit not in said)
         if not failed:
             continue
+        # A unit a timer or path starts runs again on its own; one nothing
+        # starts again stays down until someone does.
+        scheduled = {unit.activates for unit in units if unit.starter}
         found.append(
             Finding(
                 rule="unit-failed",
@@ -201,7 +204,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                     if len(failed) == 1
                     else f"{counted(len(failed), 'background job', 'background jobs')} failed on {node.label}"
                 ),
-                severity="serious",
+                severity="attention" if all(unit.unit in scheduled for unit in failed) else "serious",
                 explanation=_failed_since(node.label, failed, estate.now),
                 evidence=tuple(
                     item

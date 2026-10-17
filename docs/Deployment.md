@@ -170,7 +170,8 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-web.service` | the web container; the only thing that starts it |
 | `severino-hq-secrets.service` / `.timer` | `hq-secrets`, hourly ([Secrets](Secrets.md)) |
 | `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, a minute after each run ends and when HQ rings the doorbell |
-| `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`), started by the `audit-prune`, `sessions-clear`, `contacts-inbox`, `content-sync` and `public-registry` timers |
+| `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
+| `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
 | `severino-hq-script-drift.service` / `.timer` | `hq-host verify`, daily |
 

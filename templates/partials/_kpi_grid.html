@@ -17,7 +17,7 @@
         are, each by what it names.
         {% endcomment %}
         {% if drawing.kind == "dots" and drawing.shown %}
-          <span class="kpi-dots"{% if not drawing.links %} aria-hidden="true"{% endif %}>{% for dot in drawing.shown %}{% if dot.url %}<a class="kpi-dot{% if dot.filled %} is-filled{% endif %}" href="{{ dot.url }}" aria-label="{{ dot.tip }}" data-tip="{{ dot.tip }}"></a>{% else %}<i class="kpi-dot{% if dot.filled %} is-filled{% endif %}"{% if dot.tip %} data-tip="{{ dot.tip }}"{% endif %}></i>{% endif %}{% endfor %}</span>
+          {% include "partials/_dots.html" with dots=drawing only %}
         {% elif drawing.kind == "trend" and drawing.marks %}
           {% comment %}
           Each reading answers across its own strip of the line, which is far

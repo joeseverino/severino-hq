@@ -197,18 +197,38 @@ class FailedTests(TestCase):
     def setUp(self):
         tailnet_connection()
 
-    def test_a_failed_unit_is_serious_and_says_how_it_ended(self):
+    def test_a_failed_unit_says_how_it_ended(self):
         sweep(failed(ended_at=stamp(timedelta(hours=5))), timer(), service("severino-hq-example-other.service"))
 
         (finding,) = raised("unit-failed")
 
-        self.assertEqual(finding["severity"], "serious")
         self.assertEqual(finding["title"], f"{SERVICE} failed on example-controller")
         evidence = {item["label"]: item["value"] for item in finding["evidence"]}
         self.assertEqual(evidence["Job"], SERVICE)
         self.assertEqual(evidence["How it ended"], "exit-code, status 3")
         self.assertEqual(evidence["Failed"], "5\xa0hours ago")
         self.assertEqual({name: len(found) for name, found in every_rule().items() if found}, {"unit-failed": 1})
+
+    def test_a_failed_job_its_timer_starts_again_is_attention(self):
+        sweep(failed(), timer())
+
+        (finding,) = raised("unit-failed")
+
+        self.assertEqual(finding["severity"], "attention")
+
+    def test_a_failed_service_nothing_starts_again_is_serious(self):
+        sweep(failed())
+
+        (finding,) = raised("unit-failed")
+
+        self.assertEqual(finding["severity"], "serious")
+
+    def test_one_service_among_scheduled_jobs_makes_the_finding_serious(self):
+        sweep(failed(), timer(), failed("severino-hq-example-web.service"))
+
+        (finding,) = raised("unit-failed")
+
+        self.assertEqual(finding["severity"], "serious")
 
     def test_every_failed_unit_on_a_machine_is_one_finding(self):
         sweep(failed(), failed(TIMER, result="resources"), failed("severino-hq-example-job@example.work.service"))

@@ -476,6 +476,14 @@ context["lookup"] = ask("notes.lookup", note.slug, refresh="#note-listing")
 `refresh` names the part of the page the result shows in, fetched again when
 the work ends; without one the page loads again.
 
+Work about no one record can also keep itself current. Declared with
+`every=timedelta(days=1)`, it is done by the host once that long has passed
+since it last succeeded: the hourly `due` timer asks for each piece
+whose cadence has come round, as its own job, recorded against the timer. A
+failed attempt is not a success, so it is asked again on the next hour. An
+extension ships no systemd unit for this, and the host removes any
+`severino-hq-*` unit it did not ship.
+
 Three rules keep the work honest:
 
 - **Store, then say.** The work writes its result where the page reads it and

@@ -4,12 +4,15 @@ HQ derives the job, the capability, the route, the control and the audit
 entries from ``work()``; the page in ``views`` only shows what is stored.
 """
 
+from datetime import timedelta
+
 from hq_sdk.jobs import Job
 from hq_sdk.outbound import Failed, OutboundWork
 
 from . import registry
 
 LOOKUP = "example.lookup"
+REFRESH = "example.refresh"
 NOTES = ("first-note", "second-note")
 # A note the registry is never asked about, with the reason its control gives.
 ARCHIVED = "archived-note"
@@ -22,6 +25,12 @@ def look_up(progress, *, subject, principal):
         raise Failed("The registry lists nothing for this note.")
     progress(f"The registry lists {len(listed)} entries.", force=True)
     return {"seen": len(listed), "entries": listed}
+
+
+def refresh(progress, *, subject, principal):
+    """Every note at once, on the example's cadence."""
+
+    return {"seen": sum(len(registry.read(note) or ()) for note in NOTES)}
 
 
 def refuse(subject):
@@ -48,5 +57,13 @@ def work():
             subject_label="Note",
             subject_help="The note's slug, e.g. first-note.",
             refuse=refuse,
+        ),
+        OutboundWork(
+            REFRESH,
+            "Refresh",
+            "Ask the registry about every note.",
+            "notes.write",
+            refresh,
+            every=timedelta(days=1),
         ),
     )
