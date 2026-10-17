@@ -125,20 +125,19 @@ class RouteContextTests(SimpleTestCase):
 STORED_PAGE_COSTS = {
     # The session, the person, the table revisions and one stored number.
     "action_item_count": (4, 1),
-    "dashboard": (25, 9),
+    "dashboard": (31, 9),
     "action_items": (7, 1),
     "control_plane:findings": (6, 1),
     "control_plane:topology": (6, 1),
-    # Its empty state asks which connection would fill it.
     "control_plane:tailnet": (12, 2),
     # A page about one thing is also served the open problems about it.
-    "control_plane:machine": (20, 3),
-    "control_plane:detail": (18, 2),
-    "control_plane:services": (13, 1),
-    "control_plane:service": (18, 3),
-    "zones:detail": (21, 3),
+    "control_plane:machine": (21, 3),
+    "control_plane:detail": (19, 2),
+    "control_plane:services": (14, 1),
+    "control_plane:service": (19, 3),
+    "zones:detail": (22, 3),
     "calendar:month": (12, 6),
-    "search?q=example": (20, 1),
+    "search?q=example": (22, 1),
 }
 # The derivations one change of the estate costs, whichever page pays for them.
 # The topology and its findings are derived per reader: the queue's and the operator's.

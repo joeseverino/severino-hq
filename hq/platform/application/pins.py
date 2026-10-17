@@ -7,8 +7,6 @@ controller: the world does not change because somebody starred a domain.
 
 from hq.platform.core.models import Pin
 
-from .projection import read_once
-
 DOMAIN = "domain"
 # A service, kept at the top of the list that shows every hostname HQ knows.
 # Most of that list is infrastructure an operator reads once a quarter, and
@@ -30,12 +28,9 @@ def ordered(user, target_kind: str) -> tuple[str, ...]:
 
     if not getattr(user, "is_authenticated", False):
         return ()
-    return read_once(
-        f"pins:{user.pk}:{target_kind}",
-        lambda: tuple(
-            key.lower()
-            for key in Pin.objects.filter(user=user, target_kind=target_kind).values_list("target_key", flat=True)
-        ),
+    return tuple(
+        key.lower()
+        for key in Pin.objects.filter(user=user, target_kind=target_kind).values_list("target_key", flat=True)
     )
 
 

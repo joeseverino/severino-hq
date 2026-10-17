@@ -42,7 +42,7 @@ ANSWERS = {
 
 # Lifecycle states that need a person: stale evidence, missing access, a
 # failed probe, a rejected credential.
-ATTENTION_LIFECYCLES = ("stale", "unauthorized", "unreachable", "revoked", "unreported")
+ATTENTION_LIFECYCLES = ("stale", "unauthorized", "unreachable", "revoked")
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,7 +149,7 @@ def _tailnet_only(policy: IngressPolicy) -> bool:
     return deny_all and not policy.satisfy_any and not policy.passes_auth and policy.authorizations == 0
 
 
-def ingress_kinds() -> tuple[str, ...]:
+def _ingress_kinds() -> tuple[str, ...]:
     """The kinds whose observed records carry an ingress policy."""
 
     return tuple(kind for kind, spec in PROVIDERS.items() if spec.ingress_policy is not None)
@@ -167,7 +167,7 @@ def _ingress_control(hostname: str, snapshots: Mapping[str, Any]) -> SecurityCon
     """The first ingress policy any proxy reports for ``hostname``, judged."""
 
     host = normalized_hostname(split_host_port(hostname)[0])
-    for kind in ingress_kinds():
+    for kind in _ingress_kinds():
         snapshot = snapshots.get(kind)
         if snapshot is None or not host:
             continue
@@ -256,7 +256,7 @@ def _tailnet_policy_control(snapshot) -> SecurityControl:
     )
 
 
-def host_firewall_control(snapshot) -> SecurityControl:
+def _host_firewall_control(snapshot) -> SecurityControl:
     """Whether the firewall required the interface, not just the address.
 
     The line above this one on the page says the address is on the tailnet, and
@@ -305,11 +305,11 @@ def host_firewall_control(snapshot) -> SecurityControl:
 
 
 def _snapshots(*kinds: str) -> dict:
-    """The stored inventory of each kind, by kind, from the one read a page shares."""
+    """The stored inventory of each kind, by kind, in one query."""
 
-    from .facts import stored_inventory
+    from hq.domains.control_plane.models import ProviderInventory
 
-    return {kind: rows[-1] for kind, rows in stored_inventory(*kinds).items() if rows}
+    return {row.kind: row for row in ProviderInventory.objects.filter(kind__in=kinds)}
 
 
 def observed_request_controls(hostname: str) -> tuple[SecurityControl, SecurityControl]:
@@ -320,10 +320,10 @@ def observed_request_controls(hostname: str) -> tuple[SecurityControl, SecurityC
     inventory once per device, per address, per layer or per header.
     """
 
-    snapshots = _snapshots(*ingress_kinds(), FIREWALL_KIND)
+    snapshots = _snapshots(*_ingress_kinds(), FIREWALL_KIND)
     return (
         _ingress_control(hostname, snapshots),
-        host_firewall_control(snapshots.get(FIREWALL_KIND)),
+        _host_firewall_control(snapshots.get(FIREWALL_KIND)),
     )
 
 
@@ -336,7 +336,7 @@ def observed_connection_controls(
     from .facts import stored_snapshots
 
     stored = stored_snapshots()
-    snapshots = {kind: stored[kind][0] for kind in (*ingress_kinds(), TAILNET_POLICY_KIND) if stored.get(kind)}
+    snapshots = {kind: stored[kind][0] for kind in (*_ingress_kinds(), TAILNET_POLICY_KIND) if stored.get(kind)}
     return (
         _tailnet_policy_control(snapshots.get(TAILNET_POLICY_KIND)),
         _ingress_control(hostname, snapshots),
@@ -432,13 +432,13 @@ def _custody_control(groups: tuple[ConnectionGroup, ...]) -> SecurityControl:
     unknown = len(unkept) - keyless
     return SecurityControl(
         "credentials",
-        "Keys are kept in a vault",
+        "HQ knows where every secret is kept",
         "good" if total and not unknown else "neutral",
         " · ".join(
             part
             for part in (
                 *(f"{count} in {store}" for store, count in sorted(stores.items())),
-                f"{keyless} need no key" if keyless else "",
+                f"{keyless} need no secret" if keyless else "",
                 f"{unknown} do not say" if unknown else "",
             )
             if part
@@ -460,11 +460,6 @@ def _scope_control(evidence: Counter, connections: tuple) -> SecurityControl:
     unchecked = evidence["undeclared"] + evidence["unverified"]
     unknown = evidence["unknown"]
     missing = evidence["missing"] + evidence["revoked"]
-    # Counted by connection, as every other line on the page counts.
-    keyless = sum(
-        bool(connection.abilities) and all(state.evidence == "not_applicable" for state in connection.abilities)
-        for connection in connections
-    )
     whole = sorted(
         {
             connection.instance.label
@@ -484,14 +479,14 @@ def _scope_control(evidence: Counter, connections: tuple) -> SecurityControl:
         detail = f"{detail} Full account access: {', '.join(whole)}."
     return SecurityControl(
         "scope",
-        "Tokens hold only the permissions HQ uses",
+        "Every credential is limited to what HQ needs",
         state,
         " · ".join(
             phrase
             for count, phrase in (
                 (evidence["verified"], f"{evidence['verified']} checked"),
                 (whole, counted(len(whole), "credential") + " with full account access"),
-                (keyless, f"{keyless} need no key"),
+                (evidence["not_applicable"], f"{evidence['not_applicable']} need no key"),
                 (unchecked, f"{unchecked} not checked"),
                 (unknown, f"{unknown} not reported"),
                 (missing, f"{missing} missing"),
@@ -506,21 +501,16 @@ def _scope_control(evidence: Counter, connections: tuple) -> SecurityControl:
 
 
 def _freshness_control(connections: tuple) -> SecurityControl:
-    """Whether every connection has a reading, and how old the oldest is.
-
-    A keyless public service is left out: it has no connection of its own to
-    read, only the lookups made through it, which carry their own times.
-    """
+    """Whether every connection has a reading, and how old the oldest is."""
 
     from .moments import ago
 
-    connections = tuple(connection for connection in connections if connection.instance.credential_model != "none")
     read = tuple(connection for connection in connections if connection.instance.observed_at)
     oldest = min(read, key=lambda connection: connection.instance.observed_at, default=None)
     unread = len(connections) - len(read)
     return SecurityControl(
         "freshness",
-        "Connections have been read",
+        "Every connection has been read",
         "attention" if unread else "good" if connections else "neutral",
         (f"Oldest reading {ago(oldest.instance.observed_at)}" if oldest is not None else "Nothing read yet"),
         f"{counted(unread, 'connection has', 'connections have')} no reading."
