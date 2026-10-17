@@ -55,7 +55,7 @@ class TailnetDeviceSpec(ProviderModel):
     key_expiry_disabled: bool = Field(
         default=False,
         title="Disable key expiry",
-        description=("Disables node key expiry. Without it, the device becomes unreachable when its key expires."),
+        description=("Otherwise the device goes offline when its key expires."),
     )
 
 
@@ -173,7 +173,7 @@ DEVICE = ProviderSpec(
     change_effects=(
         (
             "key_expiry_disabled",
-            "Applied on the next reconcile. Turning it off restores key expiry.",
+            "Applied on the controller's next run. Turning it off restores key expiry.",
         ),
     ),
     removal_note=lambda spec: (
@@ -246,7 +246,7 @@ POLICY = ProviderSpec(
     change_effects=(
         (
             "document",
-            "Saving records it. Reconciling applies it if the policy's own tests pass.",
+            "Applied only if the policy's own tests pass.",
         ),
     ),
     readout=_policy_readout,
@@ -262,4 +262,13 @@ DEFINITIONS = (DEVICE, POLICY)
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
-CONNECTIONS = {"tailscale": ConnectionKind("Tailscale", "scoped", OAUTH_CLIENT)}
+CONNECTIONS = {
+    "tailscale": ConnectionKind(
+        "Tailscale",
+        "scoped",
+        OAUTH_CLIENT,
+        create="An OAuth client in the Tailscale admin console, under Settings, Trust credentials.",
+        create_url="https://tailscale.com/kb/1215/oauth-clients",
+        gives="Your tailnet's devices, who may reach what, and its DNS.",
+    )
+}

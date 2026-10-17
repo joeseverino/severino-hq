@@ -10,6 +10,8 @@ whether it is secret are stated here and nowhere else.
 from collections.abc import Mapping
 from typing import Any
 
+from django.conf import settings
+
 from .provider_spec import ConnectionShape, Setting
 
 ACME = ConnectionShape(
@@ -122,6 +124,15 @@ def projections() -> dict[str, dict[str, dict[str, Any]]]:
 
 
 def renderer_registry() -> dict[str, Any]:
-    """``hq/config/controller-connections.json``, which the renderer reads."""
+    """``hq/config/controller-connections.json``, which the renderer reads.
 
-    return {"schema_version": 1, "projections": projections()}
+    It also carries the application variables production cannot run without,
+    as the settings declare them, so the renderer refuses an item that lacks
+    one rather than install it under a container that will not serve.
+    """
+
+    return {
+        "schema_version": 2,
+        "projections": projections(),
+        "required_app_variables": sorted(settings.REQUIRED_APP_VARIABLES),
+    }

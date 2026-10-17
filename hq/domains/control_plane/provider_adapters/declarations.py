@@ -156,11 +156,7 @@ class MachineSpec(ProviderModel):
     addresses: list[str] = Field(
         default_factory=list,
         title="Addresses",
-        description=(
-            "Every address it answers on: LAN, tailnet, public. Resources "
-            "forwarding to these addresses link to this machine. Marked "
-            "addresses are also observed by HQ."
-        ),
+        description="Any address it answers on. Whatever forwards to one is linked to this machine.",
     )
 
 
@@ -197,10 +193,7 @@ class TLSDeliveryTargetSpec(ProviderModel):
         min_length=1,
         max_length=160,
         title="Name at target",
-        description=(
-            "The certificate's name on the target. Only the certificate below "
-            "uses it. Others installed here keep their own names."
-        ),
+        description=("The certificate's name on the target. Used only by the certificate below."),
     )
     certificate_resource: str = Field(
         default="",
@@ -224,18 +217,14 @@ class TLSDeliveryTargetSpec(ProviderModel):
     discover_covered_hosts: bool = Field(
         default=False,
         title="Check every proxy host it covers",
-        description=(
-            "Nginx Proxy Manager only. Check every proxy host whose name this "
-            "certificate covers, in addition to the names above."
-        ),
+        description=("Nginx Proxy Manager only. Also check every proxy host this certificate covers."),
     )
     install_domains: list[str] = Field(
         default_factory=list,
         title="Install only on the sites serving these names",
         description=(
-            "cPanel only. cPanel holds one certificate per site, shared by the "
-            "site's aliases. Leave empty to install on every site serving a "
-            "name this certificate is checked at."
+            "cPanel only. Each site holds one certificate, shared by its aliases. "
+            "Leave empty to install on every site serving a name it is checked at."
         ),
     )
     vault: str = Field(
@@ -248,10 +237,7 @@ class TLSDeliveryTargetSpec(ProviderModel):
         default="",
         max_length=160,
         title="Item",
-        description=(
-            "1Password only. The item HQ writes the certificate's details to. "
-            "It must already exist. HQ does not create it."
-        ),
+        description=("1Password only. An existing item HQ writes the certificate's details to."),
     )
 
     @model_validator(mode="after")
@@ -396,7 +382,7 @@ NETWORK = ProviderSpec(
     "An address range. HQ uses it to tell which network an address is on.",
     NetworkSpec,
     actions={
-        "reconcile": locked("HQ does not create subnets. This entry records one."),
+        "reconcile": locked("Saved in HQ only. Nothing changes on the network."),
     },
     label="Network",
     declaration_only=True,
@@ -408,7 +394,7 @@ NETWORK = ProviderSpec(
     removal_note=lambda spec: (
         f"HQ forgets {spec.get('name', 'this network')}. Addresses in it are no longer linked to a network."
     ),
-    unobserved_reason=("A range is a record. There is nothing to observe."),
+    unobserved_reason=("Kept in HQ only, so there is nothing live to read."),
 )
 
 AUTHORITY = ProviderSpec(
@@ -426,15 +412,15 @@ AUTHORITY = ProviderSpec(
     removal_note=lambda spec: (
         f"HQ forgets {spec.get('name', 'this authority')}. Certificates it issued are no longer linked to it."
     ),
-    unobserved_reason=("Kept offline. There is nothing to observe."),
+    unobserved_reason=("Kept offline, so there is nothing to read."),
 )
 
 MACHINE = ProviderSpec(
     MACHINE_KIND,
-    "A machine no sweep finds, and its addresses. Machines behind Portainer or another connection are listed already.",
+    "A machine no connection reports, added by hand with its addresses.",
     MachineSpec,
     actions={
-        "reconcile": locked("HQ does not create machines. This entry records one."),
+        "reconcile": locked("Saving records it in HQ. Nothing changes on the machine."),
     },
     label="Machine",
     home=lambda resource: named_page("control_plane:machine", resource, "name"),
@@ -459,10 +445,10 @@ MACHINE = ProviderSpec(
 
 DELIVERY_TARGET = ProviderSpec(
     DELIVERY_TARGET_KIND,
-    "A place certificates are installed, and how they get there. Certificates can only install on declared targets.",
+    "A place certificates are installed, and how they get there. Certificates install only on targets added here.",
     TLSDeliveryTargetSpec,
     actions={
-        "reconcile": locked("Nothing to reconcile. Reconcile the certificates installed here."),
+        "reconcile": locked("Saved in HQ. Certificates installed here use it when next applied."),
     },
     label="Certificate target",
     connection_providers=("npm", "ssh", "onepassword"),
@@ -479,9 +465,9 @@ DELIVERY_TARGET = ProviderSpec(
     choices="hq.platform.application.provider_choices:delivery_target",
     removal_note=lambda spec: (
         f"Certificates stop being installed on {spec.get('name', 'this target')}. "
-        "Certificates that list it stop resolving."
+        "HQ flags any certificate that still lists it."
     ),
-    unobserved_reason=("Nothing to observe. Each certificate reports its own install."),
+    unobserved_reason=("Nothing to read. Each certificate shows its own install."),
 )
 
 # Declarations only: the controller half is still the core's.
@@ -494,6 +480,23 @@ CONNECTIONS = {
     # one HQ carries can be write access to a single item's vault and nothing
     # else. That is the property the publishing adapter is built to deserve
     # rather than to rely on.
-    "onepassword": ConnectionKind("1Password", "scoped", SERVICE_ACCOUNT),
-    "ssh": ConnectionKind("SSH", "coarse", SSH_TRANSPORT),
+    "onepassword": ConnectionKind(
+        "1Password",
+        "scoped",
+        SERVICE_ACCOUNT,
+        create=(
+            "A 1Password service account that can write only to the vault certificates are published to. "
+            "HQ reads its own secrets through Connect, not this."
+        ),
+        create_url="https://developer.1password.com/docs/service-accounts/get-started/",
+        gives="Renewed certificates published to a vault, for machines that fetch their own.",
+    ),
+    "ssh": ConnectionKind(
+        "SSH",
+        "coarse",
+        SSH_TRANSPORT,
+        create="An SSH key made in 1Password, its public half in the machine's authorized_keys.",
+        create_url="https://developer.1password.com/docs/ssh/manage-keys/",
+        gives="Caddy routes and certificates on your machines, and which of their ports answer.",
+    ),
 }

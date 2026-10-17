@@ -1,6 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 {% include "partials/_visit_refresh.html" with subject="machine" name=machine.name %}
+{% include "control_plane/_machine_band.html" %}
 
 {% problems_about as problems %}{% include "partials/_problems.html" %}
 
@@ -28,15 +29,12 @@
 {% endif %}
 
 {% if machine.containers or unused_images %}
-  <h2>Containers</h2>
   {% comment %}
-  Where they are read from and what they leave behind. How they stand is
-  the tile at the top of the page.
+  Where they are read from, beside the heading, and what they leave behind
+  under it. How they stand is the band at the top of the page.
   {% endcomment %}
-  <ul class="dot-list section-facts">
-    {% if docker %}<li>{% if docker.version %}Docker {{ docker.version }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status }}{% endif %}</li>{% if docker.connection %}<li>read through {% entity docker.connection %}</li>{% endif %}{% endif %}
-    {% if unused_images %}<li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size }} can be freed</li>{% endif %}
-  </ul>
+  <h2>Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status }}{% endif %}{% if docker.connection %} · read through {% entity docker.connection %}{% endif %}</span>{% endif %}</h2>
+  {% if unused_images %}<ul class="dot-list section-facts"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size }} can be freed</li></ul>{% endif %}
   {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
   {% if machine.containers %}<div class="table-scroll">
     {% include "control_plane/_container_rows.html" with containers=machine.on_show %}
@@ -175,7 +173,7 @@
         and links to it; tags and users stay as the policy writes them.
         {% endcomment %}
         {% for port, who in opening_links %}
-          <dt>Port <code>{{ port }}</code></dt>
+          <dt>Allowed on port <code>{{ port }}</code></dt>
           <dd>{% include "control_plane/_policy_names.html" with names=who %}</dd>
         {% endfor %}
   </dl>

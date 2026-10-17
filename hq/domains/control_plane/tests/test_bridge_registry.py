@@ -9,10 +9,13 @@ controller's constants take.
 
 import ast
 import json
+import subprocess
+import sys
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase
@@ -23,6 +26,8 @@ from hq.domains.control_plane.connection_shapes import SHAPES, projections
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_spec import ConnectionShape, Setting
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
+from hq.platform.application.tests.source import parsed
+from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 PACKAGE = Path(bridge_contract.__file__).parent
 
@@ -92,7 +97,7 @@ class JoinTests(SimpleTestCase):
         for path in sorted(PACKAGE.parents[1].rglob("*.py")):
             if "tests" in path.parts or path.name.startswith("test"):
                 continue
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+            tree = parsed(path)
             docstrings = {
                 ast.get_docstring(node, clean=False)
                 for node in ast.walk(tree)
@@ -107,7 +112,7 @@ class JoinTests(SimpleTestCase):
                 naming.append(path.name)
         self.assertEqual(naming, ["bridge_contract.py"])
 
-        tree = ast.parse((PACKAGE / "bridge_contract.py").read_text(encoding="utf-8"))
+        tree = parsed(PACKAGE / "bridge_contract.py")
         paths = {"CONTRACT_PATH", "CONNECTIONS_PATH", "SHAPES_PATH"}
         emitted = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "emitted")
         inside = [node.id for node in ast.walk(emitted) if isinstance(node, ast.Name)]
@@ -234,3 +239,73 @@ class ConnectionShapeTests(SimpleTestCase):
             ConnectionShape("twice", (Setting("A", label="a"), Setting("A", label="b")))
         with self.assertRaises(ValueError):
             ConnectionShape("envelope", (Setting("PROVIDER", label="provider"),))
+
+
+def _production(**env: str) -> subprocess.CompletedProcess:
+    """Settings loaded as production loads them, from ``env`` and nothing the caller set.
+
+    Prints each required variable's setting, by the name settings give it.
+    """
+
+    probe = "; ".join(
+        [
+            "import json",
+            "from hq.config import settings as s",
+            "print(json.dumps({name: getattr(s, name.removeprefix('DJANGO_')) for name in s.REQUIRED_APP_VARIABLES}))",
+        ]
+    )
+    return subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=REPO_ROOT,
+        env=subprocess_env(
+            drop=(
+                "SEVERINO_APP_ENV_PATH",
+                "DJANGO_CSRF_TRUSTED_ORIGINS",
+                *settings.REQUIRED_APP_VARIABLES,
+            ),
+            DJANGO_DEBUG="0",
+            **env,
+        ),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+# A value for each required variable, as an application environment item holds it.
+_VALUES = {
+    "DJANGO_SECRET_KEY": "required-probe-key-0123456789abcdef0123456789abcdef",
+    "DJANGO_ALLOWED_HOSTS": "hq.example.com",
+}
+
+
+class RequiredAppVariablesTests(SimpleTestCase):
+    """The renderer refuses an item without what production cannot run without, and nothing else."""
+
+    def test_the_renderers_registry_requires_what_the_settings_declare(self):
+        emitted = json.loads(bridge_contract.SHAPES_PATH.read_text(encoding="utf-8"))
+
+        self.assertEqual(emitted["required_app_variables"], sorted(settings.REQUIRED_APP_VARIABLES))
+
+    def test_production_runs_on_the_required_variables_alone(self):
+        """A setting production refuses to load without and the list lacks fails here."""
+
+        loaded = _production(**_VALUES)
+
+        self.assertEqual(loaded.returncode, 0, loaded.stderr)
+        self.assertTrue(all(json.loads(loaded.stdout.strip().splitlines()[-1]).values()))
+
+    def test_production_cannot_serve_without_any_one_of_them(self):
+        """A name on the list that production runs without fails here."""
+
+        self.assertEqual(set(_VALUES), set(settings.REQUIRED_APP_VARIABLES))
+        for name in settings.REQUIRED_APP_VARIABLES:
+            with self.subTest(name=name):
+                loaded = _production(**{other: value for other, value in _VALUES.items() if other != name})
+                if loaded.returncode == 0:
+                    # It loaded, so the setting it feeds must be empty: no
+                    # allowed host answers every request 400.
+                    self.assertFalse(json.loads(loaded.stdout.strip().splitlines()[-1])[name])
+                else:
+                    self.assertIn(name, loaded.stderr)

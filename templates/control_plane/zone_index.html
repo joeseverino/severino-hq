@@ -28,7 +28,7 @@ one situation it is ever seen in.
     {% endfor %}
   </div>
 {% else %}
-  {% include "partials/_empty_state.html" with message="No domains yet. They appear after HQ next reads Cloudflare." %}
+  {% include "partials/_empty_state.html" with message="No domains yet." remedy=page.remedy %}
 {% endif %}
 
 {% include "partials/_sweep_freshness.html" with inventory=inventory only_kind="cloudflare.zone" %}

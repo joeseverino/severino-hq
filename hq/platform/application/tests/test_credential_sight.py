@@ -6,8 +6,9 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import escape
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
+from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_KINDS, CONNECTION_LABELS
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec
 from hq.domains.control_plane.observations.contract import registry
@@ -407,15 +408,16 @@ class CredentialSightPageTests(TestCase):
         self.assertNotIn("Add D1 Read (account)", body)
         self.assertContains(response, "Add users:read to see Tailnet user.")
         self.assertContains(response, "Reads 2 things")
-        # Not connected, once each, with what it would let HQ see.
+        # Not connected, once each in the setup list, with what it would let HQ see.
         self.assertContains(response, "<strong>AdGuard Home</strong>", count=1)
-        self.assertContains(response, "Would let HQ see: DNS client, DNS lookups, DNS server, Internal DNS record")
+        self.assertContains(response, escape(CONNECTION_KINDS["adguard"].gives))
         self.assertContains(response, "<strong>1Password</strong>", count=1)
-        self.assertContains(response, "Would let HQ manage: Certificate target")
+        self.assertContains(response, escape(CONNECTION_KINDS["onepassword"].gives))
         # Nothing sweeps these, so no credential is said to see them.
         self.assertNotIn("Nothing to observe", body)
-        self.assertNotIn("Onepassword", body)
-        self.assertNotIn("Adguard", body)
+        # Whole words: a label made from an id, not a service's own link.
+        self.assertNotRegex(body, r"\bOnepassword\b")
+        self.assertNotRegex(body, r"\bAdguard\b")
 
     def test_a_second_ssh_connection_does_not_show_the_first_ones_readings(self):
         ProviderConnection.objects.create(

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -360,6 +360,18 @@ class LayerTests(TestCase):
         found = connection(a_request("100.64.0.77"))
 
         self.assertFalse(self.layer(found, "device").holds)
+        self.assertTrue(self.layer(found, "device").conclusive)
+
+    def test_with_no_tailnet_read_a_device_is_unconfirmed_not_missing(self):
+        """A fresh install has read no tailnet: that is not a device missing from one."""
+
+        ProviderInventory.objects.filter(kind="tailscale.device").delete()
+
+        layer = self.layer(connection(a_request(A_TAILNET_ADDRESS)), "device")
+
+        self.assertFalse(layer.conclusive)
+        self.assertEqual(layer.state, "unknown")
+        self.assertIn("has not read", layer.detail)
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -493,6 +505,13 @@ class LinkTests(TestCase):
 
         self.assertEqual(connection(a_request()).handshake, MISSING)
 
+    def test_no_device_is_said_as_why(self):
+        self.assertEqual(connection(a_request()).peer_label, "Tailnet not read yet")
+
+        a_tailnet(a_device("hq-host", "100.64.0.9", observer=True))
+
+        self.assertEqual(connection(a_request()).peer_label, "No tailnet device at this address")
+
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class ConnectionPageTests(TestCase):
@@ -513,19 +532,20 @@ class ConnectionPageTests(TestCase):
         response = self.client.get(reverse("connection"))
 
         self.assertContains(response, "data-connection-panel")
-        self.assertContains(response, "Admission decision")
+        # Each check once, on the hop that decides it.
         self.assertContains(
             response,
-            "data-connection-control",
+            "data-connection-layer=",
             count=len(response.context["connection"].layers),
         )
-        self.assertContains(response, "Outbound authority")
-        self.assertContains(response, "Derived topology")
+        self.assertContains(response, f'href="{reverse("control_plane:connections")}"')
+        self.assertContains(response, f'href="{reverse("control_plane:topology")}"')
         self.assertContains(response, "data-connection-protocol")
         self.assertContains(response, "data-connection-layers")
-        self.assertContains(response, "This shows only how this request reached HQ.")
-        self.assertContains(response, "The identities and interfaces behind both ends")
-        self.assertContains(response, "Open protocol evidence to read the response.")
+        self.assertContains(response, "data-response-headers")
+        # Folded until opened, which is when the response is read back.
+        self.assertContains(response, '<details class="conn-protocol" data-connection-protocol>')
+        self.assertContains(response, '<details class="conn-protocol conn-addresses" open>')
         self.assertNotContains(response, 'id="conn-decision-title"')
         self.assertNotContains(response, 'id="connection-controls"')
 
@@ -774,14 +794,15 @@ class CostTests(TestCase):
 
         self.client.force_login(self.user)
 
-        # The panel's reads, the path walk's (the machine catalogue and the
+        # The panel's reads (the inventory once, shared by every layer that
+        # reads it), the path walk's (the machine catalogue and the
         # reading index, once each for the projection), plus one for the agent
         # brake: this is a full page, so it draws the operator's menu, and the
         # switch there shows its state. Read once however many times the
         # template asks, and not cached across requests: a brake must never
         # display a state that no longer holds. And one for the operator's
         # theme, which `<html>` carries so the page paints in it first time.
-        with self.assertNumQueries(12):
+        with self.assertNumQueries(9):
             self.client.get(reverse("connection"))
 
     def test_the_panel_costs_the_same_however_many_devices_there_are(self):
@@ -792,7 +813,7 @@ class CostTests(TestCase):
             *(a_device(f"another-{index}", f"100.64.1.{index}") for index in range(12)),
         )
 
-        with self.assertNumQueries(12):
+        with self.assertNumQueries(9):
             self.client.get(reverse("connection"))
 
 
@@ -1229,3 +1250,59 @@ class TailnetLockTests(TestCase):
         # about that node's signature would be describing nothing.
         a_tailnet_policy(enabled=True, trusted_keys=2)
         self.assertIsNone(self.layer(connection(a_request(A_LAN_ADDRESS))))
+
+
+class DashboardConnectionTileTests(SimpleTestCase):
+    """Only a failed check takes the attention tone; one HQ cannot confirm yet does not."""
+
+    def tile(self, failing):
+        from types import SimpleNamespace
+
+        from django.template.loader import render_to_string
+
+        connection = SimpleNamespace(
+            channel=SimpleNamespace(id="tailnet", label="Tailnet"),
+            transport="WireGuard + TLS",
+            holds=False,
+            failing=failing,
+            summary="1 failed" if failing else "6 not confirmed",
+            verdict="failing" if failing else "unconfirmed",
+        )
+        return render_to_string("core/_dashboard_connection.html", {"connection": connection})
+
+    def test_an_unconfirmed_check_is_said_quietly(self):
+        self.assertNotIn("is-attention", self.tile(failing=()))
+
+    def test_a_failed_check_takes_the_attention_tone(self):
+        self.assertIn("is-attention", self.tile(failing=("a layer",)))
+
+    def test_the_dot_says_the_verdict_not_only_the_network(self):
+        self.assertIn("conn-verdict-unconfirmed", self.tile(failing=()))
+
+
+class VerdictTests(SimpleTestCase):
+    """Green only when every check on the way in is confirmed."""
+
+    def verdict(self, *layers):
+        from types import SimpleNamespace
+
+        from ..connection import Connection
+
+        return Connection(
+            address="100.64.0.20",
+            channel=SimpleNamespace(id="tailnet"),
+            device=None,
+            serves=None,
+            observer=None,
+            identity=None,
+            layers=tuple(SimpleNamespace(holds=held, conclusive=sure) for held, sure in layers),
+        ).verdict
+
+    def test_every_check_held_on_evidence_is_confirmed(self):
+        self.assertEqual(self.verdict((True, True), (True, True)), "confirmed")
+
+    def test_one_unconfirmed_check_is_not_green(self):
+        self.assertEqual(self.verdict((True, True), (True, False)), "unconfirmed")
+
+    def test_one_failed_check_is_failing(self):
+        self.assertEqual(self.verdict((False, True), (True, False)), "failing")

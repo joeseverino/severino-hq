@@ -89,7 +89,7 @@ four domains behind a click and then need a second one to go anywhere.
 {% endfor %}
 
 <div class="section-head">
-  <h2>Records <span class="heading-aside">{{ records_lede }} · {% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind inline=True %}</span></h2>
+  <h2>Records <span class="heading-aside">{{ records_lede }}{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind inline=True %}</span></h2>
   {% comment %}
   No "adopt" button: the sweep adopts records in a managed domain
   (``zones.adopt_discovered_records``).
@@ -117,13 +117,13 @@ zone at the top of the page.
 
 {% comment %}
 What the domain relates to, each thing once (`zone_views._page_relationships`).
-What it is read with is how HQ knows, so it follows as one quiet line.
+What it is read with is how HQ knows: the relationships card's last line.
 {% endcomment %}
 <div class="section-flow">
 {% include "partials/_relationships.html" %}
 {% referenced_by "zone" zone.zone cards=True %}
 </div>
-{% if read_with %}
+{% if read_with and not relationships %}
   <p class="muted relation-source">Read with {% for link in read_with %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
 {% endif %}
 {% comment %}Reads what is due from the public registries once the page is up.{% endcomment %}

@@ -8,7 +8,7 @@ being given a credential rather than by anything here being edited.
 
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
@@ -140,6 +140,7 @@ class DerivationTests(TestCase):
             - {
                 "adguard",
                 "npm",
+                "cloudflare_api",
                 "cloudflare_dns",
                 "github_app",
                 "onepassword",
@@ -270,13 +271,23 @@ class ConnectionPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertNotContains(response, "API_TOKEN")
-        self.assertNotContains(response, "PASSWORD")
+        # Whole setting names: "ONEPASSWORD" is a provider's prefix, not a secret.
+        page = response.content.decode()
+        self.assertNotRegex(page, r"\bAPI_TOKEN\b")
+        self.assertNotRegex(page, r"\bPASSWORD\b")
 
-    def test_it_says_so_when_nothing_has_swept(self):
-        response = self.client.get(reverse("control_plane:connections"))
+    def test_it_says_how_to_add_one_when_nothing_has_swept(self):
+        with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"):
+            response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "The controller has not read anything yet")
+        self.assertContains(response, "Each connection is a 1Password item the controller is given")
+        self.assertContains(response, 'href="https://github.com/example/hq/blob/main/docs/Secrets.md#connections"')
+
+    def test_with_no_source_named_there_is_no_guide_to_link(self):
+        with override_settings(SEVERINO_HQ_SOURCE=""):
+            response = self.client.get(reverse("control_plane:connections"))
+
+        self.assertNotContains(response, "Secrets.md")
 
     def test_an_unclassified_connection_is_named_rather_than_hidden(self):
         sweep({**A_PORTAINER, "provider": ""})
@@ -605,6 +616,23 @@ class AdoptionSafetyTests(TestCase):
 
         self.assertContains(response, "Restart")
         self.assertNotContains(response, "Watch container")
+
+        # Restart leads by what it is for; Stop asks first, by name.
+        from hq.platform.core.templatetags.action_tags import lead_action
+
+        actions = response.context["page"].actions
+        stop = next(action for action in actions if action.label == "Stop")
+        self.assertEqual(lead_action(actions).label, "Restart")
+        self.assertEqual((stop.method, stop.danger), ("get", True))
+        confirmation = self.client.get(stop.url)
+        self.assertContains(confirmation, "Stop probe?")
+        self.assertContains(confirmation, "stops running")
+        queued = self.client.post(stop.url)
+        self.assertRedirects(
+            queued,
+            reverse("control_plane:service", kwargs={"hostname": "probe.invalid"}),
+            fetch_redirect_response=False,
+        )
 
 
 class ControllerColumnTests(TestCase):

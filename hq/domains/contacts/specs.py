@@ -31,7 +31,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             subject_resource="contact.submissions",
             execution_notes=(
                 "Validate the requested status and result bound locally.",
-                "Read submissions through the configured D1 connection.",
+                "Read submissions from the stored Cloudflare API reading.",
                 "Return only the requested bounded result set.",
             ),
             label="List messages",
@@ -49,7 +49,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             target_help="The message to review.",
             execution_notes=(
                 "Read the selected submission and validate its new review state.",
-                "Write the review fields through the configured D1 connection.",
+                "Queue the review fields for the controller, which writes them through the Cloudflare API connection.",
                 "Record the attributed change in HQ's audit log.",
             ),
             label="Review a message",
@@ -67,8 +67,8 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             target_help="The message to delete.",
             execution_notes=(
                 "Require confirmation that exactly matches the selected submission ID.",
-                "Delete the record through the configured D1 connection.",
-                "Treat an already-absent record as a successful retry and audit the change.",
+                "Queue the deletion for the controller, which applies it through the Cloudflare API connection.",
+                "Treat an already-absent or already-queued record as a successful retry and audit the change.",
             ),
             label="Delete a message",
         ),
@@ -80,7 +80,7 @@ def resources() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "contact.submissions",
             "Contact submissions",
-            "Contact requests held in Cloudflare D1 and reviewed through HQ.",
+            "Contact requests held in Cloudflare D1, as the controller last read them, and reviewed through HQ.",
             Capability.MANAGE_CONTACTS,
             contact_submissions.list_contact_submissions,
             ContactSubmissionQuery,

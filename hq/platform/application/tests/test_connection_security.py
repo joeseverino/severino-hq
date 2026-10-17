@@ -240,6 +240,37 @@ class ConnectionSecurityPostureTests(TestCase):
                 freshness = next(control for control in posture.controls if control.id == "freshness")
                 self.assertEqual(freshness.state, state)
 
+    def test_a_keyless_public_service_is_not_owed_a_reading(self):
+        from dataclasses import replace
+
+        (group,) = _groups()
+        view = group.connections[0]
+        read = replace(view, instance=replace(view.instance, observed_at=timezone.now()))
+        keyless = replace(view, instance=replace(view.instance, label="Lookups", credential_model="none"))
+
+        posture = connection_security_posture((replace(group, connections=(read, keyless)),), request=self.request())
+
+        freshness = next(control for control in posture.controls if control.id == "freshness")
+        self.assertEqual(freshness.state, "good")
+
+    def test_a_keyless_service_is_counted_once_and_alike_by_every_check(self):
+        from dataclasses import replace
+
+        (group,) = _groups()
+        view = group.connections[0]
+        keyless = replace(
+            view,
+            instance=replace(view.instance, credential_model="none"),
+            abilities=tuple(replace(state, evidence="not_applicable") for state in view.abilities),
+        )
+
+        keyless_group = replace(group, spec=replace(group.spec, secret_store=""), connections=(keyless,))
+        posture = connection_security_posture((keyless_group,), request=self.request())
+
+        controls = {control.id: control for control in posture.controls}
+        self.assertIn("1 need no key", controls["credentials"].evidence)
+        self.assertIn("1 need no key", controls["scope"].evidence)
+
     def test_deriving_the_posture_costs_no_queries(self):
         with self.assertNumQueries(0):
             connection_security_posture(_groups(), request=self.request())

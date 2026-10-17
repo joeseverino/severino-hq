@@ -183,7 +183,7 @@ DEFINITION = ProviderSpec(
     # second site block for a name the operator's file already serves.
     adoption_gap=(
         "This route is in the edge's own Caddyfile, which HQ reads and never "
-        "writes. Declare a route to have HQ serve a name from its own file."
+        "changes. To have HQ serve a name, add a route in HQ."
     ),
     removal_gap=("The controller cannot delete Caddy routes yet, so the edge would keep serving it."),
 )

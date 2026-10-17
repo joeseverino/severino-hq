@@ -14,6 +14,8 @@ from ..consoles import cloudflare_dashboard, cloudflare_zero_trust
 from ..names import normalized_hostname
 from .contract import ObservationRecord, ObservationSpec, ReadingPart
 
+CONTACT_SUBMISSION_KIND = "cloudflare.contact_submission"
+
 
 def _present(*values: Any) -> tuple[str, ...]:
     found: list[str] = []
@@ -47,6 +49,35 @@ class D1DatabaseRecord(ObservationRecord):
     created_at: str = ""
     version: str = ""
     file_size: int | None = None
+
+
+class ContactSubmissionRecord(ObservationRecord):
+    """One message from a site's contact form, a row of its D1 table.
+
+    The database is named on each row because the reader reads every database
+    that holds the table, and HQ picks the inbox among them.
+    """
+
+    connection_ref: str = ""
+    account_id: str = ""
+    database_id: str = ""
+    database: str = ""
+    id: int
+    created_at: str = ""
+    updated_at: str = ""
+    name: str = ""
+    email: str = ""
+    message: str = ""
+    status: str = ""
+    assigned_to: str = ""
+    admin_notes: str = ""
+    country: str = ""
+    ip_address: str = ""
+    browser: str = ""
+    device: str = ""
+    user_agent: str = ""
+    source_url: str = ""
+    turnstile: str = ""
 
 
 class AccessPolicyRecord(ObservationRecord):
@@ -193,6 +224,16 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("name", "")),
         relation="Backed by D1 database",
         console=lambda record: cloudflare_dashboard(record, "workers", "d1", "databases", str(record.get("uuid", ""))),
+    ),
+    ObservationSpec(
+        CONTACT_SUBMISSION_KIND,
+        "cloudflare_api",
+        "Contact message",
+        ContactSubmissionRecord,
+        requires=("D1 Read (account)",),
+        title=lambda record: f"Message #{record.get('id', '')}",
+        relation="Received through the contact form",
+        withheld=True,
     ),
     ObservationSpec(
         "cloudflare.access_app",

@@ -136,5 +136,12 @@ SHARED = (
 CONNECTIONS = {
     # An app's permissions are fine-grained and each token HQ mints is
     # narrowed again to one call's repositories and permissions.
-    PROVIDER: ConnectionKind("GitHub App", "scoped", GITHUB_APP),
+    PROVIDER: ConnectionKind(
+        "GitHub App",
+        "scoped",
+        GITHUB_APP,
+        create="A GitHub App on your account; scripts/wire-github-app.py records its ID and stores its key.",
+        create_url="https://github.com/settings/apps/new",
+        gives="Repo checks on your repositories, and HQ's deploys waiting for your approval.",
+    ),
 }

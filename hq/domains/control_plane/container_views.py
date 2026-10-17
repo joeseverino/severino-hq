@@ -48,6 +48,7 @@ class ContainerListView(PageMixin, TemplateView):
 
     template_name = "control_plane/container_list.html"
     page_title = "Containers"
+    page_reads = ("portainer.container",)
 
     @override
     def get_context_data(self, **kwargs):

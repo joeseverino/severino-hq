@@ -146,36 +146,9 @@ part's heading shows only when there is more than one.
     </table>
   </div>
 
-  {% comment %}
-  A type with a connection is described by its rows. What is left to say is
-  which types have none yet, and how to connect one.
-  {% endcomment %}
-  {% if connections.unconfigured or connections.unconnected_providers %}
-  <div class="connection-available">
-    <h2>Not connected</h2>
-    <ul>
-      {% for group in connections.unconfigured %}
-        <li>
-          <strong>{{ group.spec.label }}</strong>
-          <span class="muted">{{ group.spec.empty_message }}</span>
-          {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}<a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}
-        </li>
-      {% endfor %}
-      {% comment %}
-      A provider the controller holds no credential for. What adding one lets
-      HQ see comes from the readings registry, and what it manages from the
-      resource kinds that name it.
-      {% endcomment %}
-      {% for provider in connections.unconnected_providers %}
-        <li>
-          <strong>{{ provider.label }}</strong>
-          <span class="muted">{% if provider.sees %}Would let HQ see: {{ provider.sees|join:", " }}{% elif provider.manages %}Would let HQ manage: {{ provider.manages|join:", " }}{% endif %}</span>
-        </li>
-      {% endfor %}
-    </ul>
-  </div>
-  {% endif %}
 </section>
+{% comment %}What is not connected yet, here; once everything is, how to connect a second account closes the page, so the page always has a way to add one.{% endcomment %}
+{% if connections.setups or connections.unconfigured %}{% include "control_plane/_connection_setup.html" with setups=connections.setups others=connections.unconfigured count=connections.to_connect guide=connections.guide opened=request.GET.setup only %}{% endif %}
 {% else %}
   {% include "partials/_empty_state.html" with message="No connection types installed." %}
 {% endif %}
@@ -187,11 +160,13 @@ part's heading shows only when there is more than one.
   </div>
 {% endif %}
 
+{% include "partials/_posture.html" with posture=connections.standard card=True only %}
+
 <details class="card connection-security-advanced">
   <summary>
     <span>
       <strong>Security checks</strong>
-      <small>{{ connections.posture.check_summary }}</small>
+      <small>This request and each connection's credentials: {{ connections.posture.check_summary }}</small>
     </span>
   </summary>
   <section class="connection-trust-path" aria-labelledby="connection-trust-path-title">
@@ -218,4 +193,5 @@ part's heading shows only when there is more than one.
     {% endfor %}
   </div>
 </details>
+{% if connections.groups and not connections.setups and not connections.unconfigured and connections.again %}{% include "control_plane/_connection_setup.html" with setups=connections.again guide=connections.guide again=True only %}{% endif %}
 {% endblock %}

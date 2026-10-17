@@ -64,7 +64,7 @@ that each say "Healthy" and "Auto" say nothing.
         </tr>
       {% empty %}
         <tr><td colspan="6">
-          {% include "partials/_empty_state.html" with compact=True message=empty_message|default:"No records." %}
+          {% include "partials/_empty_state.html" with message=empty_message|default:"No records." %}
         </td></tr>
       {% endfor %}
     </tbody>

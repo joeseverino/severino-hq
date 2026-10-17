@@ -89,6 +89,9 @@ LIFECYCLE_LABELS = {
     "unauthorized": "Permission missing",
     "stale": "Out of date",
     "revoked": "Credential refused",
+    # Only the connections page says this: its controller's report came with
+    # no connections, and the row is what HQ kept of it.
+    "unreported": "No longer reported",
 }
 # What HQ can say about the credential's permissions, as the one line under
 # the state. Blank where the owner can do nothing about it: a connection type
@@ -362,6 +365,16 @@ def _validate_instance(spec: ConnectionSpec, instance: ConnectionInstance) -> Co
     ):
         raise ImproperlyConfigured(f"Connection {instance.id!r} has an invalid fact.")
     return instance
+
+
+def connection_total() -> int:
+    """How many connections HQ has, of every family: the one count every page says.
+
+    The Connections page lists each of these, keyless lookups included, so a
+    figure leading there counts the same rows.
+    """
+
+    return sum(len(_connection_instances(spec)) for spec in integration_graph().connections.values())
 
 
 def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:

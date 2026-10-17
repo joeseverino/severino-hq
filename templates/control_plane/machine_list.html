@@ -51,7 +51,7 @@ anyway, and would go on meaning nothing after it stopped being.
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="5">{% include "partials/_empty_state.html" with compact=True message="No machines yet. They appear after the controller first reads your connections." %}</td></tr>
+        <tr><td colspan="5">{% include "partials/_empty_state.html" with message="No machines yet." remedy=page.remedy %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

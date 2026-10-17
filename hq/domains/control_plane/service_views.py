@@ -40,6 +40,7 @@ from .models import ManagedResource
 from .names import normalized_hostname
 from .provider_adapters.portainer import CONTAINER_KIND
 from .providers import service_facets
+from .views import verb_action
 
 
 class ServiceListView(PageMixin, TemplateView):
@@ -47,6 +48,7 @@ class ServiceListView(PageMixin, TemplateView):
 
     template_name = "control_plane/service_list.html"
     page_title = "Services"
+    page_reads = ("cloudflare.dns_record", "npm.proxy_host", "adguard.rewrite", "caddy.route")
 
     @override
     def get_page_actions(self):
@@ -194,12 +196,13 @@ class ServiceDetailView(PageMixin, TemplateView):
         if watcher is not None:
             capabilities = resource_capabilities(watcher, running=container.verbs)
             actions.extend(
-                PageAction(
-                    VERB_LABELS[verb],
-                    reverse(f"control_plane:{verb}", kwargs={"key": watcher.key}),
-                    method="post",
-                    disabled=not allowed.enabled,
+                verb_action(
+                    verb,
+                    watcher.key,
+                    allowed,
+                    label=VERB_LABELS[verb],
                     title=allowed.reason or f"{VERB_LABELS[verb]} {container.name}",
+                    origin=self.request.get_full_path(),
                 )
                 for verb, allowed in capabilities.page_actions
                 if verb in LIFECYCLE_VERBS

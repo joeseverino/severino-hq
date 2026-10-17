@@ -1,70 +1,210 @@
-"""The unread count and the latest submissions, as D1 last said.
+"""The contact inbox, as the controller last read it.
 
-Submissions stay in D1; HQ keeps the unread count and, for the newest
-submissions, the id, date, submitter name, status and country. The dashboard,
-the header count and the search page read that stored copy. D1 is read by
-`refresh`, which the scheduled `contacts.inbox` job runs every hour and
-a write to D1 runs after it changes a submission; no GET reads D1 for these.
+The public site's contact form writes each message to a Cloudflare D1 table.
+HQ holds no credential for it: the controller reads the table through the
+cloudflare_api connection (the ``cloudflare.contact_submission`` reading) and
+applies HQ's changes (the ``cloudflare.contact_inbox`` declaration). Every
+function here reads what is stored and nothing else, so no page waits on D1.
+
+A change HQ has asked for and the reading does not show yet is laid over the
+row and marked pending, so a page shows what was asked for and that it is not
+done.
 """
 
-from datetime import timedelta
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
 
-from hq.platform.application import readings
+from django.conf import settings
 
-from . import d1
+from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.observations.cloudflare import CONTACT_SUBMISSION_KIND
+from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_INBOX_KIND
+from hq.platform.application.facts import stored_inventory
 
-UNREAD = d1.UNREAD
-REFRESH_AFTER = timedelta(hours=1)
+READING = CONTACT_SUBMISSION_KIND
+DECLARATION = CONTACT_INBOX_KIND
+DECLARATION_KEY = "contact-inbox"
 RECENT_LIMIT = 4
-# How many of the newest submissions are kept for search.
-KEPT_LIMIT = 500
+PREVIEW_LENGTH = 160
+# The fields a review changes, beside the status.
+REVIEWED = ("status", "assigned_to", "admin_notes")
+
+NOT_READ = "not_read"
+OK = "ok"
+UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True, slots=True)
+class Database:
+    connection_ref: str
+    account_id: str
+    database_id: str
+    name: str = field(default="", compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class Inbox:
+    # NOT_READ: no reading yet. OK: read. UNAVAILABLE: the last read failed,
+    # or the reading names databases HQ cannot choose between.
+    state: str
+    rows: tuple[dict[str, Any], ...] = ()
+    problem: str = ""
+    observed_at: datetime | None = None
+    database: Database | None = None
+    # The ids the reading holds, before HQ's changes are laid over.
+    held: frozenset[int] = frozenset()
+    # Changes waiting for the controller, and why it last refused them.
+    waiting: int = 0
+    refused: str = ""
+    counts: dict[str, int] = field(default_factory=dict)
+
+
+def _stored() -> ProviderInventory | None:
+    return next((snapshot for snapshot in stored_inventory(READING)[READING] if snapshot.connected), None)
+
+
+def declaration() -> ManagedResource | None:
+    return ManagedResource.objects.filter(kind=DECLARATION, key=DECLARATION_KEY).first()
+
+
+def _database_of(record: dict[str, Any]) -> Database:
+    return Database(
+        str(record.get("connection_ref", "")),
+        str(record.get("account_id", "")),
+        str(record.get("database_id", "")),
+        str(record.get("database", "")),
+    )
+
+
+def choose_database(records: list[dict[str, Any]]) -> tuple[Database | None, str]:
+    """The database the inbox is, from the databases the reading found the table in.
+
+    The only one, or the one ``CLOUDFLARE_D1_DATABASE_NAME`` names. More than
+    one is a problem to state, never a choice to make.
+    """
+
+    named = str(getattr(settings, "CLOUDFLARE_D1_DATABASE_NAME", "") or "").strip()
+    found = {_database_of(record) for record in records}
+    if named and found:
+        found = {database for database in found if database.name == named}
+        if not found:
+            return None, f"No database named {named!r} holds contact messages."
+    if len(found) > 1:
+        names = ", ".join(sorted(database.name for database in found))
+        return None, f"Several databases hold contact messages ({names}). Set CLOUDFLARE_D1_DATABASE_NAME."
+    return next(iter(found), None), ""
+
+
+def _differs(row: dict[str, Any], review: dict[str, Any]) -> bool:
+    return any(str(row.get(name) or "") != str(review.get(name) or "") for name in REVIEWED)
+
+
+def _pending(row: dict[str, Any] | None, review: dict[str, Any] | None) -> bool:
+    """Whether the reading still holds a row the review differs from."""
+
+    return row is not None and review is not None and _differs(row, review)
+
+
+def _laid_over(rows: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
+    reviews = {int(review["id"]): review for review in spec.get("reviews") or ()}
+    deleted = {int(identifier) for identifier in spec.get("deletions") or ()}
+    shown = []
+    for row in rows:
+        identifier = int(row["id"])
+        if identifier in deleted:
+            continue
+        review = reviews.get(identifier)
+        waiting = _pending(row, review)
+        if waiting and review is not None:
+            row = {**row, **{name: review.get(name, "") for name in REVIEWED}}
+        shown.append({**row, "pending": waiting, "message_preview": str(row.get("message", ""))[:PREVIEW_LENGTH]})
+    return shown
+
+
+def _waiting(rows: list[dict[str, Any]], spec: dict[str, Any]) -> int:
+    by_id = {int(row["id"]): row for row in rows}
+    reviews = sum(_pending(by_id.get(int(review["id"])), review) for review in spec.get("reviews") or ())
+    deletions = sum(int(identifier) in by_id for identifier in spec.get("deletions") or ())
+    return reviews + deletions
+
+
+def _refusal(resource: ManagedResource | None) -> str:
+    if resource is None or resource.generation == resource.observed_generation:
+        return ""
+    return next(
+        (
+            str(item.get("message", ""))
+            for item in resource.conditions or ()
+            if item.get("status") is True and item.get("type") == "Degraded"
+        ),
+        "",
+    )
+
+
+def current() -> Inbox:
+    """The inbox as stored: its rows newest first, with HQ's changes laid over.
+
+    Read once per projection: the header count, the dashboard card and the
+    queue all ask, and must not disagree.
+    """
+
+    from hq.platform.application.projection import read_once
+
+    return read_once("contacts.inbox", _current)
+
+
+def _current() -> Inbox:
+    stored = _stored()
+    if stored is None:
+        return Inbox(NOT_READ)
+    records = [record for record in stored.records or () if isinstance(record, dict) and record.get("id")]
+    database, problem = choose_database(records)
+    if problem:
+        return Inbox(UNAVAILABLE, problem=problem, observed_at=stored.observed_at)
+    own = [record for record in records if _database_of(record) == database]
+    resource = declaration()
+    spec = resource.spec if resource is not None and _database_of(resource.spec) == database else {}
+    rows = _laid_over(own, spec)
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[str(row.get("status", ""))] = counts.get(str(row.get("status", "")), 0) + 1
+    return Inbox(
+        OK if stored.reachable else UNAVAILABLE,
+        rows=tuple(rows),
+        problem="" if stored.reachable else stored.error,
+        observed_at=stored.observed_at,
+        database=database,
+        held=frozenset(int(record["id"]) for record in own),
+        waiting=_waiting(own, spec),
+        refused=_refusal(resource) if spec else "",
+        counts=counts,
+    )
 
 
 def unread() -> tuple[int, str]:
-    """The stored count and whether the last read reached D1. No network."""
+    """The unread count and whether the last read reached D1. No network."""
 
-    reading = readings.stored(UNREAD)
-    if reading is None:
+    inbox = current()
+    if inbox.state == NOT_READ:
         return 0, "unknown"
-    return int(reading.value.get("count", 0)), str(reading.value.get("status", "ok"))
+    return inbox.counts.get("unread", 0), "ok" if inbox.state == OK else "unavailable"
 
 
-def _rows() -> list[dict]:
-    reading = readings.stored(UNREAD)
-    return list(reading.value.get("rows", [])) if reading else []
+def recent() -> list[dict[str, Any]]:
+    """The newest messages, as last read. No network."""
+
+    return list(current().rows[:RECENT_LIMIT])
 
 
-def recent() -> list[dict]:
-    """The latest submissions, as stored by the last refresh. No network."""
+def search(q: str, limit: int) -> list[dict[str, Any]]:
+    """Stored messages whose sender's name contains ``q``. No network.
 
-    return _rows()[:RECENT_LIMIT]
-
-
-def search(q: str, limit: int) -> list[dict]:
-    """Stored submissions whose submitter name contains ``q``. No network.
-
-    Email and message text stay in D1, so they are searched on the contacts
-    page, which reads D1.
+    Only the name: the site-wide search lists a message by who sent it, and
+    the Messages page searches addresses and message text.
     """
 
     wanted = q.strip().casefold()
     if not wanted:
         return []
-    return [row for row in _rows() if wanted in str(row.get("name", "")).casefold()][:limit]
-
-
-def refresh(*, force: bool = False) -> None:
-    """Read D1 again if forced or the stored state is older than a few minutes.
-
-    One request answers the count and the rows, so they cannot disagree. An
-    outage keeps the last rows and count and says so.
-    """
-
-    def fetch():
-        try:
-            rows, count = d1.get_dashboard_state(limit=KEPT_LIMIT)
-            return {"count": count, "rows": rows, "status": "ok"}
-        except d1.D1Error:
-            return {"count": unread()[0], "rows": _rows(), "status": "unavailable"}
-
-    readings.refresh(UNREAD, fetch, older_than=timedelta(0) if force else REFRESH_AFTER)
+    return [row for row in current().rows if wanted in str(row.get("name", "")).casefold()][:limit]

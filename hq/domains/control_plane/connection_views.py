@@ -34,8 +34,18 @@ class ConnectionListView(PageMixin, TemplateView):
         # Beside the title with every other page's controls, not on a line of
         # their own halfway down the summary.
         inspect = reverse("connection")
-        actions = [PageAction("How I am connected", inspect, modal="connection")]
-        read_all = self._connections().read_all
+        found = self._connections()
+        actions = []
+        if found.setups or found.unconfigured or found.again:
+            # What the page is for when growing HQ: always reachable, whether
+            # anything is left unconnected or not.
+            actions.append(
+                PageAction(
+                    "Add a connection", reverse("control_plane:connections") + "#connection-setup-heading", primary=True
+                )
+            )
+        actions.append(PageAction("How I am connected", inspect, modal="connection"))
+        read_all = found.read_all
         if read_all:
             from hq.platform.application.asks import Ask
 

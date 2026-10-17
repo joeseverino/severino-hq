@@ -28,7 +28,8 @@ for it. Nothing here asks it anything.
     <span class="band-icon">{% include "partials/_icon.html" with name="clock" %}</span>
     <div>
       <span class="band-label">Next read</span>
-      {% if controller.overdue %}<strong>Overdue</strong><small>{{ controller.oldest.label }} was last read {{ controller.oldest.attempted_at|when:"ago" }} and should be read every {{ controller.sweep_every }}.</small>
+      {% if not standing.known %}<strong>After the first run</strong><small>Everything is read every {{ controller.sweep_every }} once it runs.</small>
+      {% elif controller.overdue %}<strong>Overdue</strong><small>{{ controller.oldest.label }} was last read {{ controller.oldest.attempted_at|when:"ago" }} and should be read every {{ controller.sweep_every }}.</small>
       {% elif controller.sweep_due %}<strong>Within a minute</strong><small>Everything is read every {{ controller.sweep_every }}.</small>
       {% elif controller.next_sweep_at %}<strong>In {{ controller.next_sweep_at|timeuntil }}</strong><small>Everything is read every {{ controller.sweep_every }}.</small>
       {% else %}<strong>After the first run</strong><small>Nothing has been read yet.</small>{% endif %}
@@ -43,6 +44,21 @@ for it. Nothing here asks it anything.
     </div>
   </div>
 </div>
+{% comment %}
+Never run: what the controller is, and how to start it and see why it has not
+arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
+{% endcomment %}
+{% if not standing.known %}
+<section class="card controller-start" aria-labelledby="controller-start-heading">
+  <h2 id="controller-start-heading">Start the controller</h2>
+  <p class="muted">It holds your connections' credentials; HQ never does. Once installed, it runs whenever HQ has work for it.{% if start_guide %} <a href="{{ start_guide }}" rel="noopener">Install guide</a>{% endif %}</p>
+  <ol class="resolution-workflow">
+    <li><strong>Install it</strong>{% include "partials/_command.html" with command="sudo /usr/local/lib/severino-hq/deploy/bin/hq-host install" only %}</li>
+    <li><strong>Run a pass now</strong>{% include "partials/_command.html" with command="sudo systemctl start severino-hq-controller.service" only %}</li>
+    <li><strong>If nothing arrives</strong>{% include "partials/_command.html" with command="sudo journalctl -u severino-hq-controller.service -n 50" only %}</li>
+  </ol>
+</section>
+{% endif %}
 {% endwith %}
 
 {% if controller.queue %}
@@ -66,6 +82,7 @@ for it. Nothing here asks it anything.
 </section>
 {% endif %}
 
+{% if controller.standing.known %}
 <section class="page-section" aria-labelledby="controller-readings">
   <div class="section-head"><h2 id="controller-readings">Readings</h2><span class="count">{{ controller.readings|length }}</span></div>
   {% if controller.readings %}
@@ -89,4 +106,5 @@ for it. Nothing here asks it anything.
     {% include "partials/_empty_state.html" with message="The controller has not read anything yet." %}
   {% endif %}
 </section>
+{% endif %}
 {% endblock %}

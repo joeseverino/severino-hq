@@ -1,0 +1,38 @@
+{% comment %}
+What reaches it, what runs on it and how that stands, and what it answers
+for: one band under the head, as a service's and HQ's own page open.
+{% endcomment %}
+{% if reached_links or machine.containers or serves_links or machine.roles %}
+<div class="fact-band">
+  {% if reached_links %}
+  <div class="band-fact">
+    <span class="band-icon">{% include "partials/_icon.html" with name="network" %}</span>
+    <div>
+      <span class="band-label">Read through</span>
+      {% with found=reached_links.0 %}<strong>{% entity found.0 code=True %}</strong>{% endwith %}
+      {% for link, unanswered in reached_links %}{% if not forloop.first or unanswered %}<small>{% if not forloop.first %}{% entity link %}{% endif %}{% if unanswered %} not answering{% endif %}</small>{% endif %}{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% if machine.containers %}
+  <div class="band-fact{% if container_counts.vulnerable or container_counts.stopped %} tone-serious{% elif container_counts.update %} tone-attention{% else %} tone-good{% endif %}">
+    <span class="band-icon">{% include "partials/_icon.html" with name="container" %}</span>
+    <div>
+      <span class="band-label">Containers</span>
+      <strong>{{ machine.running }} of {{ machine.containers|length }} running</strong>
+      <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known vulnerabilities,have known vulnerabilities" }} · {% endif %}{% if container_counts.update %}{{ container_counts.update|counted:"has an update,have an update" }}{% elif container_counts.up_to_date == standings|length %}All up to date{% elif container_counts.up_to_date %}{{ container_counts.up_to_date }} up to date{% else %}Updates not checked yet{% endif %}</small>
+    </div>
+  </div>
+  {% endif %}
+  {% if serves_links or machine.roles %}
+  <div class="band-fact">
+    <span class="band-icon">{% include "partials/_icon.html" with name="globe" %}</span>
+    <div>
+      <span class="band-label">Serves</span>
+      <strong>{% if serves_links %}{{ serves_links|length|counted:"name" }}{% else %}{{ machine.roles.0.label }}{% endif %}</strong>
+      <small>{% for link in serves_links %}{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label }}</a>){% endif %}{% if not forloop.last or machine.roles %} · {% endif %}{% endfor %}{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</small>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}

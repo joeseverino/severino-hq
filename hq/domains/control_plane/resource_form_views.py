@@ -46,7 +46,7 @@ from .models import ManagedResource, OperationRequest
 from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
 from .provider_spec import NameContext
-from .providers import PROVIDERS, controller_action_policy, describe_providers
+from .providers import PROVIDERS, controller_action_policy, describe_providers, spec_withheld
 
 
 class ResourceFormView(View):
@@ -61,12 +61,19 @@ class ResourceFormView(View):
     template_name = "control_plane/resource_form.html"
 
     def _existing(self, key):
-        return get_object_or_404(ManagedResource, key=key) if key else None
+        resource = get_object_or_404(ManagedResource, key=key) if key else None
+        # A withheld kind's form would print its spec; its own page changes it.
+        if resource is not None and spec_withheld(resource.kind):
+            raise Http404
+        return resource
 
     def _kind(self, request, resource):
         if resource:
             return resource.kind
-        return request.GET.get("kind") or request.POST.get("kind") or ""
+        kind = request.GET.get("kind") or request.POST.get("kind") or ""
+        if spec_withheld(kind):
+            raise Http404
+        return kind
 
     def get(self, request, key=None):
         resource = self._existing(key)

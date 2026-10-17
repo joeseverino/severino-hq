@@ -4,6 +4,7 @@ from typing import override
 
 from django.views.generic import TemplateView
 
+from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.controller_page import controller_page
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
@@ -31,4 +32,5 @@ class ControllerView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["controller"] = controller_page()
+        context["start_guide"] = docs_url("Install.md", "11-the-controllers-first-reading")
         return context

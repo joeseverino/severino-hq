@@ -524,7 +524,7 @@ class ProviderContractTests(TestCase):
         )
 
         spec["consumers"][-1]["install_domains"].append("not-covered.example")
-        with self.assertRaisesRegex(ValueError, "must be present"):
+        with self.assertRaisesRegex(ValueError, "not-covered.example"):
             validate_resolved_certificate(spec)
 
     def test_invalid_provider_payload_fails_before_persistence(self):
@@ -861,7 +861,7 @@ class OperationPolicyTests(TestCase):
             principal=cli_principal(),
         )
 
-        with self.assertRaisesRegex(PolicyError, "no settings to reconcile"):
+        with self.assertRaisesMessage(PolicyError, PROVIDERS["cloudflare.zone"].actions["reconcile"].reason):
             request_reconcile(
                 OperationCommand(idempotency_key="zone-locked"),
                 principal=cli_principal(),
@@ -1020,6 +1020,23 @@ class InfrastructureViewsTests(TestCase):
             status={"certificate_pem": "PUBLIC CERTIFICATE ONLY"},
         )
         self.client.force_login(self.user)
+
+    def test_a_row_does_not_repeat_under_its_name_what_its_name_says(self):
+        ManagedResource.objects.create(
+            key="example-proxy",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["app.example.com"],
+                "forward_scheme": "http",
+                "forward_host": "10.0.0.10",
+                "forward_port": 8000,
+            },
+        )
+
+        listing = self.client.get(reverse("control_plane:list"))
+
+        self.assertContains(listing, "app.example.com → 10.0.0.10:8000")
+        self.assertNotContains(listing, "http://10.0.0.10:8000")
 
     def test_private_dashboard_and_public_certificate_download(self):
         dashboard = self.client.get(reverse("control_plane:list"))

@@ -60,20 +60,19 @@ class PortainerContainerSpec(ProviderModel):
     on_demand: bool = Field(
         default=False,
         title="Runs on demand",
-        description=("Usually stopped and removed. A sweep that misses it is not a finding."),
+        description=("Usually stopped and removed, so HQ does not flag it as missing."),
     )
     holds_docker_socket: bool = Field(
         default=False,
         title="Holds the Docker socket",
-        description="Its job is Docker: a socket proxy or an agent. The socket and Docker's data stay listed, never an action item.",
+        description="A socket proxy or agent whose job is Docker. Its socket access is listed, not flagged.",
     )
     by_design: dict[str, str] = Field(
         default_factory=dict,
         title="Checks its job requires",
         description=(
-            "A check of the container standard it fails on purpose, by id, each "
-            "with why: DNS on the host network, a proxy that binds 443 as root. "
-            "HQ shows it with the reason and never as a gap."
+            "Checks it fails on purpose, by id, each with the reason, such as DNS "
+            "on the host network. HQ shows the reason instead of a problem."
         ),
     )
     hidden: bool = Field(
@@ -322,7 +321,7 @@ STACK = ProviderSpec(
         "port": 3000,
     },
     choices="hq.platform.application.provider_choices:container_stack",
-    unobserved_reason=("Observed through its containers, which the sweep reads."),
+    unobserved_reason=("Read through its containers."),
     # A compose file can mount the host's root, its Docker socket or its
     # network, which is root on that machine. A credential is not enough to
     # change one: a person reads what it reaches first.
@@ -335,7 +334,7 @@ CONTAINER = ProviderSpec(
     "A container HQ watches and can start, stop or restart. Its compose file still defines it.",
     PortainerContainerSpec,
     actions={
-        "reconcile": locked("Defined by a compose file outside HQ. HQ can start, stop and restart it."),
+        "reconcile": locked("Saved in HQ. Its compose file does not change."),
         "restart": applies(),
         "start": applies(),
         "stop": applies(),
@@ -380,4 +379,13 @@ DEFINITIONS = (STACK, CONTAINER)
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
-CONNECTIONS = {"portainer": ConnectionKind("Portainer", "coarse", API_TOKEN)}
+CONNECTIONS = {
+    "portainer": ConnectionKind(
+        "Portainer",
+        "coarse",
+        API_TOKEN,
+        create="An access token in Portainer, under My account, Access tokens.",
+        create_url="https://docs.portainer.io/api/access",
+        gives="Every container on your machines, with its image, stack, volumes and networks.",
+    )
+}

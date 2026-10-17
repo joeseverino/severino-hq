@@ -34,6 +34,7 @@ from .connection_contracts import (
     ConnectionLink,
     ConnectionSpec,
 )
+from .connection_setup import guide_url
 from .entity_links import entity_link
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
@@ -46,6 +47,7 @@ _READING_STATUS_LABELS = {
     "unreachable": "Not answering",
     "reachable": "Working",
     "unprobed": "Not tested",
+    "unreported": "No longer reported",
 }
 
 
@@ -78,9 +80,14 @@ class ConnectionReading:
     # it. A connection can answer every probe and refuse every operation, and
     # `reachable` only ever describes the probe.
     failing_steps: tuple[tuple[str, str], ...] = ()
+    # When its controller's report first came with no connections at all. The
+    # row is kept so the page still shows what was there.
+    unreported_at: datetime | None = None
 
     @property
     def status(self) -> str:
+        if self.unreported_at is not None:
+            return "unreported"
         if not self.reachable:
             return "unreachable"
         return "reachable" if self.probed else "unprobed"
@@ -248,6 +255,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             resources=tuple(sorted(using.get(row.connection_ref, ()))),
             named=tuple(sorted(named.get(row.connection_ref, ()))),
             failing_steps=_failing_steps(row),
+            unreported_at=row.unreported_at,
         )
         for row in connection_rows()
     )
@@ -387,7 +395,10 @@ def _controller_connection_spec() -> ConnectionSpec:
         secret_store="1Password",
         # The one family fed by sweeps rather than by its own configuration,
         # so the one whose emptiness means a report has not arrived.
-        empty_message="The controller has not read anything yet.",
+        empty_message=(
+            "Each is a vault item the controller is given; it appears here after the controller's next pass."
+        ),
+        documentation_url=guide_url(),
     )
 
 

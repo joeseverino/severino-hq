@@ -1,10 +1,11 @@
 """
 Contact submission review screens.
 
-Submissions are stored in Cloudflare D1 by the example.com contact form.
-These views read and write that table over the D1 HTTP API: there is no
-local model. Review edits (status / assignee / notes) are written back to D1
-and recorded in the HQ audit log.
+Submissions are stored in Cloudflare D1 by the example.com contact form. These
+views read the copy the controller last read (``inbox``) and never reach D1. A
+review or a deletion is queued for the controller, which applies it through
+the Cloudflare API connection; until it does, the message shows the change as
+waiting. Every change is recorded in the HQ audit log.
 """
 
 from urllib.parse import quote
@@ -19,19 +20,18 @@ from hq.platform.application.contact_submissions import (
     ContactReviewCommand,
     execute_contact_delete,
     execute_contact_review,
+    find_submission,
+    list_contact_submissions,
 )
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.ui import counted
 
-from .d1 import (
-    D1Error,
-    get_submission,
-    list_submissions,
-    status_counts,
-)
+from . import inbox
 from .forms import STATUS_CHOICES, ContactReviewForm
 
 VALID_STATUSES = {value for value, _ in STATUS_CHOICES}
+QUEUED = "The controller applies it on its next run."
 
 
 def reply_mailto(address: str, subject: str = "Re: your message") -> str:
@@ -46,43 +46,61 @@ def reply_mailto(address: str, subject: str = "Re: your message") -> str:
     return f"mailto:{quote(address, safe='@')}?subject={quote(subject, safe='')}"
 
 
+def _waiting_note(current: inbox.Inbox) -> str:
+    if current.refused:
+        return f"The controller could not apply the last change: {current.refused}"
+    if current.waiting:
+        return f"{counted(current.waiting, 'change')} waiting for the controller."
+    return ""
+
+
 def contact_list(request):
     selected_status = request.GET.get("status", "").strip()
+    if selected_status not in VALID_STATUSES:
+        selected_status = ""
     q = request.GET.get("q", "").strip()
-    error = ""
-    submissions: list[dict] = []
-    counts: dict[str, int] = {}
-
-    try:
-        submissions = list_submissions(status=selected_status, q=q)
-        counts = status_counts()
-    except D1Error as exc:
-        error = str(exc)
-
-    status_tabs = [{"value": value, "label": label, "count": counts.get(value, 0)} for value, label in STATUS_CHOICES]
+    current = inbox.current()
+    submissions = list_contact_submissions(status=selected_status, query=q, limit=500)["items"]
+    status_tabs = [
+        {"value": value, "label": label, "count": current.counts.get(value, 0)} for value, label in STATUS_CHOICES
+    ]
 
     return render(
         request,
         "contacts/contact_list.html",
         {
+            "not_read": current.state == inbox.NOT_READ,
             "submissions": submissions,
             "status_tabs": status_tabs,
             "selected_status": selected_status,
             "q": q,
-            "total_count": sum(counts.values()),
-            "error": error,
-            **page_context("Messages", "What people sent through the contact form on the site."),
+            "total_count": sum(current.counts.values()),
+            "problem": current.problem,
+            "observed_at": current.observed_at,
+            "waiting_note": _waiting_note(current),
+            **page_context(
+                "Messages", "What people sent through the contact form on the site.", reads=contact_list.page_reads
+            ),
         },
     )
 
 
-def contact_detail(request, pk: int):
-    try:
-        submission = get_submission(pk)
-    except D1Error as exc:
-        messages.error(request, str(exc))
-        return redirect("contacts:list")
+contact_list.page_reads = ("cloudflare.contact_submission",)  # type: ignore[attr-defined]
 
+
+def _review(request, pk: int, command: ContactReviewCommand) -> bool:
+    """Queue one review; say why not when it is refused."""
+
+    try:
+        execute_contact_review(command, principal=web_principal(request.user), current_id=pk)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return False
+    return True
+
+
+def contact_detail(request, pk: int):
+    submission = find_submission(pk)
     if not submission:
         messages.error(request, f"Message #{pk} was not found.")
         return redirect("contacts:list")
@@ -90,20 +108,13 @@ def contact_detail(request, pk: int):
     if request.method == "POST":
         form = ContactReviewForm(request.POST)
         if form.is_valid():
-            try:
-                execute_contact_review(
-                    ContactReviewCommand(
-                        status=form.cleaned_data["status"],
-                        assigned_to=form.cleaned_data["assigned_to"],
-                        admin_notes=form.cleaned_data["admin_notes"],
-                    ),
-                    principal=web_principal(request.user),
-                    current_id=pk,
-                )
-            except (D1Error, ValueError) as exc:
-                messages.error(request, str(exc))
-                return redirect("contacts:detail", pk=pk)
-            messages.success(request, f"Message #{pk} saved.")
+            command = ContactReviewCommand(
+                status=form.cleaned_data["status"],
+                assigned_to=form.cleaned_data["assigned_to"],
+                admin_notes=form.cleaned_data["admin_notes"],
+            )
+            if _review(request, pk, command):
+                messages.success(request, f"Message #{pk} saved. {QUEUED}")
             return redirect("contacts:detail", pk=pk)
     else:
         form = ContactReviewForm(
@@ -114,7 +125,7 @@ def contact_detail(request, pk: int):
             }
         )
 
-    reply = reply_mailto(submission["email"])
+    reply = reply_mailto(submission.get("email", ""))
     return render(
         request,
         "contacts/contact_detail.html",
@@ -124,7 +135,7 @@ def contact_detail(request, pk: int):
             "form": form,
             **page_context(
                 f"Message #{pk}",
-                f"{submission['name']} · {submission['created_at']}",
+                f"{submission.get('name', '')} · {submission.get('created_at', '')}",
                 actions=(PageAction("Reply by email", reply),),
                 trail=(("Messages", reverse("contacts:list")),),
             ),
@@ -145,34 +156,22 @@ def contact_set_status(request, pk: int):
         messages.error(request, f"Unknown status: {status!r}.")
         return redirect(_safe_next(request))
 
-    try:
-        submission = get_submission(pk)
-        if not submission:
-            messages.error(request, f"Message #{pk} was not found.")
-            return redirect("contacts:list")
-        execute_contact_review(
-            ContactReviewCommand(
-                status=status,
-                assigned_to=submission.get("assigned_to") or "",
-                admin_notes=submission.get("admin_notes") or "",
-            ),
-            principal=web_principal(request.user),
-            current_id=pk,
-        )
-    except (D1Error, ValueError) as exc:
-        messages.error(request, str(exc))
-        return redirect(_safe_next(request))
-    messages.success(request, f"Message #{pk} marked {status}.")
+    submission = find_submission(pk)
+    if not submission:
+        messages.error(request, f"Message #{pk} was not found.")
+        return redirect("contacts:list")
+    command = ContactReviewCommand(
+        status=status,
+        assigned_to=submission.get("assigned_to") or "",
+        admin_notes=submission.get("admin_notes") or "",
+    )
+    if _review(request, pk, command):
+        messages.success(request, f"Message #{pk} marked {status}. {QUEUED}")
     return redirect(_safe_next(request))
 
 
 def contact_delete(request, pk: int):
-    try:
-        submission = get_submission(pk)
-    except D1Error as exc:
-        messages.error(request, str(exc))
-        return redirect("contacts:list")
-
+    submission = find_submission(pk)
     if not submission:
         messages.error(request, f"Message #{pk} was not found.")
         return redirect("contacts:list")
@@ -184,10 +183,10 @@ def contact_delete(request, pk: int):
                 principal=web_principal(request.user),
                 current_id=pk,
             )
-        except (D1Error, ValueError) as exc:
+        except ValueError as exc:
             messages.error(request, str(exc))
             return redirect("contacts:detail", pk=pk)
-        messages.success(request, f"Message #{pk} deleted.")
+        messages.success(request, f"Message #{pk} will be deleted. {QUEUED}")
         return redirect("contacts:list")
 
     return render(
@@ -202,7 +201,7 @@ def contact_delete(request, pk: int):
             },
             **page_context(
                 f"Delete message #{pk}?",
-                f"{submission['created_at']} · {submission['name']} ({submission['email']})",
+                f"{submission.get('created_at', '')} · {submission.get('name', '')} ({submission.get('email', '')})",
                 trail=(
                     ("Messages", reverse("contacts:list")),
                     (f"Message #{pk}", reverse("contacts:detail", args=[pk])),
