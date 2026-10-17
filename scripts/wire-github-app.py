@@ -2,7 +2,7 @@
 """Put HQ's GitHub App key where the pipeline reads it.
 
     scripts/wire-github-app.py --vault VAULT --item ITEM --client-id ID \\
-        --extension OWNER/REPO [--extension OWNER/REPO ...]
+        [--extension OWNER/REPO ...]
 
 Reads the app's private key from 1Password and sets, through standard input so
 it never touches a file or a command line:
@@ -96,7 +96,9 @@ def main() -> None:
     parser.add_argument("--vault", required=True)
     parser.add_argument("--item", required=True, help="The 1Password item holding the app's private key.")
     parser.add_argument("--client-id", required=True, help="The app's client ID, from its settings page.")
-    parser.add_argument("--extension", action="append", required=True, help="OWNER/REPO, once per extension.")
+    parser.add_argument(
+        "--extension", action="append", default=[], help="OWNER/REPO, once per extension; none for a host without any."
+    )
     args = parser.parse_args()
 
     key = private_key(args.vault, args.item)

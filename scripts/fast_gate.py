@@ -67,8 +67,16 @@ def python_files() -> list[Path]:
 
 
 def is_test(path: Path) -> bool:
+    """A test module the suite discovers: every parent directory is a package.
+
+    A test outside one (the structural bar's) belongs to its own gate.
+    """
+
     return (
-        path.suffix == ".py" and path.name != "__init__.py" and (path.name.startswith("test") or "fuzz" in path.parts)
+        path.suffix == ".py"
+        and path.name != "__init__.py"
+        and (path.name.startswith("test") or "fuzz" in path.parts)
+        and all((ROOT / parent / "__init__.py").exists() for parent in path.parents if parent != Path())
     )
 
 
@@ -245,6 +253,26 @@ def step(label: str, cmd: list[str], env: dict[str, str] | None = None) -> bool:
     return code == 0
 
 
+def side_by_side(steps: list[tuple[str, list[str], dict[str, str] | None]]) -> bool:
+    """Run independent read-only checks in parallel, then print each one's
+    output in order, so a failure reads as that check's own."""
+
+    started = time.monotonic()
+    running = [
+        (label, subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+        for label, cmd, env in steps
+    ]
+    ok = True
+    for label, process in running:
+        output, _ = process.communicate()
+        print(f"[fast] {label}", flush=True)
+        if output:
+            print(output, end="" if output.endswith("\n") else "\n", flush=True)
+        ok &= process.returncode == 0
+    print(f"[fast] {len(running)} checks side by side: {time.monotonic() - started:.1f}s", flush=True)
+    return ok
+
+
 def main(argv: list[str]) -> int:
     started = time.monotonic()
     python = os.environ.get("FAST_PYTHON") or sys.executable
@@ -265,21 +293,21 @@ def main(argv: list[str]) -> int:
         return 0
 
     env = {**os.environ, "DJANGO_DEBUG": "true", "SEVERINO_LOG_LEVEL": "CRITICAL"}
-    ok = True
     py = [c for c in changed if c.endswith(".py") or c.endswith(".pyi")]
-    if py:
-        ok &= step("ruff (changed files)", [ruff, "check", *py])
-    ok &= step("manage.py check", [python, "manage.py", "check"], env)
-    ok &= step("migration drift", [python, "manage.py", "makemigrations", "--check", "--dry-run"], env)
-    ok &= step(
-        "OpenAPI drift",
-        [python, "manage.py", "api_openapi", "--check"],
-        {key: value for key, value in env.items() if key != "SEVERINO_HQ_PLUGINS"},
-    )
-    ok &= step("controller contract drift", [python, "manage.py", "bridge_contract", "--check"], env)
     typed = mypy_targets(changed)
-    if typed:
-        ok &= step("mypy (changed typed modules)", [python, "-m", "mypy", *typed], env)
+    checks: list[tuple[str, list[str], dict[str, str] | None]] = [
+        *([("ruff (changed files)", [ruff, "check", *py], None)] if py else []),
+        ("manage.py check", [python, "manage.py", "check"], env),
+        ("migration drift", [python, "manage.py", "makemigrations", "--check", "--dry-run"], env),
+        (
+            "OpenAPI drift",
+            [python, "manage.py", "api_openapi", "--check"],
+            {key: value for key, value in env.items() if key != "SEVERINO_HQ_PLUGINS"},
+        ),
+        ("controller contract drift", [python, "manage.py", "bridge_contract", "--check"], env),
+        *([("mypy (changed typed modules)", [python, "-m", "mypy", *typed], env)] if typed else []),
+    ]
+    ok = side_by_side(checks)
     ok &= step(
         "tests",
         [python, "manage.py", "test", "--noinput", "--parallel", os.environ.get("CHECK_PARALLEL", "auto"), *labels],

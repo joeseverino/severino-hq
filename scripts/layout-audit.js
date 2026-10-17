@@ -45,7 +45,6 @@ async (page) => {
     const paired = (card) => {
       const row = card.parentElement;
       if (!row || !row.classList.contains('two-col')) return 0;
-      if (row.classList.contains('align-top')) return 0;
       const kids = [...row.children].filter(
         (k) => k.getBoundingClientRect().height > 0,
       );

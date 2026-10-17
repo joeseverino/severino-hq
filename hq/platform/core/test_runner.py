@@ -26,6 +26,7 @@ pickle its traceback and the real error is replaced by ``cannot pickle
 
 import logging
 import os
+import subprocess
 import sys
 import unittest
 
@@ -38,6 +39,28 @@ from django.test.runner import (
     RemoteTestRunner,
     _init_worker,
 )
+
+
+def performance_cores() -> int | None:
+    """Performance cores on Apple silicon (``hw.perflevel0``); None elsewhere."""
+
+    if sys.platform != "darwin":
+        return None
+    try:
+        found = subprocess.run(
+            ["/usr/sbin/sysctl", "-n", "hw.perflevel0.physicalcpu"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except OSError, subprocess.CalledProcessError:
+        return None
+    return int(found) if found.isdigit() else None
+
+
+# One test worker per performance core: a worker on an efficiency core slows
+# every test it takes, and extra workers push a small machine into swap. Set at
+# import, before Django reads DJANGO_TEST_PROCESSES; a value already set, or an
+# explicit --parallel, wins.
+if (cores := performance_cores()) is not None:
+    os.environ.setdefault("DJANGO_TEST_PROCESSES", str(cores))
 
 
 class _CompositionIsolation:

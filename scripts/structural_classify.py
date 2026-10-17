@@ -8,6 +8,7 @@ import re
 import shlex
 import subprocess
 import sys
+from functools import cached_property
 from pathlib import Path
 
 CONSTRUCTORS = {
@@ -91,13 +92,15 @@ class Classifier:
             self.cache[path] = json.loads(subprocess.check_output([str(self.inspector), str(source)], text=True))
         return self.cache[path]
 
+    @cached_property
+    def tracked_files(self):
+        # One git ls-files for the run, not one git process per path.
+        listed = subprocess.check_output(["git", "ls-files", "-z"], cwd=self.root)
+        return frozenset(name.decode() for name in listed.split(b"\0") if name)
+
     def tracked(self, path):
-        subprocess.run(
-            ["git", "ls-files", "--error-unmatch", "--", str(path.relative_to(self.root))],
-            cwd=self.root,
-            check=True,
-            capture_output=True,
-        )
+        if str(path.relative_to(self.root)) not in self.tracked_files:
+            raise ValueError(f"not tracked: {path}")
 
     def generated(self, path):
         if not self.go(path)["Generated"]:

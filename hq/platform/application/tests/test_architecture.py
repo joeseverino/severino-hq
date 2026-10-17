@@ -14,6 +14,8 @@ from starlette.staticfiles import StaticFiles
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
 
+from .source import parsed
+
 # Installed or generated trees inside a checkout. With hidden directories
 # (.git, a virtualenv under any name) they are not this project's source.
 NOT_SOURCE = {
@@ -63,7 +65,7 @@ def _is_address(text: str, found: re.Match[str]) -> bool:
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
     def test_workflow_models_remain_a_dependency_leaf(self):
         root = Path(__file__).parent.resolve().parent
-        contracts = ast.parse((root / "workflow_contracts.py").read_text(encoding="utf-8"))
+        contracts = parsed(root / "workflow_contracts.py")
         relative_imports = [
             node.module for node in ast.walk(contracts) if isinstance(node, ast.ImportFrom) and node.level
         ]
@@ -74,7 +76,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
             "workflows.py": "action_links",
         }
         for filename, forbidden in boundaries.items():
-            tree = ast.parse((root / filename).read_text(encoding="utf-8"))
+            tree = parsed(root / filename)
             imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.level}
             self.assertNotIn(forbidden, imported)
 
@@ -135,7 +137,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
     def test_mcp_services_do_not_access_django_models(self):
         """Keep MCP as an adapter over application-owned behavior and projections."""
         source_path = Path(__file__).resolve().parents[4] / "hq/platform/mcp" / "services.py"
-        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        tree = parsed(source_path)
 
         model_imports = [
             node.module
@@ -165,7 +167,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         }
 
         for source_path in view_modules(root):
-            tree = ast.parse(source_path.read_text(encoding="utf-8"))
+            tree = parsed(source_path)
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                     continue
@@ -184,7 +186,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         root = Path(__file__).resolve().parents[4]
         violations = []
         for source_path in view_modules(root):
-            tree = ast.parse(source_path.read_text(encoding="utf-8"))
+            tree = parsed(source_path)
             for node in tree.body:
                 if not isinstance(node, ast.ClassDef):
                     continue
@@ -213,7 +215,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         for source_path in source_files(root, "*.py"):
             if source_path.name.startswith("test") or source_path in read:
                 continue
-            tree = ast.parse(source_path.read_text(encoding="utf-8"))
+            tree = parsed(source_path)
             if any(
                 isinstance(node, ast.ClassDef)
                 and any(
@@ -1261,7 +1263,7 @@ class AssertionPrecisionTests(SimpleTestCase):
                 for part in path.relative_to(root).parts
             ):
                 continue
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+            tree = parsed(path)
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call) or not node.args:
                     continue
@@ -1452,7 +1454,7 @@ PLAIN_WORDS_NOT_FOR_THE_OWNER = (
     ("hq/platform/api/", "The machine API: its errors and descriptions are read by a client's author."),
     ("hq/platform/mcp/", "Tool descriptions and errors an agent reads."),
     ("hq/domains/control_plane/bridge_", "The controller bridge: refusals the controller logs."),
-    ("hq/domains/control_plane/provider_adapters/", "Declaration errors raised while HQ starts."),
+    ("hq/domains/control_plane/provider_adapters/__init__.py", "Admission errors raised while HQ starts."),
     ("hq/domains/control_plane/provider_spec.py", "Declaration errors raised while HQ starts."),
     ("hq/domains/control_plane/providers.py", "Declaration errors raised while HQ starts."),
     ("hq/domains/control_plane/observations/contract.py", "Declaration errors raised while HQ starts."),
@@ -1735,7 +1737,7 @@ class OnePrimitiveTests(SimpleTestCase):
         number: no other f-string puts one in front of a value."""
 
         def builds_an_amount(path: Path) -> bool:
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            for node in ast.walk(parsed(path)):
                 if not isinstance(node, ast.JoinedStr):
                     continue
                 for before, after in zip(node.values, node.values[1:], strict=False):
@@ -1869,7 +1871,7 @@ class CognitiveComplexityTests(SimpleTestCase):
                 relative = path.relative_to(self.ROOT)
                 if path.name.startswith("test") or {"tests", "migrations"} & set(relative.parts):
                     continue
-                tree = ast.parse(path.read_text(encoding="utf-8"))
+                tree = parsed(path)
                 module = ".".join(relative.with_suffix("").parts)
                 found.update(self.functions(tree, module))
         return found
@@ -1969,7 +1971,6 @@ class RequestNeverWaitsTests(SimpleTestCase):
     ENTERED = {
         "oidc": {"hq/platform/core/oidc.py"},
         "lookup": {"hq/platform/application/lookup.py"},
-        "contacts.d1": {"hq/domains/contacts/d1.py"},
     }
 
     def sources(self):
@@ -2173,7 +2174,7 @@ class RuntimeDependencyTests(SimpleTestCase):
             for path in (root / package).rglob("*.py"):
                 if "tests" in path.parts:
                     continue
-                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                for node in ast.walk(parsed(path)):
                     if isinstance(node, ast.Import):
                         imported |= {alias.name.split(".")[0] for alias in node.names}
                     elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
