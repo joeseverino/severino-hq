@@ -55,6 +55,6 @@ A check met everywhere is a word in one closing line.
     </details>
   {% endif %}
 {% else %}
-  {% include "partials/_empty_state.html" with message="HQ's GitHub App has not read any repository yet." %}
+  {% include "partials/_empty_state.html" with message="No repository read yet." remedy=page.remedy %}
 {% endif %}
 {% endblock %}

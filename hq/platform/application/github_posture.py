@@ -157,7 +157,7 @@ STANDARD: tuple[Check, ...] = (
         "Dependabot opens security fixes",
         BOTH,
         _setting("security_fixes", True),
-        "A known-vulnerable dependency waits for you to notice it.",
+        "Without it, a vulnerable dependency stays until you notice it.",
         "Turn on Dependabot security updates.",
     ),
     Check(
@@ -422,15 +422,12 @@ COMMANDS: dict[str, Callable[[Repository], Runs]] = {
 REASONS: dict[str, str] = {}
 # Said beside a pinning plan for a repository whose workflows were not read.
 PINS_UNREAD = (
-    "Its workflows were not read, so HQ cannot say which uses: lines to pin, and requiring "
-    "pinning first would stop every run that uses a tag."
+    "HQ has not read its workflows, so it cannot list the uses: lines to pin. "
+    "Requiring pinning first would stop every run that uses a tag."
 )
 # Said once on a pinning plan where a repository calls another's workflows.
 # Which workflows is the list of steps under it.
-PINS_CALLED = (
-    "Requiring pinning is not offered for a repository that calls another repository's "
-    "workflow, because HQ did not read what that workflow uses."
-)
+PINS_CALLED = "It calls another repository's workflow, which HQ has not read, so HQ does not offer to require pinning."
 
 
 def help_for(check: _Check, missing: list[Repository]) -> Any:
@@ -470,7 +467,7 @@ def _left_out(check: _Check, missing: list[Repository]) -> str:
         parts.append(f"{', '.join(unread)}: {PINS_UNREAD}")
     if unresolved:
         parts.append(
-            f"Pin these by hand; their tags could not be read, so pinning is not required yet: {'; '.join(unresolved)}."
+            f"HQ could not read these tags, so pinning is not required yet. Pin them by hand: {'; '.join(unresolved)}."
         )
     if called:
         parts.append(PINS_CALLED)
