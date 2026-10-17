@@ -33,7 +33,7 @@ from .derivations import passed
 from .entity_links import kind_label
 from .freshness import stale_after
 from .locate import host_of
-from .projection import read_once
+from .projection import in_projection, read_once
 from .tailnet import TAILNET_KIND
 from .timestamps import moment
 
@@ -659,6 +659,24 @@ def _stored() -> dict[str, tuple[Any, ...]]:
         return {name: tuple(rows) for name, rows in grouped.items()}
 
     return read_once(_INVENTORY_KEY, load)
+
+
+def stored_inventory(*kinds: str) -> dict[str, tuple[Any, ...]]:
+    """Stored snapshots by kind, every requested kind a key even when empty.
+
+    Inside a projection, from its shared read of the whole inventory; outside
+    one, a query for just these kinds.
+    """
+
+    from hq.domains.control_plane.models import ProviderInventory
+
+    if in_projection():
+        stored = _stored()
+        return {kind: stored.get(kind, ()) for kind in kinds}
+    grouped: dict[str, list[Any]] = {kind: [] for kind in kinds}
+    for snapshot in ProviderInventory.objects.filter(kind__in=kinds):
+        grouped[snapshot.kind].append(snapshot)
+    return {kind: tuple(rows) for kind, rows in grouped.items()}
 
 
 def _inventory(kind: str) -> tuple[Any, ...]:
