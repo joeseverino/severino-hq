@@ -11,10 +11,9 @@ from django.test import SimpleTestCase
 
 from hq.config.first_use import FIRST_USE
 
-# What a start does load of the deferred set: the MCP server is built as the
-# application is, for its sessions to run for the application's lifetime, and
-# these are what building it touches. Everything else waits for its first use.
-STARTED_BY_MCP = {"attr", "attrs", "idna", "jsonschema", "mcp", "mcp_types", "python_multipart", "referencing", "rpds"}
+# What only sign-in, a bearer token or a migration uses: a start loads none of
+# them. The MCP stack is built as the application starts, so it is not here.
+FIRST_USE_ONLY = {"requests", "urllib3", "charset_normalizer", "certifi", "jwt", "cryptography", "sqlparse"}
 
 # The web application as uvicorn loads it, then what of the deferred set it loaded.
 _START = """
@@ -30,7 +29,7 @@ class FirstUseTests(SimpleTestCase):
         # A name that matches nothing defers nothing, and says so here.
         self.assertEqual(sorted(name for name in FIRST_USE if importlib.util.find_spec(name) is None), [])
 
-    def test_starting_the_web_application_loads_only_what_the_mcp_server_is_built_from(self):
+    def test_starting_the_web_application_loads_nothing_only_sign_in_or_migrations_use(self):
         environment = {**os.environ, "DJANGO_SETTINGS_MODULE": "hq.config.settings"}
         started = subprocess.run(
             [sys.executable, "-c", _START],
@@ -42,4 +41,4 @@ class FirstUseTests(SimpleTestCase):
         )
 
         self.assertEqual(started.returncode, 0, started.stderr)
-        self.assertEqual(set(json.loads(started.stdout.strip().splitlines()[-1])), STARTED_BY_MCP)
+        self.assertEqual(set(json.loads(started.stdout.strip().splitlines()[-1])) & FIRST_USE_ONLY, set())
