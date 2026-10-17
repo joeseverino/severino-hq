@@ -1,7 +1,7 @@
 """Every page, as rendered, against the rules a page cannot be allowed to break.
 
 The interface checks read source, and source can say one thing in many ways; a
-page is one thing. This signs in, seeds HQ's demo records, starts from every
+page is one thing. This signs in, seeds the example estate, starts from every
 route that takes no argument and follows the links it finds, so detail pages
 are reached without anyone listing them. Extensions installed alongside HQ are
 crawled the same way, which is how the extension gate covers their pages.
@@ -14,19 +14,20 @@ twice, and no em dash or count that disagrees with its noun ("1 resources",
 import re
 from collections import deque
 from html.parser import HTMLParser
-from io import StringIO
 from urllib.parse import urlsplit
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
 from django.test import TestCase
-from django.urls import URLPattern, URLResolver, get_resolver
+from django.urls import URLPattern, URLResolver, get_resolver, reverse
+
+from hq.platform.core import example_estate
+from hq.platform.core.example_estate import names, records
 
 # Routes that are not pages: machine endpoints, downloads, and anything that
 # acts when fetched.
 SKIPPED = re.compile(
     r"^/(api|mcp|static|media|accounts|oidc|health|csp-report)/"
-    r"|/(export|download|report|count|glance|logout|refresh|callback|complete)/"
+    r"|/(export|download|file|report|count|glance|logout|refresh|callback|complete)/"
     r"|\.(json|csv|md|pem|txt|ics)$"
 )
 PAGE_LIMIT = 400
@@ -140,7 +141,8 @@ class RenderedPageTests(TestCase):
         cls.user = get_user_model().objects.create_superuser(
             "rendered-pages", "rendered@example.test", "unused-password"
         )
-        call_command("seed_demo", stdout=StringIO())
+        with example_estate.throwaway_media():
+            example_estate.seed()
 
     def setUp(self):
         self.client.force_login(self.user)
@@ -173,9 +175,9 @@ class RenderedPageTests(TestCase):
 
     def test_every_page_keeps_the_rules(self):
         problems = []
-        crawled = 0
+        crawled = set()
         for path, page in self.crawl():
-            crawled += 1
+            crawled.add(path)
             text = " ".join(" ".join(page.text).split())
             if page.h1 != 1:
                 problems.append(f"{path}: {page.h1} h1 elements")
@@ -199,5 +201,11 @@ class RenderedPageTests(TestCase):
             )
             if BRACKETED.search(text):
                 problems.append(f"{path}: plural in brackets: {BRACKETED.search(text).group()!r}")
-        self.assertGreater(crawled, 20, "The crawl reached too few pages to mean anything.")
+        self.assertGreater(len(crawled), 20, "The crawl reached too few pages to mean anything.")
+        # The estate's own records are reached from the pages, not listed.
+        estate_pages = {
+            reverse("control_plane:machine", args=[names.MACHINE]),
+            *(reverse("projects:detail", args=[slug]) for _name, slug, *_rest in records.PROJECTS),
+        }
+        self.assertEqual(estate_pages - crawled, set())
         self.assertEqual(problems, [])

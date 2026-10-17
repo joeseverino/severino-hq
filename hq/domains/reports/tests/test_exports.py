@@ -1,8 +1,10 @@
 import csv
 from io import StringIO
 
-from django.core.management import call_command
 from django.test import TestCase
+
+from hq.domains.expenses.models import Expense
+from hq.platform.core import example_estate
 
 from .. import exports
 
@@ -18,7 +20,8 @@ class CsvExportTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        call_command("seed_demo", verbosity=0)
+        with example_estate.throwaway_media():
+            example_estate.seed()
 
     def rows(self, name):
         return list(csv.reader(StringIO(getattr(exports, name)())))
@@ -42,5 +45,8 @@ class CsvExportTests(TestCase):
     def test_a_related_record_is_exported_by_its_handle(self):
         header, *records = self.rows("expenses_csv")
         related = header.index("related_project")
-        self.assertTrue(any(record[related] for record in records))
-        self.assertFalse(any(record[related].isdigit() for record in records))
+        handles = sorted(
+            Expense.objects.filter(related_project__isnull=False).values_list("related_project__slug", flat=True)
+        )
+        self.assertTrue(handles, "the estate links no expense to a project")
+        self.assertEqual(sorted(record[related] for record in records if record[related]), handles)
