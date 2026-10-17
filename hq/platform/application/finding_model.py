@@ -66,6 +66,9 @@ class Finding:
     # When this was first seen open, where a look recorded it
     # (application.first_seen). Derivation leaves it unset.
     since: datetime | None = None
+    # The page of what it is about, as the topology names it. Derivation sets
+    # it beside the offers, so a card links its title without the topology.
+    subject_link: ActionLink | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,6 +7,8 @@ heading (`grouped`) a card does not repeat the domain. Where the reader sorts
 their own queue (`triage`) a card ends with the one thing they can do to it:
 dismiss it, or restore it. Neither fixes it. A dismissed card is its title.
 On the page of the thing a card is about (`here`) its title is plain text.
+What can be pressed and the pages that help look into it stand at the card's
+end, beside what it says, so neither takes a row of its own.
 {% endcomment %}
 <ul class="attention-list">
   {% for entry in items %}
@@ -14,7 +16,7 @@ On the page of the thing a card is about (`here`) its title is plain text.
     <li class="attention-row" data-attention-item>
       <div class="attention-body">
         <div class="attention-head">
-          <span class="pill pill-{% if item.notice %}idea{% else %}{{ item.status }}{% endif %}">{{ item.urgency }}</span>
+          {% include "partials/_urgency_pill.html" with item=item only %}
           {% if item.href and not here %}<a class="attention-title" href="{{ item.href }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
           {% if item.since or not grouped %}
           <span class="attention-meta">
@@ -25,24 +27,28 @@ On the page of the thing a card is about (`here`) its title is plain text.
         </div>
         {% if not item.aside %}
           {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
-          {% if item.advice %}<p class="attention-detail">{{ item.advice }}</p>{% endif %}
+          {% if item.facts %}{% include "partials/_facts.html" with facts=item.facts only %}{% endif %}
+          {% if item.advice %}<p class="attention-advice">{{ item.advice }}</p>{% endif %}
           {% include "partials/_resolution_workflow.html" with steps=item.steps fold=item.steps_fold label=item.label only %}
           {% if item.reason %}<p class="attention-reason">{{ item.reason }}</p>{% endif %}
-          {% if item.actions %}
-            <div class="attention-actions">
-              {% include "partials/_action_links.html" with actions=item.actions only %}
-            </div>
-          {% endif %}
         {% endif %}
       </div>
-      {% if triage %}
-      <div class="attention-end" data-triage>
-        {% if item.aside %}
-          {% url 'action_items_bring_back' as triage_url %}
-          {% post_button "Restore" triage_url name="key" value=item|row_value css="btn compact ghost" %}
-        {% else %}
-          {% url 'action_items_set_aside' as triage_url %}
-          {% post_button "Dismiss" triage_url name="key" value=item|row_value css="btn compact ghost" %}
+      {% if triage or item.actions and not item.aside or item.links and not item.aside %}
+      <div class="attention-end">
+        {% if not item.aside %}
+          {% if item.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=item.actions only %}</div>{% endif %}
+          {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}<a class="icon-link" href="{{ link.url }}" data-tip="{{ link.label }}">{% include "partials/_icon.html" with name=icon only %}<span class="visually-hidden">{{ link.label }}</span></a>{% else %}<a href="{{ link.url }}">{{ link.label }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
+        {% endif %}
+        {% if triage %}
+        <div data-triage>
+          {% if item.aside %}
+            {% url 'action_items_bring_back' as triage_url %}
+            {% post_button "Restore" triage_url name="key" value=item|row_value css="btn compact ghost" %}
+          {% else %}
+            {% url 'action_items_set_aside' as triage_url %}
+            {% post_button "Dismiss" triage_url name="key" value=item|row_value css="btn compact ghost" %}
+          {% endif %}
+        </div>
         {% endif %}
       </div>
       {% endif %}

@@ -26,6 +26,8 @@ class Sees:
     observed_at: datetime | None
     stale: bool = False
     remedy: str = ""
+    # Why refused parts were not read, one line per reason.
+    reasons: tuple[str, ...] = ()
     error: str = ""
 
     @property
@@ -119,6 +121,7 @@ def _sees(kind: str, spec: Any, row: Any) -> Sees:
         # Only a reading that was taken can be out of date; a refused one says so.
         stale=seen.state in (READABLE, PARTIAL) and freshness(kind, seen.observed_at).stale,
         remedy=seen.remedy,
+        reasons=seen.part_reasons,
         error=seen.error,
     )
 

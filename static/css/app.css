@@ -312,7 +312,12 @@
 html, body { margin: 0; padding: 0; }
 /* iOS inflates text in a block wider than the viewport, scaled by how far it
    overruns, so equal type needs this. */
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* A link to a part of the page lands it below the sticky header, whatever
+   the part is; a part under a page's own nav asks for more itself. */
+html {
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--site-header-height) + var(--space-5));
+}
 body {
   font-family: var(--font);
   font-size: var(--text-md);
@@ -665,7 +670,10 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* One line, its parts divided by a middle dot the browser draws, so a part
    that is absent leaves no stray separator. */
 .glance-caption { display: flex; min-width: 0; gap: var(--space-2); color: var(--muted); font-size: var(--text-2xs); white-space: nowrap; }
-.glance-caption > span + span::before { content: "·"; margin-right: var(--space-2); color: var(--muted-2); }
+/* A run of short things on one line (links, values, figures): one separator
+   for all of them, drawn here, so no list writes its own commas or gaps. */
+.dot-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin: 0; padding: 0; list-style: none; }
+:is(.dot-list > li, .glance-caption > span) + :is(li, span)::before { content: "·"; margin-right: var(--space-3); color: var(--muted-2); }
 .glance-alert { color: var(--attn); font-weight: 650; }
 .glance-freshness { color: var(--warn); font-size: var(--text-3xs); white-space: nowrap; }
 .glance-panel[data-refreshing] .glance-freshness { color: var(--muted-2); }
@@ -746,7 +754,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   background: var(--accent-tint);
   color: var(--accent);
 }
-.page-section { scroll-margin-block-start: calc(var(--site-header-height) + var(--page-nav-height) + 12px); }
+.page-section { scroll-margin-block-start: var(--page-nav-height); }
 /* Most heads wrap their controls in .page-actions; list pages hang a single
    control straight off the head. Both should sit at the far edge, otherwise
    the same button lands beside the title on one page and against the right
@@ -964,7 +972,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    control card) has its shadow and inset cleared by the frame rule, and the
    cell rule has to win that. A band that needs a gap (stats inside a card)
    says so with a more specific selector. */
-:is(.kpi-grid, .insight-grid, .machine-telemetry-metrics, .service-band, .fact-band, .control-summary, .finding-facts, .connection-control-grid, .sweep-grid) {
+:is(.kpi-grid, .insight-grid, .machine-telemetry-metrics, .service-band, .fact-band, .control-summary, .connection-control-grid, .sweep-grid) {
   gap: 0;
   overflow: clip;
   & > * {
@@ -1306,7 +1314,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .compact-table { box-shadow: none; }
 /* A node's relationships: the phrase once per group with its ends beside it,
    and under it where there is no room beside. */
-.relation-list { display: grid; margin: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.relation-list { display: grid; margin: 0; }
 .relation-group { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); padding: var(--space-5) var(--space-6); }
 .relation-group + .relation-group { border-top: 1px solid var(--line); }
 .relation-group dt { flex: 0 0 12rem; color: var(--muted); font-weight: 600; }
@@ -1322,9 +1330,9 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    one takes the band, three are three or one, four are four, two or one. Read
    off the band itself, so no page has to say how many it holds and none is
    left with three over one. */
-:is(.control-summary, .insight-grid, .finding-facts):has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
-:is(.control-summary, .insight-grid, .finding-facts):has(> :nth-child(3):last-child) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
-:is(.control-summary, .insight-grid, .finding-facts):has(> :nth-child(4):last-child) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr)); }
+:is(.control-summary, .insight-grid):has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+:is(.control-summary, .insight-grid):has(> :nth-child(3):last-child) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
+:is(.control-summary, .insight-grid):has(> :nth-child(4):last-child) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr)); }
 
 /* A service's overview: one raised band, not a box per fact. Each fact is its
    icon tile, then its label over its value; hairlines divide them. Health's
@@ -1354,6 +1362,14 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .band-fact small { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; }
+.page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+/* What a thing is at a glance, as tiles at the end of its title's line:
+   each tile as wide as what it says, no band of empty cells around them.
+   Under the title when the line is too short for both. */
+.page-title-row > .head-tiles { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-3) var(--space-10); }
+.head-tiles > .band-fact { flex: 0 1 auto; padding: 0; gap: var(--space-4); }
+.head-tiles .band-icon { width: 2rem; height: 2rem; }
+.head-tiles strong { font-size: var(--text-md); }
 .heading-aside { color: var(--muted); font-size: var(--text-md); font-weight: 500; letter-spacing: 0; }
 .band-meta { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-5) var(--space-9); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
 /* The origin reads under the facet row rather than as a fifth card in it: four
@@ -1592,7 +1608,7 @@ main[aria-busy="true"] [data-search-results] { opacity: .55; transition: opacity
 .scope-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); text-decoration: none; }
 a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
 .scope-chip .count { font-weight: 600; }
-.search-group { margin-bottom: var(--space-7); scroll-margin-top: calc(var(--site-header-height) + var(--space-7)); }
+.search-group { margin-bottom: var(--space-7); }
 .search-hits { list-style: none; margin: 0; padding: 0; }
 .search-hit { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-8); padding: var(--space-5) 0; border-top: 1px solid var(--line); }
 .search-hit:first-child { border-top: 0; }
@@ -1608,6 +1624,8 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* A pill in a table fits the cell's line, so a row holding one is no taller
    than a row without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
+/* A time is one phrase; broken over two lines it doubles its row. */
+.data-table td time { white-space: nowrap; }
 
 /* Columns size to what they hold, and a table too wide for its box scrolls in
    it. An identifier in a cell never breaks across lines ("hq-proxy" is never
@@ -1947,7 +1965,13 @@ a.kpi:hover { background: var(--surface-2); }
   border-top: 1px solid var(--line-2);
 }
 .attention-body { flex: 1 1 24rem; }
-.attention-end { flex: none; margin-left: auto; }
+/* What can be pressed, then the pages that help look into it, then the
+   reader's own dismiss: beside what the card says, never a row of their own
+   while the row is wide enough for both. */
+.attention-end { flex: 0 1 auto; margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-3); }
+.attention-end > .attention-actions { margin: 0; justify-content: flex-end; }
+.attention-end > .attention-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; list-style: none; font-size: var(--text-xs); }
+.attention-row[data-dismissed] > .attention-end > :not([data-triage]) { display: none; }
 .attention-end form { margin: 0; }
 .attention-row:first-child { border-top: 0; padding-top: var(--space-2); }
 
@@ -1960,9 +1984,24 @@ a.kpi:hover { background: var(--surface-2); }
 /* The card's face under its title: what it means, then what to do, then the
    reason it cannot be done from here, then what can be pressed. */
 .attention-detail { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-sm); line-height: 1.65; color: var(--ink-2); overflow-wrap: anywhere; }
+.attention-advice { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
 .attention-reason { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
 .attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 .attention-actions form { margin: 0; }
+/* What raised a card, opened from its urgency: a small panel over the page. */
+.modifier-held [data-origin] { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; outline: 1px solid var(--tone-line, var(--line)); outline-offset: 1px; }
+/* Above the page, so a surface of its own again whatever card drew it. */
+.origin-panel {
+  --surface-border: 1px solid var(--line); --surface-radius: var(--radius); --surface-bg: var(--surface);
+  --surface-shadow: var(--shadow-sm); --surface-inset: var(--space-6) var(--space-8);
+  max-width: min(36rem, calc(100vw - 2rem)); margin: auto; padding: 0; border: 0; background: transparent; overflow: visible;
+}
+.origin-panel::backdrop { background: var(--scrim); }
+/* What was read that shows it: each label once, its values beside it. */
+.attention-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-6); margin: var(--space-3) 0 0; font-size: var(--text-xs); color: var(--ink-2); }
+.attention-facts > div { display: contents; }
+.attention-facts dt { color: var(--muted); }
+.attention-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* The queue under its domains: a heading per domain and its count. */
 .queue-group + .queue-group { margin-top: var(--space-8); }
 .queue-group > h3 { display: flex; align-items: baseline; gap: var(--space-4); margin: 0; padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); color: var(--muted); font-size: var(--text-xs); font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
@@ -1987,37 +2026,37 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .action-items-card { padding-top: var(--space-5); }
 /* The open problems about the thing a page shows: the queue's cards under one count. */
-.problems-here { padding-top: var(--space-5); margin-bottom: var(--space-8); border-left: 3px solid var(--attn); }
-.problems-here > h2 { margin: 0; font-size: var(--text-sm); color: var(--attn); }
+.problems-here { padding-block: var(--space-5); margin-bottom: var(--space-6); border-left: 3px solid var(--tone-ink); }
+.problems-here .attention-row { padding-block: 0; }
+.problems-here .attention-row + .attention-row { padding-top: var(--space-5); margin-top: var(--space-5); }
+.problems-here .attention-detail { margin-top: var(--space-2); }
+/* A problem that is not urgent: one unframed line, its button beside it. */
+.problem-lines { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-3); }
+.problem-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
+.problem-line > p { flex: 1 1 24rem; margin: 0; font-size: var(--text-sm); color: var(--ink-2); }
+.problem-line > p > .pill { margin-right: var(--space-2); }
+.problem-line > p > strong { color: var(--ink); }
+.problem-line > .attention-actions { margin: 0 0 0 auto; }
+.problem-line > :is(.resolution-workflow, .resolution-fold) { flex-basis: 100%; margin-top: 0; }
 /* The short queue on the dashboard, under the greeting. */
 .dash-needs { margin-bottom: var(--stack-gap); padding-top: var(--space-5); }
 
-.finding-list { display: grid; gap: var(--space-6); }
-/* A command scrolls inside its card rather than widening every card. */
-.finding-list > * { min-width: 0; }
-.finding-card { border-left: 3px solid var(--line); }
-.finding-card.is-serious { border-left-color: var(--danger); }
-.finding-card.is-attention { border-left-color: var(--warn); }
-.finding-card .section-head { align-items: flex-start; }
-.finding-card .section-head > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
-.finding-card h2 { margin: 0; color: var(--ink); font-size: var(--text-lg); letter-spacing: 0; text-transform: none; }
-.finding-card > p { margin: 0; color: var(--ink-2); line-height: 1.55; }
-.finding-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); margin: var(--space-7) 0 0; }
-.finding-facts > div { min-width: 0; padding: var(--space-4) var(--space-5); background: var(--surface-2); }
-.finding-facts dt { color: var(--muted); font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .045em; }
-.finding-facts dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
-.finding-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
-.finding-actions form { display: inline-flex; }
-.finding-fix { margin-top: var(--space-6); }
-.finding-links { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: var(--space-6) 0 0; padding-top: var(--space-5); border-top: 1px solid var(--line-2); font-size: var(--text-sm); }
-.finding-links-group { min-width: 0; }
 /* A card's steps (partials/_resolution_workflow.html): one stands alone,
    several are numbered, and long ones fold under "Steps". */
-.resolution-workflow { max-width: var(--measure); margin: var(--space-3) 0 0; padding: 0; list-style: none; display: grid; gap: var(--space-4); font-size: var(--text-sm); color: var(--ink-2); }
-ol.resolution-workflow { padding-left: var(--space-8); list-style: decimal; }
-.resolution-workflow li { min-width: 0; }
+/* Each step's label beside its command, the commands in one column; a label
+   takes at most two fifths of the row and wraps inside it. A step's number is
+   its label's, since a list laid out as a grid draws no markers. */
+.resolution-workflow {
+  margin: var(--space-3) 0 0; padding: 0; list-style: none;
+  display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); gap: var(--space-3) var(--space-6);
+  font-size: var(--text-sm); color: var(--ink-2); counter-reset: step;
+}
+.resolution-workflow li { min-width: 0; display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; row-gap: var(--space-2); counter-increment: step; }
+.resolution-workflow li > :not(strong, .command),
+.resolution-workflow li > .command:first-child { grid-column: 1 / -1; }
+ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .resolution-workflow li > strong { color: var(--ink); font-weight: 650; }
-.resolution-workflow li > p { margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
+.resolution-workflow li > p { max-width: var(--measure); margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
 .resolution-fold { margin-top: var(--space-3); }
 .resolution-fold > summary { width: fit-content; max-width: 100%; color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
 
@@ -2026,9 +2065,6 @@ ol.resolution-workflow { padding-left: var(--space-8); list-style: decimal; }
    transitions from nothing, so each button in the queue would fade in on load. */
 @media (max-width: 720px) {
   /* The decision keeps the width; bookkeeping follows it in reading order. */
-  .finding-card .section-head { flex-direction: column; }
-  .finding-card .section-head > div { width: 100%; }
-  .finding-card .section-head > .finding-actions { margin-top: var(--space-1); }
 }
 
 .quick-actions.vertical { display: grid; grid-template-columns: 1fr; }
@@ -2073,6 +2109,20 @@ ol.resolution-workflow { padding-left: var(--space-8); list-style: decimal; }
    wrong when one is a short table beside a tall drawing: the short one grows a
    band of empty card under its last row. */
 .two-col.align-top { align-items: start; }
+/* The sections at the end of a thing's page (what else HQ holds, how it
+   relates, what names it) are mostly short: each is a card holding its own
+   heading, two to a row at one height where both fit, and one that is wide
+   (a table of four columns or more, a folded section, a fold of raw
+   readings) takes the whole row. */
+.section-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr)); gap: var(--layout-gap); align-items: stretch; margin: 0 0 var(--stack-gap); }
+/* Short sections collect at the end, so they pair with each other rather than
+   each sitting beside the gap a wide one leaves. */
+.section-flow > * { min-width: 0; margin: 0; order: 1; }
+.section-flow > :not(section, .page-section),
+.section-flow > :is(section, .page-section):has(table > thead th:nth-child(4)),
+.section-flow > :is(section, .page-section):has(> details.section-fold) { grid-column: 1 / -1; order: 0; }
+/* Sections stacked in one column of a pair, at the pair's own gap. */
+.stack { display: grid; gap: var(--layout-gap); align-content: start; min-width: 0; }
 /* A paired row whose two cards end at different points reads as broken.
    `align-top` stops a short card stretching, which is exactly what makes the
    pair ragged; instead the cards stretch and the shorter one gets somewhere to
@@ -2153,7 +2203,7 @@ ol.resolution-workflow { padding-left: var(--space-8); list-style: decimal; }
 .dashboard-patterns .calendar-marks { display: inline-flex; margin: 0 0 0 var(--space-1); min-height: 6px; }
 .dashboard-patterns .calendar-dot { width: 5px; height: 5px; }
 .dashboard-patterns .calendar-legend { margin-block: var(--space-3); }
-.two-col > section, .two-col > div:not(.col-stack), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
+.two-col > section, .two-col > div:not(.col-stack), .section-flow > :is(section, .page-section), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
 /* Inside a layout container the gap is the separation, so a section's own
    stacking margin is dead space. Declared after the section rules above so it
    wins on source order at equal specificity. */
@@ -2565,9 +2615,12 @@ ol.resolution-workflow { padding-left: var(--space-8); list-style: decimal; }
 
 /* ── KV grid ────────────────────────────────────────────────────── */
 
-.kv { display: grid; grid-template-columns: minmax(0, clamp(7rem, 30%, 200px)) minmax(0, 1fr); gap: var(--space-4) var(--space-8); padding: var(--surface-inset, var(--space-8) var(--space-9)); font-size: var(--text-sm); }
+/* Facts: each label beside its value, and as many pairs to a row as the
+   width holds, so seven short facts are two rows rather than seven. A label
+   wraps inside its own column; a value takes what is left of its pair. */
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(5rem, 8rem) minmax(min(13rem, 100% - 5rem - var(--space-6)), 1fr)); gap: var(--space-4) var(--space-6); padding: var(--surface-inset, var(--space-6) var(--space-8)); font-size: var(--text-sm); }
 .kv dt { color: var(--muted); font-weight: 500; }
-.kv dd { margin: 0; color: var(--ink); }
+.kv dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 .eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 
 /* ── Audit / activity list ─────────────────────────────────────── */
@@ -3026,7 +3079,8 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-more-scope { margin-top: var(--space-2); }
 .connection-sight-tally { display: block; font-size: var(--text-xs); color: var(--muted); }
 .connection-sight ul,
-.connection-more-scope ul { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.connection-more-scope ul,
+.cell-notes { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .connection-sight li,
 .connection-more-scope li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); }
 .connection-sight-state { font-weight: 600; }
@@ -3039,9 +3093,18 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-credential-fix-headline { display: block; color: var(--warn); }
 .operator-step { margin-top: var(--space-2); }
 .operator-step p { margin: var(--space-1) 0 0; }
+/* A command and its copy button, which sits in its corner rather than on a
+   line of its own; the command leaves room for it. */
+.command { position: relative; width: fit-content; max-width: 100%; min-width: 0; }
+.command > .command-copy { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); min-height: 0; padding: var(--space-1) var(--space-3); font-size: var(--text-2xs); color: var(--code-ink); border-color: transparent; background: transparent; opacity: .7; }
+.command > .command-copy:is(:hover, :focus-visible) { opacity: 1; }
+.command > .operator-command { margin: 0; padding-inline-end: 4.5rem; }
 /* A command wraps rather than scrolling: selecting it copies it whole. */
 .operator-command {
+  width: fit-content;
+  max-width: 100%;
   margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-5);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: all;
@@ -4531,10 +4594,6 @@ textarea.code {
   scroll-behavior: smooth;
   scroll-padding-top: var(--topology-lane-head);
 }
-/* Anchors the page links to land below the sticky site header. */
-.topology-map, .topology-trace-bar, .topology-detail, .topology-relations {
-  scroll-margin-top: calc(var(--site-header-height) + var(--space-5));
-}
 .topology-lane { min-width: 0; padding: var(--space-5); background: var(--surface-2); box-shadow: 0 0 0 1px var(--line); }
 .topology-lane > header {
   position: sticky; top: 0; z-index: 2; display: grid;
@@ -5079,8 +5138,8 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .posture-everywhere > summary { color: var(--ink); }
 
   /* A project's addresses under its name: one line, dots between. */
-  .project-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
-  .project-meta > * + *::before { content: "·"; margin-right: var(--space-5); color: var(--muted-2); }
+  .project-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); }
+  .project-meta > * + *::before { content: "·"; margin-right: var(--space-3); color: var(--muted-2); }
   .project-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--stack-gap); }
   /* An age or a count that reads wrong split across two lines. */
   .nowrap { white-space: nowrap; }
@@ -5122,13 +5181,13 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
      A grid that draws its dividers with a coloured background behind 1px gaps
      keeps that background; the frame around it is still this one. */
   :where(
-  .table-scroll:has(> .data-table), .card, .two-col > section, .two-col > div:not(.col-stack), .control-card,
+  .table-scroll:has(> .data-table), .card, .two-col > section, .two-col > div:not(.col-stack), .section-flow > :is(section, .page-section), .control-card,
   .control-metric, .control-summary, .service-band, .fact-band,
   .filter-bar, .table-toolbar, .kpi-grid, .insight-grid,
-  .finding-facts, .kv, .form,
+  .kv, .form,
   .auth-card, .mail-stage, .mail-editor,
   .topology-workspace, .github-list, .account-facts, .container-needs,
-  .boxed-facts, .policy-agents li,
+  .boxed-facts, .policy-agents li, .relation-list,
   .posture-gaps, .posture-repos, .machine-telemetry, .machine-telemetry-metrics) {
     border: var(--surface-border, 1px solid var(--line));
     border-radius: var(--surface-radius, var(--radius));
@@ -5221,8 +5280,8 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
      dead space inside the card's padding. */
   /* A frame's own padding is its edge: the first and last thing in it keep no
      margin of their own, or a heading's top margin doubles the padding above it. */
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div:not(.col-stack)) > :last-child { margin-bottom: 0; }
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div:not(.col-stack)) > :first-child { margin-top: 0; }
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div:not(.col-stack), .section-flow > :is(section, .page-section)) > :last-child { margin-bottom: 0; }
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div:not(.col-stack), .section-flow > :is(section, .page-section)) > :first-child { margin-top: 0; }
 
 
   /* ── Disclosure: one marker for everything that opens in place ─────────

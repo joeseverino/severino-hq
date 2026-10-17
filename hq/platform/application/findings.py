@@ -30,10 +30,15 @@ Absence of a remedy is a fact, not an omission. A principal who cannot run the
 capability sees the finding and the evidence and no remedy at all.
 """
 
+import inspect
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
+from functools import cache
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
+
+from django.conf import settings
 
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -210,6 +215,32 @@ def rule_for(name: str) -> FindingRule | None:
     return _RULE_BY_NAME.get(name)
 
 
+@cache
+def rule_origin(name: str) -> dict[str, Any] | None:
+    """Where a rule comes from, as a card's panel says it: its name, title and
+    severity, what it stands in for, and the file and line its detector is
+    declared at, relative to the checkout. Rules are fixed at import, so this
+    is read once per process."""
+
+    rule = rule_for(name)
+    if rule is None:
+        return None
+    where = ""
+    try:
+        source = Path(inspect.getsourcefile(rule.detect) or "")
+        line = inspect.getsourcelines(rule.detect)[1]
+        where = f"{source.relative_to(settings.BASE_DIR)}:{line}"
+    except OSError, TypeError, ValueError:
+        where = ""
+    return {
+        "rule": rule.name,
+        "title": rule.title,
+        "severity": rule.severity,
+        "subsumes": list(rule.subsumes),
+        "where": where,
+    }
+
+
 def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -> tuple[bool, str]:
     """Whether this principal may run it, and what the registry says it does."""
 
@@ -298,6 +329,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         workflow=workflow,
         steps=finding_steps(finding),
         no_help_reason=_no_help_reason(finding),
+        subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
     )
 
 

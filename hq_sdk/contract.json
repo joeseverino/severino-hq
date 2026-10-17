@@ -1599,7 +1599,9 @@
           "subject=",
           "notice=",
           "family=",
-          "since="
+          "since=",
+          "facts=",
+          "links="
         ],
         "fields": [],
         "kind": "dataclass",

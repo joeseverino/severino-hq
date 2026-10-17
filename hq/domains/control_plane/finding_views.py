@@ -4,10 +4,15 @@ from typing import override
 
 from django.views.generic import TemplateView
 
-from hq.platform.application.findings import estate_findings, finding_layout, finding_rules, rule_for
+from hq.platform.application.attention import finding_insight
+from hq.platform.application.dashboard import queue_item
+from hq.platform.application.findings import estate_findings, finding_rules, rule_for
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
+
+# The queue's source for findings: the domain whose pages they are about.
+SOURCE_ID, SOURCE = "hq.infrastructure", "Infrastructure"
 
 
 class FindingsView(PageMixin, TemplateView):
@@ -30,14 +35,9 @@ class FindingsView(PageMixin, TemplateView):
         requested_rule = self.request.GET.get("rule", "").strip()
         active_rule = rule_for(requested_rule)
         raised = estate_findings(principal=principal, rule=active_rule.name if active_rule else "")
-        entries = [
-            {
-                "finding": finding,
-                "workflow": finding.workflow,
-                "layout": finding_layout(finding),
-            }
-            for finding in raised
-        ]
+        url = reverse("control_plane:findings")
+        # The queue's own cards: one renderer for a problem wherever it is drawn.
+        entries = [queue_item(SOURCE_ID, SOURCE, finding_insight(finding, url)) for finding in raised]
 
         counts: dict[str, int] = {}
         for finding in raised:

@@ -3,7 +3,7 @@
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -455,3 +455,42 @@ class CredentialSightPageTests(TestCase):
         for spec in OBSERVATIONS.values():
             if spec.provider == "cloudflare_api":
                 self.assertContains(response, f"<span>{spec.label}</span>")
+
+
+class PartReasonTests(SimpleTestCase):
+    def test_refusals_with_one_reason_are_one_line_naming_each_part_and_where(self):
+        from hq.domains.control_plane.observations import ReadingPart
+        from hq.domains.control_plane.reading_parts import PartRefusal
+
+        from ..credential_sight import PARTIAL, Sight
+
+        off = "not available on this repository (its plan or settings leave it off)."
+        scanning, rules = ReadingPart("scanning", "Code scanning alerts"), ReadingPart("rules", "Branch rules")
+        parts = (
+            *(
+                PartRefusal(kind="example", part=part, refusal="", reason=off, scope=f"example/{repository}")
+                for repository in ("app", "site")
+                for part in (scanning, rules)
+            ),
+            PartRefusal(kind="example", part=rules, refusal="", reason="GitHub timed out", scope="example/app"),
+            PartRefusal(
+                kind="example", part=scanning, refusal="", scope="example/web",
+                reason="GitHub 404 for /repos/example/web/code-scanning/alerts?state=open",
+            ),
+            PartRefusal(
+                kind="example", part=rules, refusal="", scope="example/web",
+                reason="GitHub 404 for /repos/example/web/rules/branches/main",
+            ),
+        )  # fmt: skip
+
+        sight = Sight(kind="example", label="Repository", source="reading", state=PARTIAL, parts=parts)
+
+        self.assertEqual(
+            sight.part_reasons,
+            (
+                "Code scanning alerts, Branch rules not read on app, site: "
+                "not available on this repository (its plan or settings leave it off)",
+                "Branch rules not read on app: GitHub timed out",
+                "Code scanning alerts, Branch rules not read on web: GitHub 404",
+            ),
+        )

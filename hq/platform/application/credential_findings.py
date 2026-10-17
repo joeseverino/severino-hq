@@ -210,12 +210,9 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
                 ),
                 "severity": "serious" if expired else "attention",
                 "explanation": (
-                    (
-                        f"HQ cannot read anything through {node.label} until it is replaced."
-                        if expired
-                        else f"After that HQ cannot read anything through {node.label}."
-                    )
-                    + " Make a new one now."
+                    f"HQ cannot read anything through {node.label} until it is replaced."
+                    if expired
+                    else f"After that HQ cannot read anything through {node.label}."
                 ),
                 "evidence": (("Expires", expiry_phrase(stamp)),),
                 "steps": mint_steps(node),
@@ -241,9 +238,7 @@ RULES: tuple[FindingRule, ...] = (
         "A token is expiring",
         "attention",
         lambda estate: built_findings(expiring(estate)),
-        operator_action=(
-            f"Make a new token with the command on the connection's page before it expires. {THEN_READ_NOW}"
-        ),
+        operator_action=(f"Make a new token with the command on the connection's page. {THEN_READ_NOW}"),
         no_help_reason=_CANNOT_ISSUE,
     ),
 )

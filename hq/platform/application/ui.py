@@ -199,6 +199,12 @@ class Insight:
     # Left unset when the owner knows only that it holds now: a card that
     # guesses a start is worse than one that gives none.
     since: datetime | None = None
+    # What was read that shows it, as (label, value) pairs: "Device address",
+    # "192.0.2.10". A card draws each label once with its values beside it.
+    facts: tuple[tuple[str, str], ...] = ()
+    # Pages that help look into it (where it sits, what depends on it), drawn
+    # as one line of links under its buttons. Never something that acts.
+    links: tuple[ActionLink, ...] = ()
 
     def __post_init__(self) -> None:
         _one_of("Insight status", self.status, STATUS_VALUES)

@@ -10,6 +10,7 @@ A record that names its ``connection_ref`` belongs to that connection alone, so
 two connections of one provider never show each other's readings.
 """
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
@@ -44,6 +45,11 @@ STATE_LABELS = {
     NOT_CONNECTED: "Not connected",
     NEVER_SWEPT: "Never read",
 }
+
+
+# The request a provider's reason names ("GitHub 403 for /repos/a/b/..."):
+# the scope already says which, and without it equal reasons group.
+_REQUEST = re.compile(r"\s+for\s+(?:/|https?://)\S+$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,11 +112,23 @@ class Sight:
 
     @property
     def part_reasons(self) -> tuple[str, ...]:
-        """Why each refused part was not read, once each, where no permission opens it."""
+        """Why the refused parts were not read, where no permission opens them:
+        one line per reason, naming every part and everything it was refused
+        on ("Code scanning alerts, Branch rules not read on app, site: ...")."""
 
         if self.missing:
             return ()
-        return tuple(dict.fromkeys(part.phrase for part in self.parts))
+        grouped: dict[str, tuple[dict[str, None], dict[str, None]]] = {}
+        for part in self.parts:
+            reason = _REQUEST.sub("", part.reason or "the read failed").rstrip(".")
+            labels, scopes = grouped.setdefault(reason, ({}, {}))
+            labels[part.part.label] = None
+            if part.scope:
+                scopes[part.scope.rsplit("/", 1)[-1]] = None
+        return tuple(
+            f"{', '.join(labels)} not read{' on ' + ', '.join(scopes) if scopes else ''}: {reason}"
+            for reason, (labels, scopes) in grouped.items()
+        )
 
     @property
     def listed(self) -> bool:

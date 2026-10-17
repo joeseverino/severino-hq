@@ -230,7 +230,7 @@ class FindingsPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:findings"))
 
-        self.assertContains(response, '<div class="operator-step">')
+        self.assertContains(response, 'class="resolution-workflow"')
         self.assertContains(response, "turn on Device approval")
 
 

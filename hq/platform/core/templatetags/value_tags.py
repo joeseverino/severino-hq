@@ -410,3 +410,15 @@ def problems_about(context, url=""):
 
     request = context.get("request")
     return found(url or (request.path if request is not None else ""))
+
+
+@register.filter
+def urgent(problems):
+    """The urgent ones of ``problems``: the only ones framed above a page."""
+    return [item for item in problems or () if item.get("status") == "serious"]
+
+
+@register.filter
+def not_urgent(problems):
+    """The rest of ``problems``, each drawn as a line."""
+    return [item for item in problems or () if item.get("status") != "serious"]

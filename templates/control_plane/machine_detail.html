@@ -1,87 +1,8 @@
 {% extends "page.html" %}
 {% block page %}
 {% include "partials/_visit_refresh.html" with subject="machine" name=machine.name %}
-<p class="muted">
-      {% comment %}
-      One state, as on the list. Presence decides when the tailnet reports the
-      machine; each connection's own answer is under "Read through".
-      {% endcomment %}
-      <span class="pill pill-{{ machine.state.1 }}">{{ machine.state.0 }}</span>{% if machine.state_since %} since {{ machine.state_since }}{% endif %}
-      {% if is_this_device %}
-        {% comment %}
-        You are reading this on the machine it describes. HQ judges the caller's
-        address for the network gate before any view runs, and every machine
-        carries the addresses it answers at, so the page can say so. Outside the
-        presence block on purpose: a machine the tailnet has never heard of is
-        still the one you are sitting at.
-        {% endcomment %}
-        · <span class="pill pill-reachable" title="You are viewing this page from this machine">this device</span>
-      {% endif %}
-      {% if machine.role %} · {{ machine.role }}{% endif %}
-      {% if not reached_links %} · no connection reads it{% if not machine.declaration %}, and it is known only because another record names it{% endif %}{% endif %}
-      {% if machine.address and not header_addresses %} · <code>{{ machine.address }}</code>{% endif %}
-      {% for label, address, holder in header_addresses %} · <span class="muted">{{ label }}</span> <code>{{ address }}</code>{% if holder %} <span class="muted">{{ holder }}</span>{% endif %}{% endfor %}
-      {% comment %}
-      The other names this same machine answers to. Two credentials name one
-      machine differently and neither is wrong (a Portainer environment and an
-      SSH item for the same VPS) so the names fold together and the ones not
-      chosen are said here rather than dropped.
-      {% endcomment %}
-      {% if machine.aliases %} · also known as {% for alias in machine.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
-</p>
 
 {% problems_about as problems %}{% include "partials/_problems.html" %}
-
-{% comment %}
-What reaches it, what runs on it and how that stands, and what it answers
-for: each once, the detail below. Whatever it is also declared as is the
-"Declared as" table's to list.
-{% endcomment %}
-{% if reached_links or machine.containers or serves_links or machine.roles or unused_images %}
-<div class="fact-band">
-  {% if reached_links %}
-  <div class="band-fact">
-    <span class="band-icon">{% include "partials/_icon.html" with name="network" %}</span>
-    <div>
-      <span class="band-label">Read through</span>
-      {% with found=reached_links.0 %}<strong>{% entity found.0 code=True %}</strong>{% endwith %}
-      {% for link, unanswered in reached_links %}{% if not forloop.first or unanswered %}<small>{% if not forloop.first %}{% entity link %}{% endif %}{% if unanswered %} not answering{% endif %}</small>{% endif %}{% endfor %}
-    </div>
-  </div>
-  {% endif %}
-  {% if machine.containers %}
-  <div class="band-fact{% if container_counts.vulnerable or container_counts.stopped %} tone-serious{% elif container_counts.update %} tone-attention{% else %} tone-good{% endif %}">
-    <span class="band-icon">{% include "partials/_icon.html" with name="container" %}</span>
-    <div>
-      <span class="band-label">Containers</span>
-      <strong>{{ machine.running }} of {{ machine.containers|length }} running</strong>
-      <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known vulnerabilities,have known vulnerabilities" }} · {% endif %}{% if container_counts.update %}{{ container_counts.update|counted:"has an update,have an update" }}{% elif container_counts.up_to_date == standings|length %}All up to date{% elif container_counts.up_to_date %}{{ container_counts.up_to_date }} up to date{% else %}Updates not checked yet{% endif %}</small>
-    </div>
-  </div>
-  {% endif %}
-  {% if serves_links or machine.roles %}
-  <div class="band-fact">
-    <span class="band-icon">{% include "partials/_icon.html" with name="globe" %}</span>
-    <div>
-      <span class="band-label">Serves</span>
-      <strong>{% if serves_links %}{{ serves_links|length|counted:"name" }}{% else %}{{ machine.roles.0.label }}{% endif %}</strong>
-      <small>{% for link in serves_links %}{% entity link %}{% if forloop.first and machine.runs_hq %} {{ hq_label }}{% endif %}{% if not forloop.last or machine.roles %} · {% endif %}{% endfor %}{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</small>
-    </div>
-  </div>
-  {% endif %}
-  {% if unused_images %}
-  <div class="band-fact tone-attention">
-    <span class="band-icon">{% include "partials/_icon.html" with name="layers" %}</span>
-    <div>
-      <span class="band-label">Images</span>
-      <strong>{{ unused_images|length|counted:"unused image,unused images" }}</strong>
-      <small>{{ unused_size }} can be freed</small>
-      <small><code>ssh {{ machine.name }} "sudo docker image prune -a"</code></small>
-    </div>
-  </div>
-  {% endif %}
-</div>
-{% endif %}
 
 {% if load_metrics %}
   <section class="machine-telemetry" aria-labelledby="machine-telemetry-heading">
@@ -106,12 +27,20 @@ for: each once, the detail below. Whatever it is also declared as is the
   </section>
 {% endif %}
 
-{% if machine.containers %}
+{% if machine.containers or unused_images %}
   <h2>Containers</h2>
-  {% if docker %}<p class="muted">{% if docker.version %}Docker {{ docker.version }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} · {{ docker.status }}{% endif %}{% if docker.connection %} · read through {% entity docker.connection %}{% endif %}</p>{% endif %}
-  <div class="table-scroll">
+  {% comment %}
+  Where they are read from and what they leave behind. How they stand is
+  the tile at the top of the page.
+  {% endcomment %}
+  <ul class="dot-list section-facts">
+    {% if docker %}<li>{% if docker.version %}Docker {{ docker.version }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status }}{% endif %}</li>{% if docker.connection %}<li>read through {% entity docker.connection %}</li>{% endif %}{% endif %}
+    {% if unused_images %}<li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size }} can be freed</li>{% endif %}
+  </ul>
+  {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
+  {% if machine.containers %}<div class="table-scroll">
     {% include "control_plane/_container_rows.html" with containers=machine.on_show %}
-  </div>
+  </div>{% endif %}
   {% if machine.folded %}
     {% comment %}
     Watched exactly like the rest (start, stop and restart all work) just
@@ -128,6 +57,7 @@ for: each once, the detail below. Whatever it is also declared as is the
 {% endif %}
 
 {% if machine.presence %}
+<section class="card">
   <div class="section-head">
     <h2>Tailnet</h2>
     {% comment %}
@@ -138,17 +68,15 @@ for: each once, the detail below. Whatever it is also declared as is the
       <a class="btn" href="{% url 'control_plane:tailnet' %}?source={{ asked.source|urlencode }}&amp;target={{ asked.target|urlencode }}" data-modal-open="whatif">Policy test</a>
     {% endif %}
   </div>
-  <div class="table-scroll">
-    <table class="data-table compact-table">
-      <tbody>
-        <tr><th scope="row">Device</th><td>{% entity device_link %}</td></tr>
+  <dl class="kv">
+        <dt>Device</dt>
+          <dd>{% entity device_link %}</dd>
         {% if magic_dns_link %}
-          <tr><th scope="row">MagicDNS</th><td>{% entity magic_dns_link code=True %}</td></tr>
+          <dt>MagicDNS</dt>
+          <dd>{% entity magic_dns_link code=True %}</dd>
         {% endif %}
-        <tr>
-          <th scope="row">State</th>
-          <td>{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.state_since %}, last seen {{ machine.state_since }}{% endif %}{% endif %}</td>
-        </tr>
+        <dt>State</dt>
+          <dd>{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.state_since %}, last seen {{ machine.state_since }}{% endif %}{% endif %}</dd>
         {% comment %}
         When a request last came to HQ from this machine. Not said of the
         machine HQ runs on: its controller reaches HQ without a request, so the
@@ -156,10 +84,8 @@ for: each once, the detail below. Whatever it is also declared as is the
         there.
         {% endcomment %}
         {% if machine.presence.reached_hq and not machine.presence.observer %}
-          <tr>
-            <th scope="row">Last reached HQ</th>
-            <td>{{ machine.presence.reached_hq.phrase|capfirst }}</td>
-          </tr>
+          <dt>Last reached HQ</dt>
+          <dd>{{ machine.presence.reached_hq.phrase|capfirst }}</dd>
         {% endif %}
         {% comment %}
         Every tailnet reading here is observer-relative, and on this machine
@@ -167,35 +93,37 @@ for: each once, the detail below. Whatever it is also declared as is the
         about itself.
         {% endcomment %}
         {% if machine.presence.observer %}
-          <tr><th scope="row">Last reached HQ</th><td>This is HQ's own machine.</td></tr>
+          <dt>Last reached HQ</dt>
+          <dd>This is HQ's own machine.</dd>
         {% endif %}
-        <tr>
-          <th scope="row">Node key</th>
-          <td>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days|counted:"day" }}{% else %}Does not expire{% endif %}</td>
-        </tr>
-        <tr>
-          <th scope="row">Runs</th>
-          <td>{{ machine.presence.os|or_empty }}{% if tailscale_version %} · <span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}</td>
-        </tr>
+        <dt>Node key</dt>
+          <dd>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days|counted:"day" }}{% else %}Does not expire{% endif %}</dd>
+        <dt>Runs</dt>
+          <dd>{{ machine.presence.os|or_empty }}{% if tailscale_version %} · <span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}</dd>
         {% comment %}
         Each shown only when true. A device that runs no Tailscale SSH, accepts
         inbound connections and belongs to this tailnet is every device: three
         rows saying "no" on every machine page is how a page stops being read.
         {% endcomment %}
         {% if machine.presence.ssh_enabled %}
-          <tr><th scope="row">Tailscale SSH</th><td>Enabled</td></tr>
+          <dt>Tailscale SSH</dt>
+          <dd>Enabled</dd>
         {% endif %}
         {% if machine.presence.blocks_incoming %}
-          <tr><th scope="row">Shields</th><td>Up. Blocks all inbound connections.</td></tr>
+          <dt>Shields</dt>
+          <dd>Up. Blocks all inbound connections.</dd>
         {% endif %}
         {% if machine.presence.external %}
-          <tr><th scope="row">Belongs to</th><td>Another tailnet (shared in)</td></tr>
+          <dt>Belongs to</dt>
+          <dd>Another tailnet (shared in)</dd>
         {% endif %}
         {% if not machine.presence.authorized %}
-          <tr><th scope="row">Authorised</th><td><strong>No</strong>. It cannot connect until you approve it.</td></tr>
+          <dt>Authorised</dt>
+          <dd><strong>No</strong>. It cannot connect until you approve it.</dd>
         {% endif %}
         {% if machine.presence.lock_error %}
-          <tr><th scope="row">Tailnet lock</th><td><strong>Not signed</strong>: {{ machine.presence.lock_error }}</td></tr>
+          <dt>Tailnet lock</dt>
+          <dd><strong>Not signed</strong>: {{ machine.presence.lock_error }}</dd>
         {% endif %}
         {% comment %}
         Offered and approved, never one of the two. A route is advertised by the
@@ -205,18 +133,15 @@ for: each once, the detail below. Whatever it is also declared as is the
         reads as a working one.
         {% endcomment %}
         {% if machine.presence.advertised_routes or machine.presence.offers_exit_node %}
-          <tr>
-            <th scope="row">Exit node</th>
-            <td>
+          <dt>Exit node</dt>
+          <dd>
               {% if not machine.presence.offers_exit_node %}Not offered
               {% elif machine.presence.exit_node_approved %}Offered and approved
               {% else %}<strong>Offered, not approved</strong>
               {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <th scope="row">Routes</th>
-            <td>
+            </dd>
+          <dt>Routes</dt>
+          <dd>
               {% for route in machine.presence.advertised_routes %}<code>{{ route }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}None advertised{% endfor %}
               {% comment %}
               The verb where the fact is. Approval takes the whole advertised
@@ -227,14 +152,11 @@ for: each once, the detail below. Whatever it is also declared as is the
                 {% url 'control_plane:approve_routes' machine.route_approval_key as approve_url %}
                 {% post_button "Approve routes" approve_url title=route_approval.reason disabled=route_approval_off %}
               {% endif %}
-            </td>
-          </tr>
+            </dd>
         {% endif %}
         {% if machine.presence.tags %}
-          <tr>
-            <th scope="row">Tags</th>
-            <td>{% for tag in machine.presence.tags %}<code>{{ tag }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-          </tr>
+          <dt>Tags</dt>
+          <dd>{% for tag in machine.presence.tags %}<code>{{ tag }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</dd>
         {% endif %}
         {% comment %}
         Every address, here and nowhere else. A machine on a tailnet has a LAN
@@ -242,16 +164,22 @@ for: each once, the detail below. Whatever it is also declared as is the
         point a record at depends on where the client is, so they belong
         together in one place rather than crowding the top of the page.
         {% endcomment %}
-        <tr>
-          <th scope="row">Addresses</th>
+        <dt>Addresses</dt>
           {% comment %}
           One per line: three addresses are three answers, not a phrase.
           {% endcomment %}
-          <td>{% for label, address in labelled_addresses %}{% if label %}<span class="muted">{{ label }}</span> {% endif %}<code>{{ address }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+          <dd>{% for label, address in labelled_addresses %}{% if label %}<span class="muted">{{ label }}</span> {% endif %}<code>{{ address }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}</dd>
+              {% comment %}
+        Who the policy lets in, per port: the answer the policy test gives,
+        shown without having to ask. A policy alias names a machine's address
+        and links to it; tags and users stay as the policy writes them.
+        {% endcomment %}
+        {% for port, who in opening_links %}
+          <dt>Port <code>{{ port }}</code></dt>
+          <dd>{% include "control_plane/_policy_names.html" with names=who %}</dd>
+        {% endfor %}
+  </dl>
+</section>
 
   {% if machine.presence.peered %}
     {% comment %}
@@ -265,19 +193,14 @@ for: each once, the detail below. Whatever it is also declared as is the
     it is reaching. That is what this says and why each row is here.
     {% endcomment %}
     <h2 class="section-heading">Peered with HQ</h2>
-    <div class="table-scroll">
-      <table class="data-table">
-        <tbody>
-          <tr>
-            <th scope="row">Handshake</th>
-            <td>
+    <dl class="kv">
+          <dt>Handshake</dt>
+          <dd>
               Completed {{ machine.presence.handshake }}
               {% if machine.presence.active %} · active{% endif %}
-            </td>
-          </tr>
-          <tr>
-            <th scope="row">Path</th>
-            <td>
+            </dd>
+          <dt>Path</dt>
+          <dd>
               {% if machine.presence.peer_path == "direct" %}
                 Direct: <code>{{ machine.presence.direct_endpoint }}</code>{% if machine.presence.relay %}, fallback relay <code>{{ machine.presence.relay }}</code>{% endif %}
               {% elif machine.presence.peer_path == "relayed" %}
@@ -285,43 +208,14 @@ for: each once, the detail below. Whatever it is also declared as is the
               {% else %}
                 No path yet. One is set up when traffic starts.
               {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <th scope="row">Traffic</th>
-            <td>{{ machine.presence.rx_bytes|bytes }} in · {{ machine.presence.tx_bytes|bytes }} out</td>
-          </tr>
-          <tr>
-            <th scope="row">Node key</th>
-            <td><code class="node-key">{{ machine.presence.public_key }}</code></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+            </dd>
+          <dt>Traffic</dt>
+          <dd>{{ machine.presence.rx_bytes|bytes }} in · {{ machine.presence.tx_bytes|bytes }} out</dd>
+          <dt>Node key</dt>
+          <dd><code class="node-key">{{ machine.presence.public_key }}</code></dd>
+        </dl>
   {% endif %}
 
-  {% if machine.presence.openings %}
-    {% comment %}
-    Who the policy lets in, per port. The single most useful thing HQ can say
-    about a machine that nothing else on this page says, and it is the same
-    answer the policy test gives, shown without having to ask for it.
-    {% endcomment %}
-    <h2>Who can connect</h2>
-    <div class="table-scroll">
-      <table class="data-table compact-table">
-        <thead><tr><th>Port</th><th>From</th></tr></thead>
-        <tbody>
-          {% comment %}A policy alias names a machine's address and links to it; tags and users stay as the policy writes them.{% endcomment %}
-          {% for port, who in opening_links %}
-            <tr>
-              <td><code>{{ port }}</code></td>
-              <td>{% include "control_plane/_policy_names.html" with names=who %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% endif %}
 {% endif %}
 
 {% comment %}
@@ -329,9 +223,11 @@ for: each once, the detail below. Whatever it is also declared as is the
   produced, rendered through the shared renderer, so a section HQ gains later
   appears here without this template learning anything about it.
 {% endcomment %}
+<div class="section-flow">
 {% include "partials/_page_sections.html" %}
 {% include "partials/_relationships.html" %}
 {% referenced_by "machine" machine.name cards=True %}
+</div>
 
 {% if device_names %}
   {% include "partials/_modal.html" with id="whatif" title="Policy test" lede="Check whether the policy allows a connection." body_template="control_plane/_whatif_form.html" %}

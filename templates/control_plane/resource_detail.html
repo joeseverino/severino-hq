@@ -263,8 +263,10 @@ certificate, so the relation reads from both ends.
   {% endif %}
 {% endif %}
 
+<div class="section-flow">
 {% include "partials/_relationships.html" %}
 {% referenced_by resource.kind resource.key cards=True %}
+</div>
 
 <details class="control-diagnostics">
   <summary>Raw data</summary>

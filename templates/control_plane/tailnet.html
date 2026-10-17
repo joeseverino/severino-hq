@@ -29,15 +29,12 @@
 
   {% if tailnet.settings %}
     <h2>Settings</h2>
-    <div class="table-scroll">
-      <table class="data-table compact-table">
-        <tbody>
-          {% for setting in tailnet.settings %}
-            <tr><th scope="row">{{ setting.label }}</th><td>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value }}{% endif %}{% if setting.problem_url %} <a class="pill pill-attention" href="{{ setting.problem_url }}">Problem</a>{% endif %}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+    <dl class="kv">
+      {% for setting in tailnet.settings %}
+        <dt>{{ setting.label }}</dt>
+        <dd>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value }}{% endif %}{% if setting.problem_url %} <a class="pill pill-attention" href="{{ setting.problem_url }}">Problem</a>{% endif %}</dd>
+      {% endfor %}
+    </dl>
   {% endif %}
 
   <div class="section-head">

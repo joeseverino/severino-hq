@@ -1,5 +1,6 @@
 """Which action items a person has set aside, and the queue under its domains."""
 
+import re
 from datetime import timedelta
 from unittest import mock
 
@@ -285,7 +286,8 @@ class PageTests(TestCase):
             page = self.client.get(reverse("action_items"))
             self.assertEqual(self.shown(page), [ITEM["label"]])
             self.assertEqual(self.shown(page, "notice_groups"), [told["label"]])
-            self.assertContains(page, '<span class="pill pill-idea">Notice</span>', count=1)
+            self.assertContains(page, 'class="pill pill-idea"', count=1)
+            self.assertContains(page, ">Notice</span>", count=1)
             # The header counts everything waiting; dismissing the notices
             # leaves what needs doing where it was.
             self.assertEqual(page.context["profile_action_count"], 2)
@@ -305,7 +307,12 @@ class PageTests(TestCase):
         page = self.client.get(reverse("action_items"))
 
         self.assertContains(page, '<section class="queue-group"', count=1)
-        self.assertContains(page, "Example", count=1 + 1)  # the heading and the source filter
+        # The heading and the source filter. Each card's origin (its tooltip and
+        # the panel a modifier click opens) names its source and is not the row.
+        shown = re.sub(
+            r'<div class="origin-panel".*?</div>| data-tip="[^"]*"', "", page.content.decode(), flags=re.DOTALL
+        )
+        self.assertEqual(shown.count("Example"), 1 + 1)
 
 
 class RouteTests(TestCase):

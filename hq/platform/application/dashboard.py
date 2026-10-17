@@ -102,6 +102,8 @@ def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
         "notice": bool(getattr(item, "notice", False)),
         "family": getattr(item, "family", ""),
         "since": since.isoformat() if since else "",
+        "facts": [list(fact) for fact in getattr(item, "facts", ())],
+        "links": [asdict(link) for link in getattr(item, "links", ())],
     }
 
 

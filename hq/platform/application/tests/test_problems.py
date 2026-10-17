@@ -75,8 +75,8 @@ class ProblemsAboutTests(TestCase):
             page = self.client.get(self.url)
             queue = self.client.get(reverse("action_items"))
 
-        self.assertContains(page, 'class="card problems-here"')
-        self.assertContains(page, "1 problem")
+        self.assertContains(page, 'class="card problems-here tone-serious" id="problems-here"')
+        self.assertContains(page, "1 urgent problem")
         self.assertContains(page, "The service refused the change.")
         # One card: the page draws the queue's own markup, with no second link to itself.
         self.assertContains(page, 'class="attention-row"', count=1)

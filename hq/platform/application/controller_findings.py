@@ -172,10 +172,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=kind_key,
                 title=f"{_many(kind_key)} have not been read for {duration(silent)}",
                 severity="serious",
-                explanation=(
-                    f"What HQ shows for them is {duration(silent)} old. Read them now. "
-                    "If that fails, the connection that reads them needs fixing."
-                ),
+                explanation=("Read them now. If that fails, the connection that reads them needs fixing."),
                 evidence=(
                     ("Last read", newest.isoformat()),
                     ("Read every", duration(sweep_interval())),

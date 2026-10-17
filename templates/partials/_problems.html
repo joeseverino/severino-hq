@@ -1,26 +1,37 @@
 {% comment %}
-The open problems about the thing a page shows, as the queue's own cards. A
-page asks for them and draws them in two tags:
+The open problems about the thing a page shows. A page asks for them and draws
+them in two tags:
 
     {% problems_about as problems %}{% include "partials/_problems.html" %}
 
 `problems_about` finds them by the page's own address, or by the address it
-is given. Under the thing's own name a card does not say where it came from,
-and its title is not a link back to the page it is on. Nothing is drawn when
-nothing is open.
+is given. Under the thing's own name a problem does not say where it came
+from, and its title is not a link back to the page it is on.
+
+Only an urgent problem is framed: the queue's own card, in a box above the
+page. Anything less is a line: how urgent, what is wrong, what it means and
+what can be pressed, with its steps under it when it has any. Nothing is
+drawn when nothing is open.
 {% endcomment %}
-{% if problems %}
-<section class="card problems-here" aria-labelledby="problems-here-heading">
-  <h2 id="problems-here-heading">{{ problems|length|counted:"problem" }}</h2>
-  {% comment %}Past three, the worst two stay open and the rest fold, so the page under them is still in reach.{% endcomment %}
-  {% if problems|length > 3 %}
-    {% include "partials/_work_queue.html" with items=problems|slice:":2" grouped=True here=True only %}
-    <details class="resolution-fold">
-      <summary>{{ problems|length|add:"-2" }} more</summary>
-      {% include "partials/_work_queue.html" with items=problems|slice:"2:" grouped=True here=True only %}
-    </details>
-  {% else %}
-    {% include "partials/_work_queue.html" with items=problems grouped=True here=True only %}
-  {% endif %}
+{% with urgent=problems|urgent rest=problems|not_urgent %}
+{% if urgent %}
+<section class="card problems-here tone-serious" id="problems-here" aria-labelledby="problems-here-heading">
+  <h2 class="visually-hidden" id="problems-here-heading">{{ urgent|length|counted:"urgent problem,urgent problems" }}</h2>
+  {% include "partials/_work_queue.html" with items=urgent grouped=True here=True only %}
 </section>
 {% endif %}
+{% if rest %}
+<ul class="problem-lines">
+  {% for entry in rest %}{% with item=entry|decision %}
+  <li class="problem-line">
+    <p>
+      {% include "partials/_urgency_pill.html" with item=item only %}
+      <strong>{{ item.label }}</strong>{% if item.detail %} {{ item.detail }}{% endif %}{% if item.advice %} <span class="muted">{{ item.advice }}</span>{% endif %}{% if item.reason %} <span class="muted">{{ item.reason }}</span>{% endif %}
+    </p>
+    {% if item.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=item.actions only %}</div>{% endif %}
+    {% include "partials/_resolution_workflow.html" with steps=item.steps fold=item.steps_fold label=item.label only %}
+  </li>
+  {% endwith %}{% endfor %}
+</ul>
+{% endif %}
+{% endwith %}

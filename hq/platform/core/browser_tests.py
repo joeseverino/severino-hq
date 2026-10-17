@@ -19,6 +19,7 @@ render. JavaScript below queries by tag only.
 import json
 import mimetypes
 import os
+import re
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -75,7 +76,8 @@ SELECTORS = {
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".dash-readings .glance-panel-head",
     "patterns": ".dashboard-patterns > .card",
-    "pill": ".pill",
+    # What reads as one unit and so never breaks across lines: a state, a time.
+    "one_line": ".pill, td time",
     # Everything pressed: a button, a link drawn as one, a disclosure's handle.
     "control": "button, .btn, .icon-link, summary",
     # Anything in a table cell: its words stay inside its own box, or they are
@@ -85,10 +87,14 @@ SELECTORS = {
     "spoken": ".ask-said",
     # The one box allowed to scroll sideways.
     "table_scroll": ".table-scroll",
+    # A box that holds content: a card, a table's frame.
+    "frame": ".card, .table-scroll",
+    # What reaches across a frame besides its text.
+    "frame_content": "img, svg, canvas, button, .btn, input, select, pre",
     # Frames by design: a control, a chip, a path's steps, a diagram's nodes.
     "frame_exempt": ".btn, .pill, .request-path li, .topology-node, label",
     # Everything inside a menu or a dialog, which float over the page.
-    "frame_exempt_within": "dialog, [data-menu]",
+    "frame_exempt_within": "dialog, [popover], [data-menu]",
     # The lead control renders first, so it is the one a narrow head keeps.
     "head_lead": ".page-head .page-actions > :first-child",
     "head_title": ".page-head .page-title-row",
@@ -109,7 +115,7 @@ SELECTORS = {
     # A band's cells. Stats inside a card are the one band laid out with real
     # gaps instead of padded cells, so the KPI band is not listed.
     "band_cell": (
-        ":is(.control-summary, .service-band, .fact-band, .finding-facts, .insight-grid,"
+        ":is(.control-summary, .service-band, .fact-band, .insight-grid,"
         " .connection-control-grid, .sweep-grid,"
         " .machine-telemetry-metrics) > *"
     ),
@@ -411,11 +417,11 @@ _PAIRS = (
 }"""
 )
 
-_WRAPPED_PILLS = (
+_WRAPPED_PHRASES = (
     "(selector) => {"
     + _DESCRIBE
     + """
-  // A pill is one short state: no taller than the same pill holding one letter.
+  // A pill or a time is one phrase: no taller than the same element holding one letter.
   const found = [];
   for (const pill of document.querySelectorAll(selector)) {
     if (!pill.getClientRects().length) continue;
@@ -581,6 +587,87 @@ _CONTRAST = (
 # A band cell with no padding: its content touches the hairlines around it.
 # The frame rule zeroes the inset of anything nested in a surface, and a band
 # is one, so a component placed in a band loses its padding without a trace.
+# A frame across most of the page whose content stops short of half of it: a
+# short table stretched to the page, a card of one short line. The width is
+# the content's to set; a frame that is mostly empty says nothing with it.
+_EMPTY_FRAMES = (
+    "([selector, content]) => {"
+    + _DESCRIBE
+    + """
+  const page = document.querySelector('main').clientWidth;
+  const found = [];
+  const range = document.createRange();
+  for (const frame of document.querySelectorAll('main :is(' + selector + ')')) {
+    const r = frame.getBoundingClientRect();
+    if (r.width < page * 0.8 || r.height < 40 || !frame.checkVisibility()) continue;
+    let right = r.left;
+    const walker = document.createTreeWalker(frame, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim() || !node.parentElement.checkVisibility()) continue;
+      range.selectNodeContents(node);
+      for (const line of range.getClientRects()) right = Math.max(right, line.right);
+    }
+    for (const el of frame.querySelectorAll(content)) {
+      const box = el.getBoundingClientRect();
+      if (box.width) right = Math.max(right, box.right);
+    }
+    const used = (right - r.left) / r.width;
+    if (used < 0.5) found.push(`${describe(frame)} fills ${Math.round(used * 100)}% of its width`);
+  }
+  return found;
+}"""
+)
+
+
+# Every style rule's selector the browser kept, nested rules included. A rule
+# whose selector does not parse is dropped whole and silently: the stylesheet
+# still loads and nothing reports it.
+_KEPT_SELECTORS = """() => {
+  const sheet = [...document.styleSheets].find((s) => s.href && s.href.includes('/css/app.css'));
+  const found = [];
+  const walk = (rules) => {
+    for (const rule of rules) {
+      if (rule.selectorText !== undefined) found.push(rule.selectorText);
+      if (rule.cssRules) walk(rule.cssRules);
+    }
+  };
+  walk(sheet.cssRules);
+  return found;
+}"""
+
+
+def authored_selectors(css: str) -> list[str]:
+    """Every style rule's selector as ``app.css`` writes it, nested rules
+    included: the text before each ``{`` that does not open an at-rule."""
+
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    found, start, quote = [], 0, ""
+    for at, char in enumerate(css):
+        if quote:
+            quote = "" if char == quote else quote
+        elif char in "\"'":
+            quote = char
+        elif char in "{};":
+            if char == "{":
+                header = css[start:at].strip()
+                # A keyframe's step is not a selector.
+                if header and not header.startswith("@") and not re.fullmatch(r"[\d.%,\s]+|from|to", header):
+                    found.append(header)
+            start = at + 1
+    return found
+
+
+def _plain_selector(selector: str) -> str:
+    """A selector as the browser writes it back: no whitespace, double quotes,
+    no ``*`` before what already names an element, and every attribute value
+    quoted."""
+
+    plain = re.sub(r"\s+", "", selector).replace("'", '"')
+    plain = re.sub(r"\*(?=[:.\[#])", "", plain)
+    plain = plain.replace("(odd)", "(2n+1)").replace("(even)", "(2n)")
+    return re.sub(r'(\[[^\]=]+?[~|^$*]?=)([^"\]]+)\]', r'\1"\2"]', plain)
+
+
 _UNPADDED_CELLS = (
     "(selector) => {"
     + _DESCRIBE
@@ -1080,6 +1167,13 @@ class LayoutBrowserTests(BrowserGate):
                     self.open(name, width)
                     check(name)
 
+    def test_every_selector_parses(self):
+        authored = authored_selectors(Path(finders.find("css/app.css")).read_text())
+        self.open(next(iter(PAGES)), OVERFLOW_WIDTHS[-1])
+        kept = {_plain_selector(selector) for selector in self.page.evaluate(_KEPT_SELECTORS)}
+
+        self.assertEqual([selector for selector in authored if _plain_selector(selector) not in kept], [])
+
     def test_nothing_is_framed_inside_a_frame(self):
         def check(_name):
             self.assertEqual(
@@ -1117,7 +1211,7 @@ class LayoutBrowserTests(BrowserGate):
             self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
             self.assertEqual(self.page.evaluate(_CELLS), [])
             self.assertEqual(self.page.evaluate(_BROKEN_WORDS), [])
-            self.assertEqual(self.page.evaluate(_WRAPPED_PILLS, SELECTORS["pill"]), [])
+            self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), [])
             self.assertEqual(self.page.evaluate(_UNSEEN_COLUMNS, SELECTORS["table_scroll"]), [])
             self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["control"]), [])
             self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["cell_content"]), [])
@@ -1168,7 +1262,7 @@ class LayoutBrowserTests(BrowserGate):
         def check(_name):
             self.assertEqual(self.page.evaluate(_ESCAPES), [])
             self.assertEqual(self.page.evaluate(_OVERLAPS), [])
-            self.assertEqual(self.page.evaluate(_WRAPPED_PILLS, SELECTORS["pill"]), [])
+            self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), [])
 
         self.across(check, DENSE_PAGES)
 
@@ -1187,7 +1281,7 @@ class LayoutBrowserTests(BrowserGate):
         self.each(lambda _name: self.assertEqual(self.page.evaluate(_PAIRS), []))
 
     def test_a_pill_never_wraps(self):
-        self.each(lambda _name: self.assertEqual(self.page.evaluate(_WRAPPED_PILLS, SELECTORS["pill"]), []))
+        self.each(lambda _name: self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), []))
 
     def test_nothing_overlaps(self):
         self.each(lambda _name: self.assertEqual(self.page.evaluate(_OVERLAPS), []))
@@ -1403,6 +1497,14 @@ class LayoutBrowserTests(BrowserGate):
 
     def test_a_link_sits_on_the_line_it_continues(self):
         self.across(lambda _name: self.assertEqual(self.page.evaluate(_RAISED_LINKS), []))
+
+    def test_a_wide_frame_is_filled(self):
+        for name in ALL_PAGES:
+            with self.subTest(page=name):
+                self.open(name, OVERFLOW_WIDTHS[-1])
+                self.assertEqual(
+                    self.page.evaluate(_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]]), []
+                )
 
     def test_a_row_has_one_disclosure(self):
         self.across(lambda _name: self.assertEqual(self.page.evaluate(_NESTED_DISCLOSURES), []))

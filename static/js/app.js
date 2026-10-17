@@ -1448,22 +1448,39 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   }
 });
 
-// A block meant to be pasted somewhere else: its button copies it. Shown only
-// where the browser allows writing the clipboard; the block itself is plain
-// selectable text either way.
-document.addEventListener("DOMContentLoaded", () => {
-  if (!navigator.clipboard) return;
-  document.querySelectorAll("[data-copy-target]").forEach((button) => {
-    const source = document.getElementById(button.dataset.copyTarget);
-    if (!source) return;
-    button.hidden = false;
-    button.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(source.textContent);
-        button.textContent = "Copied";
-      } catch {
-        button.textContent = "Select it to copy";
-      }
-    });
-  });
+// A block meant to be pasted somewhere else: its button copies it. One
+// listener for the page, so a block drawn later (a fragment, an opened row)
+// copies the same way. The button names its block (`data-copy-target`) or
+// sits beside it (`data-copy`); the block is plain selectable text either way.
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-copy], [data-copy-target]");
+  if (!button) return;
+  const source = button.dataset.copyTarget
+    ? document.getElementById(button.dataset.copyTarget)
+    : button.parentElement.querySelector("pre");
+  if (!source) return;
+  try {
+    await navigator.clipboard.writeText(source.textContent.trim());
+    button.textContent = "Copied";
+  } catch {
+    button.textContent = "Select it to copy";
+  }
 });
+
+// What raised a card: Cmd- or Ctrl-click on its urgency opens the panel drawn
+// beside it (partials/_urgency_pill.html). A plain click is left alone.
+document.addEventListener("click", (event) => {
+  if (!(event.metaKey || event.ctrlKey)) return;
+  const pill = event.target.closest("[data-origin]");
+  const panel = pill && document.getElementById(pill.dataset.origin);
+  if (!panel || !panel.showPopover) return;
+  event.preventDefault();
+  panel.showPopover();
+});
+
+// While ⌘ or Ctrl is held, what a ⌘-click opens says so. Released, or the
+// window left, it reads as text again.
+const heldModifier = (event) => document.documentElement.classList.toggle("modifier-held", event.metaKey || event.ctrlKey);
+document.addEventListener("keydown", heldModifier);
+document.addEventListener("keyup", heldModifier);
+window.addEventListener("blur", () => document.documentElement.classList.remove("modifier-held"));

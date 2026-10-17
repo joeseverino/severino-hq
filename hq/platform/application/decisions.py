@@ -15,7 +15,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Any
 
 # How urgent, in the words a card's pill says.
-URGENCY = {"serious": "Urgent", "attention": "Needs attention", "neutral": "FYI", "good": "Fine"}
+URGENCY = {"serious": "Urgent", "attention": "Needs attention", "neutral": "Note", "good": "Fine"}
 NOTICE = "Notice"
 # A step a person reads without scrolling: past either, the steps fold.
 _SHORT_STEP = 120
@@ -109,6 +109,39 @@ def _next_step(item: dict[str, Any], taken: set[tuple[str, str]]) -> tuple[list[
     return [link], ""
 
 
+def _one_primary(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The first recommended action leads; every other is a plain button, so a
+    card never shows two of equal weight competing to be the fix."""
+
+    lead = next((index for index, action in enumerate(actions) if action.get("recommended")), None)
+    return [{**action, "recommended": index == lead} for index, action in enumerate(actions)]
+
+
+def _facts(pairs: Any) -> list[dict[str, Any]]:
+    """Facts by label, in the order first given: each label once, with every
+    value it was given, and a value that is a web address as a link."""
+
+    from .entity_links import web_url
+
+    grouped: dict[str, list[dict[str, str]]] = {}
+    for label, value in pairs:
+        text = str(value)
+        grouped.setdefault(str(label), []).append({"text": text, "url": web_url(text)})
+    return [{"label": label, "values": values} for label, values in grouped.items()]
+
+
+def _origin(item: dict[str, Any]) -> dict[str, Any]:
+    """What raised an item: a finding's rule and where it is declared, or the
+    domain that raised anything else and the key it raised it under."""
+
+    from .findings import rule_origin
+
+    key = str(item.get("key", ""))
+    _, finding, rest = key.partition(":finding:")
+    rule = rule_origin(rest.split(":", 1)[0]) if finding else None
+    return {"source": item.get("source", ""), "key": key, **(rule or {})}
+
+
 def decision(item: dict[str, Any]) -> dict[str, Any]:
     actions = list(item.get("actions", ()))
     workflow = item.get("workflow")
@@ -128,7 +161,9 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         **item,
         "href": subject.get("url") or item.get("url") or "",
         "urgency": NOTICE if item.get("notice") else urgency(item.get("status", "")),
-        "actions": actions + links,
+        "actions": _one_primary(actions + links),
+        "facts": _facts(item.get("facts", ())),
+        "origin": _origin(item),
         "advice": advice,
         "reason": parts["reason"],
         "steps": steps,

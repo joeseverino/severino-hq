@@ -236,6 +236,7 @@ class MachineDetailView(PageMixin, TemplateView):
 
         context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
         context["hq_label"] = HQ_LABEL
+        context["page_aside"] = "control_plane/_machine_status.html"
         context["container_kind"] = CONTAINER_KIND
         from hq.platform.application.containers import on_machine
         from hq.platform.application.machine_context import header_addresses

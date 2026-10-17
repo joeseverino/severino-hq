@@ -1076,7 +1076,8 @@ class InfrastructureViewsTests(TestCase):
         with patch("hq.domains.control_plane.finding_views.estate_findings", return_value=(finding,)):
             response = self.client.get(reverse("control_plane:findings"))
 
-        self.assertContains(response, '<a class="subtle-link" href="/connections/">Open connections</a>')
+        # Pages to look into it are links, never buttons: the projection's own.
+        self.assertContains(response, '<a href="/connections/">Open connections</a>')
         self.assertContains(response, 'href="/topology/?trace"')
         self.assertContains(response, "Trace impact")
 

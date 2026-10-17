@@ -1,0 +1,9 @@
+{% comment %}
+What was read that shows a problem, from `application.decisions`: each label
+once, with every value it was given; a value that is a web address is a link.
+{% endcomment %}
+<dl class="attention-facts">
+  {% for fact in facts %}
+  <div><dt>{{ fact.label }}</dt><dd><ul class="dot-list">{% for value in fact.values %}<li>{% if value.url %}<a class="external-link" href="{{ value.url }}" rel="noopener">{{ value.text }}</a>{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}</ul></dd></div>
+  {% endfor %}
+</dl>

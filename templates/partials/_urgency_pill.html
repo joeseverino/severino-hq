@@ -1,0 +1,22 @@
+{% comment %}
+How urgent a card is, and behind it what raised it (`item.origin`): Cmd- or
+Ctrl-click opens the rule, its severity, what it stands in for and the line
+it is defined at; hovering says the rule and its line in a tooltip. A plain
+click does nothing; the panel is the page's own markup, opened by app.js and
+dismissed like any popover.
+{% endcomment %}
+{% with panel="origin-"|add:item.origin.key|slugify %}
+<span class="pill pill-{% if item.notice %}idea{% else %}{{ item.status }}{% endif %}" data-origin="{{ panel }}" tabindex="0" data-tip="{% if item.origin.rule %}Rule {{ item.origin.rule }}{% if item.origin.where %}, defined at {{ item.origin.where|cut:"hq/platform/application/" }}{% endif %}{% else %}From {{ item.origin.source }}{% endif %}. ⌘-click for more.">{{ item.urgency }}</span>
+<div class="origin-panel" id="{{ panel }}" popover>
+  <dl class="kv compact">
+    {% if item.origin.rule %}
+      <dt>Rule</dt><dd>{{ item.origin.title }} <code>{{ item.origin.rule }}</code></dd>
+      <dt>Severity</dt><dd>{{ item.origin.severity }}</dd>
+      {% if item.origin.where %}<dt>Defined at</dt><dd><code>{{ item.origin.where }}</code></dd>{% endif %}
+      {% if item.origin.subsumes %}<dt>Stands in for</dt><dd>{% for name in item.origin.subsumes %}<code>{{ name }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</dd>{% endif %}
+    {% endif %}
+    <dt>From</dt><dd>{{ item.origin.source }}</dd>
+    <dt>Key</dt><dd><code>{{ item.origin.key }}</code></dd>
+  </dl>
+</div>
+{% endwith %}

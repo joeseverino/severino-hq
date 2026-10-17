@@ -10,7 +10,7 @@ the card and is never a step. Actions link to their owner; nothing here runs one
   {% for step in steps %}
     <li>
       {% if step.label %}<strong>{{ step.label }}</strong>{% endif %}
-      {% if step.phase == "run" %}<pre class="operator-command"><code>{{ step.summary }}</code></pre>{% elif step.summary %}<p>{{ step.summary }}</p>{% endif %}
+      {% if step.phase == "run" %}{% include "partials/_command.html" with command=step.summary only %}{% elif step.summary %}<p>{{ step.summary }}</p>{% endif %}
       {% if step.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=step.actions only %}</div>{% endif %}
     </li>
   {% endfor %}

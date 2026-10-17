@@ -133,3 +133,15 @@ def ask_button(ask, extra=""):
         mark_safe(" disabled") if ask.disabled else "",
         ask.label,
     )
+
+
+# A page that helps look into a problem, drawn as its mark: the read-only
+# links every finding carries (application.action_links), by their name.
+_LINK_ICONS = {"topology": "network", "impact": "layers"}
+
+
+@register.filter
+def link_icon(link):
+    """The icon a card draws for ``link`` in place of its words, or ""."""
+    name = link.get("name", "") if isinstance(link, dict) else getattr(link, "name", "")
+    return _LINK_ICONS.get(name, "")

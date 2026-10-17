@@ -425,6 +425,7 @@ class HQView(PageMixin, TemplateView):
 
         context = super().get_context_data(**kwargs)
         context["hq"] = hq_context(self.request)
+        context["page_aside"] = "core/_hq_status.html"
         return context
 
 

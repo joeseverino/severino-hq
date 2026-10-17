@@ -17,6 +17,8 @@ shape are doing real work:
 """
 
 import re
+from collections.abc import Iterable
+from typing import Any
 
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
 
@@ -42,7 +44,6 @@ from .references import dangling
 from .security import cli_principal
 from .services import service_catalog
 from .timestamps import moment
-from .topology import derive_topology
 from .ui import Insight, counted, ended
 from .workflow_contracts import ActionLink, WorkflowPlan
 
@@ -485,14 +486,6 @@ def _approve_routes(name: str) -> tuple[ActionLink, ...]:
 _FINDING_STATUS = {"serious": "serious", "attention": "attention", "neutral": "neutral"}
 
 
-def _node_link(node) -> ActionLink | None:
-    """The page of a finding's subject, as the topology names it."""
-
-    if node is None or not node.url:
-        return None
-    return ActionLink("subject", node.label, "read", node.url)
-
-
 @dated
 def infrastructure() -> tuple[Insight, ...]:
     """What infrastructure needs looking at: unsettled state, and deadlines.
@@ -507,7 +500,6 @@ def infrastructure() -> tuple[Insight, ...]:
     """
 
     principal = cli_principal()
-    topology = derive_topology(principal=principal)
     resources = enabled_resources()
     health_by_key = {resource.key: resource_health(resource) for resource in resources}
     actionable_keys = {
@@ -525,28 +517,10 @@ def infrastructure() -> tuple[Insight, ...]:
             else bool(finding.subject) or not finding.scope or finding.scope in actionable_kinds
         )
     )
-    nodes = {node.id: node for node in topology.nodes}
     # One item per finding, so each can be read, acted on and resolved on its
     # own. Folding them is the page's job; each says which family it is of.
     findings_url = reverse("control_plane:findings")
-    items = [
-        Insight(
-            status=_FINDING_STATUS.get(finding.severity, "attention"),
-            eyebrow="Finding",
-            # A rule's findings are one kind of matter, named as the rule
-            # names itself.
-            family=getattr(rule_for(finding.rule), "title", ""),
-            key=finding_key(finding),
-            title=finding.title,
-            value="",
-            body=finding.explanation,
-            url=f"{findings_url}?rule={finding.rule}",
-            subject=_node_link(nodes.get(finding.subject)),
-            since=finding.since,
-            workflow=finding_plan(finding, finding_key(finding)),
-        )
-        for finding in findings
-    ]
+    items = [finding_insight(finding, findings_url) for finding in findings]
     covered_resources = {
         finding.subject.removeprefix("resource:") for finding in findings if finding.subject.startswith("resource:")
     }
@@ -562,6 +536,37 @@ def infrastructure() -> tuple[Insight, ...]:
         if health["state"] in UNSETTLED_RESOURCE_STATES:
             items.append(_unsettled(resource, health))
     return tuple(items) + tailnet()
+
+
+def finding_insight(finding: Any, findings_url: str) -> Insight:
+    """A finding as the queue's card carries it, wherever it is drawn: what
+    was read that shows it, its plan, and the pages that help look into it."""
+
+    return Insight(
+        status=_FINDING_STATUS.get(finding.severity, "attention"),
+        eyebrow="Finding",
+        # A rule's findings are one kind of matter, named as the rule names itself.
+        family=getattr(rule_for(finding.rule), "title", ""),
+        key=finding_key(finding),
+        title=finding.title,
+        value="",
+        body=finding.explanation,
+        url=f"{findings_url}?rule={finding.rule}",
+        subject=finding.subject_link,
+        since=finding.since,
+        workflow=finding_plan(finding, finding_key(finding)),
+        facts=tuple((str(label), str(value)) for label, value in finding.evidence),
+        links=_dedupe_links((*finding.investigations, *finding.offers)),
+    )
+
+
+def _dedupe_links(links: Iterable[Any]) -> tuple[Any, ...]:
+    """Each page once, by its label."""
+
+    seen: dict[str, Any] = {}
+    for link in links:
+        seen.setdefault(link.label, link)
+    return tuple(seen.values())
 
 
 def _unsettled(resource, health: dict[str, str]) -> Insight:

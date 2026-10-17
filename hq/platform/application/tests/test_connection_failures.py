@@ -124,7 +124,7 @@ class SshTransportTests(TestCase):
 
 
 class FindingCardTests(TestCase):
-    """The card leads with the finding's own fix; impact and confirm are one line."""
+    """A finding is the queue's own card: its fix, its buttons, then its links."""
 
     def setUp(self):
         report(detail=SIGN_IN, failure="address")
@@ -133,25 +133,25 @@ class FindingCardTests(TestCase):
 
     def card(self):
         page = self.client.get(reverse("control_plane:findings")).content.decode()
-        start = page.index('class="card finding-card')
-        return page[start : page.index("</article>", start)]
+        start = page.index("data-attention-item")
+        return page[start : page.index("</li>\n    \n", start) if "</li>\n    \n" in page[start:] else len(page)]
 
     def test_the_specific_step_comes_first_and_the_generic_plan_is_gone(self):
         card = self.card()
 
-        self.assertLess(card.index("operator-step"), card.index("finding-links"))
+        self.assertLess(card.index("attention-body"), card.index("attention-links"))
         self.assertNotIn("What to do", card)
         self.assertNotIn("Fix it", card)
-        self.assertNotIn("resolution-workflow", card)
         # A connection that does not answer is a reading: confirming it reads now.
         self.assertIn("Check again", card)
         self.assertIn('formaction="/infrastructure/connections/read/?connection_ref=example-npm', card)
 
     def test_open_connections_is_a_link_not_the_fix(self):
         card = self.card()
-        fix = card[card.index('class="finding-fix"') : card.index("finding-links")]
+        links = card[card.index('class="attention-links"') :]
 
-        self.assertNotIn("Open connections", fix)
+        self.assertIn("Open connections", links)
+        self.assertNotIn("Open connections", card[: card.index('class="attention-links"')])
 
     def test_the_api_shape_is_unchanged(self):
         found = finding()

@@ -3,7 +3,9 @@ A page's head, from `page` (application.pages.Page). The only place a head is
 drawn: a page template extends page.html rather than including this.
 `page_badges`, when a view supplies it, is what the thing is, beside its name:
 (label, tone, title) as application.pages.PageBadge. Context rather than a
-Page field, so the SDK's Page is unchanged.
+Page field, so the SDK's Page is unchanged. `page_aside`, the same way, names
+a template drawn on the title's line: what a page says about its subject at a
+glance (how it is doing, where it runs), beside its name rather than under it.
 {% endcomment %}
 <header class="page-head">
   <div class="page-head-copy">
@@ -11,6 +13,7 @@ Page field, so the SDK's Page is unchanged.
     <div class="page-title-row">
       <h1>{{ page.title }}</h1>
       {% for badge in page_badges %}<span class="pill{% if badge.tone %} pill-{{ badge.tone }}{% endif %}"{% if badge.title %} title="{{ badge.title }}"{% endif %}>{{ badge.label }}</span>{% endfor %}
+      {% if page_aside %}{% include page_aside %}{% endif %}
     </div>
     {% if page.lede %}<p class="page-lede">{{ page.lede }}</p>{% endif %}
   </div>

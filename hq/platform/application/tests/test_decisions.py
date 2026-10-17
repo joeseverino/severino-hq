@@ -192,3 +192,29 @@ class DecisionTests(SimpleTestCase):
         self.assertIn("ghost danger", html)
         self.assertIn("Remove &lt;example&gt;", html)
         self.assertNotIn('href="/example/remove/"', html)
+
+
+class OriginTests(SimpleTestCase):
+    def test_a_finding_says_its_rule_and_the_line_it_is_declared_at(self):
+        from hq.platform.application.findings import RULES
+
+        rule = RULES[0]
+        found = decision({"key": f"hq.example:finding:{rule.name}:node:1", "source": "Example", "status": "serious"})
+
+        self.assertEqual((found["origin"]["rule"], found["origin"]["title"]), (rule.name, rule.title))
+        path, _, line = found["origin"]["where"].rpartition(":")
+        self.assertTrue(path.startswith("hq/") and path.endswith(".py"), path)
+        self.assertTrue(line.isdigit())
+
+    def test_anything_else_says_where_it_came_from(self):
+        found = decision({"key": "example.domain:Renewals:Passport", "source": "Example", "status": "attention"})
+
+        self.assertEqual(found["origin"], {"source": "Example", "key": "example.domain:Renewals:Passport"})
+
+    def test_the_pill_opens_its_origin_and_nothing_else_does(self):
+        item = decision({"key": "example.domain:x", "source": "Example", "status": "attention", "label": "X"})
+
+        html = render_to_string("partials/_urgency_pill.html", {"item": item})
+
+        self.assertIn('data-origin="origin-exampledomainx"', html)
+        self.assertIn('id="origin-exampledomainx" popover', html)

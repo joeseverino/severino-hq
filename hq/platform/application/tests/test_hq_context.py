@@ -234,6 +234,9 @@ class ProblemTests(TestCase):
 
         self.assertTrue(any("credentials" in item["label"] for item in found.problems))
         self.assertEqual(found.status[0], "serious")
+        # A controller is what HQ sees through, so its problems are drawn there.
+        self.assertEqual(set(found.parts), {"sight"})
+        self.assertEqual({tile.label: tile.tone for tile in found.tiles}["Sees"], "serious")
 
     def test_only_problems_about_hq_are_its_own(self):
         from ..ui import ActionLink
@@ -266,7 +269,11 @@ class ProblemTests(TestCase):
             found = hq_context()
 
         self.assertEqual([item["label"] for item in found.problems], ["A job failed on example-box", "Alerts"])
-        self.assertEqual(found.status, ("serious", "Has a problem"))
+        self.assertEqual(found.status, ("serious", "1 urgent · 1 needs attention"))
+        # Each beside the fact it explains: the machine where HQ runs, the repository its release.
+        self.assertEqual(found.parts, ("where", "release"))
+        tones = {tile.label: tile.tone for tile in found.tiles}
+        self.assertEqual((tones["Runs on"], tones["Release"]), ("serious", "attention"))
 
 
 @SITE
@@ -285,9 +292,47 @@ class PageTests(TestCase):
         response = self.client.get(reverse("hq_self"))
 
         self.assertEqual(response.status_code, 200)
-        for text in ("Release", "Where it runs", "How you reached it", "Its own work", "What it can see"):
+        for text in ("Release", "Runs on", "Reached through", "Jobs", "Readings"):
             self.assertContains(response, text)
         self.assertContains(response, "Delete old routine log entries")
+
+    def test_a_problem_is_drawn_under_the_part_it_is_about_and_the_status_leads_to_it(self):
+        from ..ui import ActionLink
+
+        estate()
+        machine = reverse("control_plane:machine", args=["example-box"])
+        problem = Insight(
+            status="attention", eyebrow="Finding", title="A job failed on example-box", value="", body="",
+            key="about-machine", subject=ActionLink("subject", "example-box", "read", machine),
+        )  # fmt: skip
+        with mock.patch("hq.platform.application.problems._host_entries", return_value=(entry(problem),)):
+            response = self.client.get(reverse("hq_self"))
+
+        html = response.content.decode()
+        self.assertContains(response, '<a class="pill pill-attention" href="#hq-where-heading">1 needs attention</a>')
+        # Not urgent, so a line under its part and nothing framed above the page.
+        self.assertNotContains(response, "problems-here")
+        where, line = html.index('id="hq-where-heading"'), html.index('class="problem-line"')
+        self.assertLess(where, line)
+        self.assertLess(line, html.index('id="hq-work-heading"'))
+
+    def test_an_urgent_problem_is_framed_above_the_page(self):
+        from ..ui import ActionLink
+
+        estate()
+        machine = reverse("control_plane:machine", args=["example-box"])
+        problem = Insight(
+            status="serious", eyebrow="Finding", title="A job failed on example-box", value="", body="",
+            key="about-machine", subject=ActionLink("subject", "example-box", "read", machine),
+        )  # fmt: skip
+        with mock.patch("hq.platform.application.problems._host_entries", return_value=(entry(problem),)):
+            response = self.client.get(reverse("hq_self"))
+
+        html = response.content.decode()
+        self.assertContains(response, 'href="#problems-here">1 urgent</a>')
+        self.assertContains(response, "1 urgent problem")
+        self.assertLess(html.index('id="problems-here"'), html.index('class="fact-band"'))
+        self.assertNotContains(response, 'class="problem-line"')
 
     def test_unreadable_units_render_as_a_sentence(self):
         estate()

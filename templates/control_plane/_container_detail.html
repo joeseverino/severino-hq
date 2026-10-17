@@ -71,7 +71,7 @@ standard. Each said once; the band above has its version and standing.
         <li>
           <div class="hardening-head">
             <strong>{{ step.label }}</strong>
-            <button class="btn compact ghost" type="button" data-copy-target="install-{{ forloop.counter }}" hidden>Copy</button>
+            <button class="btn compact ghost" type="button" data-copy-target="install-{{ forloop.counter }}">Copy</button>
           </div>
           <pre id="install-{{ forloop.counter }}"><code>{{ step.detail }}</code></pre>
         </li>
@@ -138,7 +138,7 @@ standard. Each said once; the band above has its version and standing.
     {% if patch.yaml %}
       <div class="hardening-head">
         <strong>Add to {% if patch.compose_file %}<code>{{ patch.compose_file }}</code>{% else %}its compose file{% endif %}</strong>
-        <button class="btn compact ghost" type="button" data-copy-target="hardening-yaml" hidden>Copy</button>
+        <button class="btn compact ghost" type="button" data-copy-target="hardening-yaml">Copy</button>
       </div>
       <pre id="hardening-yaml"><code>{{ patch.yaml }}</code></pre>
       <p class="muted">Where its service already has one of these keys, replace it. Then run <code>docker compose up -d {{ patch.service }}</code> in that directory.</p>

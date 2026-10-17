@@ -260,9 +260,11 @@ rendered through the shared renderer, so a section HQ gains later appears here
 without this template learning anything about it, and the machine page renders
 the same shape from the same file.
 {% endcomment %}
+<div class="section-flow">
 {% include "partials/_page_sections.html" %}
 {% include "partials/_relationships.html" %}
 {% referenced_by "service" service.hostname cards=True %}
+</div>
 
 {% if service.alias_claims %}
 <section id="resources" class="page-section" data-page-section>

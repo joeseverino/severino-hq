@@ -14,56 +14,17 @@ first screen on chips before the first finding.
   {% if active_rule %}<a class="btn ghost" href="{% url 'control_plane:findings' %}">Clear</a>{% endif %}
   {% comment %}The count sits in the bar it filters, not in a second bar under it.{% endcomment %}
   <p class="filter-bar-summary" role="status">
-    <strong>{{ finding_entries|length|counted:"problem" }}</strong>{% if finding_entries|length == 1 %}{% if finding_counts.serious %}, serious{% elif finding_counts.attention %}, needs a look{% endif %}{% else %}{% if finding_counts.serious %}, <strong>{{ finding_counts.serious }}</strong> serious{% endif %}{% if finding_counts.attention %}, <strong>{{ finding_counts.attention }}</strong> need a look{% endif %}{% endif %}
+    <strong>{{ finding_entries|length|counted:"problem" }}</strong>{% if finding_entries|length == 1 %}{% if finding_counts.serious %}, urgent{% elif finding_counts.attention %}, needs attention{% endif %}{% else %}{% if finding_counts.serious %}, <strong>{{ finding_counts.serious }}</strong> urgent{% endif %}{% if finding_counts.attention %}, <strong>{{ finding_counts.attention }}</strong> need attention{% endif %}{% endif %}
   </p>
 </form>
 {% endif %}
 
-<div class="finding-list">
-  {% for entry in finding_entries %}
-    <article class="card finding-card is-{{ entry.finding.severity }}">
-      <div class="section-head">
-        <div>
-          <span class="pill pill-{{ entry.finding.severity }}">{% if entry.finding.severity == "serious" %}Serious{% elif entry.finding.severity == "attention" %}Needs a look{% else %}Note{% endif %}</span>
-          <h2>{{ entry.finding.title }}</h2>
-        </div>
-      </div>
-      <p>{{ entry.finding.explanation }}</p>
-      {% if entry.finding.evidence %}
-        <dl class="finding-facts">
-          {% for label, value in entry.finding.evidence %}<div><dt>{{ label }}</dt><dd>{{ value|readable }}</dd></div>{% endfor %}
-        </dl>
-      {% endif %}
-      {% comment %}
-      The finding's own fix leads: its operator steps, then any gated remedy.
-      What to check first, other places to look and how to confirm follow as
-      one line of links (application.workflows.workflow_layout).
-      {% endcomment %}
-      <div class="finding-fix">
-        {% for step in entry.finding.steps %}{% include "partials/_operator_step.html" %}{% endfor %}
-        {% if entry.finding.no_help_reason %}<p class="muted">{{ entry.finding.no_help_reason }}</p>{% endif %}
-        {% if entry.layout.fix %}
-          <div class="finding-actions">
-            {% for action in entry.layout.fix %}
-              {% if action.method == "POST" %}
-                {% post_button action.label action.url css="btn compact primary" %}
-              {% else %}
-                <a class="btn compact primary" href="{{ action.url }}">{{ action.label }}</a>
-              {% endif %}
-            {% endfor %}
-          </div>
-        {% endif %}
-      </div>
-      {% if entry.layout.links %}
-        <p class="finding-links">
-          {% if entry.layout.impact %}<span class="finding-links-group">{% for action in entry.layout.impact %}<a class="subtle-link" href="{{ action.url }}">{{ action.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
-          {% if entry.layout.related %}<span class="finding-links-group">{% for action in entry.layout.related %}<a class="subtle-link" href="{{ action.url }}">{{ action.label }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
-          {% if entry.layout.confirm %}<span class="finding-links-group">{% for action in entry.layout.confirm %}{% if action.method == "POST" %}{% post_button action.label action.url css="btn compact" title=action.reason %}{% else %}<a class="subtle-link" href="{{ action.url }}" title="{{ action.reason }}">{{ action.label }}</a>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
-        </p>
-      {% endif %}
-    </article>
-  {% empty %}
-    {% include "partials/_empty_state.html" with message="No problems." %}
-  {% endfor %}
-</div>
+{% comment %}The queue's own cards, so a problem reads the same wherever it is drawn.{% endcomment %}
+{% if finding_entries %}
+<section class="card">
+{% include "partials/_work_queue.html" with items=finding_entries grouped=True only %}
+</section>
+{% else %}
+{% include "partials/_empty_state.html" with message="No problems." %}
+{% endif %}
 {% endblock %}
