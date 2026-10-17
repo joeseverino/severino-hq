@@ -1238,10 +1238,12 @@ class LayoutBrowserTests(BrowserGate):
     def loaded(self, name, width, **where):
         """Open ``name`` at ``width``; one that does not load fails once, not once per rule."""
 
+        opened = False
+        # subTest records a failure and carries on, so `opened` stays False.
         with self.subTest(page=name, width=width, **where):
             self.open(name, width)
-            return True
-        return False
+            opened = True
+        return opened
 
     def hold(self, name, width, rules, **where):
         """Hold each rule on the page as it stands, one subtest each, in order."""
