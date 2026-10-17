@@ -62,8 +62,9 @@ class ReferenceTests(TestCase):
     def test_the_committed_reference_is_what_the_providers_declare(self):
         from django.core.management import call_command
 
-        # The public reference names the host's providers, never an extension's.
-        with host_only():
+        # Generated in a checkout, where HQ names no source repository; an image
+        # does, and would link its docs absolutely.
+        with override_settings(SEVERINO_HQ_SOURCE=""):
             call_command("connections_reference", "--check", stdout=StringIO())
 
     def test_an_item_is_named_with_its_article(self):

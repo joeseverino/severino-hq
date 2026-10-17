@@ -42,7 +42,17 @@ from ..topology_model import (
     TopologyEdge,
     TopologyNode,
 )
-from .host_only import host_only
+
+
+def _without_links(value):
+    if isinstance(value, dict):
+        return {key: _without_links(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_without_links(item) for item in value]
+    if isinstance(value, str) and value.startswith(("http://", "https://", "/")):
+        return ""
+    return value
+
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 MANAGE = Principal(
@@ -240,16 +250,15 @@ class DerivedTopologyTests(TestCase):
         catalog.assert_not_called()
 
     def test_serialization_is_normalized_and_contains_no_credential_material(self):
-        # The host's own map: an extension's labels may use the word.
-        with host_only():
-            payload = serialize_topology(self.project(MANAGE))
-        serialized = json.dumps(payload)
+        payload = serialize_topology(self.project(MANAGE))
 
         self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(payload["summary"]["nodes"], len(payload["nodes"]))
         self.assertEqual(payload["summary"]["edges"], len(payload["edges"]))
-        self.assertNotIn("secret", serialized.lower())
-        self.assertNotIn("access_token", serialized.lower())
+        # Link targets are addresses, not material: a docs link names Secrets.md.
+        material = json.dumps(_without_links(payload)).lower()
+        self.assertNotIn("secret", material)
+        self.assertNotIn("access_token", material)
 
     def test_query_count_does_not_grow_with_resource_count(self):
         principals = (READ, MANAGE)
