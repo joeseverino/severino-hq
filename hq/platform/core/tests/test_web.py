@@ -25,7 +25,8 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import Client, TestCase, override_settings
+from django.templatetags.static import static
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -1763,3 +1764,19 @@ class CompressedResponseTests(TestCase):
         self.assertEqual(len(response.headers.get_list("content-length")), 1)
         self.assertEqual(int(response.headers["content-length"]), len(sent))
         self.assertIn(b"<form", gzip.decompress(sent))
+
+
+class RootIconTests(SimpleTestCase):
+    """What browsers ask for at the root whatever a page links is answered,
+    signed in or not, so no visit logs a 404 for an icon."""
+
+    def test_each_root_icon_is_a_permanent_redirect_to_the_collected_file(self):
+        for path, name in (
+            ("/favicon.ico", "img/favicon.ico"),
+            ("/apple-touch-icon.png", "img/apple-touch-icon.png"),
+            ("/apple-touch-icon-precomposed.png", "img/apple-touch-icon.png"),
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 301)
+                self.assertEqual(response["Location"], static(name))

@@ -87,6 +87,8 @@ SELECTORS = {
     "spoken": ".ask-said",
     # The one box allowed to scroll sideways.
     "table_scroll": ".table-scroll",
+    # What a parser leaves where a <p> was closed early by a block inside it.
+    "broken_paragraph": "main p:empty:not([hidden])",
     # A box that holds content: a card, a table's frame.
     "frame": ".card, .table-scroll",
     # What reaches across a frame besides its text.
@@ -657,6 +659,16 @@ def authored_selectors(css: str) -> list[str]:
     return found
 
 
+def _opaque(colour: str) -> tuple[int, ...]:
+    """A computed colour's red, green and blue, without its opacity, as 0-255:
+    ``rgb(255, 255, 255)`` and ``color(srgb 1 1 1 / 0.8)`` are one colour."""
+
+    numbers = [float(n) for n in re.findall(r"[\d.]+", colour.split("/")[0])]
+    if colour.startswith("color("):
+        return tuple(round(n * 255) for n in numbers[:3])
+    return tuple(round(n) for n in numbers[:3])
+
+
 def _plain_selector(selector: str) -> str:
     """A selector as the browser writes it back: no whitespace, double quotes,
     no ``*`` before what already names an element, and every attribute value
@@ -1173,6 +1185,11 @@ class LayoutBrowserTests(BrowserGate):
         kept = {_plain_selector(selector) for selector in self.page.evaluate(_KEPT_SELECTORS)}
 
         self.assertEqual([selector for selector in authored if _plain_selector(selector) not in kept], [])
+
+    def test_no_block_breaks_a_paragraph(self):
+        # A block written inside a <p> closes it early and leaves an empty <p>
+        # where its end tag was: the rest of the line falls out of it.
+        self.across(lambda _name: self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0))
 
     def test_nothing_is_framed_inside_a_frame(self):
         def check(_name):
@@ -1701,7 +1718,9 @@ class ReferenceBrowserTests(BrowserGate):
     def assert_painted_as_hq(self, paint, mode):
         self.assertIn(mode, paint["mode"].split())
         self.assertEqual(paint["viewer"], paint["page"])
-        self.assertEqual(paint["sidebar"], paint["header"])
+        # The header lets the page show through its surface; the sidebar is that
+        # surface, so they match in colour whatever the header's opacity.
+        self.assertEqual(_opaque(paint["sidebar"]), _opaque(paint["header"]))
         self.assertEqual(paint["title"], paint["ink"])
         self.assertEqual(paint["title_face"], paint["face"])
 

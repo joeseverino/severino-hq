@@ -252,6 +252,33 @@ class StyleContractTests(SimpleTestCase):
             with self.subTest(declaration=declaration):
                 self.assertIn(declaration, body)
 
+    def test_a_face_never_swaps_in_after_text_is_drawn(self):
+        """A face that arrives late and is swapped in moves every line it sets.
+        Each @font-face is shown only if ready for the first paint (optional),
+        and its file is preloaded beside the stylesheet so it usually is."""
+
+        root = Path(__file__).resolve().parents[4]
+        head = (root / "templates" / "base.html").read_text(encoding="utf-8")
+        faces = re.findall(r"@font-face\s*\{([^}]*)\}", self._stylesheet())
+        self.assertTrue(faces)
+        for face in faces:
+            source = re.search(r'url\("\.\./([^"]+)"\)', face)
+            with self.subTest(face=source.group(1) if source else face[:60]):
+                self.assertIn("font-display: optional", face)
+                self.assertIsNotNone(source)
+                self.assertIn(f'{{% static \'{source.group(1)}\' %}}" as="font"', head)
+
+    def test_a_blur_has_something_to_show_through(self):
+        """A backdrop filter costs a layer redrawn on every scroll; behind an
+        opaque background it shows nothing, so a rule that blurs must also let
+        the page through (`transparent` mixed in, or a colour with alpha)."""
+
+        for body in re.findall(r"\{([^{}]*backdrop-filter[^{}]*)\}", self._stylesheet()):
+            background = re.search(r"background(?:-color)?:\s*([^;]+);", body)
+            with self.subTest(rule=body.strip()[:80]):
+                self.assertIsNotNone(background)
+                self.assertRegex(background.group(1), r"transparent|/\s*[.\d]+\)|rgba|hsla")
+
     def test_a_long_word_breaks_rather_than_widening_the_page(self):
 
         body = re.search(r"@layer base \{.*?\nbody \{([^}]*)\}", self._stylesheet(), re.DOTALL)

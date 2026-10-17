@@ -24,8 +24,8 @@ drawn when nothing is open.
 <ul class="problem-lines">
   {% for entry in rest %}{% with item=entry|decision %}
   <li class="problem-line">
+    {% include "partials/_urgency_pill.html" with item=item only %}
     <p>
-      {% include "partials/_urgency_pill.html" with item=item only %}
       <strong>{{ item.label }}</strong>{% if item.detail %} {{ item.detail }}{% endif %}{% if item.advice %} <span class="muted">{{ item.advice }}</span>{% endif %}{% if item.reason %} <span class="muted">{{ item.reason }}</span>{% endif %}
     </p>
     {% if item.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=item.actions only %}</div>{% endif %}

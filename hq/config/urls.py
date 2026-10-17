@@ -23,6 +23,7 @@ from hq.platform.core.dashboard_views import (
 )
 from hq.platform.core.health_views import health_live, health_ready
 from hq.platform.core.speculation import rules_document
+from hq.platform.core.static import root_icon
 from hq.platform.core.views import (
     AgentAccessView,
     AgentPolicyView,
@@ -76,6 +77,9 @@ urlpatterns = [
     ),
     path("oidc/", public("mozilla_django_oidc.urls")),
     path("speculation-rules.json", rules_document, name="speculation_rules"),
+    path("favicon.ico", root_icon("img/favicon.ico")),
+    path("apple-touch-icon.png", root_icon("img/apple-touch-icon.png")),
+    path("apple-touch-icon-precomposed.png", root_icon("img/apple-touch-icon.png")),
     path("", DashboardView.as_view(), name="dashboard"),
     path("action-items/", ActionItemsView.as_view(), name="action_items"),
     path("action-items/count/", ActionItemCountView.as_view(), name="action_item_count"),

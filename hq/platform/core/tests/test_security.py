@@ -345,6 +345,11 @@ PUBLIC_SURFACE = (
     # session here would silence the reports that matter most: the ones from
     # the sign-in page. It stores nothing it was not sent and answers 204.
     "/csp-report/",
+    # Icons a browser asks for at the root whatever the page links, on the
+    # sign-in page too: each a redirect to a public static file.
+    "/favicon.ico",
+    "/apple-touch-icon.png",
+    "/apple-touch-icon-precomposed.png",
 )
 
 # A value each URL converter accepts, so a parameterised route can be asked for.

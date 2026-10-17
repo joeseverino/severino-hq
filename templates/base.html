@@ -33,6 +33,12 @@
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#1f4d57">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#18191c">
   {% endif %}
+  {% comment %}
+  The face the stylesheet asks for, fetched beside it so the first paint
+  already has it: the stylesheet shows it only if it is ready (optional), so
+  text never changes face, and therefore never moves, after it is drawn.
+  {% endcomment %}
+  <link rel="preload" href="{% static 'fonts/inter/inter-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   {% block head_extra %}{% endblock %}
 </head>

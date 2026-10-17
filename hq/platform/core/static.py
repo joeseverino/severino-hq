@@ -121,3 +121,20 @@ class CachedStaticFiles(StaticFiles):
             response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
             response.headers["X-Content-Type-Options"] = "nosniff"
         return response
+
+
+def root_icon(name: str):
+    """A view for an icon a browser asks for at the site's root whatever the page
+    links (``/favicon.ico``, iOS's ``/apple-touch-icon.png``): a permanent
+    redirect to the collected file, so each client asks once. Open before sign
+    in, since a browser asks on the sign-in page too."""
+
+    from django.contrib.auth.decorators import login_not_required
+    from django.http import HttpResponsePermanentRedirect
+    from django.templatetags.static import static
+
+    @login_not_required
+    def view(request):
+        return HttpResponsePermanentRedirect(static(name))
+
+    return view

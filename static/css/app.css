@@ -8,6 +8,10 @@
    There is deliberately no fourth layer for "things that must win": narrowing
    a component at a breakpoint is what "later in the same layer" means.
    `StyleContractTests` fails the build if a rule lands outside a layer. */
+/* Inter, HQ's own copy, preloaded by base.html. Shown only if it is ready for
+   the first paint (optional) and never swapped in after, so text never moves;
+   cached a year, it is there from the second page on. */
+@font-face { font-family: Inter; font-style: normal; font-weight: 400 700; font-display: optional; src: url("../fonts/inter/inter-variable-latin.woff2") format("woff2"); }
 @layer tokens, base, components;
 
 @layer tokens {
@@ -396,10 +400,10 @@ pre ::selection { color: var(--code-ink); }
   align-items: center;
   gap: var(--space-5) var(--space-7);
   padding: var(--space-5) var(--space-14);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 10;
-  backdrop-filter: saturate(180%) blur(8px);
+  backdrop-filter: saturate(180%) blur(12px);
 }
 .brand {
   font-weight: 700; font-size: var(--text-lg); color: var(--ink);
@@ -1971,6 +1975,8 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-end { flex: 0 1 auto; margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-3); }
 .attention-end > .attention-actions { margin: 0; justify-content: flex-end; }
 .attention-end > .attention-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; list-style: none; font-size: var(--text-xs); }
+.attention-links .icon-link { min-width: 0; width: 1.6rem; height: 1.6rem; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
+.attention-links .icon-link:is(:hover, :focus-visible) { color: var(--ink); background: var(--surface-2); }
 .attention-row[data-dismissed] > .attention-end > :not([data-triage]) { display: none; }
 .attention-end form { margin: 0; }
 .attention-row:first-child { border-top: 0; padding-top: var(--space-2); }
@@ -2034,7 +2040,7 @@ a.kpi:hover { background: var(--surface-2); }
 .problem-lines { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-3); }
 .problem-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
 .problem-line > p { flex: 1 1 24rem; margin: 0; font-size: var(--text-sm); color: var(--ink-2); }
-.problem-line > p > .pill { margin-right: var(--space-2); }
+.problem-line > .pill { flex: none; }
 .problem-line > p > strong { color: var(--ink); }
 .problem-line > .attention-actions { margin: 0 0 0 auto; }
 .problem-line > :is(.resolution-workflow, .resolution-fold) { flex-basis: 100%; margin-top: 0; }
@@ -2048,7 +2054,7 @@ a.kpi:hover { background: var(--surface-2); }
    its label's, since a list laid out as a grid draws no markers. */
 .resolution-workflow {
   margin: var(--space-3) 0 0; padding: 0; list-style: none;
-  display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); gap: var(--space-3) var(--space-6);
+  display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); gap: var(--space-2) var(--space-6);
   font-size: var(--text-sm); color: var(--ink-2); counter-reset: step;
 }
 .resolution-workflow li { min-width: 0; display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; row-gap: var(--space-2); counter-increment: step; }
@@ -3104,7 +3110,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   width: fit-content;
   max-width: 100%;
   margin: var(--space-2) 0 0;
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-2) var(--space-5);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: all;

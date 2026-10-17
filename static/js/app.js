@@ -1483,4 +1483,7 @@ document.addEventListener("click", (event) => {
 const heldModifier = (event) => document.documentElement.classList.toggle("modifier-held", event.metaKey || event.ctrlKey);
 document.addEventListener("keydown", heldModifier);
 document.addEventListener("keyup", heldModifier);
+// A key let go where the page could not hear it (a screenshot, another app)
+// is caught by the next move of the pointer, which carries the keys' state.
+document.addEventListener("pointermove", heldModifier, { passive: true });
 window.addEventListener("blur", () => document.documentElement.classList.remove("modifier-held"));
