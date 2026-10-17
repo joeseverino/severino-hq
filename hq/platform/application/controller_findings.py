@@ -7,6 +7,7 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
+from .credential_findings import UNREPORTED
 from .derivations import passed, since
 from .entity_links import kind_label, node_name
 from .finding_model import (
@@ -24,6 +25,8 @@ from .finding_model import (
 from .infrastructure import DRIFT_LABEL
 from .labels import lower_first, plural
 from .moments import ago, duration
+from .reading_facts import ago as _since
+from .render_status_findings import RENDERER_UNITS
 from .topology_lenses import _STALE_AFTER
 from .topology_model import TopologyNode
 from .ui import counted
@@ -549,6 +552,59 @@ def _work_that_keeps_failing(estate: FindingEstate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
+    """A controller that reported connections, and now reports none.
+
+    The refresh job keeps installed connections when the vault suddenly
+    resolves none, but a machine whose runtime directory was cleared has
+    nothing to keep, and installs the empty set a new host would. HQ keeps the
+    rows such a report would have removed, marked, so it is the one place that
+    still knows there were connections. A host that never had a connection has
+    no rows, and nothing is raised.
+    """
+
+    by_id = {node.id: node for node in estate.nodes()}
+    held: dict[str, list[TopologyNode]] = {}
+    for edge in estate.topology.edges:
+        connection = by_id.get(edge.target)
+        if edge.kind == "carries" and edge.source in by_id and connection and fact_values(connection, UNREPORTED):
+            held.setdefault(edge.source, []).append(connection)
+    found: list[Finding] = []
+    for controller_id, connections in sorted(held.items()):
+        node = by_id[controller_id]
+        names = ", ".join(sorted(connection.label for connection in connections))
+        since = _since(min(fact_values(connection, UNREPORTED)[0] for connection in connections), estate.now)
+        found.append(
+            Finding(
+                rule="connections-lost",
+                subject=node.id,
+                title=f"The controller on {node.label} reports no connections",
+                severity="serious",
+                explanation=(
+                    f"It reported {counted(len(connections), 'connection', 'connections')} until {since}, "
+                    "and none since, so nothing is read or changed through them. "
+                    "Check that the vault this machine reads still holds their items."
+                ),
+                evidence=(("Last reported", names), ("None since", since)),
+                remedies=(_read_again(),),
+                steps=_refresh_steps(node.label),
+                no_help_reason=cannot_run_commands(node.label),
+            )
+        )
+    return tuple(found)
+
+
+def _refresh_steps(machine: str):
+    """How the owner runs the refresh job again on its machine and reads what it wrote."""
+
+    unit = RENDERER_UNITS["hq"]
+    return (
+        *machine_step("Run the refresh job now", machine, f"systemctl start {unit}"),
+        *journal_step("Read the refresh job's log", machine, unit),
+        *_controller_steps(machine),
+    )
+
+
 def _controller_machines(estate: FindingEstate) -> dict[str, str]:
     """The machine whose controller holds each connection, by connection id."""
 
@@ -562,6 +618,17 @@ def _controller_machines(estate: FindingEstate) -> dict[str, str]:
 
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
+    FindingRule(
+        "connections-lost",
+        "The controller reports no connections",
+        "serious",
+        _connections_lost,
+        operator_action=(
+            "Check that the vault this machine reads holds the connection items, "
+            "run the refresh job, then press Read now."
+        ),
+        no_help_reason="HQ cannot read the vault.",
+    ),
     FindingRule(
         "work-that-keeps-failing",
         "A connection works but something through it keeps failing",

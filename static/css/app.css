@@ -40,7 +40,7 @@
   --ink: light-dark(#18181b, #ececee);
   --ink-2: light-dark(#2a2a2e, #d6d6da);
   --muted: light-dark(#6b6b73, #a4a4ad);
-  --muted-2: light-dark(#95959c, #8d8d96);
+  --muted-2: light-dark(#707078, #8d8d96);
   --line: light-dark(#e6e6e1, #303238);
   --line-2: light-dark(#f0f0eb, #26272c);
   --accent: light-dark(#1f4d57, #8fd0dc);
@@ -260,6 +260,9 @@
      it, so clamp() lands on one end or the other. For gapless bands. */
   --tracks-4-2-1: clamp(clamp(25%, (54rem - 100%) * 999, 50%), (24rem - 100%) * 999, 100%);
   --tracks-3-1: clamp(33.333%, (36rem - 100%) * 999, 100%);
+  --tracks-2-1: clamp(50%, (24rem - 100%) * 999, 100%);
+  --tracks-5-1: clamp(20%, (55rem - 100%) * 999, 100%);
+  --tracks-6-3-1: clamp(clamp(16.666%, (66rem - 100%) * 999, 33.333%), (33rem - 100%) * 999, 100%);
   --stack-gap: var(--space-9);
   /* The widest a chart drawing with type inside it renders. Its SVG scales
      with its card, so uncapped its axis type and marks inflate in a wide card
@@ -549,7 +552,7 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
   --tone-line: var(--tone-positive-line);
 }
 .pill-paused, .pill-editing, .pill-drafting, .pill-researching,
-.pill-internal, .pill-attention, .msg-warning, .notice-attention, .conn-decision-step-unknown,
+.pill-internal, .pill-attention, .msg-warning, .notice-attention,
 .conn-kind-declined, .connection-state-attention, .connection-state-stale, .tone-attention {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
@@ -559,8 +562,9 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
 }
 .pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned,
 .pill-replaced, .pill-deleted, .pill-login_failed, .pill-denied, .pill-spam,
-.pill-unreachable, .msg-error, .notice-serious, .conn-decision-step-does-not,
+.pill-unreachable, .msg-error, .notice-serious,
 .connection-state-unreachable, .connection-state-revoked, .connection-state-unauthorized,
+.connection-state-unreported,
 .conn-kind-elsewhere, .conn-kind-public, .conn-kind-hop-ignored {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
@@ -697,7 +701,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .glance-hours strong { color: var(--ink); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .glance-hours small { color: var(--muted-2); }
 .glance-hours small.is-wet { color: var(--accent); font-weight: 600; }
-.glance-link { justify-self: start; font-size: var(--text-xs); }
 .glance-expanded-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); }
 .glance-expanded-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
 /* A link in look: the panel's one action besides going somewhere. */
@@ -1330,13 +1333,22 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
 .code-list code { white-space: nowrap; }
 .external-link::after { content: " \2197"; font-size: .85em; }
-/* A band of cells in a grid lays out as whole rows, by how many cells it has:
-   one takes the band, three are three or one, four are four, two or one. Read
-   off the band itself, so no page has to say how many it holds and none is
-   left with three over one. */
-:is(.control-summary, .insight-grid):has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
-:is(.control-summary, .insight-grid):has(> :nth-child(3):last-child) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
-:is(.control-summary, .insight-grid):has(> :nth-child(4):last-child) { grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr)); }
+/* A band lays out as whole even rows, by how many cells it has: one takes the
+   band, two are two or one, three are three or one, four are four, two or one,
+   five are five or one, six are six, three or one. Read off the band itself,
+   so no page says how many it holds and none is left with three over one.
+   Cells are counted, not children: a dialog a cell opens and the band's own
+   note under its cells are not cells. A grid band takes the count as its
+   track floor, a wrapping one as each cell's basis (`--band-cell`). */
+:is(.control-summary, .insight-grid, .sweep-grid, .machine-telemetry-metrics, .service-band, .fact-band, .kpi-grid:not(:is(.card, .highlight-card) > *)) {
+  &:has(> :nth-child(1 of :not(dialog, .band-meta)):nth-last-child(1 of :not(dialog, .band-meta))) { --band-cell: 100%; grid-template-columns: repeat(auto-fit, minmax(100%, 1fr)); }
+  &:has(> :nth-child(2 of :not(dialog, .band-meta)):nth-last-child(1 of :not(dialog, .band-meta))) { --band-cell: var(--tracks-2-1); grid-template-columns: repeat(auto-fit, minmax(var(--tracks-2-1), 1fr)); }
+  &:has(> :nth-child(3 of :not(dialog, .band-meta)):nth-last-child(1 of :not(dialog, .band-meta))) { --band-cell: var(--tracks-3-1); grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
+  &:has(> :nth-child(4 of :not(dialog, .band-meta)):nth-last-child(1 of :not(dialog, .band-meta))) { --band-cell: var(--tracks-4-2-1); grid-template-columns: repeat(auto-fit, minmax(var(--tracks-4-2-1), 1fr)); }
+  &:has(> :nth-child(5 of :not(dialog, .band-meta)):nth-last-child(1 of :not(dialog, .band-meta))) { --band-cell: var(--tracks-5-1); grid-template-columns: repeat(auto-fit, minmax(var(--tracks-5-1), 1fr)); }
+  &:has(> :nth-child(6 of :not(dialog, .band-meta)):nth-last-child(1 of :not(dialog, .band-meta))) { --band-cell: var(--tracks-6-3-1); grid-template-columns: repeat(auto-fit, minmax(var(--tracks-6-3-1), 1fr)); }
+}
+.kpi-grid > .kpi { flex-basis: var(--band-cell, 150px); }
 
 /* A service's overview: one raised band, not a box per fact. Each fact is its
    icon tile, then its label over its value; hairlines divide them. Health's
@@ -1367,13 +1379,6 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; }
 .page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-/* What a thing is at a glance, as tiles at the end of its title's line:
-   each tile as wide as what it says, no band of empty cells around them.
-   Under the title when the line is too short for both. */
-.page-title-row > .head-tiles { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-3) var(--space-10); }
-.head-tiles > .band-fact { flex: 0 1 auto; padding: 0; gap: var(--space-4); }
-.head-tiles .band-icon { width: 2rem; height: 2rem; }
-.head-tiles strong { font-size: var(--text-md); }
 .heading-aside { color: var(--muted); font-size: var(--text-md); font-weight: 500; letter-spacing: 0; }
 .band-meta { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-5) var(--space-9); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
 /* The origin reads under the facet row rather than as a fifth card in it: four
@@ -1406,6 +1411,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .control-diagnostics[open] > summary { margin-bottom: var(--space-6); }
 /* Names and paths of any length, in half the width: wrapped, never sideways. */
 .control-diagnostics pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* In a form it is one more group of fields, spaced like one. */
+.form > .control-diagnostics { margin: var(--space-8) 0 0; }
 /* Inside a metric card the disclosure is one more row, not a section. */
 .control-metric > .control-diagnostics { margin: var(--space-2) 0 0; }
 /* A short record list on a card reads at body size, not headline size. */
@@ -1472,7 +1479,6 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    border, the radius and the shadow. */
 .table-scroll > .data-table { border: 0; border-radius: 0; box-shadow: none; }
 /* A run of like events in a history: one line, its events a click away. */
-.history-run > summary { cursor: pointer; }
 .history-run-list { margin: var(--space-2) 0 0; padding-left: var(--space-5); font-size: var(--text-sm); }
 /* Nothing follows it, so the gap it reserves is dead card. The same is true of
    anything that ends a card: a trailing margin inside a padded box is a band
@@ -1760,6 +1766,18 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table[data-drop~="10"] > * > tr > :nth-child(10):not([colspan]),
 .data-table[data-drop~="11"] > * > tr > :nth-child(11):not([colspan]),
 .data-table[data-drop~="12"] > * > tr > :nth-child(12):not([colspan]) { display: none; }
+/* A column empty in every row is not drawn (tables.js marks it). */
+.data-table[data-blank~="2"] > * > tr > :nth-child(2):not([colspan]),
+.data-table[data-blank~="3"] > * > tr > :nth-child(3):not([colspan]),
+.data-table[data-blank~="4"] > * > tr > :nth-child(4):not([colspan]),
+.data-table[data-blank~="5"] > * > tr > :nth-child(5):not([colspan]),
+.data-table[data-blank~="6"] > * > tr > :nth-child(6):not([colspan]),
+.data-table[data-blank~="7"] > * > tr > :nth-child(7):not([colspan]),
+.data-table[data-blank~="8"] > * > tr > :nth-child(8):not([colspan]),
+.data-table[data-blank~="9"] > * > tr > :nth-child(9):not([colspan]),
+.data-table[data-blank~="10"] > * > tr > :nth-child(10):not([colspan]),
+.data-table[data-blank~="11"] > * > tr > :nth-child(11):not([colspan]),
+.data-table[data-blank~="12"] > * > tr > :nth-child(12):not([colspan]) { display: none; }
 /* Each column's floor: tables.js says how narrow a column may get (its own
    one-line width, or a few words' worth, whichever is less; more for the
    column that names the row), and this holds it there without capping how
@@ -1968,11 +1986,13 @@ a.kpi:hover { background: var(--surface-2); }
   padding: var(--space-5) 0;
   border-top: 1px solid var(--line-2);
 }
-.attention-body { flex: 1 1 24rem; }
+/* As wide as what it says, up to a readable measure, so what acts on it
+   follows it rather than standing at the far edge of a wide card. */
+.attention-body { flex: 0 1 auto; min-width: min(100%, 18rem); max-width: var(--measure); }
 /* What can be pressed, then the pages that help look into it, then the
    reader's own dismiss: beside what the card says, never a row of their own
    while the row is wide enough for both. */
-.attention-end { flex: 0 1 auto; margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-3); }
+.attention-end { flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3) var(--space-4); }
 .attention-end > .attention-actions { margin: 0; justify-content: flex-end; }
 .attention-end > .attention-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; list-style: none; font-size: var(--text-xs); }
 .attention-links .icon-link { min-width: 0; width: 1.6rem; height: 1.6rem; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
@@ -1980,6 +2000,7 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-row[data-dismissed] > .attention-end > :not([data-triage]) { display: none; }
 .attention-end form { margin: 0; }
 .attention-row:first-child { border-top: 0; padding-top: var(--space-2); }
+.attention-row:last-child { padding-bottom: 0; }
 
 /* What is wrong, on one line with how bad it is and what it is about: the
    line a reader scans the queue by. */
@@ -1994,15 +2015,13 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-reason { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
 .attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 .attention-actions form { margin: 0; }
-/* What raised a card, opened from its urgency: a small panel over the page. */
+/* What raised a card, opened from its urgency: a small modal over the page,
+   titled with the card it explains. */
 .modifier-held [data-origin] { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; outline: 1px solid var(--tone-line, var(--line)); outline-offset: 1px; }
-/* Above the page, so a surface of its own again whatever card drew it. */
-.origin-panel {
-  --surface-border: 1px solid var(--line); --surface-radius: var(--radius); --surface-bg: var(--surface);
-  --surface-shadow: var(--shadow-sm); --surface-inset: var(--space-6) var(--space-8);
-  max-width: min(36rem, calc(100vw - 2rem)); margin: auto; padding: 0; border: 0; background: transparent; overflow: visible;
-}
-.origin-panel::backdrop { background: var(--scrim); }
+/* Hide the tooltip while the origin panel is open: it would cover the panel. */
+:root:has(.origin-panel:popover-open) .chart-tip { display: none; }
+/* One of HQ's modals; what it lists sits flat inside it. */
+.origin-panel { --surface-border: 0 none; --surface-radius: 0; --surface-bg: transparent; --surface-shadow: none; --surface-inset: 0; }
 /* What was read that shows it: each label once, its values beside it. */
 .attention-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-6); margin: var(--space-3) 0 0; font-size: var(--text-xs); color: var(--ink-2); }
 .attention-facts > div { display: contents; }
@@ -2039,27 +2058,53 @@ a.kpi:hover { background: var(--surface-2); }
 /* A problem that is not urgent: one unframed line, its button beside it. */
 .problem-lines { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-3); }
 .problem-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
-.problem-line > p { flex: 1 1 24rem; margin: 0; font-size: var(--text-sm); color: var(--ink-2); }
+.problem-line > p { flex: 0 1 auto; max-width: var(--measure); margin: 0; font-size: var(--text-sm); color: var(--ink-2); }
 .problem-line > .pill { flex: none; }
 .problem-line > p > strong { color: var(--ink); }
-.problem-line > .attention-actions { margin: 0 0 0 auto; }
+.problem-line > .attention-actions { margin: 0; }
 .problem-line > :is(.resolution-workflow, .resolution-fold) { flex-basis: 100%; margin-top: 0; }
 /* The short queue on the dashboard, under the greeting. */
-.dash-needs { margin-bottom: var(--stack-gap); padding-top: var(--space-5); }
+/* Dashboard Needs you: the heading and its items share one line while they fit. */
+.dash-needs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-6); margin-bottom: var(--stack-gap); }
+.dash-needs > .section-head { flex: 0 0 auto; margin: 0; padding: 0; border: 0; }
+.dash-needs > .attention-list { flex: 1 1 auto; min-width: 0; }
+.dash-needs .attention-row { align-items: center; padding-block: 0; }
+.dash-needs .attention-body { min-width: 0; }
+/* Steps or checks side by side, each an icon, a title and a sentence. Read
+   down each column, as a list is, so however many there are the columns end
+   within a step of each other: never a row of five and a row of two. */
+.dash-start { margin-bottom: var(--stack-gap); }
+.step-list {
+  columns: 14rem 4; column-gap: var(--space-9);
+  margin: 0; padding: 0; list-style: none; font-size: var(--text-sm);
+}
+.step-list li { display: flex; align-items: flex-start; gap: var(--space-5); break-inside: avoid; padding-bottom: var(--space-5); }
+.step-list li.is-done { color: var(--muted); }
+.step-list li.is-done .band-icon { background: var(--surface-2); color: var(--muted); }
+.step-list li:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
+.step-list a { font-weight: 600; }
+.step-list .muted { display: block; margin-top: var(--space-1); }
+/* HQ's standard: its checks read as a list in two columns at most (4 and 3),
+   never a row of five with two under it. */
+.posture-checks { grid-template-columns: repeat(auto-fit, minmax(min(100%, max(20rem, 40%)), 1fr)); }
 
 /* A card's steps (partials/_resolution_workflow.html): one stands alone,
    several are numbered, and long ones fold under "Steps". */
-/* Each step's label beside its command, the commands in one column; a label
-   takes at most two fifths of the row and wraps inside it. A step's number is
-   its label's, since a list laid out as a grid draws no markers. */
+/* Each step's label beside its command, the commands starting on one line; a
+   label takes at most two fifths of the row and wraps inside it. A command
+   too long for the room beside its label goes under it with the row's whole
+   width, so a path is not folded into a strip. A step's number
+   is its label's, since a list laid out this way draws no markers. */
 .resolution-workflow {
   margin: var(--space-3) 0 0; padding: 0; list-style: none;
-  display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); gap: var(--space-2) var(--space-6);
+  display: grid; gap: var(--space-2);
   font-size: var(--text-sm); color: var(--ink-2); counter-reset: step;
 }
-.resolution-workflow li { min-width: 0; display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; row-gap: var(--space-2); counter-increment: step; }
-.resolution-workflow li > :not(strong, .command),
-.resolution-workflow li > .command:first-child { grid-column: 1 / -1; }
+.resolution-workflow > li { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-6); counter-increment: step; }
+.resolution-workflow > li > strong { flex: 0 0 min(40%, 11rem); min-width: 0; }
+.resolution-workflow > li > .command { flex: 0 1 auto; }
+.resolution-workflow > li > :not(strong, .command),
+.resolution-workflow > li > .command:first-child { flex-basis: 100%; }
 ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .resolution-workflow li > strong { color: var(--ink); font-weight: 650; }
 .resolution-workflow li > p { max-width: var(--measure); margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
@@ -2114,7 +2159,6 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
    Stretching is right when both sides are lists that read as one block, and
    wrong when one is a short table beside a tall drawing: the short one grows a
    band of empty card under its last row. */
-.two-col.align-top { align-items: start; }
 /* The sections at the end of a thing's page (what else HQ holds, how it
    relates, what names it) are mostly short: each is a card holding its own
    heading, two to a row at one height where both fit, and one that is wide
@@ -2129,20 +2173,18 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .section-flow > :is(section, .page-section):has(> details.section-fold) { grid-column: 1 / -1; order: 0; }
 /* Sections stacked in one column of a pair, at the pair's own gap. */
 .stack { display: grid; gap: var(--layout-gap); align-content: start; min-width: 0; }
-/* A paired row whose two cards end at different points reads as broken.
-   `align-top` stops a short card stretching, which is exactly what makes the
-   pair ragged; instead the cards stretch and the shorter one gets somewhere to
-   put the difference. A card in a stretched pair is a column, and its drawing
+/* A paired row whose two cards end at different points reads as broken, so
+   the cards stretch and the shorter one gets somewhere to put the difference. A card in a stretched pair is a column, and its drawing
    sits in the middle of whatever height the row ends up being rather than
    leaving the slack in one lump at the bottom. */
-.two-col:not(.align-top) > .card,
-.two-col:not(.align-top) > .chart-card {
+.two-col > .card,
+.two-col > .chart-card {
   display: flex;
   flex-direction: column;
 }
-.two-col:not(.align-top) > .chart-card > .chart-scroll,
-.two-col:not(.align-top) > .chart-card > .pie-row { margin-block: auto; }
-.two-col:not(.align-top) > .card > .table-scroll:only-of-type { margin-bottom: auto; }
+.two-col > .chart-card > .chart-scroll,
+.two-col > .chart-card > .pie-row { margin-block: auto; }
+.two-col > .card > .table-scroll:only-of-type { margin-bottom: auto; }
 /* Panels that flow rather than pair. Assigning cards to a fixed left and right
    column means their heights are whatever the data made them, so one column
    ends early and the page carries the difference as a hole. Columns balance
@@ -2194,7 +2236,9 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 @container (min-width: 660px) {
   .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 6; }
 }
-.dashboard-counts { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-9); padding: var(--space-4) 0; margin-bottom: var(--stack-gap); border-block: 1px solid var(--line); }
+/* The totals across HQ, and the owner's links: each one surface, so neither
+   floats on the page between the cards. */
+.dashboard-counts { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-9); padding: var(--surface-inset, var(--space-5) var(--space-8)); margin-bottom: var(--stack-gap); }
 .dashboard-counts .kpi { display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); padding: 0; background: none; }
 .dashboard-counts .kpi .value { font-size: var(--text-md); order: -1; }
 .dashboard-counts .kpi .label { font-size: var(--text-xs); text-transform: none; letter-spacing: 0; }
@@ -2211,7 +2255,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .dashboard-patterns .calendar-marks { display: inline-flex; margin: 0 0 0 var(--space-1); min-height: 6px; }
 .dashboard-patterns .calendar-dot { width: 5px; height: 5px; }
 .dashboard-patterns .calendar-legend { margin-block: var(--space-3); }
-.two-col > section, .two-col > div:not(.col-stack), .section-flow > :is(section, .page-section), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
+.two-col > section, .two-col > div, .section-flow > :is(section, .page-section), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
 /* Inside a layout container the gap is the separation, so a section's own
    stacking margin is dead space. Declared after the section rules above so it
    wins on source order at equal specificity. */
@@ -2268,17 +2312,6 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .calendar-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); }
 .calendar-head h2 { margin: 0; }
 .calendar-head-copy { min-width: 0; }
-/* A column inside a layout cell: stack cards under one another where the
-   neighbouring cell is taller. A bare wrapper, not a card: the frame rule
-   leaves it out, so the cards it holds keep their own frame and padding. */
-.col-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--layout-gap);
-  min-width: 0;
-}
-.col-stack > * { margin: 0; }
-
 /* The calendar. A source's colour is one custom property, so a dot, a line, a
    bar and a swatch all read it the same way. */
 .series-1 { --source: var(--series-1); }
@@ -2392,8 +2425,8 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
    thousand to one. Wrapped under the month it is alone on its line and takes
    the width, its day and its list of calendars side by side. */
 .calendar-aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); align-items: start; gap: var(--layout-gap); }
-.day-panel, .calendar-sources { padding: var(--space-5); }
-.day-panel .section-head { margin-bottom: var(--space-4); }
+.day-panel, .calendar-sources, .calendar-upcoming { padding: var(--space-5); }
+.day-panel .section-head, .calendar-upcoming .section-head { margin-bottom: var(--space-4); }
 .day-panel-entry { margin-bottom: var(--space-5); padding-bottom: var(--space-5); border-bottom: 1px solid var(--line-2); }
 .day-panel-entry h3 { margin: 0 0 var(--space-2); }
 .day-panel-entry p { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
@@ -2607,19 +2640,21 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .section-foot a:hover { color: var(--accent); }
 .dashboard-patterns .section-foot { margin-top: auto; padding-top: var(--space-6); text-align: right; }
 
-/* Empty state: make zero panels feel intentional, not broken */
-.empty {
-  padding: var(--space-7) 0 var(--space-2);
-  color: var(--muted);
+/* Empty state (partials/_empty_state.html): a card of one regular-weight line,
+   what is missing and then what would fill it. Inside another frame the
+   surface rule clears the card's frame and its inset. The card is as wide as
+   its line: one sentence across a page-wide frame is a gulf. */
+.empty.card {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin: 0 0 var(--stack-gap);
+  padding: var(--surface-inset, var(--space-6) var(--space-8));
+  color: var(--ink-2);
   font-size: var(--text-sm);
 }
-.empty.compact { padding: var(--space-2) 0 0; }
-.empty p { margin: 0 0 var(--space-3); }
-.empty .empty-cta { color: var(--accent-2); font-weight: 500; }
-/* What is missing leads; what would fill it follows, quieter and at a
-   reading width. */
-.empty > p:first-child { color: var(--ink-2); font-weight: 600; }
-.empty .empty-why { max-width: var(--measure); }
+.empty.card:last-child { margin-bottom: 0; }
+.empty p { margin: 0; max-width: var(--measure); }
+.empty .empty-cta { color: var(--accent-2); font-weight: 500; white-space: nowrap; }
 
 /* ── KV grid ────────────────────────────────────────────────────── */
 
@@ -2630,18 +2665,6 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .kv dt { color: var(--muted); font-weight: 500; }
 .kv dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 .eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-
-/* ── Audit / activity list ─────────────────────────────────────── */
-
-.audit-list { list-style: none; padding: 0; margin: 0; }
-.audit-list li {
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--line-2);
-  font-size: var(--text-sm);
-  display: flex; gap: var(--space-5); align-items: baseline; flex-wrap: wrap;
-}
-.audit-list li:last-child { border-bottom: 0; }
-.audit-list .ts { color: var(--muted-2); font-variant-numeric: tabular-nums; font-size: var(--text-xs); white-space: nowrap; }
 
 /* Until the readings are one row (their own container says when), a popover
    hangs from the readings' right edge, which is the page's, rather than from
@@ -2696,7 +2719,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
    form fields is just a taller row. `.field` has to stay the wrapper: the
    control styling hangs off `.field select`, so dropping it to kill the margin
    drops the border and padding with it and the control falls back to the
-   browser's own. Same modifier convention as .kv.compact and .empty.compact. */
+   browser's own. Same modifier convention as .kv.compact. */
 .field.compact { margin-bottom: 0; }
 .field label { display: block; font-weight: 600; margin-bottom: var(--space-2); font-size: var(--text-sm); }
 .field input, .field select, .field textarea { width: 100%; }
@@ -2744,7 +2767,8 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 }
 .form-errors .errorlist { margin: 0; }
 .errors { color: var(--danger); margin: var(--space-2) 0 0; padding-left: var(--space-8); font-size: var(--text-sm); }
-.form-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-6); }
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
+.form-actions-note { font-size: var(--text-xs); }
 
 /* ── Dropzone ───────────────────────────────────────────────────────
    The real file input covers the zone, so the click target and the drop target
@@ -3011,6 +3035,8 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 .discovery-meta code { font-size: var(--text-3xs); overflow-wrap: anywhere; }
 .command-hint { margin: var(--space-2) 0 0; }
+/* A key to press is said only where there are keys: not on a touch screen. */
+@media (hover: none) { .keyboard-only { display: none; } }
 .command-runner { margin: 0; max-width: 56rem; }
 /* What a command acts on, when the page was opened for one thing. */
 .command-target p { margin: 0; }
@@ -3079,10 +3105,20 @@ a.discovery-link:hover strong { color: var(--accent); }
    cell's larger line and sit above the words beside them. */
 .connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
 /* Its own section under the table, not a second compartment of a card around it. */
-.connection-available { margin-top: var(--space-10); }
-.connection-available h2 { margin: 0 0 var(--space-4); }
-.connection-available ul { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-.connection-available li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); font-size: var(--text-sm); }
+/* How to connect each provider not yet connected: one row each, opened for its steps. */
+.connection-setup { margin-top: var(--stack-gap); }
+.setup-list { margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+.setup-list > li { border-top: 1px solid var(--line-2); }
+.setup-list summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0; cursor: pointer; }
+.setup-list details[open] { padding-bottom: var(--space-6); }
+/* Names share one edge so what each gives reads down one column; narrow, it wraps under its name. */
+.setup-list summary > strong { flex: 0 0 10rem; }
+.setup-list summary > .muted { flex: 1 1 18rem; }
+/* A family set up on its own: one line, its name under the services' names,
+   past the width of their disclosure mark and its gaps. */
+.setup-list > .setup-other { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0 var(--space-4) calc(1.05em + var(--space-1) + var(--space-5)); }
+.setup-permissions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin: var(--space-2) 0; padding: 0; list-style: none; font-size: var(--text-xs); }
+.setup-permissions code { white-space: nowrap; }
 .connection-sight,
 .connection-more-scope { margin-top: var(--space-2); }
 .connection-sight-tally { display: block; font-size: var(--text-xs); color: var(--muted); }
@@ -3107,14 +3143,15 @@ a.discovery-link:hover strong { color: var(--accent); }
 .command > .command-copy { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); min-height: 0; padding: var(--space-1) var(--space-3); font-size: var(--text-2xs); color: var(--code-ink); border-color: transparent; background: transparent; opacity: .7; }
 .command > .command-copy:is(:hover, :focus-visible) { opacity: 1; }
 .command > .operator-command { margin: 0; padding-inline-end: 4.5rem; }
-/* A command wraps rather than scrolling: selecting it copies it whole. */
+/* A command wraps rather than scrolling: selecting it copies it whole. It
+   breaks where `|breakable` lets it, a word only when nothing else fits. */
 .operator-command {
   width: fit-content;
   max-width: 100%;
   margin: var(--space-2) 0 0;
   padding: var(--space-2) var(--space-5);
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   user-select: all;
   font-size: var(--text-xs);
 }
@@ -3148,9 +3185,10 @@ a.discovery-link:hover strong { color: var(--accent); }
   list-style: none;
 }
 .connection-security-advanced > summary::-webkit-details-marker { display: none; }
-.connection-security-advanced > summary > span:first-child { display: grid; gap: var(--space-1); }
+/* Closed, it is a status line: the title at the left, how the checks stand at the right. */
+.connection-security-advanced > summary > span:first-child { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-6); }
 .connection-security-advanced > summary strong { font-size: var(--text-lg); }
-.connection-security-advanced > summary small { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; }
+.connection-security-advanced > summary small { color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
 .connection-security-advanced > summary::after {
   content: "+";
   color: var(--muted);
@@ -3172,91 +3210,90 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-trust-path > :last-child { flex: 3 1 24rem; min-width: 0; }
 .connection-trust-path h3 { margin: var(--space-1) 0 var(--space-2); font-size: var(--text-lg); }
 .connection-trust-path p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
-.request-path {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
-  gap: var(--space-8);
-  margin: 0;
-  padding: var(--space-2) var(--space-2) var(--space-4);
-  list-style: none;
-  max-width: 100%;
-}
-/* Each hop a card of its own, raised off the page, joined by an arrow: an icon
-   tile that says what kind of thing it is, then what it is called. */
-/* Every hop the same shape, whatever it carries: a header row (icon, what kind
-   of thing, its proof), the name on one line, then at most one line of facts.
-   The hops share the width, each at least 8.5rem, and a route longer than one
-   row continues on the next, since a strip that scrolls hides its last hops
-   past the edge of a phone. */
+/* A route (control_plane/_path_hops.html): one surface, each hop a stop on
+   one line, its icon on the line. Down the box, as the connection panel draws
+   its route, unless every hop fits across it whole: then across, one row,
+   never wrapped onto a second where the line would run off the page's edge.
+   Asked of the route's own width, so the same route reads the same in half a
+   card and on a phone. */
+.route { container: route / inline-size; margin: 0 0 var(--stack-gap); padding: var(--surface-inset, var(--space-6) var(--space-8)); }
+.route:last-child { margin-bottom: 0; }
+.request-path { display: grid; margin: 0; padding: 0; list-style: none; }
 .request-path li {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-rows: auto auto auto;
-  align-content: start;
+  grid-template-columns: 26px 8rem minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: var(--space-4);
-  row-gap: var(--space-2);
+  column-gap: var(--space-5);
   min-width: 0;
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  padding: var(--space-3) 0;
 }
-.request-path li::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: calc(-1 * var(--space-8) + 3px);
-  width: 6px;
-  height: 6px;
-  transform: translateY(-50%) rotate(45deg);
-  border-top: 1.5px solid var(--line-strong);
-  border-right: 1.5px solid var(--line-strong);
+/* The line, through the middle of every icon. A hop that does not hold
+   colours its stretch, as the connection panel's does. */
+.request-path li::before {
+  content: ""; position: absolute; left: 12px; top: 0; bottom: 0; width: 2px;
+  background: var(--line);
 }
-.request-path li:last-child::after { display: none; }
+.request-path li:first-child::before { top: 50%; }
+.request-path li:last-child::before { bottom: 50%; }
+.request-path li:only-child::before { display: none; }
+.request-path li.is-attention::before { background: var(--tone-critical-tint); }
 .request-path .hop-icon {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius);
-  background: var(--accent-tint);
-  color: var(--accent-2);
-  font-size: var(--text-lg);
+  position: relative;
+  display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: var(--radius);
+  background: linear-gradient(var(--accent-tint) 0 0), var(--surface);
+  color: var(--accent-2); font-size: var(--text-lg);
 }
-.request-path .hop-label { min-width: 0; overflow: hidden; color: var(--muted); font-size: var(--text-xs); line-height: 1.3; white-space: nowrap; text-overflow: ellipsis; }
-.request-path li > strong,
-.request-path li > small {
-  grid-column: 1 / -1;
-  min-width: 0;
-  overflow: hidden;
+.request-path .hop-label { min-width: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.3; }
+.hop-body { display: grid; gap: 1px; min-width: 0; }
+.hop-body > strong { display: flex; align-items: baseline; min-width: 0; font-size: var(--text-sm); font-weight: 650; line-height: 1.3; }
+/* A name breaks only where `|breakable` lets it (after a dot, before a
+   colon), and only when it does not fit; its certificate mark stays beside it. */
+.hop-body > strong > :not(.cert-mark) { min-width: 0; overflow-wrap: normal; }
+.hop-body > strong > .cert-mark { flex-shrink: 0; overflow: visible; }
+.hop-body > small { margin: 0; color: var(--muted); font-size: var(--text-2xs); line-height: 1.35; }
+/* Too narrow for the kind beside the name: the kind over it. */
+@container route (max-width: 24rem) {
+  .request-path li { grid-template-columns: 26px minmax(0, 1fr) auto; row-gap: 0; }
+  .request-path .hop-icon { grid-row: 1 / span 2; }
+  .request-path .hop-label { grid-column: 2; grid-row: 1; }
+  .request-path .hop-body { grid-column: 2; grid-row: 2; }
+  .request-path .hop-proof { grid-column: 3; grid-row: 1 / span 2; }
 }
-.request-path li > strong { display: flex; align-items: baseline; font-size: var(--text-sm); font-weight: 650; line-height: 1.3; }
-/* A name takes a second line before it is cut, and breaks where it must; its
-   certificate mark stays beside it. Cut, it is cut inside the hop. */
-.request-path li > strong > :not(.cert-mark),
-.request-path li > small {
-  display: -webkit-box; min-width: 0; overflow: hidden; overflow-wrap: anywhere;
-  -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+/* Across: every hop gets 9rem, enough for its kind and an address with
+   its port, or the route goes down. Counted off the route itself. */
+@container route (min-width: 18rem) { .request-path:has(> li:nth-child(2):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
+@container route (min-width: 27rem) { .request-path:has(> li:nth-child(3):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
+@container route (min-width: 36rem) { .request-path:has(> li:nth-child(4):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
+@container route (min-width: 45rem) { .request-path:has(> li:nth-child(5):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
+@container route (min-width: 54rem) { .request-path:has(> li:nth-child(6):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
+@container route (min-width: 63rem) { .request-path:has(> li:nth-child(7):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
+@container route (min-width: 72rem) { .request-path:has(> li:nth-child(8):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
+/* Across, a hop is its icon on the line, its kind, then what it is. */
+@container style(--across: 1) {
+  .request-path li { grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; align-items: start; row-gap: var(--space-2); padding: 0; }
+  .request-path li::before { left: 13px; right: calc(-1 * var(--space-6) - 13px); top: 12px; bottom: auto; width: auto; height: 2px; }
+  .request-path li:first-child::before { top: 12px; }
+  .request-path li:last-child::before { display: none; }
+  .request-path .hop-label { grid-column: 1 / -1; grid-row: 2; }
+  .request-path .hop-body { grid-column: 1 / -1; grid-row: 3; }
+  .request-path .hop-icon { grid-row: 1; }
+  .request-path .hop-proof { grid-column: 3; grid-row: 1; align-self: center; }
 }
-.request-path li > strong > .cert-mark { flex-shrink: 0; overflow: visible; }
-.request-path li > small { margin: 0; color: var(--muted); font-size: var(--text-2xs); line-height: 1.35; }
 /* A hop's certificate: a check in a circle after its name, in the name's colour
    once the controller has verified it, faint until then. */
 .cert-mark { display: inline-flex; margin-left: .35em; font-size: 1.15em; color: var(--accent-2); vertical-align: -.15em; cursor: default; }
 .cert-mark.is-pending { color: var(--muted-2); }
-/* A hop this very request was proven to pass through: a dot in the corner,
+/* A hop this very request was proven to pass through: a dot at the hop's end,
    its reason on hover; the evidence is the connection page's. */
-.hop-proof { grid-column: 3; grid-row: 1; width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+.hop-proof { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
 .request-path li.is-proven .hop-proof { background: var(--ok); box-shadow: 0 0 0 3px var(--tone-positive-bg); }
 .request-path li.is-attention .hop-proof { background: var(--danger); }
 .path-proof-note { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-4) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .hop-proof-key { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--tone-positive-bg); }
-.request-path li.is-unknown { box-shadow: inset 0 3px 0 var(--muted-2), var(--shadow); }
-.request-path li.is-unknown .hop-icon { background: var(--line-2); color: var(--muted-2); }
-.request-path li.is-attention { box-shadow: inset 0 3px 0 var(--danger), var(--shadow); }
+.request-path li.is-unknown .hop-icon { background: linear-gradient(var(--line-2) 0 0), var(--surface); color: var(--muted-2); }
+.request-path li.is-attention .hop-icon { background: linear-gradient(var(--tone-critical-tint) 0 0), var(--surface); color: var(--danger); }
 .connection-control-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr));
@@ -3419,6 +3456,11 @@ kbd {
   font-size: var(--text-sm);
 }
 .notice > strong { display: block; }
+/* On a saved copy, a line about the reader's connection is marked as an example. */
+span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; }
+.menu-item-status span.example-connection::before { content: " · "; }
+/* In a grid that spaces its own rows, a notice adds no margin of its own. */
+.conn > .notice { margin: 0; }
 .notice p { margin: var(--space-2) 0 0; }
 .msg {
   padding: var(--space-4) var(--space-6); border-radius: var(--radius-sm); margin-bottom: var(--space-3);
@@ -3432,7 +3474,6 @@ kbd {
 
 .pagination { display: flex; gap: var(--space-6); align-items: center; margin: var(--space-8) 0; font-size: var(--text-sm); }
 
-.export-grid { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-4); }
 
 .auth-card { max-width: 380px; margin: clamp(var(--space-20), 10vh, var(--space-40)) auto; padding: var(--surface-inset, var(--space-14)); text-align: center; }
 .auth-logo { display: block; width: 64px; height: 64px; margin: 0 auto var(--space-7); }
@@ -3562,6 +3603,10 @@ kbd {
    fit; the nav gets its own row here rather than overlapping the search. */
 @media (max-width: 860px) {
   .site-header { gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
+  /* The person's control is a square mark like search and the bell beside it:
+     the name is in its menu, and a phone's one row has no room to repeat it. */
+  .user-menu > summary { width: var(--control-size); padding: 0; }
+  .user-menu .user-name { display: none; }
   .brand { font-size: var(--text-md); }
   /* The sections live in the toggle's panel from 1080px down, so the bar stays
      a single row here and needs no wrapping rules of its own. */
@@ -3999,7 +4044,8 @@ kbd {
 .zone-switch a > span[aria-hidden] { color: var(--accent); }
 
 /* Facts above a form: what the thing is, before what can be changed. */
-.form-facts { margin: 0 0 var(--stack-gap); padding: var(--space-5) var(--space-6); background: var(--bg-tint); border-radius: var(--radius-sm); }
+/* What the thing already is, as plain facts above what can be changed: not a bar. */
+.form-facts.kv.compact { margin: 0 0 var(--stack-gap); padding: 0; background: none; }
 
 /* Overflow menu: the actions worth having, without a second row of buttons.
    The panel is the nav's dropdown (same box, same shadow, same radius) so
@@ -4048,9 +4094,10 @@ kbd {
 .overflow-menu-panel .btn.danger { color: var(--danger); }
 
 .name-list { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; max-width: 40rem; }
-.name-list-row { display: flex; flex-wrap: wrap; gap: var(--space-3); width: 100%; }
-/* Beside its Remove, whatever `.field input` says about width. */
-.name-list-row input { flex: 1 1 12rem; width: auto; min-width: 0; }
+/* Every editable row keeps a column for its Remove, so inputs line up whether
+   or not a row has one (the spare row has nothing to remove). */
+.name-list-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem; gap: var(--space-3); width: 100%; }
+.name-list-row input { width: 100%; min-width: 0; }
 .name-list-add { margin-top: var(--space-1); }
 /* Says which values HQ can see for itself, beside the ones only this field
    records. Wraps under the input on a narrow screen rather than squeezing it. */
@@ -4062,9 +4109,9 @@ kbd {
 }
 /* A value a sweep reports. Shown as the fact it is rather than as an input,
    because HQ holds it whether or not this field does. */
-.name-list-row-observed { align-items: center; }
+.name-list-row-observed { display: flex; align-items: center; }
 .name-list-observed {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   padding: var(--space-3) 0;
   font-family: var(--font-mono);
@@ -4132,11 +4179,9 @@ textarea.code {
 
 /* ----- This connection -------------------------------------------------- */
 
-/* Wider than a normal dialog because this one is a table of readings rather
-   than a short task; at the shared width every row would wrap onto several
-   lines. */
+/* A page in a dialog: wide enough for you and the link side by side. */
 .modal-wide {
-  width: min(780px, calc(100vw - 32px));
+  width: min(1120px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -4164,83 +4209,60 @@ textarea.code {
 
 /* The panel is read in a dialog and on a page of its own, so what it does when
    it is narrow is asked of the panel, not the screen. */
-.conn { display: grid; gap: var(--space-10); container: conn / inline-size; }
+.conn { display: grid; gap: var(--stack-gap); container: conn / inline-size; }
 .conn-pending { padding: var(--space-10) 0; }
 .conn h3 {
   font-size: var(--text-2xs); letter-spacing: .07em; text-transform: uppercase;
   color: var(--muted); margin: 0 0 var(--space-4);
 }
 .conn-note { color: var(--muted); font-size: var(--text-xs); margin: calc(var(--space-2) * -1) 0 var(--space-5); }
+.conn-note-after { margin: var(--space-3) 0 0; }
 
-.conn-verdict {
-  display: flex; align-items: center; gap: var(--space-6);
-  padding: var(--space-6) var(--space-7); border-radius: var(--radius);
-  background: var(--bg-tint); border-left: 3px solid var(--muted-2);
-}
-.conn-tailnet { border-left-color: var(--ok); }
-.conn-network, .conn-loopback { border-left-color: var(--warn); }
-.conn-elsewhere { border-left-color: var(--danger); }
-.conn-verdict .conn-dot { margin: 0; width: 9px; height: 9px; }
+.conn-peering.conn-tailnet { border-left: 3px solid var(--ok); }
+.conn-peering:is(.conn-network, .conn-loopback) { border-left: 3px solid var(--warn); }
+.conn-peering.conn-elsewhere { border-left: 3px solid var(--danger); }
 .conn-tailnet .conn-dot { background: var(--ok); }
 .conn-network .conn-dot, .conn-loopback .conn-dot { background: var(--warn); }
 .conn-elsewhere .conn-dot { background: var(--danger); }
-.conn-verdict-text { flex: 1; min-width: 0; }
-.conn-headline { font-size: var(--text-xl); font-weight: 650; margin: 0; }
-.conn-sub { margin: 1px 0 0; color: var(--muted); font-size: var(--text-xs); }
-.conn-address { font-size: var(--text-sm); white-space: nowrap; }
-.conn-decision, .conn-path { display: grid; gap: var(--space-4); }
+/* The tailnet's colour only once every check on the way in is confirmed
+   (Connection.verdict). */
+.conn-verdict-unconfirmed:is(.conn-tailnet, .conn-badge-tailnet) .conn-dot { background: var(--muted-2); }
+.conn-verdict-failing:is(.conn-tailnet, .conn-badge-tailnet) .conn-dot { background: var(--attn); }
+.conn-peering.conn-tailnet.conn-verdict-unconfirmed { border-left-color: var(--line); }
+.conn-peering.conn-tailnet.conn-verdict-failing { border-left-color: var(--attn); }
+.conn-verdict-unconfirmed .conn-link:not(.conn-link-relayed) .conn-link-line { background: var(--line); }
+.conn-headline { display: inline-flex; align-items: center; gap: var(--space-3); font-size: var(--text-lg); font-weight: 650; margin: 0; }
+.conn-sub { margin: 0; color: var(--muted); font-size: var(--text-xs); text-align: center; }
+.conn-path { display: grid; gap: var(--space-4); align-content: start; container: path / inline-size; }
+.conn-path .conn-layer-label { overflow-wrap: normal; }
+/* A wide route keeps each hop's evidence beside its value. */
+/* A hop: its kind, what it is with what HQ read about it, and what opening it
+   shows. */
+.conn-path > .conn-layers > .conn-layer > details > summary { grid-template-columns: auto 7rem minmax(0, 1fr) max-content; padding: var(--space-3) 0; }
+.conn-hop-detail { margin-left: var(--space-4); color: var(--muted); font-size: var(--text-xs); font-weight: 400; }
+.conn-hop-detail::before { content: "· "; }
+.conn-hop-more { color: var(--muted); font-size: var(--text-2xs); white-space: nowrap; }
+.conn-hop-more::after { content: " ›"; }
+details[open] > summary .conn-hop-more::after { content: " ⌄"; }
+/* A narrow one stacks the hop, its value and its evidence under the tick. */
+@container path (max-width: 24rem) {
+  .conn-path > .conn-layers > .conn-layer > details > summary { grid-template-columns: auto minmax(0, 1fr); row-gap: 0; }
+  .conn-path > .conn-layers > .conn-layer > details > summary > :not(.conn-tick) { grid-column: 2; }
+  .conn-path > .conn-layers > .conn-layer > details > summary > .conn-tick { grid-row: span 3; align-self: start; }
+  .conn-path > .conn-layers > .conn-layer > details > summary .conn-layer-evidence { justify-self: start; text-align: left; }
+}
+/* The heading as every card here has it, its count on the same line. */
+.conn-path-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
+.conn-path-head h3 { margin: 0; }
+.conn-path-head span { color: var(--muted); font-size: var(--text-2xs); text-align: right; }
+/* The route beside the evidence behind it, so neither leaves half a row empty. */
+.conn-aside { display: grid; gap: var(--stack-gap); }
 .conn-findings { display: grid; gap: var(--space-2); }
 .conn-findings .conn-agree { margin: 0; }
 .conn-decision-head { display: flex; align-items: end; justify-content: space-between; gap: var(--space-7); }
 .conn-decision-head h3 { margin-bottom: var(--space-1); }
 .conn-decision-head p { margin: 0; color: var(--muted); font-size: var(--text-2xs); }
 .conn-decision-head > strong { color: var(--muted); font-size: var(--text-2xs); font-weight: 550; white-space: nowrap; }
-.conn-decision ol {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.conn-decision li {
-  display: flex;
-  flex: 1 0 132px;
-  min-width: 0;
-}
-.conn-decision-step {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--space-3);
-  align-items: center;
-  min-height: 44px;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--ink-2);
-  background: var(--surface);
-  font-size: var(--text-3xs);
-  line-height: 1.25;
-  text-decoration: none;
-  width: 100%;
-}
-.conn-decision-step:hover { border-color: var(--accent); text-decoration: none; }
-.conn-decision-step-does-not { border-color: color-mix(in srgb, var(--danger) 42%, var(--line)); background: color-mix(in srgb, var(--tone-tint) 55%, var(--surface)); }
-.conn-decision-step-does-not .conn-tick { background: var(--tone-tint); color: var(--danger); }
-.conn-decision-step-unknown { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); background: color-mix(in srgb, var(--tone-tint) 45%, var(--surface)); }
-.conn-decision-step-unknown .conn-tick { background: var(--tone-tint); color: var(--warn); }
-.conn-related {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3) var(--space-6);
-  flex-wrap: wrap;
-  margin-top: -7px;
-  padding-bottom: var(--space-5);
-  border-bottom: 1px solid var(--line);
-  font-size: var(--text-xs);
-}
-.conn-related > span { color: var(--muted); }
-.conn-related a { font-weight: 600; }
 .conn-protocol { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .conn-protocol > summary {
   display: flex;
@@ -4255,12 +4277,34 @@ textarea.code {
 .conn-protocol > summary > span:first-child { display: grid; gap: var(--space-1); }
 .conn-protocol > summary strong { font-size: var(--text-sm); }
 .conn-protocol > summary small { color: var(--muted); font-size: var(--text-2xs); }
-.conn-protocol > summary .count { margin-left: auto; }
-.conn-protocol-body { display: grid; gap: var(--space-10); padding: var(--space-8) var(--space-7); border-top: 1px solid var(--line); }
+.conn-protocol > summary .count { margin-left: auto; white-space: nowrap; }
+.conn-protocol-body {
+  display: grid; gap: var(--space-8); padding: var(--space-7); border-top: 1px solid var(--line);
+  container: fold / inline-size;
+}
+.conn-addresses .conn-row { grid-template-columns: minmax(0, 11rem) 5rem minmax(0, 1fr); }
+.conn-addresses .conn-row > .conn-kind { justify-self: start; }
+/* With room, a header is one row: its value, what it is for, then whether it
+   was read or sent, each in its own column. */
+@container fold (min-width: 46rem) {
+  .conn-protocol-body .conn-row-wide { grid-template-columns: minmax(0, 26rem) minmax(0, 1fr) 5.5rem; }
+  .conn-protocol-body .conn-row-wide > code { grid-column: 1; grid-row: 1; justify-self: start; }
+  .conn-protocol-body .conn-row-wide > .conn-row-note { grid-column: 2; grid-row: 1; }
+  .conn-protocol-body .conn-row-wide > .conn-kind { grid-column: 3; grid-row: 1; justify-self: end; }
+}
 
 /* Two columns of label/value pairs. A grid rather than a table so the labels
    share one width across both columns and the values line up with each other. */
-.conn-cols { display: grid; gap: var(--space-10) var(--space-14); grid-template-columns: 1fr 1fr; align-items: start; }
+/* You, the link and the route, side by side. */
+.conn-cols { display: grid; gap: var(--stack-gap); grid-template-columns: minmax(0, 1fr); }
+/* Sized by the panel, not the window, so the dialog and the page agree: you
+   and the link side by side, the route across both beneath them. */
+@container conn (min-width: 54rem) {
+  .conn-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .conn-cols > .conn-path { grid-column: 1 / -1; }
+  /* Your addresses beside HQ's. */
+  .conn-addresses .conn-protocol-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
 .conn-pairs { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3) var(--space-7); align-items: baseline; }
 .conn-pairs dt { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
 .conn-pairs dd { margin: 0; font-size: var(--text-sm); min-width: 0; overflow-wrap: anywhere; }
@@ -4304,7 +4348,7 @@ textarea.code {
 .conn-layers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
 .conn-layer { border: 1px solid var(--line); border-radius: var(--radius); }
 .conn-layer summary {
-  display: grid; grid-template-columns: auto minmax(88px, .55fr) minmax(150px, 1fr) minmax(0, .9fr);
+  display: grid; grid-template-columns: auto 6.5rem minmax(5rem, 1fr) fit-content(45%);
   align-items: center; gap: var(--space-5);
   padding: var(--space-4) var(--space-6); cursor: pointer; list-style: none;
 }
@@ -4324,13 +4368,44 @@ textarea.code {
 .conn-layer-label { font-weight: 550; font-size: var(--text-sm); min-width: 0; overflow-wrap: anywhere; }
 .conn-layer-evidence {
   justify-self: end; font-size: var(--text-2xs); color: var(--muted);
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%; overflow-wrap: anywhere; text-align: right;
+  background: none; padding: 0;
 }
-.conn-layer-body { margin: 0 var(--space-6) var(--space-5) var(--space-20); display: grid; gap: var(--space-4); }
-.conn-layer-body p { margin: 0; font-size: var(--text-sm); color: var(--ink-2); }
-.conn-layer-body dl { display: flex; gap: var(--space-4); margin: 0; font-size: var(--text-2xs); }
-.conn-layer-body dt { color: var(--muted); }
-.conn-layer-body dd { margin: 0; font-weight: 600; }
+/* The path is a route: each hop a stop on one line from your device down to
+   HQ, the tick on the line. A hop that does not hold colours its stretch. */
+.conn-path > .conn-layers { gap: 0; }
+.conn-path > .conn-layers > .conn-layer { position: relative; border: 0; border-radius: 0; }
+.conn-path > .conn-layers > .conn-layer::before {
+  content: ""; position: absolute; left: 7.5px; top: 0; bottom: 0; width: 2px;
+  background: var(--tone-positive-tint);
+}
+.conn-path > .conn-layers > .conn-layer:first-child::before { top: 50%; }
+.conn-path > .conn-layers > .conn-layer:last-child::before { bottom: auto; height: 50%; }
+.conn-path > .conn-layers > .conn-layer:only-child::before { display: none; }
+.conn-path > .conn-layers > .conn-layer-does-not::before { background: var(--tone-critical-tint); }
+.conn-path > .conn-layers > .conn-layer-unknown::before { background: var(--tone-caution-tint); }
+/* An opened hop's evidence sits on a panel of its own under the hop's name, so
+   it reads as that hop's and the route plainly continues after it. */
+.conn-path > .conn-layers > .conn-layer > details > .conn-layer-body {
+  margin: 0 0 var(--space-4) calc(17px + var(--space-5)); padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius); background: var(--bg-tint);
+}
+.conn-path .conn-tick { position: relative; }
+.conn-path .conn-hop { border: 0; padding-inline: 0; background: none; }
+.conn-layer-body {
+  display: grid; gap: var(--space-3);
+  margin: 0 var(--space-6) var(--space-4) calc(var(--space-6) + 17px + var(--space-5));
+}
+.conn-layer-body p { margin: 0; font-size: var(--text-xs); color: var(--ink-2); }
+/* A hop's own checks are rows of the hop, not boxes inside it: a tick, the
+   statement and its evidence on one line, the sentence when opened. */
+.conn-layer-body .conn-layers { gap: 0; border-top: 1px solid var(--line-2); }
+.conn-layer-body .conn-layer { border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0; }
+.conn-layer-body .conn-layer summary {
+  grid-template-columns: auto minmax(7rem, 1fr) fit-content(45%); gap: var(--space-4); padding: var(--space-3) 0;
+}
+.conn-layer-body .conn-layer .conn-layer-label { font-size: var(--text-xs); }
+.conn-layer-body .conn-layer .conn-layer-body { margin: 0 0 var(--space-3) calc(17px + var(--space-4)); }
 .conn-scope-note {
   margin: 0; padding-top: var(--space-6); border-top: 1px solid var(--line-2);
   color: var(--muted); font-size: var(--text-2xs);
@@ -4355,7 +4430,6 @@ textarea.code {
 }
 
 @container conn (max-width: 36rem) {
-  .conn-cols { grid-template-columns: 1fr; }
   .conn-verdict { flex-wrap: wrap; }
   .conn-address { width: 100%; }
   .conn-layer-evidence { display: none; }
@@ -4363,7 +4437,6 @@ textarea.code {
   .conn-layer-body { margin-left: var(--space-6); }
   .conn-decision-head { align-items: start; }
   .conn-decision-head > strong { max-width: 130px; white-space: normal; text-align: right; }
-  .conn-related > span { flex-basis: 100%; }
   /* Value and kind on one line, the note beneath, rather than three columns
      that cannot each hold an IPv6 address. */
   .conn-row, .conn-hop { grid-template-columns: minmax(0, 1fr) max-content; }
@@ -4430,7 +4503,7 @@ textarea.code {
 .conn-opaque { border-left-color: var(--danger); }
 .conn-opaque .conn-dot { background: var(--danger); }
 .conn-badge-opaque .conn-dot { background: var(--danger); }
-.conn-rules { display: grid; gap: var(--space-2); margin: 0 var(--space-6) var(--space-5) var(--space-20); justify-items: start; }
+.conn-rules { display: grid; gap: var(--space-2); margin: 0; justify-items: start; }
 .conn-rules code { font-size: var(--text-2xs); }
 
 /* An address is as wide as the address. Stretching each one to the column
@@ -4453,19 +4526,12 @@ textarea.code {
 .conn-row-stacked > code { justify-self: stretch; }
 .conn-row-stacked .conn-row-note { grid-column: 1 / -1; }
 
-/* Which network the tailnet link is riding over. A definition list pairs one
-   term with one value, and this value is three things (a verdict, why it
-   matters, and sometimes an address worth asking about) so the cell stacks
-   rather than fighting the grid for a single line. */
-/* Named for the question it answers, not for the mechanism: `.conn-peering` is
-   the You-to-HQ strip at the top of this panel, and reusing it here would
-   override that element's own grid.
-
-   Not `justify-items: start`. The cell inherits `overflow-wrap: anywhere` from
-   `.conn-pairs dd`, so a grid item sized to fit-content resolves to
-   min-content, and with that wrap rule min-content is one character: the
-   verdict would render as a column of single letters. */
-.conn-carriage { display: grid; gap: var(--space-1); }
+/* Which network the link rides over, with Why and About on the same line; an
+   opened one takes the line below. Words wrap whole: the cell would otherwise
+   inherit `overflow-wrap: anywhere` and fit-content would shrink to a letter. */
+.conn-carriage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4); overflow-wrap: normal; }
+.conn-pairs .conn-more > summary { padding: 0; }
+.conn-carriage > details[open] { flex-basis: 100%; }
 .conn-carriage > strong { font-weight: 600; }
 /* Riding over the internet is not a fault, so it is not red. It is the one
    state where the path is public and the operator may want to look further,
@@ -4473,11 +4539,9 @@ textarea.code {
 .conn-carriage-internet > strong { color: var(--accent); }
 .conn-carriage-relay > strong { color: var(--warn); }
 .conn-carriage-unknown > strong { color: var(--muted); }
-.conn-carriage .conn-more { width: 100%; }
 /* The verdict is the answer; the reasoning is available, not imposed. Prose
    under every row would turn a scannable panel into an essay, and the
    explanation is only wanted when the verdict is surprising. */
-.conn-why > summary { padding: var(--space-1) 0; }
 .conn-why > p { margin: var(--space-1) 0 0; }
 
 /* ----- Favourites ------------------------------------------------------- */
@@ -4559,7 +4623,7 @@ textarea.code {
 
 .topology-workspace {
   background: var(--surface-2);
-  overflow: hidden;
+  overflow: clip;
 }
 .topology-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-8);
@@ -4588,26 +4652,29 @@ textarea.code {
    and runs their transitions from nothing (docs/Design.md). */
 @media (min-width: 1180px) {
   .topology-stage.has-detail { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
+  /* Beside a map the page scrolls, the details stay in view. */
   .topology-stage.has-detail .topology-detail {
-    max-height: min(68vh, 680px); overflow-y: auto; border-top: 0; border-left: 1px solid var(--line);
+    position: sticky; top: var(--site-header-height); align-self: start;
+    max-height: calc(100vh - var(--site-header-height)); overflow-y: auto; border-top: 0; border-left: 1px solid var(--line);
   }
 }
-/* Scroll padding clears the sticky lane headers, so a card scrolled to is
-   never under one. */
+/* The lanes run down columns as a list does, as many columns as fit, so a
+   short lane sits under the one before it instead of leaving a column of
+   empty map beside a long one. The page scrolls; the map never does inside
+   it. A lane with nothing in it, or nothing the filter left, is not drawn. */
 .topology-map {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(218px, 1fr));
-  align-items: stretch; gap: 1px; overflow: auto; background: var(--surface-2);
-  min-width: 0; max-width: 100%; max-height: min(68vh, 680px);
-  overscroll-behavior-inline: contain;
-  scroll-behavior: smooth;
-  scroll-padding-top: var(--topology-lane-head);
+  columns: 15rem; column-gap: var(--space-8);
+  padding: var(--space-5) var(--space-6); background: var(--surface-2);
+  min-width: 0; max-width: 100%;
 }
-.topology-lane { min-width: 0; padding: var(--space-5); background: var(--surface-2); box-shadow: 0 0 0 1px var(--line); }
+.topology-lane { min-width: 0; padding: 0 0 var(--space-6); }
+.topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
 .topology-lane > header {
-  position: sticky; top: 0; z-index: 2; display: grid;
+  display: grid; break-after: avoid;
   grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-3);
-  padding: var(--space-1) var(--space-1) var(--space-4); background: var(--surface-2);
+  padding: var(--space-1) var(--space-1) var(--space-4);
 }
+.topology-node-list > * { break-inside: avoid; }
 .topology-lane h2 { margin: 0; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .055em; color: var(--muted); }
 .topology-kind-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .topology-kind-controller { background: var(--topology-controller); }
@@ -4616,7 +4683,7 @@ textarea.code {
 .topology-kind-resource { background: var(--ok); }
 .topology-kind-target { background: var(--topology-target); }
 .topology-kind-dependency { background: var(--muted-2); }
-.topology-node-list { display: grid; gap: var(--space-3); }
+.topology-node-list > * + * { margin-top: var(--space-3); }
 .topology-node {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
   gap: var(--space-3); padding: var(--space-4) var(--space-5);
@@ -4629,7 +4696,7 @@ textarea.code {
 .topology-node.is-attention { border-left-color: var(--warn); }
 .topology-node.is-serious { border-left-color: var(--danger); }
 .topology-node-title { display: grid; gap: 1px; min-width: 0; }
-.topology-node-title strong, .topology-node-title small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topology-node-title strong, .topology-node-title small { overflow-wrap: break-word; }
 .topology-node-title strong { font-size: var(--text-sm); color: var(--ink); }
 .topology-node-title small { font-size: var(--text-2xs); color: var(--muted); }
 /* The count is the node's direct relationships; the link around it selects
@@ -4657,8 +4724,8 @@ textarea.code {
 .topology-node-body p { margin: 0; font-size: var(--text-xs); }
 .topology-node-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .topology-node-actions form { display: inline-flex; }
-/* The name is the box that truncates, so its own edge stays inside the node. */
-.topology-node-title strong > * { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A name is read whole: it wraps inside the node rather than being cut. */
+.topology-node-title strong > * { display: block; }
 .topology-node-link { color: inherit; text-decoration: none; }
 .topology-node-link:hover, .topology-node-link:focus-visible { color: var(--accent); text-decoration: underline; }
 
@@ -4945,32 +5012,46 @@ form[data-clean] .save-bar { display: none; }
 form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity: .6; }
 /* The dashboard's readings: how this request arrived, whether the controller
    still is, and what the estate reports. One row of equals: the same mark, the
-   same lead and the same quiet line under it, spaced rather than ruled apart,
-   since a rule between two that have wrapped onto different lines divides
-   nothing.
+   same lead and the same quiet line under it, spaced rather than ruled apart.
 
-   The row asks its own width what it can show, never the window's. With room
-   it is one line at the right of the greeting. Without, the readings pair up,
-   two to a line, and on a phone the connection keeps its name and its verdict
-   and drops the line between: how it arrived is one tap away.
+   Beside the greeting while every reading fits on one line there; otherwise
+   the strip takes its own line under it, still one row; narrower again, whole
+   rows of two; on the narrowest screen, one to a line. Never three over one,
+   and never a reading left out: counted off the strip itself.
 
    It is a layer of its own so that a panel's popover opens over the cards
    below it; a container is otherwise painted beneath what follows it. */
 .dash-head > .dash-hello { flex: 0 1 auto; }
-.dash-readings { position: relative; z-index: 2; display: flex; flex-wrap: wrap; align-items: flex-start; flex: 1 1 22rem; min-width: 0; container-type: inline-size; }
-/* Two to a row while each half can hold a reading's lead, and one to a row
-   below that: a half narrower than a lead would push the lead past the page. */
-/* Two to a row where both fit. A reading whose lead is wider than half the
-   row takes a row of its own, so its lead is never drawn over its neighbour. */
-.dash-readings :is(.dash-reading, .glance-panel) { flex: 1 1 max(50%, 11rem); min-width: min-content; max-width: 100%; }
-.dash-readings .glance-panel-head { padding-inline: var(--space-3); grid-template-columns: 22px minmax(max-content, 1fr); }
+.dash-readings {
+  --readings: 2;
+  --reading: 11rem;
+  /* Half a row for an even count; an odd one goes from one row to one a line. */
+  --half: calc(50% - var(--space-5));
+  position: relative; z-index: 2; display: grid; align-items: start; justify-content: end;
+  /* Asks for a whole row before it settles beside the greeting. */
+  flex: 1 1 calc(var(--readings) * var(--reading)); min-width: 0;
+  /* Each track is a whole row's share; where that is under a reading's width,
+     half the row; where half is, the whole row. */
+  grid-template-columns: repeat(auto-fit, minmax(max(
+    calc(100% / var(--readings) - var(--space-5)),
+    clamp(0px, (var(--readings) * var(--reading) - 100%) * 999, var(--half)),
+    clamp(0px, (2 * var(--reading) - 100%) * 999, 100%)
+  ), max-content));
+  gap: var(--space-4) var(--space-5);
+}
+.dash-readings:has(.glance-panel:nth-child(1 of .glance-panel)) { --readings: 3; --half: 100%; }
+.dash-readings:has(.glance-panel:nth-child(2 of .glance-panel)) { --readings: 4; --half: calc(50% - var(--space-5)); }
+.dash-readings:has(.glance-panel:nth-child(3 of .glance-panel)) { --readings: 5; --half: 100%; }
+.dash-readings:has(.glance-panel:nth-child(4 of .glance-panel)) { --readings: 6; --half: calc(50% - var(--space-5)); }
+.dash-readings:has(.glance-panel:nth-child(5 of .glance-panel)) { --readings: 7; --half: 100%; }
+.dash-readings:has(.glance-panel:nth-child(6 of .glance-panel)) { --readings: 8; --half: calc(50% - var(--space-5)); }
+.dash-readings :is(.dash-reading, .glance-panel) { min-width: 0; max-width: 100%; }
 /* One shape for all of them, so they line up: the lead on a line of one
    height, in one size and one colour, with the mark beside that line rather
    than centred on however many lines the reading happens to have (it keeps
-   its own column for the whole reading, so nothing is ever set under it); then the
-   quiet lines, which start level because the leads do. A reading that is
-   empty or out of date says so in the line under its lead, not by being
-   smaller or greyer than its neighbours. */
+   its own column for the whole reading, so nothing is ever set under it); then
+   the quiet lines, which start level because the leads do. */
+.dash-readings .glance-panel-head { padding-inline: var(--space-3); grid-template-columns: 22px minmax(max-content, 1fr); }
 .dash-readings .glance-symbol { align-self: start; margin-top: var(--space-1); }
 .dash-readings .glance-panel-head > :not(.glance-symbol) { grid-column: 2; }
 .dash-readings .glance-lead { display: flex; align-items: baseline; gap: var(--space-3); min-height: 26px; color: var(--muted); line-height: 1; }
@@ -4980,26 +5061,18 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 .dash-reading { color: inherit; }
 .dash-reading:hover { color: inherit; text-decoration: none; }
 .dash-reading .glance-caption { overflow: hidden; text-overflow: ellipsis; }
-.dash-connection .glance-caption { display: none; }
 .dash-controller.is-silent .glance-caption { color: var(--attn); font-weight: 650; }
 .dash-controller.is-arriving .conn-dot { background: var(--ok); }
 .dash-controller.is-silent .conn-dot { background: var(--attn); }
-@container (min-width: 440px) {
-  .dash-connection .glance-caption { display: flex; }
-}
 @container (min-width: 900px) {
-  .dash-readings :is(.dash-reading, .glance-panel) { flex: 0 1 auto; }
-  .dash-readings > :first-child { margin-left: auto; }
   .dash-readings .glance-panel-head { padding-inline: var(--space-7); }
 }
 .dash-connection-checks { color: var(--muted-2); font-size: var(--text-3xs); white-space: nowrap; }
 .dash-connection-checks.is-attention { color: var(--attn); font-weight: 650; }
-.dash-cell > .card { display: flex; flex-direction: column; min-width: 0; margin: 0; }
-.dash-cell { display: contents; }
 .section-period { margin-left: var(--space-3); color: var(--muted-2); font-weight: 500; letter-spacing: 0; text-transform: none; }
 .empty-value { color: var(--muted-2); }
 .dash-empty { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-.dash-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); padding-top: var(--space-8); border-top: 1px solid var(--line); }
+.dash-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); padding: var(--surface-inset, var(--space-5) var(--space-8)); }
 .dash-links h2 { margin: 0; color: var(--muted-2); font-size: var(--text-2xs); font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 }
 
@@ -5111,7 +5184,12 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
      that miss it, then a row per repository with a segment per check. */
   .posture-gaps, .posture-repos { list-style: none; margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: hidden; }
   .posture-gaps li, .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); }
-  .posture-gaps li + li, .posture-repos li + li { border-top: 1px solid var(--line-2); }
+  .posture-gaps li + li { border-top: 1px solid var(--line-2); }
+  /* A repository's row is short: as many to a line as the frame holds, each
+     cell drawing its own hairlines as a band's do, so a wide frame is not a
+     column of rows ending halfway across it. */
+  .posture-repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 32rem), 1fr)); overflow: clip; }
+  .posture-repos li { box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2); }
   .posture-gaps li { align-items: flex-start; border-left: 3px solid var(--tone-caution-line); }
   .posture-gaps li.is-serious { border-left-color: var(--danger); }
   /* Failed on purpose, with the reason: a fact, not a gap. */
@@ -5150,6 +5228,9 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .project-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--stack-gap); }
   /* An age or a count that reads wrong split across two lines. */
   .nowrap { white-space: nowrap; }
+  /* A hyphenated part of an address or a path (`|breakable`): moved to the
+     next line whole, and broken inside only when it is longer than a line. */
+  .whole { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
   /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
   .one-line { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; }
   /* The same mark as a verified certificate: a check in a circle, one colour. */
@@ -5188,14 +5269,15 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
      A grid that draws its dividers with a coloured background behind 1px gaps
      keeps that background; the frame around it is still this one. */
   :where(
-  .table-scroll:has(> .data-table), .card, .two-col > section, .two-col > div:not(.col-stack), .section-flow > :is(section, .page-section), .control-card,
+  .table-scroll:has(> .data-table), .card, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section), .control-card,
   .control-metric, .control-summary, .service-band, .fact-band,
   .filter-bar, .table-toolbar, .kpi-grid, .insight-grid,
   .kv, .form,
   .auth-card, .mail-stage, .mail-editor,
   .topology-workspace, .github-list, .account-facts, .container-needs,
   .boxed-facts, .policy-agents li, .relation-list,
-  .posture-gaps, .posture-repos, .machine-telemetry, .machine-telemetry-metrics) {
+  .posture-gaps, .posture-repos, .machine-telemetry, .machine-telemetry-metrics, .route,
+  .dashboard-counts, .dash-links) {
     border: var(--surface-border, 1px solid var(--line));
     border-radius: var(--surface-radius, var(--radius));
     background: var(--surface-bg, var(--surface));
@@ -5294,8 +5376,8 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
      dead space inside the card's padding. */
   /* A frame's own padding is its edge: the first and last thing in it keep no
      margin of their own, or a heading's top margin doubles the padding above it. */
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div:not(.col-stack), .section-flow > :is(section, .page-section)) > :last-child { margin-bottom: 0; }
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div:not(.col-stack), .section-flow > :is(section, .page-section)) > :first-child { margin-top: 0; }
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section)) > :last-child { margin-bottom: 0; }
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section)) > :first-child { margin-top: 0; }
 
 
   /* ── Disclosure: one marker for everything that opens in place ─────────

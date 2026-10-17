@@ -5,6 +5,8 @@ a long TXT arrives in, the tags nobody models) because the one thing an editor
 must never do is publish something other than what the operator chose.
 """
 
+from types import SimpleNamespace
+
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -13,6 +15,8 @@ from hq.domains.control_plane.models import ManagedResource
 
 from ..mail_policy import (
     SPF_LOOKUP_LIMIT,
+    _receiving,
+    _senders,
     compose_dmarc,
     compose_spf,
     describe_dmarc,
@@ -110,8 +114,8 @@ class SpfTests(SimpleTestCase):
     def test_a_policy_protecting_nothing_says_so(self):
         self.assertIn("forgeries get through", parse_spf("v=spf1 +all").default_result)
 
-    def test_a_policy_with_no_final_term_is_named_as_unhandled(self):
-        self.assertIn("unhandled", parse_spf("v=spf1 include:a.example").default_result)
+    def test_a_policy_with_no_final_term_names_the_missing_term(self):
+        self.assertIn("`all`", parse_spf("v=spf1 include:a.example").default_result)
 
     def test_lookups_are_counted_because_eleven_of_them_fail_silently(self):
         policy = parse_spf("v=spf1 " + " ".join(f"include:h{i}.example" for i in range(11)) + " -all")
@@ -139,6 +143,34 @@ class SpfTests(SimpleTestCase):
 
     def test_something_that_is_not_spf_is_not_read_as_one(self):
         self.assertFalse(parse_spf("v=DMARC1; p=reject").valid)
+
+
+class SendersTests(SimpleTestCase):
+    def test_a_domain_that_lets_nobody_send_says_nobody(self):
+        self.assertEqual(_senders(parse_spf("v=spf1 -all")), "Nobody")
+
+    def test_the_all_term_is_not_counted_as_a_sender(self):
+        self.assertEqual(_senders(parse_spf("v=spf1 include:example.net -all")), "1 rule")
+
+
+class ReceivingTests(SimpleTestCase):
+    def mx(self, content, priority=0):
+        return SimpleNamespace(record_type="MX", content=content, priority=priority)
+
+    def test_a_null_mx_says_the_domain_takes_no_mail_on_purpose(self):
+        section = _receiving((self.mx("."),))
+
+        self.assertEqual(section.answer, "Nobody, on purpose")
+        self.assertNotIn("mail server", section.detail)
+
+    def test_mail_servers_are_named_and_counted(self):
+        section = _receiving((self.mx("mx1.example.net", 10), self.mx("mx2.example.net", 20)))
+
+        self.assertEqual(section.answer, "mx1.example.net, mx2.example.net")
+        self.assertIn("2 mail servers", section.detail)
+
+    def test_no_mx_says_mail_goes_nowhere(self):
+        self.assertEqual(_receiving(()).answer, "Nobody")
 
 
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)

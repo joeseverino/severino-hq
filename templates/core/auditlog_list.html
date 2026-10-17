@@ -1,7 +1,7 @@
 {% extends "list_page.html" %}
 {% comment %}
 One history. Each row is an application.history.Entry: one audit event, a run
-of like events shown as one line with its events behind a <details>, or a
+of like events shown as one line whose events the row's toggle lists, or a
 moment another source dated (a deploy, a container start).
 {% endcomment %}
 {% block row %}
@@ -17,12 +17,10 @@ moment another source dated (a deploy, a container start).
     <td>{{ first.actor_label }}</td>
     <td><span class="pill pill-{{ first.action }}">{{ first.get_action_display }}</span></td>
     <td>
-      <details class="history-run">
-        <summary>{{ row.title }}</summary>
-        <ul class="history-run-list">
-          {% for event in row.events %}<li><a href="{% url 'core:audit_detail' event.pk %}">{{ event.object_repr|default:event.type_label }}</a></li>{% endfor %}
-        </ul>
-      </details>
+      {{ row.title }}
+      <ul class="history-run-list row-more">
+        {% for event in row.events %}<li><a href="{% url 'core:audit_detail' event.pk %}">{{ event.object_repr|default:event.type_label }}</a></li>{% endfor %}
+      </ul>
     </td>
     <td class="muted">{{ first.message }}</td>
     {% endwith %}
@@ -36,4 +34,3 @@ moment another source dated (a deploy, a container start).
     {% endwith %}
   {% endif %}
 {% endblock %}
-{% block empty %}{% if awaiting %}Nothing is waiting for your approval.{% else %}Nothing has been recorded yet.{% endif %}{% endblock %}

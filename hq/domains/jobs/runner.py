@@ -306,9 +306,9 @@ SLACK = timedelta(minutes=10)
 
 
 def due(kind: str, every: timedelta, *, now: datetime, subject: str | None = None) -> bool:
-    """Whether work of ``kind`` is due: never done, or last done well at least
-    ``every`` (less ``SLACK``) ago, and not being done now. ``subject``, when
-    given, narrows to the jobs asked about that subject."""
+    """Whether work of ``kind`` is due: never done, or last done at least
+    ``every`` less ``SLACK`` ago, and not running now. ``subject`` narrows to
+    jobs about that subject."""
 
     jobs = Job.objects.filter(kind=kind)
     if subject is not None:

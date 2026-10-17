@@ -8,9 +8,9 @@ would be a page about anybody.
 {% block page %}
 <div data-watching>
 {% if not login %}
-  {% include "partials/_empty_state.html" with message="Your sign-in names no GitHub account. In Pocket ID, add a custom field named github holding your GitHub login to your user, then sign in again." %}
+  {% include "partials/_empty_state.html" with message="Your sign-in names no GitHub account." remedy=github_claim only %}
 {% elif not profile %}
-  {% include "partials/_empty_state.html" with message="Not read from GitHub yet. Press Read now to read it." %}
+  {% include "partials/_empty_state.html" with message="Not read from GitHub yet." only %}
 {% else %}
   <section class="gh-profile" aria-label="Your GitHub profile">
     {% if profile.avatar %}<img class="gh-avatar" src="{{ profile.avatar }}" alt="" width="64" height="64">{% endif %}

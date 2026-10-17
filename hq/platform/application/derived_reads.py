@@ -503,7 +503,7 @@ def get_reading(kind: str) -> dict[str, Any]:
     if spec is None:
         raise NotFoundError(kind)
     row = _rows((kind,)).get(kind)
-    stored = row.records if row is not None and isinstance(row.records, list) else []
+    stored = row.records if row is not None and isinstance(row.records, list) and not spec.withheld else []
     return {
         **_reading(kind, row),
         "items": [spec.admitted(record) for record in stored if isinstance(record, dict)],

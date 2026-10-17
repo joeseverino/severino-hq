@@ -51,6 +51,7 @@ from . import (
     dns_findings,
     docker_estate,
     perimeter_findings,
+    posture_findings,
     reference_findings,
     registration_findings,
     render_status_findings,
@@ -85,11 +86,9 @@ from .topology_model import (
     TopologyNode,
 )
 from .workflows import (
-    WorkflowLayout,
     claim_identity,
     claim_resolution_plan,
     serialize_workflow,
-    workflow_layout,
 )
 
 _CLAIM_NAMESPACE = "infrastructure.finding"
@@ -181,6 +180,7 @@ RULE_MODULES = (
     tailnet_findings,
     dns_findings,
     contradiction_findings,
+    posture_findings,
 )
 RULES: tuple[FindingRule, ...] = tuple(rule for module in RULE_MODULES for rule in module.RULES)
 
@@ -198,17 +198,39 @@ def finding_steps(finding: Finding) -> tuple[OperatorStep, ...]:
     return (OperatorStep(label=found.operator_action),) if found else ()
 
 
-def finding_layout(finding: Finding) -> WorkflowLayout:
-    """How a card shows a finding's actions: its plan's remedy and check, and
-    its own investigations and offers as links."""
-
-    return workflow_layout(finding.workflow, investigations=finding.investigations, offers=finding.offers)
-
-
 def finding_rules() -> tuple[FindingRule, ...]:
     """Every claim HQ knows how to make about itself."""
 
     return RULES
+
+
+@dataclass(frozen=True, slots=True)
+class Coverage:
+    """What an empty findings page was checked over, so "no problems" says how far it goes."""
+
+    rules: int
+    machines: int
+    services: int
+    # When the controller last reported; None when it never has.
+    read_at: datetime | None
+
+    @property
+    def sentence(self) -> str:
+        from .moments import ago
+        from .ui import counted
+
+        return (
+            f"{counted(self.rules, 'check')} over {counted(self.machines, 'machine')} and "
+            f"{counted(self.services, 'service')}, from readings {ago(self.read_at)}."
+        )
+
+
+def coverage() -> Coverage:
+    from .cadence import controller_standing
+    from .estate import estate_reading
+
+    estate = estate_reading()
+    return Coverage(len(RULES), len(estate.machines), len(estate.services), controller_standing().seen_at)
 
 
 def rule_for(name: str) -> FindingRule | None:
@@ -379,7 +401,7 @@ def _verification(finding: Finding, principal: Principal, subject: TopologyNode 
             method="POST",
             capability=read.capability,
             target=read.target,
-            reason="Reads it now; the check runs again on what the controller reports.",
+            reason="Reads it now, then checks again.",
         )
     return ActionLink(
         "verify",

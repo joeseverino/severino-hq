@@ -332,3 +332,41 @@ class KeepTheLiveVersionPageTests(TestCase):
 
         self.assertNotContains(response, "Keep the live version")
         self.assertNotContains(response, "Restore HQ&#x27;s version")
+
+
+class CleanPageTests(TestCase):
+    """A findings page with none says how far that goes."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.client.force_login(get_user_model().objects.create_user("operator"))
+
+    def page(self, seen_at):
+        from unittest import mock
+
+        from django.urls import reverse
+
+        from ..cadence import ControllerStanding
+
+        with mock.patch(
+            "hq.platform.application.cadence.controller_standing",
+            return_value=ControllerStanding(seen_at=seen_at, silent=False),
+        ):
+            return self.client.get(reverse("control_plane:findings"))
+
+    def test_nothing_read_is_not_no_problems(self):
+        response = self.page(None)
+
+        self.assertContains(response, "Nothing read yet, so nothing checked.")
+        self.assertNotContains(response, "No problems")
+
+    def test_no_problems_says_what_was_checked_and_when(self):
+        from django.utils import timezone
+
+        ManagedResource.objects.create(key="example-box", kind="machine", spec={"name": "example-box"})
+
+        response = self.page(timezone.now())
+
+        self.assertContains(response, "No problems found.")
+        self.assertContains(response, f"{len(RULES)} checks over 1 machine and 0 services, from readings")

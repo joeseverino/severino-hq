@@ -8,4 +8,3 @@
   <td><span class="pill pill-{{ row.sensitivity }}">{{ row.get_sensitivity_display }}</span></td>
   <td class="muted">{% if row.last_reviewed %}{{ row.last_reviewed|when:"day" }}{% else %}Never{% endif %}</td>
 {% endblock %}
-{% block empty %}No documents yet. <a href="{% url 'docs_index:import' %}">Import manifest</a>{% endblock %}

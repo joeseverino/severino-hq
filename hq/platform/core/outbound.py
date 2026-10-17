@@ -45,11 +45,6 @@ ALLOWED = frozendict(
             "operator or a program asked for by name and waits for; it is "
             "bounded by SEVERINO_LOOKUP_TIMEOUT_SECONDS and carries no credential."
         ),
-        "contacts.d1": (
-            "A contact submission's email and message exist only in the "
-            "site's D1 database, which HQ keeps no copy of, so its review "
-            "pages read and write that store directly, bounded by D1's timeout."
-        ),
     }
 )
 

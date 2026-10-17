@@ -157,7 +157,11 @@ def _runs_tile(found: HQContext) -> Tile:
     if found.machine is None:
         return Tile("Runs on", "Not known", "No machine HQ reads answers at HQ's addresses.", icon="server")
     container = found.container
-    detail = f"{container.running.name} · {container.uptime}" if container is not None else "Its container is not known"
+    detail = (
+        " · ".join(filter(None, (container.running.name, container.uptime)))
+        if container is not None
+        else "Its container is not known"
+    )
     healthy = container is not None and container.running.healthy
     return Tile("Runs on", found.machine.name, detail, found.machine.url, GOOD if healthy else ATTENTION, "server")
 

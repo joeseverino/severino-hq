@@ -150,7 +150,7 @@ def content() -> tuple[Insight, ...]:
 
 
 def contacts_state() -> tuple[int, str]:
-    """Unread submissions and whether D1 was reachable, as last read. No network:
+    """Unread submissions and whether the last read reached D1. No network:
     the snapshot and the queue both ask here, so they cannot disagree."""
 
     return read_once(CONTACTS_STATE_KEY, inbox.unread)
@@ -226,12 +226,6 @@ def _asset_backlog() -> tuple[tuple[EntityLink, ...], bool]:
     )
     missing = tuple(entity_link("asset", slug, label=name) for name, slug, lacks, _linked in rows if lacks)
     return missing, any(linked for _name, _slug, _lacks, linked in rows)
-
-
-def assets_missing_purchase() -> tuple[EntityLink, ...]:
-    """Each active asset with no purchase date or no cost, by name."""
-
-    return _asset_backlog()[0]
 
 
 @dated

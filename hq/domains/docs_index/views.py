@@ -36,6 +36,7 @@ DOCS_TRAIL = ("Docs", reverse_lazy("docs_index:list"))
 
 
 class DocsListView(PageMixin, TableListMixin, ListView):
+    table_empty = "No documents yet."
     model = DocumentationRecord
     template_name = "docs_index/docs_list.html"
     paginate_by = 25

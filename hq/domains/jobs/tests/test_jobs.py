@@ -367,3 +367,32 @@ class JobListOrderTests(TestCase):
         Job.objects.exclude(state=Job.State.SUCCEEDED).delete()
 
         self.assertNotContains(self.client.get(reverse("jobs:list")), "on its last run")
+
+
+class JobNameTests(TestCase):
+    """A job is called what its declaration calls it; its kind is kept for detail."""
+
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+
+    def test_a_declared_job_reads_by_its_declared_name_whatever_its_run_stored(self):
+        from hq.platform.application.scheduled_work import named
+
+        Job.objects.create(kind="sessions.clear", label="sessions.clear", state=Job.State.SUCCEEDED, actor="timer")
+
+        page = self.client.get(reverse("jobs:list")).content.decode()
+
+        self.assertIn(f'{named("sessions.clear").label} <code class="row-more">sessions.clear</code>', page)
+
+    def test_work_no_longer_declared_keeps_the_name_its_run_stored(self):
+        Job.objects.create(kind="example.gone", label="Example work", state=Job.State.SUCCEEDED, actor="timer")
+
+        self.assertContains(self.client.get(reverse("jobs:list")), "Example work <code")
+
+    def test_jobs_and_the_audit_log_link_to_each_other(self):
+        jobs = self.client.get(reverse("jobs:list")).content.decode()
+        audit = self.client.get(reverse("core:audit_list")).content.decode()
+
+        # In the page's own head, not only the navigation.
+        self.assertRegex(jobs, rf'class="btn[^"]*" href="{reverse("core:audit_list")}"')
+        self.assertRegex(audit, rf'class="btn[^"]*" href="{reverse("jobs:list")}"')

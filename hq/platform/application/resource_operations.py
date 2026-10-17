@@ -211,10 +211,7 @@ def refuse_while_drifted(resource: ManagedResource) -> None:
     """
 
     if is_drifted(resource):
-        raise PolicyError(
-            f"{resource.key} differs from what is live. Keep the live version or "
-            "restore HQ's first, so this change is made to what is actually in force."
-        )
+        raise PolicyError(f"{resource.key} differs from what is live. Keep the live version or restore HQ's first.")
 
 
 def _resource_for_operation(key: str) -> ManagedResource:
@@ -286,6 +283,19 @@ def _queue_operation(
     # anything happening.
     transaction.on_commit(ring_doorbell)
     return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
+
+
+def queue_reconcile(resource: ManagedResource, *, principal: Principal, reason: str) -> dict[str, Any]:
+    """Queue a reconcile of a declaration a domain service has just written.
+
+    For a service that writes a declaration under its own capability (the
+    contact inbox under contacts), so it is checked against the same policy
+    as any other reconcile. Keyed on the generation: asking twice for one
+    generation queues it once.
+    """
+
+    command = OperationCommand(idempotency_key=f"reconcile:{resource.pk}:g{resource.generation}", reason=reason)
+    return _queue_operation(resource, command, principal=principal, action=OperationRequest.Action.RECONCILE)
 
 
 @transaction.atomic
@@ -626,7 +636,7 @@ def request_reach_allow(
             shut.append((target.name, port))
     if not shut:
         raise PolicyError(
-            "The tailnet policy does not block any place that could not be reached. Allowing more will not fix this."
+            "The tailnet policy blocks none of the places that failed, so allowing more will not fix this."
         )
 
     policy = ManagedResource.objects.filter(kind=POLICY_KIND).first()

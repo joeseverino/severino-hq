@@ -24,9 +24,12 @@ and leads to the first.
   {% endfor %}
 </div>
 
-{% comment %}Release, where it runs and how it was reached are short: they share the width.{% endcomment %}
-<div class="two-col">
-<section aria-labelledby="hq-release-heading">
+{% comment %}
+Release is a list of facts, so it takes the width and its facts flow into
+columns. Where HQ runs and how it was reached are about the same height, so
+they share a row; either alone takes it.
+{% endcomment %}
+<section class="card" aria-labelledby="hq-release-heading">
   <h2 id="hq-release-heading">Release</h2>
   {% include "partials/_problems.html" with problems=hq.problems_in.release|not_urgent only %}
   <dl class="kv">
@@ -57,9 +60,9 @@ and leads to the first.
           <dd>{% for name, version in release.extensions %}{{ name }} <span class="muted">{{ version }}</span>{% if not forloop.last %} · {% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</dd>
       </dl>
 </section>
-<div class="stack">
+<div class="{% if machine and hq.request_path %}two-col{% else %}stack{% endif %}">
 {% if machine %}
-<section aria-labelledby="hq-where-heading">
+<section class="card" aria-labelledby="hq-where-heading">
   <h2 id="hq-where-heading">Runs on</h2>
   {% include "partials/_problems.html" with problems=hq.problems_in.where|not_urgent only %}
   <dl class="kv">
@@ -86,8 +89,9 @@ and leads to the first.
 </section>
 {% endif %}
 {% if hq.request_path %}{% with found=hq.request_path %}
-<section aria-labelledby="hq-reach-heading">
+<section class="card" aria-labelledby="hq-reach-heading">
   <h2 id="hq-reach-heading">Reached through</h2>
+  {% include "partials/_example_connection.html" with notice=True %}
   {% include "partials/_problems.html" with problems=hq.problems_in.reach|not_urgent only %}
   <p class="muted">{{ found.connection.channel.label }} · {{ found.proof }}</p>
   {% include "control_plane/_path_hops.html" with route=found.route label="How this page reached you" %}
@@ -95,10 +99,9 @@ and leads to the first.
 </section>
 {% endwith %}{% endif %}
 </div>
-</div>
 
 <section aria-labelledby="hq-work-heading">
-  <h2 id="hq-work-heading">Jobs</h2>
+  <h2 id="hq-work-heading">Jobs{% if work.jobs and work.read_at and not work.unread %} <span class="heading-aside">read {{ work.read_at|when:"ago" }}</span>{% endif %}</h2>
   {% if work.unread %}
     <p class="muted">{{ work.unread }}</p>
   {% elif work.jobs %}
@@ -118,7 +121,6 @@ and leads to the first.
         </tbody>
       </table>
     </div>
-    {% if work.read_at %}<p class="muted">Read {{ work.read_at|when:"ago" }}</p>{% endif %}
   {% endif %}
   {% if work.scheduled %}
     <div class="table-scroll">
@@ -163,6 +165,10 @@ and leads to the first.
 <section aria-labelledby="hq-sight-heading">
   <h2 id="hq-sight-heading">Readings</h2>
   {% include "partials/_problems.html" with problems=hq.problems_in.sight|not_urgent only %}
+  {% comment %}A table where every row says "Never read" says one thing; it is said once.{% endcomment %}
+  {% if sight.never == sight.rows|length %}
+  <p class="card">None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>
+  {% else %}
   <div class="table-scroll">
     <table class="data-table">
       <thead><tr><th>Reading</th><th class="key-col">State</th><th>Records</th><th class="optional-col">Last read</th></tr></thead>
@@ -184,6 +190,7 @@ and leads to the first.
       {% endfor %}
     </table>
   </div>
+  {% endif %}
   {% if sight.unconnected %}<p class="muted">Not connected: {{ sight.unconnected|join:", " }}. <a href="{% url 'control_plane:connections' %}">Connections</a></p>{% endif %}
 </section>
 {% endif %}

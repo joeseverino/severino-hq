@@ -7,6 +7,7 @@ from typing import Any
 
 from django.db.models import Q, QuerySet, Sum
 
+from .page_reads import Remedy
 from .projection import guarded
 
 
@@ -92,6 +93,15 @@ class TableListMixin:
     table_totals: tuple[TableTotal, ...] = ()
     table_default_sort = ""
     table_search_placeholder = "Search…"
+    # What an empty list means, in one line ("No assets yet."). What would
+    # fill it is derived: the page's lead action, or the connection that reads
+    # what it lists (``Page.remedy``).
+    table_empty = "Nothing here yet."
+    # False where the lead action is a view of this same list, not a way to fill it.
+    table_empty_remedy = True
+
+    def get_table_empty(self) -> str:
+        return self.table_empty
 
     def get_table_filters(self) -> tuple[TableFilter, ...]:
         return self.table_filters
@@ -209,6 +219,9 @@ class TableListMixin:
             "selectable": self.table_selectable,
             "active_count": active_count,
             "querystring": query_params.urlencode(),
+            "empty": self.get_table_empty(),
+            "empty_remedy": self.table_empty_remedy,
+            "clear": Remedy("Clear the search and filters", "?"),
         }
 
     def table_totals_for(self, queryset: QuerySet[Any]) -> dict[str, Any]:

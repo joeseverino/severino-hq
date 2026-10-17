@@ -262,9 +262,11 @@ class AuditHistoryPageTests(TestCase):
         page = self.client.get(self.url()).content.decode()
 
         self.assertEqual([len(row.events) for row in found], [14, 3, 1])
-        self.assertIn("<summary>14 containers</summary>", page)
-        self.assertIn("<summary>3 DNS records</summary>", page)
-        self.assertIn('<details class="history-run">', page)
+        self.assertIn("14 containers", page)
+        self.assertIn("3 DNS records", page)
+        # Listed behind the row's own toggle, never a dropdown of its own.
+        self.assertIn('<ul class="history-run-list row-more">', page)
+        self.assertNotIn("<details", page.split("<tbody")[1].split("</tbody>")[0])
         self.assertIn(reverse("core:audit_detail", args=[found[0].events[5].pk]), page)
 
     def test_a_run_is_counted_in_the_plural_its_type_has(self):
@@ -277,10 +279,10 @@ class AuditHistoryPageTests(TestCase):
 
         page = self.client.get(self.url()).content.decode()
 
-        self.assertIn("<summary>2 calendar entries</summary>", page)
+        self.assertIn("2 calendar entries", page)
         self.assertNotIn("entrys", page)
         # A model that declares its plural is counted in it.
-        self.assertIn("<summary>2 provider inventories</summary>", page)
+        self.assertIn("2 provider inventories", page)
 
     def test_the_same_thing_again_and_again_is_counted_as_times(self):
         for index in range(4):
@@ -288,7 +290,7 @@ class AuditHistoryPageTests(TestCase):
 
         page = self.client.get(self.url()).content.decode()
 
-        self.assertIn("<summary>example-operator · 4 times</summary>", page)
+        self.assertIn("example-operator · 4 times", page)
         self.assertNotIn("4 users", page)
 
     def test_a_run_breaks_on_another_actor_a_gap_or_a_moment_between(self):

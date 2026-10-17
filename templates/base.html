@@ -122,7 +122,7 @@
           <line x1="15.5" y1="15.5" x2="20" y2="20"></line>
         </svg>
         <span class="search-label">Find anything</span>
-        <kbd class="search-key" aria-hidden="true">⌘K</kbd>
+        <kbd class="search-key keyboard-only" aria-hidden="true">⌘K</kbd>
       </a>
       <a class="action-badge" href="{% url 'action_items' %}" title="Needs you" data-action-count-url="{% url 'action_item_count' %}"{% if show_action_count %} data-action-count-fresh="{{ profile_action_count }}"{% endif %}>
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
@@ -219,7 +219,7 @@
                href="{% url 'connection' %}"
                data-modal-open="connection">
               <span>Connection</span>
-              <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label }}</span></span>
+              <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label }}</span>{% include "partials/_example_connection.html" %}</span>
             </a>
             <form action="{% url 'logout' %}" method="post">
               {% csrf_token %}

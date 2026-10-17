@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from django import forms
+from django.urls import reverse
 
 from .models import Receipt
 from .validation import (
@@ -14,7 +17,38 @@ RECEIPT_ACCEPT = ",".join(sorted(ALLOWED_RECEIPT_CONTENT_TYPES))
 RECEIPT_SIZE_HINT = f"PDF or image · up to {MAX_RECEIPT_BYTES // (1024 * 1024)} MB"
 
 
+class _StoredReceipt:
+    """The file a receipt already holds, named and linked as HQ serves it."""
+
+    def __init__(self, name: str, url: str) -> None:
+        self.name, self.url = name, url
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ReceiptFileInput(forms.ClearableFileInput):
+    """Links "Currently" to the protected file view; MEDIA_URL is never served."""
+
+    stored: _StoredReceipt | None = None
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        if self.stored and context["widget"]["is_initial"]:
+            context["widget"]["value"] = self.stored
+        return context
+
+
 class ReceiptUploadForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        receipt = self.instance
+        if receipt.pk and receipt.file:
+            self.fields["file"].widget.stored = _StoredReceipt(
+                receipt.original_filename or Path(receipt.file.name).name,
+                reverse("receipts:file", args=[receipt.pk]),
+            )
+
     class Meta:
         model = Receipt
         fields = [
@@ -27,7 +61,7 @@ class ReceiptUploadForm(forms.ModelForm):
             "notes",
         ]
         widgets = {
-            "file": forms.ClearableFileInput(attrs={"accept": RECEIPT_ACCEPT}),
+            "file": ReceiptFileInput(attrs={"accept": RECEIPT_ACCEPT}),
             "date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 3}),
         }

@@ -71,27 +71,38 @@ class DashboardQueueTests(TestCase):
     def test_queue_has_safe_actions_and_dashboard_keeps_domain_overviews_first(self):
         from hq.domains.control_plane.models import DashboardRefreshRequest
 
-        with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")):
-            for path in ("/", "/action-items/"):
-                with self.subTest(path=path):
-                    response = self.client.get(path)
-                    if path == "/action-items/":
-                        self.assertContains(response, "Reconcile the bill")
-                        self.assertContains(response, "Inspect evidence", count=1)
-                        self.assertContains(response, "Recheck facts")
-                        self.assertContains(response, 'formaction="/dashboard/glance/"')
-                        self.assertContains(response, 'form="hq-post"')
-                        self.assertContains(response, 'name="csrfmiddlewaretoken"')
-                        self.assertContains(response, "Urgent</span>")
-                    else:
-                        # A queue this short is read on the dashboard itself.
-                        self.assertContains(response, "data-attention-item", count=2)
-                        self.assertContains(response, "Inspect evidence", count=1)
-                        self.assertContains(response, 'href="/action-items/"')
-                    self.assertTemplateUsed(response, "partials/_work_queue.html")
-                    self.assertNotContains(response, "An interesting observation")
-                    self.assertNotContains(response, 'href=""')
+        for path in ("/", "/action-items/"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                if path == "/action-items/":
+                    self.assertContains(response, "Reconcile the bill")
+                    self.assertContains(response, "Inspect evidence", count=1)
+                    self.assertContains(response, "Recheck facts")
+                    self.assertContains(response, 'formaction="/dashboard/glance/"')
+                    self.assertContains(response, 'form="hq-post"')
+                    self.assertContains(response, 'name="csrfmiddlewaretoken"')
+                    self.assertContains(response, "Urgent</span>")
+                else:
+                    # What is serious is read on the dashboard itself; the rest is a count.
+                    serious = [item for item in work_queue() if item["status"] == "serious"]
+                    self.assertContains(response, "data-attention-item", count=len(serious))
+                    self.assertContains(response, 'href="/action-items/"')
+                self.assertTemplateUsed(response, "partials/_work_queue.html")
+                self.assertNotContains(response, "An interesting observation")
+                self.assertNotContains(response, 'href=""')
         self.assertFalse(DashboardRefreshRequest.objects.exists())
+
+    def test_a_queue_with_something_urgent_in_it_takes_that_tone(self):
+        self.assertContains(self.client.get("/"), 'class="card dash-needs tone-serious"')
+
+    def test_a_queue_with_nothing_urgent_is_only_the_count(self):
+        calm = [item for item in work_queue() if item["status"] != "serious"]
+        with patch("hq.platform.application.dashboard.work_queue", return_value=calm):
+            response = self.client.get("/")
+
+        self.assertNotContains(response, "dash-needs")
+        self.assertNotContains(response, "data-attention-item")
+        self.assertContains(response, f"{len(calm)} thing{'s' if len(calm) != 1 else ''} need")
 
     def test_a_long_queue_stays_a_count_on_the_dashboard(self):
         items = [{**work_queue()[0], "key": f"example:{i}", "label": f"Decision {i}"} for i in range(4)]
@@ -195,3 +206,35 @@ class DashboardQueueTests(TestCase):
         # A domain's own calendar stays on its pages; the dashboard shows the composed month.
         self.assertNotContains(response, "Example activity")
         self.assertContains(response, 'id="dashboard-calendar"', count=1)
+
+
+class EmptyQueueClaimTests(TestCase):
+    """An empty queue is "Nothing needs you" only once something has been read."""
+
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_user(username="fresh-install"))
+        empty = patch("hq.platform.application.dashboard.domain_attention_items", return_value=())
+        empty.start()
+        self.addCleanup(empty.stop)
+
+    def status(self, seen_at):
+        from hq.platform.application.cadence import ControllerStanding
+
+        with patch(
+            "hq.platform.core.dashboard_views.controller_standing",
+            return_value=ControllerStanding(seen_at=seen_at, silent=False),
+        ):
+            return self.client.get("/")
+
+    def test_a_controller_that_never_ran_has_cleared_nothing(self):
+        response = self.status(None)
+
+        self.assertContains(response, "HQ has read nothing yet.")
+        self.assertNotContains(response, "Nothing needs you.")
+
+    def test_once_read_an_empty_queue_says_so(self):
+        from django.utils import timezone
+
+        response = self.status(timezone.now())
+
+        self.assertContains(response, "Nothing needs you.")

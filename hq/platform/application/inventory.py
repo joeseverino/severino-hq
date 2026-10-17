@@ -560,7 +560,9 @@ def record_connections(
     Scoped to the controller that reported it, so a connection this one no
     longer carries goes away without touching another controller's. A credential
     revoked in 1Password stops being offered on the next sweep, which is the
-    whole point of holding this as an observation rather than as a list.
+    whole point of holding this as an observation rather than as a list. The
+    exception is a report that carries none, which marks the rows it held
+    rather than removing them (``ProviderConnection.unreported_at``).
     """
 
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
@@ -587,6 +589,7 @@ def record_connections(
                 manages=connection["manages"],
                 store=store_references(connection.get("store")),
                 reported_at=observed_at,
+                unreported_at=None,
             )
             if carried:
                 stored.append(connection_ref)
@@ -613,6 +616,7 @@ def record_connections(
                 "store": store_references(connection.get("store")),
                 "observed_at": observed_at,
                 "reported_at": observed_at,
+                "unreported_at": None,
             },
         )
         # The row carries when it was last checked; the audit log carries changes.
@@ -621,7 +625,19 @@ def record_connections(
         if (before[2] if before else False) != row.manages:
             _record_manages(row)
         stored.append(connection_ref)
-    ProviderConnection.objects.filter(controller_id=controller_id).exclude(connection_ref__in=stored).delete()
+    held = ProviderConnection.objects.filter(controller_id=controller_id)
+    if stored:
+        held.exclude(connection_ref__in=stored).delete()
+    else:
+        # A report with nothing in it keeps what this controller held, marked,
+        # so the loss stays visible until a report carries a connection again.
+        # Dated by the first such report: later empty ones leave it alone.
+        held.filter(unreported_at__isnull=True).update(
+            unreported_at=observed_at,
+            reachable=False,
+            failure="",
+            detail="Not in the controller's last report.",
+        )
     return {
         "ok": True,
         "recorded": sorted(stored),

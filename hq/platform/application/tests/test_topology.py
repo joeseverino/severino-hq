@@ -557,6 +557,9 @@ class TopologyPageTests(TestCase):
         self.assertEqual(len(cards(everything)), len(cards(shown)) + left_out)
         self.assertContains(shown, f"Show {left_out} more")
         self.assertContains(everything, "Show fewer")
+        # "N of M shown" is out of every card, the ones left out included.
+        self.assertEqual(shown.context["topology_total"], len(cards(everything)))
+        self.assertContains(shown, f'data-topology-total="{len(cards(everything))}"')
 
     def test_a_view_shows_everything_it_holds(self):
         from ..topology_lenses import topology_lenses

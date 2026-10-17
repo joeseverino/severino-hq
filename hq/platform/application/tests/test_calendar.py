@@ -105,6 +105,24 @@ class ContractTests(SimpleTestCase):
 
 
 class MonthTests(TestCase):
+    def test_upcoming_is_what_is_still_ahead_in_order(self):
+        events = [
+            CalendarEvent("past", "Past", TODAY - timedelta(days=2)),
+            CalendarEvent("trip", "Trip", TODAY - timedelta(days=1), TODAY + timedelta(days=2)),
+            CalendarEvent("later", "Later", TODAY + timedelta(days=3)),
+            CalendarEvent("dot", "Deploy", TODAY + timedelta(days=1), mark=True),
+            *(CalendarEvent(f"many-{n}", f"Many {n}", TODAY + timedelta(days=4)) for n in range(10)),
+        ]
+        with _with(_domain([_source("example.ahead", events)])):
+            month = calendar_month(TODAY.replace(day=1), today=TODAY)
+
+        ids = [placed.event.id for placed in month.upcoming]
+        # An event under way is still ahead; a past one and a dot are not listed.
+        self.assertEqual(ids[:2], ["trip", "later"])
+        self.assertNotIn("past", ids)
+        self.assertNotIn("dot", ids)
+        self.assertEqual(len(ids), 8, "the next week or two, not a second grid")
+
     def test_six_sunday_first_weeks_with_today_and_the_past(self):
         with _with():
             month = calendar_month(date(2026, 10, 1), today=TODAY)
@@ -311,6 +329,14 @@ class PlacementTests(SimpleTestCase):
 class PageTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_user("calendar-page"))
+
+    def test_upcoming_spells_out_each_title_beside_its_day(self):
+        _entry(title="Renew the example.com certificate before it lapses", starts_on=timezone.localdate())
+
+        response = self.client.get(reverse("calendar:month"))
+
+        upcoming = response.content.decode().split('aria-labelledby="calendar-upcoming-title"', 1)[1]
+        self.assertIn("Renew the example.com certificate before it lapses", upcoming.split("</section>", 1)[0])
 
     def test_the_month_the_day_and_an_entry_link_together(self):
         entry = _entry(title="Dentist", starts_on=timezone.localdate())

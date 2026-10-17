@@ -227,7 +227,7 @@ _ENDED = {
     "queued": ("Running now", NEUTRAL),
     "running": ("Running now", NEUTRAL),
 }
-# How many recent runs a piece of work shows; more is a texture, not a history.
+# Recent runs shown per piece of work: as many dots as Dots draws.
 RECENT = Dots.LIMIT
 
 

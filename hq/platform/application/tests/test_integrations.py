@@ -47,7 +47,7 @@ class IntegrationGraphTests(TestCase):
         self.assertIsInstance(graph.connections, frozendict)
         self.assertIsInstance(graph.search, frozendict)
         with self.assertRaises(TypeError):
-            graph.connections["example.mutable"] = graph.connections["hq.cloudflare_d1"]
+            graph.connections["example.mutable"] = graph.connections["hq.nws"]
 
     def test_the_composed_graph_is_compiled_once_until_explicitly_cleared(self):
         first = integration_graph()
@@ -252,10 +252,10 @@ class IntegrationGraphTests(TestCase):
 
     def test_a_connection_emits_its_capability_edge_once(self):
         graph = integration_graph()
-        d1 = graph.connections["hq.cloudflare_d1"]
-        review = next(ability for ability in d1.abilities if ability.capability == "contact.submission.review")
+        registries = graph.connections["hq.public_registries"]
+        lookup = next(ability for ability in registries.abilities if ability.capability == "lookup.name")
 
-        self.assertIs(graph.capabilities[review.capability], graph.capabilities["contact.submission.review"])
+        self.assertIs(graph.capabilities[lookup.capability], graph.capabilities["lookup.name"])
 
     def test_every_projection_sees_one_synthetic_contribution(self):
         resource = ResourceSpec(

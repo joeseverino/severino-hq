@@ -169,7 +169,6 @@ def dashboard_queries() -> list[str]:
     with (
         mock.patch("hq.platform.application.domains.extension_domains", return_value=()),
         mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-        mock.patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
         CaptureQueriesContext(database) as queries,
         projection_scope(),
         # What the page costs to derive; a stored answer costs less.

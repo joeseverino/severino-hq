@@ -70,14 +70,6 @@ def _clear_sessions(progress: Any) -> dict[str, Any]:
     return {"deleted": before - Session.objects.count()}
 
 
-def _contacts_inbox(progress: Any) -> dict[str, Any]:
-    from hq.domains.contacts import inbox
-
-    inbox.refresh(force=True)
-    count, status = inbox.unread()
-    return {"unread": count, "status": status}
-
-
 def _content_index(progress: Any) -> dict[str, Any]:
     from hq.domains.content.content_sync import ContentSyncError, sync_content_index
     from hq.domains.jobs.runner import Failed
@@ -138,7 +130,6 @@ DAILY = timedelta(days=1)
 
 SCHEDULED: tuple[ScheduledWork, ...] = (
     ScheduledWork("audit.prune", "Delete old routine log entries", prune_audit, every=DAILY),
-    ScheduledWork("contacts.inbox", "Read the contact inbox", _contacts_inbox, every=timedelta(hours=1)),
     ScheduledWork("content.sync", "Fetch the site's content list", _content_index, every=DAILY),
     ScheduledWork("due", "Do the work that is due", _due),
     ScheduledWork("registry.refresh", "Read domain registration and image data", _public_registry, every=DAILY),
@@ -147,6 +138,18 @@ SCHEDULED: tuple[ScheduledWork, ...] = (
 )
 
 ACTOR = "timer"
+
+
+def job_names() -> dict[str, str]:
+    """Each declared job's name in words, by its kind: the host's scheduled
+    work and the outbound work the composition declares."""
+
+    from .outbound_work import declared_work
+
+    return {
+        **{work.name: work.label for work in SCHEDULED},
+        **{name: work.label for name, work in declared_work().items()},
+    }
 
 
 def named(name: str) -> ScheduledWork:

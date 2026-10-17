@@ -11,10 +11,11 @@ from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
-from hq.platform.application import action_items as queue_state, fragments
+from hq.platform.application import action_items as queue_state, fragments, getting_started
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
+from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
 from hq.platform.application.glance import (
@@ -80,6 +81,9 @@ class DashboardLinkChoiceView(View):
 
 class DashboardView(fragments.FragmentMixin, TemplateView):
     template_name = "dashboard.html"
+    # What its estate figures count (``application.page_reads``): connecting
+    # these first fills the page HQ opens on.
+    page_reads = ("tailscale.device", "portainer.container", "cloudflare.dns_record", "npm.proxy_host")
 
     # A part of the dashboard asked for by name is composed alone: paging the
     # month or saving the links reads what that card shows and nothing else.
@@ -130,6 +134,10 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         queue = queue_state.with_aside_state(snapshot["priority"], self.request.user)
         doing, told = queue_state.split_waiting(queue)
         action_queue_count = len(doing)
+        # Only what is serious is shown in place, and only while it is short
+        # enough to read there. Everything else is the count above it and in
+        # the header.
+        serious = [item for item in doing if item["status"] == "serious"]
         hour = timezone.localtime().hour
         greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
         if name := self.request.user.first_name:
@@ -164,13 +172,13 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             # line that arrives after it is a line that visibly changes.
             request_connection=request_path(self.request).connection,
             controller=controller_standing(),
-            # The stored rows, kept by the scheduled contacts.inbox job: reading
-            # them asks no one, so the card is drawn with the page.
+            # The rows the controller last read: reading them asks no one, so
+            # the card is drawn with the page.
             recent_contacts=[
                 ListRow(
-                    title=submission["name"],
-                    detail=submission["status"],
-                    meta=submission["created_at"],
+                    title=submission.get("name", ""),
+                    detail=submission.get("status", ""),
+                    meta=submission.get("created_at", ""),
                     url=reverse("contacts:detail", args=[submission["id"]]),
                 )
                 for submission in inbox.recent()
@@ -182,8 +190,13 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             active_projects=snapshot["active_projects"],
             draft_content_count=snapshot["kpis"]["draft_content"],
             action_queue_count=action_queue_count,
-            # A queue short enough to read in place is shown in place.
-            needs_you=doing if len(doing) <= NEEDS_YOU_IN_PLACE else [],
+            needs_you=serious if len(serious) <= NEEDS_YOU_IN_PLACE else [],
+            # The setup steps a new HQ has left; empty once they are done.
+            # Every step while any is left, the done ones marked, so the row
+            # shows how far a new HQ has come.
+            getting_started=getting_started.steps() if getting_started.remaining() else (),
+            getting_started_left=len(getting_started.remaining()),
+            install_guide=docs_url("Install.md") if getting_started.remaining() else "",
             notice_count=len(told),
             aside_count=len(queue) - action_queue_count - len(told),
             profile_action_count=action_queue_count + len(told),

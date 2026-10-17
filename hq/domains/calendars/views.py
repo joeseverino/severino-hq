@@ -23,6 +23,7 @@ from hq.platform.application.calendar_entries import (
     when_label,
 )
 from hq.platform.application.deletion import delete_calendar_entry
+from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of
 from hq.platform.application.security import safe_next, web_principal
@@ -75,6 +76,7 @@ class CalendarView(PageMixin, TemplateView):
             selected=selected,
             day=day,
             day_groups=_rows(day, opened=self.request.GET.get("entry", "")) if day else (),
+            upcoming=_upcoming(calendar),
             entry=self._entry(selected),
             previous_url=month_url(calendar.previous, selected),
             next_url=month_url(calendar.next, selected),
@@ -124,6 +126,25 @@ def _range(event) -> str:
     first, last = event.first_day, event.last_day
     end = f"{last:%b} {last.day}" if last.month != first.month else str(last.day)
     return f"{first:%b} {first.day} – {end}"
+
+
+def _upcoming(calendar) -> tuple:
+    """What is ahead in the month shown, as the shared record rows: each
+    title in full beside its day, which a narrow grid cannot spell out."""
+
+    rows = []
+    for placed in calendar.upcoming:
+        event = placed.event
+        day = max(event.first_day, calendar.today)
+        rows.append(
+            ListRow(
+                title=event.title,
+                meta=" ".join(filter(None, (when_day(day), event.time_label))),
+                url=event.url or month_url(day.replace(day=1), day),
+                external=event.url.startswith("http"),
+            )
+        )
+    return tuple(rows)
 
 
 def _rows(day, *, opened: str = "") -> tuple:

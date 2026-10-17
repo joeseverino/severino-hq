@@ -55,7 +55,7 @@ def active_projects():
 
 
 def projects_needing_output():
-    """Active work with neither content nor documentation recorded against it."""
+    """Active work still missing a writeup or a doc: each project is owed both."""
 
     return (
         active_projects()
@@ -280,12 +280,16 @@ def watching() -> tuple[Card, ...]:
 
     from datetime import timedelta
 
-    from .github_profile import profile, profiles
+    from .github_profile import accounts, profile, profiles
     from .timestamps import moment
 
     # A profile is only ever read for a signed-in person's own linked account,
-    # so its reading names them.
-    logins = profiles()
+    # so its reading names them. A profile no account links is nobody's and is
+    # not counted: the Starred repos page asks for the account rather than
+    # showing 0.
+    held = profiles()
+    linked = set(accounts()) if held else set()
+    logins = tuple(login for login in held if login in linked)
     if len(logins) != 1:
         return ()
     found = profile(logins[0])

@@ -17,6 +17,8 @@ from hq.domains.control_plane.providers import (
     PROVIDERS,
     enabled_controller_actions,
     resolve_provider_spec,
+    shown_spec,
+    spec_withheld,
     validate_spec,
 )
 from hq.platform.core.audit import operation_context
@@ -211,7 +213,7 @@ def serialize_resource(resource: ManagedResource) -> dict[str, Any]:
         "in_sync": resource.generation == resource.observed_generation,
         "health": health,
         "public_effect": provider.public_effect if provider else False,
-        "spec": resource.spec,
+        "spec": shown_spec(resource.kind, resource.spec),
         "status": serialize_public_status(resource.status),
         "conditions": resource.conditions,
         "last_observed_at": (resource.last_observed_at.isoformat() if resource.last_observed_at else None),
@@ -355,6 +357,17 @@ def _can_change_the_public_internet(kind: str) -> bool:
     return any(action_kind == kind for action_kind, _ in enabled_controller_actions())
 
 
+def _refuse_withheld(kind: str, current_key: str | None) -> None:
+    """A withheld kind is written only by the domain that owns it, under its
+    own capability: this writer would echo its spec back to the caller."""
+
+    current = (
+        ManagedResource.objects.filter(key=current_key).values_list("kind", flat=True).first() if current_key else None
+    )
+    if spec_withheld(kind) or (current is not None and spec_withheld(current)):
+        raise PolicyError("This record is changed from its own page, not here.")
+
+
 @transaction.atomic
 def save_managed_resource(
     command: ManagedResourceCommand,
@@ -375,6 +388,7 @@ def save_managed_resource(
     """
 
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
+    _refuse_withheld(command.kind, current_key)
     validated_spec = validate_spec(command.kind, command.spec)
     # A kind that needs a person's agreement does not get written by a caller
     # that has not got one. The capability boundary has already held such a

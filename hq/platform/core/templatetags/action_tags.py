@@ -89,15 +89,24 @@ def post_button(label, url, *, name="action", value="", css="btn", title="", dis
 
 @register.filter
 def lead_action(actions):
-    """The one control a narrow head keeps beside its title: the page's primary
-    action, else its first that is not destructive, else its first."""
+    """The one control a narrow head keeps beside its title, chosen by what each
+    is for rather than where it stands: never a destructive one while another
+    is offered, then one that can be pressed, then the page's primary, then
+    the first. So a service's Restart leads and its Stop waits in the menu."""
 
     actions = tuple(actions or ())
-    return (
-        next((action for action in actions if getattr(action, "primary", False)), None)
-        or next((action for action in actions if not getattr(action, "danger", False)), None)
-        or (actions[0] if actions else None)
+    if not actions:
+        return None
+    ranked = sorted(
+        enumerate(actions),
+        key=lambda pair: (
+            bool(getattr(pair[1], "danger", False)),
+            bool(getattr(pair[1], "disabled", False)),
+            not getattr(pair[1], "primary", False),
+            pair[0],
+        ),
     )
+    return ranked[0][1]
 
 
 @register.filter

@@ -84,20 +84,23 @@ def _sight() -> Sight:
     from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
     from hq.domains.control_plane.observations import OBSERVATIONS
 
+    from ..connections import connection_rows
     from ..credential_sight import NEVER_SWEPT, NOT_CONNECTED
     from ..facts import stored_snapshots
 
     stored = {kind: rows[0] for kind, rows in stored_snapshots().items() if rows}
+    reported = {CONNECTION_LABELS.get(row.provider) for row in connection_rows()}
     groups: dict[str, list[Sees]] = {}
     for kind, spec in OBSERVATIONS.items():
         row = _sees(kind, spec, stored.get(kind))
         groups.setdefault(CONNECTION_LABELS.get(spec.provider, KEYLESS), []).append(row)
     # A provider that takes a connection and has none is said in one line; a
-    # reading that needs no connection is always listed, read or not.
+    # reading that needs no connection is always listed, read or not, and so is
+    # every reading of a connection the controller has reported, read yet or not.
     shown = {
         label: tuple(rows)
         for label, rows in groups.items()
-        if label == KEYLESS or any(row.state not in (NOT_CONNECTED, NEVER_SWEPT) for row in rows)
+        if label == KEYLESS or label in reported or any(row.state not in (NOT_CONNECTED, NEVER_SWEPT) for row in rows)
     }
     return Sight(
         groups=tuple(sorted(shown.items(), key=lambda group: (group[0] == KEYLESS, group[0]))),

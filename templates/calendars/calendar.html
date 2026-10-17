@@ -51,6 +51,13 @@ opening a day ask this page for the `calendar` part and take it in place.
       </section>
     {% endif %}
 
+    {% if upcoming %}
+      <section class="card calendar-upcoming" aria-labelledby="calendar-upcoming-title">
+        <div class="section-head"><h2 id="calendar-upcoming-title">Upcoming</h2></div>
+        {% include "partials/_record_list.html" with rows=upcoming label="Upcoming" %}
+      </section>
+    {% endif %}
+
     <section class="card calendar-sources" id="calendar-sources" aria-label="Calendars">
       {% for group, sources in calendar.groups %}
         {% if group %}<h3>{{ group }}</h3>{% endif %}

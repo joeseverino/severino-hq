@@ -4,7 +4,8 @@ from urllib.parse import unquote, urlsplit
 
 from django import template
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import conditional_escape, format_html
+from django.utils.safestring import mark_safe
 
 from hq.platform.application.entity_links import web_url as _web_url
 from hq.platform.application.labels import human_bytes
@@ -237,6 +238,34 @@ def readable(value):
     return when(value)
 
 
+# Where an address, hostname or path may wrap: after a dot or slash, before a
+# port's colon. Without them a narrow box cuts "10.0.0.10:8000" mid-number.
+_BREAK_AFTER = re.compile(r"([./])(?=.)")
+_BREAK_BEFORE = re.compile(r"(?<=.)(:)(?=.)")
+
+
+# A part with a hyphen inside it ("nginx-proxy-manager") is kept on one line:
+# a browser breaks after a hyphen, and a name split there reads as two. A flag
+# ("-a") has nothing before its hyphen to break from.
+_PARTS = re.compile(r"(<wbr>|\s+)")
+_INNER_HYPHEN = re.compile(r"[^-\s]-")
+
+
+def _whole(part: str) -> str:
+    return f'<span class="whole">{part}</span>' if _INNER_HYPHEN.search(part) else part
+
+
+@register.filter(is_safe=True)
+def breakable(value):
+    """``value`` escaped, with a line-break opportunity where an address may wrap,
+    and none inside a hyphenated part."""
+
+    # Escaped first, so the only markup in the result is what is added here.
+    text = str(conditional_escape(value))
+    marked = _BREAK_BEFORE.sub(r"<wbr>\1", _BREAK_AFTER.sub(r"\1<wbr>", text))
+    return mark_safe("".join(_whole(part) for part in _PARTS.split(marked)))
+
+
 def _is_this_page(context, url: str) -> bool:
     """Whether ``url`` is the page being rendered, not a fragment of it."""
 
@@ -422,3 +451,12 @@ def urgent(problems):
 def not_urgent(problems):
     """The rest of ``problems``, each drawn as a line."""
     return [item for item in problems or () if item.get("status") != "serious"]
+
+
+@register.simple_tag
+def rendered_copy() -> bool:
+    """Whether this render is a saved copy of HQ (``SEVERINO_RENDERED_COPY``)."""
+
+    from django.conf import settings
+
+    return bool(settings.SEVERINO_RENDERED_COPY)

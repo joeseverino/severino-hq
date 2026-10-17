@@ -1,5 +1,7 @@
 {% comment %}
 A command to paste somewhere else, with its copy button in its corner: the
 one way a page shows a command (`command`). Selecting it copies it whole too.
+It wraps at its spaces, slashes and dots, never inside a word or a
+hyphenated name, so a path reads as a path at any width.
 {% endcomment %}
-<div class="command"><pre class="operator-command"><code>{{ command }}</code></pre><button class="btn compact ghost command-copy" type="button" data-copy>Copy</button></div>
+<div class="command"><pre class="operator-command"><code>{{ command|breakable }}</code></pre><button class="btn compact ghost command-copy" type="button" data-copy>Copy</button></div>

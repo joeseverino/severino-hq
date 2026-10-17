@@ -962,6 +962,15 @@ document.addEventListener("click", (event) => {
     const last = rows[rows.length - 1];
     const row = last.cloneNode(true);
     row.querySelector("input").value = "";
+    // The spare row has nothing to remove; a row added here does.
+    if (!row.querySelector("[data-name-list-remove]")) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn ghost";
+      button.dataset.nameListRemove = "";
+      button.textContent = "Remove";
+      row.append(button);
+    }
     last.after(row);
     row.querySelector("input").focus();
     return;
@@ -1219,26 +1228,6 @@ const hqShowResponseHeaders = (root) => {
     });
 };
 
-// The compact admission rail is an index into the evidence below it. A normal
-// link remains the no-script fallback; when enhanced, open the exact control
-// inside this copy of the shared panel (page or dialog) before scrolling.
-document.addEventListener("click", (event) => {
-  const link = event.target.closest("[data-connection-control]");
-  if (!link) return;
-  const panel = link.closest("[data-connection-panel]");
-  const control = panel?.querySelector(
-    `[data-connection-layer="${CSS.escape(link.dataset.connectionControl)}"]`,
-  );
-  if (!control) return;
-  event.preventDefault();
-  // A control sits inside its hop's disclosure: open the way down to it.
-  for (let up = control; up && up !== panel; up = up.parentElement) {
-    if (up.tagName === "DETAILS") up.open = true;
-  }
-  control.querySelector("summary")?.focus({ preventScroll: true });
-  control.scrollIntoView({ block: "center" });
-});
-
 document.addEventListener("DOMContentLoaded", () => {
   const panel = document.querySelector("[data-connection-panel]");
   if (panel && !panel.closest("dialog")) hqShowResponseHeaders(panel);
@@ -1277,6 +1266,8 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   const kindControls = [...workspace.querySelectorAll("[data-topology-kind]")];
   const status = workspace.querySelector("[data-topology-status]");
   const reset = workspace.querySelector("[data-topology-reset]");
+  // The total counts every card, including those hidden until asked for.
+  const total = Number(workspace.dataset.topologyTotal) || nodes.length;
   let focused = nodes.some((node) => node.dataset.topologyNode === workspace.dataset.focus)
     ? workspace.dataset.focus : "";
 
@@ -1372,18 +1363,16 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       const visible = nodes.filter((node) => !node.hidden).length;
       status.textContent = selected
         ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
-        : `${visible} of ${nodes.length} nodes shown. Select one to isolate its immediate relationships.`;
+        : `${visible} of ${total} shown. Press a count of links to see only what it connects to.`;
     }
   };
 
-  // Isolating a node shrinks the lanes under whatever the map was scrolled
-  // to, which leaves the first cards under the sticky headers. Start from
-  // the top, then bring the selection into view below them.
+  // Isolating a node shrinks the lanes under whatever the page was scrolled
+  // to, so the selection is brought back into view.
   const reveal = () => {
     const selected = nodes.find((node) => node.dataset.topologyNode === focused);
     if (!map || !selected) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    map.scrollTo({ top: 0, behavior: "auto" });
     selected.scrollIntoView({
       behavior: reduce ? "auto" : "smooth",
       block: "nearest",
@@ -1478,8 +1467,8 @@ document.addEventListener("click", (event) => {
   panel.showPopover();
 });
 
-// While ⌘ or Ctrl is held, what a ⌘-click opens says so. Released, or the
-// window left, it reads as text again.
+  // While Cmd or Ctrl is held, mark what a Cmd-click would open; clear it on
+  // release or when the window loses focus.
 const heldModifier = (event) => document.documentElement.classList.toggle("modifier-held", event.metaKey || event.ctrlKey);
 document.addEventListener("keydown", heldModifier);
 document.addEventListener("keyup", heldModifier);

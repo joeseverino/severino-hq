@@ -45,6 +45,8 @@ SOURCE_ID = re.compile(r"^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$")
 SERIES_SLOTS = 10
 # Rows a month cell shows, bars first, before the rest fold into "+N more".
 CELL_ROWS = 3
+# The most an Upcoming list holds: the next week or two, not a second grid.
+UPCOMING = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +237,9 @@ class CalendarMonth:
     weeks: tuple[tuple[CalendarCell, ...], ...]
     groups: tuple[tuple[str, tuple[SourceView, ...]], ...]
     today: date
+    # What is still ahead in these weeks, in order, at most ``UPCOMING``: the
+    # list a narrow grid cannot spell out.
+    upcoming: tuple[Placed, ...] = ()
 
     @property
     def previous(self) -> date:
@@ -428,7 +433,8 @@ def calendar_month(
         days = [start + timedelta(days=offset) for offset in range(7)]
         lanes = _lanes(spans, days)
         weeks.append(tuple(_cell(day, month, today, on_day.get(day, []), lanes) for day in days))
-    return CalendarMonth(month=month, weeks=tuple(weeks), groups=groups, today=today)
+    ahead = tuple(item for item in shown if not item.event.mark and item.event.last_day >= today)
+    return CalendarMonth(month=month, weeks=tuple(weeks), groups=groups, today=today, upcoming=ahead[:UPCOMING])
 
 
 def _sort_time(event: CalendarEvent) -> Any:

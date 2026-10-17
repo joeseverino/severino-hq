@@ -86,6 +86,15 @@ def check_of(status: str) -> str:
     return f"health check {verdict.removeprefix('health: ')}"
 
 
+def health_of(status: str) -> str:
+    """The same verdict in a word, for a line beside the uptime: ``healthy``."""
+
+    found = _CHECK.search(str(status or ""))
+    if not found:
+        return ""
+    return found.group(1).removeprefix("health: ")
+
+
 @dataclass(frozen=True, slots=True)
 class Running:
     """A container a controller last saw, described as a person would read it.
@@ -155,6 +164,10 @@ class Running:
     @property
     def check(self) -> str:
         return check_of(self.status)
+
+    @property
+    def health(self) -> str:
+        return health_of(self.status)
 
     @property
     def published(self) -> str:

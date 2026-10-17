@@ -329,6 +329,13 @@ class DashboardGlanceTests(TestCase):
         machine = next(panel for panel in panels if panel["id"] == self.machine_request_id)
         self.assertTrue(machine["due"])
 
+    def test_with_no_machine_chosen_no_panel_is_drawn(self):
+        # Get started's "Choose a machine" step asks instead; the header does
+        # not repeat it.
+        DashboardMachine.objects.all().delete()
+
+        self.assertEqual(dashboard_panels(DashboardConfiguration(infrastructure_label="Homelab")), ())
+
     def test_never_observed_panels_are_not_reported_as_stale_readings(self):
         panels = dashboard_panels()
         self.assertTrue(all(not panel["due"] for panel in panels))
@@ -554,21 +561,14 @@ class GlanceRenderingTests(TestCase):
 
         self.assertEqual(weather["readings"], ())
 
-    def test_no_machine_draws_no_machine_reading_unless_it_is_the_only_way_in(self):
+    def test_no_machine_draws_no_machine_reading(self):
         DashboardMachine.objects.all().delete()
         spec = panel_specs()[0]
 
-        # Another reading is there: the dashboard carries no empty placeholder.
         self.assertNotIn("infrastructure", [panel["id"] for panel in dashboard_panels()])
-
-        # Nothing else is: the placeholder is how readings get chosen, and its
-        # words come from the spec.
+        # Even when it would be the only reading: Get started asks for a machine.
         with patch("hq.platform.application.glance.panel_specs", return_value=(spec,)):
-            (panel,) = dashboard_panels()
-        self.assertEqual(
-            (panel["id"], panel["label"], panel["empty"]),
-            ("infrastructure", spec.label, spec.empty),
-        )
+            self.assertEqual(dashboard_panels(), ())
 
     def test_the_settings_page_holds_the_form_and_its_placeholder_is_not_a_coordinate(self):
         self.client.force_login(get_user_model().objects.create_user("glance-settings"))

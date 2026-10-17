@@ -85,13 +85,10 @@
   {% endif %}
 
   {% if not total and not discovery_total %}
-  <div class="empty">
-    <p>Nothing matches <strong>{{ q }}</strong>.</p>
-    <p class="muted">Try a shorter word, a domain name, or an id.</p>
-  </div>
+  {% include "partials/_empty_state.html" with message="Nothing matches. Try a shorter word, a domain name, or an id." only %}
   {% endif %}
 {% else %}
-  <p class="command-hint muted">Search finds machines, services, domains, records, pages and commands. <kbd>⌘ K</kbd> opens it from any page.</p>
+  <p class="command-hint muted">Search finds machines, services, domains, records, pages and commands.<span class="keyboard-only"> <kbd>⌘ K</kbd> opens it from any page.</span></p>
 {% endif %}
 </div>
 {% endblock %}

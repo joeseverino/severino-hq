@@ -304,7 +304,19 @@ def _dashboard(populated):
         if not populated:
             # Nothing contributes, the calendar's sources included.
             stack.enter_context(mock.patch("hq.platform.application.calendar.calendar_sources", return_value=()))
+        else:
+            # The machine an owner shows in the header, so its reading lines up
+            # with the connection's and the controller's.
+            from hq.domains.control_plane.models import DashboardMachine
+
+            machine = ManagedResource.objects.filter(kind="machine").order_by("key").first()
+            if machine is not None:
+                DashboardMachine.objects.get_or_create(machine=machine)
         yield
+        if populated:
+            from hq.domains.control_plane.models import DashboardMachine
+
+            DashboardMachine.objects.all().delete()
 
 
 # The connection page's request: the laptop, forwarded by the proxy host.
@@ -402,13 +414,16 @@ def _calendar_day() -> str:
 # name -> (url, context manager for what no view reads from the database[,
 # the request's own fields])
 _MESSAGE = {
+    "connection_ref": "example-cloudflare",
+    "account_id": "example-account",
+    "database_id": "example-database",
+    "database": "contacts",
     "id": 1,
     "created_at": "2026-07-18 12:00:00",
     "updated_at": "2026-07-18 12:00:00",
     "name": "Example Person",
     "email": "person@example.com",
     "message": "Hello from the contact form.",
-    "message_preview": "Hello from the contact form.",
     "status": "unread",
     "country": "US",
     "turnstile": "verified",
@@ -417,13 +432,14 @@ _MESSAGE = {
 
 @contextmanager
 def _messages():
-    """The inbox with a message in it: its row carries every control a row can."""
+    """The inbox with a message in it, as the controller's reading holds it."""
 
-    with (
-        mock.patch("hq.domains.contacts.views.status_counts", return_value={"unread": 1}),
-        mock.patch("hq.domains.contacts.views.list_submissions", return_value=[_MESSAGE]),
-    ):
-        yield
+    from hq.domains.contacts import inbox
+
+    ProviderInventory.objects.update_or_create(
+        kind=inbox.READING, defaults={"records": [_MESSAGE], "observed_at": timezone.now(), "reachable": True}
+    )
+    yield
 
 
 PAGES = {

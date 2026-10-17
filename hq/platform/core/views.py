@@ -48,7 +48,9 @@ class ThrottledLoginView(LoginView):
 
     @property
     def sso_only(self) -> bool:
-        return settings.SEVERINO_OIDC_ENABLED and not settings.SEVERINO_PASSWORD_LOGIN_ENABLED
+        from .oidc import sso_only
+
+        return settings.SEVERINO_OIDC_ENABLED and sso_only()
 
     @override
     def get(self, request, *args, **kwargs):
@@ -394,10 +396,12 @@ class ConnectionView(PageMixin, TemplateView):
 
     template_name = "core/connection.html"
     page_title = "Your connection"
-    page_lede = "How you are connected to HQ right now, who it takes you to be, and the evidence behind every admission decision."
+    page_lede = "How this browser reaches HQ, and each check on the way."
 
     @override
     def get_context_data(self, **kwargs):
+        from hq.platform.application.connection_catalog import connection_catalog
+        from hq.platform.application.posture import estate_posture
         from hq.platform.application.request_path import request_path
 
         context = super().get_context_data(**kwargs)
@@ -407,6 +411,7 @@ class ConnectionView(PageMixin, TemplateView):
         found = request_path(self.request)
         context["request_path"] = found
         context["connection"] = found.connection
+        context["posture"] = estate_posture(connection_catalog(principal=web_principal(self.request.user)))
         return context
 
 

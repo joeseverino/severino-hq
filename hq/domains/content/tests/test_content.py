@@ -316,7 +316,9 @@ class ContentPageTests(TestCase):
         self.assertContains(writeups, "New writeup")
         # One type on the list: the column and its filter say nothing.
         self.assertNotIn("Type", [column.label for column in writeups.context["table"]["columns"]])
-        self.assertContains(pages, 'No pages yet. <a href="/content/new/?content_type=page">New page</a>')
+        self.assertContains(
+            pages, 'No pages yet. <a class="empty-cta" href="/content/new/?content_type=page">New page &rarr;</a>'
+        )
         self.assertContains(everything, "<h1>Content</h1>")
         self.assertContains(everything, "New writeup or page")
         self.assertContains(everything, "No source document")

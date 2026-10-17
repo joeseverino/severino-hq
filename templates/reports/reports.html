@@ -13,7 +13,7 @@
   <div class="kpi"><span class="label">Expenses {{ year }}</span><span class="value">{{ expenses_total|money }}</span><span class="muted">{% if expenses_count %}<a href="{{ expenses_url }}">{{ expenses_count|counted:"expense" }}</a>{% else %}{{ expenses_count|counted:"expense" }}{% endif %}</span></div>
   <div class="kpi"><span class="label">Deductible (est.) {{ year }}</span><span class="value">{{ expenses_deductible|money }}</span><span class="muted">Estimate, not tax advice</span></div>
   <div class="kpi"><span class="label">Assets purchased {{ year }}</span><span class="value">{{ assets_count }}</span><span class="muted">{{ assets_total|money }} total</span></div>
-  <div class="kpi"><span class="label">Documents due for review</span><span class="value">{% if docs_needing_review_count %}<a href="{{ docs_needing_review_url }}">{{ docs_needing_review_count }}</a>{% else %}0{% endif %}</span></div>
+  <div class="kpi"><span class="label">Docs due for review</span><span class="value">{% if docs_needing_review_count %}<a href="{{ docs_needing_review_url }}">{{ docs_needing_review_count }}</a>{% else %}0{% endif %}</span></div>
 </section>
 
 {% comment %}
@@ -90,19 +90,22 @@ mostly empty card. A reading with nothing in it is not drawn.
 </div>
 {% endif %}
 
-<section>
-  <h2>Exports</h2>
-  <p class="muted">Exports leave out secrets, the text of sensitive documents, and receipt files.</p>
-  <div class="export-grid">
-    <a class="btn" href="{% url 'reports:expenses_csv' %}?year={{ year }}">Expenses {{ year }} (CSV)</a>
-    <a class="btn" href="{% url 'reports:assets_csv' %}?year={{ year }}">Assets {{ year }} (CSV)</a>
-    <a class="btn" href="{% url 'reports:expenses_csv' %}">All expenses (CSV)</a>
-    <a class="btn" href="{% url 'reports:assets_csv' %}">All assets (CSV)</a>
-    <a class="btn" href="{% url 'reports:content_csv' %}">Writeups and pages (CSV)</a>
-    <a class="btn" href="{% url 'reports:projects_csv' %}">Projects (CSV)</a>
-    <a class="btn" href="{% url 'reports:documentation_csv' %}">Documents (CSV)</a>
-    <a class="btn" href="{% url 'reports:year_summary_json' %}?year={{ year }}">Year summary {{ year }} (JSON)</a>
-    <a class="btn" href="{% url 'reports:year_summary_md' %}?year={{ year }}">Year summary {{ year }} (Markdown)</a>
+{% comment %}
+Each export once, by what it holds, its files beside it: a list on a card,
+not a wall of buttons.
+{% endcomment %}
+<section class="card" aria-labelledby="exports-heading">
+  <div class="section-head">
+    <h2 id="exports-heading">Exports</h2>
+    <span class="count">Without secrets, sensitive documents' text or receipt files</span>
   </div>
+  <dl class="kv">
+    <dt>Expenses</dt><dd class="dot-list"><span><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year }} CSV</a></span><span><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></span></dd>
+    <dt>Assets</dt><dd class="dot-list"><span><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year }} CSV</a></span><span><a href="{% url 'reports:assets_csv' %}">All years CSV</a></span></dd>
+    <dt>Year summary</dt><dd class="dot-list"><span><a href="{% url 'reports:year_summary_json' %}?year={{ year }}">{{ year }} JSON</a></span><span><a href="{% url 'reports:year_summary_md' %}?year={{ year }}">{{ year }} Markdown</a></span></dd>
+    <dt>Writeups and pages</dt><dd><span><a href="{% url 'reports:content_csv' %}">CSV</a></span></dd>
+    <dt>Projects</dt><dd><span><a href="{% url 'reports:projects_csv' %}">CSV</a></span></dd>
+    <dt>Documents</dt><dd><span><a href="{% url 'reports:documentation_csv' %}">CSV</a></span></dd>
+  </dl>
 </section>
 {% endblock %}

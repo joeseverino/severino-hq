@@ -38,6 +38,7 @@ PROJECTS_TRAIL = ("Projects", reverse_lazy("projects:list"))
 
 
 class ProjectListView(PageMixin, TableListMixin, ListView):
+    table_empty = "No projects yet."
     model = Project
     template_name = "projects/project_list.html"
     paginate_by = 25
@@ -313,6 +314,13 @@ class WatchingView(PageMixin, TemplateView):
 
         context = super().get_context_data(**kwargs)
         context["login"] = self.login
+        if not self.login:
+            from hq.platform.application.connection_setup import docs_url
+            from hq.platform.application.page_reads import Remedy
+
+            context["github_claim"] = Remedy(
+                "Add your GitHub login to your sign-in", docs_url("Install.md", "your-github-account")
+            )
         context["profile"] = profile(self.login)
         context["app_repositories"] = self.app_repositories
         return context
@@ -391,6 +399,7 @@ class PostureView(PageMixin, TemplateView):
 
     template_name = "projects/posture.html"
     page_title = "Repo checks"
+    page_reads = ("github.repository",)
 
     @override
     def get_page_lede(self) -> str:

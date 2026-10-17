@@ -1,8 +1,13 @@
-<div class="empty{% if compact %} compact{% endif %}">
-  {% comment %}What is missing, then (when the page can say) what would fill it.{% endcomment %}
-  <p>{{ message }}</p>
-  {% if why %}<p class="empty-why">{{ why }}</p>{% endif %}
-  {% if action_url and action_label %}
-    <p><a class="empty-cta" href="{{ action_url }}">{{ action_label }} &rarr;</a></p>
-  {% endif %}
+{% comment %}
+The one empty state (docs/Design.md, "Nothing empty takes space"): a card
+holding one line, what is missing, then what would fill it. `message`,
+and `why` where a second sentence qualifies it (what was checked), in the
+same line;
+`remedy`, anything with a `label` and a `url` (`page.remedy` derives the
+connection that reads the page, else its own lead action), or a plain link
+as `action_url` and `action_label`. Inside another frame the card draws
+nothing of its own.
+{% endcomment %}
+<div class="empty card" data-empty-state>
+  <p>{{ message }}{% if why %} {{ why }}{% endif %}{% if remedy %} {% if remedy.url %}<a class="empty-cta" href="{{ remedy.url }}">{{ remedy.label }} &rarr;</a>{% else %}<span class="empty-cta">{{ remedy.label }}</span>{% endif %}{% elif action_url and action_label %} <a class="empty-cta" href="{{ action_url }}">{{ action_label }} &rarr;</a>{% endif %}</p>
 </div>

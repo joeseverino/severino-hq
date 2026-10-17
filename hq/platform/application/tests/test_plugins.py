@@ -162,6 +162,7 @@ class PluginContractTests(TestCase):
             [],
             "the installed set belongs in COMPOSITION_EXTENSIONS at composition time, not in the host source",
         )
+        self.assertEqual(document["retired"], [], "a retired extension is named in the secret, not here")
 
     def test_the_host_source_never_names_an_installed_extension(self):
         """The host must not know which extensions exist.

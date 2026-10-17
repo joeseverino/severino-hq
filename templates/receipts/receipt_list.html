@@ -7,4 +7,3 @@
   <td class="muted">{{ row.original_filename|or_empty }}</td>
   <td class="muted">{{ row.uploaded_at|when:"ago" }}</td>
 {% endblock %}
-{% block empty %}No receipts yet. <a href="{% url 'receipts:create' %}">Upload receipt</a>{% endblock %}

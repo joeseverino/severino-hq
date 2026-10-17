@@ -22,20 +22,24 @@ until its owner stops raising it; one the reader is not going to act on now can
 be dismissed: it leaves the queue and the counts, stays reachable below, and
 comes back on its own only if it gets worse.
 {% endcomment %}
+{% comment %}
+The page is titled Needs you, so its card is titled by what it holds: the one
+area when there is one, else that it is a list of what to do.
+{% endcomment %}
+{% if action_groups %}
 <section class="card action-items-card" data-triage-routes data-dismiss="{% url 'action_items_set_aside' %}" data-restore="{% url 'action_items_bring_back' %}">
   <div class="section-head">
-    <h2>{% if action_query or action_status or action_source or action_about %}Matches{% else %}Needs you{% endif %} <span class="count" data-queue-count>{{ action_item_total }}</span></h2>
-    {% if action_groups %}{% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}{% endif %}
+    <h2>{% if action_groups|length == 1 %}{{ action_groups.0.label }}{% elif action_query or action_status or action_source or action_about %}Matches{% else %}To do{% endif %} <span class="count" data-queue-count>{{ action_item_total }}</span></h2>
+    {% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}
   </div>
-  {% if action_groups %}
-    {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url %}
-  {% elif action_query or action_status or action_source or action_about %}
-    {% url 'action_items' as all_actions_url %}
-    {% include "partials/_empty_state.html" with message="Nothing matches these filters." action_url=all_actions_url action_label="Clear filters" compact=True only %}
-  {% else %}
-    {% include "partials/_work_queue.html" with items=action_groups empty="Nothing needs you." %}
-  {% endif %}
+  {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url titled=action_groups|length|add:"-1" %}
 </section>
+{% elif action_query or action_status or action_source or action_about %}
+  {% url 'action_items' as all_actions_url %}
+  {% include "partials/_empty_state.html" with message="Nothing matches these filters." action_url=all_actions_url action_label="Clear filters" only %}
+{% else %}
+  {% include "partials/_empty_state.html" with message="Nothing needs you." only %}
+{% endif %}
 
 {% comment %}
 What is only being told: something happened or was measured, and there is

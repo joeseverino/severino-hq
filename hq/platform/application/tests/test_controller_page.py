@@ -15,6 +15,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory, ReadRequest
 
 from ..controller_page import controller_page
+from .commands import commands_on
 
 DIRECTORY = Path(tempfile.mkdtemp())
 MARKERS = override_settings(
@@ -46,6 +47,20 @@ class ControllerPageTests(TestCase):
         self.assertIsNone(page.swept_at)
         self.assertEqual(page.readings, ())
         self.assertEqual(page.queue, ())
+
+    def test_a_controller_never_seen_is_given_its_start_steps_and_one_that_ran_is_not(self):
+        from hq.platform.application import cadence
+
+        self.client.force_login(get_user_model().objects.create_superuser("controller-reader"))
+        with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"):
+            never = self.client.get(reverse("control_plane:controller"))
+            cadence.note_controller()
+            arrived = self.client.get(reverse("control_plane:controller"))
+
+        self.assertContains(never, "Start the controller")
+        self.assertIn("sudo systemctl start severino-hq-controller.service", commands_on(never))
+        self.assertContains(never, "docs/Install.md#11-the-controllers-first-reading")
+        self.assertNotContains(arrived, "Start the controller")
 
     def test_what_was_read_is_listed_with_what_failed_first(self):
         store("adguard.rewrite")

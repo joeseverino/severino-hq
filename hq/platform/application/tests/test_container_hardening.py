@@ -202,7 +202,7 @@ class HardeningTests(TestCase):
 
         (removal,) = found.removals
         self.assertEqual(removal.lines, ("network_mode: host",))
-        self.assertIn("publish each under ports", removal.caution)
+        self.assertIn("ports:", removal.caution)
 
     def test_the_socket_is_a_reason_not_a_change(self):
         found = self.hardening(**{**KEPT, "mounts": [SOCKET]})

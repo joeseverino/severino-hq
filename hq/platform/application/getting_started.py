@@ -1,0 +1,68 @@
+"""What a new HQ still needs, in the order it is worth doing.
+
+A first project is not one of them: the dashboard's Projects card already asks
+for it, and saying it twice is noise.
+
+Derived, never stored: each step is done when HQ can see it is, so there is
+nothing to tick off and nothing to forget to untick. An HQ with every step done
+shows none of them.
+"""
+
+from dataclasses import dataclass
+
+from .projection import read_once
+from .routes import reverse
+
+
+@dataclass(frozen=True, slots=True)
+class Step:
+    id: str
+    label: str
+    why: str
+    url: str
+    done: bool
+    # The same icon its tile on the dashboard carries.
+    icon: str = ""
+
+
+def steps() -> tuple[Step, ...]:
+    """Every step, done or not; ``remaining`` is what a page shows."""
+
+    return read_once("getting_started.steps", _steps)
+
+
+def remaining() -> tuple[Step, ...]:
+    return tuple(step for step in steps() if not step.done)
+
+
+def _steps() -> tuple[Step, ...]:
+    from .cadence import controller_standing
+    from .connections import connection_rows
+    from .glance import dashboard_machines
+
+    return (
+        Step(
+            "controller",
+            "Run the controller",
+            "It reads your machines and services and applies the changes HQ asks for.",
+            reverse("control_plane:controller"),
+            controller_standing().known,
+            icon="activity",
+        ),
+        Step(
+            "connection",
+            "Add a connection",
+            "Cloudflare, Tailscale, Portainer or your proxy: whatever HQ should read.",
+            reverse("control_plane:connections"),
+            bool(connection_rows()),
+            icon="link",
+        ),
+        Step(
+            "machine",
+            "Choose a machine for the dashboard",
+            "Its load and containers then show at the top of this page.",
+            reverse("control_plane:machines"),
+            bool(dashboard_machines()),
+            icon="server",
+        ),
+    )

@@ -29,6 +29,9 @@ VERB_LABELS = {
     "approve-routes": "Approve routes",
 }
 LIFECYCLE_VERBS = frozenset({"start", "stop", "restart"})
+# Verbs that take something away from whoever is using it: asked for by name
+# on a page of their own, never pressed straight from a head.
+DESTRUCTIVE_VERBS = frozenset({"stop"})
 
 
 @dataclass(frozen=True, slots=True)

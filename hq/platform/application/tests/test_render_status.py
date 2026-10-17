@@ -28,6 +28,7 @@ from ..inventory_testing import store
 from ..projection import projection_scope
 from ..security import cli_principal, web_principal
 from ..topology import derive_topology
+from .commands import commands_on
 from .test_remedy_links import TRAP, UNOFFERED, _command_links, an_operator
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 
@@ -203,7 +204,8 @@ class OneDeclarationTests(SimpleTestCase):
 
         self.assertIn("OnUnitActiveSec=1h\n", timer)
         self.assertIn("RandomizedDelaySec=30s\n", timer)
-        self.assertIn("FullEvery:       24 * time.Hour,", main)
+        # gofmt aligns the field to its neighbours, so any run of spaces.
+        self.assertRegex(main, r"FullEvery: +24 \* time\.Hour,")
         # Read from the timer, not restated beside it.
         self.assertEqual(rules.RENDER_EVERY, timedelta(hours=1))
         self.assertEqual(rules.RENDER_DELAY, timedelta(seconds=30))
@@ -555,7 +557,7 @@ class PageTests(TestCase):
             self.assertEqual(response.status_code, 200)
             body = response.content.decode()
             self.assertIn("could not refresh its credentials from 1Password", body)
-            self.assertIn("sudo systemctl start severino-hq-secrets.service", body)
+            self.assertIn("sudo systemctl start severino-hq-secrets.service", commands_on(body))
             emitted += [
                 (unescape(match.group(1)), "GET") for match in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"', body)
             ]

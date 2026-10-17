@@ -12,10 +12,9 @@ What failed on its last run, said once above the rows that lead the list.
 {% endblock %}
 {% block row %}
   <td>{{ row.created_at|when }}</td>
-  <td>{{ row.label }}</td>
+  <td>{{ row.title }}{% if row.title != row.kind %} <code class="row-more">{{ row.kind }}</code>{% endif %}</td>
   <td>{{ row.get_state_display }}</td>
   <td class="num-col">{% if row.duration_seconds %}{{ row.duration_seconds|seconds }}{% else %}{% empty_value %}{% endif %}</td>
   <td>{{ row.note|or_empty }}</td>
   <td>{{ row.requested_by|or_empty }}</td>
 {% endblock %}
-{% block empty %}No jobs yet.{% endblock %}

@@ -85,7 +85,8 @@ class ServiceHealthTests(TestCase):
 
         health = self.health()
 
-        self.assertEqual(health.label, "Set up")
+        # Configured is not healthy: nothing behind the proxy was read running.
+        self.assertEqual((health.state, health.label), ("unknown", "In place"))
         self.assertIn("DNS record and proxy are in place", health.detail)
         self.assertIn("HQ does not read what runs there", health.detail)
 
@@ -105,8 +106,18 @@ class ServiceHealthTests(TestCase):
 
         health = self.health()
 
-        self.assertEqual((health.state, health.label), ("good", "Set up"))
+        self.assertEqual((health.state, health.label), ("good", "Running"))
         self.assertIn("forward to app on lab-1", health.detail)
+
+    def test_a_container_with_a_passing_health_check_says_so(self):
+        self.proxy(8080)
+        containers(
+            {"host": "lab-1", "name": "app", "ports": [8080], "state": "running", "status": "Up 2 hours (healthy)"}
+        )
+
+        health = self.health()
+
+        self.assertEqual((health.state, health.label), ("good", "Health check passing"))
 
     def test_no_state_reads_as_healthy(self):
         self.proxy(8080)

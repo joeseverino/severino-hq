@@ -20,7 +20,9 @@ class ExpenseListTests(_Signed):
     def test_an_empty_list_offers_the_way_forward_and_no_empty_controls(self):
         response = self.client.get(reverse("expenses:list"))
 
-        self.assertContains(response, 'No expenses yet. <a href="/expenses/new/">New expense</a>')
+        self.assertContains(
+            response, 'No expenses yet. <a class="empty-cta" href="/expenses/new/">New expense &rarr;</a>'
+        )
         self.assertNotContains(response, "Filtered")
         self.assertNotContains(response, "$0.00")
         # A year to filter by once an expense has one.

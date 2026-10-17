@@ -17,7 +17,8 @@ clauses, and in prose the stale one is a phrase mid-paragraph. In a grid the
 counts line up, and the odd one out is the row whose age does not match its
 neighbours.
 
-`inline` gives just the age, for a heading's aside that already says what it counts.
+`inline` gives just the age, after a ` · `, for a heading's aside that already says
+what it counts; with no reading it gives nothing, separator included.
 `only_kind` narrows it to one provider, and stays a sentence: one reading needs
 no grid, and the page around it has already said which provider it is about.
 `count` replaces the sweep's total when the page shows part of it: one domain's
@@ -25,7 +26,7 @@ records. Each state is worded by `credential_sight.standing`: refused, unreadabl
 or out of date.
 {% endcomment %}
 {% if inventory %}
-  {% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% if snapshot.reachable %}read {{ snapshot.observed_at|ago_short }}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
+  {% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %} · {% if snapshot.reachable %}read {{ snapshot.observed_at|ago_short }}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
   {% elif only_kind %}
     <p class="muted">
       {% for snapshot in inventory %}

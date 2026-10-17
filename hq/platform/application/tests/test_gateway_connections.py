@@ -1,12 +1,12 @@
 """Host gateways emit one connection/capability/resource contract."""
 
-from unittest import mock
-
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
+    ManagedResource,
+    ProviderConnection,
     ProviderInventory,
     WeatherObservation,
 )
@@ -32,7 +32,6 @@ OPERATOR = Principal(
 
 
 @override_settings(
-    CLOUDFLARE_API_TOKEN="cloudflare-secret",
     SEVERINO_LOOKUP_ENDPOINT="https://resolver.example",
     SEVERINO_RDAP_ENDPOINT="https://rdap.example",
 )
@@ -44,11 +43,23 @@ class GatewayConnectionTests(TestCase):
             repository_url="https://github.com/example/project",
         )
         DashboardConfiguration.objects.create(weather_point="41.8781,-87.6298", weather_label="Chicago")
-        # The account and database come from the observer's D1 reading.
+        # The messages the controller read through the cloudflare_api connection.
         ProviderInventory.objects.create(
-            kind="cloudflare.d1_database",
-            records=[{"account_id": "a" * 32, "name": "contacts", "uuid": "database-id"}],
+            kind="cloudflare.contact_submission",
+            records=[
+                {
+                    "connection_ref": "example-cloudflare",
+                    "account_id": "a" * 32,
+                    "database_id": "database-id",
+                    "database": "contacts",
+                    "id": 7,
+                    "status": "unread",
+                }
+            ],
             observed_at=timezone.now(),
+        )
+        ProviderConnection.objects.create(
+            connection_ref="example-cloudflare", provider="cloudflare_api", manages=True, observed_at=timezone.now()
         )
         WeatherObservation.objects.create(
             point="41.8781,-87.6298",
@@ -59,10 +70,10 @@ class GatewayConnectionTests(TestCase):
     def test_host_gateways_emit_from_the_domain_registry(self):
         names = set(integration_graph().connections)
 
-        self.assertLessEqual(
-            {"hq.cloudflare_d1", "hq.public_registries", "hq.nws"},
-            names,
-        )
+        self.assertLessEqual({"hq.public_registries", "hq.nws"}, names)
+        # The contact inbox is read and written by the controller through the
+        # Cloudflare API connection, so it has no connection of its own here.
+        self.assertNotIn("hq.cloudflare_d1", names)
         # Retired: the GitHub App is HQ's one GitHub connection, and the public
         # read behind it holds no credential to show.
         self.assertNotIn("hq.github", names)
@@ -71,17 +82,6 @@ class GatewayConnectionTests(TestCase):
         payload = list_connections(principal=OPERATOR)
         groups = {group["name"]: group for group in payload["groups"]}
 
-        d1 = groups["hq.cloudflare_d1"]["instances"][0]
-        self.assertEqual(
-            {ability["capability"] for ability in d1["abilities"]},
-            {
-                "contact.submissions.list",
-                "contact.submission.review",
-                "contact.submission.delete",
-            },
-        )
-        rendered = str(payload)
-        self.assertNotIn("cloudflare-secret", rendered)
         nws = groups["hq.nws"]["instances"][0]
         self.assertEqual(nws["status_label"], "keyless")
         self.assertEqual(nws["targets"][0]["label"], "Dashboard weather")
@@ -114,11 +114,7 @@ class GatewayConnectionTests(TestCase):
             "contact.submissions",
         )
 
-    @mock.patch("hq.platform.application.contact_submissions.d1.update_submission")
-    @mock.patch("hq.platform.application.contact_submissions.d1.get_submission")
-    def test_d1_review_runs_through_the_shared_executor(self, get, update):
-        get.return_value = {"id": 7, "status": "unread"}
-
+    def test_a_review_runs_through_the_shared_executor_and_is_queued(self):
         result = execute_capability(
             "contact.submission.review",
             {"status": "read", "assigned_to": "joe", "admin_notes": "handled"},
@@ -127,11 +123,11 @@ class GatewayConnectionTests(TestCase):
         )
 
         self.assertTrue(result["ok"])
-        update.assert_called_once_with(7, "read", "joe", "handled")
+        spec = ManagedResource.objects.get(kind="cloudflare.contact_inbox").spec
+        self.assertEqual(spec["reviews"], [{"id": 7, "status": "read", "assigned_to": "joe", "admin_notes": "handled"}])
 
-    @mock.patch("hq.platform.application.contact_submissions.d1.delete_submission")
-    @mock.patch("hq.platform.application.contact_submissions.d1.get_submission", return_value=None)
-    def test_d1_delete_retry_is_already_successful(self, get, delete):
+    def test_a_delete_retry_is_already_successful(self):
+        ProviderInventory.objects.filter(kind="cloudflare.contact_submission").update(records=[])
         result = execute_capability(
             "contact.submission.delete",
             {"confirm": "7"},
@@ -141,4 +137,4 @@ class GatewayConnectionTests(TestCase):
 
         self.assertTrue(result["ok"])
         self.assertTrue(result["deleted"]["already_absent"])
-        delete.assert_not_called()
+        self.assertFalse(ManagedResource.objects.exists())

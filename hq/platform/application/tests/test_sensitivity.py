@@ -8,6 +8,7 @@ from django.test import SimpleTestCase
 from hq.domains.docs_index.models import DocumentationRecord
 
 from ..sensitivity import SAFE_SENSITIVITIES
+from .source import parsed
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -60,7 +61,7 @@ class SafeSensitivityTests(SimpleTestCase):
         for path in sorted((ROOT / "hq/platform/application").rglob("*.py")):
             if path.name.startswith("test") or path.name == "sensitivity.py":
                 continue
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            for node in ast.walk(parsed(path)):
                 if isinstance(node, (ast.Assign, ast.AnnAssign)):
                     targets = node.targets if isinstance(node, ast.Assign) else [node.target]
                     if any(isinstance(t, ast.Name) and t.id == "SAFE_SENSITIVITIES" for t in targets):

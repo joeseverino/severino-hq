@@ -2,8 +2,8 @@
 
 A derived answer stops standing when a table it reads is written or when its
 moment comes (``hq.platform.application.derivations``). Left there, the next
-request pays for deriving it again, and with a controller reporting every
-minute nearly every request a person makes is that next request.
+request pays for deriving it again, and with a controller reporting every few
+minutes while HQ is in use, many requests a person makes are that next request.
 
 So the question is asked again when the change lands. Every statement a
 connection runs is seen here; one that writes a table a remembered question
@@ -21,11 +21,10 @@ read, so each pass waits twice as long for them to settle, up to
 ``SETTLES_LONGEST``, and a request derives what it asks for itself, as it would
 with no pass at all. The first pass that nothing interrupts restores the wait.
 
-A request never waits on the pass. It derives what it needs and does not find
-stored, and the pass, reaching that question, finds it standing. Between two
-questions the pass waits for any request that is deriving, so the two seldom
-run side by side at half speed each. Only a request that needs the very answer
-another thread is deriving waits, for that one answer.
+A request never waits on the pass: it derives what it needs itself, and the
+pass later finds that answer stored. The pass pauses between questions while a
+request is deriving. Only a request needing an answer another thread is
+deriving waits, for that answer.
 
 Nothing here decides what is true. A request that arrives before the thread
 has finished derives for itself, exactly as it did before.
