@@ -21,10 +21,11 @@ read, so each pass waits twice as long for them to settle, up to
 ``SETTLES_LONGEST``, and a request derives what it asks for itself, as it would
 with no pass at all. The first pass that nothing interrupts restores the wait.
 
-A request and the pass never derive side by side, where each would run at half
-speed. A request that is deriving for itself goes first, and the pass waits
-between two questions. A request that arrives while the pass is asking waits
-for its own answer, which the pass asks next.
+A request never waits on the pass. It derives what it needs and does not find
+stored, and the pass, reaching that question, finds it standing. Between two
+questions the pass waits for any request that is deriving, so the two seldom
+run side by side at half speed each. Only a request that needs the very answer
+another thread is deriving waits, for that one answer.
 
 Nothing here decides what is true. A request that arrives before the thread
 has finished derives for itself, exactly as it did before.

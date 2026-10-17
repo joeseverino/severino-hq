@@ -381,9 +381,8 @@ def _answer(declared: Derivation, variant: str, args: tuple, kwargs: dict) -> tu
 
     key = None if _UNCACHED.get() else _key(declared, variant)
     value, until, found = _stored(key)
-    if not found and (_awaited(key) or _awaited_pass(declared, variant, key)):
-        # Another thread was deriving this very answer, or was asking again
-        # everything that no longer stood: it is stored now.
+    if not found and _awaited(key):
+        # Another thread was deriving this very answer: it is stored now.
         value, until, found = _stored(key)
     if not found:
         with _deriving(key), _for_a_request():
@@ -423,75 +422,15 @@ def _awaited(key: str | None) -> bool:
     return stored is not None and stored.wait(WAITS)
 
 
-# Set unless a pass of ``derive_ahead`` is in flight, and set unless a request
-# is deriving for itself. Two threads deriving at once each run at half speed,
-# so each side waits for the other where it holds nothing the other needs: a
-# request at its own top-level question, the pass between two questions.
-_NO_PASS = threading.Event()
-_NO_PASS.set()
+# Set unless a request is deriving for itself. Two threads deriving at once
+# each run at half speed, so the pass waits between two questions for requests
+# to finish; a request never waits on the pass, only on a thread deriving the
+# very answer it needs (``_awaited``).
 _NO_REQUEST = threading.Event()
 _NO_REQUEST.set()
-_REQUESTS: list[int] = [0]
+_REQUESTS = 0
 # The longest a pass waits between questions for requests to finish, in seconds.
 GIVES_WAY = 2.0
-# What the pass in flight has stored so far, and the derivations requests are
-# waiting on, which the pass asks next. Both are read and written under the
-# condition, which is notified as each question is answered.
-_TURN = threading.Condition()
-_PASS_STORED: set[str] = set()
-_WANTED: Counter[str] = Counter()
-# How many times the pass in flight has asked each question, by name and
-# variant. A write that lands while it derives moves the revisions, so the key
-# it stores need not be the one a waiting request holds: once its question has
-# been asked, the request looks for its own answer and derives it if absent.
-_PASS_ASKED: Counter[tuple[str, str]] = Counter()
-# The questions the pass in flight has yet to ask: a request waits only for one
-# of these, never for a question this pass will not reach.
-_PASS_PENDING: set[tuple[str, str]] = set()
-
-
-def _awaited_pass(declared: Derivation, variant: str, key: str | None) -> bool:
-    """Wait for the pass in flight, if one is, to ask what this request asks.
-
-    Only at a request's own top-level question, where it holds nothing the
-    pass could be waiting for, and never inside a transaction. The pass asks
-    what is waited on first, and the wait ends when it has: its answer is then
-    stored under this request's key, or the tables moved on while it derived
-    and the request derives its own.
-    """
-
-    from django.db import connection
-
-    if key is None or _AHEAD.get() or _FRAME.get() is not None or _NO_PASS.is_set():
-        return False
-    if connection.in_atomic_block:
-        return False
-    deadline = monotonic_time.monotonic() + WAITS
-    question = (declared.name, variant)
-    with _TURN:
-        if question not in _PASS_PENDING:
-            return False
-        asked = _PASS_ASKED[question]
-        _WANTED[declared.name] += 1
-        try:
-            while not _NO_PASS.is_set() and key not in _PASS_STORED and _PASS_ASKED[question] == asked:
-                remaining = deadline - monotonic_time.monotonic()
-                if remaining <= 0:
-                    break
-                _TURN.wait(remaining)
-        finally:
-            _WANTED[declared.name] -= 1
-    return True
-
-
-def _next_asked(pending: list[tuple[str, str, _Ask]]) -> int:
-    """Which pending question the pass asks next: one a request waits on, else the first."""
-
-    with _TURN:
-        for index, (name, _variant, _ask) in enumerate(pending):
-            if _WANTED[name] > 0:
-                return index
-    return 0
 
 
 @contextmanager
@@ -501,15 +440,16 @@ def _for_a_request() -> Iterator[None]:
     if _AHEAD.get():
         yield
         return
+    global _REQUESTS
     with _IN_FLIGHT_LOCK:
-        _REQUESTS[0] += 1
+        _REQUESTS += 1
         _NO_REQUEST.clear()
     try:
         yield
     finally:
         with _IN_FLIGHT_LOCK:
-            _REQUESTS[0] -= 1
-            if _REQUESTS[0] == 0:
+            _REQUESTS -= 1
+            if _REQUESTS == 0:
                 _NO_REQUEST.set()
 
 
@@ -755,46 +695,20 @@ def _remembered() -> list[tuple[str, str, _Ask]]:
 
 
 def derive_ahead() -> list[str]:
-    """Ask again every remembered question whose answer no longer stands.
+    """Ask again every remembered question whose answer no longer stands; the
+    derivations asked.
 
-    Returns the derivations asked. One that fails is forgotten and logged: the
-    next request asks it afresh and is told what went wrong.
+    One that fails is forgotten and logged: the next request asks it afresh and
+    is told what went wrong. Between two questions the pass waits for requests
+    that are deriving for themselves, and finds what they stored standing.
     """
 
-    _NO_PASS.clear()
-    try:
-        return _pass()
-    finally:
-        with _TURN:
-            _PASS_STORED.clear()
-            _PASS_ASKED.clear()
-            _PASS_PENDING.clear()
-            _NO_PASS.set()
-            _TURN.notify_all()
-
-
-def _pass() -> list[str]:
-    """Go through the remembered questions once; the derivations asked."""
-
     asked: list[str] = []
-    pending = _remembered()
-    with _TURN:
-        _PASS_PENDING.update((name, variant) for name, variant, _ask in pending)
-    while pending:
-        # A request deriving for itself goes first: what it stores, this pass
-        # then finds standing.
+    for name, variant, ask in _remembered():
         _NO_REQUEST.wait(GIVES_WAY)
-        name, variant, ask = pending.pop(_next_asked(pending))
-        derived, key = _ask_once(name, variant, ask)
+        derived, _key = _ask_once(name, variant, ask)
         if derived:
             asked.append(name)
-        # Asked, answered or not: a request waiting on it looks for itself.
-        with _TURN:
-            if key:
-                _PASS_STORED.add(key)
-            _PASS_ASKED[name, variant] += 1
-            _PASS_PENDING.discard((name, variant))
-            _TURN.notify_all()
     return asked
 
 

@@ -210,14 +210,15 @@ Three rules keep a page from waiting on a writer:
   100 ms, and a job that begins its next transaction within a millisecond of
   the last would win every time, so a job lets go after each second of
   writing (`database.gives_way`, applied by the runner to every job).
-- A request waits on the derive-ahead pass only for a question the pass has
-  yet to ask, and only until it has asked it. While writes keep landing during
-  passes, the pass waits longer for them to settle (`ahead.SETTLES_LONGEST`),
-  since what it derives would be unsettled before anyone read it.
+- A request never waits on the derive-ahead pass: it derives what it does not
+  find stored, and the pass finds that standing. While writes keep landing
+  during passes, the pass waits longer for them to settle
+  (`ahead.SETTLES_LONGEST`), since what it derives would be unsettled before
+  anyone read it.
 
-Measured on 2026-10-16 (an M3, Python 3.15, four readers, a 500-row import, a
-report every 5 s): during the import, page p95 1.1 s, and the report's worst
-wait for the lock 0.7 s.
+Measured on 2026-10-17 (an M3, Python 3.15, four readers, a 500-row import, a
+report every 5 s): during the import, page p95 about 1 s, and the report's
+worst wait for the lock under 1 s.
 
 A running HQ reports the same per request. Every response carries
 `Server-Timing: app;dur=<ms>`, and the access log line (`severino.request`,
@@ -408,9 +409,9 @@ writing transaction, and a rolled-back write says nothing. Writes that land
 together are one pass, which starts once none has landed for 50 ms and no later
 than 0.5 s after the first; writes during a pass are answered by one more. A
 question is derived at most once per state of its tables, and by one thread
-when two want it. A request and the pass never derive side by side: a request
-deriving for itself goes first, and one that arrives while the pass is asking
-waits for its own answer, which the pass asks next. `ahead=` on a derivation is
+when two want it. A request never waits on the pass: it derives what it
+does not find stored, and the pass waits between questions while a request is
+deriving. `ahead=` on a derivation is
 how many ways of asking are kept current (eight by default), and a way nobody
 asked for in a day is forgotten. A question asked ahead counts as HQ being in
 use.
