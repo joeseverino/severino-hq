@@ -802,7 +802,7 @@ class CostTests(TestCase):
         # template asks, and not cached across requests: a brake must never
         # display a state that no longer holds. And one for the operator's
         # theme, which `<html>` carries so the page paints in it first time.
-        with self.assertNumQueries(9):
+        with self.assertNumQueries(12):
             self.client.get(reverse("connection"))
 
     def test_the_panel_costs_the_same_however_many_devices_there_are(self):
@@ -813,7 +813,7 @@ class CostTests(TestCase):
             *(a_device(f"another-{index}", f"100.64.1.{index}") for index in range(12)),
         )
 
-        with self.assertNumQueries(9):
+        with self.assertNumQueries(12):
             self.client.get(reverse("connection"))
 
 

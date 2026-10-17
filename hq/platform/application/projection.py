@@ -66,12 +66,6 @@ def seeded() -> dict[str, Any]:
     return dict(scope.get(_SEED, {})) if scope is not None else {}
 
 
-def in_projection() -> bool:
-    """Whether a projection is being assembled, so a read made now is shared."""
-
-    return _READ_SCOPE.get() is not None
-
-
 def read_once[T](key: str, loader: Callable[[], T]) -> T:
     """Load once inside ``projection_scope``; behave normally outside one."""
 

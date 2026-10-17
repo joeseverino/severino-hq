@@ -20,7 +20,6 @@ from django.conf import settings
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.cloudflare import CONTACT_SUBMISSION_KIND
 from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_INBOX_KIND
-from hq.platform.application.facts import stored_inventory
 
 READING = CONTACT_SUBMISSION_KIND
 DECLARATION = CONTACT_INBOX_KIND
@@ -61,7 +60,7 @@ class Inbox:
 
 
 def _stored() -> ProviderInventory | None:
-    return next((snapshot for snapshot in stored_inventory(READING)[READING] if snapshot.connected), None)
+    return ProviderInventory.objects.filter(kind=READING, connected=True).first()
 
 
 def declaration() -> ManagedResource | None:

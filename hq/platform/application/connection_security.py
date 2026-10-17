@@ -305,11 +305,11 @@ def host_firewall_control(snapshot) -> SecurityControl:
 
 
 def _snapshots(*kinds: str) -> dict:
-    """The stored inventory of each kind, by kind, from the one read a page shares."""
+    """The stored inventory of each kind, by kind, in one query."""
 
-    from .facts import stored_inventory
+    from hq.domains.control_plane.models import ProviderInventory
 
-    return {kind: rows[-1] for kind, rows in stored_inventory(*kinds).items() if rows}
+    return {row.kind: row for row in ProviderInventory.objects.filter(kind__in=kinds)}
 
 
 def observed_request_controls(hostname: str) -> tuple[SecurityControl, SecurityControl]:
