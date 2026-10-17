@@ -4,6 +4,10 @@
 import os
 import sys
 
+from hq.config.first_use import load_on_first_use
+
+load_on_first_use()
+
 
 def main():
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")

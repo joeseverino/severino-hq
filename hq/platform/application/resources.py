@@ -3,6 +3,7 @@
 from collections.abc import Iterable, Mapping
 from typing import Any, TypedDict, override
 
+from django.db.models import Model
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -13,6 +14,7 @@ from pydantic import (
 )
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.providers import spec_withheld
 from hq.platform.core.models import AuditLog
 
 from . import (
@@ -31,7 +33,7 @@ from .input_errors import pydantic_refusal
 from .integration_specs import ResourceSpec
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
-from .search_contracts import SearchDefinition
+from .search_contracts import SearchDefinition, search_lines
 from .security import Capability, Principal, require_all
 
 
@@ -41,6 +43,15 @@ class ResourceSearchDefinition(SearchDefinition):
     @override
     def url(self, instance: Any) -> str:
         return services.home_url(instance)
+
+    @override
+    def body(self, instance: Model) -> str:
+        """The indexed text; a withheld kind's spec is left out (``ProviderSpec.withheld``)."""
+
+        fields = tuple(
+            field for field in self.fields if field != "spec" or not spec_withheld(str(getattr(instance, "kind", "")))
+        )
+        return "\n".join(line for field in fields for line in search_lines(getattr(instance, field, None)))
 
 
 class ResourceQuery(BaseModel):

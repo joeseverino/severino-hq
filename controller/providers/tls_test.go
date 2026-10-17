@@ -62,11 +62,31 @@ func tlsConsumers() []connections.Connection {
 
 // tlsIssuing is tlsConsumers with what an order needs: the DNS token the
 // challenge is answered with, and the certificate authority account.
-func tlsIssuing() []connections.Connection {
+func tlsIssuing(directory string) []connections.Connection {
 	return append(tlsConsumers(),
 		apiTokenConnection(runtime.ConnectionProviderCloudflareDNS, "cloudflare_dns", "https://example.invalid", "synthetic"),
-		acmeConnection("acme", "ops@example.test", "https://acme.example/directory"),
+		acmeConnection("acme", "ops@example.test", directory),
 	)
+}
+
+// issuingHarness is a harness whose renewals order from a fake authority: the
+// zone and challenge record calls answer on its Cloudflare routes, and the
+// dialer serves what the authority last issued as "issued".
+func issuingHarness(t *testing.T, env runtime.Environment, pki *testPKI) *tlsHarness {
+	t.Helper()
+	authority := newACMEFake(t, pki, nil)
+	h := newTLSHarness(t, env, tlsIssuing(authority.directory())...)
+	envelope := func(result any) Object { return Object{"success": true, "errors": []any{}, "result": result} }
+	zones := []any{}
+	for _, zone := range []string{"a", "b"} {
+		zones = append(zones, Object{"id": "zone-" + zone, "name": zone + ".example"})
+		h.http.answers["/zones/zone-"+zone+"/dns_records"] = envelope(Object{"id": "record", "type": "TXT"})
+		h.http.answers["/zones/zone-"+zone+"/dns_records/record"] = envelope(Object{"id": "record"})
+	}
+	h.http.routes["/zones?page=1&per_page=100"] = envelope(zones)
+	h.dialer.issued = authority.issued
+	_ = os.MkdirAll(env.ACMEDir, 0o700)
+	return h
 }
 
 func verified(ctx context.Context) context.Context {
@@ -174,23 +194,19 @@ func TestReconcileTLSReadsEveryConsumer(t *testing.T) {
 
 func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	env := tlsEnv(t)
-	h := newTLSHarness(t, env, tlsIssuing()...)
 	pki := newTestPKI(t)
+	h := issuingHarness(t, env, pki)
 	oldChain, oldKey, oldDER := pki.leaf(2, tlsNow.AddDate(0, 0, 5), "a.example")
-	newChain, newKey, newDER := pki.leaf(3, tlsNow.AddDate(0, 3, 0), "a.example")
-	h.dialer.certs = map[string][]byte{"old": oldDER, "new": newDER}
+	h.dialer.certs = map[string][]byte{"old": oldDER}
 	h.command.outcomes = map[string]fakeOutcome{
-		"ssh snapshot":     {StdoutB64: base64.StdEncoding.EncodeToString(certificateBundle(oldChain, oldKey))},
-		"ssh deploy":       {},
-		"certbot certonly": {},
+		"ssh snapshot": {StdoutB64: base64.StdEncoding.EncodeToString(certificateBundle(oldChain, oldKey))},
+		"ssh deploy":   {},
 	}
-	h.command.lineage = map[string]string{"fullchain.pem": string(newChain), "privkey.pem": string(newKey)}
-	_ = os.MkdirAll(env.ACMEDir, 0o700)
 	spec := Object{"certificate_name": "a", "domains": []any{"a.example"}, "renewal_window_days": 30, "consumers": []any{
 		Object{"kind": "caddy", "name": "edge", "connection_ref": "caddy", "verify_domains": []any{"a.example"}},
 	}}
 
-	h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}, {"edge.example|a.example": {Cert: "new"}}}
+	h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}, {"edge.example|a.example": {Cert: "issued"}}}
 	result, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)
 	if err != nil {
 		t.Fatal(err)
@@ -201,8 +217,8 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 	}
 
 	// The new certificate never activates: verification times out and the old one is restored.
-	h2 := newTLSHarness(t, env, tlsIssuing()...)
-	h2.dialer.certs, h2.command.outcomes, h2.command.lineage = h.dialer.certs, h.command.outcomes, h.command.lineage
+	h2 := issuingHarness(t, env, pki)
+	h2.dialer.certs, h2.command.outcomes = h.dialer.certs, h.command.outcomes
 	_ = os.RemoveAll(filepath.Join(env.ACMEDir, "config"))
 	h2.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}}
 	_, err = h2.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)
@@ -253,7 +269,7 @@ func TestNPMCertificateIDs(t *testing.T) {
 	}
 }
 
-func TestCertbotNamesAreCheckedBeforeTheyReachArgv(t *testing.T) {
+func TestCertificateNamesAreCheckedBeforeTheyReachAnOrderOrAPath(t *testing.T) {
 	for _, domains := range [][]string{{"a.example", "--server=x"}, {"-d"}, {"a.example\n"}} {
 		if _, err := checkedDomains(TLSCertificateSpec{Domains: domains}); err == nil {
 			t.Fatalf("accepted %q", domains)
@@ -282,27 +298,22 @@ func TestRenewalNotVerifiedWhileAConsumerIsUnreadOrUnchecked(t *testing.T) {
 		reason string
 	}{
 		{"unreachable consumer", Object{"kind": "caddy", "name": "mirror", "connection_ref": "caddy", "verify_domains": []any{"b.example"}},
-			map[string]fakeServe{"edge.example|a.example": {Cert: "new"}}, "mirror could not be read at b.example"},
+			map[string]fakeServe{"edge.example|a.example": {Cert: "issued"}}, "mirror could not be read at b.example"},
 		{"unchecked consumer", Object{"kind": "caddy", "name": "mirror", "connection_ref": "caddy", "verify_domains": []any{}},
-			map[string]fakeServe{"edge.example|a.example": {Cert: "new"}}, "mirror has no verification domain"},
+			map[string]fakeServe{"edge.example|a.example": {Cert: "issued"}}, "mirror has no verification domain"},
 		{"stale consumer", Object{"kind": "caddy", "name": "mirror", "connection_ref": "caddy", "verify_domains": []any{"b.example"}},
-			map[string]fakeServe{"edge.example|a.example": {Cert: "new"}, "edge.example|b.example": {Cert: "old"}}, "mirror still serves the previous certificate at b.example"},
+			map[string]fakeServe{"edge.example|a.example": {Cert: "issued"}, "edge.example|b.example": {Cert: "old"}}, "mirror still serves the previous certificate at b.example"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			env := tlsEnv(t)
-			h := newTLSHarness(t, env, tlsIssuing()...)
 			pki := newTestPKI(t)
+			h := issuingHarness(t, tlsEnv(t), pki)
 			oldChain, oldKey, oldDER := pki.leaf(2, tlsNow.AddDate(0, 0, 5), "a.example", "b.example")
-			newChain, newKey, newDER := pki.leaf(3, tlsNow.AddDate(0, 3, 0), "a.example", "b.example")
-			h.dialer.certs = map[string][]byte{"old": oldDER, "new": newDER}
+			h.dialer.certs = map[string][]byte{"old": oldDER}
 			h.command.outcomes = map[string]fakeOutcome{
-				"ssh snapshot":     {StdoutB64: base64.StdEncoding.EncodeToString(certificateBundle(oldChain, oldKey))},
-				"ssh deploy":       {},
-				"certbot certonly": {},
+				"ssh snapshot": {StdoutB64: base64.StdEncoding.EncodeToString(certificateBundle(oldChain, oldKey))},
+				"ssh deploy":   {},
 			}
-			h.command.lineage = map[string]string{"fullchain.pem": string(newChain), "privkey.pem": string(newKey)}
-			_ = os.MkdirAll(env.ACMEDir, 0o700)
 			h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}, "edge.example|b.example": {Cert: "old"}}, c.served}
 			spec := Object{"certificate_name": "a", "domains": []any{"a.example", "b.example"}, "renewal_window_days": 30, "consumers": []any{edge, c.second}}
 			_, err := h.r.runAction(runtime.ResourceKindTLSCertificate, "renew", verified(t.Context()), spec, nil, true)

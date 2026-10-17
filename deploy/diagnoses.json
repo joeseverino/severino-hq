@@ -23,12 +23,12 @@
     {
       "id": "composition-set",
       "match": "COMPOSITION_EXTENSIONS must",
-      "title": "The composition set is missing",
-      "fix": "The COMPOSITION_EXTENSIONS secret is unset or empty. Restore it in this repository's Actions secrets."
+      "title": "The composition set is missing or malformed",
+      "fix": "The COMPOSITION_EXTENSIONS secret is unset, has no extensions list, or retires an extension it still lists. Restore it in this repository's Actions secrets in the shape of composition/extensions.json; an empty list composes the host with no extensions."
     },
     {
       "id": "no-admission",
-      "match": "an extension has no successful admission on main",
+      "match": "an extension (has no finished admission|'s newest admission) on main",
       "title": "An extension has not been admitted",
       "fix": "One extension has no successful admission on its main branch. Open its repository's Verify and admit plugin runs and fix or re-run the latest."
     },
@@ -90,7 +90,19 @@
       "id": "unsigned-composition",
       "match": "not signed by this repository's compose workflow",
       "title": "The image to deploy is not signed by this repository",
-      "fix": "Production only runs a composition this repository's Compose workflow signed. Run Compose for this commit instead of deploying an image published some other way."
+      "fix": "Production only runs a composition this repository's Compose workflow signed, and the host checks that itself before anything runs. Run Compose for this commit instead of deploying an image published some other way."
+    },
+    {
+      "id": "extension-dropped",
+      "match": "drops [0-9]+ extension\\(s\\) the running release carries",
+      "title": "The image would remove an extension production runs",
+      "fix": "Production still runs the previous image. The image carries fewer extensions than production does, and its composition does not say that was meant. If it was, add the extension's id to \"retired\" in the COMPOSITION_EXTENSIONS secret, run Compose, and deploy that. If not, restore the extension to the secret and run Compose. Which extension is in the host's private log at /var/log/severino-hq/extensions.log."
+    },
+    {
+      "id": "extensions-unreadable",
+      "match": "could not read the extensions",
+      "title": "The host could not tell which extensions the release carries",
+      "fix": "Production still runs the previous image. The host refuses a deploy when it cannot compare the image's extensions with the ones production runs: the running image could not be read or pulled again by its digest, or the new image carries no readable lock. Re-run the deploy; if it fails the same way, run Compose for the commit and deploy that."
     },
     {
       "id": "controller-preflight",
@@ -100,13 +112,13 @@
     },
     {
       "id": "unhealthy",
-      "match": "(New image did not become healthy|Application replacement failed|Controller activation failed)",
+      "match": "([Nn]ew image did not become healthy|Application replacement failed|Controller activation failed)",
       "title": "The new version did not come up healthy, and was rolled back",
       "fix": "Production still runs the previous image. What the deploy, sync or installer printed is in the private logs on the deploy host (/var/log/severino-hq), and the application's in HQ's own; fix it and merge again."
     },
     {
       "id": "disk",
-      "match": "Deployment requires at least 512 MiB",
+      "match": "(Deployment requires at least 512 MiB|a deploy needs [0-9]+ MiB free)",
       "title": "The deploy host is short on disk",
       "fix": "The machine needs at least 512 MiB free to deploy. Prune unused images on it, then re-run the deploy."
     },

@@ -115,7 +115,8 @@ class GivesWayTests(TransactionTestCase):
             stop.set()
             writer.join()
 
-        self.assertLess(waited, database.HOLDS + 1.0)
+        # A turn, plus the disk sync each commit waits for (synchronous=FULL).
+        self.assertLess(waited, database.HOLDS + 2.0)
 
     def test_without_sqlite_or_inside_a_transaction_nothing_changes(self):
         with transaction.atomic(), database.without_waiting():

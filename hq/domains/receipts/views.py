@@ -6,6 +6,7 @@ media URL. The ``ReceiptFileView`` streams the file only to authenticated users.
 
 from pathlib import Path
 from typing import override
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.db.models import Count
@@ -51,6 +52,7 @@ RECEIPTS_TRAIL = ("Receipts", reverse_lazy("receipts:list"))
 
 
 class ReceiptListView(PageMixin, TableListMixin, ListView):
+    table_empty = "No receipts yet."
     model = Receipt
     template_name = "receipts/receipt_list.html"
     paginate_by = 25
@@ -167,6 +169,10 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
             ctx["receipt"] = receipt
             return ctx
 
+        # With no match, a new expense starts from what the receipt says.
+        ctx["new_expense"] = (
+            f"{reverse('expenses:create')}?{urlencode({'vendor': receipt.vendor, 'cost': receipt.amount})}"
+        )
         # Find potential expenses with the same vendor or same amount.
         potential_expenses = Expense.objects.annotate(receipt_count=Count("receipts")).filter(receipt_count=0)
 

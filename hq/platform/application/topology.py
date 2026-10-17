@@ -533,6 +533,7 @@ def _relations(principal: Principal, build: Any) -> RelationGraph:
 
 @derivation("estate.topology", reads=ESTATE_READS, vary=estate_variant)
 def _derive(principal: Principal) -> Topology:
+    from .posture import estate_posture
     from .topology_estate import add_estate
 
     edges: dict[str, TopologyEdge] = {}
@@ -559,7 +560,11 @@ def _derive(principal: Principal) -> Topology:
         )
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
-    return Topology(ordered_nodes, ordered_edges)
+    unmet = tuple(
+        (standing.check.id, standing.reading.evidence, standing.reading.met is not None)
+        for standing in estate_posture(groups).unmet
+    )
+    return Topology(ordered_nodes, ordered_edges, unmet)
 
 
 def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:

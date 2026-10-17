@@ -1,0 +1,7 @@
+{% comment %}
+On a saved copy of HQ (SEVERINO_RENDERED_COPY), what a page says about the
+reader's connection describes the example visit the copy was rendered for. Every place
+that describes "you" includes this, so the copy never states it as the
+reader's. It asks the setting itself, so it works inside an ``only`` include.
+``notice`` for a panel, the short mark otherwise.
+{% endcomment %}{% load value_tags %}{% rendered_copy as copy %}{% if copy %}{% if notice %}<p class="notice example-connection"><strong>This is an example connection, not yours.</strong> The demo was saved from an example laptop on an example tailnet; this page is a saved copy.</p>{% else %}<span class="example-connection">example connection</span>{% endif %}{% endif %}

@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, model_validator
 
+from hq.platform.application.routes import reverse
+
 from ..connection_shapes import API_TOKEN
 from ..consoles import cloudflare_dashboard
 from ..credential_reads import REGISTRAR_READ
@@ -516,10 +518,10 @@ DNS_RECORD = ProviderSpec(
 
 ZONE = ProviderSpec(
     ZONE_KIND,
-    "A domain HQ manages. Only declared domains have their records managed, even if the connection can see more zones.",
+    "A domain HQ manages. HQ changes records only in domains added here.",
     CloudflareZoneSpec,
     actions={
-        "reconcile": locked("A domain has no settings to reconcile."),
+        "reconcile": locked("A domain has no settings to apply."),
     },
     label="Domain",
     home=lambda resource: named_page("zones:detail", resource, "zone"),
@@ -542,8 +544,69 @@ ZONE = ProviderSpec(
     ),
 )
 
-# Declarations only: the controller half is still the core's.
-DEFINITIONS = (DNS_RECORD, ZONE)
+CONTACT_INBOX_KIND = "cloudflare.contact_inbox"
+# The statuses the contact form's table holds a message in.
+ContactStatus = Literal["unread", "read", "replied", "archived", "spam"]
+# How many changes may wait for the controller at once. A change leaves the
+# declaration once the reading shows it applied, so this is a backlog the
+# controller has not caught up with, never a history.
+CONTACT_CHANGES_LIMIT = 200
+
+
+class ContactReview(ProviderModel):
+    id: int = Field(ge=1, title="Message")
+    status: ContactStatus = Field(title="Status")
+    assigned_to: str = Field(default="", max_length=120, title="Assigned to")
+    admin_notes: str = Field(default="", max_length=10000, title="Notes")
+
+
+class ContactInboxSpec(ProviderModel):
+    """Changes to a site's contact messages that the controller has yet to apply.
+
+    The messages live in a D1 database the public site writes to. HQ holds no
+    credential for it: the cloudflare_api connection reads them and applies
+    these changes, each one idempotent, so applying the list again changes
+    nothing.
+    """
+
+    connection_ref: str = Field(min_length=1, max_length=160, title="Connection")
+    account_id: str = Field(min_length=1, max_length=64, title="Account")
+    database_id: str = Field(min_length=1, max_length=64, title="Database")
+    reviews: tuple[ContactReview, ...] = Field(default=(), max_length=CONTACT_CHANGES_LIMIT, title="Reviews")
+    deletions: tuple[Annotated[int, Field(ge=1)], ...] = Field(
+        default=(), max_length=CONTACT_CHANGES_LIMIT, title="Deletions"
+    )
+
+
+def _contact_inbox_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
+    del status
+    return (
+        ("Reviews waiting", str(len(spec.get("reviews") or ())), ""),
+        ("Deletions waiting", str(len(spec.get("deletions") or ())), ""),
+    )
+
+
+CONTACT_INBOX = ProviderSpec(
+    CONTACT_INBOX_KIND,
+    "Changes you make to contact form messages, applied through the Cloudflare API connection.",
+    ContactInboxSpec,
+    actions={"reconcile": applies(automatic=True)},
+    label="Contact inbox",
+    home=lambda resource: reverse("contacts:list"),
+    connection_providers=("cloudflare_api",),
+    hostnames=None,
+    readout=_contact_inbox_readout,
+    name=lambda spec: "Contact inbox",
+    key_hint=lambda spec: "contact-inbox",
+    created_from="contacts",
+    unobserved_reason="The messages are read on Messages. This holds only your changes to them.",
+    removal_gap="Changes to messages are made on Messages.",
+    # Reviews carry the operator's notes on what people sent; only Messages,
+    # under the contacts capability, shows them.
+    withheld=True,
+)
+
+DEFINITIONS = (DNS_RECORD, ZONE, CONTACT_INBOX)
 
 SHARED = (
     SharedValue(
@@ -558,6 +621,24 @@ SHARED = (
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
 CONNECTIONS = {
-    "cloudflare_api": ConnectionKind("Cloudflare API", "scoped", API_TOKEN),
-    "cloudflare_dns": ConnectionKind("Cloudflare DNS", "scoped", API_TOKEN),
+    "cloudflare_api": ConnectionKind(
+        "Cloudflare API",
+        "scoped",
+        API_TOKEN,
+        create="A custom API token in the Cloudflare dashboard, under My Profile, API Tokens.",
+        create_url="https://dash.cloudflare.com/profile/api-tokens",
+        # Changing a contact message's status, notes or presence: the
+        # cloudflare.contact_inbox declaration.
+        writes=("D1 Write (account)",),
+        gives="Your site's visits and contact-form messages, its tunnels, Access apps and Pages projects.",
+    ),
+    "cloudflare_dns": ConnectionKind(
+        "Cloudflare DNS",
+        "scoped",
+        API_TOKEN,
+        create="A custom API token in the Cloudflare dashboard, under My Profile, API Tokens, limited to your zones.",
+        create_url="https://dash.cloudflare.com/profile/api-tokens",
+        writes=("DNS Write (zone)", "Zone Read (zone)"),
+        gives="Your domains and their public DNS records.",
+    ),
 }

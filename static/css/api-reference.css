@@ -14,9 +14,16 @@
 .content:has(> .api-reference) { max-width: none; padding: 0; overflow-x: visible; isolation: isolate; }
 .content > .api-reference { margin: 0; }
 
-/* Said until the viewer has mounted. */
-.api-reference-loading { margin: 0; padding: var(--content-pad); color: var(--muted); }
-.api-reference-loading:has(+ .api-reference:not(:empty)) { display: none; }
+/* Said until the viewer has mounted; one that has not mounted after a while
+   is said to have failed, with the document itself. Both lines share one
+   cell, and the change is a delayed step of the stylesheet, not a timer. */
+.api-reference-status { display: grid; padding: var(--content-pad); color: var(--muted); }
+.api-reference-status > p { grid-area: 1 / 1; margin: 0; }
+.api-reference-status:has(~ .api-reference:not(:empty)) { display: none; }
+.api-reference-loading { animation: api-reference-gone 0s 10s forwards; }
+.api-reference-failed { visibility: hidden; animation: api-reference-late 0s 10s forwards; }
+@keyframes api-reference-late { to { visibility: visible; } }
+@keyframes api-reference-gone { to { visibility: hidden; } }
 
 :root {
   --scalar-font: var(--font);
@@ -157,5 +164,5 @@
 
 /* Without script nothing is loading; the page says where the document is. */
 @media (scripting: none) {
-  .api-reference-loading { display: none; }
+  .api-reference-status { display: none; }
 }

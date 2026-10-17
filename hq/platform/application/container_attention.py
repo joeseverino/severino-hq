@@ -262,8 +262,8 @@ def _reach(running) -> tuple[str, str]:
 def _help(check_id: str) -> str:
     if check_id == "no-docker-socket":
         return (
-            "HQ cannot tell which Docker calls each needs, so it cannot write a socket proxy for it. "
-            "For a container that is meant to control Docker, say so and HQ stops warning about it."
+            "HQ cannot tell which Docker calls each one needs, so it cannot write a socket proxy. "
+            "Mark a container that is meant to control Docker, and HQ stops warning about it."
         )
     return "The compose change for each is on its page."
 

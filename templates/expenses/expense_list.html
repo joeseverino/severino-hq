@@ -9,4 +9,3 @@
   <td class="muted">{{ row.business_use_percentage }}%</td>
   <td>{{ row.estimated_deductible_amount|money }}</td>
 {% endblock %}
-{% block empty %}No expenses yet. <a href="{% url 'expenses:create' %}">New expense</a>{% endblock %}

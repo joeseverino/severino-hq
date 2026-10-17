@@ -49,7 +49,9 @@ python=python3
 # Keyed by checkout, so worktrees do not overwrite each other's database.
 key=$(printf '%s' "$repo_root" | cksum | cut -d' ' -f1)
 work="${XDG_CACHE_HOME:-$HOME/.cache}/severino-hq/scan-$key"
-src="$work/src"
+# One exported tree per gate set: `mise run ci` runs CodeQL and Scorecard in
+# parallel, and each deletes its tree before exporting.
+src="$work/src$(printf '%s' "$gates" | tr ' ' '-')"
 
 echo "[security] Exporting the tree to scan"
 rm -rf "$src"

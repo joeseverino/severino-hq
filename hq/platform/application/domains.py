@@ -307,7 +307,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             capabilities=_provider("hq.domains.contacts.specs:capabilities"),
             resources=_provider("hq.domains.contacts.specs:resources"),
             attention=_provider("hq.platform.application.attention:contacts"),
-            connections=_provider("hq.domains.contacts.d1:connection_specs"),
         ),
         apps=("hq.domains.contacts",),
         mounts=(Mount("contacts/", "hq.domains.contacts.urls"),),

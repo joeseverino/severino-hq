@@ -40,6 +40,7 @@ from .facts import (
 )
 from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
+from .mail_policy import is_null_mx
 from .timestamps import moment
 from .ui import ListRow, counted, ended
 from .zones import ZONE_KIND, ZoneInsight
@@ -128,9 +129,13 @@ def _overlays(joined) -> str:
         if item.facet or not item.spec.joins_hostnames:
             continue
         counts.setdefault(item.relation, set()).update(item.hostnames)
-    return " · ".join(
-        f"{len(names)} {relation[:1].lower()}{relation[1:]}" for relation, names in sorted(counts.items())
-    )
+    return " · ".join(f"{len(names)} {_mid_sentence(relation)}" for relation, names in sorted(counts.items()))
+
+
+def _mid_sentence(phrase: str) -> str:
+    """A phrase as it reads after a number: "Behind Access" lowercased, "DNS lookups" kept."""
+
+    return phrase if phrase[1:2].isupper() else phrase[:1].lower() + phrase[1:]
 
 
 def certificates(zone) -> ZoneInsight | None:
@@ -349,11 +354,15 @@ def email(zone) -> ZoneInsight | None:
             note="Next: publish v=spf1 -all and a DMARC p=reject record.",
         )
 
+    # A null MX names no server: the domain says it takes no mail.
+    refuses = is_null_mx(tuple(mail))
+    if refuses:
+        mail = []
     # Assembled as whole sentences rather than joined fragments: capitalising
     # a comma-joined list lowercases the acronyms and states nothing clearly.
     sentences = []
     if not mail:
-        sentences.append("Nothing accepts mail for this domain.")
+        sentences.append("A null MX says it takes no mail." if refuses else "Nothing accepts mail for this domain.")
     sentences.append("SPF is published." if spf else "No SPF record.")
     sentences.append(f"{_dmarc_policy(dmarc[0].content)}." if dmarc else "No DMARC record.")
     return ZoneInsight(
@@ -383,9 +392,8 @@ def leftover_challenges(zone) -> ZoneInsight | None:
         notice=True,
         value=f"{len(stale)} left behind",
         detail=(
-            "These are created while a certificate is being issued and removed "
-            "once it is. Ones still here were not cleaned up, and serve no "
-            "purpose."
+            "Made while a certificate is issued and normally removed after. "
+            "These were left behind and serve no purpose."
         ),
         concern=True,
     )

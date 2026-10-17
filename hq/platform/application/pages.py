@@ -74,6 +74,25 @@ class Page:
     navigation: PageNavigation | None = None
     # Where the page sits, as (label, url) pairs, when it is reached from a parent.
     trail: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    # What the page shows, by the names it is declared under
+    # (``application.page_reads``).
+    reads: tuple[str, ...] = ()
+
+    @property
+    def remedy(self) -> Any:
+        """What would fill the page while nothing has been read: the connection
+        that reads what it shows, else its own lead action. Asked only by an
+        empty state, so a full page never looks."""
+
+        from .page_reads import remedy
+
+        return (remedy(self.reads) if self.reads else None) or self.lead
+
+    @property
+    def lead(self) -> PageAction | None:
+        """The page's own way to add what it lists: its primary link."""
+
+        return next((action for action in self.actions if action.primary and action.method == "get"), None)
 
 
 def page_context(
@@ -83,6 +102,7 @@ def page_context(
     actions: Iterable[PageAction] = (),
     navigation: PageNavigation | None = None,
     trail: Iterable[tuple[str, str]] = (),
+    reads: Iterable[str] = (),
 ) -> dict[str, Page]:
     """``{"page": Page(...)}``, for a function view's ``render`` context."""
     return {
@@ -92,6 +112,7 @@ def page_context(
             actions=tuple(actions),
             navigation=navigation,
             trail=tuple(trail),
+            reads=tuple(reads),
         )
     }
 
@@ -114,6 +135,9 @@ class PageMixin(FragmentMixin):
 
     page_title = ""
     page_lede = ""
+    # What the page shows (``application.page_reads``), so an empty one can
+    # name the connection that would fill it.
+    page_reads: tuple[str, ...] = ()
 
     def get_page_title(self) -> str:
         return self.page_title
@@ -139,6 +163,7 @@ class PageMixin(FragmentMixin):
                 actions=self.get_page_actions(),
                 navigation=self.get_page_navigation(),
                 trail=self.get_page_trail(),
+                reads=self.page_reads,
             )
         )
         return context

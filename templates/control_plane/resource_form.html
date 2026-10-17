@@ -54,12 +54,10 @@ model validates the submission. Nothing here knows what kind of resource this is
       {% if resource %}
         {% for field in identity %}{% include "partials/_form_field.html" %}{% endfor %}
         {% if kind == "machine" %}
-          <div class="field checkbox-field">
-            <label for="id_show_on_dashboard">
-              <input id="id_show_on_dashboard" type="checkbox" name="show_on_dashboard"{% if show_on_dashboard %} checked{% endif %}>
-              Show on dashboard
-            </label>
-            <span class="help">Show this machine's CPU, memory and storage in the dashboard header.</span>
+          <div class="field">
+            <label for="id_show_on_dashboard">Show on dashboard</label>
+            <input id="id_show_on_dashboard" type="checkbox" name="show_on_dashboard"{% if show_on_dashboard %} checked{% endif %}>
+            <p class="help">Its CPU, memory and storage in the dashboard header.</p>
           </div>
         {% endif %}
       {% endif %}
@@ -73,13 +71,13 @@ model validates the submission. Nothing here knows what kind of resource this is
     to the page they were looking at, not the resource registry.
     {% endcomment %}
     <a class="btn" href="{{ cancel_url }}">Cancel</a>
+    {% comment %}
+    What saving does, said beside the button that does it, by the capability
+    registry rather than by this page: a flat promise here would be false for
+    every kind whose actions are locked, which is the one case where an
+    operator most needs to know that saving changes nothing.
+    {% endcomment %}
+    <span class="muted form-actions-note">{{ apply_note }}</span>
   </div>
 </form>
-
-{% comment %}
-Said by the capability registry rather than by this page. A flat promise
-here would be false for every kind whose actions are locked, which is the
-one case where an operator most needs to know that saving changes nothing.
-{% endcomment %}
-<p class="muted">{{ apply_note }}</p>
 {% endblock %}

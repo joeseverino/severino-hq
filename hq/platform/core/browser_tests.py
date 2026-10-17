@@ -42,6 +42,8 @@ OVERFLOW_WIDTHS = (PHONE_SCREEN[0], 820, 1360)
 # Every page, from the sparse estate and the dense one. The overflow and
 # density checks run all of them at OVERFLOW_WIDTHS.
 ALL_PAGES = (*PAGES, *DENSE_PAGES)
+# The pages that draw a route, sparse and dense.
+ROUTE_PAGES = ("service", "connections", "dense/service", "dense/connections")
 # How tall a table row may be, in lines of its own body text. The tallest row
 # the tables are designed for is a connection's: its name, endpoint, who holds
 # its secret, where it reaches from, and a closed "Can see" disclosure, one
@@ -93,8 +95,8 @@ SELECTORS = {
     "frame": ".card, .table-scroll",
     # What reaches across a frame besides its text.
     "frame_content": "img, svg, canvas, button, .btn, input, select, pre",
-    # Frames by design: a control, a chip, a path's steps, a diagram's nodes.
-    "frame_exempt": ".btn, .pill, .request-path li, .topology-node, label",
+    # Frames by design: a control, a chip, a diagram's nodes.
+    "frame_exempt": ".btn, .pill, .topology-node, label",
     # Everything inside a menu or a dialog, which float over the page.
     "frame_exempt_within": "dialog, [popover], [data-menu]",
     # The lead control renders first, so it is the one a narrow head keeps.
@@ -114,6 +116,16 @@ SELECTORS = {
     "disclosure": "main details:not([data-menu])",
     # Where the API reference mounts its viewer.
     "reference": "#api-reference-root",
+    # A band, and what in it is not a cell: a dialog a cell opens, its note.
+    "band": (
+        ":is(.control-summary, .service-band, .fact-band, .insight-grid, .sweep-grid, .machine-telemetry-metrics)"
+    ),
+    "band_aside": "dialog, .band-meta",
+    # A route's hops, and the map's lanes and the box that holds them.
+    "route": ".request-path",
+    "map": ".topology-map",
+    "map_lane": ".topology-lane",
+    "map_node": ".topology-node",
     # A band's cells. Stats inside a card are the one band laid out with real
     # gaps instead of padded cells, so the KPI band is not listed.
     "band_cell": (
@@ -139,6 +151,11 @@ AUDIT_RULES = {
     "seam-mismatch",
     "sentence-in-a-chip-row",
 }
+_AUDIT = (
+    "async () => { const audit = "
+    + AUDIT.read_text(encoding="utf-8").strip()
+    + ";\nreturn await audit({ evaluate: (probe) => probe() }); }"
+)
 
 # In-page probes. Each returns a list of findings; empty is the pass.
 _DESCRIBE = """
@@ -589,9 +606,8 @@ _CONTRAST = (
 # A band cell with no padding: its content touches the hairlines around it.
 # The frame rule zeroes the inset of anything nested in a surface, and a band
 # is one, so a component placed in a band loses its padding without a trace.
-# A frame across most of the page whose content stops short of half of it: a
-# short table stretched to the page, a card of one short line. The width is
-# the content's to set; a frame that is mostly empty says nothing with it.
+# A frame across most of the page whose content fills less than half of it (a
+# short table stretched wide, a one-line card): the content should set the width.
 _EMPTY_FRAMES = (
     "([selector, content]) => {"
     + _DESCRIBE
@@ -732,7 +748,11 @@ _UNPADDED_TILES = (
       const within = node.parentElement;
       if (within.closest(detached)) continue;
       if (within.closest(exempt) && !within.closest(control)) continue;
-      const box = node.parentElement.closest(control) || node;
+      // A control that draws no box (a bare glyph, its touch target hung
+      // into the padding) is measured by what it draws.
+      const pressed = node.parentElement.closest(control);
+      const drawn = pressed && (fill(pressed) || parseFloat(getComputedStyle(pressed).borderBottomWidth) > 0);
+      const box = drawn ? pressed : node;
       let at;
       if (box === node) { range.selectNodeContents(node); at = range.getBoundingClientRect(); }
       else at = box.getBoundingClientRect();
@@ -800,10 +820,11 @@ _SPILLED_LABELS = (
     + _DESCRIBE
     + """
   // A control is at least as wide as what it says. One sized for a glyph and
-  // given a word draws the word over whatever stands beside it.
+  // given a word draws the word over whatever stands beside it. One with no
+  // words has no label to spill: what reaches past it is a hit area.
   const found = [];
   for (const el of document.querySelectorAll(selector)) {
-    if (!el.checkVisibility()) continue;
+    if (!el.checkVisibility() || !el.textContent.trim()) continue;
     const style = getComputedStyle(el);
     if (style.overflowX !== 'visible' || style.display === 'inline') continue;
     if (el.scrollWidth > el.clientWidth + 1) {
@@ -815,6 +836,9 @@ _SPILLED_LABELS = (
 )
 
 _SETTLED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
+# Colours transition between palettes, so contrast is measured after the
+# transition ends.
+_FINISH_TRANSITIONS = """() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } })"""
 
 _UNSEEN_COLUMNS = (
     "(scroll) => {"
@@ -855,6 +879,9 @@ _MOVED_BY_SPEAKING = (
   const place = (el) => { const r = box(el); return [r.left, r.top, r.width, r.height].map(Math.round).join(' '); };
   const before = others.map(place);
   const was = size();
+  // Each control as it was drawn, to put back once it has been measured.
+  const drawn = asks.map((ask) => [ask, ask.dataset.askState,
+    ...[...ask.querySelectorAll('[data-ask-note], [data-ask-elapsed]')].map((el) => [el, el.hidden, [...el.childNodes]])]);
   for (const ask of asks) {
     ask.dataset.askState = 'running';
     ask.querySelector('[data-ask-note]').textContent = said;
@@ -881,6 +908,12 @@ _MOVED_BY_SPEAKING = (
       found.push(`${describe(note)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
     }
   }
+  // Back as it loaded, so the next probe reads the page the server drew.
+  for (const [ask, state, ...parts] of drawn) {
+    if (state === undefined) delete ask.dataset.askState; else ask.dataset.askState = state;
+    for (const [el, hidden, nodes] of parts) { el.replaceChildren(...nodes); el.hidden = hidden; }
+  }
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
   return found.slice(0, 10);
 }"""
 )
@@ -922,6 +955,99 @@ _READINGS = """(heads) => heads.map((head) => {
     size: getComputedStyle(lines[0].querySelector('strong') || lines[0]).fontSize,
   };
 })"""
+
+
+def reading_problems(readings):
+    """What breaks the readings' one shape: a line under the mark or cut short,
+    a mark off its lead, leads of two sizes, rows of different counts, second
+    lines at different depths."""
+
+    found = []
+    for reading in readings:
+        found.extend(f"under the mark: {line}" for line in reading["under_the_mark"])
+        found.extend(f"cut short: {line}" for line in reading["cut"])
+        if abs(reading["mark"] - reading["lead"]) > 3:
+            found.append(f"mark {reading['mark']} beside a lead at {reading['lead']}")
+    if len({reading["size"] for reading in readings}) > 1:
+        found.append(f"leads in {sorted({reading['size'] for reading in readings})}")
+    rows = {}
+    for reading in readings:
+        rows.setdefault(round(reading["top"]), []).append(reading)
+    if len({len(row) for row in rows.values()}) > 1:
+        found.append(f"rows of {[len(row) for row in rows.values()]}")
+    if len({reading["second"] for reading in readings if reading["second"]}) > 1:
+        found.append(f"second lines at {sorted({r['second'] for r in readings if r['second']})}")
+    return found
+
+
+# A band of up to six cells lays out as whole even rows: every row it wraps
+# to holds as many cells as the first (Design.md, "One band").
+_UNEVEN_BANDS = (
+    "([band, aside]) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + band)) {
+    if (!el.checkVisibility()) continue;
+    const cells = [...el.children].filter((cell) => !cell.matches(aside) && cell.checkVisibility());
+    if (cells.length < 2 || cells.length > 6) continue;
+    const rows = new Map();
+    for (const cell of cells) {
+      const top = Math.round(box(cell).top);
+      rows.set(top, (rows.get(top) || 0) + 1);
+    }
+    const counts = [...rows.values()];
+    if (new Set(counts).size > 1) found.push(`${describe(el)}: ${counts.join(' + ')}`);
+  }
+  return found;
+}"""
+)
+
+# A route is one row across its box or one column down it, never a row that
+# wrapped with its line running off the edge.
+_WRAPPED_ROUTES = (
+    "(route) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + route)) {
+    const hops = [...el.children].filter((hop) => hop.checkVisibility()).map(box);
+    if (hops.length < 2) continue;
+    const tops = new Set(hops.map((hop) => Math.round(hop.top)));
+    const lefts = new Set(hops.map((hop) => Math.round(hop.left)));
+    if (tops.size > 1 && lefts.size > 1) found.push(`${describe(el)}: ${tops.size} rows of hops`);
+  }
+  return found;
+}"""
+)
+
+# The map scrolls with the page, and draws no lane with nothing in it.
+_MAP = """([map, lane, node]) => {
+  const box = document.querySelector(map);
+  if (!box) return null;
+  return {
+    scrolls: ['auto', 'scroll'].includes(getComputedStyle(box).overflowY),
+    empty: [...box.querySelectorAll(lane)]
+      .filter((el) => el.checkVisibility() && !el.querySelector(node))
+      .map((el) => el.textContent.trim().slice(0, 30)),
+  };
+}"""
+
+# A table with a column of dashes, a column of marks with no words, and a
+# column of short words: the dashes are not drawn, the marks are, and no word
+# is split however the column's width rounds.
+_BLANK_PROBE = f"""<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="{settings.STATIC_URL}css/app.css">
+<script defer src="{settings.STATIC_URL}js/tables.js"></script>
+</head><body><main><div class="table-scroll"><table class="data-table">
+<thead><tr><th>Title</th><th>Type</th><th>Nothing</th><th>Runs</th><th>Note</th></tr></thead><tbody>
+<tr><td>Upgrade a container to a new release</td><td>Runbook</td><td><span class="empty-value">\u2013</span></td>
+<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>A sentence long enough to take the room it is given and wrap.</td></tr>
+<tr><td>Rotate the signing keys</td><td>Runbook</td><td>\u2013</td>
+<td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>Another sentence that wraps in its column.</td></tr>
+</tbody></table></div></main></body></html>"""
+_COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
+  .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""
 
 
 # A table with one row whose only clipped text is for screen readers, beside
@@ -1037,6 +1163,9 @@ SPEAKING_HEADS = {
     "head/words": "Two words",
     "head/name": "example-host.example.com",
 }
+# What a pressed control says about its work, short to long, and where.
+SAYINGS = ("Reading", "Reading example-host", "That could not be done. Try again in a minute.")
+SPEAKING_WIDTHS = (320, PHONE_SCREEN[0], 1360)
 
 
 # A shared component filled the way an extension's page fills it, which no host
@@ -1087,6 +1216,15 @@ def speaking_heads():
 
 
 class LayoutBrowserTests(BrowserGate):
+    """The layout rules over the stress estate.
+
+    Each page is opened once per width and per configuration (script off,
+    script on), and every rule that holds there is read off that one load,
+    each in a subtest named for the rule, the page and the width. The rules
+    that change the page (open its disclosures, dispatch a resize) run after
+    the ones that only read it.
+    """
+
     @classmethod
     def render(cls):
         with transaction.atomic():
@@ -1097,38 +1235,318 @@ class LayoutBrowserTests(BrowserGate):
             transaction.set_rollback(True)
         return pages | speaking_heads() | shared_parts()
 
-    def each(self, check):
-        """Run ``check(name)`` on every page at every width, one subtest each."""
+    def loaded(self, name, width, **where):
+        """Open ``name`` at ``width``; one that does not load fails once, not once per rule."""
 
-        for name in PAGES:
+        opened = False
+        # subTest records a failure and carries on, so `opened` stays False.
+        with self.subTest(page=name, width=width, **where):
+            self.open(name, width)
+            opened = True
+        return opened
+
+    def hold(self, name, width, rules, **where):
+        """Hold each rule on the page as it stands, one subtest each, in order."""
+
+        for rule in rules:
+            with self.subTest(rule=rule.__name__, page=name, width=width, **where):
+                rule(name)
+
+    def in_scheme(self, scheme):
+        """The same load in the other palette. Without script no animation
+        frame runs, so the colours are not waited for: they are finished."""
+
+        self.page.emulate_media(color_scheme=scheme)
+        self.page.evaluate(_FINISH_TRANSITIONS)
+
+    # Without script: the page as the server drew it. Layout must hold before
+    # progressive enhancement.
+
+    def unscripted_reads(self, name, width):
+        """The rules that only read the page: on the sparse estate's pages at
+        every WIDTHS width, and on every page at every OVERFLOW_WIDTHS width."""
+
+        rules = []
+        if name in PAGES and width in WIDTHS:
+            rules += [
+                self.every_stylesheet_loads,
+                self.nothing_escapes_the_page_sideways,
+                self.tables_scroll_inside_their_own_container,
+                self.grid_rows_end_together,
+                self.a_pill_never_wraps,
+                self.nothing_overlaps,
+                self.layout_audit_structural_rules,
+            ]
+        if width in OVERFLOW_WIDTHS:
+            rules += self.overflow_reads(name)
+        if width == PHONE_SCREEN[0]:
+            rules.append(self.a_narrow_head_keeps_its_lead_control_beside_the_title)
+        if width == OVERFLOW_WIDTHS[-1]:
+            rules.append(self.a_wide_frame_is_filled)
+        return rules
+
+    def overflow_reads(self, name):
+        rules = [
+            self.no_block_breaks_a_paragraph,
+            self.nothing_is_framed_inside_a_frame,
+            self.words_stay_inside_the_box_that_holds_them,
+            self.only_a_table_scrolls_sideways,
+            self.nothing_runs_out_of_its_table_cell,
+            self.a_table_row_stays_within_its_height_budget,
+            self.no_column_is_narrower_than_its_words,
+            self.a_link_sits_on_the_line_it_continues,
+            self.a_row_has_one_disclosure,
+            self.a_band_cell_keeps_its_padding,
+            self.a_band_lays_out_as_whole_rows,
+        ]
+        if name in DENSE_PAGES:
+            rules.append(self.dense_pages_keep_to_their_boxes)
+        if name in ROUTE_PAGES:
+            rules.append(self.a_route_is_one_row_or_one_column)
+        return rules
+
+    def unscripted_openings(self, name, width):
+        """The rules that open the page's disclosures, after every read."""
+
+        rules = []
+        if width in OVERFLOW_WIDTHS:
+            rules.append(self.a_filled_box_keeps_its_padding)
+        rules.append(self.open_every_disclosure)
+        if name in PAGES and width in WIDTHS:
+            rules.append(self.nothing_escapes_the_page_sideways_with_every_disclosure_open)
+        if width in OVERFLOW_WIDTHS:
+            rules.append(self.only_a_table_scrolls_sideways_with_every_disclosure_open)
+        return rules
+
+    def test_every_page_keeps_the_layout_rules_without_script(self):
+        for name in ALL_PAGES:
+            for width in sorted({*OVERFLOW_WIDTHS, *(WIDTHS if name in PAGES else ())}):
+                if not self.loaded(name, width):
+                    continue
+                self.hold(name, width, self.unscripted_reads(name, width))
+                if width in OVERFLOW_WIDTHS:
+                    self.in_scheme("dark")
+                    self.hold(name, width, [self.text_reads_in_the_dark_theme])
+                    self.in_scheme("light")
+                self.hold(name, width, self.unscripted_openings(name, width))
+
+    def test_a_shared_part_escapes_nothing_sideways(self):
+        """A component filled the way an extension fills it, closed and opened."""
+
+        for name in SHARED_PARTS:
             for width in WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    check(name)
+                if self.loaded(name, width):
+                    self.hold(
+                        name,
+                        width,
+                        [
+                            self.nothing_escapes_the_page_sideways,
+                            self.open_every_disclosure,
+                            self.nothing_escapes_the_page_sideways_with_every_disclosure_open,
+                        ],
+                    )
 
-    def across(self, check, pages=ALL_PAGES):
-        """Run ``check(name)`` on ``pages`` at every OVERFLOW_WIDTHS width."""
+    def every_stylesheet_loads(self, _name):
+        sheets = self.page.evaluate(_STYLESHEETS)
+        self.assertGreater(sheets["links"], 0)
+        self.assertEqual(sheets["loaded"], sheets["links"])
+        self.assertEqual(sheets["empty"], [])
 
-        for name in pages:
-            for width in OVERFLOW_WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    check(name)
+    def nothing_escapes_the_page_sideways(self, _name):
+        self.assertEqual(self.page.evaluate(_ESCAPES), [])
 
-    def boxes(self, key):
-        return self.page.locator(SELECTORS[key]).evaluate_all(
-            "elements => elements.map(e => { const r = e.getBoundingClientRect(); "
-            "return {top: r.top, bottom: r.bottom, left: r.left}; })"
+    def open_every_disclosure(self, _name):
+        """Every disclosure and popover open, for the rules that follow."""
+
+        self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
+
+    def nothing_escapes_the_page_sideways_with_every_disclosure_open(self, _name):
+        self.assertEqual(self.page.evaluate(_ESCAPES), [])
+
+    def no_block_breaks_a_paragraph(self, _name):
+        # A block written inside a <p> closes it early and leaves an empty <p>
+        # where its end tag was: the rest of the line falls out of it.
+        self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0)
+
+    def nothing_is_framed_inside_a_frame(self, _name):
+        self.assertEqual(
+            self.page.evaluate(_NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]]),
+            [],
         )
 
-    def test_every_stylesheet_loads(self):
-        def check(_name):
-            sheets = self.page.evaluate(_STYLESHEETS)
-            self.assertGreater(sheets["links"], 0)
-            self.assertEqual(sheets["loaded"], sheets["links"])
-            self.assertEqual(sheets["empty"], [])
+    def a_narrow_head_keeps_its_lead_control_beside_the_title(self, _name):
+        self.assertIn(
+            self.page.evaluate(_HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"]]),
+            (None, True),
+        )
 
-        self.each(check)
+    def words_stay_inside_the_box_that_holds_them(self, _name):
+        self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["control"]), [])
+        self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["cell_content"]), [])
+
+    def only_a_table_scrolls_sideways(self, _name):
+        """At a phone, tablet and laptop width; again with every disclosure open."""
+
+        self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+
+    def only_a_table_scrolls_sideways_with_every_disclosure_open(self, _name):
+        self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+
+    def nothing_runs_out_of_its_table_cell(self, _name):
+        self.assertEqual(self.page.evaluate(_CELLS), [])
+
+    def a_table_row_stays_within_its_height_budget(self, _name):
+        self.assertEqual(self.page.evaluate(_ROW_HEIGHTS, ROW_LINES), [])
+
+    def dense_pages_keep_to_their_boxes(self, _name):
+        """Nothing escapes, overlaps, or wraps a pill with production-sized data."""
+
+        self.assertEqual(self.page.evaluate(_ESCAPES), [])
+        self.assertEqual(self.page.evaluate(_OVERLAPS), [])
+        self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), [])
+
+    def tables_scroll_inside_their_own_container(self, name):
+        """On a phone a wide table scrolls sideways; it never stacks into cards."""
+
+        tables = self.page.evaluate(_TABLES)
+        self.assertEqual(tables["found"], [])
+        if "<table" in self.pages[name]:
+            self.assertGreater(tables["seen"], 0, "the probe measured nothing")
+
+    def grid_rows_end_together(self, _name):
+        self.assertEqual(self.page.evaluate(_PAIRS), [])
+
+    def a_pill_never_wraps(self, _name):
+        self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), [])
+
+    def nothing_overlaps(self, _name):
+        self.assertEqual(self.page.evaluate(_OVERLAPS), [])
+
+    def layout_audit_structural_rules(self, _name):
+        report = self.page.evaluate(_AUDIT)
+        self.assertEqual([v for v in report["violations"] if v["rule"] in AUDIT_RULES], [])
+
+    def text_reads_in_the_dark_theme(self, _name):
+        """Text clears WCAG AA on whatever it sits on, in the dark palette.
+
+        Colour lives in tokens and each token carries both palettes, so a
+        light-only colour can only come from a component that went round them.
+        The stylesheet test catches a literal; this catches the rest (a token
+        whose dark half was never checked, ink meant for one surface drawn on
+        another) by measuring what the browser actually paints.
+        """
+
+        self.assertEqual(self.page.evaluate("() => matchMedia('(prefers-color-scheme: dark)').matches"), True)
+        report = self.page.evaluate(_CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST])
+        self.assertGreater(report["sampled"], 0)
+        self.assertEqual(report["found"], [])
+
+    def a_filled_box_keeps_its_padding(self, _name):
+        """It opens every disclosure in the page to lay out what they hold."""
+
+        self.assertEqual(
+            self.page.evaluate(
+                _UNPADDED_TILES,
+                [
+                    SELECTORS["tile_exempt"],
+                    SELECTORS["tile_control"],
+                    SELECTORS["tile_detached"],
+                    SELECTORS["disclosure"],
+                ],
+            ),
+            [],
+        )
+
+    def no_column_is_narrower_than_its_words(self, _name):
+        self.assertEqual(self.page.evaluate(_BROKEN_WORDS), [])
+
+    def a_link_sits_on_the_line_it_continues(self, _name):
+        self.assertEqual(self.page.evaluate(_RAISED_LINKS), [])
+
+    def a_wide_frame_is_filled(self, _name):
+        self.assertEqual(self.page.evaluate(_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]]), [])
+
+    def a_row_has_one_disclosure(self, _name):
+        self.assertEqual(self.page.evaluate(_NESTED_DISCLOSURES), [])
+
+    def a_band_cell_keeps_its_padding(self, _name):
+        self.assertEqual(self.page.evaluate(_UNPADDED_CELLS, SELECTORS["band_cell"]), [])
+
+    def a_band_lays_out_as_whole_rows(self, _name):
+        self.assertEqual(self.page.evaluate(_UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]), [])
+
+    def a_route_is_one_row_or_one_column(self, _name):
+        self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
+
+    # With script: the page a person reads is the one its script has fitted.
+
+    def test_every_page_keeps_the_layout_rules_once_its_script_has_run(self):
+        """The rules that hold without script hold there too; pressing a
+        control moves nothing; a table fits its box with every disclosure open."""
+
+        self.start(java_script_enabled=True)
+        self.spoke = 0
+        for name in (*ALL_PAGES, *SPEAKING_HEADS):
+            widths = SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*OVERFLOW_WIDTHS, *SPEAKING_WIDTHS)
+            for width in sorted(set(widths)):
+                if not self.loaded(name, width, script="on"):
+                    continue
+                self.page.evaluate(_SETTLED)
+                if width in OVERFLOW_WIDTHS and name in ALL_PAGES:
+                    self.hold(name, width, self.scripted_reads(), script="on")
+                if width in SPEAKING_WIDTHS:
+                    self.pressing_a_control_moves_nothing(name, width)
+                if width in OVERFLOW_WIDTHS and name in ALL_PAGES:
+                    self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
+        self.assertGreater(self.spoke, len(SPEAKING_HEADS), "no page in the fixture has a control that speaks")
+
+    def scripted_reads(self):
+        return [
+            self.only_a_table_scrolls_sideways,
+            self.nothing_runs_out_of_its_table_cell,
+            self.no_column_is_narrower_than_its_words,
+            self.a_pill_never_wraps,
+            self.a_table_shares_its_width_only_with_columns_that_show,
+            self.words_stay_inside_the_box_that_holds_them,
+            self.a_tables_names_share_one_edge_whether_or_not_a_row_opens,
+        ]
+
+    def a_table_shares_its_width_only_with_columns_that_show(self, _name):
+        self.assertEqual(self.page.evaluate(_UNSEEN_COLUMNS, SELECTORS["table_scroll"]), [])
+
+    def a_tables_names_share_one_edge_whether_or_not_a_row_opens(self, _name):
+        """A row with a toggle and a row without start their names on the same
+        line down the column: the toggle has a gutter every row keeps.
+        """
+
+        for edges in self.page.evaluate(_NAME_EDGES, SELECTORS["table_scroll"]):
+            self.assertEqual(edges, 1)
+
+    def pressing_a_control_moves_nothing(self, name, width):
+        """Each saying is drawn and then taken back, so the next is measured
+        on the page as it loaded."""
+
+        for said in SAYINGS:
+            with self.subTest(rule="pressing_a_control_moves_nothing", page=name, width=width, said=said):
+                found = self.page.evaluate(_MOVED_BY_SPEAKING, [said, SELECTORS["spoken"]])
+                if found is None:
+                    continue
+                self.spoke += 1
+                self.assertEqual(found, [])
+
+    def a_table_fits_its_box_at_every_width(self, _name):
+        """Not only on a phone. A table wider than its box wraps, and where
+        wrapping would cramp it gives up columns from the far end, so nothing
+        a reader came for is off the edge at a tablet or a laptop width
+        either. Every page, with every disclosure open.
+        """
+
+        self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
+        self.page.evaluate("() => window.dispatchEvent(new Event('resize'))")
+        self.page.wait_for_timeout(200)
+        self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+
+    # Rules with a setup of their own.
 
     def assert_decision_face(self, row):
         """What a card means is on its face; only long steps fold, and one
@@ -1164,174 +1582,12 @@ class LayoutBrowserTests(BrowserGate):
                         self.assertTrue(action.is_visible())
                     self.assert_decision_face(row)
 
-    def test_nothing_escapes_the_page_sideways(self):
-        """Closed, and with every disclosure and popover open."""
-
-        def check(_name):
-            self.assertEqual(self.page.evaluate(_ESCAPES), [])
-            self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
-            self.assertEqual(self.page.evaluate(_ESCAPES), [])
-
-        self.each(check)
-        for name in SHARED_PARTS:
-            for width in WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    check(name)
-
     def test_every_selector_parses(self):
         authored = authored_selectors(Path(finders.find("css/app.css")).read_text())
         self.open(next(iter(PAGES)), OVERFLOW_WIDTHS[-1])
         kept = {_plain_selector(selector) for selector in self.page.evaluate(_KEPT_SELECTORS)}
 
         self.assertEqual([selector for selector in authored if _plain_selector(selector) not in kept], [])
-
-    def test_no_block_breaks_a_paragraph(self):
-        # A block written inside a <p> closes it early and leaves an empty <p>
-        # where its end tag was: the rest of the line falls out of it.
-        self.across(lambda _name: self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0))
-
-    def test_nothing_is_framed_inside_a_frame(self):
-        def check(_name):
-            self.assertEqual(
-                self.page.evaluate(_NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]]),
-                [],
-            )
-
-        self.across(check)
-
-    def test_a_narrow_head_keeps_its_lead_control_beside_the_title(self):
-        for name in ALL_PAGES:
-            with self.subTest(page=name):
-                self.open(name, PHONE_SCREEN[0])
-                self.assertIn(
-                    self.page.evaluate(_HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"]]),
-                    (None, True),
-                )
-
-    def scripted(self, check, pages=ALL_PAGES, widths=(PHONE_SCREEN[0], 820)):
-        """Run ``check(name)`` with the page's script on: the page as it is read."""
-
-        self.start(java_script_enabled=True)
-        for name in pages:
-            for width in widths:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    self.page.evaluate(_SETTLED)
-                    check(name)
-
-    def test_the_rules_hold_once_the_script_has_laid_the_page_out(self):
-        """The page a person reads is the one its script has fitted: the rules
-        that hold without script hold there too."""
-
-        def check(_name):
-            self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
-            self.assertEqual(self.page.evaluate(_CELLS), [])
-            self.assertEqual(self.page.evaluate(_BROKEN_WORDS), [])
-            self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), [])
-            self.assertEqual(self.page.evaluate(_UNSEEN_COLUMNS, SELECTORS["table_scroll"]), [])
-            self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["control"]), [])
-            self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["cell_content"]), [])
-
-        self.scripted(check, widths=(PHONE_SCREEN[0], 820, 1360))
-
-    def test_words_stay_inside_the_box_that_holds_them(self):
-        def check(_name):
-            self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["control"]), [])
-            self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["cell_content"]), [])
-
-        self.across(check)
-
-    def test_pressing_a_control_moves_nothing(self):
-        seen = 0
-        self.start(java_script_enabled=True)
-        for name in (*ALL_PAGES, *SPEAKING_HEADS):
-            for said in ("Reading", "Reading example-host", "That could not be done. Try again in a minute."):
-                for width in (320, PHONE_SCREEN[0], 1360):
-                    with self.subTest(page=name, said=said, width=width):
-                        self.open(name, width)
-                        found = self.page.evaluate(_MOVED_BY_SPEAKING, [said, SELECTORS["spoken"]])
-                        if found is None:
-                            continue
-                        seen += 1
-                        self.assertEqual(found, [])
-        self.assertGreater(seen, len(SPEAKING_HEADS), "no page in the fixture has a control that speaks")
-
-    def test_only_a_table_scrolls_sideways(self):
-        """At a phone, tablet and laptop width, with every disclosure open."""
-
-        def check(_name):
-            self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
-            self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
-            self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
-
-        self.across(check)
-
-    def test_nothing_runs_out_of_its_table_cell(self):
-        self.across(lambda _name: self.assertEqual(self.page.evaluate(_CELLS), []))
-
-    def test_a_table_row_stays_within_its_height_budget(self):
-        self.across(lambda _name: self.assertEqual(self.page.evaluate(_ROW_HEIGHTS, ROW_LINES), []))
-
-    def test_dense_pages_keep_to_their_boxes(self):
-        """Nothing escapes, overlaps, or wraps a pill with production-sized data."""
-
-        def check(_name):
-            self.assertEqual(self.page.evaluate(_ESCAPES), [])
-            self.assertEqual(self.page.evaluate(_OVERLAPS), [])
-            self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), [])
-
-        self.across(check, DENSE_PAGES)
-
-    def test_tables_scroll_inside_their_own_container(self):
-        """On a phone a wide table scrolls sideways; it never stacks into cards."""
-
-        def check(name):
-            tables = self.page.evaluate(_TABLES)
-            self.assertEqual(tables["found"], [])
-            if "<table" in self.pages[name]:
-                self.assertGreater(tables["seen"], 0, "the probe measured nothing")
-
-        self.each(check)
-
-    def test_grid_rows_end_together(self):
-        self.each(lambda _name: self.assertEqual(self.page.evaluate(_PAIRS), []))
-
-    def test_a_pill_never_wraps(self):
-        self.each(lambda _name: self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), []))
-
-    def test_nothing_overlaps(self):
-        self.each(lambda _name: self.assertEqual(self.page.evaluate(_OVERLAPS), []))
-
-    def test_layout_audit_structural_rules(self):
-        audit = AUDIT.read_text(encoding="utf-8").strip()
-        script = "async () => { const audit = " + audit + ";\nreturn await audit({ evaluate: (probe) => probe() }); }"
-
-        def check(_name):
-            report = self.page.evaluate(script)
-            self.assertEqual([v for v in report["violations"] if v["rule"] in AUDIT_RULES], [])
-
-        self.each(check)
-
-    def test_text_reads_in_the_dark_theme(self):
-        """Text clears WCAG AA on whatever it sits on, in the dark palette.
-
-        Colour lives in tokens and each token carries both palettes, so a
-        light-only colour can only come from a component that went round them.
-        The stylesheet test catches a literal; this catches the rest (a token
-        whose dark half was never checked, ink meant for one surface drawn on
-        another) by measuring what the browser actually paints.
-        """
-
-        self.start(color_scheme="dark")
-
-        def check(_name):
-            self.assertEqual(self.page.evaluate("() => matchMedia('(prefers-color-scheme: dark)').matches"), True)
-            report = self.page.evaluate(_CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST])
-            self.assertGreater(report["sampled"], 0)
-            self.assertEqual(report["found"], [])
-
-        self.across(check)
 
     def card_rows(self, key):
         """The cards of one dashboard grid, grouped by the row they sit on."""
@@ -1436,36 +1692,6 @@ class LayoutBrowserTests(BrowserGate):
             self.assertEqual(opened["columns"], closed["columns"])
             self.assertEqual(opened["rows"][1:], closed["rows"][1:])
 
-    def test_a_table_fits_its_box_at_every_width(self):
-        """Not only on a phone. A table wider than its box wraps, and where
-        wrapping would cramp it gives up columns from the far end, so nothing
-        a reader came for is off the edge at a tablet or a laptop width
-        either. Every page, with every disclosure open.
-        """
-
-        self.start(java_script_enabled=True)
-
-        def check(_name):
-            self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
-            self.page.evaluate("() => window.dispatchEvent(new Event('resize'))")
-            self.page.wait_for_timeout(200)
-            self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
-
-        self.across(check)
-
-    def test_a_tables_names_share_one_edge_whether_or_not_a_row_opens(self):
-        """A row with a toggle and a row without start their names on the same
-        line down the column: the toggle has a gutter every row keeps.
-        """
-
-        self.start(java_script_enabled=True)
-
-        def check(_name):
-            for edges in self.page.evaluate(_NAME_EDGES, SELECTORS["table_scroll"]):
-                self.assertEqual(edges, 1)
-
-        self.across(check)
-
     def test_any_table_sorts_by_a_heading(self):
         """A table whose server does not sort it sorts on the page: ascending,
         then descending, then as it came, each section keeping its own rows.
@@ -1503,51 +1729,30 @@ class LayoutBrowserTests(BrowserGate):
                 self.open("dashboard", width)
                 readings = self.page.locator(SELECTORS["readings"]).evaluate_all(_READINGS)
                 self.assertGreaterEqual(len(readings), 3)
-                for reading in readings:
-                    self.assertEqual(reading["under_the_mark"], [])
-                    self.assertEqual(reading["cut"], [])
-                    self.assertAlmostEqual(reading["mark"], reading["lead"], delta=3)
-                self.assertEqual(len({reading["size"] for reading in readings}), 1)
-                self.assertEqual(len({reading["second"] for reading in readings if reading["second"]}), 1)
+                self.assertEqual(reading_problems(readings), [])
 
-    def test_a_filled_box_keeps_its_padding(self):
-        self.across(
-            lambda _name: self.assertEqual(
-                self.page.evaluate(
-                    _UNPADDED_TILES,
-                    [
-                        SELECTORS["tile_exempt"],
-                        SELECTORS["tile_control"],
-                        SELECTORS["tile_detached"],
-                        SELECTORS["disclosure"],
-                    ],
-                ),
-                [],
-            )
-        )
+    def test_the_map_scrolls_with_the_page_and_draws_no_empty_lane(self):
+        for width in OVERFLOW_WIDTHS:
+            with self.subTest(width=width):
+                self.open("topology", width)
+                found = self.page.evaluate(_MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]])
+                self.assertIsNotNone(found)
+                self.assertFalse(found["scrolls"])
+                self.assertEqual(found["empty"], [])
 
-    def test_no_column_is_narrower_than_its_words(self):
-        self.across(lambda _name: self.assertEqual(self.page.evaluate(_BROKEN_WORDS), []))
-
-    def test_a_link_sits_on_the_line_it_continues(self):
-        self.across(lambda _name: self.assertEqual(self.page.evaluate(_RAISED_LINKS), []))
-
-    def test_a_wide_frame_is_filled(self):
-        for name in ALL_PAGES:
-            with self.subTest(page=name):
-                self.open(name, OVERFLOW_WIDTHS[-1])
-                self.assertEqual(
-                    self.page.evaluate(_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]]), []
-                )
-
-    def test_a_row_has_one_disclosure(self):
-        self.across(lambda _name: self.assertEqual(self.page.evaluate(_NESTED_DISCLOSURES), []))
-
-    def test_a_band_cell_keeps_its_padding(self):
-        def check(_name):
-            self.assertEqual(self.page.evaluate(_UNPADDED_CELLS, SELECTORS["band_cell"]), [])
-
-        self.across(check)
+    def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
+        self.start(java_script_enabled=True)
+        self.pages = {**self.pages, "blank-column-probe": _BLANK_PROBE}
+        for width in (PHONE_SCREEN[0], 820, 1360):
+            with self.subTest(width=width):
+                self.open("blank-column-probe", width)
+                self.page.evaluate(_SETTLED)
+                shown = self.page.evaluate(_COLUMNS_SHOWN)
+                self.assertNotIn("Nothing", shown)
+                self.assertIn("Title", shown)
+                if width > PHONE_SCREEN[0]:
+                    self.assertIn("Runs", shown)
+                self.assertEqual(self.page.evaluate(_BROKEN_WORDS), [])
 
 
 # The API reference: a vendored viewer mounted inside HQ's frame. Its markup is

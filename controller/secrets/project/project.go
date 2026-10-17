@@ -36,8 +36,10 @@ type Input struct {
 	// EnvItem is the title or identifier of the application environment item.
 	EnvItem string
 	Items   []connectapi.FullItem
-	// MinAppVariables is the fewest variables a real application environment has.
-	MinAppVariables int
+	// HoldsConnections reports whether the installed connections document holds
+	// any, or cannot be shown not to. If so, a read that resolves none keeps them,
+	// so an emptied vault never silently replaces a good inventory.
+	HoldsConnections bool
 }
 
 // File is one file of the controller's SSH directory.
@@ -53,7 +55,11 @@ type File struct {
 type Output struct {
 	AppEnv       []byte
 	AppVariables int
-	Document     connections.Document
+	// Withheld is why the connections, the identities and the signing keys
+	// were not rendered while the application environment was. Nil when the
+	// whole read was rendered.
+	Withheld error
+	Document connections.Document
 	// SSH holds known_hosts, each identity and its public half, and each
 	// signing key and its public half, sorted by name.
 	SSH         []File
@@ -139,10 +145,22 @@ func appEnvironment(input Input) ([]byte, int, error) {
 	if bytes.Contains(out.Bytes(), []byte("op://")) {
 		return nil, 0, refuse("Refusing: an unresolved reference survived injection.")
 	}
-	if count < input.MinAppVariables {
-		return nil, 0, refuse("Refusing suspiciously small app env (", strconv.Itoa(count), " vars) from 1Password.")
+	if missing := unset(input.Registry.RequiredAppVariables, seen); len(missing) > 0 {
+		return nil, 0, refuse("Refusing an application environment without ", strings.Join(missing, ", "), ".")
 	}
 	return out.Bytes(), count, nil
+}
+
+// unset is each required name not rendered, in the registry's order. Names
+// only: they are the registry's, never the item's values.
+func unset(required []string, rendered map[string]bool) []string {
+	var missing []string
+	for _, name := range required {
+		if !rendered[name] {
+			missing = append(missing, name)
+		}
+	}
+	return missing
 }
 
 // reservedPrefixes are the namespaces of what the launcher and the image set
@@ -314,6 +332,33 @@ func connection(input Input, item connectapi.FullItem) (*projected, error) {
 	return &projected{connection: found, prefix: prefix}, nil
 }
 
+// inventory is every connection item of the read, as one document. None is a
+// valid answer here; whether it may be installed is Project's to say.
+func inventory(input Input) (connections.Document, error) {
+	items := append([]connectapi.FullItem{}, input.Items...)
+	sort.Slice(items, func(i, j int) bool { return text(items[i].Id) < text(items[j].Id) })
+	refs, prefixes := map[string]bool{}, map[string]bool{}
+	document := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{}}
+	for _, item := range items {
+		found, err := connection(input, item)
+		if err != nil {
+			return connections.Document{}, err
+		}
+		if found == nil {
+			continue
+		}
+		if refs[found.connection.Ref] {
+			return connections.Document{}, refuse("More than one 1Password item declares connection_ref=", found.connection.Ref, ".")
+		}
+		if prefixes[found.prefix] {
+			return connections.Document{}, refuse("More than one connection declares the same env_prefix.")
+		}
+		refs[found.connection.Ref], prefixes[found.prefix] = true, true
+		document.Connections = append(document.Connections, found.connection)
+	}
+	return document, nil
+}
+
 // checkBootstrap accepts op://<vault>/<item> in a vault the renderer does not
 // read. One in the vault it reads is refused under every name that vault
 // answers to: a reader of that vault could then mint.
@@ -341,36 +386,22 @@ func checkBootstrap(vault Vault, ref, bootstrap string) error {
 }
 
 // Project renders one read of the vault. Any refusal refuses the whole render.
+// The one exception is a read that resolves no connection while connections
+// are installed: the application environment is rendered, and the rest is
+// withheld so the installed connections stay.
 func Project(input Input) (Output, error) {
 	var out Output
 	var err error
 	if out.AppEnv, out.AppVariables, err = appEnvironment(input); err != nil {
 		return Output{}, err
 	}
-	items := append([]connectapi.FullItem{}, input.Items...)
-	sort.Slice(items, func(i, j int) bool { return text(items[i].Id) < text(items[j].Id) })
-	refs, prefixes := map[string]bool{}, map[string]bool{}
-	document := connections.Document{SchemaVersion: connections.SchemaVersion}
-	for _, item := range items {
-		found, err := connection(input, item)
-		if err != nil {
-			return Output{}, err
-		}
-		if found == nil {
-			continue
-		}
-		if refs[found.connection.Ref] {
-			return Output{}, refuse("More than one 1Password item declares connection_ref=", found.connection.Ref, ".")
-		}
-		if prefixes[found.prefix] {
-			return Output{}, refuse("More than one connection declares the same env_prefix.")
-		}
-		refs[found.connection.Ref], prefixes[found.prefix] = true, true
-		document.Connections = append(document.Connections, found.connection)
+	document, err := inventory(input)
+	if err != nil {
+		return Output{}, err
 	}
-	// The renderer validates each connection; an empty inventory is also an error.
-	if len(document.Connections) == 0 {
-		return Output{}, refuse("Refusing a controller environment that resolved no connections.")
+	if len(document.Connections) == 0 && input.HoldsConnections {
+		out.Withheld = refuse("Refusing to replace the installed connections with a vault that resolved none; they are kept.")
+		return out, nil
 	}
 	// Encoded here, with the size bound the controller reads under, so a
 	// document it would refuse is a refusal of the vault's content and never

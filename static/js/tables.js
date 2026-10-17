@@ -155,6 +155,22 @@
   const NARROW_BOX = 640;
   // What each heading's column takes with every value on one line.
   const oneLine = new WeakMap();
+  // Hide a column that is a dash in every row. Never the column that names the
+  // row, nor one holding anything but a dash (a control, a mark, a drawing).
+  const blankCell = (cell) => EMPTY.test(cell.textContent)
+    && !cell.querySelector(":not(.empty-value, .empty-value *, br)");
+  const markBlank = (table) => {
+    delete table.dataset.blank;
+    const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
+    const rows = [...table.querySelectorAll(":scope > tbody > tr:not(.row-group):not(.row-detail)")]
+      .filter((row) => row.children.length === headings.length);
+    if (!rows.length) return;
+    const named = headings[0]?.classList.contains("select-column") ? 1 : 0;
+    const blank = headings
+      .map((heading, index) => index)
+      .filter((index) => index > named && rows.every((row) => blankCell(row.children[index])));
+    if (blank.length) table.dataset.blank = blank.map((index) => index + 1).join(" ");
+  };
   const fitTable = (table) => {
     const wrapper = table.parentElement;
     if (!wrapper?.classList.contains("table-scroll")) return;
@@ -172,6 +188,7 @@
     table.querySelectorAll(":scope > tbody > tr > [data-span]").forEach((cell) => {
       cell.colSpan = Number(cell.dataset.span);
     });
+    markBlank(table);
     const overflows = () => table.getBoundingClientRect().width > wrapper.clientWidth + 1;
     const all = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
     all.forEach((heading) => {
@@ -193,7 +210,7 @@
         const style = getComputedStyle(heading);
         const inset = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
         const floor = Math.min(wanted[index], index === named ? READABLE_NAME : READABLE);
-        heading.style.setProperty("--column-floor", `${Math.max(0, Math.floor(floor - inset))}px`);
+        heading.style.setProperty("--column-floor", `${Math.max(0, Math.ceil(floor - inset))}px`);
       });
       // Before any column leaves, identifiers are cut sooner: a long name in a
       // chip is whole again when its row is opened, and a column is not.

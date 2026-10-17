@@ -249,7 +249,7 @@ class AuthGateTests(TestCase):
     @override_settings(SEVERINO_OIDC_ENABLED=True)
     def test_login_page_shows_sso_button_when_enabled(self):
         response = self.client.get("/accounts/login/")
-        self.assertContains(response, "Sign in with Pocket ID")
+        self.assertContains(response, "Sign in with single sign-on")
 
 
 class SecurityBoundaryTests(TestCase):
@@ -659,14 +659,12 @@ class SearchPageTests(_AuthedTestCase):
         self.assertContains(response, 'aria-controls="modal-command-center"')
 
     def test_results_highlight_matches_and_skip_empty_scopes(self):
-        from unittest import mock
 
         Project.objects.create(
             name="Highlight target",
             description="global search rendering check",
         )
-        with mock.patch("hq.domains.contacts.d1.query", side_effect=AssertionError("search called D1")):
-            response = self.client.get("/search/", {"q": "highlight"})
+        response = self.client.get("/search/", {"q": "highlight"})
 
         content = response.content.decode()
         self.assertIn("<mark>", content)
@@ -676,8 +674,33 @@ class SearchPageTests(_AuthedTestCase):
         self.assertNotIn("Expenses</h2>", content)
 
 
+class EmptyListTests(_AuthedTestCase):
+    def test_an_empty_list_is_the_empty_state_and_no_table(self):
+        """Headings over no rows say nothing; the one empty state says what is missing."""
+
+        page = self.client.get(reverse("expenses:list"))
+
+        self.assertContains(page, "data-empty-state")
+        self.assertNotContains(page, '<table class="data-table"')
+
+    def test_a_list_emptied_by_its_filter_offers_the_way_back(self):
+        page = self.client.get(reverse("expenses:list"), {"q": "nothing-matches-this"})
+
+        self.assertContains(page, "Nothing matches.")
+        self.assertNotContains(page, '<table class="data-table"')
+
+
 class KeyColumnTests(_AuthedTestCase):
     """A list says which columns a phone keeps, on the heading, sortable or not."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # An empty list draws no table, so its headings need rows under them.
+        from hq.platform.core import example_estate
+
+        with example_estate.throwaway_media():
+            example_estate.seed()
 
     def test_a_sortable_heading_carries_its_columns_classes(self):
         page = self.client.get(reverse("expenses:list"))
@@ -792,9 +815,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
     def test_action_items_is_the_full_existing_queue_and_filters_it(self):
         ContentItem.objects.create(title="Unfinished post", status=ContentItem.Status.DRAFT)
 
-        with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")):
-            response = self.client.get("/action-items/")
-            filtered = self.client.get("/action-items/", {"status": "serious", "q": "draft"})
+        response = self.client.get("/action-items/")
+        filtered = self.client.get("/action-items/", {"status": "serious", "q": "draft"})
 
         self.assertContains(response, "1 draft is not published")
         self.assertContains(response, 'href="/content/?status=draft"')
@@ -807,13 +829,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
     def test_profile_count_is_lazy_off_dashboard(self):
         ContentItem.objects.create(title="Count me", status=ContentItem.Status.DRAFT)
 
-        with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")):
-            page = self.client.get("/projects/")
-        # The count is fetched after the page, which is where D1 is read again.
-        with (
-            patch("hq.domains.contacts.d1.get_dashboard_state", return_value=([], 0)),
-            patch("hq.platform.application.domains.extension_domains", return_value=()),
-        ):
+        page = self.client.get("/projects/")
+        with patch("hq.platform.application.domains.extension_domains", return_value=()):
             count = self.client.get("/action-items/count/")
 
         self.assertContains(page, "data-action-count hidden")
@@ -844,13 +861,16 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertContains(silent, "Last read")
 
     def test_the_dashboard_draws_its_contacts_without_waiting_on_d1(self):
-        from hq.domains.contacts import d1
-        from hq.platform.application import readings
+        from django.utils import timezone
 
-        row = {"id": 7, "name": "One call", "status": "unread", "created_at": "2026-08-23"}
-        readings.record(d1.UNREAD, {"count": 3, "rows": [row], "status": "ok"})
-        with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page called D1")):
-            page = self.client.get("/")
+        from hq.domains.control_plane.models import ProviderInventory
+
+        rows = [
+            {"id": 7, "name": "One call", "status": "unread", "created_at": "2026-08-23", "database_id": "example"},
+            *({"id": number, "status": "unread", "database_id": "example"} for number in (6, 5)),
+        ]
+        ProviderInventory.objects.create(kind="cloudflare.contact_submission", records=rows, observed_at=timezone.now())
+        page = self.client.get("/")
 
         # With the page, from the stored rows: nothing is fetched afterwards,
         # so no card appears and then changes.
@@ -862,8 +882,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertNotIn("data-fragment-load", main)
 
     def test_an_empty_contact_feed_draws_no_card(self):
-        with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page called D1")):
-            page = self.client.get("/")
+        page = self.client.get("/")
 
         self.assertNotContains(page, "<h2>Contacts</h2>")
 

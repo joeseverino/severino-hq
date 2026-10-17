@@ -70,9 +70,9 @@ class OnePasswordPublication(ProviderModel):
     item: str = Field(min_length=1, max_length=160)
 
 
-# A certbot lineage name: it becomes --cert-name and a directory under live/.
-# A shared value (``SHARED``): the controller checks the same pattern where
-# the name reaches certbot.
+# A certificate's lineage name: the directory under live/ its certificate and
+# key are kept in. A shared value (``SHARED``): the controller checks the same
+# pattern where the name becomes a path.
 CERTIFICATE_NAME_PATTERN = r"^[a-z0-9][a-z0-9-]*$"
 CERTIFICATE_NAME_LENGTH = 160
 
@@ -113,7 +113,7 @@ class TLSCertificateSpec(ProviderModel):
         le=60,
         title="Renew this many days early",
         description=(
-            "Days before expiry that renewal starts. HQ also renews at once if a consumer serves the wrong certificate."
+            "Days before expiry that renewal starts. HQ also renews at once if a site serves the wrong certificate."
         ),
     )
 
@@ -149,16 +149,16 @@ class ResolvedTLSCertificateSpec(ProviderModel):
     def normalize_domains(cls, domains: list[str]) -> list[str]:
         normalized = [normalized_hostname(domain) for domain in domains]
         if any(not domain or " " in domain for domain in normalized):
-            raise ValueError("Certificate domains must be non-empty DNS names.")
+            raise ValueError("Each domain must be a DNS name.")
         if len(normalized) != len(set(normalized)):
-            raise ValueError("Certificate domains must be unique.")
+            raise ValueError("Each domain can be listed only once.")
         return normalized
 
     @model_validator(mode="after")
     def validate_consumers(self) -> ResolvedTLSCertificateSpec:
         identities = [(consumer.kind, consumer.name) for consumer in self.consumers]
         if len(identities) != len(set(identities)):
-            raise ValueError("TLS consumer kind/name pairs must be unique.")
+            raise ValueError("Each place it is installed can be listed only once.")
 
         covered = set(self.domains)
         for consumer in self.consumers:
@@ -166,9 +166,7 @@ class ResolvedTLSCertificateSpec(ProviderModel):
                 continue
             uncovered = [domain for domain in consumer.install_domains if not certificate_covers(domain, covered)]
             if uncovered:
-                raise ValueError(
-                    "cPanel install domains must be present in certificate domains: " + ", ".join(uncovered)
-                )
+                raise ValueError("These cPanel names are not among the certificate's domains: " + ", ".join(uncovered))
         return self
 
 
@@ -464,9 +462,7 @@ CERTIFICATE = ProviderSpec(
     hostnames=_certificate_hostnames,
     seed=_certificate_seed,
     covers=True,
-    unobserved_reason=(
-        "No sweep reads certificates. HQ updates this record when it issues or installs the certificate."
-    ),
+    unobserved_reason=("HQ updates this when it issues or installs the certificate."),
     removal_gap=("The controller cannot delete certificates yet, so renewals would not stop."),
 )
 
@@ -490,7 +486,7 @@ UPLOADED_CERTIFICATE = ProviderSpec(
     hostnames=_uploaded_certificate_hostnames,
     covers=True,
     readout=_uploaded_certificate_readout,
-    unobserved_reason=("HQ stores the file. Installs are checked when the certificate is reconciled."),
+    unobserved_reason=("HQ stores the file and checks each install when it applies the certificate."),
 )
 
 # Declarations only: the controller half is still the core's.
@@ -510,9 +506,9 @@ SHARED = (
     SharedValue(
         "TLSCertificateName",
         Annotated[str, Field(max_length=CERTIFICATE_NAME_LENGTH, pattern=CERTIFICATE_NAME_PATTERN)],
-        "A certbot lineage name: it becomes --cert-name and a directory under live/. "
-        "HQ's tls.certificate declaration validates with it and the controller checks "
-        "it again where it reaches certbot's argv and a path.",
+        "A certificate's lineage name: the directory under live/ its certificate and key "
+        "are kept in. HQ's tls.certificate declaration validates with it and the controller "
+        "checks it again where it becomes a path.",
     ),
     SharedValue(
         "TLSConsumerKind",

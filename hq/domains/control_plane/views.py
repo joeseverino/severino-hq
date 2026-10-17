@@ -4,7 +4,7 @@ from functools import cached_property
 from typing import Any, override
 
 from django.contrib import messages
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import DetailView, ListView
@@ -23,7 +23,9 @@ from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
+    DESTRUCTIVE_VERBS,
     VERB_LABELS,
+    Allowed,
     resource_capabilities,
 )
 from hq.platform.application.resource_context import (
@@ -59,7 +61,7 @@ from hq.platform.core.templatetags.nav_tags import returning_to
 from .models import ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
-from .providers import PROVIDERS, describe_providers
+from .providers import PROVIDERS, describe_providers, shown_spec
 
 # Which use case serves which verb. A table rather than a fall-through, so a
 # lifecycle verb such as Restart never reaches reconciliation, which is locked
@@ -130,7 +132,7 @@ def _spec_rows(resource, *, beside_readout: bool = False) -> dict[str, tuple[tup
         said.update(service_hostnames(resource.kind, resource.spec))
     primary: list[tuple[str, str]] = []
     advanced: list[tuple[str, str]] = []
-    for name, value in resource.spec.items():
+    for name, value in shown_spec(resource.kind, resource.spec).items():
         # A reported field's setting is the fixed goal its readout already states.
         if value is None or name in provider.reported_fields:
             continue
@@ -304,9 +306,12 @@ class InfrastructureListView(PageMixin, ListView):
             resource.origin_machine = origin_machine(resource, machines, at, targets)
             # What it is, in the provider's own words.
             rows = readout_rows(resource)
-            resource.summary = rows[0][1] or rows[0][2] if rows else ""
-            # The name the row's link shows, so the line under it never repeats it.
+            # The name the row's link shows, and the line under it only when it
+            # adds something: "a → 10.0.0.10:80" needs no "http://10.0.0.10:80".
             resource.shown_name = record_name(resource.kind, resource.spec, resource.key)
+            summary = rows[0][1] or rows[0][2] if rows else ""
+            bare = summary.rpartition("://")[2]
+            resource.summary = "" if bare in resource.shown_name else summary
         context["changes"] = [
             {
                 "resource": operation.resource.key,
@@ -434,13 +439,14 @@ class InfrastructureDetailView(PageMixin, DetailView):
             **({"reconcile": "Restore HQ's version"} if drifted else {}),
         }
         actions = [
-            PageAction(
-                labels[verb],
-                reverse(f"control_plane:{verb}", args=[key]),
-                method="post",
-                primary=verb == "renew",
-                disabled=not allowed.enabled,
+            verb_action(
+                verb,
+                key,
+                allowed,
+                label=labels[verb],
                 title="" if allowed.enabled else allowed.reason,
+                origin=self.request.get_full_path(),
+                primary=verb == "renew",
             )
             for verb, allowed in capabilities.page_actions
         ]
@@ -561,6 +567,18 @@ OPERATION_PHRASE = {
 }
 
 
+def verb_action(
+    verb: str, key: str, allowed: Allowed, *, label: str, title: str, origin: str, primary: bool = False
+) -> PageAction:
+    """One of a resource's verbs as a head control. A destructive one opens its
+    confirmation, named, and comes back to ``origin``; the rest post at once."""
+
+    url = reverse(f"control_plane:{verb}", args=[key])
+    if verb in DESTRUCTIVE_VERBS:
+        return PageAction(label, returning_to(url, origin), danger=True, disabled=not allowed.enabled, title=title)
+    return PageAction(label, url, method="post", primary=primary, disabled=not allowed.enabled, title=title)
+
+
 class OperationView(View):
     """Ask the controller for one action on one resource.
 
@@ -570,6 +588,28 @@ class OperationView(View):
     """
 
     action = OperationRequest.Action.RECONCILE
+
+    def get(self, request, key):
+        """A destructive verb's confirmation, naming what stops; any other verb only posts."""
+
+        if self.action not in DESTRUCTIVE_VERBS:
+            return HttpResponseNotAllowed(["POST"])
+        resource = get_object_or_404(ManagedResource, key=key)
+        name = record_name(resource.kind, resource.spec, resource.key)
+        label = f"{VERB_LABELS[self.action]} {name}"
+        return render(
+            request,
+            "control_plane/resource_confirm_verb.html",
+            {
+                "name": name,
+                "confirm": {
+                    "url": request.get_full_path(),
+                    "label": label,
+                    "cancel_url": safe_next(request, fallback=resource.get_absolute_url()),
+                },
+                **page_context(f"{label}?", kind_label(resource.kind)),
+            },
+        )
 
     def post(self, request, key):
         resource = get_object_or_404(ManagedResource, key=key)

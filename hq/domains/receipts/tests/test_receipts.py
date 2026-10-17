@@ -70,6 +70,14 @@ class ReceiptLinkTests(TestCase):
         self.assertEqual(response.context["form"].initial["vendor"], "Example Host")
         self.assertEqual(response.context["form"].initial["total_cost"], "12.00")
 
+    def test_the_edit_form_links_the_current_file_through_the_protected_view(self):
+        receipt = _receipt(original_filename="scan.pdf")
+
+        response = self.client.get(reverse("receipts:edit", args=[receipt.pk]))
+
+        self.assertContains(response, f'<a href="{reverse("receipts:file", args=[receipt.pk])}">scan.pdf</a>')
+        self.assertNotContains(response, "/_internal-media/")
+
 
 class ReceiptFileRuleTests(SimpleTestCase):
     def test_a_file_over_the_limit_is_refused_in_megabytes(self):

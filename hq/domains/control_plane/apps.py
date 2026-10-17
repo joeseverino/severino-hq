@@ -29,6 +29,7 @@ class ControlPlaneConfig(AppConfig):
             # reporting that it looked, not the world reporting that it moved.
             observation=("last_observed_at",),
             connection=_resource_connection,
+            redact_for=_withheld_fields,
         )
         register_audit(
             OperationRequest,
@@ -41,6 +42,14 @@ class ControlPlaneConfig(AppConfig):
         register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL)
         # Who asked for a connection to be read now, and when.
         register_audit(ReadRequest, "Read request", connection=lambda request: request.connection_ref)
+
+
+def _withheld_fields(resource) -> tuple[str, ...]:
+    """The spec of a withheld kind is logged as changed, never with its values."""
+
+    from .providers import spec_withheld
+
+    return ("spec",) if spec_withheld(resource.kind) else ()
 
 
 def _resource_connection(resource) -> str:

@@ -1,15 +1,32 @@
 """Static assets: collected and compressed once at image build, served natively over ASGI."""
 
+import re
 from pathlib import Path
 from typing import override
 
 from django.conf import settings
 from django.contrib.staticfiles import finders
 from django.contrib.staticfiles.storage import staticfiles_storage
+from django.core.files.base import ContentFile
+from rjsmin import jsmin
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
 from starlette.staticfiles import StaticFiles
 from whitenoise.storage import CompressedManifestStaticFilesStorage
+
+# A quoted string (kept whole, so a "/*" in one is not a comment) or a comment.
+# A comment that opens "/*!" is a licence, and is kept.
+_CSS_STRING_OR_COMMENT = re.compile(r"""("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|/\*(?!!).*?\*/""", re.DOTALL)
+
+
+def without_comments(css: str) -> str:
+    """A stylesheet without its comments or the blank lines they leave.
+
+    Line breaks stay, so the served file still reads rule by rule in the inspector.
+    """
+
+    kept = _CSS_STRING_OR_COMMENT.sub(lambda found: found.group(1) or "", css)
+    return "".join(line.rstrip() + "\n" for line in kept.splitlines() if line.strip())
 
 
 class HashedStaticStorage(CompressedManifestStaticFilesStorage):
@@ -22,6 +39,18 @@ class HashedStaticStorage(CompressedManifestStaticFilesStorage):
     """
 
     manifest_strict = False
+
+    @override
+    def _save(self, name, content):
+        # collectstatic writes every copy through here, so the hash and the gzip
+        # copy match the bytes served.
+        if name.endswith((".css", ".js")) and not name.startswith("vendor/"):
+            # Rewound first: hashing the file read it to its end.
+            content.seek(0)
+            text = content.read().decode()
+            served = without_comments(text) if name.endswith(".css") else jsmin(text, keep_bang_comments=True)
+            content = ContentFile(served.encode())
+        return super()._save(name, content)
 
     @override
     def stored_name(self, name):

@@ -10,7 +10,7 @@ Install [mise](https://mise.jdx.dev) and uv. mise reads the uv pin from
 `pyproject.toml`, so it also needs a `python3` on the PATH.
 
 ```sh
-git clone https://github.com/<owner>/severino-hq.git
+git clone https://github.com/joeseverino/severino-hq.git
 cd severino-hq
 mise install
 export DJANGO_DEBUG=1
@@ -20,11 +20,14 @@ uv run --locked python manage.py seed_demo
 mise run dev
 ```
 
-Open <http://127.0.0.1:8000/> and sign in. `seed_demo` is optional demo data.
+Open <http://127.0.0.1:8000/> and sign in. `seed_demo` is optional: it fills
+the database with the example estate, the same homelab the public demo shows
+(`hq/platform/core/example_estate/`), and refuses a database that already holds
+records rather than merging into it.
 `mise run dev` collects versioned assets and runs Uvicorn with reload, on the
 same ASGI path as production, so local browser checks exercise compression,
 cache headers and routing. With `DJANGO_DEBUG` off, settings refuse to load
-without a real `DJANGO_SECRET_KEY`, which is why local commands set it on;
+without a real `DJANGO_SECRET_KEY`, so local commands turn it on;
 `mise run dev` sets it itself. Nothing reads a `.env` file: `.env.example` is
 the production template, rendered by the host and named by
 `SEVERINO_APP_ENV_PATH` ([Deployment](Deployment.md)).
@@ -58,7 +61,8 @@ destination. The extension set for the composed suite is named in a gitignored
 `HQ_LOCAL_PLUGINS` (which to enable). Without it the composed pass says it did
 not run, and covers less.
 
-The suite runs in parallel. `CHECK_PARALLEL=1 mise run fast` rules
+The suite runs in parallel, one worker per core (per performance core on
+Apple silicon; `DJANGO_TEST_PROCESSES` overrides it). `CHECK_PARALLEL=1 mise run fast` rules
 parallelism out when a failure looks order-dependent; install `tblib` to see
 the real error from a parallel worker.
 
@@ -84,7 +88,8 @@ each pin lives. Beyond those:
 ### Browser layout
 
 `mise run browser` installs the WebKit the locked Playwright pins (HQ is read
-in Safari) and runs `hq.platform.core.browser_tests`. It renders the
+in Safari) and runs `hq.platform.core.browser_tests` and
+`hq.platform.core.estate_browser_tests`. It renders the
 dashboard, service, connections, machine, topology and project pages over a
 synthetic `example.*` estate at phone through desktop widths, with JavaScript
 off, and checks that nothing escapes the page sideways, tables scroll in their
@@ -92,8 +97,18 @@ own container, grid rows end together, siblings never overlap, and the rules
 of `scripts/layout-audit.js` hold. A failure saves a screenshot to the OS
 temporary directory. A check selects markup only through `SELECTORS`, and
 `hq/platform/core/tests/test_browser_selectors.py` fails on a selector no
-template renders. `HQ_BROWSER_ENGINE=chromium` or `firefox` runs the same
-assertions in another engine.
+template renders.
+
+It runs those checks on two estates.
+The stress estate (`build_estate()` in
+`hq/platform/core/tests/test_browser_fixtures.py`) breaks things on purpose:
+long names, many rows, every state at once, on the pages it was built for.
+The example estate (`hq/platform/core/example_estate/`, the homelab the demo
+and `seed_demo` show) is read by `hq.platform.core.estate_browser_tests` on
+every page the navigation declares, with script on and deferred parts loaded,
+at 402, 820, 1360 and 1680 pixels, in the light palette and the dark. A
+finding names its check, page, width and theme.
+`HQ_BROWSER_ENGINE=chromium` or `firefox` runs both in another engine.
 
 ### Debug toolbar
 

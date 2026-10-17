@@ -131,7 +131,7 @@ class PublicLogTests(SimpleTestCase):
         for path in (WORKFLOWS / "compose.yml", ROOT / "composition" / "Dockerfile"):
             with self.subTest(path=path.name):
                 self.assertNotIn("PLUGIN_WHEEL_DIGESTS", path.read_text())
-        self.assertIn("build/composition/digests /tmp/plugin/", (ROOT / "composition" / "Dockerfile").read_text())
+        self.assertIn("COPY build/composition/ /tmp/plugin/", (ROOT / "composition" / "Dockerfile").read_text())
 
     def test_sealed_logs_are_encrypted_to_a_post_quantum_key(self):
         pins = (ROOT / "scripts" / "toolchain.env").read_text()
@@ -195,6 +195,30 @@ class CoordinatedBranchTests(SimpleTestCase):
                     "steps.coordinated.outputs.found != 'true'",
                     self.steps[named(self.steps, name)],
                 )
+
+    def test_the_runner_holds_no_registry_credential_and_verifies_nothing_root_does_not(self):
+        # Root's hq-host verifies the signature; the runner is what it distrusts.
+        for absent in ("cosign", ".docker/config.json", "actions/checkout", "contents: read"):
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, self.deploy_job)
+        self.assertIn("| sudo /usr/local/lib/severino-hq/scripts/deploy-image.sh", self.deploy_job)
+
+    def test_an_empty_composition_set_is_allowed_and_a_missing_one_is_not(self):
+        read = self.steps[named(self.steps, "Read the composition set")]
+        self.assertIn('if [ -z "${COMPOSITION_EXTENSIONS:-}" ]; then', read)
+        self.assertIn('.extensions | type == "array"', read)
+        self.assertNotIn(".extensions | length", read)
+
+    def test_retired_extensions_reach_the_image_and_are_masked(self):
+        merge = self.steps[named(self.steps, "Merge locks and stage the build context")]
+        self.assertIn("> build/composition/plugin-retired.json", merge)
+        self.assertIn(
+            "(.retired // [])[]", self.steps[named(self.steps, "Mask the extension names for the rest of the job")]
+        )
+        self.assertIn(
+            "COPY build/composition/plugin-retired.json /opt/severino/plugin-retired.json",
+            (ROOT / "composition" / "Dockerfile").read_text(),
+        )
 
     def test_candidates_are_built_on_hosted_runners_and_never_deployed(self):
         self.assertEqual(re.findall(r"(?m)^    runs-on: (.*)$", self.compose_job), ["ubuntu-24.04"])
@@ -328,6 +352,34 @@ class ComposeCandidateTests(SimpleTestCase):
             code, output = self.run_main(
                 "--entry", self.entry(), "--wheel", str(alpha), "--out", str(self.root / "out")
             )
+        self.assertEqual(code, 1)
+        self.assertEqual(output, {})
+
+    def test_a_composition_of_no_extensions_is_the_host_alone(self):
+        out = self.root / "out"
+        code, output = self.run_main("--policy-sha256", "a" * 64, "--out", str(out))
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            json.loads((out / "plugin-lock.json").read_text()),
+            {"schema_version": 1, "host": "severino-hq", "plugins": []},
+        )
+        self.assertEqual(output["references"], "\n")
+        self.assertEqual(output["policy-sha256"], f"{'a' * 64}\n")
+        self.assertEqual(list(out.glob("*.whl")), [])
+
+    def test_a_composition_of_no_extensions_must_state_its_policy(self):
+        for argv in ((), ("--policy-sha256", "not-a-digest")):
+            with self.subTest(argv=argv):
+                code, output = self.run_main(*argv, "--out", str(self.root / "out"))
+                self.assertEqual(code, 1)
+                self.assertEqual(output, {})
+
+    def test_an_admission_under_another_policy_than_the_compositions_is_refused(self):
+        alpha = self.wheel("example_alpha-2.0-py3-none-any.whl")
+        self.cordon([self.admitted(alpha, policy="b" * 64)])
+        code, output = self.run_main(
+            "--policy-sha256", "a" * 64, "--entry", self.entry(), "--wheel", str(alpha), "--out", str(self.root / "out")
+        )
         self.assertEqual(code, 1)
         self.assertEqual(output, {})
 

@@ -55,14 +55,16 @@ alphabetical is the order and there is nothing to move.
                 {% comment %}
                 Declarations first. The certificate is the one the path presents
                 to a client (the edge's for a proxied name, the proxy's for a
-                tailnet name); every other facet adds one line per kind of reading.
+                tailnet name), named by its issuer; by its own name only when no
+                declaration above already names it. Every other facet adds one
+                line per kind of reading.
                 {% endcomment %}
                 {% for claim in facet.claims %}
                   {% entity claim.within_service code=True %}{% if not forloop.last or facet.readings or facet.id == certificate_facet %}<br>{% endif %}
                 {% endfor %}
                 {% if facet.id == certificate_facet %}
                   {% with certificate=service.path.certificate %}
-                    {% if certificate %}<span title="{{ certificate.statement }}">{{ certificate.role }}{% if certificate.name or certificate.issuer %} <span class="muted">· {% firstof certificate.issuer certificate.name %}</span>{% elif certificate.unread %} <span class="muted">· not read</span>{% endif %}</span>{% elif not facet.claims %}{% empty_value %}{% endif %}
+                    {% if certificate %}<span title="{{ certificate.statement }}">{{ certificate.role }}{% if certificate.issuer %} <span class="muted">· {{ certificate.issuer }}</span>{% elif certificate.name and not facet.claims %} <span class="muted">· {{ certificate.name }}</span>{% elif certificate.unread %} <span class="muted">· not read</span>{% endif %}</span>{% elif not facet.claims %}{% empty_value %}{% endif %}
                   {% endwith %}
                 {% else %}
                   {% for line in facet.reading_lines %}
@@ -103,7 +105,7 @@ alphabetical is the order and there is nothing to move.
     </tbody>
     {% empty %}
     <tbody>
-      <tr><td colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}">{% include "partials/_empty_state.html" with compact=True message=empty_message action_url=start_url action_label="Publish a service" %}</td></tr>
+      <tr><td colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}">{% include "partials/_empty_state.html" with message=empty_message action_url=start_url action_label="Publish a service" %}</td></tr>
     </tbody>
     {% endfor %}
   </table>

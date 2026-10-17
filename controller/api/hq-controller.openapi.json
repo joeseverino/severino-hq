@@ -1983,7 +1983,7 @@
       },
       "TLSCertificateDomain": {
         "type": "string",
-        "description": "A domain certbot is asked for: DNS labels, optionally under one wildcard. The controller checks it where it reaches certbot's argv.",
+        "description": "A domain a certificate order asks for: DNS labels, optionally under one wildcard. The controller checks it again before it reaches an order or a challenge record name.",
         "pattern": "^(\\*\\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
       },
       "ConditionType": {
@@ -2459,6 +2459,94 @@
         "pattern": "^\\s*(\\d{1,3})\\s+(issue|issuewild|iodef)\\s+\"([^\"]*)\"\\s*$",
         "type": "string",
         "description": "A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it."
+      },
+      "CloudflareContactSubmissionRecord": {
+        "description": "One message from a site's contact form, a row of its D1 table. The database is named on each row because the reader reads every database that holds the table, and HQ picks the inbox among them.",
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "database_id": {
+            "default": "",
+            "type": "string"
+          },
+          "database": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "created_at": {
+            "default": "",
+            "type": "string"
+          },
+          "updated_at": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "email": {
+            "default": "",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "assigned_to": {
+            "default": "",
+            "type": "string"
+          },
+          "admin_notes": {
+            "default": "",
+            "type": "string"
+          },
+          "country": {
+            "default": "",
+            "type": "string"
+          },
+          "ip_address": {
+            "default": "",
+            "type": "string"
+          },
+          "browser": {
+            "default": "",
+            "type": "string"
+          },
+          "device": {
+            "default": "",
+            "type": "string"
+          },
+          "user_agent": {
+            "default": "",
+            "type": "string"
+          },
+          "source_url": {
+            "default": "",
+            "type": "string"
+          },
+          "turnstile": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
       },
       "CloudflareD1DatabaseRecord": {
         "properties": {
@@ -4325,6 +4413,8 @@
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
+          "cloudflare.contact_inbox",
+          "cloudflare.contact_submission",
           "cloudflare.d1_database",
           "cloudflare.dns_record",
           "cloudflare.edge_certificate",
@@ -4380,6 +4470,8 @@
           "ResourceKindCaddyRoute",
           "ResourceKindCloudflareAccessApp",
           "ResourceKindCloudflareAccessServiceToken",
+          "ResourceKindCloudflareContactInbox",
+          "ResourceKindCloudflareContactSubmission",
           "ResourceKindCloudflareD1Database",
           "ResourceKindCloudflareDNSRecord",
           "ResourceKindCloudflareEdgeCertificate",
@@ -4439,6 +4531,7 @@
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
+          "cloudflare.contact_submission",
           "cloudflare.d1_database",
           "cloudflare.dns_record",
           "cloudflare.edge_certificate",
@@ -4480,6 +4573,7 @@
           "SweptCaddyRoute",
           "SweptCloudflareAccessApp",
           "SweptCloudflareAccessServiceToken",
+          "SweptCloudflareContactSubmission",
           "SweptCloudflareD1Database",
           "SweptCloudflareDNSRecord",
           "SweptCloudflareEdgeCertificate",
@@ -4518,7 +4612,7 @@
         "maxLength": 160,
         "pattern": "^[a-z0-9][a-z0-9-]*$",
         "type": "string",
-        "description": "A certbot lineage name: it becomes --cert-name and a directory under live/. HQ's tls.certificate declaration validates with it and the controller checks it again where it reaches certbot's argv and a path."
+        "description": "A certificate's lineage name: the directory under live/ its certificate and key are kept in. HQ's tls.certificate declaration validates with it and the controller checks it again where it becomes a path."
       },
       "TLSConsumerKind": {
         "type": "string",

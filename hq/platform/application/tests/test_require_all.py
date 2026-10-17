@@ -4,6 +4,7 @@ from pathlib import Path
 from django.test import SimpleTestCase
 
 from ..security import AuthorizationError, Capability, Principal, require_all
+from .source import parsed
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
 
@@ -29,7 +30,7 @@ class RequireAllTests(SimpleTestCase):
                 continue
             found.extend(
                 f"{path.name}:{node.lineno}"
-                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+                for node in ast.walk(parsed(path))
                 if isinstance(node, ast.For)
                 and any(
                     isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "require"

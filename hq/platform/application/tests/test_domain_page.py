@@ -66,13 +66,20 @@ class RelationsSaidOnceTests(SimpleTestCase):
 
 class RecordsLedeTests(SimpleTestCase):
     def test_one_record_is_one_record(self):
-        one = SimpleNamespace(managed=True, adoptable=(), managed_count=1, records=(object(),))
-        many = SimpleNamespace(managed=True, adoptable=(), managed_count=17, records=())
-        unmanaged = SimpleNamespace(managed=False, adoptable=(), managed_count=0, records=(1, 2))
+        one = SimpleNamespace(managed=True, adoptable=(), managed_count=1, records=(object(),), policy=())
+        many = SimpleNamespace(managed=True, adoptable=(), managed_count=17, records=(), policy=())
+        unmanaged = SimpleNamespace(managed=False, adoptable=(), managed_count=0, records=(1, 2), policy=())
 
         self.assertEqual(_records_lede(one), "1 record, all managed by HQ")
         self.assertEqual(_records_lede(many), "17 records, all managed by HQ")
         self.assertEqual(_records_lede(unmanaged), "2 records, none managed by HQ")
+
+    def test_the_count_says_how_many_are_folded_under_it(self):
+        zone = SimpleNamespace(managed=True, adoptable=(), managed_count=4, records=(), policy=(1, 2, 3))
+
+        self.assertEqual(
+            _records_lede(zone), "4 records, all managed by HQ, 3 of them under Policy and verification below"
+        )
 
 
 class RecordTableTests(SimpleTestCase):

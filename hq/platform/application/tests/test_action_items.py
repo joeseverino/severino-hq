@@ -310,7 +310,7 @@ class PageTests(TestCase):
         # The heading and the source filter. Each card's origin (its tooltip and
         # the panel a modifier click opens) names its source and is not the row.
         shown = re.sub(
-            r'<div class="origin-panel".*?</div>| data-tip="[^"]*"', "", page.content.decode(), flags=re.DOTALL
+            r'<div class="[^"]*origin-panel[^"]*".*?</dl>| data-tip="[^"]*"', "", page.content.decode(), flags=re.DOTALL
         )
         self.assertEqual(shown.count("Example"), 1 + 1)
 

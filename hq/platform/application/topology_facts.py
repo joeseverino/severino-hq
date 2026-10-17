@@ -286,13 +286,17 @@ def add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
 
 
 def _unanswered() -> dict[tuple[str, str], tuple[tuple[str, str], ...]]:
-    """Why each connection that did not answer failed, and where it points."""
+    """Why each connection that did not answer failed, and where it points.
+
+    One its controller stopped reporting says when instead of why.
+    """
 
     from .connections import connection_rows
-    from .credential_findings import ENDPOINT, FAILURE
+    from .credential_findings import ENDPOINT, FAILURE, UNREPORTED
 
     return {
         (row.controller_id, row.connection_ref): (
+            *(((UNREPORTED, row.unreported_at.isoformat()),) if row.unreported_at else ()),
             *(((FAILURE, row.failure),) if row.failure else ()),
             *(((ENDPOINT, row.endpoint),) if row.endpoint else ()),
         )

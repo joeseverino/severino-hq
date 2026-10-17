@@ -225,6 +225,12 @@ class ProviderConnection(TimestampedModel):
     observed_at = models.DateTimeField()
     # When a controller last reported it, carried or probed.
     reported_at = models.DateTimeField(null=True, blank=True)
+    # When its controller sent a report that carried no connection at all.
+    # Such a report keeps the rows rather than replacing them with nothing,
+    # because an emptied vault on the controller's machine looks exactly like a
+    # host that never had any, and these rows are the only record that there
+    # were. The next report that carries a connection replaces them as usual.
+    unreported_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("provider", "connection_ref")

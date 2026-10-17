@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/api"
-	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -175,14 +174,16 @@ func (r *Registry) acmeDir() (string, error) {
 
 // certificateName and certificateDomain are the contract's patterns, which
 // HQ's tls.certificate declaration takes its name pattern from, checked again
-// where they reach certbot's argv and a path.
+// where they reach an order, a challenge record name and a path.
 var (
 	certificateName       = api.MustPattern("TLSCertificateName")
 	certificateNameLength = api.MustLimit("TLSCertificateName", "maxLength")
 	certificateDomain     = api.MustPattern("TLSCertificateDomain")
 )
 
-// lineagePath is where certbot keeps this certificate's lineage, for a name that is one.
+// lineagePath is where this certificate's lineage is kept, for a name that is
+// one: config/live/<name>, where certbot kept it, so a lineage it saved is read
+// unchanged until the next issuance replaces it.
 func (r *Registry) lineagePath(spec TLSCertificateSpec) (string, error) {
 	if len([]rune(spec.CertificateName)) > certificateNameLength || !certificateName.MatchString(spec.CertificateName) {
 		return "", &ProviderError{Message: "the certificate name is not a lineage name"}
@@ -194,7 +195,7 @@ func (r *Registry) lineagePath(spec TLSCertificateSpec) (string, error) {
 	return filepath.Join(acme, "config", "live", spec.CertificateName), nil
 }
 
-// checkedDomains is the names certbot is asked for, each a domain name, never an option.
+// checkedDomains is the names an order asks for, each a domain name.
 func checkedDomains(spec TLSCertificateSpec) ([]string, error) {
 	for _, domain := range spec.Domains {
 		if !certificateDomain.MatchString(domain) {
@@ -216,7 +217,7 @@ func readLineage(dir string) ([]byte, []byte, error) {
 	return fullchain, privateKey, nil
 }
 
-// lineage is the certificate certbot last saved for this spec.
+// lineage is the certificate last saved for this spec.
 func (r *Registry) lineage(spec TLSCertificateSpec) ([]byte, []byte, error) {
 	dir, err := r.lineagePath(spec)
 	if err != nil {
@@ -224,7 +225,7 @@ func (r *Registry) lineage(spec TLSCertificateSpec) ([]byte, []byte, error) {
 	}
 	fullchain, privateKey, err := readLineage(dir)
 	if err != nil {
-		return nil, nil, &ProviderError{Message: "certbot lineage is unavailable for reconciliation"}
+		return nil, nil, &ProviderError{Message: "the certificate lineage is unavailable for reconciliation"}
 	}
 	return fullchain, privateKey, nil
 }
@@ -269,8 +270,8 @@ func (r *Registry) resumableLineage(spec TLSCertificateSpec, deployedFingerprint
 }
 
 // foreignACMEEntry is the first ACME state entry this process could not take
-// ownership of: certbot copies a key's owner onto its renewal, and a process
-// that is not root can only chown to itself.
+// ownership of. Issuance replaces a lineage directory and the files in it, and
+// a process that is not root cannot remove what another account owns there.
 func foreignACMEEntry(acmeDir string) string {
 	uid, gid := os.Getuid(), os.Getgid()
 	var walk func(root string) string
@@ -318,30 +319,85 @@ func foreignACMEEntry(acmeDir string) string {
 	return walk(acmeDir)
 }
 
-// writePrivate writes a credential readable by this account alone from its first byte.
-func writePrivate(path, text string) error {
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+// saveLineage puts a certificate where readLineage finds it: the two files
+// are written to a directory beside the lineage, then the two directories
+// trade names in one step, so a reader sees the old pair or the new one.
+func saveLineage(dir string, fullchain, privateKey []byte) error {
+	parent := filepath.Dir(dir)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return err
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
+	// What an interrupted save left beside the lineage is never read.
+	if leftovers, err := filepath.Glob(filepath.Join(parent, "."+filepath.Base(dir)+".*")); err == nil {
+		for _, leftover := range leftovers {
+			_ = os.RemoveAll(leftover)
+		}
+	}
+	staged, err := os.MkdirTemp(parent, "."+filepath.Base(dir)+".")
 	if err != nil {
 		return err
 	}
-	_, writeErr := file.WriteString(text)
-	closeErr := file.Close()
-	if writeErr != nil {
-		return writeErr
+	defer os.RemoveAll(staged)
+	for _, file := range []struct {
+		name string
+		data []byte
+		mode os.FileMode
+	}{{"fullchain.pem", fullchain, 0o644}, {"privkey.pem", privateKey, 0o600}} {
+		if err := writeNew(filepath.Join(staged, file.name), file.data, file.mode); err != nil {
+			return err
+		}
 	}
-	return closeErr
+	if err := syncDir(staged); err != nil {
+		return err
+	}
+	if err := replaceDir(staged, dir); err != nil {
+		return err
+	}
+	return syncDir(parent)
 }
 
-// cloudflareToken is the DNS-edit token the ACME DNS-01 challenge uses.
-func (r *Registry) cloudflareToken() (string, error) {
-	_, token, err := r.cloudflareCredential(runtime.ConnectionProviderCloudflareDNS, "")
-	return token.APIToken, err
+// replaceDir puts staged at dir. An existing dir is exchanged with staged in
+// one step and left at staged's name for removal; a filesystem that cannot
+// exchange gets two renames, between which a reader finds no lineage and the
+// next renewal issues again.
+func replaceDir(staged, dir string) error {
+	if _, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
+		return os.Rename(staged, dir)
+	}
+	unsupported, err := exchangeDirs(staged, dir)
+	if !unsupported {
+		return err
+	}
+	previous := staged + ".previous"
+	if err := os.Rename(dir, previous); err != nil {
+		return err
+	}
+	defer os.RemoveAll(previous)
+	return os.Rename(staged, dir)
 }
 
-// issueCertificate runs certbot's DNS-01 issuance and returns the new lineage.
+// writeNew writes a file that must not exist yet, readable by mode from its
+// first byte, and flushed before it is named in a lineage.
+func writeNew(path string, data []byte, mode os.FileMode) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
+}
+
+// issueCertificate orders the certificate over DNS-01 and saves it as the
+// spec's lineage. Nothing is saved unless the whole order succeeded and the
+// certificate covers the spec's names with the key beside it; the challenge
+// records are removed either way, after the save.
 func (r *Registry) issueCertificate(ctx context.Context, spec TLSCertificateSpec) ([]byte, []byte, error) {
 	lineage, err := r.lineagePath(spec)
 	if err != nil {
@@ -360,52 +416,37 @@ func (r *Registry) issueCertificate(ctx context.Context, spec TLSCertificateSpec
 		return nil, nil, &ProviderError{Message: "ACME state directory is not writable"}
 	}
 	if foreign := foreignACMEEntry(acme); foreign != "" {
-		return nil, nil, &ProviderError{Message: "ACME state is not wholly the controller's: " + foreign + ". Certbot would be issued a certificate it cannot save, so nothing was requested."}
+		return nil, nil, &ProviderError{Message: "ACME state is not wholly the controller's: " + foreign + ". A certificate would be issued that the controller cannot save, so nothing was requested."}
 	}
-	if _, err := r.commands().Run(ctx, []string{"certbot", "--version"}, nil, "certbot preflight", "", nil); err != nil {
+	if _, err := r.propagationDelay(); err != nil {
 		return nil, nil, err
 	}
-	token, err := r.cloudflareToken()
+	ctx, cancel := context.WithTimeout(ctx, acmeOrderTimeout)
+	defer cancel()
+	client, err := r.acmeClient(ctx, acme)
 	if err != nil {
 		return nil, nil, err
 	}
-	credentials := filepath.Join(acme, "cloudflare.ini")
-	if err := writePrivate(credentials, "dns_cloudflare_api_token = "+token+"\n"); err != nil {
-		return nil, nil, &ProviderError{Message: "ACME credentials could not be written"}
+	result, err := r.orderCertificate(ctx, client, domains)
+	if err == nil {
+		err = saveIssued(lineage, result, domains)
 	}
-	defer os.Remove(credentials)
-	// The certificate authority account is the one connection of its shape.
-	account, err := runtime.Only(r.Supplied, func(c connections.Connection) *connections.ACME { return c.ACME })
+	if cleanup := r.removeChallenges(ctx, result.placed); cleanup != nil {
+		err = errors.Join(err, cleanup)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
-	email, directory := account.Email, account.DirectoryURL
-	propagation := r.Env.ACMEPropagationSeconds
-	if propagation == "" {
-		propagation = "30"
+	return result.fullchain, result.privateKey, nil
+}
+
+// saveIssued checks an issued certificate against the spec, then saves it.
+func saveIssued(lineage string, result issued, domains []string) error {
+	if _, err := validateCertificate(result.fullchain, result.privateKey, domains); err != nil {
+		return err
 	}
-	argv := []string{
-		"certbot", "certonly", "--non-interactive", "--agree-tos",
-		"--email", email,
-		"--server", directory,
-		"--dns-cloudflare",
-		"--dns-cloudflare-credentials", credentials,
-		"--dns-cloudflare-propagation-seconds", propagation,
-		"--config-dir", filepath.Join(acme, "config"),
-		"--work-dir", filepath.Join(acme, "work"),
-		"--logs-dir", filepath.Join(acme, "logs"),
-		"--cert-name", spec.CertificateName,
-		"--force-renewal",
+	if err := saveLineage(lineage, result.fullchain, result.privateKey); err != nil {
+		return &ProviderError{Message: "the issued certificate could not be saved", Err: err}
 	}
-	for _, domain := range domains {
-		argv = append(argv, "-d", domain)
-	}
-	if _, err := r.commands().Run(ctx, argv, nil, "certbot certonly", "", nil); err != nil {
-		return nil, nil, err
-	}
-	fullchain, privateKey, err := readLineage(lineage)
-	if err != nil {
-		return nil, nil, &ProviderError{Message: "certbot did not produce a complete lineage", Err: err}
-	}
-	return fullchain, privateKey, nil
+	return nil
 }

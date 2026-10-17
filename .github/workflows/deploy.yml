@@ -7,8 +7,10 @@ name: Deploy
 #   Resolve  finds the signed image for the commit, and says on it, as HQ's
 #            app, that it waits for approval
 #   Approve  waits for a person. A newer release takes its place in the wait
-#   Deploy   on the self-hosted runner, once approved: verify the signature,
-#            recreate, wait for health, roll back if it fails
+#   Deploy   on the self-hosted runner, once approved: hands the image to
+#            root's hq-host, which verifies its signature, refuses one that
+#            drops an extension, recreates, waits for health, rolls back if
+#            it fails
 #   Report   says on the commit whether it is live, or why not and what fixes
 #            it, and comments once on the merged pull request
 #
@@ -126,74 +128,27 @@ jobs:
     concurrency:
       group: deploy-production
       cancel-in-progress: false
+    # Only to pull the image: the token is handed to root for that and kept
+    # nowhere on this machine.
     permissions:
-      contents: read
       packages: read
     steps:
-      - name: Authorize the registry for signature verification
-        # Written directly rather than through `docker login`, which reaches the
-        # daemon: this runner deliberately holds no Docker access, so the only
-        # thing that needs registry credentials here is cosign, and cosign reads
-        # this file. The deploy itself authenticates separately, inside the
-        # root-owned script, from a token handed over on stdin.
-        #
-        # Removed again by the cleanup step below. This runner is a machine in
-        # the house, not a container thrown away afterwards, so a credential
-        # left in its home directory is one that outlives the job.
-        env:
-          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REGISTRY_USER: ${{ github.actor }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.docker"
-          auth="$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_TOKEN" | base64 -w0)"
-          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' "$auth" > "$HOME/.docker/config.json"
-          chmod 600 "$HOME/.docker/config.json"
-      - name: Read the host's cosign release
-        # Two files, not the repository: this runner keeps no checkout.
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          sparse-checkout: |
-            .github/actions/cosign
-            controller/host/verifier.go
-          sparse-checkout-cone-mode: false
-      - name: Install Cosign
-        uses: ./.github/actions/cosign
-      - name: Verify the image was composed by Compose
-        # On the host, before anything privileged: hq-host deploy verifies
-        # again as root, and this answers first with a clear message.
-        #
-        # Verified against the identity of Compose in this repository, so
-        # a digest pushed to the composition name by any other means (another
-        # workflow, a stolen registry token, a hand `docker push`) stops here
-        # instead of becoming production. Output is discarded: the certificate
-        # payload names the image, and the interesting part is whether this
-        # step exits zero.
-        env:
-          IMAGE: ${{ needs.resolve.outputs.image }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          cosign verify \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity-regexp \
-              "^https://github\.com/${REPOSITORY}/\.github/workflows/compose\.yml@refs/heads/main$" \
-            "$IMAGE" > /dev/null
-          echo "composition signature verified"
       - name: Deploy exact image with health rollback
         # Same deploy path and rollback as a host release: it pulls, recreates,
         # waits for health, activates the controller, and restores the previous
         # image if any step fails.
         #
-        # Run through sudo against the root-owned copy, not the checkout. That
-        # is what lets this runner hold no docker access and no general sudo:
-        # everything privileged happens inside a script the runner cannot edit,
-        # and the only thing crossing the boundary is one image reference that
-        # the preceding step has already verified.
+        # Run through sudo against the root-owned copy; this runner keeps no
+        # checkout. That is what lets it hold no docker access and no general
+        # sudo: everything privileged happens inside a program the runner
+        # cannot edit, and the only thing crossing the boundary is one image
+        # reference. The signature is verified there, as root, and not here:
+        # root does not trust this runner, so a check made here would protect
+        # nothing and need a registry credential on this machine to make.
         #
         # The registry token goes over stdin, not as an argument: arguments are
-        # readable in the process table while the command runs.
+        # readable in the process table while the command runs. Root writes it
+        # to a directory of this deploy's alone and removes it after.
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_USER: ${{ github.actor }}
@@ -202,10 +157,6 @@ jobs:
           set -euo pipefail
           printf '%s\n%s\n' "$REGISTRY_USER" "$REGISTRY_TOKEN" \
             | sudo /usr/local/lib/severino-hq/scripts/deploy-image.sh "$IMAGE"
-      - name: Remove the registry credential
-        if: always()
-        run: rm -f "$HOME/.docker/config.json"
-
 
   report:
     name: Report

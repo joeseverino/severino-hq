@@ -86,7 +86,7 @@ class Identity:
 
 
 def identity_of(request, device: tailnet.Device | None) -> Identity:
-    from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY
+    from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, sso_only
 
     user = getattr(request, "user", None)
     backends = tuple(getattr(settings, "AUTHENTICATION_BACKENDS", ()))
@@ -102,10 +102,7 @@ def identity_of(request, device: tailnet.Device | None) -> Identity:
         username=getattr(user, "username", "") or "",
         email=getattr(user, "email", "") or "",
         full_name=(getattr(user, "get_full_name", lambda: "")() or "").strip(),
-        # Whether a password could sign anyone in at all. Read from what is
-        # installed rather than from a flag saying it is not, because the
-        # backend list is the thing Django actually consults.
-        sso_only=bool(backends) and not any(name.endswith("ModelBackend") for name in backends),
+        sso_only=sso_only(),
         backends=backends,
         session_expires=expiry,
         tailnet_user=device.user if device else "",

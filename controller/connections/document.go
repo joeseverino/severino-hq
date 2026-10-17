@@ -200,13 +200,12 @@ func (c Connection) validate(index int) error {
 }
 
 // Validate refuses a document either side could misread. Messages name a
-// connection by position, never by value.
+// connection by position, never by value. A document with no connection is
+// valid: a host that has not set one up yet runs HQ without any. Whether an
+// empty one may replace an installed one is the renderer's question.
 func (d Document) Validate() error {
 	if d.SchemaVersion != SchemaVersion {
 		return invalid("schema version %d is not %d", d.SchemaVersion, SchemaVersion)
-	}
-	if len(d.Connections) == 0 {
-		return invalid("no connections")
 	}
 	refs := map[string]bool{}
 	for index, connection := range d.Connections {
@@ -253,6 +252,11 @@ func Decode(data []byte) (Document, error) {
 	if err := jsonv2.Unmarshal(data, &document, jsonv2.RejectUnknownMembers(true)); err != nil {
 		// The decoder's message can quote the input, which is credentials.
 		return Document{}, invalid("not the declared shape")
+	}
+	// Encode always writes the list, empty or not; one that is missing or
+	// null was not written by it.
+	if document.Connections == nil {
+		return Document{}, invalid("no connections list")
 	}
 	if err := document.Validate(); err != nil {
 		return Document{}, err

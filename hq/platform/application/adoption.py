@@ -26,7 +26,7 @@ from .conditions import stamped
 from .inventory import record_identity, record_token, service_hostnames
 from .security import Principal
 
-OBSERVES_ONLY = "HQ only reads through this connection. Allow it to manage on the connection to change things."
+OBSERVES_ONLY = "This connection is read-only. Set manages to 1 on its 1Password item to change things."
 
 
 def manages_through(
@@ -349,13 +349,13 @@ def adopt_service(
     )
     if found is None:
         raise NotFoundError(
-            f"HQ found nothing it does not already manage for {command.hostname!r}. It may be managed already, or gone."
+            f"HQ found nothing new to manage for {command.hostname!r}. It may be managed already, or gone."
         )
     from .infrastructure import PolicyError
 
     writable = [item for item in found.items if not item.observed_only]
     if not writable:
-        raise PolicyError(f"{found.hostname} is read through connections that only observe.")
+        raise PolicyError(f"{found.hostname} is read through read-only connections.")
     adopted = [
         adopt(
             # By token, not by hostname: a service may be served by several
@@ -412,15 +412,15 @@ def adopt(
     if found is None:
         subject = command.hostname or command.token or "that record"
         raise NotFoundError(
-            f"HQ found no {registry_label(command.kind).lower()} it does not already manage "
+            f"HQ found no new {registry_label(command.kind).lower()} to manage "
             f"for {subject!r}. It may be managed already, or gone."
         )
     if PROVIDERS[found.kind].adoption_gap:
         raise PolicyError(PROVIDERS[found.kind].adoption_gap)
     if found.observed_only:
         raise PolicyError(
-            f"This {found.label.lower()} is read through a connection that only "
-            "observes. Set manages on the connection to adopt it."
+            f"This {found.label.lower()} is read through a read-only connection. "
+            "Set manages to 1 on its 1Password item to adopt it."
         )
     result = save_managed_resource(
         ManagedResourceCommand(

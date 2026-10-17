@@ -185,6 +185,15 @@ def panel_specs(
     return tuple(specs)
 
 
+def dashboard_machines() -> tuple[ManagedResource, ...]:
+    """The machines chosen for the dashboard, read once per page: the panels and
+    the first steps both ask."""
+
+    from .projection import read_once
+
+    return read_once("glance.dashboard_machines", _dashboard_machines)
+
+
 def _dashboard_machines() -> tuple[ManagedResource, ...]:
     """Enabled declared machines selected for the dashboard, in operator order."""
 
@@ -353,7 +362,7 @@ def dashboard_panels(
 ) -> tuple[dict[str, Any], ...]:
     configuration = configuration or dashboard_configuration()
     specs = {spec.id: spec for spec in panel_specs(configuration)}
-    machine_resources = _dashboard_machines()
+    machine_resources = dashboard_machines()
     routes = _machine_routes(machine_resources) if machine_resources else {}
     point = configuration.weather_point
     weather = WeatherObservation.objects.filter(point=point).first() if point else None
@@ -388,18 +397,7 @@ def dashboard_panels(
             )
         )
     # Nothing empty takes space: with no machine chosen there is no machine
-    # reading to draw. The one exception is a dashboard that would otherwise
-    # have no reading at all, where this one is the way in to choosing some.
-    if not panels and "weather" not in specs:
-        panels.append(
-            _panel(
-                specs["infrastructure"],
-                payload={},
-                observed_at=None,
-                refreshing=False,
-                refreshable=False,
-            )
-        )
+    # reading to draw, and Get started's step is what asks for one.
     if "weather" in specs:
         panels.append(
             _panel(

@@ -31,6 +31,7 @@ from ..projection import projection_scope
 from ..public_registry import wanted_addresses
 from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
+from .host_only import host_only
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
 # 203.0.113.0/24 stands in for a public range here.
@@ -253,6 +254,12 @@ class EstateCardTests(TestCase):
         with projection_scope():
             return {card["id"]: card for card in cards()}
 
+    def listed(self) -> str:
+        from ..connection_catalog import connection_total
+
+        with projection_scope():
+            return str(connection_total())
+
     def test_every_figure_links_to_its_page(self):
         found = self.cards()
 
@@ -262,13 +269,24 @@ class EstateCardTests(TestCase):
         self.assertEqual(found["hq.estate.services"]["url"], reverse("control_plane:services"))
         self.assertEqual(found["hq.estate.domains"]["value"], "1")
         self.assertEqual(found["hq.estate.domains"]["url"], reverse("zones:index"))
-        self.assertEqual(found["hq.estate.connections"]["value"], "1")
+        self.assertEqual(found["hq.estate.connections"]["value"], self.listed())
         self.assertEqual(found["hq.estate.connections"]["detail"], "example-ssh not answering")
         # One connection with a problem leads to its own row.
         self.assertEqual(
             found["hq.estate.connections"]["url"],
             reverse("control_plane:connections") + "#connection-example-ssh",
         )
+
+    def test_connections_are_counted_when_every_one_answers(self):
+        ProviderConnection.objects.filter(connection_ref="example-ssh").update(reachable=True, detail="")
+        connection("example-dns")
+
+        card = self.cards()["hq.estate.connections"]
+
+        self.assertEqual(card["value"], self.listed())
+        self.assertEqual(card["url"], reverse("control_plane:connections"))
+        self.assertNotIn("detail", card)
+        self.assertNotIn("status", card)
 
     def test_the_nearest_expiries_link_to_their_subject(self):
         found = self.cards()
@@ -768,7 +786,6 @@ class EstateQueryBudgetTests(TestCase):
         with (
             mock.patch("hq.platform.application.domains.extension_domains", return_value=()),
             mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-            mock.patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
             CaptureQueriesContext(db) as queries,
             uncached(),
         ):
@@ -826,15 +843,33 @@ class WatchedTests(TestCase):
         self.assertEqual(len(estate.watched), 3)
 
 
-class QuietEstateCardTests(TestCase):
-    """A figure of nought says nothing, so it is not drawn."""
+class ConnectionFigureTests(TestCase):
+    """The dashboard's connections figure is the Connections page's count."""
 
-    def test_no_connection_figure_while_every_connection_answers(self):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(host_only())
+
+    def test_the_figure_counts_every_row_the_connections_page_lists(self):
+        from ..connection_context import connections_context
+
         ManagedResource.objects.create(key="example-box", kind="machine", spec={"name": "example-box"})
+        ProviderConnection.objects.create(
+            controller_id="example-controller",
+            connection_ref="example-dns",
+            provider="cloudflare_dns",
+            endpoint="https://api.example.com",
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+        admin = Principal("test", "admin", frozenset(Capability))
 
         with projection_scope():
             found = {card["id"]: card for card in cards()}
+        with projection_scope():
+            listed = connections_context(principal=admin).connection_count
 
         self.assertIn("hq.estate.machines", found)
-        self.assertNotIn("hq.estate.connections", found)
+        self.assertEqual(found["hq.estate.connections"]["value"], str(listed))
         self.assertTrue(all(card["url"] for card in found.values()))

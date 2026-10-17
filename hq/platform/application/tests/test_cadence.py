@@ -459,3 +459,77 @@ class ControllerStandingTests(TestCase):
         with override_settings(SEVERINO_CONTROLLER_HEARTBEAT="/nonexistent/dir/heartbeat"):
             cadence.note_controller()
             self.assertFalse(cadence.controller_standing().known)
+
+
+class PassDueTests(TestCase):
+    """HQ rings for a pass when one has something to do, and only then."""
+
+    def setUp(self):
+        self.settings_override, self.directory = markers()
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+        # Read a minute ago and idle: no sweep is due.
+        swept(age_seconds=60)
+        self.resource = ManagedResource.objects.create(
+            key="a-rewrite",
+            kind="adguard.rewrite",
+            spec={"domain": "app.example.com", "answer": "192.0.2.1"},
+        )
+
+    def operation(self, **fields):
+        return OperationRequest.objects.create(
+            resource=self.resource,
+            action=OperationRequest.Action.RECONCILE,
+            idempotency_key=f"test-{OperationRequest.objects.count()}",
+            **fields,
+        )
+
+    def test_nothing_due_is_no_pass_and_no_ring(self):
+        from hq.platform.core import doorbell
+
+        self.assertEqual(cadence.pass_due(), "")
+        self.assertFalse(doorbell.ask())
+        self.assertFalse((self.directory / "doorbell").exists())
+
+    def test_queued_work_is_a_pass(self):
+        self.operation()
+
+        self.assertEqual(cadence.pass_due(), "Work is queued.")
+
+    def test_a_claim_whose_lease_ran_out_is_a_pass_and_a_live_one_is_not(self):
+        claimed = self.operation(
+            state=OperationRequest.State.CLAIMED,
+            claimed_by="example-controller",
+            lease_expires_at=timezone.now() + timedelta(minutes=5),
+        )
+        self.assertEqual(cadence.pass_due(), "")
+
+        OperationRequest.objects.filter(pk=claimed.pk).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
+        self.assertEqual(cadence.pass_due(), "Work a controller took did not finish in time.")
+
+    def test_a_dashboard_reading_asked_for_is_a_pass_until_a_read_request_would_expire(self):
+        from hq.domains.control_plane.models import DashboardRefreshRequest
+
+        asked = DashboardRefreshRequest.objects.create(panel_id="weather")
+        self.assertEqual(cadence.pass_due(), "A dashboard reading was asked for.")
+
+        long_ago = timezone.now() - cadence.read_request_lifetime() - timedelta(seconds=1)
+        DashboardRefreshRequest.objects.filter(pk=asked.pk).update(requested_at=long_ago)
+        self.assertEqual(cadence.pass_due(), "")
+
+    @override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=30)
+    def test_a_sweep_coming_due_rings(self):
+        from hq.platform.core import doorbell
+
+        self.assertIn("due", cadence.pass_due())
+        self.assertTrue(doorbell.ask())
+        self.assertTrue((self.directory / "doorbell").exists())
+
+    def test_the_floor_is_the_controller_timers(self):
+        timer = Path(settings.BASE_DIR) / "deploy/systemd/severino-hq-controller.timer"
+        declared = dict(
+            line.split("=", 1) for line in timer.read_text().splitlines() if "=" in line and not line.startswith("#")
+        )
+
+        self.assertEqual(declared["OnUnitInactiveSec"], f"{int(cadence.CONTROLLER_FLOOR.total_seconds() // 60)}min")
+        self.assertGreater(cadence.CONTROLLER_SILENT_AFTER, cadence.CONTROLLER_FLOOR)

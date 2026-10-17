@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, assert_type
 
-from hq_sdk import capabilities, demo, jobs, money, outbound, pages, reads, resources
+from hq_sdk import capabilities, demo, jobs, money, outbound, pages, reads, resources, tables
 
 
 def the_clock(moment: datetime) -> None:
@@ -109,3 +109,13 @@ def a_page() -> None:
 
     pages.PageAction("Open")  # type: ignore[call-arg]
     pages.page_context("Example", actions=["Open"])  # type: ignore[list-item]
+    assert_type(pages.page_context("Example", reads=("example.things",)), dict[str, pages.Page])
+    pages.page_context("Example", reads=1)  # type: ignore[arg-type]
+
+
+def a_page_lead(page: pages.Page) -> None:
+    assert_type(page.lead, pages.PageAction | None)
+
+
+def an_empty_table(view: tables.TableListMixin) -> None:
+    assert_type(view.get_table_empty(), str)

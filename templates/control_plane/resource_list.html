@@ -35,7 +35,7 @@ offers every type.
             three wrapped lines and makes every row beside it ragged; the full
             value is one click away on the record itself.
             {% endcomment %}
-            {% if resource.summary and resource.summary not in resource.shown_name %}<br><span class="muted">{{ resource.summary|truncatechars:64 }}</span>{% endif %}
+            {% if resource.summary %}<br><span class="muted">{{ resource.summary|truncatechars:64 }}</span>{% endif %}
             {% comment %}
             Whose address a proxy forwards to, when HQ knows the machine.
             {% endcomment %}
@@ -52,7 +52,7 @@ offers every type.
       {% endfor %}
     </tbody>
     {% empty %}
-    <tbody><tr><td colspan="3" class="muted">{% if records.filtered %}Nothing matches.{% else %}No records yet.{% endif %}</td></tr></tbody>
+    <tbody><tr class="row-empty"><td colspan="3">{% if records.filtered %}{% include "partials/_empty_state.html" with message="Nothing matches." only %}{% else %}{% include "partials/_empty_state.html" with message="No records yet." only %}{% endif %}</td></tr></tbody>
     {% endfor %}
   </table>
 </div>

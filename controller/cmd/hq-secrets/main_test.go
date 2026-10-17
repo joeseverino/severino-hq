@@ -106,7 +106,7 @@ func TestDefaultsAreTheHostsPaths(t *testing.T) {
 		layout.SecretDir != "/opt/apps/severino-hq/secrets" || layout.RootUID != 0 || layout.WebUID != 10001 || layout.WebGID != 10001 {
 		t.Fatalf("layout: %+v", layout)
 	}
-	if container != "severino-hq" || config.MinAppVariables != 15 || !strings.HasSuffix(config.RegistryPath, "/hq/config/controller-connections.json") {
+	if container != "severino-hq" || !strings.HasSuffix(config.RegistryPath, "/hq/config/controller-connections.json") {
 		t.Fatalf("defaults: %s %+v", container, config)
 	}
 }

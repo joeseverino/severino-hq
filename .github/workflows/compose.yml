@@ -115,8 +115,21 @@ jobs:
             exit 1
           fi
           printf '%s' "$COMPOSITION_EXTENSIONS" > composition-set.json
-          if ! jq -e '.extensions | length > 0' composition-set.json >/dev/null 2>&1; then
-            echo "::error::COMPOSITION_EXTENSIONS must list at least one extension"; exit 1
+          # An empty list is a choice: the host with no extensions. A missing
+          # or misspelled one is not, so the key itself must be there.
+          if ! jq -e '.extensions | type == "array"' composition-set.json >/dev/null 2>&1; then
+            echo "::error::COMPOSITION_EXTENSIONS must be JSON with an extensions list, empty for none"; exit 1
+          fi
+          # What the deploy may drop. Production refuses an image without an
+          # extension it is running unless the image's composition retired it
+          # here (controller/host/extensions.go), so an extension leaves only
+          # by being named, and never by being both kept and retired.
+          if ! jq -e '
+                (.retired // []) as $retired
+                | ($retired | type == "array" and all(type == "string" and length > 0))
+                and ([.extensions[].id] - ([.extensions[].id] - $retired) | length == 0)
+              ' composition-set.json >/dev/null 2>&1; then
+            echo "::error::COMPOSITION_EXTENSIONS must list retired extensions as ids it no longer composes"; exit 1
           fi
 
       - name: Mask the extension names for the rest of the job
@@ -133,10 +146,11 @@ jobs:
         run: |
           set -euo pipefail
           jq -r '
-            .extensions[]
-            | .id, .repository,
-              (.repository | split("/") | last),
-              (.id | split(".") | last)
+            (.extensions[]
+             | .id, .repository,
+               (.repository | split("/") | last),
+               (.id | split(".") | last)),
+            ((.retired // [])[] | ., (split(".") | last))
           ' composition-set.json \
             | tr -d '\r' | sed '/^$/d' | sort -u \
             | while read -r name; do
@@ -503,9 +517,11 @@ jobs:
                            | openssl dgst -sha256 | awk '{print $NF}')
             mkdir -p candidate-wheels
           fi
-          args=""
+          # The policy every admission was checked against, stated once, so a
+          # composition of no extensions still names it.
+          args="--policy-sha256 $policy_sha"
           count=$(jq '.extensions | length' composition-set.json)
-          for index in $(seq 0 $((count - 1))); do
+          for ((index = 0; index < count; index++)); do
             repo=$(jq -r ".extensions[$index].repository" composition-set.json)
             workflow=$(jq -r ".extensions[$index].workflow" composition-set.json)
             plugin_id=$(jq -r ".extensions[$index].id" composition-set.json)
@@ -573,6 +589,9 @@ jobs:
             echo "::error title=Composition refused::The admitted set does not compose. The reason is in this run's sealed failure logs."
             exit 1
           fi
+          # Shipped inside the image, under its signature: what a deploy may
+          # drop from the release it replaces.
+          jq -c '(.retired // []) | unique' composition-set.json > build/composition/plugin-retired.json
 
       - name: Build composed image
         # Skipped by an admission's dispatch that found nothing to do, and by a

@@ -497,7 +497,7 @@ class ProviderSurfaceTests(TestCase):
         # so the reason can be reworded without editing a test that is not
         # about it.
         self.assertNotIn("The controller applies it", _apply_note(ZONE_KIND))
-        self.assertIn("no settings to reconcile", _apply_note(ZONE_KIND))
+        self.assertIn(PROVIDERS[ZONE_KIND].actions["reconcile"].reason, _apply_note(ZONE_KIND))
         self.assertIn("The controller applies it", _apply_note(RECORD_KIND))
 
     def test_a_zone_declares_no_service_facet(self):

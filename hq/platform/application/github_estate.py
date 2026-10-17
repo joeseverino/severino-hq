@@ -207,8 +207,8 @@ def attention() -> tuple[Insight, ...]:
                     url=str(repo.production.get("url") or repo.url),
                     workflow=cannot_help(
                         f"github-unverified:{repo.name}",
-                        "HQ reads which verification step failed, not why; the cause is in the "
-                        "deploy's log and the fix in the repository, which HQ never writes.",
+                        "HQ sees which step failed, not why. The cause is in the deploy's log, "
+                        "and the fix in the repository, which HQ never writes to.",
                     ),
                 )
             )
@@ -226,7 +226,7 @@ def attention() -> tuple[Insight, ...]:
                     url=f"{repo.url}/security",
                     workflow=cannot_help(
                         f"github-alerts:{repo.name}",
-                        "An alert closes with an upgrade in the repository's code, which HQ reads and never writes.",
+                        "An alert closes when the code is upgraded. HQ never writes to the repository.",
                     ),
                 )
             )
@@ -238,7 +238,7 @@ def attention() -> tuple[Insight, ...]:
                 key=f"github-artifact:{repo.name}:{artifact['name']}",
                 title=f"{repo.short}'s admission lapses in {artifact['days']} days",
                 value=str(artifact["days"]),
-                body="Composition stops admitting it when it does. A new admission run renews it.",
+                body="Once it lapses, HQ's next build leaves it out. Run its admission again to renew it.",
                 action="Open actions",
                 url=f"{repo.url}/actions",
                 workflow=cannot_help(

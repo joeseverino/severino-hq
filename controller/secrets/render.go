@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -36,10 +37,9 @@ type Config struct {
 	// name of the reader token in it, one per consumer.
 	CredentialsDir, ConnectCredential string
 	Layout                            install.Layout
-	// RegistryPath is hq/config/controller-connections.json in the root-owned tree.
+	// RegistryPath is hq/config/controller-connections.json in the root-owned
+	// tree. It also names the application variables the render requires.
 	RegistryPath string
-	// MinAppVariables is the fewest variables a real application environment has.
-	MinAppVariables int
 	// ConnectTimeout bounds readiness and the whole read of the vault.
 	ConnectTimeout time.Duration
 	// FullEvery is the longest an unchanged vault goes without a full read.
@@ -197,7 +197,7 @@ func (r *Runner) validate() error {
 		return errConfig("SEVERINO_CONNECT_CREDENTIAL is required")
 	case r.open == nil && connect.CheckEndpoint(config.Endpoint) != nil:
 		return connect.CheckEndpoint(config.Endpoint)
-	case config.MinAppVariables < 1 || config.ConnectTimeout <= 0 || config.FullEvery <= 0:
+	case config.ConnectTimeout <= 0 || config.FullEvery <= 0:
 		return errConfig("the renderer's bounds must be positive")
 	}
 	return nil
@@ -265,10 +265,11 @@ func (r *Runner) read(ctx context.Context, client *connect.Client, id string) (c
 func (r *Runner) inputs(salt string, registry []byte) string {
 	config := r.Config
 	// The document's version is an input: a renderer that writes another
-	// format never takes an older render for a current one.
+	// format never takes an older render for a current one. The registry,
+	// which names the required variables, is one too.
 	return digest(salt, []byte("hq-secrets/1"), registry, []byte(config.Vault), []byte(config.EnvItem),
 		[]byte(config.Layout.SecretDir), []byte(config.Layout.RuntimeDir), []byte(config.Layout.WebDir),
-		[]byte(strconv.Itoa(config.MinAppVariables)), []byte(strconv.Itoa(connections.SchemaVersion)))
+		[]byte(strconv.Itoa(connections.SchemaVersion)))
 }
 
 // Run renders once. It returns after the lock is released and the staging
@@ -387,13 +388,9 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 	}
 	out, err := project.Project(project.Input{
 		Registry: registry, EnvItem: config.EnvItem, Items: items,
-		MinAppVariables: config.MinAppVariables,
-		Vault:           project.Vault{Configured: config.Vault, ID: *vault.Id, Name: text(vault.Name)},
+		HoldsConnections: holdsConnections(tree, config.Layout.RootUID),
+		Vault:            project.Vault{Configured: config.Vault, ID: *vault.Id, Name: text(vault.Name)},
 	})
-	if err != nil {
-		return Result{}, err
-	}
-	encoded, err := out.Document.Encode()
 	if err != nil {
 		return Result{}, err
 	}
@@ -401,21 +398,13 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 	// Retrieval and validation are complete. Stage what is renamed into place;
 	// only then is anything installed touched.
 	layout := config.Layout
-	stage, err := tree.NewStage()
-	if err != nil {
-		return Result{}, err
-	}
-	defer stage.Close()
-	if err := stage.Write("connections", encoded, layout.RootUID, layout.RootGID, 0o400); err != nil {
-		return Result{}, err
-	}
-	if err := stage.Mkdir(install.SSHDirName); err != nil {
-		return Result{}, err
-	}
-	for _, file := range out.SSH {
-		if err := stage.Write(install.SSHDirName+"/"+file.Name, file.Data, layout.RootUID, layout.RootGID, file.Mode); err != nil {
+	var encoded []byte
+	var stage *install.Stage
+	if out.Withheld == nil {
+		if stage, encoded, err = stageController(tree, out, layout); err != nil {
 			return Result{}, err
 		}
+		defer stage.Close()
 	}
 
 	result := Result{Outcome: secretstatus.OutcomeRendered}
@@ -467,6 +456,12 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 	result.Changed = result.WebChanged
 	if err := r.at("web-env"); err != nil {
 		return result, err
+	}
+	// The application environment is installed; the connections it came with
+	// are not. No state is saved, so the next run reads the vault in full again
+	// and refuses again until the vault holds connections.
+	if out.Withheld != nil {
+		return result, out.Withheld
 	}
 
 	controllerChanged, err := r.installController(tree, stage, encoded, out)
@@ -524,6 +519,48 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 		slog.Int("app_variables", next.Counts.AppVariables), slog.Int("identities", next.Counts.Identities),
 		slog.Int("signing_keys", next.Counts.SigningKeys))
 	return result, nil
+}
+
+// holdsConnections reports whether the installed connections document holds a
+// connection, or cannot be shown not to: one that is there but is not the
+// renderer's own, or does not read, counts as holding some. Only a document
+// known to be absent or empty lets a read that resolves none replace it.
+func holdsConnections(tree *install.Tree, uid int) bool {
+	data, ok := install.Read(tree.Runtime(), install.ConnectionsName, uid, 0o400)
+	if !ok {
+		_, err := tree.Runtime().Lstat(install.ConnectionsName)
+		return !errors.Is(err, fs.ErrNotExist)
+	}
+	document, err := connections.Decode(data)
+	return err != nil || len(document.Connections) > 0
+}
+
+// stageController encodes the connections document and stages it with the
+// identities, beside the runtime directory they are renamed into.
+func stageController(tree *install.Tree, out project.Output, layout install.Layout) (*install.Stage, []byte, error) {
+	encoded, err := out.Document.Encode()
+	if err != nil {
+		return nil, nil, err
+	}
+	stage, err := tree.NewStage()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := stage.Write("connections", encoded, layout.RootUID, layout.RootGID, 0o400); err != nil {
+		stage.Close()
+		return nil, nil, err
+	}
+	if err := stage.Mkdir(install.SSHDirName); err != nil {
+		stage.Close()
+		return nil, nil, err
+	}
+	for _, file := range out.SSH {
+		if err := stage.Write(install.SSHDirName+"/"+file.Name, file.Data, layout.RootUID, layout.RootGID, file.Mode); err != nil {
+			stage.Close()
+			return nil, nil, err
+		}
+	}
+	return stage, encoded, nil
 }
 
 type installFailure struct{}

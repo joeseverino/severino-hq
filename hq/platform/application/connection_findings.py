@@ -21,7 +21,8 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
 
     found: list[Finding] = []
     for node in estate.nodes():
-        if node.kind != "connection":
+        # Said once for its controller, by connections-lost.
+        if node.kind != "connection" or fact_values(node, credential_findings.UNREPORTED):
             continue
         refusal = next((value for key, value in node.facts if key == "credential-refused"), None)
         refused = refusal is not None

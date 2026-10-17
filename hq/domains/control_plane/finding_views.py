@@ -6,7 +6,7 @@ from django.views.generic import TemplateView
 
 from hq.platform.application.attention import finding_insight
 from hq.platform.application.dashboard import queue_item
-from hq.platform.application.findings import estate_findings, finding_rules, rule_for
+from hq.platform.application.findings import coverage, estate_findings, finding_rules, rule_for
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
@@ -55,6 +55,8 @@ class FindingsView(PageMixin, TemplateView):
                 ),
                 "active_rule": active_rule,
                 "finding_counts": counts,
+                # How far a page with none goes: a clean page over nothing read is not clean.
+                "finding_coverage": coverage() if not raised and not active_rule else None,
             }
         )
         return context

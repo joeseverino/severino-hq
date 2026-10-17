@@ -246,6 +246,12 @@ class SpfPolicy:
     valid: bool = True
 
     @property
+    def senders(self) -> tuple[SpfTerm, ...]:
+        """The rules that name who may send; ``all`` is what happens to everyone else."""
+
+        return tuple(term for term in self.terms if term.mechanism != "all")
+
+    @property
     def lookups(self) -> int:
         return sum(1 for term in self.terms if term.costs_lookup)
 
@@ -269,7 +275,7 @@ class SpfPolicy:
                     "?": "Anything else is treated as neutral, so forgeries get through.",
                     "+": "Anything else passes, so forgeries get through.",
                 }.get(term.qualifier, "")
-        return "No `all` term, so senders not listed here are simply unhandled."
+        return "No `all` term, so it says nothing about senders not listed here."
 
 
 def parse_spf(value: str) -> SpfPolicy:
@@ -354,6 +360,37 @@ def _is_dkim(record) -> bool:
     return "._domainkey." in record.name.lower()
 
 
+def is_null_mx(mx: tuple[Any, ...]) -> bool:
+    """One MX naming the root (RFC 7505): the domain says it takes no mail."""
+
+    return len(mx) == 1 and mx[0].content.strip() in {".", ""}
+
+
+def _senders(spf: SpfPolicy) -> str:
+    return counted(len(spf.senders), "rule") if spf.senders else "Nobody"
+
+
+def _receiving(mx: tuple[Any, ...]) -> MailSection:
+    if is_null_mx(mx):
+        answer = "Nobody, on purpose"
+        detail = "A null MX says this domain takes no mail, so a sender is told at once instead of retrying for days."
+    elif mx:
+        answer = ", ".join(sorted({r.content for r in mx}))
+        detail = f"{counted(len(mx), 'mail server', 'mail servers')}, tried in priority order."
+    else:
+        answer = "Nobody"
+        detail = "No MX record, so mail sent to this domain is not delivered anywhere."
+    return MailSection(
+        id="receiving",
+        label="Receiving",
+        question="Who accepts mail for this domain?",
+        answer=answer,
+        detail=detail,
+        records=mx,
+        add_type="MX",
+    )
+
+
 def mail_overview(zone) -> MailOverview:
     """Everything that decides this domain's mail, assembled once.
 
@@ -380,24 +417,12 @@ def mail_overview(zone) -> MailOverview:
     policy = dmarc_tags.get("p", "")
 
     sections = (
-        MailSection(
-            id="receiving",
-            label="Receiving",
-            question="Who accepts mail for this domain?",
-            answer=(", ".join(sorted({r.content for r in mx})) if mx else "Nobody"),
-            detail=(
-                f"{counted(len(mx), 'mail server', 'mail servers')}, tried in priority order."
-                if mx
-                else "No MX record, so mail sent to this domain is not delivered anywhere."
-            ),
-            records=mx,
-            add_type="MX",
-        ),
+        _receiving(mx),
         MailSection(
             id="sending",
             label="Sending",
             question="Who is allowed to send as this domain?",
-            answer=(counted(len(spf.terms), "rule") if spf and spf.valid else "Anyone"),
+            answer=_senders(spf) if spf and spf.valid else "Anyone",
             detail=(
                 spf.default_result
                 if spf and spf.valid

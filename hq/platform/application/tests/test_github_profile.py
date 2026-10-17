@@ -285,6 +285,15 @@ class CardTests(TestCase):
 
         self.assertEqual(watching(), ())
 
+    def test_a_profile_no_sign_in_names_is_not_counted(self):
+        """The Starred repos page asks for the account; the card must not say 0."""
+
+        from ..sections import watching
+
+        hold()
+
+        self.assertEqual(watching(), ())
+
 
 class ShortAgeTests(TestCase):
     def test_an_age_is_one_unit(self):

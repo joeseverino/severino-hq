@@ -69,6 +69,19 @@ def resource_home(resource: Any) -> str:
     return reverse("control_plane:detail", kwargs={"key": resource.key})
 
 
+def spec_withheld(kind: str) -> bool:
+    """Whether generic surfaces must not show a declaration's spec (``ProviderSpec.withheld``)."""
+
+    provider = PROVIDERS.get(kind)
+    return provider is not None and provider.withheld
+
+
+def shown_spec(kind: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """A spec as a generic surface may show it: whole, or nothing of a withheld kind."""
+
+    return {} if spec_withheld(kind) else spec
+
+
 def readout_rows(resource: Any) -> tuple[tuple[str, str, str], ...]:
     """``(label, desired, observed)`` as the resource's provider describes it."""
 

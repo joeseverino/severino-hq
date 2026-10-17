@@ -293,7 +293,25 @@ for f in $sources; do
 done
 # shellcheck disable=SC2086
 shellcheck -x $sources
-for suite in scripts/test-*.sh; do "$suite"; done
+# Suites run in parallel (each uses its own temporary directory); a failed
+# suite's output is printed whole, not interleaved.
+logs="$(mktemp -d)"
+trap 'rm -rf "$logs"' EXIT
+for suite in scripts/test-*.sh; do
+    name="${suite##*/}"
+    { status=0; "$suite" >"$logs/$name.log" 2>&1 || status=$?; echo "$status" >"$logs/$name.status"; } &
+done
+wait
+failed=0
+for suite in scripts/test-*.sh; do
+    name="${suite##*/}"
+    if [ "$(cat "$logs/$name.status")" != 0 ]; then
+        cat "$logs/$name.log"
+        echo "$name failed" >&2
+        failed=1
+    fi
+done
+exit "$failed"
 '''
 
 [tasks."checks:bridge-contract"]
@@ -449,10 +467,10 @@ env = { HQ_DEMO_OUT = "{{config_root}}/var/demo" }
 run = "uv run --locked --group browser python -m unittest demo.check -v"
 
 [tasks."browser:layout"]
-description = "Real-browser layout invariants over synthetic pages"
+description = "Real-browser layout invariants over the stress estate and the example estate"
 depends = ["setup:webkit"]
 env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
-run = "uv run --locked --group browser python manage.py test hq.platform.core.browser_tests --noinput --parallel 1"
+run = "uv run --locked --group browser python manage.py test hq.platform.core.browser_tests hq.platform.core.estate_browser_tests --noinput --parallel 1"
 
 # ------------------------------------------------------------- controller
 

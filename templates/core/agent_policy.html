@@ -18,14 +18,14 @@
     <span>{{ rule_count|counted:"rule changed from the default,rules changed from the default" }}</span>
     {% if awaiting_count %}<a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count }}</strong> waiting for your approval</a>{% endif %}
     <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count }}</strong> refused in the last day</a>
-    {% if any_dormant %}<span class="policy-dormant-note">A greyed-out rule does nothing yet. HQ's settings do not let MCP agents do that action at all (the <code>SEVERINO_MCP_ENABLE</code> settings).</span>{% endif %}
+    {% if any_dormant %}<span class="policy-dormant-note">A greyed-out rule does nothing until the <code>SEVERINO_MCP_ENABLE</code> settings let agents do that action.</span>{% endif %}
   </p>
   {% if agents %}
     <ul class="policy-agents">
       {% for agent in agents %}
         <li>
           <span class="policy-agent-name">{{ agent.label }}</span>
-          <span class="muted">Uses {{ agent.detail }} · {{ agent.identity.granted|length|counted:"permission from Pocket ID,permissions from Pocket ID" }} · last seen {{ agent.identity.last_seen|ago }}</span>
+          <span class="muted">Uses {{ agent.detail }} · {{ agent.identity.granted|length|counted:"permission from your sign-in,permissions from your sign-in" }} · last seen {{ agent.identity.last_seen|ago }}</span>
         </li>
       {% endfor %}
     </ul>
@@ -43,7 +43,7 @@ per surface and per agent, so a rule is read and changed where it sits.
   {% if show_all %}<a class="btn compact ghost" href="{% url 'agent_policy' %}">Show only changed</a>{% else %}<a class="btn compact ghost" href="{% url 'agent_policy' %}?all=1">Show all {{ action_count }} actions</a>{% endif %}
 </div>
 {% if not shown_groups %}
-  <p class="muted">Every action is at its default.</p>
+  {% include "partials/_empty_state.html" with message="Every action is at its default." only %}
 {% else %}
 <form method="post" class="policy">
   {% csrf_token %}

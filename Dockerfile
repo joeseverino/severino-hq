@@ -18,11 +18,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml uv.lock ./
 # The export is complete and hashed: nothing resolves, and a file that differs
 # from the lock is refused.
+# HQ is English only (LANGUAGE_CODE, no LocaleMiddleware), so Django's other
+# locales are deleted. The locale package and `en` stay: Django reads formats
+# and LANG_INFO from them.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv export --locked --no-default-groups --no-emit-project \
         --format requirements-txt --output-file /tmp/hq-runtime.txt > /dev/null \
     && uv pip install --python /usr/local/bin/python --prefix /install \
-        --require-hashes --no-deps -r /tmp/hq-runtime.txt
+        --require-hashes --no-deps -r /tmp/hq-runtime.txt \
+    && find /install/lib -type d -path '*/site-packages/django/*locale/*' -prune ! -name en -exec rm -rf {} +
 
 
 # The controller and the root secret renderer, one static binary each: CGO off,
@@ -71,7 +75,6 @@ RUN python -m pip uninstall --yes pip \
     && apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         sqlite3 ca-certificates openssh-client \
-        certbot python3-certbot-dns-cloudflare \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -132,9 +135,10 @@ ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "hq.config.asgi:application", "--host", "0.0.0.0", "--port", "8000", \
      "--no-proxy-headers", "--access-log", "--timeout-keep-alive", "120"]
 
+# The probe is the static controller binary already in the image: no
+# interpreter or shell per check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request, sys; \
-        sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready/', timeout=3).status == 200 else 1)"
+    CMD ["/usr/local/bin/hq-controller", "ready", "http://127.0.0.1:8000/health/ready/"]
 
 # Which commit this image is, and where it lives, for HQ to read about itself:
 # the same two values the build stamps as OCI labels, which a container shows

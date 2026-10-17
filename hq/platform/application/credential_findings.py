@@ -22,6 +22,8 @@ from .ui import counted
 
 # Fact keys a connection node carries; ``topology`` writes them.
 FAILURE = "connection-failure"
+# When its controller's report came with no connections at all.
+UNREPORTED = "connection-unreported"
 ENDPOINT = "connection-endpoint"
 MISSING = "credential-missing"
 UNSEEN = "credential-unseen"

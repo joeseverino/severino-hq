@@ -1,0 +1,9 @@
+{% extends "confirm_page.html" %}
+{% comment %}
+Confirming a verb that takes something away from whoever is using it (a
+stop), by the name of what it stops. The button posts back to this address,
+which carries where to return to.
+{% endcomment %}
+{% block consequences %}
+<p><strong>{{ name }}</strong> stops running, and whatever it serves stops answering until it is started again.</p>
+{% endblock %}

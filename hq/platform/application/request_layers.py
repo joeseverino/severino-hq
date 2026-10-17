@@ -90,7 +90,7 @@ def admission_layers(
         # and this says whether the packet had to arrive there to be let in.
         _arrival_layer(firewall),
         *_policy_layers(device, forwarder, serves, request, known, forwarded),
-        _device_layer(device),
+        _device_layer(device, read=bool(known)),
         # Under the device claim, because it is what that claim rests on: the
         # line above says the tailnet knows this node, and this says whether the
         # tailnet had to be shown a signature to believe it.
@@ -340,7 +340,18 @@ def _server_port(request) -> int:
     return int(value) if value.isdigit() else _port_of(request)
 
 
-def _device_layer(device: tailnet.Device | None) -> Layer:
+def _device_layer(device: tailnet.Device | None, *, read: bool = True) -> Layer:
+    if device is None and not read:
+        # With no tailnet reading, HQ cannot say whether the device is on it.
+        return Layer(
+            "device",
+            "The tailnet knows this device",
+            False,
+            "HQ has not read the tailnet's devices yet, so it cannot say whether this one is among them.",
+            boundary="Device identity",
+            mechanism="The tailnet device list",
+            conclusive=False,
+        )
     if device is None:
         return Layer(
             "device",
@@ -466,8 +477,7 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
             "identity-agreement",
             "The device's owner is the person signed in",
             False,
-            "The device's tailnet owner and the HQ account are two separate "
-            "names, and single sign-on did not link them.",
+            "Single sign-on did not link this device's tailnet owner to your HQ account.",
             evidence=f"{identity.tailnet_user} ↔ {session_principal or 'unnamed session'}",
             boundary="Identity correlation",
             mechanism="The session and the tailnet device owner",
@@ -478,14 +488,11 @@ def _identity_agreement_layer(identity: Identity) -> Layer:
         "The device's owner is the person signed in",
         identity.corroborated,
         (
-            "Single sign-on put your Tailscale account in this session, and "
-            "Tailscale reports the same account as this device's owner."
+            "You signed in with your Tailscale account, and Tailscale says that account owns this device."
             if identity.agreement_basis == "SSO-signed principal link"
             else "The tailnet account that owns this device is the account signed in to HQ."
             if identity.corroborated
-            else "The tailnet account that owns this device is a different "
-            "account from the one signed in. Check who owns the device and "
-            "who is signed in."
+            else "A different tailnet account owns this device. Check who owns the device and who is signed in."
         ),
         evidence=(
             f"Device owner {identity.tailnet_user} · single sign-on "
@@ -723,9 +730,8 @@ def _session_layer(request, identity: Identity) -> Layer:
         "Session cookie is locked to this site",
         holds,
         (
-            "The session cookie is sent only over HTTPS, cannot be read by "
-            "scripts, is not sent with requests other sites start, and can "
-            "only be set by this exact host."
+            "Sent only over HTTPS, hidden from scripts, not sent when another "
+            "site starts the request, and set only by this host."
             if holds
             else "The session cookie is missing a protection. Check Secure, HttpOnly, SameSite and the __Host- prefix."
         ),

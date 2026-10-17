@@ -215,6 +215,7 @@ def register_audit(
     redact: Iterable[str] = (),
     observation: Iterable[str] = (),
     connection: Callable[[Any], str] | None = None,
+    redact_for: Callable[[Any], Iterable[str]] | None = None,
 ) -> None:
     """Register a model so create/update/delete events land in the audit log.
 
@@ -223,6 +224,9 @@ def register_audit(
     logging) but the values are replaced.
 
     `connection` returns the connection_ref an instance's work goes through.
+
+    `redact_for` names further fields to redact for one instance, where whether
+    a value may be logged depends on the row (a declaration of a withheld kind).
     """
 
     if model in _AUDITED_MODELS:
@@ -251,7 +255,7 @@ def register_audit(
             changes = _changes(
                 _shown(getattr(instance, "_audit_snapshot", None)),
                 _snapshot(instance, names),
-                secret,
+                secret | frozenset(redact_for(instance) if redact_for else ()),
             )
             # A save that changed nothing is not an event. Django writes
             # every field on every `save()`, so an unchanged re-submit would

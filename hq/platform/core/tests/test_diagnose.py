@@ -41,6 +41,23 @@ class DiagnoseTests(SimpleTestCase):
         self.assertEqual(found["id"], "controller-preflight")
         self.assertIn("controller-preflight.log", found["fix"])
 
+    def test_a_refused_deploy_says_why_without_naming_an_extension(self):
+        # As hq-host deploy prints them (controller/host).
+        image = "ghcr.io/example-owner/example-repo/composition@sha256:" + "a" * 64
+        cases = {
+            f"refusing to deploy {image}: not signed by this repository's compose workflow": "unsigned-composition",
+            f"refusing to deploy {image}: it drops 1 extension(s) the running release carries "
+            "that its composition does not declare retired": "extension-dropped",
+            f"refusing to deploy {image}: could not read the extensions the running release carries": (
+                "extensions-unreadable"
+            ),
+            "a deploy needs 512 MiB free; 100 MiB are": "disk",
+            "the new image did not become healthy: exit status 1": "unhealthy",
+        }
+        for line, expected in cases.items():
+            with self.subTest(expected=expected):
+                self.assertEqual(_diagnose().diagnose(line)["id"], expected)
+
     def test_nothing_known_says_so_and_asks_for_an_entry(self):
         found = _diagnose().diagnose("something nobody has seen")
 

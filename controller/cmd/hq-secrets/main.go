@@ -92,12 +92,11 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 			WebDir:     value("SEVERINO_HQ_WEB_SECRET_DIR", runtime+"/web"),
 			RootUID:    0, RootGID: 0, WebUID: host.WebUID, WebGID: host.WebGID,
 		},
-		RegistryPath:    *registry,
-		MinAppVariables: 15,
-		ConnectTimeout:  *timeout,
-		FullEvery:       24 * time.Hour,
-		HealthAttempts:  12,
-		HealthInterval:  5 * time.Second,
+		RegistryPath:   *registry,
+		ConnectTimeout: *timeout,
+		FullEvery:      24 * time.Hour,
+		HealthAttempts: 12,
+		HealthInterval: 5 * time.Second,
 	}, container, nil
 }
 

@@ -38,7 +38,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
       <div>
         <span class="band-label">Locked to an exact build</span>
         <strong>{{ pinned }} of {{ containers|length }}</strong>
-        <small>{% if pinned == containers|length %}None changes on a pull.{% else %}The rest run a tag, which can point at a different build on the next pull.{% endif %}</small>
+        <small>{% if pinned == containers|length %}None change on a pull.{% else %}The rest run a tag, which can point at a different build on the next pull.{% endif %}</small>
       </div>
     </div>
   </div>
@@ -104,13 +104,13 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
             {% include "control_plane/_container_standing.html" %}
             {% with posture=item.posture %}<td class="optional-col">{% if posture.serious %}<span class="container-reach" tabindex="0" data-tip="{% for result in posture.unmet %}{% if result.check.serious %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">Can control its machine</span>{% elif posture.unmet %}<span tabindex="0" data-tip="{% for result in posture.unmet %}{{ result.check.label }}&#10;{% endfor %}">{{ posture.unmet|length }} to fix</span>{% elif posture.measured %}<span class="muted">{% if posture.met == posture.measured %}All {{ posture.measured }} pass{% else %}{{ posture.met }} of {{ posture.measured }} pass{% endif %}</span>{% endif %}</td>{% endwith %}
             <td class="optional-col">{% for hostname in item.serves %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
-            <td>{% if not item.running.healthy %}<span class="pill pill-serious">{{ item.running.state|capfirst }}</span><br>{% endif %}{{ item.uptime|default:item.running.status }}{% if item.running.check %}<br><span class="muted">{{ item.running.check }}</span>{% endif %}</td>
+            <td>{% if not item.running.healthy %}<span class="pill pill-serious">{{ item.running.state|capfirst }}</span><br>{% endif %}{{ item.uptime|default:item.running.status }}{% if item.running.health %} <span class="muted" title="{{ item.running.check|capfirst }}">· {{ item.running.health }}</span>{% endif %}</td>
           </tr>
         {% endwith %}{% endfor %}
       </tbody>
     </table>
   </div>
 {% else %}
-  {% include "partials/_empty_state.html" with message="No containers yet. They appear after HQ first reads a machine through Portainer." %}
+  {% include "partials/_empty_state.html" with message="No containers yet." remedy=page.remedy %}
 {% endif %}
 {% endblock %}

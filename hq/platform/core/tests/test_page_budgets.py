@@ -125,11 +125,11 @@ class RouteContextTests(SimpleTestCase):
 STORED_PAGE_COSTS = {
     # The session, the person, the table revisions and one stored number.
     "action_item_count": (4, 1),
-    "dashboard": (31, 9),
+    "dashboard": (29, 9),
     "action_items": (7, 1),
     "control_plane:findings": (6, 1),
     "control_plane:topology": (6, 1),
-    "control_plane:tailnet": (12, 2),
+    "control_plane:tailnet": (13, 2),
     # A page about one thing is also served the open problems about it.
     "control_plane:machine": (21, 3),
     "control_plane:detail": (19, 2),

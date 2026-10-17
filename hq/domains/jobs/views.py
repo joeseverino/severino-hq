@@ -9,7 +9,7 @@ from django.http import Http404, JsonResponse
 from django.urls import reverse
 from django.views.generic import DetailView, ListView, View
 
-from hq.platform.application.pages import PageMixin
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableSort
 
 from .models import Job
@@ -22,16 +22,15 @@ ENDED_BADLY = (Job.State.FAILED, Job.State.LOST)
 class JobListView(PageMixin, TableListMixin, ListView):
     """Every job, newest first, through the host's own table contract."""
 
+    table_empty = "No jobs yet."
+
     model = Job
     template_name = "jobs/job_list.html"
     paginate_by = 40
     page_title = "Background jobs"
     table_search_fields = ("label", "kind", "note")
     table_search_placeholder = "Search jobs and results…"
-    page_lede = (
-        "Work HQ does on a schedule or that you started, and how each run went. "
-        "What changed as a result is in the audit log."
-    )
+    page_lede = "Work HQ does on a schedule or that you started, and how each run went."
     table_columns = (
         TableColumn("Started", "created_at"),
         TableColumn("Job", css="key-col"),
@@ -50,6 +49,20 @@ class JobListView(PageMixin, TableListMixin, ListView):
     )
     table_default_sort = FAILED_FIRST
 
+    @override
+    def get_page_actions(self):
+        # What a job changed is recorded there.
+        return (PageAction("Audit log", reverse("core:audit_list")),)
+
+    @cached_property
+    def names(self) -> dict[str, str]:
+        """A job's name in words is its declaration's; what a run stored is the
+        fallback for work no longer declared."""
+
+        from hq.platform.application.scheduled_work import job_names
+
+        return job_names()
+
     @cached_property
     def latest_runs(self) -> dict[str, tuple[object, str, str]]:
         """Each kind's latest run as ``(id, state, label)``, from one read.
@@ -61,7 +74,7 @@ class JobListView(PageMixin, TableListMixin, ListView):
         for kind, pk, state, label in Job.objects.order_by("kind", "-created_at").values_list(
             "kind", "pk", "state", "label"
         ):
-            latest.setdefault(kind, (pk, state, label or kind))
+            latest.setdefault(kind, (pk, state, self.names.get(kind) or label or kind))
         return latest
 
     @property
@@ -107,6 +120,8 @@ class JobListView(PageMixin, TableListMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["failed_last"] = [label for _pk, label in self.failed_last]
+        for job in context["object_list"]:
+            job.title = self.names.get(job.kind) or job.label or job.kind
         return context
 
 

@@ -301,9 +301,8 @@ def hold_for_approval(spec, payload: dict[str, Any], target: Any, *, principal: 
     subject = approval_subject(spec, payload, target)
     if subject is None:
         raise UnreadableSubject(
-            f"{spec.name} needs a person to approve it, and what it would change "
-            "could not be read, so there is nothing to show them. Check the "
-            "target and ask again."
+            f"{spec.name} needs a person to approve it, but HQ could not read what "
+            "it would change. Check the target and ask again."
         )
     digest = fingerprint(spec.name, target, payload, subject.baseline)
     existing = ApprovalRequest.objects.filter(

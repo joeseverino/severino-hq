@@ -117,7 +117,8 @@ class ServiceCompositionTests(TestCase):
             {"dns": ["app-dns"], "proxy": ["app-proxy"], "certificate": ["wildcard"]},
         )
         self.assertEqual(service.faults, ())
-        self.assertEqual(service.status, "good")
+        # Every record in place is configured; nothing behind it was read running.
+        self.assertEqual((service.status, service.status_label), ("unknown", "In place"))
 
     def test_a_wildcard_certificate_covers_a_name_it_does_not_list(self):
         """The certificate lists ``*.example.com``; the service is a subdomain.

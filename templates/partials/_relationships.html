@@ -40,6 +40,8 @@
     {% endfor %}
   </dl>
   {% endif %}
+  {% comment %}What the page was read with, when it names that, as the card's last line.{% endcomment %}
+  {% if read_with %}<p class="muted relation-source">Read with {% for link in read_with %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
   {% if relationships.unreadable %}
     <p class="muted">Could not be read: {{ relationships.unreadable|join:", " }}. This list may be incomplete. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections &rarr;</a></p>
   {% endif %}

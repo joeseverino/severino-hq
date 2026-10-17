@@ -49,7 +49,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     # the type its form opens on.
     new_label = "New writeup or page"
     new_type = ""
-    empty_message = "No writeups or pages yet."
+    table_empty = "No writeups or pages yet."
     table_filters = (TableFilter("status", "Status", "status", ContentItem.Status.choices),)
     table_selectable = True
     table_toggles = (TableToggle("no_docs", "No source document"),)
@@ -134,7 +134,6 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
             show_type=len(self.types_held) > 1,
             new_label=self.new_label,
             new_url=self.new_url,
-            empty_message=self.empty_message,
         )
         return context
 
@@ -144,7 +143,7 @@ class WriteupListView(_ContentSectionView):
     heading = "Writeups"
     new_label = "New writeup"
     new_type = ContentItem.Type.ARTICLE.value
-    empty_message = "No writeups yet."
+    table_empty = "No writeups yet."
 
 
 class PageListView(_ContentSectionView):
@@ -152,7 +151,7 @@ class PageListView(_ContentSectionView):
     heading = "Pages"
     new_label = "New page"
     new_type = ContentItem.Type.PAGE.value
-    empty_message = "No pages yet."
+    table_empty = "No pages yet."
 
 
 class ContentListView(_ContentSectionView):

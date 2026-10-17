@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Assemble the build context for an image carrying several admitted plugins.
 
-    compose-plugins.py --entry a.json --wheel a.whl \
+    compose-plugins.py --policy-sha256 HEX \
+                       --entry a.json --wheel a.whl \
                        --entry b.json --wheel b.whl \
                        --out build/composition
+    compose-plugins.py --policy-sha256 HEX --out build/composition
     compose-plugins.py --candidate --wheel a.whl --wheel b.whl --out build/candidate
 
 Each plugin is verified and admitted independently, producing a canonical
@@ -16,6 +18,8 @@ is the failure worth avoiding.
 What remains here is genuinely host-side: pair each wheel with its entry, check
 the bytes against the digest that entry admitted, and derive the enabled plugin
 list from the merged lock so the enabled and approved sets cannot drift apart.
+A composition of no extensions is the host alone: an empty lock, written here
+because there is nothing for Cordon to merge.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -75,7 +80,21 @@ def emit(out: Path, references: str, digests: list[str], policy_sha256: str | No
         policy.unlink()
 
 
-def compose_admitted(entries: list[Path], wheels: list[Path], out: Path) -> int:
+def compose_none(out: Path, policy_sha256: str) -> int:
+    """The host with no extensions: an empty lock the runtime accepts as one."""
+    stage([], out)
+    (out / "plugin-lock.json").write_text(json.dumps({"schema_version": 1, "host": HOST, "plugins": []}) + "\n")
+    emit(out, "", [], policy_sha256)
+    print("composition staged: no extensions")
+    return 0
+
+
+def compose_admitted(entries: list[Path], wheels: list[Path], out: Path, policy_sha256: str | None = None) -> int:
+    if not entries:
+        if not re.fullmatch(r"[0-9a-f]{64}", policy_sha256 or ""):
+            print("a composition of no extensions must state its policy", file=sys.stderr)
+            return 1
+        return compose_none(out, policy_sha256)
     command = [CORDON_LOCK, "--host", HOST]
     for entry in entries:
         command += ["--entry", str(entry)]
@@ -106,6 +125,9 @@ def compose_admitted(entries: list[Path], wheels: list[Path], out: Path) -> int:
         # mixed set can never satisfy it. Fail here, with the reason.
         print(f"plugins were admitted under {len(policies)} policies", file=sys.stderr)
         return 1
+    if policy_sha256 and policies != {policy_sha256}:
+        print("plugins were admitted under another policy than this composition's", file=sys.stderr)
+        return 1
 
     digests = stage(wheels, out)
     (out / "plugin-lock.json").write_text(json.dumps(lock) + "\n")
@@ -135,7 +157,8 @@ def compose_candidate(wheels: list[Path], out: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--entry", action="append", default=[], type=Path)
-    parser.add_argument("--wheel", action="append", required=True, type=Path)
+    parser.add_argument("--wheel", action="append", default=[], type=Path)
+    parser.add_argument("--policy-sha256", help="the admission policy this composition is checked against")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument(
         "--candidate",
@@ -145,12 +168,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.candidate:
-        if args.entry:
+        if args.entry or args.policy_sha256:
             parser.error("--candidate takes wheels only")
+        if not args.wheel:
+            parser.error("--candidate needs at least one --wheel")
         return compose_candidate(args.wheel, args.out)
     if len(args.entry) != len(args.wheel):
         parser.error("each --entry needs exactly one matching --wheel")
-    return compose_admitted(args.entry, args.wheel, args.out)
+    return compose_admitted(args.entry, args.wheel, args.out, args.policy_sha256)
 
 
 if __name__ == "__main__":

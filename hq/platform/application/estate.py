@@ -39,6 +39,7 @@ EDGE_RENEWAL_OVERDUE_DAYS = 14
 MANAGED_CERTIFICATE_KINDS = (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND)
 REFUSED = "refused"
 NOT_ANSWERING = "not answering"
+UNREPORTED = "no longer reported"
 
 
 def subject_link(kind: str, name: str) -> ActionLink | None:
@@ -108,6 +109,8 @@ class Estate:
     services: tuple[Any, ...] = ()
     domains: tuple[str, ...] = ()
     connections: tuple[ConnectionState, ...] = ()
+    # Every connection HQ reads through, healthy or not.
+    connection_total: int = 0
     registrations: tuple[Expiry, ...] = ()
     certificates: tuple[Expiry, ...] = ()
 
@@ -142,6 +145,7 @@ def estate_reading() -> Estate:
 
 
 def _estate() -> Estate:
+    from .connection_catalog import connection_total
     from .connections import machines_once
     from .services import service_catalog
     from .zones import zone_names
@@ -154,6 +158,7 @@ def _estate() -> Estate:
         services=services,
         domains=domains,
         connections=connection_states(),
+        connection_total=connection_total(),
         registrations=_registrations(domains),
         certificates=_certificates(domains, hostnames),
     )
@@ -170,7 +175,7 @@ def refused_connections() -> dict[str, str]:
 
 
 def _connections() -> tuple[ConnectionState, ...]:
-    """Connections that did not answer, or whose provider refused the credential."""
+    """Connections that did not answer, whose provider refused the credential, or that their controller stopped reporting."""
 
     from .connections import connection_rows
     from .credential_sight import credential_sight
@@ -178,7 +183,9 @@ def _connections() -> tuple[ConnectionState, ...]:
     refused = {found.provider: found.credential_refusal for found in credential_sight() if found.credential_refusal}
     found = []
     for row in connection_rows():
-        if row.provider in refused:
+        if row.unreported_at is not None:
+            found.append(ConnectionState(row.connection_ref, UNREPORTED, row.detail))
+        elif row.provider in refused:
             found.append(ConnectionState(row.connection_ref, REFUSED, refused[row.provider]))
         elif not row.reachable:
             found.append(ConnectionState(row.connection_ref, NOT_ANSWERING, row.detail))
@@ -307,25 +314,30 @@ def cards() -> tuple[dict[str, Any], ...]:
                     **({"status": "attention"} if first.overdue else {}),
                 }
             )
-    # Said only when there is one: a figure of nought here says nothing.
-    if estate.connections:
-        first = estate.connections[0]
-        found.append(
-            {
-                "id": "hq.estate.connections",
-                "label": "Connections with a problem",
-                "value": str(len(estate.connections)),
-                # One leads to its own row; several to the page that lists them.
-                "url": (
-                    entity_link("connection", first.ref).url
-                    if len(estate.connections) == 1
-                    else reverse("control_plane:connections")
-                ),
-                "detail": f"{first.ref} {first.state}",
-                "status": "attention",
-            }
-        )
+    if estate.connection_total:
+        found.append(_connections_card(estate))
     return tuple(found)
+
+
+def _connections_card(estate: Estate) -> dict[str, Any]:
+    """Every connection, like machines and services; one with a problem says which."""
+
+    troubled = estate.connections
+    card = {
+        "id": "hq.estate.connections",
+        "label": "Connections",
+        "value": str(estate.connection_total),
+        "url": reverse("control_plane:connections"),
+    }
+    if len(troubled) == 1:
+        # One leads to its own row; several to the page that lists them.
+        card |= {
+            "url": entity_link("connection", troubled[0].ref).url,
+            "detail": f"{troubled[0].ref} {troubled[0].state}",
+        }
+    elif troubled:
+        card["detail"] = f"{len(troubled)} with a problem"
+    return card | ({"status": "attention"} if troubled else {})
 
 
 def _answers_at(machine) -> str:
@@ -364,9 +376,11 @@ def overview():
         ),
         "hq.estate.services": Dots(
             tuple(
+                # Filled for what the services page calls healthy, so a dot is
+                # never greener than the State it leads to.
                 Dot(
-                    filled=not service.faults,
-                    tip=" · ".join((service.hostname, service.faults[0] if service.faults else "wired")),
+                    filled=service.health.state == "good",
+                    tip=" · ".join((service.hostname, service.faults[0] if service.faults else service.health.label)),
                     url=entity_link("service", service.hostname).url,
                 )
                 for service in estate.services
@@ -463,7 +477,7 @@ def _offline(estate: Estate) -> tuple[Insight, ...]:
                 since=seen,
                 workflow=cannot_help(
                     f"estate-offline:{machine.name}",
-                    "HQ has no power or console access to a machine, so it is brought back where it runs.",
+                    "HQ has no power or console access to machines. Bring it back on the machine itself.",
                 ),
             )
         )

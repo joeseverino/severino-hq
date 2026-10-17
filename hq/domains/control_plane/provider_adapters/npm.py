@@ -219,4 +219,13 @@ DEFINITIONS = (DEFINITION,)
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
-CONNECTIONS = {"npm": ConnectionKind("Nginx Proxy Manager", "coarse", LOGIN)}
+CONNECTIONS = {
+    "npm": ConnectionKind(
+        "Nginx Proxy Manager",
+        "coarse",
+        LOGIN,
+        create="A user in Nginx Proxy Manager, under Users, allowed to manage proxy hosts and certificates.",
+        create_url="https://nginxproxymanager.com/guide/",
+        gives="Your proxy hosts, their certificates, and whom each one lets in.",
+    )
+}

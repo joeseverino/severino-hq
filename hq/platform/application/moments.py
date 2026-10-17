@@ -161,9 +161,7 @@ def span(days: int) -> str:
 
     from .ui import counted
 
-    if abs(days) <= DAYS_SAID_AS_DAYS:
-        said = counted(abs(days), "day")
-    else:
-        said = duration(timedelta(days=abs(days))).replace("\xa0", " ")
+    # Past a few weeks, a no-break space keeps the number with its unit ("2\xa0weeks").
+    said = counted(abs(days), "day") if abs(days) <= DAYS_SAID_AS_DAYS else duration(timedelta(days=abs(days)))
     # A count below nothing is that long past.
     return f"{said} overdue" if days < 0 else said

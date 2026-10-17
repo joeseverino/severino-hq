@@ -10,4 +10,3 @@
   <td>{% if row.total_cost %}{{ row.estimated_deductible_amount|money }}{% else %}{% empty_value %}{% endif %}</td>
   <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
 {% endblock %}
-{% block empty %}No assets yet. <a href="{% url 'assets:create' %}">New asset</a>{% endblock %}

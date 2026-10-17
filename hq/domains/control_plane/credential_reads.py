@@ -69,8 +69,6 @@ class Minter:
     script: str
     stores: tuple[tuple[str, str], ...]
     bootstrap: tuple[tuple[str, str], ...]
-    # Where an operator creates the credential by hand instead.
-    by_hand: str
     # The flag naming the account, when the credential is minted for one.
     account_flag: str = ""
 
@@ -81,7 +79,6 @@ MINTERS: Mapping[str, Minter] = frozendict(
             script="scripts/mint-cloudflare-token.sh",
             stores=(("--store", "API_TOKEN"),),
             bootstrap=(("CLOUDFLARE_BOOTSTRAP_TOKEN", "API_TOKEN"),),
-            by_hand="Cloudflare dashboard, My Profile, API Tokens: a custom token",
             account_flag="--account",
         ),
         "tailscale": Minter(
@@ -91,7 +88,6 @@ MINTERS: Mapping[str, Minter] = frozendict(
                 ("TAILSCALE_BOOTSTRAP_CLIENT_ID", "CLIENT_ID"),
                 ("TAILSCALE_BOOTSTRAP_CLIENT_SECRET", "CLIENT_SECRET"),
             ),
-            by_hand="Tailscale admin console, Settings, Trust credentials: an OAuth client",
         ),
     }
 )

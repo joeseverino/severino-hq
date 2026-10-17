@@ -23,6 +23,7 @@ from typing import Any
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
+from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.credential_reads import MINTERS, Minter, observer_permissions
 from hq.domains.control_plane.observations import OBSERVATIONS
 
@@ -247,7 +248,9 @@ def _fix(row: Any, sight: Any) -> CredentialFix:
     if minter is None or not fix.needed:
         return fix
     command, gaps = mint_command(minter, row.provider, store_references(row.store))
-    return replace(fix, command=command, gaps=gaps, by_hand=minter.by_hand)
+    # Where to create it by hand instead: the provider's own declaration says.
+    by_hand = CONNECTION_KINDS[row.provider].create if row.provider in CONNECTION_KINDS else ""
+    return replace(fix, command=command, gaps=gaps, by_hand=by_hand)
 
 
 def credential_fixes() -> dict[str, CredentialFix]:

@@ -150,7 +150,7 @@
     </div>
   {% endif %}
 {% else %}
-  {% include "partials/_empty_state.html" with message="Tailnet policy not read yet." %}
+  {% include "partials/_empty_state.html" with message="Tailnet policy not read yet." remedy=page.remedy %}
 {% endif %}
 
 {% partialdef whatif %}{% include "control_plane/_whatif_result.html" %}{% endpartialdef %}

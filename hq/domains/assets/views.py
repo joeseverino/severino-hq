@@ -25,6 +25,7 @@ from .models import ASSET_CATEGORY_CHOICES, Asset
 
 
 class AssetListView(PageMixin, TableListMixin, ListView):
+    table_empty = "No assets yet."
     model = Asset
     template_name = "assets/asset_list.html"
     paginate_by = 25

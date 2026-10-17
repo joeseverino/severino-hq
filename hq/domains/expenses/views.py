@@ -25,6 +25,7 @@ from .models import EXPENSE_CATEGORY_CHOICES, Expense
 
 
 class ExpenseListView(PageMixin, TableListMixin, ListView):
+    table_empty = "No expenses yet."
     model = Expense
     template_name = "expenses/expense_list.html"
     paginate_by = 50

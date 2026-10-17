@@ -329,7 +329,7 @@ class PageTests(PolicyTestCase):
             "All MCP agents",
             "All API clients",
             "example-agent",
-            "permissions from Pocket ID",
+            "permissions from your sign-in",
             "Projects",
             "0 rules changed from the default",
             "Agents are allowed",

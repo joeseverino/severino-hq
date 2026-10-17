@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from functools import cache
 from pathlib import Path
 from unittest import skipUnless
 from unittest.mock import patch
@@ -115,13 +116,19 @@ class ConcurrentCallTests(LiveBridge):
         self.assertEqual(status, 404)
 
 
-def controller_binary() -> Path | None:
-    """The controller to run a pass with: the image's, or one built from this checkout."""
+def can_run_a_pass() -> bool:
+    """Whether a controller can be had: the image's, or Go to build this checkout's."""
+
+    return SHIPPED_CONTROLLER.exists() or (shutil.which("go") is not None and CONTROLLER_SOURCE.is_dir())
+
+
+@cache
+def controller_binary() -> Path:
+    """The controller to run a pass with: the image's, or this checkout's, built
+    once per process and only by a test that runs one, never by discovery."""
 
     if SHIPPED_CONTROLLER.exists():
         return SHIPPED_CONTROLLER
-    if shutil.which("go") is None or not CONTROLLER_SOURCE.is_dir():
-        return None
     built = Path(os.environ.get("SEVERINO_TEST_BUILDS") or tempfile.mkdtemp()) / f"hq-controller-{os.getpid()}"
     if not built.exists():
         subprocess.run(
@@ -145,7 +152,7 @@ class Counted:
         await application(scope, receive, send)
 
 
-@skipUnless(controller_binary(), "no controller binary and no Go toolchain to build one")
+@skipUnless(can_run_a_pass(), "no controller binary and no Go toolchain to build one")
 class ControllerPassTests(TransactionTestCase):
     """The Go controller, run as the launcher runs it, against the live Django bridge."""
 

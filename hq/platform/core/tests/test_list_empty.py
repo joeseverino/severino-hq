@@ -17,11 +17,16 @@ class EmptyListTests(TestCase):
         response = self.client.get(reverse("assets:list"))
 
         self.assertContains(response, "No assets yet.")
+        self.assertContains(
+            response, f'<a class="empty-cta" href="{reverse("assets:create")}">New asset &rarr;</a>', html=True
+        )
         self.assertNotContains(response, "Nothing matches.")
 
     def test_a_list_emptied_by_its_search_offers_the_way_back(self):
         response = self.client.get(reverse("assets:list"), {"q": "no such asset"})
 
         self.assertContains(response, "Nothing matches.")
-        self.assertContains(response, '<a href="?">Clear the search and filters</a>', html=True)
+        self.assertContains(
+            response, '<a class="empty-cta" href="?">Clear the search and filters &rarr;</a>', html=True
+        )
         self.assertNotContains(response, "No assets yet.")

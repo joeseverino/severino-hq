@@ -48,7 +48,7 @@ fork changes them in every place listed.
 | The `admission` environment on each extension, `main` only, holding `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` | each extension's settings, set by `scripts/wire-github-app.py` | an admission starting Compose |
 | HQ's GitHub App: no webhook, the permissions in [`deploy/github-apps.json`](../deploy/github-apps.json), installed on the host and every extension | the account's app settings | everything above, and the controller |
 | A `main` ruleset requiring **Severino HQ · Review**, with code scanning holding a merge on a CodeQL alert | repository rules | merges |
-| A self-hosted runner with the `severino-hq` label | the host ([Deployment](Deployment.md#a-new-host)) | Deploy |
+| A self-hosted runner with the `severino-hq` label | the host ([Install](Install.md#6-install-the-runner-and-write-hostjson)) | Deploy |
 
 ### `host.json`
 
@@ -61,7 +61,7 @@ bootstrap` renders it ([Secrets](Secrets.md#bootstrap-and-ownership)).
 | `vault` | the 1Password vault every credential is read from |
 | `env_item` | the item holding the application environment |
 | `connect.unit` | the systemd service running Connect; the renderer requires it |
-| `connect.url` | Connect's address, `http://127.0.0.1:PORT`, with a port below 1024 |
+| `connect.url` | Connect's address, `http://127.0.0.1:PORT`, with a port below 1024, such as `880` |
 | `connect.credential` | the encrypted credential in `/etc/credstore.encrypted/` holding the reader token |
 | `runner.unit` | the Actions runner's service unit |
 | `runner.user` | the account the runner runs as; not root |
@@ -70,8 +70,8 @@ bootstrap` renders it ([Secrets](Secrets.md#bootstrap-and-ownership)).
 
 | Item | Holds |
 | :--- | :--- |
-| The application-environment item (`env_item`) | every variable in [`.env.example`](../.env.example) that applies: `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `SEVERINO_MCP_ALLOWED_HOSTS`, the OIDC issuer, client and allowed groups, `SEVERINO_API_RESOURCE`, `SEVERINO_SECRET_STORE_KEY`, the D1 database and token, `CONTENT_INDEX_URL`, `DJANGO_TIME_ZONE` |
-| One item per connection | `connection_ref`, `projection`, `env_prefix`, and `manages` where HQ may act ([Secrets](Secrets.md#connections)) |
+| The application-environment item (`env_item`) | the variables in [Install](Install.md#7-create-the-application-environment); the renderer refuses an item without a required one and names it |
+| One item per connection, none to start | `connection_ref`, `projection`, `env_prefix`, and `manages` where HQ may act ([Secrets](Secrets.md#connections)) |
 | SSH Key items | the controller's deployment identities and the GitHub App's signing key |
 
 The domains HQ serves and manages are not configured anywhere: they are what

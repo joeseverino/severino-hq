@@ -15,6 +15,8 @@ from hq.platform.application.pages import PageMixin
 class AnalyticsOverviewView(PageMixin, TemplateView):
     template_name = "analytics/overview.html"
     page_title = "Analytics"
+    # Visits are read by an action of the Cloudflare API connection, not a reading.
+    page_reads = ("cloudflare_api",)
 
     @override
     def get_context_data(self, **kwargs):

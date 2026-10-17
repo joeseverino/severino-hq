@@ -7,6 +7,23 @@ contracts are the public surface.
 
 ## [Unreleased]
 
+### Changed
+
+- The contact inbox moves behind the controller. The `cloudflare_api`
+  connection reads the contact table (`cloudflare.contact_submission`, D1
+  Read) and applies reviews and deletions queued in the
+  `cloudflare.contact_inbox` declaration (D1 Write, with the connection
+  managing). The web process no longer reads `CLOUDFLARE_API_TOKEN` or calls
+  D1, the separate Cloudflare D1 connection is gone, and so is the
+  `contacts.inbox` job.
+
+### Upgrade notes
+
+- Remove `CLOUDFLARE_API_TOKEN` from the app environment item. To change
+  messages from HQ, add D1 Write (account) to the cloudflare_api token and
+  set `manages` to `1` on its item; until then the inbox reads but refuses
+  changes.
+
 ### Added
 
 - Connection credentials: HQ names the permissions a valid credential lacks

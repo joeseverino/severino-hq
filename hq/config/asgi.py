@@ -4,6 +4,10 @@ The controller bridge is started from here and served elsewhere: on a private
 Unix socket, never on this application's listener.
 """
 
+from hq.config.first_use import load_on_first_use
+
+load_on_first_use()
+
 import contextlib
 import os
 
@@ -105,8 +109,18 @@ async def deriving_ahead():
 
 
 @contextlib.asynccontextmanager
+async def ringing_when_due():
+    """Run the doorbell (hq.platform.core.doorbell) for the application's lifetime."""
+
+    from hq.platform.core.doorbell import ringing_when_due as ringing
+
+    with ringing():
+        yield
+
+
+@contextlib.asynccontextmanager
 async def lifespan(app):
-    async with mcp_served.sessions.run(), bridge_serving(), deriving_ahead():
+    async with mcp_served.sessions.run(), bridge_serving(), deriving_ahead(), ringing_when_due():
         yield
 
 

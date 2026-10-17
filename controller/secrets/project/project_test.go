@@ -44,13 +44,16 @@ func registry(t testing.TB) Registry {
 	return parsed
 }
 
-// envItem is an application environment item with n variables.
-func envItem(n int) item {
-	fields := []field{}
-	for index := range n {
-		fields = append(fields, f("EXAMPLE_"+string(rune('A'+index)), "value"))
-	}
-	return item{ID: id(900), Title: "example env", Fields: fields}
+// required is a value for each variable the shipped registry requires.
+func required() []field {
+	return []field{f("DJANGO_ALLOWED_HOSTS", "hq.example.com"), f("DJANGO_SECRET_KEY", secret)}
+}
+
+// envItem is an application environment item: every required variable, two
+// optional ones, and extra.
+func envItem(extra ...field) item {
+	fields := append(required(), f("EXAMPLE_A", "value"), f("EXAMPLE_B", "value"))
+	return item{ID: id(900), Title: "example env", Fields: append(fields, extra...)}
 }
 
 func apiToken(n int, ref, prefix string, extra ...field) item {
@@ -63,10 +66,10 @@ func apiToken(n int, ref, prefix string, extra ...field) item {
 func input(t testing.TB, items ...item) Input {
 	t.Helper()
 	in := Input{
-		Registry: registry(t), EnvItem: "example env", MinAppVariables: 15,
+		Registry: registry(t), EnvItem: "example env",
 		Vault: Vault{Configured: connecttest.VaultName, ID: connecttest.VaultID, Name: connecttest.VaultName},
 	}
-	for _, each := range append(items, envItem(15)) {
+	for _, each := range append(items, envItem()) {
 		in.Items = append(in.Items, each.Full())
 	}
 	return in
@@ -331,9 +334,46 @@ func TestItemsThatAreNotConnectionsAreSkipped(t *testing.T) {
 	}
 }
 
-func TestAVaultWithNoConnectionsIsRefused(t *testing.T) {
-	refused(t, input(t, item{ID: id(2), Fields: []field{f("username", "someone")}}), "resolved no connections")
-	refused(t, input(t), "resolved no connections")
+// A host with nothing installed yet renders an empty inventory, and the
+// application environment with it, so HQ can start before any connection
+// exists.
+func TestAVaultWithNoConnectionsRendersAnEmptyInventory(t *testing.T) {
+	for _, in := range []Input{input(t), input(t, item{ID: id(2), Fields: []field{f("username", "someone")}})} {
+		out, err := Project(in)
+		if err != nil || out.Withheld != nil {
+			t.Fatalf("an empty inventory was refused: %v %v", err, out.Withheld)
+		}
+		if out.AppEnv == nil || out.Document.Connections == nil || len(out.Document.Connections) != 0 || out.Identities+out.SigningKeys != 0 {
+			t.Fatalf("rendered %d connections, %d keys, app env %t", len(out.Document.Connections), out.Identities+out.SigningKeys, out.AppEnv != nil)
+		}
+		if _, err := out.Document.Encode(); err != nil {
+			t.Fatalf("the empty inventory does not encode: %v", err)
+		}
+	}
+}
+
+// Where connections are installed, a read that resolves none is a wrong or
+// emptied vault until shown otherwise: the application environment renders,
+// and the connections are withheld as a refusal of the vault's content.
+func TestAVaultWithNoConnectionsNeverReplacesInstalledOnes(t *testing.T) {
+	in := input(t, item{ID: id(2), Fields: []field{f("username", "someone")}})
+	in.HoldsConnections = true
+	out, err := Project(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(out.Withheld, ErrContent) || !strings.Contains(out.Withheld.Error(), "resolved none") {
+		t.Fatalf("withheld with %v", out.Withheld)
+	}
+	if !bytes.Contains(out.AppEnv, []byte("DJANGO_SECRET_KEY=")) || out.Document.Connections != nil || out.SSH != nil {
+		t.Fatal("the application environment was not rendered alone")
+	}
+	// A vault that does hold connections replaces the installed ones as always.
+	held := input(t, apiToken(1, "example", "EXAMPLE"))
+	held.HoldsConnections = true
+	if out, err := Project(held); err != nil || out.Withheld != nil || len(out.Document.Connections) != 1 {
+		t.Fatalf("a vault with a connection was not rendered: %v %v", err, out.Withheld)
+	}
 }
 
 func TestBootstrapReferences(t *testing.T) {
@@ -413,9 +453,7 @@ func TestApplicationEnvironment(t *testing.T) {
 		f("lower_case", "skipped"), f("X", "single letters are not variables"), f("EMPTY", ""),
 		{ID: "novalue", Type: "STRING", Label: "NO_VALUE"}, f("notes", "skipped"), f("WITH_1_DIGIT", "kept"),
 	}}
-	for index := range 12 {
-		env.Fields = append(env.Fields, f("FILL_"+string(rune('A'+index)), "v"))
-	}
+	env.Fields = append(env.Fields, required()...)
 	in.Items[len(in.Items)-1] = env.Full()
 	out, err := Project(in)
 	if err != nil {
@@ -425,7 +463,7 @@ func TestApplicationEnvironment(t *testing.T) {
 	if !strings.HasPrefix(string(out.AppEnv), want) {
 		t.Fatalf("rendered:\n%s", out.AppEnv)
 	}
-	if out.AppVariables != 16 || strings.Contains(string(out.AppEnv), "skipped") || strings.Contains(string(out.AppEnv), "EMPTY") {
+	if out.AppVariables != 6 || strings.Contains(string(out.AppEnv), "skipped") || strings.Contains(string(out.AppEnv), "EMPTY") {
 		t.Fatalf("%d variables:\n%s", out.AppVariables, out.AppEnv)
 	}
 
@@ -434,33 +472,53 @@ func TestApplicationEnvironment(t *testing.T) {
 		changed.Items[len(changed.Items)-1] = item{ID: id(900), Title: "example env", Fields: fields}.Full()
 		return changed
 	}
-	fifteen := envItem(15).Fields
-	refused(t, replace(fifteen[:14]...), "suspiciously small app env (14 vars)")
+	base := envItem().Fields
 	refused(t, replace(), "empty render")
+	// Every required variable, named when it is missing or empty; the values
+	// never appear.
+	without := func(name string, value ...string) []field {
+		kept := []field{}
+		for _, each := range base {
+			if each.Label != name {
+				kept = append(kept, each)
+			}
+		}
+		for _, v := range value {
+			kept = append(kept, f(name, v))
+		}
+		return kept
+	}
+	refused(t, replace(without("DJANGO_SECRET_KEY")...), "without DJANGO_SECRET_KEY.")
+	refused(t, replace(without("DJANGO_SECRET_KEY", "")...), "without DJANGO_SECRET_KEY.")
+	refused(t, replace(without("DJANGO_ALLOWED_HOSTS")...), "without DJANGO_ALLOWED_HOSTS.")
+	refused(t, replace(f("EXAMPLE_A", "value"), f("django_secret_key", "lower case is another name")), "without DJANGO_ALLOWED_HOSTS, DJANGO_SECRET_KEY.")
+	if minimal, err := Project(replace(required()...)); err != nil || minimal.AppVariables != 2 {
+		t.Fatalf("the required variables alone were refused: %v", err)
+	}
 	refused(t, replace(f("lower", "only")), "empty render")
-	refused(t, replace(append(fifteen, f("REFERENCE", "op://Example Vault/item/field"))...), "unresolved reference")
+	refused(t, replace(append(base, f("REFERENCE", "op://Example Vault/item/field"))...), "unresolved reference")
 	// A line of a multi-line value that looks like an empty assignment is
 	// inside its quotes: it is the value, and it is rendered as written.
-	multi, err := Project(replace(append(fifteen, f("MULTI", "first\nINJECTED=\nlast"))...))
+	multi, err := Project(replace(append(base, f("MULTI", "first\nINJECTED=\nlast"))...))
 	if err != nil || !strings.Contains(string(multi.AppEnv), "MULTI='first\nINJECTED=\nlast'\n") {
 		t.Fatalf("a multi-line value was refused or rewritten: %v", err)
 	}
-	refused(t, replace(append(fifteen, f("BINARY", "a\x00b"))...), "NUL")
+	refused(t, replace(append(base, f("BINARY", "a\x00b"))...), "NUL")
 	// Read back as text, a carriage return would not be the byte that was written.
-	refused(t, replace(append(fifteen, f("WINDOWS", "line one\r\nline two"))...), "carriage return")
-	refused(t, replace(append(fifteen, f("BARE", "a\rb"))...), "carriage return")
+	refused(t, replace(append(base, f("WINDOWS", "line one\r\nline two"))...), "carriage return")
+	refused(t, replace(append(base, f("BARE", "a\rb"))...), "carriage return")
 	// Django takes the first of two, a shell sourcing the file the last.
-	refused(t, replace(append(fifteen, f("EXAMPLE_A", "another"))...), "set twice")
-	refused(t, replace(append(fifteen, f("TWICE", "one"), f("TWICE", "one"))...), "set twice")
+	refused(t, replace(append(base, f("EXAMPLE_A", "another"))...), "set twice")
+	refused(t, replace(append(base, f("TWICE", "one"), f("TWICE", "one"))...), "set twice")
 	// A repeated label that renders nothing is not a variable set twice.
-	if _, err := Project(replace(append(fifteen, f("notes", "a"), f("notes", "b"), f("EMPTY", ""), f("EMPTY", ""))...)); err != nil {
+	if _, err := Project(replace(append(base, f("notes", "a"), f("notes", "b"), f("EMPTY", ""), f("EMPTY", ""))...)); err != nil {
 		t.Fatalf("repeated labels that are not variables were refused: %v", err)
 	}
 
 	missing := input(t, apiToken(1, "example", "EXAMPLE"))
 	missing.EnvItem = "another env"
 	refused(t, missing, "exactly one item; found 0")
-	twice := input(t, apiToken(1, "example", "EXAMPLE"), item{ID: id(901), Title: "example env", Fields: fifteen})
+	twice := input(t, apiToken(1, "example", "EXAMPLE"), item{ID: id(901), Title: "example env", Fields: base})
 	refused(t, twice, "exactly one item; found 2")
 	byID := input(t, apiToken(1, "example", "EXAMPLE"))
 	byID.EnvItem = id(900)
@@ -688,7 +746,7 @@ func TestSigningKeyRefusals(t *testing.T) {
 }
 
 func TestRegistryRefusals(t *testing.T) {
-	good := `{"schema_version":1,"projections":{"p":{"CONNECTION_REF":{"source":"connection_ref"},"URL":{"source":"field","label":"website"}}}}`
+	good := `{"schema_version":2,"projections":{"p":{"CONNECTION_REF":{"source":"connection_ref"},"URL":{"source":"field","label":"website"}}},"required_app_variables":["EXAMPLE_KEY"]}`
 	if _, err := parse([]byte(good)); err != nil {
 		t.Fatal(err)
 	}
@@ -697,9 +755,16 @@ func TestRegistryRefusals(t *testing.T) {
 	}
 	for name, text := range map[string]string{
 		"not json":               `projections`,
-		"wrong schema version":   strings.Replace(good, `"schema_version":1`, `"schema_version":2`, 1),
-		"no projections":         `{"schema_version":1,"projections":{}}`,
-		"projections not object": `{"schema_version":1,"projections":[]}`,
+		"wrong schema version":   strings.Replace(good, `"schema_version":2`, `"schema_version":1`, 1),
+		"no projections":         `{"schema_version":2,"projections":{},"required_app_variables":["EXAMPLE_KEY"]}`,
+		"projections not object": `{"schema_version":2,"projections":[],"required_app_variables":["EXAMPLE_KEY"]}`,
+		// An empty list would accept any item; a name no field renders, none.
+		"no required variables":    strings.Replace(good, `,"required_app_variables":["EXAMPLE_KEY"]`, ``, 1),
+		"empty required variables": strings.Replace(good, `["EXAMPLE_KEY"]`, `[]`, 1),
+		"lowercase required":       strings.Replace(good, `["EXAMPLE_KEY"]`, `["example_key"]`, 1),
+		"one-letter required":      strings.Replace(good, `["EXAMPLE_KEY"]`, `["X"]`, 1),
+		"repeated required":        strings.Replace(good, `["EXAMPLE_KEY"]`, `["EXAMPLE_KEY","EXAMPLE_KEY"]`, 1),
+		"required not a list":      strings.Replace(good, `["EXAMPLE_KEY"]`, `"EXAMPLE_KEY"`, 1),
 		// The vault is the inventory: a registry that lists connections is refused.
 		"a connections key":         strings.Replace(good, `{"schema_version"`, `{"connections":{},"schema_version"`, 1),
 		"unknown entry key":         entry(`{"source":"field","label":"website","optinal":true}`),
@@ -714,7 +779,7 @@ func TestRegistryRefusals(t *testing.T) {
 		"lowercase variable":        strings.Replace(good, `"URL"`, `"url"`, 1),
 		"renderer's own variable":   strings.Replace(good, `"URL"`, `"STORE_ITEM"`, 1),
 		"bootstrap variable":        strings.Replace(good, `"URL"`, `"BOOTSTRAP"`, 1),
-		"no connection ref":         `{"schema_version":1,"projections":{"p":{"URL":{"source":"field","label":"website"}}}}`,
+		"no connection ref":         `{"schema_version":2,"projections":{"p":{"URL":{"source":"field","label":"website"}}},"required_app_variables":["EXAMPLE_KEY"]}`,
 		"connection ref from field": strings.Replace(good, `{"source":"connection_ref"}`, `{"source":"field","label":"connection_ref"}`, 1),
 		"repeated projection":       strings.Replace(good, `"projections":{`, `"projections":{"p":{"CONNECTION_REF":{"source":"connection_ref"}},`, 1),
 		"trailing data":             good + `{}`,
@@ -838,9 +903,9 @@ func FuzzProject(f *testing.F) {
 			connecttest.F("user", "deploy"), connecttest.F("host_key", hostKey), connecttest.F("identity", "Edge deploy key"),
 			connecttest.F("app_id", "1"), connecttest.F("signing_key", "Edge deploy key"),
 		}, URLs: []connecttest.URL{{Href: website}}}
-		in := Input{Registry: parsed, EnvItem: "example env", MinAppVariables: 15,
+		in := Input{Registry: parsed, EnvItem: "example env",
 			Vault: Vault{Configured: connecttest.VaultName, ID: connecttest.VaultID, Name: connecttest.VaultName},
-			Items: []connectapi.FullItem{connection.Full(), envItem(15).Full(),
+			Items: []connectapi.FullItem{connection.Full(), envItem().Full(),
 				connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, key.Public).Full()}}
 		out, err := Project(in)
 		if err != nil {

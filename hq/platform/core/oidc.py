@@ -23,6 +23,13 @@ SSO_FAILURE_SESSION_KEY = "oidc_failure"
 SIGNED_IN_SESSION_KEY = "signed_in_at"
 
 
+def sso_only() -> bool:
+    """Whether no password backend is installed."""
+
+    backends = tuple(settings.AUTHENTICATION_BACKENDS)
+    return bool(backends) and not any(name.endswith("ModelBackend") for name in backends)
+
+
 def _tailscale_principal(payload) -> str:
     value = payload.get(TAILSCALE_PRINCIPAL_CLAIM)
     if not isinstance(value, str):

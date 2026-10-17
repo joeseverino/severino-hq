@@ -183,6 +183,25 @@ class ProjectionTests(TestCase):
         self.assertFalse(rows[UNIT_KIND].stale)
         self.assertGreaterEqual(self.context().sight.stale, 1)
 
+    def test_a_reported_connection_is_never_called_unconnected_before_its_first_reading(self):
+        from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+        from hq.domains.control_plane.models import ProviderConnection
+
+        ProviderConnection.objects.create(
+            connection_ref="example-portainer",
+            controller_id="example-controller",
+            provider="portainer",
+            endpoint="https://portainer.example.com",
+            reachable=True,
+            probed=True,
+            observed_at=timezone.now(),
+        )
+
+        seen = self.context().sight
+
+        self.assertNotIn(CONNECTION_LABELS["portainer"], seen.unconnected)
+        self.assertIn(CONNECTION_LABELS["portainer"], dict(seen.groups))
+
     def test_a_reading_that_needs_no_connection_is_listed_and_never_called_unconnected(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 
@@ -433,23 +452,21 @@ class ScheduledWorkTests(TestCase):
         self.assertAlmostEqual(row.next_due, newest.finished_at + timedelta(days=1), delta=timedelta(seconds=1))
 
     def test_work_never_done_is_due_now_and_says_so(self):
-        row = self.rows()["contacts.inbox"]
+        row = self.rows()["content.sync"]
 
-        self.assertEqual((row.every, row.result, row.next_due, row.runs), ("Hourly", "Not done yet", None, None))
+        self.assertEqual((row.every, row.result, row.next_due, row.runs), ("Daily", "Not done yet", None, None))
 
     def test_every_piece_with_a_cadence_has_a_row_and_none_without(self):
-        self.assertEqual(
-            set(self.rows()), {"audit.prune", "contacts.inbox", "content.sync", "registry.refresh", "sessions.clear"}
-        )
+        self.assertEqual(set(self.rows()), {"audit.prune", "content.sync", "registry.refresh", "sessions.clear"})
 
     def test_three_queries_however_many_jobs_there_are(self):
         for hours in range(40):
-            self.ran("contacts.inbox", timedelta(hours=hours))
+            self.ran("content.sync", timedelta(hours=hours))
 
         with self.assertNumQueries(3):
             rows = self.rows()
 
-        self.assertEqual(len(rows["contacts.inbox"].runs.shown), 12)
+        self.assertEqual(len(rows["content.sync"].runs.shown), 12)
 
     def test_the_resource_carries_the_rows_without_the_drawing(self):
         self.ran("sessions.clear", timedelta(hours=1))

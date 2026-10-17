@@ -128,7 +128,7 @@ TOPOLOGY_LENSES: tuple[TopologyLens, ...] = (
     TopologyLens(
         "unobserved-abilities",
         "Things HQ could read but currently cannot",
-        "What a connection type offers that no working connection gives HQ now.",
+        "What a service offers that no working connection reads now.",
         _unobserved_abilities,
     ),
     TopologyLens(

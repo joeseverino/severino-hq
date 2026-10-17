@@ -194,6 +194,8 @@ _UNSEEN_CALLS = frozenset(
         "CommandError",
         "SuspiciousOperation",
         "Http404",
+        # A shared value's description is the controller contract's, read by its author.
+        "SharedValue",
     }
 )
 

@@ -75,8 +75,9 @@ def _in_place(service: Any) -> Health:
     """Every part HQ set up is in place: which parts those are, and what answers
     behind the proxy where HQ reads it.
 
-    HQ checks records, never a request. So the word is what was checked, and a
-    proxy forwarding to a port nothing publishes says that instead.
+    HQ checks records, never a request. So the word is what was checked, and
+    green only for something read running: records in place are configured, not
+    healthy. A proxy forwarding to a port nothing publishes says that instead.
     """
 
     parts = [
@@ -90,17 +91,31 @@ def _in_place(service: Any) -> Health:
         return Health(UNKNOWN, "DNS record only", "A DNS record is in place. Nothing HQ set up answers at it.")
     behind = _behind_the_proxy(service)
     if behind is None:
-        return Health(GOOD, "Set up", f"{checked}." if checked else "")
+        return Health(UNKNOWN, "In place", f"{checked}." if checked else "")
     address, machine, container, reads_containers = behind
     if container:
-        return Health(GOOD, "Set up", f"{checked} and forward to {container} on {machine}.")
+        return _running(service.container, f"{checked} and forward to {container} on {machine}.")
     if reads_containers:
         return Health(
             ATTENTION,
             "Nothing on that port",
             f"{checked}. The proxy forwards to {address}, and no container on {machine} publishes that port.",
         )
-    return Health(GOOD, "Set up", f"{checked}. The proxy forwards to {address}. HQ does not read what runs there.")
+    return Health(UNKNOWN, "In place", f"{checked}. The proxy forwards to {address}. HQ does not read what runs there.")
+
+
+def _running(running: Any, detail: str) -> Health:
+    """What the container behind the proxy was last read doing: its own health
+    check where it has one, else whether it runs."""
+
+    check = running.check if running is not None else ""
+    if check == "health check passing":
+        return Health(GOOD, "Health check passing", detail)
+    if check:
+        return Health(ATTENTION, check[:1].upper() + check[1:], detail)
+    if running is not None and running.healthy:
+        return Health(GOOD, "Running", detail)
+    return Health(UNKNOWN, "In place", detail)
 
 
 def _and(names: list[str]) -> str:

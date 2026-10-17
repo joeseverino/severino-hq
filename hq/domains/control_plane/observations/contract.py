@@ -135,6 +135,10 @@ class ObservationSpec:
     # What a record tells about the connection that read it, as ``(key, value)``
     # facts the findings read off that connection's node.
     facts: Callable[[Mapping[str, Any]], tuple[tuple[str, str], ...]] = lambda record: ()
+    # Whether its records are what people sent (names, addresses, messages),
+    # kept for the one page whose capability covers them. The readings any
+    # reader may open count them and never list them.
+    withheld: bool = False
 
     def __reduce__(self) -> tuple[Any, tuple[str]]:
         # A spec is a declaration, not data. A stored value that refers to one

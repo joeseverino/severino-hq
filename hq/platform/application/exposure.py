@@ -58,7 +58,6 @@ _SERIOUS_AT = {
 # The ports a machine's front door answers on: a request routed to the machine
 # lands on whichever container publishes one of them.
 FRONT_DOOR_PORTS = frozenset({80, 443})
-_STATUS_ORDER = ("serious", "attention", "neutral", "good")
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,10 +134,6 @@ def status_at(status: str, level: str) -> str:
     if status == "attention" and level == UNROUTED:
         return "neutral"
     return status
-
-
-def status_rank(status: str) -> int:
-    return _STATUS_ORDER.index(status) if status in _STATUS_ORDER else len(_STATUS_ORDER)
 
 
 def gates_of(hostname: str) -> tuple[str, ...]:

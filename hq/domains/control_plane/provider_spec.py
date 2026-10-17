@@ -130,6 +130,17 @@ class ConnectionKind:
     credential: Literal["scoped", "coarse"]
     # The settings its credential arrives as.
     shape: ConnectionShape
+    # What to create at the provider for it, in one sentence that says where,
+    # and the provider's own page on it. The Connections page walks a new
+    # connection through from these.
+    create: str = ""
+    create_url: str = ""
+    # Permissions a scoped credential needs to change what HQ manages through
+    # it, beside the reads its readings declare (``observer_permissions``).
+    writes: tuple[str, ...] = ()
+    # What connecting it gives the owner, in one line of his own words: the
+    # Connections page offers it by this, never by the names of its kinds.
+    gives: str = ""
 
 
 class ProviderModel(BaseModel):
@@ -546,6 +557,11 @@ class ProviderSpec:
     # the same reason ``choices`` is one: the answer needs the database, and
     # this module must not.
     notes: str = ""
+    # Whether its spec holds what people wrote (a note on a contact message)
+    # rather than settings. Every generic surface (the records API and MCP,
+    # the record pages, search, the audit log) shows its readout and never the
+    # spec; the domain that owns the kind shows it under its own capability.
+    withheld: bool = False
     # What the controller may do to this kind, and which of those it may do
     # unprompted. Declared here, beside the provider it is about.
     # HQ is the source of truth for what HQ can do; a second copy of that

@@ -7,8 +7,8 @@ heading (`grouped`) a card does not repeat the domain. Where the reader sorts
 their own queue (`triage`) a card ends with the one thing they can do to it:
 dismiss it, or restore it. Neither fixes it. A dismissed card is its title.
 On the page of the thing a card is about (`here`) its title is plain text.
-What can be pressed and the pages that help look into it stand at the card's
-end, beside what it says, so neither takes a row of its own.
+With `glance` (the dashboard) a card is its title and what to do. Its buttons
+and links sit at its end, beside its text, not on rows of their own.
 {% endcomment %}
 <ul class="attention-list">
   {% for entry in items %}
@@ -16,11 +16,11 @@ end, beside what it says, so neither takes a row of its own.
     <li class="attention-row" data-attention-item>
       <div class="attention-body">
         <div class="attention-head">
-          {% include "partials/_urgency_pill.html" with item=item only %}
+          {% if not glance %}{% include "partials/_urgency_pill.html" with item=item only %}{% endif %}
           {% if item.href and not here %}<a class="attention-title" href="{{ item.href }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
-          {% if item.since or not grouped %}
+          {% if item.since or not grouped and not glance %}
           <span class="attention-meta">
-            {% if not grouped %}<span>{{ item.source }}</span>{% endif %}
+            {% if not grouped and not glance %}<span>{{ item.source }}</span>{% endif %}
             {% if item.since %}<span>Since {{ item.since|when:"day" }}</span>{% endif %}
           </span>
           {% endif %}

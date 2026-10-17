@@ -1,6 +1,0 @@
-/* Toast shown when a form is submitted in the demo. */
-.demo-note {
-  position: fixed; inset-inline: 0; inset-block-end: var(--space-8); margin: 0 auto; width: fit-content; max-width: calc(100vw - 2rem);
-  padding: var(--space-4) var(--space-7); border-radius: var(--radius); background: var(--ink); color: var(--surface);
-  font-size: var(--text-sm); box-shadow: var(--shadow-sm); z-index: 50;
-}

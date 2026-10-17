@@ -13,6 +13,9 @@ service account because Connect's file API does not support uploads.
 
 ## Bootstrap and ownership
 
+The steps for a new host are in [Install](Install.md); this section is the
+rules they keep.
+
 The host's own values live in `/etc/severino-hq/host.json`
 ([`deploy/host.example.json`](../deploy/host.example.json)): the vault, the
 application-environment item, the Connect unit and loopback URL, and the name of
@@ -136,9 +139,25 @@ registry declares (`manage.py bridge_contract`), it is read strictly, and one
 whose projections are not the shapes the connections document is typed with is
 refused whole; the vault remains the connection inventory. An item that names
 no provider is for the one its `env_prefix` spells, except an SSH transport,
-which is for `ssh`. A render that resolved no
-connection, an empty application environment, or one with fewer than fifteen
-variables is a failure, not an empty success.
+which is for `ssh`. An empty application environment, or one without a
+variable HQ cannot run without, is refused, and the refusal names each one
+missing. Which variables those are is declared once, as
+`REQUIRED_APP_VARIABLES` in `hq/config/settings.py`, and `manage.py
+bridge_contract` writes them into the registry as `required_app_variables`: `DJANGO_ALLOWED_HOSTS` and `DJANGO_SECRET_KEY`. Any other variable is
+optional.
+
+A vault that resolves no connection renders an empty connections document
+where none is installed, or where the installed one is empty: a new host, or
+one whose tmpfs a reboot cleared, starts HQ before any connection exists.
+Where the installed document holds a connection, or is there and cannot be
+read as the renderer's own, a vault that resolves none is refused as `content`
+and the installed connections and identities stay. The application environment
+is still installed and the web container restarted for it, and no state is
+saved, so every run reads the vault in full and refuses again until it holds
+a connection. HQ remembers what each controller last reported, and a
+controller that reported connections and then reports none raises the serious
+finding `connections-lost`, which is what catches an emptied vault on a host
+that had nothing installed to keep.
 In the application environment a carriage return or a variable set
 twice is refused, because readers would disagree about the value. A
 connections document larger than the controller reads is refused as content,
@@ -447,7 +466,8 @@ would make it transactional and requires moving the mounts first.
 
 **The validators are not defensive padding.** Each rejects a specific way a
 render can succeed while producing something unusable: an unresolved reference,
-an empty file, a variable with no value, or zero connections.
+an empty file, a variable with no value, a missing required variable, or a
+vault that resolves no connection after holding one.
 
 **The skip is verified, not assumed.** A matching content version only skips
 the read when every installed file still matches its recorded digest. The state

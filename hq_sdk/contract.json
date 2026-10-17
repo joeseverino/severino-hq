@@ -157,7 +157,8 @@
           "*",
           "redact=",
           "observation=",
-          "connection="
+          "connection=",
+          "redact_for="
         ]
       }
     },
@@ -669,11 +670,19 @@
           "lede=",
           "actions=",
           "navigation=",
-          "trail="
+          "trail=",
+          "reads="
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "lead": {
+            "kind": "property"
+          },
+          "remedy": {
+            "kind": "property"
+          }
+        }
       },
       "PageAction": {
         "bases": [],
@@ -756,7 +765,8 @@
           "*",
           "actions=",
           "navigation=",
-          "trail="
+          "trail=",
+          "reads="
         ]
       }
     },
@@ -1247,6 +1257,12 @@
             "parameters": [
               "self",
               "**kwargs"
+            ]
+          },
+          "get_table_empty": {
+            "kind": "method",
+            "parameters": [
+              "self"
             ]
           },
           "get_table_filters": {

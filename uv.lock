@@ -1311,6 +1311,26 @@ wheels = [
 ]
 
 [[package]]
+name = "rjsmin"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/7e/1a5e8fa9cf68e9147b4bc041e247783117a9d100cdec91d0efaea785d035/rjsmin-1.3.0.tar.gz", hash = "sha256:7c2ef57d55e2d76db0c0d0f7399c6c5efde995c677b190ba30fb94019f94a07e", size = 427569, upload-time = "2026-10-10T16:32:12.994Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cc/5a/acad8dbac532c113eafc9bde01cf3b556b18762a5dd3fcf62c7c04956da2/rjsmin-1.3.0-cp315-cp315-manylinux1_i686.whl", hash = "sha256:719b949efea978e435ff22447f9dd8004f680862ee1d9d559151c966d67ca50f", size = 32520, upload-time = "2026-10-10T16:33:25.063Z" },
+    { url = "https://files.pythonhosted.org/packages/00/00/48631d59fabbffde8a21a9494422a9d1617e1dac17ad31058a96609c611b/rjsmin-1.3.0-cp315-cp315-manylinux1_x86_64.whl", hash = "sha256:bb223344438e77d74c5e41d5a07fb754c42e9b04bab0c004d08ca6022c885d72", size = 32167, upload-time = "2026-10-10T16:33:26.408Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/81/1977433e16146575269bc81ab118bcc4012a3814ae1787450dd12d03927e/rjsmin-1.3.0-cp315-cp315-manylinux2014_aarch64.whl", hash = "sha256:da4961eb74c563094e931f7d09bf2fbd12d1690ec567a6fbea3964e5a142b80e", size = 32690, upload-time = "2026-10-10T16:33:27.983Z" },
+    { url = "https://files.pythonhosted.org/packages/77/7b/d45832af516bc9fae2bbdd929be97a3edfdf7ba30e3c351bb60c092a4237/rjsmin-1.3.0-cp315-cp315-musllinux_1_2_aarch64.whl", hash = "sha256:30625ba457151b52f7a262169187f0bf1def5e25418381282a0891a560afc0e0", size = 33235, upload-time = "2026-10-10T16:33:29.59Z" },
+    { url = "https://files.pythonhosted.org/packages/30/81/c1373e2bc61c21957474c13f42776c71c2dbebf06400f9a218c566b52d09/rjsmin-1.3.0-cp315-cp315-musllinux_1_2_i686.whl", hash = "sha256:9d08552e90f5f6b7e79838a23190bc89ba6ccbcad74b9cca923bfb4596d5415d", size = 33454, upload-time = "2026-10-10T16:33:30.94Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/35/c5f46e4cedaf95b414f6701c8cced668aa1328b4f588e27590ad3535ab70/rjsmin-1.3.0-cp315-cp315-musllinux_1_2_x86_64.whl", hash = "sha256:adccd1027c095ad49408802a77ad030ad567a337d938031c42bbbccce22d93c8", size = 32819, upload-time = "2026-10-10T16:33:32.294Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/20/7af2475fa7a6ce3fde9ccdd40ff31b489d633f6b76a87664691a66d14dac/rjsmin-1.3.0-cp315-cp315t-manylinux1_i686.whl", hash = "sha256:a49363b26e4fa35f4a56f1a0102bcb81e0502ad98d0802cc0eabee54c38a5a3a", size = 34172, upload-time = "2026-10-10T16:33:33.634Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/79/bbaacb8e52691c2c4eac47cf1e03cd124b28d77328f99d366c282da97396/rjsmin-1.3.0-cp315-cp315t-manylinux1_x86_64.whl", hash = "sha256:9fb12bc2939e2037c4c1fa36dffd46229f0a6c9ca7e5a18e7ff4841bc7f3f47b", size = 33823, upload-time = "2026-10-10T16:33:35.255Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/6c/7e3bf4a66bea608b805a6cb80ab497356d38f4929bf28e33b28a0246e910/rjsmin-1.3.0-cp315-cp315t-manylinux2014_aarch64.whl", hash = "sha256:4eaed13693f43b52ced8266923d56c9e03c11fc788a834312ea3b498cc80871c", size = 34647, upload-time = "2026-10-10T16:33:36.652Z" },
+    { url = "https://files.pythonhosted.org/packages/37/25/f924b49524e3e2dbd9f577c3eb2a3533862803a15c14bd4fef196f1c3b5a/rjsmin-1.3.0-cp315-cp315t-musllinux_1_2_aarch64.whl", hash = "sha256:9dbda7b1423b7e50590dc60aee22bdf14c51b52edc2f23823ced8e7e054a1cd7", size = 34815, upload-time = "2026-10-10T16:33:38.019Z" },
+    { url = "https://files.pythonhosted.org/packages/68/43/e06b06b5ada1c62a0527896d43cd7c5b896a5d419f49fb1b4079526c07c5/rjsmin-1.3.0-cp315-cp315t-musllinux_1_2_i686.whl", hash = "sha256:5e957e788256bd23141786e6646bc2062b7fa78de6f4eb8b155f47a54524c990", size = 34966, upload-time = "2026-10-10T16:33:39.336Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/9c/1ecf761d5a9cdf1610d90a9c42710680773788eb5b178196ddaf81fec85b/rjsmin-1.3.0-cp315-cp315t-musllinux_1_2_x86_64.whl", hash = "sha256:bc0d1f930dfb64195394d121a746431674a310a26a3205423b8236a6144192a4", size = 34267, upload-time = "2026-10-10T16:33:40.65Z" },
+]
+
+[[package]]
 name = "rpds-py"
 version = "2026.6.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1412,6 +1432,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyjwt" },
     { name = "referencing" },
+    { name = "rjsmin" },
     { name = "starlette" },
     { name = "tblib" },
     { name = "uvicorn" },
@@ -1452,6 +1473,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.14.0,<3" },
     { name = "pyjwt", specifier = ">=2.15.1,<3" },
     { name = "referencing", specifier = ">=0.37.0,<1" },
+    { name = "rjsmin", specifier = ">=1.2,<2" },
     { name = "starlette", specifier = ">=1.8.0,<2" },
     { name = "tblib", specifier = ">=3,<4" },
     { name = "uvicorn", specifier = ">=0.54.0,<1" },

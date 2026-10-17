@@ -26,6 +26,7 @@ from ..findings import derive_findings
 from ..report_testing import report_connections
 from ..security import cli_principal
 from ..topology import derive_topology
+from .commands import commands_on
 
 ACCOUNT = "0123abcd"
 STORE = {
@@ -354,8 +355,8 @@ class RenderedFixTests(TestCase):
         response = self.client.get(reverse("control_plane:connections"))
 
         self.assertContains(response, "operator-command")
-        self.assertContains(response, "--account 0123abcd")
-        self.assertContains(response, "op://Example Vault/exampleitem01/credential")
+        self.assertIn("--account 0123abcd", commands_on(response))
+        self.assertIn("op://Example Vault/exampleitem01/credential", commands_on(response))
         self.assertNotContains(response, "Cloudflare API refused this credential")
         self.assertNotContains(response, SECRET)
 
@@ -363,7 +364,7 @@ class RenderedFixTests(TestCase):
         response = self.client.get(reverse("control_plane:findings"))
 
         self.assertContains(response, "operator-command")
-        self.assertContains(response, "op://Example Vault/exampleitem01/credential")
+        self.assertIn("op://Example Vault/exampleitem01/credential", commands_on(response))
         self.assertNotContains(response, SECRET)
 
     def test_the_findings_api_carries_the_step(self):

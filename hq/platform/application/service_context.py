@@ -242,7 +242,9 @@ def _health_detail(service) -> str:
     # The uptime is the container's card on the path; the health check is the
     # evidence the verdict rests on.
     running = service.container
-    return " · ".join(part for part in (running.check if running else "", service.health.detail) if part)
+    # Not twice: a health check that passes is already the verdict's word.
+    check = running.check if running and running.check.lower() != service.health.label.lower() else ""
+    return " · ".join(part for part in (check, service.health.detail) if part)
 
 
 def _what(service) -> str:

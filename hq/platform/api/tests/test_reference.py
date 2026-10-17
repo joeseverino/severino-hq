@@ -44,8 +44,16 @@ class ReferencePageTests(TestCase):
         self.assertContains(response, static("vendor/scalar/standalone.js"))
         self.assertContains(response, static("js/api-reference.js"))
         self.assertContains(response, static("css/api-reference.css"))
-        # Something is said while the bundle loads, outside what it mounts on.
-        self.assertContains(response, 'role="status">Loading the reference.</p>\n<div class="api-reference"')
+        # Something is said while the bundle loads, outside what it mounts on,
+        # and if it never does, where the document itself is.
+        page = response.content.decode()
+        status = page.split('<div class="api-reference-status" role="status">', 1)[1].split(
+            '<div class="api-reference"', 1
+        )[0]
+        self.assertIn("Loading the reference.", status)
+        self.assertIn(
+            f'The reference did not load. The document itself is at <a href="{reverse("hq_api:openapi")}">', status
+        )
 
     def test_it_sends_hqs_policy_minus_only_trusted_types(self):
         """The one exception to the policy, pinned.

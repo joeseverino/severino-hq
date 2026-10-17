@@ -8,6 +8,7 @@ from unittest import mock
 from django.test import SimpleTestCase
 
 from ..timestamps import moment
+from .source import parsed
 
 PLUS_TWO = timezone(timedelta(hours=2))
 ROOT = Path(__file__).resolve().parents[4]
@@ -153,7 +154,7 @@ class OneParserTests(SimpleTestCase):
                 continue
             offenders.extend(
                 f"{relative}:{node.lineno}"
-                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+                for node in ast.walk(parsed(path))
                 if isinstance(node, ast.Attribute)
                 and node.attr == "fromisoformat"
                 and isinstance(node.value, ast.Name)

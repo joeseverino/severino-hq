@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
@@ -98,16 +100,37 @@ var responses = map[string]any{
 var jobs = map[string]any{
 	"audit.prune":      runtime.JobOutcome{Name: "audit.prune", State: runtime.JobStateSucceeded, Note: "", Job: "7b6c"},
 	"content.sync":     runtime.JobOutcome{Name: "content.sync", State: runtime.JobStateFailed, Note: "The index did not answer."},
-	"contacts.inbox":   runtime.JobOutcome{Name: "contacts.inbox", State: runtime.JobStateLost, Note: "The job did not finish."},
+	"sessions.clear":   runtime.JobOutcome{Name: "sessions.clear", State: runtime.JobStateLost, Note: "The job did not finish."},
 	"registry.refresh": runtime.JobOutcome{Name: "registry.refresh", State: runtime.JobStateRunning, Note: "Already running."},
+}
+
+// built is the binary under test, built once for the package so no test pays
+// for a build.
+var built = sync.OnceValues(func() (string, error) {
+	dir, err := os.MkdirTemp("", "hq-controller-test")
+	if err != nil {
+		return "", err
+	}
+	binary := filepath.Join(dir, "hq-controller")
+	if out, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
+		return "", fmt.Errorf("build: %v\n%s", err, out)
+	}
+	return binary, nil
+})
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if binary, err := built(); err == nil {
+		os.RemoveAll(filepath.Dir(binary))
+	}
+	os.Exit(code)
 }
 
 func setUp(t *testing.T) (binary string, bridge *stubBridge) {
 	t.Helper()
-	binary = filepath.Join(t.TempDir(), "hq-controller")
-	build := exec.Command("go", "build", "-o", binary, ".")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
+	binary, err := built()
+	if err != nil {
+		t.Fatal(err)
 	}
 	for action, value := range responses {
 		data, _ := json.Marshal(value)
@@ -253,6 +276,43 @@ func TestBridgeFailure(t *testing.T) {
 	}
 }
 
+// TestReady is the healthcheck: ready only on a 200 from the address itself,
+// never on a redirect to one, and never when nothing answers.
+func TestReady(t *testing.T) {
+	binary, bridge := setUp(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health/ready/", func(w http.ResponseWriter, _ *http.Request) {})
+	mux.HandleFunc("/starting/", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "starting", http.StatusServiceUnavailable)
+	})
+	mux.Handle("/moved/", http.RedirectHandler("/health/ready/", http.StatusFound))
+	server := httptest.NewServer(mux)
+	closed := httptest.NewServer(mux)
+	closed.Close()
+	defer server.Close()
+	for _, tc := range []struct {
+		args []string
+		code int
+	}{
+		{[]string{"ready", server.URL + "/health/ready/"}, 0},
+		{[]string{"ready", server.URL + "/starting/"}, 1},
+		{[]string{"ready", server.URL + "/moved/"}, 1},
+		{[]string{"ready", closed.URL + "/health/ready/"}, 1},
+		{[]string{"ready"}, 2},
+		{[]string{"ready", "::not a url"}, 2},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			code, calls, lines := runBinary(t, binary, bridge, tc.args...)
+			if code != tc.code {
+				t.Fatalf("exit %d, want %d, output %v", code, tc.code, lines)
+			}
+			if len(calls) != 0 {
+				t.Fatalf("a healthcheck called the bridge: %v", actions(calls))
+			}
+		})
+	}
+}
+
 // TestJob asks HQ for one piece of scheduled work and exits as it ended: work
 // done or already under way is success, work that failed or was lost fails
 // the unit that asked, and nothing but the bridge is called.
@@ -266,7 +326,7 @@ func TestJob(t *testing.T) {
 		{[]string{"job", "audit.prune"}, 0, `"state":"succeeded"`},
 		{[]string{"job", "registry.refresh"}, 0, `"state":"running"`},
 		{[]string{"job", "content.sync"}, 1, "The index did not answer."},
-		{[]string{"job", "contacts.inbox"}, 1, `"state":"lost"`},
+		{[]string{"job", "sessions.clear"}, 1, `"state":"lost"`},
 		{[]string{"job", "no.such"}, 1, `"ok":false`},
 		{[]string{"job"}, 2, "usage"},
 		{[]string{"job", "audit.prune", "extra"}, 2, "usage"},

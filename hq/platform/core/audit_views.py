@@ -22,6 +22,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     context_object_name = "events"
     paginate_by = 50
     page_title = "Audit log"
+    table_empty_remedy = False
     table_search_scope = "audit"
     table_selectable = True
     table_filters = (
@@ -32,16 +33,14 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     table_toggles = (TableToggle(READS, "Read requests"),)
     table_columns = (
         TableColumn("When", "created_at", "Oldest event", "Newest event"),
-        TableColumn("Who", "user__username", "User A–Z", "User Z–A"),
-        TableColumn("Action", "action", "Action A–Z", "Action Z–A", css="key-col"),
-        TableColumn("What", "object_type", "Type A–Z", "Type Z–A"),
+        TableColumn("Who", "user__username", "User A–Z", "User Z–A", css="optional-col"),
+        TableColumn("Action", "action", "Action A–Z", "Action Z–A"),
+        TableColumn("What", "object_type", "Type A–Z", "Type Z–A", css="key-col"),
         TableColumn("Message", "message", "Message A–Z", "Message Z–A"),
     )
     table_default_sort = "-created_at"
     table_search_placeholder = "Search what changed, ids and messages…"
-    page_lede = (
-        "Everything that changed, and who or what changed it. How background work went is under Background jobs."
-    )
+    page_lede = "Everything that changed, and who or what changed it."
 
     @override
     def get_page_actions(self):
@@ -62,6 +61,8 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
                     primary=awaiting,
                 )
             )
+        # How the work behind these changes went is recorded there.
+        actions.append(PageAction("Background jobs", reverse("jobs:list")))
         return tuple(actions)
 
     @override
@@ -161,6 +162,10 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
             span["since"] = max(filter(None, (span.get("since"), day["since"])))
             span["until"] = min(filter(None, (span.get("until"), day["until"])))
         return span
+
+    @override
+    def get_table_empty(self) -> str:
+        return "Nothing is waiting for your approval." if self._awaiting() else "Nothing has been recorded yet."
 
     def _awaiting(self) -> bool:
         """The log narrowed to requests still waiting for a person."""

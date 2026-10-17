@@ -165,6 +165,9 @@ class Topology:
 
     nodes: tuple[TopologyNode, ...]
     edges: tuple[TopologyEdge, ...]
+    # Unmet checks of HQ's standard as ``(id, evidence, read)``, here so the
+    # posture finding rule costs no query.
+    unmet_standard: tuple[tuple[str, str, bool], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

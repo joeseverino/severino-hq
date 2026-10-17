@@ -13,6 +13,7 @@ from django.utils import timezone
 from ..github_posture import (
     COMMANDS,
     PINS_CALLED,
+    PINS_UNREAD,
     REASONS,
     STANDARD,
     WIRED_SECRETS,
@@ -167,7 +168,8 @@ class PostureViewTests(TestCase):
     def test_nothing_read_says_so(self):
         response = self.client.get(reverse("posture"))
 
-        self.assertContains(response, "has not read any repository yet")
+        self.assertContains(response, "No repository read yet.")
+        self.assertContains(response, "Connect GitHub App")
 
     def test_it_needs_a_sign_in(self):
         self.client.logout()
@@ -206,7 +208,7 @@ class PostureHelpTests(TestCase):
     def test_pinning_offers_no_setting_while_the_workflows_were_not_read(self):
         item = self.item("actions-pinned", access=kept(pinning_required=False))
 
-        self.assertIn("workflows were not read", item.workflow.steps[-1].summary)
+        self.assertIn(PINS_UNREAD, item.workflow.steps[-1].summary)
         self.assertNotIn("sha_pinning_required", str(item.workflow))
 
     def test_pinning_is_a_paste_per_workflow_then_the_setting(self):

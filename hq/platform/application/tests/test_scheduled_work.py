@@ -178,7 +178,7 @@ class DueTests(TestCase):
     def test_the_hosts_own_work_declares_how_often_it_is_done(self):
         every = {work.name: work.every for work in SCHEDULED}
 
-        self.assertEqual(every["contacts.inbox"], timedelta(hours=1))
+        self.assertNotIn("contacts.inbox", every)
         self.assertEqual(
             {every[name] for name in ("audit.prune", "content.sync", "registry.refresh", "sessions.clear")},
             {timedelta(days=1)},

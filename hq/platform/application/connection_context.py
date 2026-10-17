@@ -38,14 +38,18 @@ from .connection_security import (
     connection_security_posture,
     observed_connection_controls,
 )
+from .connection_setup import ProviderSetup, guide_url, setups
+from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import ProviderSight, sight_by_connection
 from .derived_reads import NotFoundError, serialize_path, serialize_provider_sight
 from .entity_links import entity_link
 from .freshness import freshness
 from .hq_self import hq_hostnames
+from .moments import ago
 from .path_model import ServicePath
 from .paths import hq_path
+from .posture import Inputs, Posture, posture
 from .problems import problem_counts
 from .projection import projection_scope, read_once
 from .request_path import joined
@@ -70,6 +74,8 @@ class ConnectionRow:
     used_for: str = ""
     # How many problems are open about it, and the queue showing only those.
     problems: int = 0
+    # When its controller's report came with no connections at all.
+    unreported_at: datetime | None = None
 
     @property
     def problems_url(self) -> str:
@@ -94,8 +100,12 @@ class ConnectionRow:
 
         A credential the service refused outright is refused whatever the
         probe said, so the state cannot disagree with the readings beside it.
+        One its controller no longer reports is that before anything else: no
+        probe or reading about it is current.
         """
 
+        if self.unreported_at is not None:
+            return "unreported"
         if self.sight is not None and self.sight.credential_refusal:
             return "revoked"
         return self.connection.lifecycle
@@ -114,6 +124,9 @@ class ConnectionRow:
     def state_line(self) -> str:
         """The one line under the state word, or ""."""
 
+        if self.unreported_at is not None:
+            observed = self.instance.observed_at
+            return f"Last reported {ago(observed)}" if observed else ""
         if self.lifecycle != self.connection.lifecycle:
             return ""
         missing = self._permissions_missing
@@ -189,10 +202,18 @@ class ConnectionsContext:
     rows: tuple[ConnectionRow, ...]
     unconfigured: tuple[ConnectionGroup, ...]
     unconnected_providers: tuple[ProviderSight, ...]
+    # How to connect each provider that has no connection yet: every one, on a
+    # fresh install.
+    setups: tuple[ProviderSetup, ...]
+    # The same for each provider already connected: a second account of one is
+    # still a connection to add, so the page always offers a way to add one.
+    again: tuple[ProviderSetup, ...]
     unlabelled: tuple[ConnectionView, ...]
     oldest: ConnectionInstance | None
     # The estate alone, the same for every caller.
     estate_posture: ConnectionSecurityPosture
+    # HQ's standard, read from the estate checks above.
+    standard: Posture
     # With the request's admission joined in, where there is a request.
     posture: ConnectionSecurityPosture
     hq_path: ServicePath | None
@@ -201,6 +222,18 @@ class ConnectionsContext:
     read_all: ActionLink | None
     reading_everything_since: datetime | None
     answers_request: bool
+
+    @property
+    def to_connect(self) -> int:
+        """Everything not yet connected: each service, and each family set up on its own."""
+
+        return len(self.setups) + len(self.unconfigured)
+
+    @property
+    def guide(self) -> str:
+        """Where adding a connection is written down."""
+
+        return guide_url()
 
     @property
     def connection_count(self) -> int:
@@ -264,6 +297,7 @@ class ConnectionsContext:
                     else None
                 ),
             },
+            "standard": self.standard.as_dict(),
             "not_connected": [
                 {
                     "family": group.spec.name,
@@ -331,6 +365,9 @@ def _rows(
     pending: dict[str, datetime],
 ) -> tuple[tuple[ConnectionRow, ...], tuple[ProviderSight, ...]]:
     sights, unconnected = sight_by_connection(controller_refs)
+    unreported = {
+        (row.controller_id, row.connection_ref): row.unreported_at for row in connection_rows() if row.unreported_at
+    }
     fixes = credential_fixes()
     events = last_activity(connection.instance.connection_ref for group in groups for connection in group.connections)
     reach = connection_reach(
@@ -356,6 +393,7 @@ def _rows(
                     reach=reach.get(ref),
                     used_for=used_for.get(group.spec.name, ""),
                     problems=open_problems.get(entity_link("connection", connection.instance.label).url, 0),
+                    unreported_at=unreported.get((connection.instance.controller_id, ref)),
                 )
             )
         # Within its group, a connection that needs a person comes first.
@@ -405,6 +443,9 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
         }
         pending, everything = _pending_reads()
         rows, unconnected = _rows(groups, controller_refs, principal, pending)
+        every = setups()
+        connected = frozenset(controller_refs.values())
+        available = tuple(setup for setup in every if setup.provider not in connected)
         site = next(iter(hq_hostnames()), "")
         tailnet_policy, edge = observed_connection_controls(site)
         estate = connection_security_posture(groups, tailnet_policy=tailnet_policy, edge=edge)
@@ -412,8 +453,15 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
         return ConnectionsContext(
             groups=groups,
             rows=rows,
-            unconfigured=tuple(group for group in groups if not group.connections),
+            # With no controller connections yet, the setup list says what to add.
+            unconfigured=tuple(
+                group
+                for group in groups
+                if not group.connections and not (group.spec.name == CONTROLLER_CONNECTIONS and available)
+            ),
             unconnected_providers=unconnected,
+            setups=available,
+            again=tuple(setup for setup in every if setup.provider in connected),
             unlabelled=tuple(view for view in controller if view.instance.kind == "unclassified"),
             # The oldest, named, because the page's honesty depends on the
             # staler half: the newest would describe every row as current.
@@ -423,6 +471,7 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
                 default=None,
             ),
             estate_posture=estate,
+            standard=posture(Inputs(edge, groups)),
             posture=(
                 connection_security_posture(groups, request=request, tailnet_policy=tailnet_policy, edge=edge)
                 if request is not None

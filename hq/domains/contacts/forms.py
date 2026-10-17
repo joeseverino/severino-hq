@@ -11,7 +11,7 @@ STATUS_CHOICES = [
 
 
 class ContactReviewForm(forms.Form):
-    """The admin-editable fields on a contact submission (written back to D1)."""
+    """The admin-editable fields on a contact submission, queued for the controller to write to D1."""
 
     status = forms.ChoiceField(choices=STATUS_CHOICES)
     assigned_to = forms.CharField(required=False, max_length=120)

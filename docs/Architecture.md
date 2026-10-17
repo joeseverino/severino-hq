@@ -156,9 +156,10 @@ Large projections run inside
 `hq.platform.application.projection.projection_scope()`: a reading is reused
 while one answer is assembled and discarded when the scope exits, so no
 process-cached state reaches a later request. The dashboard's contact rows,
-unread total and upstream health come from one D1 read, which the scheduled
-`contacts.inbox` job makes hourly and a D1 write repeats after it changes a
-submission; pages, the header count and search read the stored result.
+unread total and upstream health come from the controller's
+`cloudflare.contact_submission` reading; pages, the header count and search
+read the stored result, and a review or deletion waits in the
+`cloudflare.contact_inbox` declaration until the controller applies it.
 
 ## What a request costs
 
@@ -211,7 +212,7 @@ Three rules keep a page from waiting on a writer:
   the last would win every time, so a job lets go after each second of
   writing (`database.gives_way`, applied by the runner to every job).
 - A request never waits on the derive-ahead pass: it derives what it does not
-  find stored, and the pass finds that standing. While writes keep landing
+  find stored, and the pass then finds it stored. While writes keep landing
   during passes, the pass waits longer for them to settle
   (`ahead.SETTLES_LONGEST`), since what it derives would be unsettled before
   anyone read it.
@@ -319,9 +320,9 @@ within one unit of the truth. Whatever asks an unseen derivation stands no
 longer than it does. The rules an extension keeps are in
 [Plugins](Plugins.md#derived-reads).
 
-**Asked again when the change lands.** The controller reports about once a
-minute and every report moves a revision the estate reads, so the first request
-after each would otherwise derive while a person waits. Every top-level
+**Asked again when the change lands.** The controller reports every few
+minutes while HQ is in use, and every report moves a revision the estate reads,
+so the first request after each would otherwise derive while a person waits. Every top-level
 question a request asks is remembered with its arguments, context and seeded
 projection. `hq.platform.core.ahead` watches every statement a connection runs;
 one that writes a table a remembered question reads wakes one thread after its
@@ -382,8 +383,8 @@ an audit event whenever any library opens a connection, resolves a name,
 starts a process or sleeps; while a request is served, that event raises
 `OutboundInRequest`, so the call never leaves. A place a request must wait is a
 named entry in `ALLOWED` with its reason, entered with `allowed("name")`:
-signing in (bounded by `OIDC_TIMEOUT`), a public lookup an operator asked for
-by name, and contact submissions, which exist only in the site's D1 database.
+signing in (bounded by `OIDC_TIMEOUT`) and a public lookup an operator asked
+for by name.
 `RequestNeverWaitsTests` holds the entries to their places.
 `SEVERINO_OUTBOUND_IN_REQUEST=report` logs `outbound.in_request` and lets the
 call go, for a composition whose extensions still reach out from a request; an
@@ -415,8 +416,9 @@ escapes and marks up independently. Presentation metadata (group label, title
 field, badge, timestamp) lives on the `SearchDefinition` its `ResourceSpec`
 carries. Scopes a principal cannot search are omitted, not rendered empty.
 Contact submissions live in Cloudflare D1, not the local database; the web view
-adds the matching inbox rows (by submitter name) as a group beside the registry
-scopes, and email and message text are searched on the contacts page.
+adds the matching rows of the controller's last read (by submitter name) as a
+group beside the registry scopes, and email and message text are searched on
+the contacts page.
 
 Ranking is stated once, in the backend: FTS5's `rank` (bm25, lower is better),
 then object id compared as text, numbered per scope with `ROW_NUMBER()`.
@@ -871,6 +873,20 @@ one managed certificate is uploaded once and every enabled proxy host its SANs
 cover is found, rebound, reloaded and live-verified. TLS renewal issues through
 DNS-01 only when needed, snapshots the rollback artifact, deploys to every
 consumer, and verifies one fingerprint everywhere before reporting success.
+
+Issuance is the controller's Go ACME client (`controller/providers/tls_acme.go`). It signs in with one account key per certificate
+authority, kept 0600 under `account/` in the ACME state; the first issuance
+carries over the key certbot registered there, if there is one, so the
+authority sees the same account, and otherwise registers a new P-256 key with
+the ACME connection's email. Each name is proved with a `_acme-challenge` TXT
+record created through the `cloudflare_dns` connection, given
+`ACME_PROPAGATION_SECONDS` (default 30) to propagate, and removed once the
+order ends, whether it succeeded or not. The DNS token is never written to
+disk. The certificate gets a fresh P-256 key, and is saved only after it is
+checked against its names and key: `fullchain.pem` and `privkey.pem` are
+written beside `config/live/<name>/` and exchanged with it in one rename, so a
+reader sees the old pair or the new one.
+
 Public DNS records reconcile and delete; their zone is declaration-only, because
 changing a zone's settings needs a credential the controller does not hold.
 Short-lived NPM tokens stay in memory, and a report carrying a secret-bearing
@@ -881,9 +897,12 @@ than being visible: a declaration whose every action is locked changes nothing,
 so refusing it would only stop an operator recording which domains HQ is
 responsible for.
 
-HQ's `CLOUDFLARE_API_TOKEN` is the D1 contact form's data-plane access: it
-writes submissions and nothing else
-(`scripts/cloudflare-d1-writer-permissions.txt`), and the account and database
-come from the `cloudflare_api` observer's D1 reading. It is never projected
-into the controller or used for DNS. DNS-01 uses its own least-privilege
+The contact form's D1 table is reached only by the controller, through the
+`cloudflare_api` connection: its `cloudflare.contact_submission` reading reads
+every database holding the table (D1 Read), and the `cloudflare.contact_inbox`
+declaration carries HQ's reviews and deletions for it to apply (D1 Write, and
+the connection must manage). The web process holds no Cloudflare credential.
+The records are people's names, addresses and messages, so the reading is
+`withheld`: the generic readings resource counts them and lists none, and only
+the contacts capability reads them. The declaration is `withheld` too, because reviews carry the operator's notes. The records API, MCP, record pages, reports, search and the audit log show its status and never its contents, and the generic writer refuses it. DNS-01 uses its own least-privilege
 connection.

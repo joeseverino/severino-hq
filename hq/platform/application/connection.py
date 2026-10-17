@@ -70,7 +70,7 @@ class Peering:
 PEERING_UNKNOWN = Peering(
     "unknown",
     "Not known yet",
-    "This device is on the tailnet, and it has no direct or relayed path to HQ's machine right now.",
+    "This device is on the tailnet but cannot reach HQ's machine right now.",
 )
 # Not the same statement. "No peering" is a fact about the device; this is a fact about
 # HQ's view of it. Behind a proxy it has not been told to trust, HQ judges the
@@ -191,6 +191,15 @@ class Connection:
         return tuple(layer for layer in self.layers if not layer.conclusive)
 
     @property
+    def verdict(self) -> str:
+        """The dot's tone: "confirmed" only when every check held on evidence,
+        "failing" when one did not, else "unconfirmed"."""
+
+        if self.failing:
+            return "failing"
+        return "confirmed" if self.holds else "unconfirmed"
+
+    @property
     def summary(self) -> str:
         if self.holds:
             return f"All {len(self.layers)} checks passed"
@@ -234,8 +243,17 @@ class Connection:
 
     @property
     def peer_label(self) -> str:
+        """Your device's name, or plainly why there is none: HQ cannot see past
+        a proxy, has not read the tailnet, or read it and found no device here."""
+
         peer = self.caller_device
-        return peer.label if peer else "Device not found"
+        if peer:
+            return peer.label
+        if self.untrusted_forwarding or self.forwarded:
+            return "Not seen past the proxy"
+        if self.observer is None:
+            return "Tailnet not read yet"
+        return "No tailnet device at this address"
 
     @property
     def peer_address(self) -> str:

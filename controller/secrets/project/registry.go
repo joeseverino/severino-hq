@@ -50,14 +50,21 @@ type Entry struct {
 }
 
 // Registry is hq/config/controller-connections.json: where on a vault item
-// each setting of each connection shape comes from. HQ's registry emits it and
-// the shapes themselves are the generated types of the connections document,
-// so a registry that states another set of settings is refused. It names no
-// connection; the vault is the inventory.
+// each setting of each connection shape comes from, and which application
+// variables HQ cannot run without. HQ emits it: the shapes themselves are the
+// generated types of the connections document, so a registry that states
+// another set of settings is refused, and the required variables are the ones
+// HQ's settings declare. It names no connection; the vault is the inventory.
 type Registry struct {
 	SchemaVersion int                         `json:"schema_version"`
 	Projections   map[string]map[string]Entry `json:"projections"`
+	// RequiredAppVariables must each be set, and not empty, on the application
+	// environment item, or the render is refused naming the ones that are not.
+	RequiredAppVariables []string `json:"required_app_variables"`
 }
+
+// RegistryVersion is the only registry version the renderer reads.
+const RegistryVersion = 2
 
 // ErrRegistry is every reason a registry is refused.
 var ErrRegistry = errors.New("invalid connection registry")
@@ -86,11 +93,14 @@ func parse(data []byte) (Registry, error) {
 	if err := jsonv2.Unmarshal(data, &registry, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return Registry{}, registryError("not the declared shape")
 	}
-	if registry.SchemaVersion != 1 {
-		return Registry{}, registryError("schema version %d is not 1", registry.SchemaVersion)
+	if registry.SchemaVersion != RegistryVersion {
+		return Registry{}, registryError("schema version %d is not %d", registry.SchemaVersion, RegistryVersion)
 	}
 	if len(registry.Projections) == 0 {
 		return Registry{}, registryError("no projections")
+	}
+	if err := registry.checkRequired(); err != nil {
+		return Registry{}, err
 	}
 	for name, projection := range registry.Projections {
 		if name == "" {
@@ -133,6 +143,23 @@ func parse(data []byte) (Registry, error) {
 		}
 	}
 	return registry, nil
+}
+
+// checkRequired refuses a registry that requires nothing, or that requires a
+// name the renderer would never render: an empty list would accept any item,
+// and an unrenderable name would refuse every one.
+func (r Registry) checkRequired() error {
+	if len(r.RequiredAppVariables) == 0 {
+		return registryError("no required application variables")
+	}
+	seen := map[string]bool{}
+	for _, name := range r.RequiredAppVariables {
+		if !appVariable.MatchString(name) || seen[name] {
+			return registryError("the required application variables are not distinct variable names")
+		}
+		seen[name] = true
+	}
+	return nil
 }
 
 // envelope reports a variable every projection may state beside its settings.

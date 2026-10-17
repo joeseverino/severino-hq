@@ -38,7 +38,7 @@
               {% endfor %}
             </ol>
           {% else %}
-            {% include "partials/_empty_state.html" with message="No data in this window." compact=1 %}
+            {% include "partials/_empty_state.html" with message="No data in this window." only %}
           {% endif %}
         </section>
       {% endfor %}
@@ -67,7 +67,6 @@
       {% endif %}
     </section>
   {% else %}
-    {% url 'control_plane:connections' as connections_url %}
-    {% include "partials/_empty_state.html" with message="No visits recorded yet." why="Visits are read from Cloudflare Web Analytics, through a Cloudflare connection." action_url=connections_url action_label="Connections" only %}
+    {% include "partials/_empty_state.html" with message="No visits recorded yet." remedy=page.remedy only %}
   {% endif %}
 {% endblock %}

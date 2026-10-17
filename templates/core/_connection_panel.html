@@ -3,57 +3,19 @@ The body of the connection panel, shared by the dialog in the header and the
 page it falls back to. Nothing here knows which one it is in.
 {% endcomment %}
 <div class="conn" data-connection-panel>
-  <div class="conn-verdict conn-{{ connection.channel.id }}">
-    <span class="conn-dot" aria-hidden="true"></span>
-    <div class="conn-verdict-text">
-      <p class="conn-headline">{{ connection.channel.label }}</p>
-      <p class="conn-sub">{{ connection.summary }} · {{ connection.transport }}</p>
-    </div>
-    <code class="conn-address">{{ connection.address }}</code>
-  </div>
-
+  {% include "partials/_example_connection.html" with notice=True %}
   {% if request_path.findings %}
-    <section class="conn-findings" aria-label="Where this request contradicts the readings">
+    <section class="conn-findings" aria-label="Where this request disagrees with what HQ read">
       {% for hop in request_path.findings %}
         <p class="conn-agree conn-agree-no"><strong>{{ hop.label }}:</strong> {{ hop.check.detail }} {{ hop.check.step }}</p>
       {% endfor %}
     </section>
   {% endif %}
 
-  <section class="conn-decision" aria-label="Admission decision">
-    <div class="conn-decision-head">
-      <div>
-        <h3>Admission decision</h3>
-        <p>Independent controls, evaluated in request order.</p>
-      </div>
-      <strong>{{ connection.summary }}</strong>
-    </div>
-    <ol>
-      {% for layer in connection.layers %}
-        <li>
-          <a class="conn-decision-step conn-decision-step-{{ layer.state }}"
-             href="{% url 'connection' %}"
-             data-connection-control="{{ layer.id }}">
-            <span class="conn-tick" aria-hidden="true">{% if layer.state == 'unknown' %}?{% elif layer.holds %}&check;{% else %}&times;{% endif %}</span>
-            <span>{{ layer.label }}</span>
-          </a>
-        </li>
-      {% endfor %}
-    </ol>
-  </section>
-
-  <nav class="conn-related" aria-label="Related connection views">
-    <span>Continue through the model</span>
-    <a href="{% url 'control_plane:connections' %}">Outbound authority</a>
-    <a href="{% url 'control_plane:topology' %}">Derived topology</a>
-  </nav>
-
   {% comment %}
-  The peering itself, drawn as the two ends it has. Every other surface here
-  describes one machine; this one is about the link between two, and a pair of
-  panels facing each other says that faster than a table of the same values.
+  The two ends and the link between them, with the verdict on the link.
   {% endcomment %}
-  <section class="conn-peering">
+  <section class="conn-peering conn-{{ connection.channel.id }} conn-verdict-{{ connection.verdict }}">
     <div class="conn-peer">
       <span class="conn-peer-role">You</span>
       {% if connection.machine_url %}
@@ -63,15 +25,16 @@ page it falls back to. Nothing here knows which one it is in.
       {% endif %}
       <code>{{ connection.peer_address }}</code>
       {% if connection.reported_device %}
-        <span class="conn-row-note">reported by the forwarding hop</span>
+        <span class="conn-row-note">reported by the proxy that forwarded it</span>
       {% elif connection.identity.tailnet_user %}
         <span class="conn-row-note">{{ connection.identity.tailnet_user }}</span>
       {% endif %}
     </div>
     <div class="conn-link conn-link-{{ connection.path }}">
-      <span class="conn-link-label">{{ connection.path_label }}</span>
+      <p class="conn-headline"><span class="conn-dot" aria-hidden="true"></span>{{ connection.channel.label }}</p>
       <span class="conn-link-line" aria-hidden="true"></span>
-      <span class="conn-row-note">{{ connection.transport }}</span>
+      <p class="conn-sub">This request: {{ connection.summary|lower }} · {{ connection.path_label }} · {{ connection.transport }}</p>
+      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a> · {{ posture.count_line }}</p>{% endif %}
     </div>
     <div class="conn-peer">
       <span class="conn-peer-role">HQ</span>
@@ -86,7 +49,7 @@ page it falls back to. Nothing here knows which one it is in.
   </section>
 
   <div class="conn-cols">
-    <section>
+    <section class="card">
       <h3>You</h3>
       <dl class="conn-pairs">
         <dt>Signed in</dt>
@@ -94,23 +57,19 @@ page it falls back to. Nothing here knows which one it is in.
           <strong>{{ connection.identity.full_name|default:connection.identity.username }}</strong>
           {% if connection.identity.email %}<code>{{ connection.identity.email }}</code>{% endif %}
         </dd>
-        <dt>Tailnet account</dt>
-        <dd>
-          {% if connection.identity.tailnet_user %}<code>{{ connection.identity.tailnet_user }}</code>
-          {% else %}{% empty_value %}{% endif %}
-        </dd>
-        <dt>Device</dt>
-        <dd>
-          {% if connection.untrusted_forwarding and connection.reported_device %}
+        {% comment %}A row is drawn only when it has a value: the strip above already says why there is no device.{% endcomment %}
+        {% if connection.identity.tailnet_user %}
+          <dt>Tailnet account</dt>
+          <dd><code>{{ connection.identity.tailnet_user }}</code></dd>
+        {% endif %}
+        {% if connection.caller_device %}
+          <dt>Device</dt>
+          <dd>
             <strong>{{ connection.caller_device.label }}</strong>
             {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os }}</span>{% endif %}
-            <span class="conn-row-note">correlated from forwarded evidence; not used for admission</span>
-          {% elif connection.caller_device %}
-            <strong>{{ connection.caller_device.label }}</strong>
-            {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os }}</span>{% endif %}
-          {% elif connection.untrusted_forwarding %}<span class="muted">not resolved past the proxy</span>
-          {% else %}<span class="muted">unknown to the tailnet</span>{% endif %}
-        </dd>
+            {% if connection.untrusted_forwarding and connection.reported_device %}<span class="conn-row-note">matched from what the proxy forwarded; not used to let you in</span>{% endif %}
+          </dd>
+        {% endif %}
         {% if connection.caller_device.dns_name %}
           <dt>MagicDNS</dt><dd><code>{{ connection.caller_device.dns_name }}</code></dd>
         {% endif %}
@@ -142,35 +101,36 @@ page it falls back to. Nothing here knows which one it is in.
       </dl>
       {% if connection.identity.corroborated %}
         <p class="conn-agree conn-agree-yes">
-          Tailnet ownership and this session independently agree.
+          Your tailnet account and your sign-in name the same person.
         </p>
       {% elif connection.identity.conflicted %}
         <p class="conn-agree conn-agree-no">
-          Tailnet ownership and this session name different people.
+          Your tailnet account and your sign-in name different people.
         </p>
       {% elif connection.identity.tailnet_user %}
         <p class="conn-agree conn-agree-no">
-          Both systems identify this request, but HQ has not been told those two account names are the same person.
+          Your tailnet account and your sign-in are not linked, so HQ cannot tell they are the same person.
         </p>
       {% else %}
         <p class="conn-agree conn-agree-no">
-          Only the session has an opinion on who is asking.
+          Only your sign-in says who you are. No tailnet account is known for this request.
         </p>
       {% endif %}
     </section>
 
-    <section>
+    <section class="card">
       <h3>The link</h3>
       <dl class="conn-pairs">
         <dt>Path</dt>
         <dd>
           <strong>{{ connection.path_label }}</strong>
         </dd>
-        <dt>Measured by</dt>
-        <dd>
-          <strong>{{ connection.measurement_label }}</strong>
-          {% if connection.serving_basis %}<span class="conn-row-note">{{ connection.serving_basis }}</span>{% endif %}
-        </dd>
+        {% if connection.observer %}
+          <dt>Measured by</dt>
+          <dd>
+            <strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label }}</strong>
+          </dd>
+        {% endif %}
         <dt>Carried over</dt>
         <dd class="conn-carriage conn-carriage-{{ connection.peering.id }}">
           <strong>{{ connection.peering.label }}</strong>
@@ -188,7 +148,7 @@ page it falls back to. Nothing here knows which one it is in.
                    data-fragment-load
                    data-fragment-failure="The lookup could not be reached.">
                 <div class="conn-row">
-                  <span class="conn-row-note">Read when you open this, not when the page is built.</span>
+                  <span class="conn-row-note">Looked up when you open this.</span>
                 </div>
               </div>
             </details>
@@ -200,8 +160,10 @@ page it falls back to. Nothing here knows which one it is in.
             <code>{{ connection.presence.direct_endpoint }}</code>
           </dd>
         {% endif %}
-        <dt>Last handshake</dt>
-        <dd>{{ connection.handshake }}</dd>
+        {% if connection.presence %}
+          <dt>Last handshake</dt>
+          <dd>{{ connection.handshake }}</dd>
+        {% endif %}
         {% if connection.carried %}
           <dt>Node traffic</dt><dd>{{ connection.carried }}</dd>
         {% endif %}
@@ -237,29 +199,19 @@ page it falls back to. Nothing here knows which one it is in.
                 {% endfor %}
               </dl>
               <p class="conn-row-note">
-                These are the caller and observing node behind the measurement above.
-                {% if connection.link_observed_by_hq %}The observer is independently resolved as the node serving HQ.{% else %}HQ has not proved that the observer is its serving node.{% endif %}
-                Compare either key against <code>tailscale status</code> on that machine.
+                Your device's key and the key of the machine that measured this link.
+                {% if connection.link_observed_by_hq %}That machine is the one HQ runs on.{% else %}HQ cannot confirm that machine is the one it runs on.{% endif %}
+                Compare either with <code>tailscale status</code> on that machine.
               </p>
             </details>
           </dd>
         {% endif %}
       </dl>
     </section>
-  </div>
-
-  {% comment %}
-  The path to HQ, one hop at a time: what the readings say each hop is, checked
-  against what this request shows there, with the admission layers decided at
-  that hop. One model: the same object the API and MCP return.
-  {% endcomment %}
-  <section class="conn-path" aria-label="Path to HQ" data-connection-layers>
-    <div class="conn-decision-head">
-      <div>
-        <h3>Path to HQ</h3>
-        <p>Every hop from the readings, checked against this request, with the controls decided there.</p>
-      </div>
-      <strong>{{ request_path.proof }}</strong>
+  <section class="card conn-path" aria-label="Path to HQ" data-connection-layers>
+    <div class="conn-path-head">
+      <h3>Path to HQ</h3>
+      <span>{{ request_path.proof }}</span>
     </div>
     <ol class="conn-layers">
       {% for hop in request_path.hops %}
@@ -268,25 +220,16 @@ page it falls back to. Nothing here knows which one it is in.
             <summary>
               <span class="conn-tick" aria-hidden="true">{% if hop.check.state == 'proven' %}&check;{% elif hop.check.state == 'contradicted' %}&times;{% else %}?{% endif %}</span>
               <span class="conn-layer-boundary">{{ hop.label }}</span>
-              <span class="conn-layer-label">{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name }}{% elif hop.detail %}{{ hop.detail }}{% else %}{% empty_value %}{% endif %}</span>
-              {% if hop.name and hop.detail %}<code class="conn-layer-evidence">{{ hop.detail }}</code>{% elif hop.link.url and hop.name and hop.name != hop.link.label %}<code class="conn-layer-evidence">{{ hop.name }}</code>{% endif %}
+              <span class="conn-layer-label">{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name }}{% elif hop.detail %}{{ hop.detail }}{% else %}{% empty_value %}{% endif %}{% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}<span class="conn-hop-detail">{{ hop.detail }}</span>{% elif hop.link.url and hop.name and hop.name != hop.link.label %}<span class="conn-hop-detail">{{ hop.name }}</span>{% endif %}</span>
+              <span class="conn-hop-more">{% if hop.layers %}{{ hop.layers|length|counted:"check,checks" }}{% else %}Details{% endif %}</span>
             </summary>
             <div class="conn-layer-body">
-              {% if hop.check %}<p><strong>{{ hop.check.label }}.</strong> {{ hop.check.detail }}</p>{% endif %}
+              {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label }}. {{ hop.check.detail }}{% endif %}{% if hop.source %} Read from {{ hop.source.phrase }}{% if hop.source.observed_at %}, {{ hop.source.observed_at|when }}{% endif %}.{% endif %}</p>{% endif %}
               {% if hop.check.step %}<p class="conn-agree conn-agree-no">{{ hop.check.step }}</p>{% endif %}
-              {% if hop.source %}
-                <dl>
-                  <dt>Read from</dt>
-                  <dd>{{ hop.source.phrase }}{% if hop.source.observed_at %} · {{ hop.source.observed_at|when }}{% endif %}</dd>
-                </dl>
-              {% endif %}
               {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement }}</p>{% endif %}
               {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst }}</p>{% endif %}
               {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation }} {% entity link %}</p>{% endfor %}
               {% if hop.evidence %}
-                {% if hop.step == "device" and request_path.connection.forwarded %}
-                  <p class="conn-note">Behind a proxy every request arrives from the proxy, and the caller's address sits in a header anyone can write. Which hop HQ believes is the whole of whether the network gate means anything.</p>
-                {% endif %}
                 <ol class="conn-hops">
                   {% for item in hop.evidence %}
                     <li class="conn-hop{% if item.role %} conn-hop-{{ item.role }}{% endif %}">
@@ -304,16 +247,11 @@ page it falls back to. Nothing here knows which one it is in.
                       <details data-connection-layer="{{ layer.id }}">
                         <summary>
                           <span class="conn-tick" aria-hidden="true">{% if layer.state == 'unknown' %}?{% elif layer.holds %}&check;{% else %}&times;{% endif %}</span>
-                          <span class="conn-layer-boundary">{{ layer.boundary }}</span>
                           <span class="conn-layer-label">{{ layer.label }}</span>
                           {% if layer.evidence %}<code class="conn-layer-evidence">{{ layer.evidence }}</code>{% endif %}
                         </summary>
                         <div class="conn-layer-body">
-                          <p>{{ layer.detail }}</p>
-                          <dl>
-                            <dt>Verified by</dt>
-                            <dd>{{ layer.mechanism }}</dd>
-                          </dl>
+                          <p class="muted">{{ layer.detail }}</p>
                           {% if layer.rules %}
                             <div class="conn-rules">
                               {% for rule in layer.rules %}<code>{{ rule }}</code>{% endfor %}
@@ -330,23 +268,22 @@ page it falls back to. Nothing here knows which one it is in.
         </li>
       {% endfor %}
     </ol>
-    <p class="conn-scope-note">This shows only how this request reached HQ. Each check names what it relied on, and no single passed check is the whole defence.</p>
   </section>
 
-  <details class="conn-protocol conn-addresses">
+  </div>
+
+  <div class="conn-aside">
+  <details class="conn-protocol conn-addresses" open>
     <summary>
       <span>
         <strong>Addresses</strong>
-        <small>The identities and interfaces behind both ends</small>
+        <small>Yours and HQ's</small>
       </span>
       <span class="count">Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %} · HQ {{ request_path.hq_addresses|length }}{% endif %}</span>
     </summary>
     <div class="conn-protocol-body">
       <section>
-        <h3>Your address evidence</h3>
-        {% if connection.tailnet_observed_at %}
-          <p class="conn-note">Tailnet snapshot: {{ connection.tailnet_observed_at|when }}</p>
-        {% endif %}
+        <h3>Your addresses</h3>
         <div class="conn-rows">
           {% for address in request_path.addresses %}
             <div class="conn-row{% if address.current %} conn-current{% endif %}">
@@ -356,6 +293,9 @@ page it falls back to. Nothing here knows which one it is in.
             </div>
           {% endfor %}
         </div>
+        {% if connection.tailnet_observed_at %}
+          <p class="conn-note conn-note-after">Tailnet read {{ connection.tailnet_observed_at|when }}.</p>
+        {% endif %}
       </section>
 
       {% if request_path.hq_addresses %}
@@ -375,18 +315,19 @@ page it falls back to. Nothing here knows which one it is in.
     </div>
   </details>
 
+  {% comment %}Folded: the response is read back only once somebody opens it.{% endcomment %}
   <details class="conn-protocol" data-connection-protocol>
     <summary>
       <span>
-        <strong>Protocol evidence</strong>
-        <small>Request inputs and response security headers</small>
+        <strong>Headers</strong>
+        <small>Sent by your browser and by HQ</small>
       </span>
-      <span class="count">On demand</span>
+      <span class="count">{{ request_path.headers|length|counted:"header,headers" }}</span>
     </summary>
     <div class="conn-protocol-body">
       <section>
         <h3>What this request carried</h3>
-        <p class="conn-note">The raw input to every decision above. A header HQ does not read is listed too, because a proxy sending one that nothing looks at is invisible until both lists are printed.</p>
+        <p class="conn-note">Every header this request carried, and what HQ reads it for.</p>
         <div class="conn-rows">
           {% for header in request_path.headers %}{% if header.used %}
             <div class="conn-row conn-row-wide conn-row-used">
@@ -412,12 +353,13 @@ page it falls back to. Nothing here knows which one it is in.
 
       <section>
         <h3>What HQ sent back</h3>
-        <p class="conn-note">Read from the response this browser actually received, not from the settings that were meant to produce it.</p>
+        <p class="conn-note">Read from the response this browser received.</p>
         <div class="conn-rows" data-response-headers>
-          <div class="conn-row"><span class="conn-row-note">Open protocol evidence to read the response.</span></div>
+          <div class="conn-row"><span class="conn-row-note">Open Headers to read the response.</span></div>
         </div>
       </section>
     </div>
   </details>
+  </div>
 
 </div>

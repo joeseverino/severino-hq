@@ -5,7 +5,10 @@
   <link rel="stylesheet" href="{% static 'css/api-reference.css' %}">
 {% endblock %}
 {% block content %}
-<p class="api-reference-loading" role="status">Loading the reference.</p>
+<div class="api-reference-status" role="status">
+  <p class="api-reference-loading">Loading the reference.</p>
+  <p class="api-reference-failed">The reference did not load. The document itself is at <a href="{{ document_url }}">{{ document_url }}</a>.</p>
+</div>
 <div class="api-reference" id="api-reference-root" data-url="{{ document_url }}"></div>
 <noscript><p>The reference needs JavaScript. The document itself is at <a href="{{ document_url }}">{{ document_url }}</a>.</p></noscript>
 {% endblock %}

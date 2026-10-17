@@ -174,7 +174,7 @@ def _security_options(container, runtime, unmet):
     if "no-new-privileges" in wanted:
         cautions.append("A program that needs setuid to work (sudo, su) can no longer gain root.")
     if "confined" in wanted:
-        cautions.append("A system call the default profile refuses now fails, which is what the profile is for.")
+        cautions.append("System calls the default profile blocks now fail.")
     yield Change(tuple(sorted(wanted)), "security_opt", _listed("security_opt", kept), " ".join(cautions))
 
 
@@ -193,8 +193,8 @@ def _system_paths(container, runtime, unmet):
         ("no-system-path-writable",),
         "volumes",
         _listed("volumes", lines),
-        "Read-only refuses every write there, and docker cp into it fails too: a deploy that copies a file into "
-        "that path stops working. This list replaces its volumes, so every other mount is written as it is.",
+        "Writes there fail, docker cp included, so a deploy that copies a file into that path breaks. "
+        "This list replaces its volumes; every other mount is kept as it is.",
     )
 
 
@@ -228,8 +228,8 @@ def _network(container, runtime, unmet):
         yield Removal(
             "own-network",
             ("network_mode: host",),
-            "Docker reports no ports for a container on the host network, so which it serves is not known here: "
-            "publish each under ports:, or nothing reaches it.",
+            "Docker reports no ports for a host-network container. "
+            "Publish each port it serves under ports:, or nothing reaches it.",
         )
 
 
@@ -288,8 +288,8 @@ def _health(container, runtime, unmet):
     if not port:
         yield Unwritten(
             "health-checked",
-            "It publishes no port and HQ knows no health endpoint for its image, so what proves it works is yours "
-            "to name: a healthcheck: whose test is a command that fails when it does.",
+            "It publishes no port and HQ knows no health endpoint for its image. "
+            "Add a healthcheck: whose test command fails when the service does.",
         )
         return
     url = f"http://127.0.0.1:{port}{path}"
@@ -300,7 +300,7 @@ def _health(container, runtime, unmet):
         f'  test: ["CMD-SHELL", "wget -q --spider {url} || exit 1"]\n'
         "  interval: 30s\n  timeout: 5s\n  retries: 3",
         (f"Asks {why}. " if why else f"Assumes port {port} answers HTTP at {path}. ")
-        + "Needs wget in the image: with curl instead, use curl -fsS; an image with neither needs a check it ships.",
+        + "Needs wget in the image. With curl, use curl -fsS. With neither, use a check the image ships.",
     )
 
 
@@ -339,8 +339,8 @@ def _socket(container, runtime, unmet):
     if "no-docker-socket" in unmet:
         yield Unwritten(
             "no-docker-socket",
-            "HQ cannot tell which Docker calls it needs, so it cannot write a socket proxy for it. "
-            "If this container is meant to control Docker, say so and HQ stops warning about it.",
+            "HQ cannot tell which Docker calls it needs, so it cannot write a socket proxy. "
+            "If it is meant to control Docker, mark it, and HQ stops warning about it.",
         )
 
 

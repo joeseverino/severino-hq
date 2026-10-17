@@ -1,8 +1,10 @@
 {% extends "page.html" %}
 {% block page %}
-{% if error %}
-<div class="msg msg-error">{{ error }}</div>
+{% if not_read %}
+{% include "partials/_empty_state.html" with message="No messages read yet." remedy=page.remedy %}
 {% else %}
+{% if problem %}<div class="msg msg-warning">{{ problem }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}</div>{% endif %}
+{% if waiting_note %}<div class="msg msg-info">{{ waiting_note }}</div>{% endif %}
 <div class="status-tabs">
   <a class="status-tab {% if not selected_status %}is-current{% endif %}"
      href="{% url 'contacts:list' %}{% if q %}?q={{ q|urlencode }}{% endif %}">
@@ -25,7 +27,7 @@
 
 {% comment %}With nothing received, one sentence says so; the tabs, the count and an empty table would say it three more times.{% endcomment %}
 {% if not total_count and not q %}
-  {% include "partials/_empty_state.html" with message="No messages yet." why="Messages sent through the contact form on the site appear here." only %}
+  {% include "partials/_empty_state.html" with message="No messages yet." only %}
 {% else %}
 <p class="muted">{{ submissions|length|counted:"message" }}{% if selected_status or q %} match{% endif %}.</p>
 
@@ -44,7 +46,7 @@
           <div class="muted">{{ s.email }}</div>
         </td>
         <td class="msg-preview"><a class="subtle-link" href="{% url 'contacts:detail' s.id %}">{{ s.message_preview|truncatechars:120 }}</a></td>
-        <td><span class="pill pill-{{ s.status }}">{{ s.status|capfirst }}</span></td>
+        <td><span class="pill pill-{{ s.status }}">{{ s.status|capfirst }}</span>{% if s.pending %} <span class="pill pill-attention">Waiting</span>{% endif %}</td>
         <td class="muted">{{ s.country|or_empty }}</td>
         <td class="actions-col row-actions">
           {% url 'contacts:set_status' s.id as status_url %}

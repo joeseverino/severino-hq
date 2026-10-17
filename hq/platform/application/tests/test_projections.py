@@ -521,7 +521,6 @@ class DashboardProjectionTests(TestCase):
     @staticmethod
     def _snapshot_queries():
         with (
-            patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
             CaptureQueriesContext(connection) as queries,
             # What the snapshot costs to derive; a stored answer costs less.
             uncached(),
@@ -595,12 +594,14 @@ class DashboardProjectionTests(TestCase):
             status=Project.Status.ACTIVE,
         )
 
-        from hq.domains.contacts.d1 import UNREAD
-        from hq.platform.application import readings
+        from hq.domains.control_plane.models import ProviderInventory
 
-        readings.record(UNREAD, {"count": 2, "status": "ok"})
-        with patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")):
-            snapshot = operating_snapshot(principal=cli_principal())
+        ProviderInventory.objects.create(
+            kind="cloudflare.contact_submission",
+            records=[{"id": number, "status": "unread", "database_id": "example"} for number in (1, 2)],
+            observed_at=timezone.now(),
+        )
+        snapshot = operating_snapshot(principal=cli_principal())
 
         json.dumps(snapshot)
         # Keyed by the domain that raised it; the link travels with the entry.
@@ -644,7 +645,6 @@ class DashboardProjectionTests(TestCase):
         # Fiscal year starting this month: the 45-day-old expense falls outside.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month),
-            patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
             uncached(),
         ):
             snapshot = operating_snapshot(principal=cli_principal())
@@ -655,7 +655,6 @@ class DashboardProjectionTests(TestCase):
         # expenses fall inside, while the future expense remains excluded.
         with (
             override_settings(SEVERINO_FISCAL_YEAR_START_MONTH=today.month % 12 + 1),
-            patch("hq.domains.contacts.d1.query", side_effect=AssertionError("a page render called D1")),
             uncached(),
         ):
             snapshot = operating_snapshot(principal=cli_principal())

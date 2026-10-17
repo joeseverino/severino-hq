@@ -10,7 +10,7 @@
 </div>
 
 <section class="card">
-  <div class="section-head"><h2>Message</h2><span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread"|capfirst }}</span></div>
+  <div class="section-head"><h2>Message</h2><span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread"|capfirst }}</span>{% if submission.pending %} <span class="pill pill-attention">Waiting for the controller</span>{% endif %}</div>
   <dl class="kv">
     <dt>Name</dt><dd>{{ submission.name }}</dd>
     <dt>Email</dt><dd><a href="{{ reply_href }}">{{ submission.email }}</a></dd>

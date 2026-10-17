@@ -4,10 +4,12 @@ its domains, from `action_items.by_source`. An entry is one item, or a family
 of them folded under its owner's name for it: closed, it is one line saying
 how many and how bad; open, it is the same rows as anywhere else. `aside_url`,
 where the part can be dismissed, lets a family be dismissed whole.
+`titled="0"` when the card around it is already titled by its one area, so
+the area is not said twice.
 {% endcomment %}
 {% for group in groups %}
-  <section class="queue-group" aria-labelledby="{{ prefix }}-{{ forloop.counter }}">
-    <h3 id="{{ prefix }}-{{ forloop.counter }}">{{ group.label }} <span class="count" data-queue-count>{{ group.items|length }}</span></h3>
+  <section class="queue-group"{% if titled != 0 %} aria-labelledby="{{ prefix }}-{{ forloop.counter }}"{% endif %}>
+    {% if titled != 0 %}<h3 id="{{ prefix }}-{{ forloop.counter }}">{{ group.label }} <span class="count" data-queue-count>{{ group.items|length }}</span></h3>{% endif %}
     <div class="queue-entries">
       {% for entry in group.entries %}
         {% if entry.folded %}

@@ -73,4 +73,13 @@ DEFINITIONS = (DEFINITION,)
 
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
-CONNECTIONS = {"adguard": ConnectionKind("AdGuard Home", "coarse", LOGIN)}
+CONNECTIONS = {
+    "adguard": ConnectionKind(
+        "AdGuard Home",
+        "coarse",
+        LOGIN,
+        create="A login for AdGuard Home's web interface: the one made on first run, or another under users in AdGuardHome.yaml.",
+        create_url="https://github.com/AdguardTeam/AdGuardHome/wiki/Configuration",
+        gives="Your internal DNS records, and which devices look up what.",
+    )
+}

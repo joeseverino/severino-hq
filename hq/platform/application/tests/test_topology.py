@@ -43,6 +43,17 @@ from ..topology_model import (
     TopologyNode,
 )
 
+
+def _without_links(value):
+    if isinstance(value, dict):
+        return {key: _without_links(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_without_links(item) for item in value]
+    if isinstance(value, str) and value.startswith(("http://", "https://", "/")):
+        return ""
+    return value
+
+
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 MANAGE = Principal(
     "operator",
@@ -240,13 +251,14 @@ class DerivedTopologyTests(TestCase):
 
     def test_serialization_is_normalized_and_contains_no_credential_material(self):
         payload = serialize_topology(self.project(MANAGE))
-        serialized = json.dumps(payload)
 
         self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(payload["summary"]["nodes"], len(payload["nodes"]))
         self.assertEqual(payload["summary"]["edges"], len(payload["edges"]))
-        self.assertNotIn("secret", serialized.lower())
-        self.assertNotIn("access_token", serialized.lower())
+        # Link targets are addresses, not material: a docs link names Secrets.md.
+        material = json.dumps(_without_links(payload)).lower()
+        self.assertNotIn("secret", material)
+        self.assertNotIn("access_token", material)
 
     def test_query_count_does_not_grow_with_resource_count(self):
         principals = (READ, MANAGE)
@@ -557,6 +569,9 @@ class TopologyPageTests(TestCase):
         self.assertEqual(len(cards(everything)), len(cards(shown)) + left_out)
         self.assertContains(shown, f"Show {left_out} more")
         self.assertContains(everything, "Show fewer")
+        # "N of M shown" is out of every card, the ones left out included.
+        self.assertEqual(shown.context["topology_total"], len(cards(everything)))
+        self.assertContains(shown, f'data-topology-total="{len(cards(everything))}"')
 
     def test_a_view_shows_everything_it_holds(self):
         from ..topology_lenses import topology_lenses

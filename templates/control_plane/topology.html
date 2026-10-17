@@ -21,7 +21,7 @@
   </section>
 {% endif %}
 
-<section class="topology-workspace" data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}">
+<section class="topology-workspace" data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}" data-topology-total="{{ topology_total }}">
   <div class="topology-toolbar" role="group" aria-label="Topology controls">
     {% comment %}
     Which view is the server's question, so it is a form; the rest of this bar
@@ -53,11 +53,11 @@
     {% if topology_left_out %}<a class="btn ghost compact" href="{% url 'control_plane:topology' %}?all=1#map">Show {{ topology_left_out }} more</a>{% elif topology_everything %}<a class="btn ghost compact" href="{% url 'control_plane:topology' %}#map">Show fewer</a>{% endif %}
   </div>
 
-  <p class="topology-hint muted" aria-live="polite" data-topology-status>Pick anything to see what it is connected to.</p>
+  <p class="topology-hint muted" aria-live="polite" data-topology-status>Press a count of links to see only what it connects to.</p>
 
   <div class="topology-stage{% if topology_detail %} has-detail{% endif %}" data-topology-stage>
   <div class="topology-map" id="map" tabindex="-1" role="region" aria-label="Topology lanes">
-    {% for group in topology_groups %}
+    {% for group in topology_groups %}{% if group.items %}
       <section class="topology-lane" data-topology-lane="{{ group.kind }}" aria-labelledby="topology-{{ group.kind }}">
         <header>
           <span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
@@ -82,14 +82,12 @@
                 <strong>{% if item.link.url %}<a class="topology-node-link" href="{{ item.link.url }}" data-entity="{{ item.link.kind_label }}"{% if item.link.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.link.label }}</a>{% else %}<span data-entity="{{ item.link.kind_label }}">{{ item.link.label }}</span>{% endif %}</strong>
                 <small>{{ item.node.subtitle }}</small>
               </span>
-              <a class="topology-node-select" href="{{ item.focus_url }}" data-topology-select aria-controls="topology-detail" title="Details · {{ item.degree|counted:"link" }}" aria-label="Details for {{ item.node.label }}, {{ item.degree|counted:"link" }}"{% if item.node.id == focus_node %} aria-current="true"{% endif %}><span class="topology-node-degree" aria-hidden="true">{{ item.degree }}</span></a>
+              <a class="topology-node-select" href="{{ item.focus_url }}" data-topology-select aria-controls="topology-detail" title="Details · {{ item.degree|counted:"link" }}" aria-label="Details for {{ item.node.label }}, {{ item.degree|counted:"link" }}"{% if item.node.id == focus_node %} aria-current="true"{% endif %}><span class="topology-node-degree" aria-hidden="true">{{ item.degree|counted:"link" }}</span></a>
             </article>
-          {% empty %}
-            <p class="muted">None.</p>
           {% endfor %}
         </div>
       </section>
-    {% empty %}
+    {% endif %}{% empty %}
       {% if active_lens %}
         {% include "partials/_empty_state.html" with message="Nothing matches this view." %}
       {% else %}

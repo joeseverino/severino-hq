@@ -134,6 +134,8 @@ class TopologyView(PageMixin, TemplateView):
                 # lanes rather than inside its card.
                 "topology_detail": detail,
                 "topology_left_out": left_out,
+                # What "N of M shown" is out of: every card, the left-out ones too.
+                "topology_total": left_out + sum(len(items) for items in groups.values()),
                 "topology_everything": bool(self.request.GET.get("all")) and not (active_lens or trace),
                 "topology_lenses": topology_lenses(),
                 "active_lens": active_lens,

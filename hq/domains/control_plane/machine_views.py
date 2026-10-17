@@ -32,6 +32,7 @@ class MachineListView(PageMixin, TemplateView):
 
     template_name = "control_plane/machine_list.html"
     page_title = "Machines"
+    page_reads = ("tailscale.device", "portainer.environment")
 
     @override
     def get_context_data(self, **kwargs):
@@ -99,6 +100,7 @@ class TailnetView(PageMixin, TemplateView):
 
     template_name = "control_plane/tailnet.html"
     page_title = "Tailnet"
+    page_reads = ("tailscale.policy", "tailscale.device")
 
     @override
     def get_page_actions(self):

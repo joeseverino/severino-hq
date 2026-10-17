@@ -27,6 +27,7 @@ from ..item_help import (
 )
 from ..ui import Insight
 from ..workflow_contracts import ActionLink
+from .source import parsed
 
 ROOT = Path(__file__).resolve().parents[4]
 # Owned by a change in flight elsewhere; each is listed here, by file, until
@@ -35,7 +36,7 @@ PENDING: set[str] = set()
 
 
 def _insight_calls(path: Path) -> list[ast.Call]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree = parsed(path)
     return [
         node
         for node in ast.walk(tree)

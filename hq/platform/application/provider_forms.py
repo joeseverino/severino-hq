@@ -130,8 +130,6 @@ class NameListWidget(forms.Widget):
             '<div class="name-list-row">'
             '<input type="text" name="{}" value="" spellcheck="false"'
             ' autocapitalize="off" autocorrect="off">'
-            '<button type="button" class="btn ghost" data-name-list-remove'
-            ' aria-label="Remove">Remove</button>'
             "</div>",
             name,
         )
@@ -183,11 +181,8 @@ class ResourceIdentityForm(forms.Form):
     enabled = forms.BooleanField(
         required=False,
         initial=True,
-        label="Keep this the way HQ sets it",
-        help_text=(
-            "Switched off, the controller leaves it alone. Switching it off does "
-            "not remove anything that is already live."
-        ),
+        label="Managed by HQ",
+        help_text="Turn off to stop HQ changing it. Nothing is removed.",
     )
 
 
@@ -318,8 +313,7 @@ def spec_form_class(
             required=original.required,
             label=original.label,
             widget=forms.CheckboxSelectMultiple if many else None,
-            help_text=original.help_text
-            or ("" if options else "Nothing to choose yet. None have been described to HQ."),
+            help_text=original.help_text or ("" if options else "Nothing to choose yet. Add one to HQ first."),
         )
     for name, effect in provider.change_effects:
         if name in fields:
