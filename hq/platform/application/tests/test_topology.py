@@ -42,6 +42,7 @@ from ..topology_model import (
     TopologyEdge,
     TopologyNode,
 )
+from .host_only import host_only
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 MANAGE = Principal(
@@ -239,7 +240,9 @@ class DerivedTopologyTests(TestCase):
         catalog.assert_not_called()
 
     def test_serialization_is_normalized_and_contains_no_credential_material(self):
-        payload = serialize_topology(self.project(MANAGE))
+        # The host's own map: an extension's labels may use the word.
+        with host_only():
+            payload = serialize_topology(self.project(MANAGE))
         serialized = json.dumps(payload)
 
         self.assertEqual(payload["schema_version"], 2)

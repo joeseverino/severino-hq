@@ -62,7 +62,9 @@ class ReferenceTests(TestCase):
     def test_the_committed_reference_is_what_the_providers_declare(self):
         from django.core.management import call_command
 
-        call_command("connections_reference", "--check", stdout=StringIO())
+        # The public reference names the host's providers, never an extension's.
+        with host_only():
+            call_command("connections_reference", "--check", stdout=StringIO())
 
     def test_an_item_is_named_with_its_article(self):
         by_provider = {setup.provider: setup for setup in setups()}
