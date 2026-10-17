@@ -64,8 +64,8 @@ func TestDecodeRefusals(t *testing.T) {
 		"trailing garbage":        good + `x`,
 		"not json":                `SECRET=` + secret,
 		"empty":                   ``,
-		"no connections":          `{"schema_version":2,"connections":[]}`,
 		"null connections":        `{"schema_version":2,"connections":null}`,
+		"missing connections":     `{"schema_version":2}`,
 		"invalid ref":             strings.Replace(good, `"ref":"a"`, `"ref":"../a"`, 1),
 		"no provider":             strings.Replace(good, `"provider":"example"`, `"provider":""`, 1),
 		"multi-line provider":     strings.Replace(good, `"provider":"example"`, `"provider":"a\nb"`, 1),
@@ -101,6 +101,21 @@ func TestDecodeRefusals(t *testing.T) {
 	}
 	if _, err := Decode(make([]byte, MaxBytes+1)); !errors.Is(err, ErrInvalid) {
 		t.Fatal("an oversized document was accepted")
+	}
+}
+
+// A host with no connection yet still has a document, and it reads back as one.
+func TestADocumentWithNoConnectionsRoundTrips(t *testing.T) {
+	encoded, err := Document{SchemaVersion: SchemaVersion}.Encode()
+	if err != nil {
+		t.Fatalf("an empty document was refused: %v", err)
+	}
+	if string(encoded) != `{"connections":[],"schema_version":2}`+"\n" {
+		t.Fatalf("an empty document encoded as %s", encoded)
+	}
+	decoded, err := Decode(encoded)
+	if err != nil || len(decoded.Connections) != 0 {
+		t.Fatalf("an empty document did not read back: %v", err)
 	}
 }
 

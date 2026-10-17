@@ -114,11 +114,9 @@ def recently_used(now: float | None = None) -> bool:
 def note_controller() -> None:
     """Record that the controller reached HQ, on the call every real run makes.
 
-    A file's mtime, like the activity marker and for the same reason: it is
-    written about once a minute and read by one page. What it is for is the
-    case no record of a sweep can show, a controller that stopped arriving at
-    all: every reading then stays as it was, which looks like a quiet
-    estate until somebody notices nothing has moved.
+    A file's mtime, like the activity marker: written once a pass, read by one
+    page. It shows what no sweep record can: a controller that stopped arriving,
+    which otherwise looks like a quiet estate.
 
     Best effort. The controller's work may not fail because a note about it
     could not be written.
@@ -130,9 +128,15 @@ def note_controller() -> None:
         return
 
 
-# A run starts within a minute of the last ending and a sweep takes a few, so
-# a healthy controller is never this long between arrivals.
-CONTROLLER_SILENT_AFTER = timedelta(minutes=15)
+# The host also starts a pass this long after the last one ended, to catch a
+# doorbell rung while the host was off, a claim whose controller died, and the
+# day's automatic work. deploy/systemd/severino-hq-controller.timer must hold
+# the same value (tested).
+CONTROLLER_FLOOR = timedelta(minutes=15)
+
+# A healthy controller arrives at least once per floor; the second floor allows
+# for a long pass.
+CONTROLLER_SILENT_AFTER = 2 * CONTROLLER_FLOOR
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,15 +152,28 @@ class ControllerStanding:
 
 
 def controller_standing(now: datetime | None = None) -> ControllerStanding:
-    """The controller's last arrival. Never seen is unknown, not silent: an
+    """The controller's last arrival: its heartbeat, else the newest reading,
+    since only a controller writes one (a database copied from another host
+    has readings and no heartbeat here). Never seen is unknown, not silent: an
     installation with no controller has nothing to be late."""
 
     marker = _path("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat")
     try:
         seen_at = datetime.fromtimestamp(marker.stat().st_mtime, tz=timezone.get_current_timezone())
     except OSError:
+        seen_at = newest_reading()
+    if seen_at is None:
         return ControllerStanding(seen_at=None, silent=False)
     return ControllerStanding(seen_at=seen_at, silent=(now or timezone.now()) - seen_at > CONTROLLER_SILENT_AFTER)
+
+
+def newest_reading() -> datetime | None:
+    """When the newest stored reading was taken, whichever controller took it."""
+
+    from .facts import stored_snapshots
+
+    times = [row.observed_at for rows in stored_snapshots().values() for row in rows if row.observed_at]
+    return max(times, default=None)
 
 
 def sweep_interval() -> timedelta:
@@ -447,6 +464,29 @@ def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
     if kind and kind not in OBSERVATIONS and kind not in PROVIDERS:
         raise ValidationError({"kind": ValidationError("No such type.", code="invalid_choice")})
     return (ref, kind) if named else None
+
+
+def pass_due() -> str:
+    """Why the controller should run a pass now, or "" when a pass would find nothing.
+
+    The doorbell (`hq.platform.core.doorbell`) asks this once a minute for work
+    that comes due with time alone; a request that queues work rings on its own.
+    An unanswered dashboard refresh stops counting after `read_request_lifetime()`.
+    """
+
+    from hq.domains.control_plane.models import DashboardRefreshRequest, OperationRequest
+
+    now = timezone.now()
+    if OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).exists():
+        return "Work is queued."
+    if OperationRequest.objects.filter(state=OperationRequest.State.CLAIMED, lease_expires_at__lte=now).exists():
+        return "Work a controller took did not finish in time."
+    if DashboardRefreshRequest.objects.filter(
+        completed_at__isnull=True, requested_at__gte=now - read_request_lifetime()
+    ).exists():
+        return "A dashboard reading was asked for."
+    verdict = sweep_due()
+    return str(verdict["reason"]) if verdict["due"] else ""
 
 
 def ring_doorbell() -> bool:

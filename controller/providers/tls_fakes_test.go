@@ -16,7 +16,6 @@ import (
 	"io/fs"
 	"math/big"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -29,6 +28,8 @@ type fakeDialer struct {
 	http   *fakeHTTP
 	phases []map[string]fakeServe
 	certs  map[string][]byte // name -> DER
+	// issued is the certificate the fake authority last issued, served as "issued".
+	issued func() []byte
 }
 
 type fakeServe struct {
@@ -66,6 +67,9 @@ func (d *fakeDialer) Peer(_ context.Context, domain, connectHost string) ([]byte
 	if serve.Error != "" {
 		return nil, &tlsReadError{reason: serve.Error}
 	}
+	if serve.Cert == "issued" && d.issued != nil {
+		return d.issued(), nil
+	}
 	return d.certs[serve.Cert], nil
 }
 
@@ -73,7 +77,6 @@ func (d *fakeDialer) Peer(_ context.Context, domain, connectHost string) ([]byte
 type fakeCommander struct {
 	http     *fakeHTTP
 	outcomes map[string]fakeOutcome
-	lineage  map[string]string // certbot certonly writes these files into the lineage
 }
 
 type fakeOutcome struct {
@@ -91,8 +94,6 @@ func commandKey(argv []string) string {
 		return "ssh " + argv[len(argv)-1]
 	case "op":
 		return "op " + argv[1] + " " + argv[2]
-	case "certbot":
-		return "certbot " + argv[1]
 	}
 	return argv[0]
 }
@@ -144,17 +145,9 @@ func (c *fakeCommander) exec(_ context.Context, commandArgv []string, input []by
 		record["files"] = files
 	}
 	key := commandKey(commandArgv)
-	if key == "certbot certonly" {
-		for i, arg := range commandArgv {
-			if arg == "--dns-cloudflare-credentials" {
-				data, _ := os.ReadFile(commandArgv[i+1])
-				record["credentials"] = string(data)
-			}
-		}
-	}
 	c.http.requests = append(c.http.requests, request{commandArgv[0], "RUN", record, ""})
 	outcome, ok := c.outcomes[key]
-	if !ok && key != "certbot --version" {
+	if !ok {
 		return nil, nil, 1, nil
 	}
 	switch outcome.Fail {
@@ -162,23 +155,6 @@ func (c *fakeCommander) exec(_ context.Context, commandArgv []string, input []by
 		return nil, nil, 1, nil
 	case "missing":
 		return nil, nil, 0, fs.ErrNotExist
-	}
-	if key == "certbot certonly" {
-		for i, arg := range commandArgv {
-			if arg == "--config-dir" {
-				name := ""
-				for j, other := range commandArgv {
-					if other == "--cert-name" {
-						name = commandArgv[j+1]
-					}
-				}
-				dir := filepath.Join(commandArgv[i+1], "live", name)
-				_ = os.MkdirAll(dir, 0o700)
-				for file, content := range c.lineage {
-					_ = os.WriteFile(filepath.Join(dir, file), []byte(content), 0o600)
-				}
-			}
-		}
 	}
 	if outcome.StdoutB64 != "" {
 		data, err := base64.StdEncoding.DecodeString(outcome.StdoutB64)

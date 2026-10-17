@@ -2,12 +2,12 @@
 Description=Run Severino HQ infrastructure controller
 
 [Timer]
-# The floor, not the cadence. Applying queued work does not wait for this
-# (the .path unit starts the controller the moment HQ queues something), and
-# how often it sweeps is HQ's to decide, so this only has to be often enough to
-# catch a doorbell that was missed while the machine was off.
+# A floor, not the schedule: HQ rings the doorbell (the .path unit) when work
+# is queued or a pass comes due. This catches a doorbell missed while the host
+# was off, a claim whose controller died, and the day's automatic work.
+# Must equal CONTROLLER_FLOOR in hq/platform/application/cadence.py (tested).
 OnBootSec=2min
-OnUnitInactiveSec=1min
+OnUnitInactiveSec=15min
 RandomizedDelaySec=5s
 Persistent=true
 Unit=severino-hq-controller.service

@@ -13,11 +13,21 @@
     "and the host refuses to boot unless the lock inventory exactly matches the",
     "enabled set.",
     "",
+    "An empty 'extensions' list composes the host with none; a missing one fails.",
+    "",
+    "'retired' lists the ids of extensions taken out on purpose. A deploy refuses",
+    "an image that drops an extension production runs unless the image's",
+    "composition names it here, so an extension leaves production only by being",
+    "named. An id cannot be both listed and retired. Once production runs",
+    "without it, the entry may go.",
+    "",
     "Example:",
     "  { \"extensions\": [ { \"id\": \"example.alpha\",",
     "                       \"repository\": \"owner/example-alpha\",",
-    "                       \"workflow\": \".github/workflows/admit-plugin.yml\" } ] }"
+    "                       \"workflow\": \".github/workflows/admit-plugin.yml\" } ],",
+    "    \"retired\": [ \"example.beta\" ] }"
   ],
   "schema_version": 1,
-  "extensions": []
+  "extensions": [],
+  "retired": []
 }

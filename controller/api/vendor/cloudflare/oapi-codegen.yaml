@@ -18,6 +18,7 @@ output-options:
     - cloudflare-tunnel-list-cloudflare-tunnels
     - d1-get-database
     - d1-list-databases
+    - d1-query-database
     - dns-records-for-a-zone-create-dns-record
     - dns-records-for-a-zone-delete-dns-record
     - dns-records-for-a-zone-list-dns-records

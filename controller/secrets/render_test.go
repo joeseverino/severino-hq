@@ -76,12 +76,13 @@ type machine struct {
 	creds    string
 }
 
+// envItem is an application environment item: the variables the shipped
+// registry requires, and two it does not.
 func envItem() item {
-	fields := []field{f("DJANGO_SECRET_KEY", secretEnv)}
-	for index := range 15 {
-		fields = append(fields, f("EXAMPLE_"+string(rune('A'+index)), "value"))
-	}
-	return item{ID: id(900), Title: "example env", Version: 1, Fields: fields}
+	return item{ID: id(900), Title: "example env", Version: 1, Fields: []field{
+		f("DJANGO_SECRET_KEY", secretEnv), f("EXAMPLE_A", "value"), f("EXAMPLE_B", "value"),
+		f("DJANGO_ALLOWED_HOSTS", "hq.example.com"),
+	}}
 }
 
 func apiToken(n int, ref, prefix string) item {
@@ -121,7 +122,7 @@ func newHost(t *testing.T, items ...item) *machine {
 			CredentialsDir: h.creds, ConnectCredential: "op_connect_example",
 			Layout: install.Layout{SecretDir: filepath.Join(root, "secrets"), RuntimeDir: runtime, WebDir: filepath.Join(runtime, "web"),
 				RootUID: os.Getuid(), RootGID: os.Getgid(), WebUID: os.Getuid(), WebGID: os.Getgid()},
-			RegistryPath: "../../hq/config/controller-connections.json", MinAppVariables: 15,
+			RegistryPath:   "../../hq/config/controller-connections.json",
 			ConnectTimeout: 5 * time.Second, FullEvery: 24 * time.Hour, HealthAttempts: 12, HealthInterval: 5 * time.Second,
 		},
 		Mounts: func(string) error { return h.mountErr },
@@ -265,7 +266,7 @@ func TestAFirstRenderInstallsEveryConsumersFile(t *testing.T) {
 		t.Fatalf("result: %+v", result)
 	}
 	env := read(t, h.appEnv())
-	if !strings.HasPrefix(env, "DJANGO_SECRET_KEY='"+secretEnv+"'\nEXAMPLE_A='value'\n") || strings.Count(env, "\n") != 16 || mode(t, h.appEnv()) != 0o400 {
+	if !strings.HasPrefix(env, "DJANGO_SECRET_KEY='"+secretEnv+"'\nEXAMPLE_A='value'\n") || strings.Count(env, "\n") != 4 || mode(t, h.appEnv()) != 0o400 {
 		t.Fatalf("application environment (mode %o):\n%s", mode(t, h.appEnv()), env)
 	}
 	if mode(t, h.document()) != 0o400 {
@@ -298,7 +299,7 @@ func TestAFirstRenderInstallsEveryConsumersFile(t *testing.T) {
 	status := h.status()
 	if status.LastAttempt.Outcome != "rendered" || status.LastAttempt.Failure != "" || status.LastSuccess == nil ||
 		!status.LastSuccess.At.Equal(h.now) || *status.LastSuccess.ContentVersion != 1 ||
-		status.LastSuccess.Counts != (secretstatus.Counts{ItemsRead: 4, Connections: 2, AppVariables: 16, Identities: 1}) {
+		status.LastSuccess.Counts != (secretstatus.Counts{ItemsRead: 4, Connections: 2, AppVariables: 4, Identities: 1}) {
 		t.Fatalf("status: %+v %+v", status.LastAttempt, status.LastSuccess)
 	}
 	if status.Connect == nil || status.Connect.Version != "1.8.1" || status.Connect.Dependencies[0] != (secretstatus.Dependency{Service: "sync", Status: "ACTIVE"}) {
@@ -444,7 +445,7 @@ func TestARenderOfAnotherDocumentVersionIsNotCurrent(t *testing.T) {
 	// The inputs as a renderer that knew no document version digests them.
 	config := h.runner.Config
 	left.Inputs = digest(left.Salt, []byte("hq-secrets/1"), []byte(read(t, config.RegistryPath)), []byte(config.Vault), []byte(config.EnvItem),
-		[]byte(config.Layout.SecretDir), []byte(config.Layout.RuntimeDir), []byte(config.Layout.WebDir), []byte(strconv.Itoa(config.MinAppVariables)))
+		[]byte(config.Layout.SecretDir), []byte(config.Layout.RuntimeDir), []byte(config.Layout.WebDir))
 	data, err := json.Marshal(left)
 	if err != nil {
 		t.Fatal(err)
@@ -474,7 +475,7 @@ func TestTheRegistryAndConfigurationArePartOfWhatIsCurrent(t *testing.T) {
 	if _, err := h.run(); !errors.Is(err, project.ErrContent) {
 		t.Fatalf("a changed registry was not applied: %v", err)
 	}
-	os.WriteFile(registry, []byte(`{"schema_version":1,"projections":{},"connections":{}}`), 0o600)
+	os.WriteFile(registry, []byte(`{"schema_version":2,"projections":{},"required_app_variables":["EXAMPLE_A"],"connections":{}}`), 0o600)
 	if _, err := h.run(); Class(err) != "config" {
 		t.Fatalf("a registry naming connections was accepted: %v", err)
 	}
@@ -579,9 +580,9 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 		{"the vault is not in scope", "connect_response", func(h *machine) { h.runner.Config.Vault = "Another Vault" }},
 		{"no connections", "content", func(h *machine) { h.fake.Items = []item{envItem()} }},
 		{"no environment item", "content", func(h *machine) { h.fake.Items = h.fake.Items[:3] }},
-		{"a small environment", "content", func(h *machine) {
+		{"a required variable missing", "content", func(h *machine) {
 			env := envItem()
-			env.Fields = env.Fields[:14]
+			env.Fields = env.Fields[:3]
 			h.fake.Items[3] = env
 		}},
 		{"duplicate connection", "content", func(h *machine) { h.fake.Items = append(h.fake.Items, apiToken(5, "example", "OTHER")) }},
@@ -643,6 +644,80 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 				t.Fatalf("a failure rewrote the last success: %+v", status.LastSuccess)
 			}
 		})
+	}
+}
+
+// A host with no connection yet installs an empty inventory beside the
+// application environment, so HQ starts before any provider is set up. A
+// runtime directory cleared by a reboot is a host with nothing installed.
+func TestAVaultWithNoConnectionsInstallsAnEmptyInventoryWhereNoneIsInstalled(t *testing.T) {
+	h := newHost(t)
+	if result := h.ok(); !result.WebChanged {
+		t.Fatalf("the application environment was not installed: %+v", result)
+	}
+	document, err := connections.ReadFile(h.document(), os.Getuid())
+	if err != nil || len(document.Connections) != 0 || mode(t, h.document()) != 0o400 {
+		t.Fatalf("the empty inventory was not installed: %v", err)
+	}
+	if !strings.HasPrefix(read(t, h.appEnv()), "DJANGO_SECRET_KEY='") {
+		t.Fatal("the application environment was not rendered")
+	}
+	if counts := h.status().LastSuccess.Counts; counts.Connections != 0 || counts.AppVariables != 4 {
+		t.Fatalf("counts: %+v", counts)
+	}
+	// The connections a later read finds replace the empty inventory.
+	h.fake.Edit(func(fake *connecttest.Fake) {
+		fake.Items = append([]item{apiToken(1, "example", "EXAMPLE")}, fake.Items...)
+	})
+	h.ok()
+	if document, _ := connections.ReadFile(h.document(), os.Getuid()); len(document.Connections) != 1 {
+		t.Fatal("a connection did not replace the empty inventory")
+	}
+	// Cleared by a reboot, the runtime directory holds nothing to keep.
+	h.fake.Edit(func(fake *connecttest.Fake) { fake.Items = []item{envItem()} })
+	for _, name := range []string{install.ConnectionsName, stateName} {
+		os.Remove(filepath.Join(h.layout().RuntimeDir, name))
+	}
+	h.ok()
+	if document, _ := connections.ReadFile(h.document(), os.Getuid()); len(document.Connections) != 0 {
+		t.Fatal("an empty vault after a reboot did not install an empty inventory")
+	}
+}
+
+// Where connections are installed, a vault that resolves none is refused as
+// content and they stay. The application environment it holds is still
+// installed and loaded, and the refusal repeats every run until the vault
+// holds a connection again.
+func TestAVaultWithNoConnectionsNeverReplacesInstalledOnes(t *testing.T) {
+	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
+	h.web.installed = true
+	h.ok()
+	installed, restarts := read(t, h.document()), h.web.restarts
+	h.fake.Edit(func(fake *connecttest.Fake) { fake.Items = []item{envItem()} })
+	h.rotate()
+	for range 2 {
+		h.now = h.now.Add(time.Hour)
+		_, err := h.run()
+		if Class(err) != "content" || !strings.Contains(err.Error(), "resolved none") {
+			t.Fatalf("an empty vault replaced the installed connections: %v", err)
+		}
+		if read(t, h.document()) != installed {
+			t.Fatal("the installed connections were touched")
+		}
+		if len(h.staging()) != 0 {
+			t.Fatalf("staging was left behind: %v", h.staging())
+		}
+	}
+	if !strings.Contains(read(t, h.appEnv()), "rotated-") || h.web.restarts != restarts+1 {
+		t.Fatalf("the application environment was not installed and loaded: %d restarts", h.web.restarts)
+	}
+	if status := h.status(); status.LastAttempt.Failure != "content" {
+		t.Fatalf("status: %+v", status.LastAttempt)
+	}
+	// An installed document that cannot be shown empty counts as holding some.
+	os.Chmod(h.document(), 0o600)
+	if _, err := h.run(); Class(err) != "content" {
+		t.Fatalf("an unreadable installed document was replaced by an empty one: %v", err)
 	}
 }
 

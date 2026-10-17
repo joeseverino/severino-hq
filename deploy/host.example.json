@@ -3,7 +3,7 @@
   "env_item": "example env",
   "connect": {
     "unit": "example-connect.service",
-    "url": "http://127.0.0.1:8080",
+    "url": "http://127.0.0.1:880",
     "credential": "op_connect_example"
   },
   "runner": {

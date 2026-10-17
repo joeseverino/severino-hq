@@ -416,6 +416,8 @@ const (
 	ResourceKindCaddyRoute                   ResourceKind = "caddy.route"
 	ResourceKindCloudflareAccessApp          ResourceKind = "cloudflare.access_app"
 	ResourceKindCloudflareAccessServiceToken ResourceKind = "cloudflare.access_service_token"
+	ResourceKindCloudflareContactInbox       ResourceKind = "cloudflare.contact_inbox"
+	ResourceKindCloudflareContactSubmission  ResourceKind = "cloudflare.contact_submission"
 	ResourceKindCloudflareD1Database         ResourceKind = "cloudflare.d1_database"
 	ResourceKindCloudflareDNSRecord          ResourceKind = "cloudflare.dns_record"
 	ResourceKindCloudflareEdgeCertificate    ResourceKind = "cloudflare.edge_certificate"
@@ -480,6 +482,10 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindCloudflareAccessApp:
 		return true
 	case ResourceKindCloudflareAccessServiceToken:
+		return true
+	case ResourceKindCloudflareContactInbox:
+		return true
+	case ResourceKindCloudflareContactSubmission:
 		return true
 	case ResourceKindCloudflareD1Database:
 		return true
@@ -587,6 +593,7 @@ const (
 	SweptCaddyRoute                   SweptKind = "caddy.route"
 	SweptCloudflareAccessApp          SweptKind = "cloudflare.access_app"
 	SweptCloudflareAccessServiceToken SweptKind = "cloudflare.access_service_token"
+	SweptCloudflareContactSubmission  SweptKind = "cloudflare.contact_submission"
 	SweptCloudflareD1Database         SweptKind = "cloudflare.d1_database"
 	SweptCloudflareDNSRecord          SweptKind = "cloudflare.dns_record"
 	SweptCloudflareEdgeCertificate    SweptKind = "cloudflare.edge_certificate"
@@ -637,6 +644,8 @@ func (e SweptKind) Valid() bool {
 	case SweptCloudflareAccessApp:
 		return true
 	case SweptCloudflareAccessServiceToken:
+		return true
+	case SweptCloudflareContactSubmission:
 		return true
 	case SweptCloudflareD1Database:
 		return true
@@ -953,6 +962,30 @@ type CloudflareAccessServiceTokenRecord struct {
 
 // CloudflareCAAValue A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it.
 type CloudflareCAAValue = string
+
+// CloudflareContactSubmissionRecord One message from a site's contact form, a row of its D1 table. The database is named on each row because the reader reads every database that holds the table, and HQ picks the inbox among them.
+type CloudflareContactSubmissionRecord struct {
+	AccountID     string `json:"account_id,omitempty"`
+	AdminNotes    string `json:"admin_notes,omitempty"`
+	AssignedTo    string `json:"assigned_to,omitempty"`
+	Browser       string `json:"browser,omitempty"`
+	ConnectionRef string `json:"connection_ref,omitempty"`
+	Country       string `json:"country,omitempty"`
+	CreatedAt     string `json:"created_at,omitempty"`
+	Database      string `json:"database,omitempty"`
+	DatabaseID    string `json:"database_id,omitempty"`
+	Device        string `json:"device,omitempty"`
+	Email         string `json:"email,omitempty"`
+	ID            int    `json:"id"`
+	IPAddress     string `json:"ip_address,omitempty"`
+	Message       string `json:"message,omitempty"`
+	Name          string `json:"name,omitempty"`
+	SourceURL     string `json:"source_url,omitempty"`
+	Status        string `json:"status,omitempty"`
+	Turnstile     string `json:"turnstile,omitempty"`
+	UpdatedAt     string `json:"updated_at,omitempty"`
+	UserAgent     string `json:"user_agent,omitempty"`
+}
 
 // CloudflareD1DatabaseRecord One cloudflare.d1_database record: D1 database.
 type CloudflareD1DatabaseRecord struct {
@@ -1758,10 +1791,10 @@ type SweepVerdict struct {
 // SweptKind A kind the controller reads in a sweep: exactly the kinds it registers a reader for.
 type SweptKind string
 
-// TLSCertificateDomain A domain certbot is asked for: DNS labels, optionally under one wildcard. The controller checks it where it reaches certbot's argv.
+// TLSCertificateDomain A domain a certificate order asks for: DNS labels, optionally under one wildcard. The controller checks it again before it reaches an order or a challenge record name.
 type TLSCertificateDomain = string
 
-// TLSCertificateName A certbot lineage name: it becomes --cert-name and a directory under live/. HQ's tls.certificate declaration validates with it and the controller checks it again where it reaches certbot's argv and a path.
+// TLSCertificateName A certificate's lineage name: the directory under live/ its certificate and key are kept in. HQ's tls.certificate declaration validates with it and the controller checks it again where it becomes a path.
 type TLSCertificateName = string
 
 // TLSConsumerKind Where a certificate is served from: the kinds of TLS consumer a certificate spec declares.

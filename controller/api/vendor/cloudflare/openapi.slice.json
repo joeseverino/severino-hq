@@ -186,6 +186,34 @@
     }
    }
   },
+  "/accounts/{account_id}/d1/database/{database_id}/query": {
+   "post": {
+    "operationId": "d1-query-database",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "database_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Query response"
+     }
+    }
+   }
+  },
   "/accounts/{account_id}/pages/projects": {
    "get": {
     "operationId": "pages-project-get-projects",

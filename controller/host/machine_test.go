@@ -30,6 +30,10 @@ type fakeHost struct {
 	// boot is what starting the web unit does to the host, as an image's
 	// entrypoint would.
 	boot func()
+	// files is what an image holds outside /app, by image then path. An image
+	// it names has only those; one it does not holds any file asked for.
+	files   map[string]map[string]string
+	created string
 }
 
 // program is what each command an install or a deploy runs does here: it is
@@ -63,6 +67,7 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 	case strings.HasPrefix(call, "docker inspect --format {{.Image}}"):
 		return answer(imageID+"\n", 0)
 	case strings.HasPrefix(call, "docker create"):
+		f.created = args[len(args)-2]
 		return answer("c0ffee\n", 0)
 	case strings.HasPrefix(call, "docker volume inspect"):
 		return answer(filepath.Join(f.root, "volumes", args[len(args)-1])+"\n", 0)
@@ -75,6 +80,14 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 		from := args[len(args)-2]
 		if item, ok := strings.CutPrefix(from[strings.Index(from, ":")+1:], "/app/"); ok {
 			return exec.CommandContext(ctx, "cp", "-R", filepath.Join(f.image, item), args[len(args)-1])
+		}
+		if held, ok := f.files[f.created]; ok {
+			body, ok := held[from[strings.Index(from, ":")+1:]]
+			if !ok {
+				return answer("", 1)
+			}
+			os.WriteFile(args[len(args)-1], []byte(body), 0o600)
+			return answer("", 0)
 		}
 		os.WriteFile(args[len(args)-1], []byte("#!/bin/sh\n"), 0o700)
 	case name == "cp":

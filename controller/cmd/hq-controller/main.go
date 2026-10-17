@@ -4,6 +4,9 @@
 //
 // "hq-controller job NAME" is the other thing a timer asks of HQ: one piece of
 // scheduled work, done by the running process. It reads no connection.
+//
+// "hq-controller ready URL" is the image's healthcheck: exit 0 when URL
+// answers 200, with no interpreter started per probe.
 package main
 
 import (
@@ -12,10 +15,12 @@ import (
 	"flag"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/joeseverino/severino-hq/controller/providers"
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -24,12 +29,21 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	code := 1
-	if len(os.Args) > 1 && os.Args[1] == "job" {
+	mode := ""
+	if len(os.Args) > 1 {
+		mode = os.Args[1]
+	}
+	switch mode {
+	case "job":
 		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), os.Stdout)
-	} else if env, supplied, err := load(os.Environ()); err != nil {
-		json.NewEncoder(os.Stdout).Encode(failure{Message: err.Error()})
-	} else {
-		code = run(ctx, os.Args[1:], env, supplied, os.Stdout, os.Stderr)
+	case "ready":
+		code = ready(ctx, os.Args[2:], os.Stdout)
+	default:
+		if env, supplied, err := load(os.Environ()); err != nil {
+			json.NewEncoder(os.Stdout).Encode(failure{Message: err.Error()})
+		} else {
+			code = run(ctx, os.Args[1:], env, supplied, os.Stdout, os.Stderr)
+		}
 	}
 	stop()
 	os.Exit(code)
@@ -84,6 +98,41 @@ func job(ctx context.Context, args []string, socket string, stdout io.Writer) in
 		return 0
 	}
 	return 1
+}
+
+// readyTimeout is under the healthcheck's own timeout, so a slow answer is
+// reported here as not ready rather than killed by Docker.
+const readyTimeout = 3 * time.Second
+
+// ready is exit 0 when the address answers 200 itself. A redirect is not
+// followed, no proxy is consulted, and the body is not read.
+func ready(ctx context.Context, args []string, stdout io.Writer) int {
+	if len(args) != 1 || args[0] == "" {
+		json.NewEncoder(stdout).Encode(failure{Message: "usage: hq-controller ready URL"})
+		return 2
+	}
+	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, args[0], nil)
+	if err != nil {
+		json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
+		return 2
+	}
+	client := &http.Client{
+		Transport:     &http.Transport{Proxy: nil, DisableKeepAlives: true},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
+		return 1
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		json.NewEncoder(stdout).Encode(failure{Message: response.Status})
+		return 1
+	}
+	return 0
 }
 
 func run(ctx context.Context, args []string, env runtime.Environment, supplied runtime.Connections, stdout, stderr io.Writer) int {

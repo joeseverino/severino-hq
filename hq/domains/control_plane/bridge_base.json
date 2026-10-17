@@ -1983,7 +1983,7 @@
       },
       "TLSCertificateDomain": {
         "type": "string",
-        "description": "A domain certbot is asked for: DNS labels, optionally under one wildcard. The controller checks it where it reaches certbot's argv.",
+        "description": "A domain a certificate order asks for: DNS labels, optionally under one wildcard. The controller checks it again before it reaches an order or a challenge record name.",
         "pattern": "^(\\*\\.)?([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
       },
       "ConditionType": {

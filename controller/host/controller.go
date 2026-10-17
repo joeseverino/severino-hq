@@ -132,8 +132,8 @@ func bridgeVolume() string {
 }
 
 // prepareACME makes the certificate state the controller's, every run and
-// the whole tree: certbot copies a key's owner onto its replacement, so one
-// file left another account's fails a renewal after the CA has issued.
+// the whole tree: issuance replaces a lineage directory and the files in it,
+// which an unprivileged process cannot do to what another account owns.
 func (c *Controller) prepareACME() error {
 	if err := os.MkdirAll(c.ACME, 0o700); err != nil {
 		return err

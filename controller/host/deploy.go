@@ -98,16 +98,25 @@ func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Read
 		env = append(env, "DOCKER_CONFIG="+config)
 		d.Command = withEnv(d.Command, env)
 	}
-	// The signature is checked here, by root. The runner already checked it,
-	// but the runner is the party the sudoers rule distrusts; and the shape
-	// above is exactly what a stolen registry token could also push.
+	// The signature is checked here, by root, and nowhere before it: the
+	// runner that asked for this deploy is the party the sudoers rule
+	// distrusts, and the shape above is exactly what a stolen registry token
+	// could also push. The reference is pinned by digest, so what is verified
+	// is what is pulled and run.
 	if err := d.run(ctx, d.Cosign, "verify",
 		"--certificate-oidc-issuer", signerIssuer,
 		"--certificate-identity-regexp", d.Source.Signer(), image); err != nil {
 		cleanup()
-		return fmt.Errorf("refusing to deploy %s: not signed by the compose workflow", image)
+		return fmt.Errorf("refusing to deploy %s: not signed by this repository's compose workflow", image)
 	}
 	fmt.Fprintln(d.Out, "Signature verified.")
+	// Read before the prune below, which can remove the running image when
+	// HQ is stopped.
+	running, err := d.runningExtensions(ctx, stage)
+	if err != nil {
+		cleanup()
+		return fmt.Errorf("refusing to deploy %s: %w", image, err)
+	}
 	// The running image is referenced and survives, so it stays the rollback.
 	_ = d.run(ctx, "docker", "image", "prune", "--all", "--force")
 	_ = d.run(ctx, "docker", "builder", "prune", "--all", "--force")
@@ -116,6 +125,10 @@ func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Read
 		return fmt.Errorf("a deploy needs %d MiB free; %d MiB are", d.FreeBytes>>20, free>>20)
 	}
 	if err := d.private(ctx, "Image pull", "pull", "docker", "pull", image); err != nil {
+		cleanup()
+		return err
+	}
+	if err := d.keepsExtensions(ctx, stage, image, running); err != nil {
 		cleanup()
 		return err
 	}
