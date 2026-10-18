@@ -1,10 +1,12 @@
 import json
+import threading
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.test import SimpleTestCase, TestCase, override_settings
+from jwt.algorithms import RSAAlgorithm
 
 from hq.platform.application.security import AuthorizationError
 from hq.platform.application.tests.host_only import host_only
@@ -21,6 +23,7 @@ from ..testing import ContractClient
 
 ISSUER = "https://sso.example.test"
 RESOURCE = "https://hq.example.test/api"
+KID = "example-key"
 
 _KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 _OTHER_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -38,21 +41,18 @@ def _token(key=_KEY, **overrides) -> str:
         "exp": now + timedelta(minutes=5),
     }
     claims.update(overrides)
-    return jwt.encode(claims, key, algorithm="RS256")
+    return jwt.encode(claims, key, algorithm="RS256", headers={"kid": KID})
 
 
-class _FakeJWKS:
-    """Stands in for the identity provider's published key set."""
-
-    def __init__(self, key):
-        self._key = key
-
-    def get_signing_key_from_jwt(self, token):
-        return type("Key", (), {"key": self._key.public_key()})()
+def _held(key):
+    jwk = RSAAlgorithm.to_jwk(key.public_key(), as_dict=True)
+    return {KID: jwt.PyJWK({**jwk, "kid": KID, "use": "sig", "alg": "RS256"})}
 
 
 def _serving(key=_KEY):
-    return patch.object(security, "_jwks", lambda: _FakeJWKS(key))
+    """The identity provider's published key, held as the key thread holds it."""
+
+    return patch.object(security.KEYS, "held", _held(key))
 
 
 @override_settings(
@@ -102,6 +102,24 @@ class TokenVerificationTests(SimpleTestCase):
         )
         with _serving(), self.assertRaises(security.TokenError):
             security.verify(forever)
+
+    @override_settings(OIDC_OP_JWKS_ENDPOINT=f"{ISSUER}/.well-known/jwks.json")
+    def test_the_key_set_is_read_on_a_thread_of_its_own_when_the_application_starts(self):
+        reader = []
+
+        def get_signing_keys(client):
+            reader.append(threading.current_thread())
+            return list(_held(_KEY).values())
+
+        with (
+            patch.object(security.KEYS, "held", {}),
+            patch.object(security.PyJWKClient, "get_signing_keys", get_signing_keys),
+        ):
+            with security.keeping_keys():
+                pass
+            self.assertEqual(security.verify(_token())["client_id"], "example-automation")
+        self.assertEqual(len(reader), 1)
+        self.assertIsNot(reader[0], threading.current_thread())
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_an_unconfigured_resource_fails_closed(self):
@@ -267,6 +285,24 @@ class TransportTests(SentinelMixin, TestCase):
             response = self._post("example.import", {}, token=_token(key=_OTHER_KEY))
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["error"]["code"], "invalid_token")
+
+    @override_settings(OIDC_OP_JWKS_ENDPOINT=f"{ISSUER}/.well-known/jwks.json")
+    def test_a_token_is_never_verified_by_reaching_the_identity_provider(self):
+        """Keys not yet read, or a key not held, answer 401 and ask for a read."""
+
+        security.KEYS.wanted.clear()
+        for case, held in (("not loaded", {}), ("unknown key", {"another-key": _held(_KEY)[KID]})):
+            with (
+                self.subTest(case),
+                patch.object(security.KEYS, "held", held),
+                self.assertLogs("severino.api", "WARNING") as logged,
+            ):
+                response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.json()["error"]["code"], "invalid_token")
+            self.assertTrue(security.KEYS.wanted.is_set())
+            self.assertIn(logged.records[0].event, {"api.keys.not_loaded", "api.keys.unknown"})
+            security.KEYS.wanted.clear()
 
     def test_an_ungranted_capability_is_403(self):
         with _serving():

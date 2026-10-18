@@ -12,12 +12,14 @@ stale the next time a plugin adds a capability.
 """
 
 import logging
-from functools import cache
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import jwt
 from django.conf import settings
-from jwt import PyJWKClient
+from jwt import PyJWK, PyJWKClient
 
 from hq.platform.application.security import AuthorizationError, Principal
 
@@ -60,12 +62,86 @@ class TokenError(ClientReason):
     code = "invalid_token"
 
 
-@cache
-def _jwks() -> PyJWKClient:
-    # Cached deliberately: fetching the key set per request would put the
-    # identity provider in the latency path of every import, and signing keys
-    # rotate on a scale of months, not requests.
-    return PyJWKClient(settings.OIDC_OP_JWKS_ENDPOINT, cache_keys=True)
+# Seconds between reads of the identity provider's key set, and the least
+# time between two reads, which a token naming an unknown key may ask for early.
+REFRESH_EVERY = 3600.0
+REFRESH_AT_MOST_EVERY = 60.0
+# How long stopping waits for a read in flight, in seconds.
+STOPS_WITHIN = 5.0
+
+
+class SigningKeys:
+    """The identity provider's signing keys, held in the process by key id.
+
+    A request never fetches them (``hq.platform.core.outbound``): they are read
+    when the application starts and again every ``REFRESH_EVERY`` on a thread
+    of their own (``keeping_keys``), and a token naming a key not held asks
+    that thread to read again instead of waiting for it.
+    """
+
+    def __init__(self) -> None:
+        self.held: dict[str, PyJWK] = {}
+        self.wanted = threading.Event()
+
+    def load(self) -> None:
+        """Read the key set now. Never while serving a request."""
+
+        client = PyJWKClient(settings.OIDC_OP_JWKS_ENDPOINT, cache_jwk_set=False, timeout=settings.OIDC_TIMEOUT)
+        self.held = {key.key_id: key for key in client.get_signing_keys() if key.key_id}
+
+    def find(self, kid: str) -> PyJWK:
+        """The held key ``kid`` names, or ``TokenError`` and a read asked for."""
+
+        key = self.held.get(kid)
+        if key is not None:
+            return key
+        self.wanted.set()
+        if self.held:
+            logger.warning(
+                "No loaded signing key has the token's key id; the key set will be read again.",
+                extra={"event": "api.keys.unknown"},
+            )
+        else:
+            logger.warning(
+                "The identity provider's signing keys are not loaded, so no token can be verified yet.",
+                extra={"event": "api.keys.not_loaded"},
+            )
+        raise TokenError("The access token was not accepted.")
+
+
+KEYS = SigningKeys()
+
+
+@contextmanager
+def keeping_keys() -> Iterator[None]:
+    """Keep ``KEYS`` current for as long as the web application runs."""
+
+    if not is_configured():
+        yield
+        return
+    stopping = threading.Event()
+
+    def run() -> None:
+        while True:
+            try:
+                KEYS.load()
+            except Exception:  # the keys held stay; the next read tries again
+                logger.exception("api.keys.load_failed")
+            KEYS.wanted.clear()
+            if stopping.wait(REFRESH_AT_MOST_EVERY):
+                return
+            KEYS.wanted.wait(REFRESH_EVERY - REFRESH_AT_MOST_EVERY)
+            if stopping.is_set():
+                return
+
+    thread = threading.Thread(target=run, name="hq-signing-keys", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stopping.set()
+        KEYS.wanted.set()
+        thread.join(STOPS_WITHIN)
 
 
 def is_configured() -> bool:
@@ -90,10 +166,10 @@ def verify(token: str) -> dict[str, Any]:
     if not is_configured():
         raise TokenError("The machine API is not configured.")
     try:
-        signing_key = _jwks().get_signing_key_from_jwt(token)
+        signing_key = KEYS.find(str(jwt.get_unverified_header(token).get("kid") or ""))
         return jwt.decode(
             token,
-            signing_key.key,
+            signing_key,
             algorithms=[settings.OIDC_RP_SIGN_ALGO],
             audience=settings.SEVERINO_API_RESOURCE,
             issuer=settings.OIDC_ISSUER,

@@ -119,8 +119,22 @@ async def ringing_when_due():
 
 
 @contextlib.asynccontextmanager
+async def keeping_signing_keys():
+    """Hold the identity provider's signing keys, read outside every request."""
+
+    with api_security.keeping_keys():
+        yield
+
+
+@contextlib.asynccontextmanager
 async def lifespan(app):
-    async with mcp_served.sessions.run(), bridge_serving(), deriving_ahead(), ringing_when_due():
+    async with (
+        mcp_served.sessions.run(),
+        bridge_serving(),
+        deriving_ahead(),
+        ringing_when_due(),
+        keeping_signing_keys(),
+    ):
         yield
 
 
