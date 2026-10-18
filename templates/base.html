@@ -219,7 +219,7 @@
                href="{% url 'connection' %}"
                data-modal-open="connection">
               <span>Connection</span>
-              <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label }}</span>{% include "partials/_example_connection.html" %}</span>
+              <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label }}</span></span>
             </a>
             <form action="{% url 'logout' %}" method="post">
               {% csrf_token %}

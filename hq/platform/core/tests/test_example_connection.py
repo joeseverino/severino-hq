@@ -24,8 +24,8 @@ class ExampleConnectionTests(TestCase):
 
         # The connection panel, as a page and as the dialog's copy.
         self.assertContains(pages["connection"], NOTICE, count=1)
-        # The dashboard's connection reading, and the user menu's line on every page.
-        self.assertContains(pages["dashboard"], MARK, count=2)
+        # The dashboard's connection reading; the menu's line links to the panel.
+        self.assertContains(pages["dashboard"], MARK, count=1)
 
     def test_a_live_answer_carries_no_mark(self):
         for name, response in self.pages().items():

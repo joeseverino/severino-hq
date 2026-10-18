@@ -3458,7 +3458,6 @@ kbd {
 .notice > strong { display: block; }
 /* On a saved copy, a line about the reader's connection is marked as an example. */
 span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; }
-.menu-item-status span.example-connection::before { content: " · "; }
 /* In a grid that spaces its own rows, a notice adds no margin of its own. */
 .conn > .notice { margin: 0; }
 .notice p { margin: var(--space-2) 0 0; }

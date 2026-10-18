@@ -87,8 +87,8 @@ class DemoSiteTests(unittest.TestCase):
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
         self.assertIn("This is an example connection, not yours.", connection)
         dashboard = (OUT / "index.html").read_text(encoding="utf-8")
-        # The dashboard's connection reading and the user menu's Connection line.
-        self.assertEqual(dashboard.count('<span class="example-connection">example connection</span>'), 2)
+        # The dashboard's connection reading; the menu's line links to the panel above.
+        self.assertEqual(dashboard.count('<span class="example-connection">example connection</span>'), 1)
 
     def test_no_separator_is_left_with_nothing_after_it(self):
         dangling = set()
