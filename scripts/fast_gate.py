@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 from pathlib import Path
@@ -114,9 +115,18 @@ def is_test(path: Path) -> bool:
     return (
         path.suffix == ".py"
         and path.name != "__init__.py"
-        and (path.name.startswith("test") or "fuzz" in path.parts)
+        and (path.name.startswith("test") or ("fuzz" in path.parts and not is_fuzz_harness(path)))
         and all((ROOT / parent / "__init__.py").exists() for parent in path.parents if parent != Path())
     )
+
+
+def is_fuzz_harness(path: Path) -> bool:
+    """An atheris harness: run by its fuzzer, and in the suite through the test that drives it."""
+
+    try:
+        return "import atheris" in (ROOT / path).read_text()
+    except OSError:
+        return False
 
 
 def imports(path: Path, modules: set[str]) -> set[str]:
@@ -297,20 +307,38 @@ def step(label: str, cmd: list[str], env: dict[str, str] | None = None) -> bool:
 
 def side_by_side(steps: list[tuple[str, list[str], dict[str, str] | None]]) -> bool:
     """Run independent read-only checks in parallel, then print each one's
-    output in order, so a failure reads as that check's own."""
+    output in order, so a failure reads as that check's own.
+
+    Each check opens a database of its own. Django connects for its system
+    checks, and the first connection to a new file switches it to WAL, which
+    SQLite refuses with "database is locked" when another process is doing
+    the same, without waiting out the timeout.
+    """
 
     started = time.monotonic()
-    running = [
-        (label, subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
-        for label, cmd, env in steps
-    ]
-    ok = True
-    for label, process in running:
-        output, _ = process.communicate()
-        print(f"[fast] {label}", flush=True)
-        if output:
-            print(output, end="" if output.endswith("\n") else "\n", flush=True)
-        ok &= process.returncode == 0
+    # Named as a test run's scratch is, so a killed run's is swept by the next.
+    with tempfile.TemporaryDirectory(prefix=f"severino-test-fast-{os.getpid()}-") as scratch:
+        running = [
+            (
+                label,
+                subprocess.Popen(
+                    cmd,
+                    cwd=ROOT,
+                    env={**(os.environ if env is None else env), "SEVERINO_DATABASE_PATH": f"{scratch}/{n}.sqlite3"},
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                ),
+            )
+            for n, (label, cmd, env) in enumerate(steps)
+        ]
+        ok = True
+        for label, process in running:
+            output, _ = process.communicate()
+            print(f"[fast] {label}", flush=True)
+            if output:
+                print(output, end="" if output.endswith("\n") else "\n", flush=True)
+            ok &= process.returncode == 0
     print(f"[fast] {len(running)} checks side by side: {time.monotonic() - started:.1f}s", flush=True)
     return ok
 

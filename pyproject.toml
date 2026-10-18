@@ -131,6 +131,8 @@ disallow_any_generics = true
 warn_return_any = true
 
 [tool.coverage.run]
+# Under var/, so the shards a failed run leaves sit with the other scratch data.
+data_file = "var/coverage/data"
 source = ["."]
 parallel = true
 concurrency = ["multiprocessing", "thread"]

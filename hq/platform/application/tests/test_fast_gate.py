@@ -1,7 +1,11 @@
 """The inner-loop gate maps a change to the tests that reach it."""
 
 import importlib.util
+import io
+import os
+import sys
 import tempfile
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -142,3 +146,37 @@ class FastGateNestedLayoutTests(SimpleTestCase):
         self.assertTrue(fast_gate.is_test(Path("tests/fuzz/api_properties.py")))
         self.assertFalse(fast_gate.is_test(Path("tests/fixtures/example_hq_plugin/views.py")))
         self.assertFalse(fast_gate.is_test(Path("tests/fuzz/__init__.py")))
+
+    def test_an_atheris_harness_is_not_a_test_label(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fuzz = root / "tests" / "fuzz"
+            fuzz.mkdir(parents=True)
+            for package in (root / "tests", fuzz):
+                (package / "__init__.py").write_text("")
+            (fuzz / "harness.py").write_text("import atheris\n")
+            (fuzz / "properties.py").write_text("from hypothesis import given\n")
+            with patch.object(fast_gate, "ROOT", root):
+                self.assertFalse(fast_gate.is_test(Path("tests/fuzz/harness.py")))
+                self.assertTrue(fast_gate.is_test(Path("tests/fuzz/properties.py")))
+
+
+class FastGateConcurrencyTests(SimpleTestCase):
+    def test_checks_run_side_by_side_never_share_a_database(self):
+        # Two processes making one new SQLite file WAL at once: one is refused.
+        report = "import os; print('database=' + os.environ['SEVERINO_DATABASE_PATH'])"
+        shared = {**os.environ, "SEVERINO_DATABASE_PATH": "/nonexistent/shared.sqlite3"}
+        output = io.StringIO()
+        with redirect_stdout(output):
+            ok = fast_gate.side_by_side(
+                [
+                    ("inherits", [sys.executable, "-c", report], None),
+                    ("given one", [sys.executable, "-c", report], shared),
+                    ("given the same", [sys.executable, "-c", report], shared),
+                ]
+            )
+        self.assertTrue(ok)
+        paths = [line.removeprefix("database=") for line in output.getvalue().splitlines() if "database=" in line]
+        self.assertEqual(len(paths), 3)
+        self.assertEqual(len(set(paths)), 3)
+        self.assertFalse([path for path in paths if Path(path).parent.exists()])

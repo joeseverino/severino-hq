@@ -41,8 +41,6 @@ deploy/bin/
 docs/HOMELAB.md
 
 # Coverage
-.coverage
-.coverage.*
 htmlcov/
 coverage.xml
 
