@@ -73,7 +73,7 @@ def block(text: str, key: str, indent: int) -> list[str]:
         match = re.match(rf"^ {{{indent}}}{key}:\s*(.*?)\s*(?:#.*)?$", line)
         if not match:
             continue
-        if match.group(1):
+        if match.group(1) and match.group(1) not in {">-", ">", "|"}:
             return [match.group(1)]
         nested = []
         for rest in lines[index + 1 :]:
@@ -83,6 +83,23 @@ def block(text: str, key: str, indent: int) -> list[str]:
                 nested.append(rest.strip())
         return nested
     return []
+
+
+def needed(job: str) -> set[str]:
+    """The job ids a job's ``needs:`` names, inline, as a list, or nested."""
+    return {name for part in block(job, "needs", 4) for name in re.findall(r"[A-Za-z0-9_-]+", part.removeprefix("- "))}
+
+
+def upstream(name: str, needs: dict[str, set[str]]) -> set[str]:
+    """Every job ``name`` waits on, directly or through another."""
+    seen: set[str] = set()
+    pending = list(needs.get(name, ()))
+    while pending:
+        job = pending.pop()
+        if job not in seen:
+            seen.add(job)
+            pending.extend(needs.get(job, ()))
+    return seen
 
 
 def uses(text: str) -> list[str]:
@@ -112,6 +129,26 @@ class ActionPinTests(SimpleTestCase):
                 pins.setdefault(action, set()).add(sha)
         self.assertGreater(len(pins), 5)
         self.assertEqual({action: shas for action, shas in pins.items() if len(shas) > 1}, {})
+
+
+@tag("source")
+class JobConditionTests(SimpleTestCase):
+    def test_a_job_after_a_skippable_job_names_its_status_check(self):
+        """A bare ``if:`` also requires every job upstream to have succeeded, so one
+        skipped by its own condition (a push-only job) silently skips this one too."""
+        checked = 0
+        for path in workflows():
+            found = jobs(path.read_text())
+            needs = {name: needed(job) for name, job in found.items()}
+            skippable = {name for name, job in found.items() if block(job, "if", 4)}
+            for name, job in found.items():
+                expression = " ".join(block(job, "if", 4))
+                if not expression or re.search(r"\b(always|cancelled|success|failure)\(\)", expression):
+                    continue
+                checked += 1
+                with self.subTest(workflow=path.name, job=name):
+                    self.assertEqual(upstream(name, needs) & skippable, set())
+        self.assertGreater(checked, 1)
 
 
 @tag("source")

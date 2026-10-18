@@ -226,8 +226,8 @@ class _Reads:
         for name, defaulted in _expression_names(value):
             if name in bound or name in _AMBIENT or name in _LITERALS:
                 continue
-            required = not (guarded or defaulted or name in guards)
-            self.found[name] = self.found.get(name, False) or required
+            optional = guarded or defaulted or name in guards
+            self.found[name] = self.found.get(name, False) or not optional
 
     def walk(self, nodelist: Iterable[Any], bound: set[str], guards: frozenset[str]) -> None:
         bound = set(bound)

@@ -96,7 +96,7 @@ jobs:
   approve:
     name: Approve
     needs: resolve
-    if: needs.resolve.outputs.image != ''
+    if: success() && needs.resolve.outputs.image != ''
     # The approval, apart from the deploy it allows. One release waits at a
     # time and it is the newest: a later run takes this group and the older
     # wait is cancelled, so the queue holds the build that includes everything
@@ -116,7 +116,7 @@ jobs:
   deploy:
     name: Deploy
     needs: [resolve, approve]
-    if: needs.resolve.outputs.image != ''
+    if: success() && needs.resolve.outputs.image != ''
     # Self-hosted runner ON the homelab. It dials out to GitHub; GitHub never
     # connects in. Only this job runs there, only for main, and it holds no
     # key of HQ's app.
