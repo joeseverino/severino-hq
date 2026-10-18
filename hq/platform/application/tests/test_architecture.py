@@ -829,8 +829,10 @@ class StyleContractTests(SimpleTestCase):
             r"(?:homelab|lan|internal|local)\b(?!\.(?:example\.)?toml\b)"
         )
         # Names a checkout's own deployment goes by, one per line, kept in
-        # .git/info where nothing is tracked or pushed. Absent, only the
-        # generic patterns above apply.
+        # .git/info where nothing is tracked or pushed. A line starting with
+        # `!` is an address the deployment publishes on purpose (a public
+        # demo), which a file may name although a term covers it. Absent, only
+        # the generic patterns above apply.
         terms_file = Path(
             subprocess.run(
                 ["git", "rev-parse", "--git-path", "info/deployment-terms"],
@@ -843,13 +845,15 @@ class StyleContractTests(SimpleTestCase):
         if not terms_file.is_absolute():
             terms_file = root / terms_file
         try:
-            terms = tuple(
+            lines = [
                 line.strip().lower()
                 for line in terms_file.read_text(encoding="utf-8").splitlines()
                 if line.strip() and not line.startswith("#")
-            )
+            ]
         except OSError:
-            terms = ()
+            lines = []
+        published = tuple(line[1:] for line in lines if line.startswith("!"))
+        terms = tuple(line for line in lines if not line.startswith("!"))
         # Lockfiles and pinned action SHAs are hashes, not hosts. Vendored
         # bundles/specs carry upstream examples, pinned by their UPSTREAM.
         skip = (
@@ -880,6 +884,8 @@ class StyleContractTests(SimpleTestCase):
                 findings.append(f"{name}: ssh host key")
             findings.extend(f"{name}: {candidate}" for candidate in sorted(set(private_host.findall(text))))
             lowered = text.lower()
+            for address_published in published:
+                lowered = lowered.replace(address_published, "")
             for index, term in enumerate(terms):
                 if term in lowered:
                     findings.append(f"{name}: deployment term #{index + 1}")
