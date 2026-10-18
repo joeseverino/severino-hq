@@ -494,12 +494,16 @@ def _intended(repo: Repository) -> dict[str, str]:
     return {}
 
 
-def posture_of(repo: Repository) -> Posture:
-    return measure(repo, STANDARD, intended=_intended(repo))
+def posture_of(repo: Repository) -> Posture | None:
+    """How ``repo`` meets the standard; None for an archived one, which is
+    read-only and so has nothing more to protect."""
+
+    return None if repo.archived else measure(repo, STANDARD, intended=_intended(repo))
 
 
 def postures() -> list[Posture]:
-    return [posture_of(repo) for repo in sorted(repositories().values(), key=lambda item: item.name)]
+    found = (posture_of(repo) for repo in sorted(repositories().values(), key=lambda item: item.name))
+    return [posture for posture in found if posture is not None]
 
 
 def attention() -> tuple[Insight, ...]:

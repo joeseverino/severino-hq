@@ -3008,6 +3008,10 @@
             "default": false,
             "type": "boolean"
           },
+          "archived": {
+            "default": false,
+            "type": "boolean"
+          },
           "url": {
             "default": "",
             "type": "string"

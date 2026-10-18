@@ -81,6 +81,7 @@ type GitHubRepositoryRecord struct {
 	ConnectionRef     string                    `json:"connection_ref"`
 	Repository        string                    `json:"repository"`
 	Private           bool                      `json:"private"`
+	Archived          bool                      `json:"archived"`
 	URL               string                    `json:"url"`
 	DefaultBranch     string                    `json:"default_branch"`
 	PushedAt          string                    `json:"pushed_at"`
@@ -326,7 +327,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		return GitHubRepositoryRecord{}, err
 	}
 	record := GitHubRepositoryRecord{
-		ConnectionRef: g.c.ref, Repository: g.name, Private: repo.Private, URL: repo.HTMLURL,
+		ConnectionRef: g.c.ref, Repository: g.name, Private: repo.Private, Archived: repo.Archived, URL: repo.HTMLURL,
 		DefaultBranch: branch, PushedAt: repo.PushedAt, Head: githubHead(commit),
 	}
 	if uses, ok := part(ctx, g, runtime.PartWorkflowPins, func() (githubUsesFound, error) { return g.workflowUses(ctx, branch) }); ok {

@@ -365,7 +365,7 @@ func githubRepositoryRoutes() map[string]string {
 	workflow := base64.StdEncoding.EncodeToString([]byte("jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v4\n      - uses: \"actions/setup-go@0123456789abcdef0123456789abcdef01234567\"\n      - uses: ./.github/actions/local\n      - uses: docker://alpine:3\n  call:\n    uses: example/shared/.github/workflows/reuse.yml@main\n"))
 	composite := base64.StdEncoding.EncodeToString([]byte("runs:\n  steps:\n    - uses: actions/checkout@v4\n"))
 	return map[string]string{
-		api(""): `{"full_name":"example/app","private":true,"html_url":"https://github.com/example/app","default_branch":"main","pushed_at":"2030-01-02T00:00:00Z","visibility":"private",
+		api(""): `{"full_name":"example/app","private":true,"archived":true,"html_url":"https://github.com/example/app","default_branch":"main","pushed_at":"2030-01-02T00:00:00Z","visibility":"private",
 			"security_and_analysis":{"secret_scanning":{"status":"enabled"},"advanced_security":{"status":"disabled"}}}`,
 		api("/commits/main"): `{"sha":"aaaa000000000000000000000000000000000000","html_url":"https://github.com/example/app/commit/aaaa","author":{"login":"octo"},
 			"commit":{"message":"Ship it\n\nbody","author":{"name":"Octo","date":"2030-01-01T00:00:00Z"},"committer":{"name":"Octo","date":"2030-01-02T00:00:00Z"}}}`,
@@ -462,7 +462,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 			}
 		})
 	}
-	if record.ConnectionRef != "hq-app" || record.Repository != "example/app" || !record.Private || record.DefaultBranch != "main" {
+	if record.ConnectionRef != "hq-app" || record.Repository != "example/app" || !record.Private || !record.Archived || record.DefaultBranch != "main" {
 		t.Errorf("record %+v", record)
 	}
 	// A 403 under a token that holds every read permission is a feature the

@@ -1328,6 +1328,8 @@ type Environment_ProtectionRules_Item struct {
 
 // FullRepository Full Repository
 type FullRepository struct {
+	Archived bool `json:"archived"`
+
 	// DefaultBranch Example: master
 	DefaultBranch string `json:"default_branch"`
 

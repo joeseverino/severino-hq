@@ -1208,6 +1208,7 @@ type GitHubProfileRecord struct {
 type GitHubRepositoryRecord struct {
 	Access            map[string]interface{}   `json:"access,omitempty"`
 	Alerts            map[string]interface{}   `json:"alerts,omitempty"`
+	Archived          bool                     `json:"archived,omitempty"`
 	Artifacts         []map[string]interface{} `json:"artifacts,omitempty"`
 	CalledWorkflows   []string                 `json:"called_workflows,omitempty"`
 	Checks            map[string]interface{}   `json:"checks,omitempty"`

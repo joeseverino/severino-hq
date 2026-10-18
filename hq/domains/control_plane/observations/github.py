@@ -57,6 +57,8 @@ class RepositoryRecord(ObservationRecord):
     connection_ref: str
     repository: str
     private: bool = False
+    # Read-only on GitHub: nothing more can land in it to protect.
+    archived: bool = False
     url: str = ""
     default_branch: str = ""
     pushed_at: str = ""

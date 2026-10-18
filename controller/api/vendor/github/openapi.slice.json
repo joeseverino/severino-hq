@@ -2558,6 +2558,9 @@
       "type": "string",
       "example": "master"
      },
+     "archived": {
+      "type": "boolean"
+     },
      "visibility": {
       "description": "The repository visibility: public, private, or internal.",
       "type": "string",
@@ -2572,6 +2575,7 @@
      "html_url",
      "private",
      "default_branch",
+     "archived",
      "pushed_at"
     ],
     "x-github-breaking-changes": [

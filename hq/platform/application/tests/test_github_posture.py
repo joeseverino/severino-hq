@@ -132,6 +132,40 @@ class PostureTests(TestCase):
         self.assertEqual((item.key, item.value, item.magnitude), ("github-posture:actions-pinned", "3", 3))
         self.assertTrue(item.body.startswith("alpha, beta, gamma."))
 
+    def test_an_archived_repository_is_held_to_nothing(self):
+        from hq.domains.control_plane.models import ProviderInventory
+
+        record = {
+            "connection_ref": "github",
+            "default_branch": "main",
+            "head": {},
+            "private": True,
+            "access": kept(vulnerability_alerts=False),
+            "variables": [],
+        }
+        ProviderInventory.objects.update_or_create(
+            kind="github.repository",
+            defaults={
+                "records": [
+                    {
+                        **record,
+                        "repository": f"example/{name}",
+                        "url": f"https://github.com/example/{name}",
+                        "archived": name == "retired",
+                    }
+                    for name in ("kept", "retired")
+                ],
+                "reachable": True,
+                "connected": True,
+                "observed_at": timezone.now(),
+            },
+        )
+
+        self.assertEqual([found.subject.name for found in postures()], ["example/kept"])
+        (item,) = attention()
+        self.assertEqual((item.key, item.magnitude), ("github-posture:vulnerability-alerts", 1))
+        self.assertNotIn("retired", item.body)
+
     def test_an_item_is_as_old_as_the_oldest_repository_reading_it_names(self):
         from hq.domains.control_plane.models import ProviderInventory
 
