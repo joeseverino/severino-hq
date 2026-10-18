@@ -1075,13 +1075,13 @@ _RAGGED_QUEUES = (
 # A snug table cuts its identifiers only as far as its room needs: given two
 # more characters, it would no longer fit its box.
 _OVERCUT_TABLES = (
-    "() => {"
+    "(box) => {"
     + _DESCRIBE
     + """
   const found = [];
   const root = getComputedStyle(document.documentElement);
   const widest = parseFloat(root.getPropertyValue('--identifier-max'));
-  for (const table of document.querySelectorAll('main .table-scroll > table[data-snug]')) {
+  for (const table of document.querySelectorAll('main ' + box + ' > table[data-snug]')) {
     const wrapper = table.parentElement;
     const room = parseFloat(getComputedStyle(table).getPropertyValue('--identifier-max'));
     if (!table.checkVisibility() || room >= widest) continue;
@@ -1561,7 +1561,7 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
 
     def a_snug_table_cuts_identifiers_only_as_far_as_it_must(self, _name):
-        self.assertEqual(self.page.evaluate(_OVERCUT_TABLES), [])
+        self.assertEqual(self.page.evaluate(_OVERCUT_TABLES, SELECTORS["table_scroll"]), [])
 
     def a_queue_ends_its_cards_at_one_edge(self, _name):
         self.assertEqual(self.page.evaluate(_RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]), [])
