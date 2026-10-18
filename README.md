@@ -15,15 +15,10 @@ to each other.
 HQ is a host. Extensions add whole domains to it from their own repositories,
 and this repository names none of them: it holds the contracts they meet at.
 
-The [demo](demo/README.md) is HQ's own pages filled with an example homelab,
-saved as a static site and published with the repository's GitHub Pages.
+The [demo](https://demo.jseverino.com/) is HQ's own pages filled with an
+example homelab, saved as a static site ([how it is built](demo/README.md)).
 
 ![The Severino HQ dashboard, showing the example homelab the demo is built from](docs/images/dashboard.png)
-
-![Derived estate: the controller reads what each credential sees, readings are joined into one relation graph that every surface reads, and every write passes the manages gate](docs/diagrams/derived-estate.png)
-
-<sup>Diagram source: [`docs/diagrams/derived-estate.mmd`](docs/diagrams/derived-estate.mmd),
-pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
 
 Nothing about the infrastructure is typed in. A controller holds the
 credentials and reads what each can see; HQ stores the readings, derives the
@@ -31,7 +26,10 @@ rest, and acts only through a connection that declares it `manages` what it
 touches. How is in [Derived Facts](docs/Derived-Facts.md) and
 [Architecture](docs/Architecture.md).
 
-![A service's page: its path from the device to the app, each step's state, what breaks if it fails, and where each was read](docs/images/service.png)
+![Derived estate: the controller reads what each credential sees, readings are joined into one relation graph that every surface reads, and every write passes the manages gate](docs/diagrams/derived-estate.png)
+
+<sup>Diagram source: [`docs/diagrams/derived-estate.mmd`](docs/diagrams/derived-estate.mmd),
+pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
 
 ## Install
 
@@ -73,6 +71,11 @@ the controller reading its first connection, step by step.
 The design and the production checklist are in
 [Security](docs/Security.md); reporting is in
 [`.github/SECURITY.md`](.github/SECURITY.md).
+
+A service's page shows the path a request takes to it, each step read from
+its source, with what breaks if that step fails.
+
+![A service's page: its path from the device to the app, each step's state, what breaks if it fails, and where each was read](docs/images/service.png)
 
 ## Verify it yourself
 
