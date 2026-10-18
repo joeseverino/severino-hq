@@ -332,19 +332,20 @@ jobs:
           set -euo pipefail
           : > admissions.txt
           while read -r repo; do
-            # The newest finished admission, whatever it concluded. An older
-            # green one would compose a wheel built against an older host; one
-            # still running starts its own composition when it ends.
-            latest=$(gh run list --repo "$repo" --workflow admit-plugin.yml \
-                    --branch main --status completed --limit 1 \
-                    --json databaseId,conclusion -q '.[0] | "\(.databaseId) \(.conclusion)"')
-            run=${latest%% *}
+            # The newest successful admission. One that failed since does not
+            # hold back the host or the other extensions: the composed suite
+            # runs every extension's tests against this host, so an older
+            # wheel is proven here before it ships. One still running starts
+            # its own composition when it ends.
+            run=$(gh run list --repo "$repo" --workflow admit-plugin.yml \
+                    --branch main --status success --limit 1 --json databaseId -q '.[0].databaseId')
             if [ -z "$run" ]; then
-              echo "::error::an extension has no finished admission on main"; exit 1
+              echo "::error::an extension has no successful admission on main"; exit 1
             fi
-            if [ "${latest#* }" != success ]; then
-              echo "::error::an extension's newest admission on main ended ${latest#* }; fix it and its admission runs this again"
-              exit 1
+            newest=$(gh run list --repo "$repo" --workflow admit-plugin.yml \
+                    --branch main --status completed --limit 1 --json databaseId -q '.[0].databaseId')
+            if [ "$newest" != "$run" ]; then
+              echo "::warning::an extension's newest admission on main failed; composing its last successful one"
             fi
             printf '%s=%s\n' "$repo" "$run" >> admissions.txt
           done < <(jq -r '.extensions[].repository' composition-set.json | sort)

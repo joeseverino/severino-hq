@@ -176,6 +176,12 @@ images: each admits itself and publishes its signed bundle, and the host
 composes them, so deploying one never replaces the others. The pipeline around
 it is in [Deployment](Deployment.md#the-pipeline).
 
+Compose takes each plugin's newest successful admission, so a plugin whose
+latest admission failed ships its last good wheel and holds back neither the
+host nor the others. The composed suite runs every installed plugin's tests
+against the host it is composed with, so whatever wheel is chosen is proven
+together before it is published.
+
 A plugin's admission starts the composition, and nothing polls. The last step
 of the host's `admit-plugin` action mints a token as HQ's GitHub App, asking
 only for Actions write on this repository, and dispatches **Compose** with an
