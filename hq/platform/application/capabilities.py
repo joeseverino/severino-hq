@@ -213,10 +213,10 @@ def _authorized_run(
     authorize_capability(spec, principal)
     _refuse_unknown_fields(spec, payload)
     key, payload = _retry_key(spec, payload)
-    command: Any = TypeAdapter(spec.command_type).validate_python(payload)
+    command = validate_command(spec, payload)
     # A held request has acted on nothing, so it is answered afresh each
     # time: the same key runs the command once a person has agreed.
-    held, acting = _consent(spec, spec.name, payload, target, principal)
+    held, acting = _consent(spec, payload, command, target, principal)
     if held is not None:
         return held
 
@@ -304,24 +304,33 @@ def _target_refusal(spec: CapabilitySpec, name: str, target: str | int | None) -
     return None
 
 
+def validate_command(spec: CapabilitySpec, payload: dict[str, Any]) -> Any:
+    """The command ``payload`` becomes: what runs, and so what policy judges."""
+
+    return TypeAdapter(spec.command_type).validate_python(payload)
+
+
 def _consent(
     spec: CapabilitySpec,
-    name: str,
     payload: dict[str, Any],
+    command: Any,
     target: str | int | None,
     principal: Principal,
 ) -> tuple[dict[str, Any] | None, Principal]:
     """``(held, principal)``: a held request's answer, or the principal to run as.
 
     Asked last, after authority and shape, so only a valid request becomes a
-    decision a person has to read. Raises ``PolicyDenied`` on a deny rule.
+    decision a person has to read. Judged on the validated command, never the
+    payload: validation coerces (``1`` is ``True``), and a rule read off the
+    payload would let a coercible spelling past it. Raises ``PolicyDenied`` on
+    a deny rule.
     """
 
-    decision = decide(spec, principal, payload, target)
+    decision = decide(spec, principal, command, target)
     if decision.rule == Rule.DENY:
-        raise PolicyDenied(f"{name} is refused by {decision.source}.")
+        raise PolicyDenied(f"{spec.name} is refused by {decision.source}.")
     if decision.rule == Rule.APPROVE:
-        return hold_for_approval(spec, payload, target, principal=principal), principal
+        return hold_for_approval(spec, payload, command, target, principal=principal), principal
     if decision.overrides_a_hold:
         # Standing policy is the consent; carried where consent travels.
         return None, replace(principal, approved_by=decision.source)
@@ -352,7 +361,7 @@ def _run(
 
 def execute_approved(
     spec: CapabilitySpec,
-    payload: dict[str, Any],
+    command: Any,
     target: str | int | None,
     *,
     principal: Principal,
@@ -370,7 +379,6 @@ def execute_approved(
     surrounding transaction guarantees.
     """
 
-    command: Any = TypeAdapter(spec.command_type).validate_python(payload)
     return _run(spec, command, principal=principal, target=target, expected_updated_at=None)
 
 

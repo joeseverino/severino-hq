@@ -10,9 +10,10 @@ from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, Man
 from hq.domains.projects.models import Project
 from hq.platform.core.models import AgentIdentity, AuditLog
 
-from ..approvals import approve
-from ..capabilities import capability_registry, execute_capability
+from ..approvals import DELETING_FLAGS, approve
+from ..capabilities import capability_registry, execute_capability, validate_command
 from ..capability_policy import RULE_LABELS, Rule, Scope, decide, field_name, matrix, set_rule
+from ..integration_specs import capability_schema
 from ..labels import human_label
 from ..security import AuthorizationError, Capability, Principal, cli_principal, web_principal
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
@@ -27,6 +28,16 @@ def agent(actor="example-agent", interface="mcp", capabilities=WRITES):
 
 def spec(name):
     return capability_registry()[name]
+
+
+_EMPTY = {"array": [], "object": {}, "string": "", "boolean": False, "integer": 0, "number": 0}
+
+
+def required_fields(registered):
+    """The least payload a command accepts: each required field, empty."""
+
+    schema = capability_schema(registered)
+    return {field: _EMPTY[schema["properties"][field].get("type")] for field in schema.get("required", ())}
 
 
 class PolicyTestCase(TestCase):
@@ -51,33 +62,34 @@ class DefaultTests(PolicyTestCase):
 
         self.assertEqual(result["status"], "awaiting_approval")
 
-    def test_an_agents_orphan_prune_waits_like_a_delete(self):
-        """A sync that prunes deletes every record the manifest leaves out,
-        so an agent's is held, though the capability itself only writes."""
+    def test_an_agents_deleting_flag_waits_like_a_delete_however_it_is_spelled(self):
+        """An orphan prune deletes every record the manifest leaves out, so an
+        agent's is held though the capability only writes. Judged on the
+        command, because validation reads 1 and "true" as True and a policy
+        that read the payload would let either run a prune nobody approved."""
 
         from hq.domains.docs_index.models import DocumentationRecord
 
         DocumentationRecord.objects.create(doc_id="example-kept", title="Kept", obsidian_path="Kept.md")
-        syncer = agent(
-            capabilities=frozenset(
-                {
-                    Capability.READ,
-                    Capability.SYNC_DOCUMENTATION,
-                    Capability.PRUNE_DOCUMENTATION,
-                }
-            )
-        )
+        everything = agent(capabilities=frozenset(Capability))
+        flagged = [
+            (name, flag, set(capability_schema(registered)["properties"]))
+            for name, registered in capability_registry().items()
+            for flag in DELETING_FLAGS
+            if flag in capability_schema(registered).get("properties", {})
+        ]
+        self.assertTrue(flagged, "no command declares a deleting flag, so the hold guards nothing")
+        for name, flag, fields in flagged:
+            plain = required_fields(spec(name))
+            for spelling in (True, 1, "true"):
+                with self.subTest(capability=name, spelling=spelling):
+                    confirmed = {field: spelling for field in fields if field.startswith("confirm")}
 
-        pruning = execute_capability(
-            "documentation.sync",
-            {"manifest": [], "prune_orphans": True, "confirm_prune": True},
-            principal=syncer,
-        )
-        plain = execute_capability("documentation.sync", {"manifest": []}, principal=syncer)
+                    result = execute_capability(name, {**plain, **confirmed, flag: spelling}, principal=everything)
 
-        self.assertEqual(pruning["status"], "awaiting_approval")
-        self.assertTrue(DocumentationRecord.objects.filter(doc_id="example-kept").exists())
-        self.assertTrue(plain["ok"])
+                    self.assertEqual(result.get("status"), "awaiting_approval", result)
+                    self.assertTrue(DocumentationRecord.objects.filter(doc_id="example-kept").exists())
+            self.assertTrue(execute_capability(name, plain, principal=everything)["ok"])
 
     def test_an_ordinary_write_still_runs(self):
         result = execute_capability("project.create", {"name": "Runs"}, principal=agent())
@@ -220,7 +232,8 @@ class SurfaceRuleTests(PolicyTestCase):
             ManagedResource.objects.get(key=POLICY_KEY).spec["document"],
             policy_document("group:elsewhere"),
         )
-        decision = decide(spec("infrastructure.resource.update"), agent(), update_payload("x"), POLICY_KEY)
+        updating = spec("infrastructure.resource.update")
+        decision = decide(updating, agent(), validate_command(updating, update_payload("x")), POLICY_KEY)
         self.assertTrue(decision.overrides_a_hold)
         self.assertEqual(decision.source, "mcp policy")
 

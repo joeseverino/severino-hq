@@ -81,12 +81,12 @@ DESTRUCTIVE_EFFECT = "destructive"
 DELETING_FLAGS = ("prune_orphans",)
 
 
-def deletes(spec, payload: Any) -> bool:
+def deletes(spec, command: Any) -> bool:
     """Whether this call removes records: by its effect, or by what it asks for."""
 
     if spec.effect == DESTRUCTIVE_EFFECT:
         return True
-    return isinstance(payload, dict) and any(payload.get(flag) is True for flag in DELETING_FLAGS)
+    return any(getattr(command, flag, False) is True for flag in DELETING_FLAGS)
 
 
 DECLARATIONS = "infrastructure.resources"
@@ -186,7 +186,7 @@ def _baseline_of(resource: ManagedResource) -> dict[str, Any]:
     }
 
 
-def approval_subject(spec, payload: dict[str, Any], target: Any) -> ApprovalSubject | None:
+def approval_subject(spec, command: Any, target: Any) -> ApprovalSubject | None:
     """What a held call is about, and its baseline. Shared by hold and approve,
     whose fingerprints must match. None for a read or a missing target.
     """
@@ -194,19 +194,19 @@ def approval_subject(spec, payload: dict[str, Any], target: Any) -> ApprovalSubj
     if spec.effect == READ_EFFECT:
         return None
     if spec.subject_resource == DECLARATIONS:
-        return _declaration_subject(payload, target)
+        return _declaration_subject(command, target)
     return _record_subject(spec, target)
 
 
-def _declaration_subject(payload: dict[str, Any], target: Any) -> ApprovalSubject | None:
+def _declaration_subject(command: Any, target: Any) -> ApprovalSubject | None:
     if target is not None:
         resource = ManagedResource.objects.filter(key=str(target)).first()
         if resource is None:
             return None
         return ApprovalSubject(resource.kind, resource.key, _baseline_of(resource))
     # No target means a declaration being brought into existence, and the kind
-    # it will have is in the payload.
-    return ApprovalSubject(str(payload.get("kind", "")), str(payload.get("key", "")), {})
+    # it will have is in the command.
+    return ApprovalSubject(str(getattr(command, "kind", "")), str(getattr(command, "key", "")), {})
 
 
 def _record_subject(spec, target: Any) -> ApprovalSubject | None:
@@ -245,7 +245,7 @@ def may_be_held_by_default(spec) -> bool:
     return spec.effect != READ_EFFECT and spec.subject_resource == DECLARATIONS
 
 
-def held_by_default(spec, payload: dict[str, Any], target: Any) -> bool:
+def held_by_default(spec, command: Any, target: Any) -> bool:
     """The default before any operator rule: a change to a gated declaration waits."""
 
     if not may_be_held_by_default(spec):
@@ -253,7 +253,7 @@ def held_by_default(spec, payload: dict[str, Any], target: Any) -> bool:
     if target is not None:
         kind = ManagedResource.objects.filter(key=str(target)).values_list("kind", flat=True).first()
         return kind is not None and _gated(kind)
-    return _gated(str(payload.get("kind", "")))
+    return _gated(str(getattr(command, "kind", "")))
 
 
 def _gated(kind: str) -> bool:
@@ -287,18 +287,21 @@ def consent_gap(kind: str, *, principal: Principal) -> str:
     )
 
 
-def hold_for_approval(spec, payload: dict[str, Any], target: Any, *, principal: Principal) -> dict[str, Any] | None:
+def hold_for_approval(
+    spec, payload: dict[str, Any], command: Any, target: Any, *, principal: Principal
+) -> dict[str, Any] | None:
     """Hold this call for a person, or return nothing if it needs no holding.
 
     The one call site is the capability runner, immediately after authority and
     payload validation and before the handler. In that order on purpose: a
     caller that may not do this at all is told so, and a malformed request is
     still malformed, rather than either becoming a decision for somebody to read.
+    What it is about is read from ``command``; ``payload`` is kept to replay.
     """
 
     if is_interactive(principal):
         return None
-    subject = approval_subject(spec, payload, target)
+    subject = approval_subject(spec, command, target)
     if subject is None:
         raise UnreadableSubject(
             f"{spec.name} needs a person to approve it, but HQ could not read what "
@@ -325,7 +328,7 @@ def hold_for_approval(spec, payload: dict[str, Any], target: Any, *, principal: 
             "approval. Nothing further is accepted from it until those are "
             "answered."
         )
-    reason = str(payload.get("reason", ""))[:300]
+    reason = str(getattr(command, "reason", ""))[:300]
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,
@@ -505,7 +508,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     may be looking at this page) is atomic.
     """
 
-    from .capabilities import authorize_capability, capability_registry, execute_approved
+    from .capabilities import authorize_capability, capability_registry, execute_approved, validate_command
 
     held = _decidable(approval_id)
     spec = capability_registry().get(held.capability)
@@ -516,7 +519,8 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     # The approver has to be allowed to do the thing themselves. Otherwise this
     # page would be a way to run a capability the clicker does not hold.
     authorize_capability(spec, principal)
-    current = approval_subject(spec, held.payload, held.target or None)
+    command = validate_command(spec, held.payload)
+    current = approval_subject(spec, command, held.target or None)
     baseline = current.baseline if current is not None else {}
     if fingerprint(held.capability, held.target or None, held.payload, baseline) != (held.content_fingerprint):
         _settle(
@@ -541,7 +545,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
         locked = ApprovalRequest.objects.select_for_update().get(pk=held.pk)
         if locked.state != ApprovalRequest.State.PENDING:
             raise ApprovalError(f"That request is already {locked.get_state_display().lower()}.")
-        result = execute_approved(spec, locked.payload, locked.target or None, principal=acting)
+        result = execute_approved(spec, command, locked.target or None, principal=acting)
         locked.state = ApprovalRequest.State.APPROVED
         locked.decided_actor = principal.actor
         locked.decided_interface = principal.interface

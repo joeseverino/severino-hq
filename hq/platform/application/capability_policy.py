@@ -52,19 +52,19 @@ class Decision:
         return self.rule == Rule.ALLOW and self.default == Rule.APPROVE
 
 
-def default_rule(spec, payload, target) -> str:
-    return Rule.APPROVE if held_by_default(spec, payload, target) else Rule.ALLOW
+def default_rule(spec, command, target) -> str:
+    return Rule.APPROVE if held_by_default(spec, command, target) else Rule.ALLOW
 
 
-def decide(spec, principal: Principal, payload, target) -> Decision:
-    """At most one query."""
+def decide(spec, principal: Principal, command, target) -> Decision:
+    """At most one query. ``command`` is the validated command, which is what runs."""
 
-    default = default_rule(spec, payload, target)
+    default = default_rule(spec, command, target)
     if is_interactive(principal):
         return Decision(Rule.ALLOW, "operator", default)
     if principal.interface not in SURFACES:
         return Decision(default, "default", default)
-    if deletes(spec, payload):
+    if deletes(spec, command):
         default = Rule.APPROVE
 
     rules = dict(
