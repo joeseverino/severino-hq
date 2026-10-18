@@ -13,5 +13,4 @@ node "$cli" lint --extends=spec --format=summary \
     hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json \
     controller/api/hq-connections.openapi.json
 
-./scripts/generate-clients.sh --check
 node --test scripts/openapi/test-client.mjs

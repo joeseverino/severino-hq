@@ -331,6 +331,36 @@ class GateReferenceTests(SimpleTestCase):
             with self.subTest(workflow=name, task=task):
                 self.assertIn(task, tasks)
 
+    # Tasks that hand whatever follows them to manage.py, whose command line no
+    # usage spec can declare: mise appends the words as they were typed.
+    PASSTHROUGH = frozenset({"manage", "suite:as-image"})
+
+    def test_a_task_that_takes_arguments_says_what_they_are(self):
+        """``mise run <task> --help`` prints a task's ``usage``. Once one is
+        declared mise stops appending arguments to ``run``, so each name it
+        declares must reach the task or its script; and a script that reads its
+        own arguments needs a usage, or --help describes nothing."""
+        tasks = tomllib.loads((ROOT / "mise.toml").read_text())["tasks"]
+        reads_arguments = re.compile(r'"\$@"|\$\{?[1-9#]|sys\.argv')
+        checked = 0
+        for name, task in tasks.items():
+            run = task.get("run", "")
+            run = " ".join(run) if isinstance(run, list) else run
+            scripts = [ROOT / path for path in re.findall(r"[\w/.-]+\.(?:sh|py)\b", run) if (ROOT / path).is_file()]
+            declared = re.findall(r'(?:arg|flag)\s+"[<\[]?(?:--)?([\w-]+)', task.get("usage", ""))
+            with self.subTest(task=name):
+                if declared:
+                    checked += 1
+                    reached = run + "".join(path.read_text() for path in scripts)
+                    dropped = [word for word in declared if f"usage_{word.replace('-', '_')}" not in reached]
+                    self.assertEqual(dropped, [], f"{name} declares arguments it never forwards")
+                elif name not in self.PASSTHROUGH and re.fullmatch(r"[\w/.-]+", run.strip()):
+                    for path in scripts:
+                        self.assertFalse(
+                            reads_arguments.search(path.read_text()), f"{name} takes arguments; declare usage"
+                        )
+        self.assertGreater(checked, 3)
+
 
 def compose_plugins():
     spec = importlib.util.spec_from_file_location("compose_plugins", ROOT / "scripts" / "compose-plugins.py")

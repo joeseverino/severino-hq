@@ -1,14 +1,14 @@
 #!/bin/sh
 # The composed suite as the image runs it, from a checkout.
 #
-#   scripts/suite-as-image.sh [manage.py test arguments]
+#   mise run suite:as-image [manage.py test arguments]
 #
 # The suite runs in a copy of only what the image is built from (the paths
 # Dockerfile.dockerignore admits, tracked or new), so a test that reads docs/,
 # .git or anything else the image leaves out fails here rather than in Compose.
-# It runs as the image configures it: DEBUG off, SEVERINO_HQ_SOURCE and
-# SEVERINO_HQ_REVISION stamped, and the extension set mise.local.toml names
-# (HQ_LOCAL_PLUGINS, HQ_LOCAL_PYTHONPATH). Without one it runs the host alone
+# It runs as the image configures it: the task's composed environment (DEBUG
+# off, the extension set mise.local.toml names), with SEVERINO_HQ_SOURCE and
+# SEVERINO_HQ_REVISION stamped. Without an extension set it runs the host alone
 # and says so; REQUIRE_COMPOSED=1 fails instead.
 set -eu
 
@@ -23,8 +23,9 @@ if [ -z "${HQ_LOCAL_PLUGINS:-}" ]; then
     echo "No HQ_LOCAL_PLUGINS supplied: the host alone, as the image runs it (scripts/mise.local.example.toml)."
 fi
 
-# The address the build stamps, as https whatever the remote's scheme.
-source_url="$(git remote get-url origin | sed -E 's#^git@([^:]+):#https://\1/#; s#\.git$##')"
+# shellcheck source=scripts/lib/source-url.sh
+. ./scripts/lib/source-url.sh
+source_url="$(source_url)"
 tree="$(mktemp -d)"
 trap 'rm -rf "${tree}"' EXIT HUP INT TERM
 
@@ -41,10 +42,8 @@ environment="${UV_PROJECT_ENVIRONMENT:-.venv}"
 case "${environment}" in /*) ;; *) environment="${repo}/${environment}" ;; esac
 
 cd "${tree}"
-exec env -u DJANGO_DEBUG \
+exec env \
     UV_PROJECT_ENVIRONMENT="${environment}" \
     SEVERINO_HQ_SOURCE="${source_url}" \
     SEVERINO_HQ_REVISION="$(git -C "${repo}" rev-parse HEAD)" \
-    SEVERINO_HQ_PLUGINS="${HQ_LOCAL_PLUGINS:-}" \
-    PYTHONPATH="${HQ_LOCAL_PYTHONPATH:-}" \
     uv run --locked python manage.py test --noinput --parallel auto "$@"

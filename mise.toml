@@ -10,7 +10,9 @@
 # A gate is a task named <job>:<gate>. Each CI job runs the aggregate of its
 # name (`mise run -c checks`), so a gate added here runs locally and in the
 # pipeline with no second list to edit. `-c` keeps going past a failure and
-# names every gate that failed.
+# names every gate that failed. No gate declares `sources`: mise judges them by
+# file times alone, and a verdict also turns on the environment and on files
+# no list would name.
 #
 # Python dependencies come from uv.lock through `uv run --locked`; nothing here
 # needs a virtualenv made by hand. uv itself is not one of the tools below: its
@@ -59,6 +61,21 @@ macos-arm64 = { asset_pattern = "codeql-bundle-osx64.tar.zst" }
 macos-x64 = { asset_pattern = "codeql-bundle-osx64.tar.zst" }
 linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 
+# ------------------------------------------------------------- templates
+# A gate never opens the developer's database: each Django gate extends one of
+# these, which name a scratch path, so a checkout's own data cannot change what
+# a gate reports; HQ_GATE_DATABASE moves it, so gates run side by side can each
+# open their own. A gate sees no extension set it did not ask for. A task
+# extends one template, so the composed one restates what it shares with django.
+
+[task_templates.django]
+env = { SEVERINO_DATABASE_PATH = "{{ env.HQ_GATE_DATABASE | default(value=config_root ~ '/var/db/gates.sqlite3') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+
+# The extension set mise.local.toml names, loaded as the image loads it: DEBUG
+# off, and admission off, since a checkout has no admitted wheels.
+[task_templates.composed]
+env = { SEVERINO_DATABASE_PATH = "{{ env.HQ_GATE_DATABASE | default(value=config_root ~ '/var/db/gates.sqlite3') }}", DJANGO_DEBUG = false, DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0", SEVERINO_HQ_PLUGINS = "{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}" }
+
 # --------------------------------------------------------------- operator
 
 [tasks.dev]
@@ -69,33 +86,51 @@ run = "scripts/dev.sh"
 [tasks.manage]
 description = "manage.py with the development settings the gates use: mise run manage -- <command>"
 raw = true
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "development-not-a-real-secret", DJANGO_DEBUG = "1", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver" }
-run = "mkdir -p var/db && uv run --locked python manage.py"
+extends = "django"
+run = "uv run --locked python manage.py"
 
 [tasks.regen]
 description = "Rewrite every derived file from its source; --check fails on drift instead"
 depends = ["setup:openapi"]
 raw = true
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "development-not-a-real-secret", DJANGO_DEBUG = "1", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver" }
-run = "mkdir -p var/db && scripts/regen.sh"
+extends = "django"
+usage = 'flag "--check" help="Fail on drift, writing nothing: every drift:* gate"'
+run = '''
+if [ -n "${usage_check:-}" ]; then
+    exec mise run -c 'drift:*'
+fi
+exec scripts/regen.sh
+'''
 
 [tasks.preflight]
 description = "Ready to release: every gate, the composed suite and the deploy host"
 raw = true
+usage = '''
+flag "--remote" help="Read every check GitHub ran on this commit instead of running `mise run ci`; the commit must be pushed"
+flag "--skip-host" help="Local gates only, exiting 2: not a verdict on the release"
+'''
 run = "scripts/preflight.sh"
 
 [tasks.failure-logs]
 description = "Open a failed Compose run's sealed logs"
 raw = true
-run = "scripts/failure-logs.sh"
+usage = '''
+arg "<run>" help="The Compose run whose logs were sealed"
+arg "[dir]" help="Where to unpack them; a private temporary directory by default"
+'''
+run = 'scripts/failure-logs.sh "$usage_run" ${usage_dir:+"$usage_dir"}'
 
 # ------------------------------------------------------------- aggregates
 
 [tasks.fast]
 description = "Inner loop: lint, types and tests for what the change touches"
 depends = ["setup:openapi"]
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3" }
-run = "uv run --locked python scripts/fast_gate.py"
+extends = "django"
+usage = '''
+arg "[base]" help="The ref to diff against; default $CHECK_BASE, then origin/main, then main"
+flag "--list" help="Print the selected test modules and run nothing"
+'''
+run = 'uv run --locked python scripts/fast_gate.py ${usage_list:+--list} ${usage_base:+"$usage_base"}'
 
 [tasks.check]
 description = "Does my change work: every Checks gate, the Tests gates on one Python, and the suite composed"
@@ -110,7 +145,7 @@ depends = ["checks", "tests", "browser", "controller", "scan", "image"]
 
 [tasks.checks]
 description = "CI job Checks"
-depends = ["checks:*"]
+depends = ["checks:*", "drift:*"]
 
 [tasks.tests]
 description = "CI job Tests, on every Python the matrix declares"
@@ -143,8 +178,6 @@ description = "CI job Image: build, then every check an image must pass"
 depends = ["image:verify:*"]
 
 # ----------------------------------------------------------------- checks
-# A gate never opens the developer's database: each Django gate names a
-# scratch path, so a checkout's own data cannot change what a gate reports.
 
 [tasks."checks:conflicts"]
 description = "No sync-conflict copies in the tree"
@@ -169,11 +202,11 @@ run = ["uv run --locked ruff check .", "uv run --locked ruff format --check ."]
 [tasks."checks:mypy"]
 description = "mypy: the typed seams pyproject.toml names"
 # django-stubs loads the host's settings.
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3" }
+extends = "django"
 run = "uv run --locked python -m mypy"
 
 [tasks."checks:badges"]
-description = "The README badge and the test matrix state the toolchain"
+description = "The README badge and the workflow matrices state the toolchain"
 run = '''
 set -eu
 expected="$(printf '%s\n' $PYTHON_VERSIONS | paste -sd'|' -)"
@@ -187,6 +220,11 @@ declared="$(printf '%s\n' $PYTHON_VERSIONS | jq -Rc '[.]' | jq -sc 'add')"
 matrix="$(yq -o=json -I=0 '.jobs.tests.strategy.matrix.python' .github/workflows/ci.yml)"
 if [ "$matrix" != "$declared" ]; then
     echo "Tests runs $matrix; scripts/toolchain.env declares $declared." >&2
+    exit 1
+fi
+plugins="$(yq '.on.workflow_call.inputs.python-versions.default' .github/workflows/plugin-checks.yml | jq -c .)"
+if [ "$plugins" != "$declared" ]; then
+    echo "plugin-checks.yml defaults to $plugins; scripts/toolchain.env declares $declared." >&2
     exit 1
 fi
 '''
@@ -318,13 +356,8 @@ exit "$failed"
 description = "The tests that read the repository, run once on the checkout"
 # Tagged "source"; a whole-suite run leaves them out (hq/platform/core/test_runner.py),
 # so no image or composed pass runs them.
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+extends = "django"
 run = "uv run --locked python manage.py test --tag source --noinput --parallel auto"
-
-[tasks."checks:bridge-contract"]
-description = "The controller's contracts are the ones the registry derives"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
-run = "uv run --locked python manage.py bridge_contract --check"
 
 [tasks."checks:deploycheck"]
 description = "Production settings raise no security warning"
@@ -346,24 +379,56 @@ uv run --locked --only-group audit pip-audit --disable-pip --require-hashes -r "
 '''
 
 [tasks."checks:structural"]
-description = "No new near-duplicate; the largest files did not grow"
-run = "scripts/structural-bar.sh"
+description = "No new near-duplicate pair outside tests"
+usage = 'flag "--record" help="Rewrite the baseline from this tree instead of checking it"'
+run = 'scripts/structural-bar.sh ${usage_record:+--record}'
 
 [tasks."checks:scorecard"]
 description = "Scorecard: every file-based check at 10"
 run = "scripts/security-scan.sh scorecard"
+
+# ------------------------------------------------------------------ drift
+# Each derived file against its source, run by the Checks job, by `mise run
+# fast` side by side, and by `mise run regen --check`. `mise run regen`
+# rewrites them all.
+
+[tasks."drift:sdk-contract"]
+description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
+extends = "django"
+run = "uv run --locked python manage.py sdk_contract --check"
+
+[tasks."drift:api-document"]
+description = "The machine API's OpenAPI document is current"
+extends = "django"
+run = "uv run --locked python manage.py api_openapi --check"
+
+[tasks."drift:clients"]
+description = "The generated API clients are what the API document generates"
+depends = ["setup:openapi"]
+run = "scripts/generate-clients.sh --check"
+
+[tasks."drift:bridge-contract"]
+description = "The controller's contracts are the ones the registry derives"
+extends = "django"
+run = "uv run --locked python manage.py bridge_contract --check"
+
+[tasks."drift:connections-reference"]
+description = "docs/Connections.md is what the providers declare"
+extends = "django"
+run = "uv run --locked python manage.py connections_reference --check"
 
 # ------------------------------------------------------------------ tests
 # Each runs on the interpreter UV_PYTHON names; `mise run tests` walks the matrix.
 
 [tasks."tests:django"]
 description = "Django's system checks"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+extends = "django"
 run = "uv run --locked python manage.py check"
 
 [tasks."tests:plugins"]
 description = "The public plugin contract"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver", SEVERINO_HQ_PLUGINS = "tests.fixtures.example_hq_plugin.plugin:plugin" }
+extends = "django"
+env = { SEVERINO_HQ_PLUGINS = "tests.fixtures.example_hq_plugin.plugin:plugin" }
 run = [
     "uv run --locked python manage.py check",
     "uv run --locked python manage.py plugins",
@@ -371,22 +436,12 @@ run = [
 
 [tasks."tests:migrations"]
 description = "No model change without its migration"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+extends = "django"
 run = "uv run --locked python manage.py makemigrations --check --dry-run"
-
-[tasks."tests:api-document"]
-description = "The machine API's OpenAPI document is current"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
-run = "uv run --locked python manage.py api_openapi --check"
-
-[tasks."tests:connections-reference"]
-description = "docs/Connections.md is what the providers declare"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
-run = "uv run --locked python manage.py connections_reference --check"
 
 [tasks."tests:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+extends = "django"
 run = "uv run --locked python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
 
 [tasks."tests:suite"]
@@ -394,7 +449,8 @@ description = "The suite as production configures it, with the coverage floor"
 # DJANGO_DEBUG unset: the settings take the defaults production takes (secure
 # cookies, cached templates, no live static). The development defaults are
 # held by tests that load the settings with it on.
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+extends = "django"
+env = { DJANGO_DEBUG = false }
 # Parallel across the cores; hq/platform/core/test_runner.py makes workers safe
 # on the WAL database. Coverage follows the workers (pyproject.toml) and is
 # combined before it is judged.
@@ -407,7 +463,7 @@ status=0
 # stopped would otherwise be combined into this one's total.
 mkdir -p var/coverage
 uv run --locked coverage erase
-env -u DJANGO_DEBUG uv run --locked coverage run manage.py test --noinput --parallel auto --durations 10 >"$log" 2>&1 || status=$?
+uv run --locked coverage run manage.py test --noinput --parallel auto --durations 10 >"$log" 2>&1 || status=$?
 cat "$log"
 [ "$status" -eq 0 ]
 uv run --locked coverage combine --quiet
@@ -436,7 +492,7 @@ fi
 
 [tasks."suite:composed"]
 description = "The suite composed with the extensions mise.local.toml names"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "check-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "testserver", SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0" }
+extends = "composed"
 run = '''
 set -eu
 if [ -z "${HQ_LOCAL_PLUGINS:-}" ]; then
@@ -447,13 +503,12 @@ if [ -z "${HQ_LOCAL_PLUGINS:-}" ]; then
     echo "Composed suite not run: no HQ_LOCAL_PLUGINS supplied (scripts/mise.local.example.toml)."
     exit 0
 fi
-env -u DJANGO_DEBUG SEVERINO_HQ_PLUGINS="$HQ_LOCAL_PLUGINS" PYTHONPATH="${HQ_LOCAL_PYTHONPATH:-}" \
-    uv run --locked python manage.py test --noinput --parallel auto
+uv run --locked python manage.py test --noinput --parallel auto
 '''
 
 [tasks."suite:as-image"]
 description = "The composed suite as the image runs it: only the files the image ships"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "check-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "testserver", SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0" }
+extends = "composed"
 run = "scripts/suite-as-image.sh"
 
 # ---------------------------------------------------------------- browser
@@ -461,6 +516,9 @@ run = "scripts/suite-as-image.sh"
 [tasks."setup:webkit"]
 description = "Install the WebKit the locked Playwright pins: HQ is read in Safari"
 hide = true
+# The lock pins Playwright, which pins the browser. A browser removed by hand
+# comes back with `mise run --force setup:webkit`.
+sources = ["uv.lock"]
 run = '''
 set -eu
 # On a runner the system libraries come with it.
@@ -473,7 +531,8 @@ fi
 
 [tasks."demo:build"]
 description = "Build the public demo into var/demo"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver", HQ_DEMO_OUT = "{{config_root}}/var/demo" }
+extends = "django"
+env = { HQ_DEMO_OUT = "{{config_root}}/var/demo" }
 run = "uv run --locked python manage.py test demo.build --noinput --parallel 1"
 
 [tasks."browser:demo"]
@@ -487,13 +546,13 @@ run = "uv run --locked --group browser python -m unittest demo.check -v"
 [tasks."browser:layout"]
 description = "Real-browser layout invariants over the stress estate"
 depends = ["setup:webkit"]
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+extends = "django"
 run = "uv run --locked --group browser python manage.py test hq.platform.core.browser_tests.LayoutBrowserTests --noinput --parallel 1"
 
 [tasks."browser:navigation"]
 description = "Real-browser invariants over the example estate, the frame around a page and its fragments"
 depends = ["setup:webkit"]
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+extends = "django"
 run = "uv run --locked --group browser python manage.py test hq.platform.core.estate_browser_tests hq.platform.core.browser_tests.ReferenceBrowserTests hq.platform.core.browser_tests.FragmentBrowserTests --noinput --parallel 1"
 
 # ------------------------------------------------------------- controller
@@ -512,11 +571,42 @@ run = "scripts/security-scan.sh codeql"
 # IMAGE names the image under test; the pipeline passes the one it built.
 
 [tasks."image:build"]
-description = "Build the production image"
-hide = true
+description = "Build the production image as CI builds it; nothing when IMAGE hands one over"
+# IMAGE_BUILD_CACHE carries the pipeline's layer cache flags; a checkout has none.
+usage = '''
+flag "--tag <tag>" default="severino-hq:ci-local" help="The name to build it as"
+flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"
+'''
 run = '''
 set -eu
-[ -n "${IMAGE:-}" ] || docker build -q -t severino-hq:ci-local .
+[ -z "${IMAGE:-}" ] || exit 0
+. ./scripts/lib/source-url.sh
+source="$(source_url)"
+revision="${usage_revision:-$(git rev-parse HEAD)}"
+# The security archive's release date keys the layer that applies Debian's
+# fixes, so a cached layer is reused until Debian publishes. Unreachable, the
+# day keys it instead: rebuilt at most daily. The Debian release is the one
+# the runtime stage is built on.
+codename="$(sed -nE 's/^FROM python:[^@]*-slim-([a-z]+)@.* AS runtime$/\1/p' Dockerfile)"
+security_release="$(curl -fsSL --retry 3 "https://deb.debian.org/debian-security/dists/${codename}-security/InRelease" 2>/dev/null \
+    | sed -n 's/^Date: //p' || true)"
+if [ -z "$security_release" ]; then
+    security_release="$(date -u +%F)"
+    echo "::warning title=Debian security date unknown::deb.debian.org did not answer; the upgrade layer is keyed on ${security_release} instead."
+fi
+# The source label is the standard OCI one: GHCR links the package to this
+# repository by it, and the controller reads which repository delivers it from
+# the image it runs. The tree label is what a push to main compares to promote
+# an image proven on its pull request (scripts/proven-on-pr.sh).
+# shellcheck disable=SC2086  # the cache flags are meant to split
+docker buildx build --load ${IMAGE_BUILD_CACHE:-} \
+    --label "org.opencontainers.image.source=$source" \
+    --label "org.opencontainers.image.revision=$revision" \
+    --label "dev.severino.hq.tree=$(git rev-parse 'HEAD^{tree}')" \
+    --build-arg "HQ_SOURCE=$source" \
+    --build-arg "HQ_REVISION=$revision" \
+    --build-arg "DEBIAN_SECURITY_RELEASE=$security_release" \
+    -t "$usage_tag" .
 '''
 
 [tasks."image:verify:python"]

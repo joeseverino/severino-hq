@@ -29,6 +29,7 @@ on:
           input instead of forking this file.
         required: false
         type: string
+        # PYTHON_VERSIONS (scripts/toolchain.env), held to it by checks:badges.
         default: '["3.15"]'
       package-dir:
         description: >-

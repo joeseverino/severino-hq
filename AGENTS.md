@@ -33,8 +33,8 @@ base (`BASE`, `$CHECK_BASE`, then `origin/main`, `main`) are mapped through the
 tree's import graph to the test modules that import them directly or through
 one module between, plus every test of the changed Django apps and every test
 that names one (its URL namespace or app label), the architecture tests, ruff on the changed files, `manage.py
-check`, drift in every derived file (`mise run regen --check` less the Go
-types), and mypy on changed typed modules. Its tests run with `DEBUG` on, the
+check`, migration drift, every `drift:*` gate (each derived file against its
+source, also what `mise run regen --check` runs), and mypy on changed typed modules. Its tests run with `DEBUG` on, the
 one pass that does. A change to what extensions render
 through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
 moment modules, template tags) also runs the extensions' own suites, composed,

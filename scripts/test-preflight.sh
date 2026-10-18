@@ -100,10 +100,10 @@ preflight() {
     : >"${TEST_LOG}"
     status=0
     PATH="${bin}:${PATH}" SEVERINO_HQ_DEPLOY_HOST="${SEVERINO_HQ_DEPLOY_HOST-deploy.example.test}" \
-        sh "${repo}/scripts/preflight.sh" "$@" >"${work}/out" 2>&1 || status=$?
+        env "$@" sh "${repo}/scripts/preflight.sh" >"${work}/out" 2>&1 || status=$?
     return "${status}"
 }
-expect() { # expect <status> <why> [args]
+expect() { # expect <status> <why> [the task's usage_* flags]
     want="$1"
     why="$2"
     shift 2
@@ -130,7 +130,7 @@ if grep -q "secret-marker-example" "${work}/out"; then
 fi
 
 # 2. Skipping the host is loud and never a pass.
-expect 2 "a skipped host" --skip-host
+expect 2 "a skipped host" usage_skip_host=true
 says "SKIPPED  deploy host (--skip-host)"
 says "HOST NOT CHECKED"
 if grep -q '^ssh' "${TEST_LOG}"; then fail "--skip-host still reached the host"; fi
@@ -167,20 +167,20 @@ git_ update-ref refs/remotes/origin/feature HEAD
 export PREFLIGHT_REMOTE_POLL=0 PREFLIGHT_REMOTE_TIMEOUT=0
 export TEST_CHECKS="completed success test
 completed success code scanning"
-expect 0 "every GitHub check passed" --remote
+expect 0 "every GitHub check passed" usage_remote=true
 says "code scanning"
 if grep -q '^mise run -c ci ' "${TEST_LOG}"; then fail "--remote still ran the local gates"; fi
 TEST_CHECKS="completed success test
 completed failure structural bar"
-expect 1 "a failed GitHub check" --remote
+expect 1 "a failed GitHub check" usage_remote=true
 TEST_CHECKS="in_progress - test"
-expect 1 "a GitHub check still running when time runs out" --remote
+expect 1 "a GitHub check still running when time runs out" usage_remote=true
 TEST_CHECKS=""
-expect 1 "no GitHub check at all" --remote
+expect 1 "no GitHub check at all" usage_remote=true
 git_ update-ref -d refs/remotes/origin/feature
 git_ update-ref -d refs/remotes/origin/main
 TEST_CHECKS="completed success test"
-expect 1 "an unpushed HEAD" --remote
+expect 1 "an unpushed HEAD" usage_remote=true
 says "HEAD is not pushed"
 git_ update-ref refs/remotes/origin/main HEAD~1
 unset TEST_CHECKS PREFLIGHT_REMOTE_POLL PREFLIGHT_REMOTE_TIMEOUT

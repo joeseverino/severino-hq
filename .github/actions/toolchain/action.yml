@@ -14,17 +14,6 @@ inputs:
     required: false
     default: ""
 
-outputs:
-  python-versions:
-    description: The test matrix, as a JSON list.
-    value: ${{ steps.read.outputs.python-versions }}
-  oldest-python:
-    description: The oldest version the matrix runs.
-    value: ${{ steps.read.outputs.oldest-python }}
-  trivy:
-    description: The Trivy release every image scan runs.
-    value: ${{ steps.read.outputs.trivy }}
-
 runs:
   using: composite
   steps:
@@ -33,14 +22,10 @@ runs:
       run: |
         set -euo pipefail
         . ./scripts/toolchain.env
-        # shellcheck disable=SC2086  # the version list is meant to split
-        versions="$(printf '%s\n' $PYTHON_VERSIONS | jq -Rrc '[.]' | jq -sc 'add')"
         {
-          echo "python-versions=$versions"
-          # shellcheck disable=SC2086
+          # shellcheck disable=SC2086  # the version list is meant to split
           echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"
           echo "mise=$(sed -n 's/^min_version = "\(.*\)"$/\1/p' mise.toml)"
-          echo "trivy=$TRIVY_VERSION"
         } >> "$GITHUB_OUTPUT"
         # Nothing installs that mise.lock does not record. The CodeQL bundle is
         # the local mirror of CI's CodeQL job and age belongs to Compose; neither is

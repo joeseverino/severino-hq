@@ -1,9 +1,12 @@
 #!/bin/sh
 # The one command whose exit 0 means ready to release.
 #
-#   scripts/preflight.sh               # every gate, the deploy host included
-#   scripts/preflight.sh --remote      # the heavy gates read from GitHub instead
-#   scripts/preflight.sh --skip-host   # local gates only; never exits 0
+#   mise run preflight               # every gate, the deploy host included
+#   mise run preflight --remote      # the heavy gates read from GitHub instead
+#   mise run preflight --skip-host   # local gates only; never exits 0
+#
+# The task's usage declares the flags; mise hands them over as usage_remote
+# and usage_skip_host.
 #
 # Runs, in order:
 #   1. `mise run ci`: every gate the pipeline runs (one that cannot run fails);
@@ -28,16 +31,6 @@ set -eu
 
 repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "${repo_root}"
-
-skip_host=0
-remote=0
-for argument in "$@"; do
-    case "${argument}" in
-        --skip-host) skip_host=1 ;;
-        --remote) remote=1 ;;
-        *) echo "usage: scripts/preflight.sh [--remote] [--skip-host]" >&2; exit 2 ;;
-    esac
-done
 
 # shellcheck source=scripts/lib/systemd-units.sh
 . ./scripts/lib/systemd-units.sh
@@ -91,7 +84,7 @@ github_gates() {
     ! printf '%s\n' "${checks}" | grep -Ev '^completed (success|skipped|neutral) ' >/dev/null
 }
 
-if [ "${remote}" -eq 1 ]; then
+if [ -n "${usage_remote:-}" ]; then
     gate "every GitHub check on this commit" github_gates
 else
     gate "every gate the pipeline runs" mise run -c ci
@@ -132,7 +125,7 @@ host_check() {
     return "${status}"
 }
 
-if [ "${skip_host}" -eq 1 ]; then
+if [ -n "${usage_skip_host:-}" ]; then
     record SKIPPED "deploy host (--skip-host)"
 elif [ -z "${SEVERINO_HQ_DEPLOY_HOST:-}" ]; then
     record FAILED "deploy host: SEVERINO_HQ_DEPLOY_HOST is not set"
