@@ -33,6 +33,10 @@ only by a merged pull request.
 - [ ] **Severino HQ · Production** reaches *Waiting for approval*. Approve the
       Deploy run in the `production` environment. A newer release waiting
       supersedes an older one; reject a stale one rather than approving it.
+- [ ] A release that migrates is rehearsed first: `mise run shadow-run IMAGE`
+      with the image it waits to deploy runs its migrations, bridge, jobs and
+      controller plan on a copy of production's database on the deploy host,
+      touching nothing live. Approve only on `result=pass`.
 - [ ] The Deploy job is green and the check says *Live in production*. CI
       green is not live: only the Deploy job deploys.
 
