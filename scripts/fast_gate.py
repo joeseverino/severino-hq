@@ -28,6 +28,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # pass that `mise run check` also leaves to `mise run browser`.
 SKIP_PARTS = {"node_modules", "controller", "browser_tests", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")
+# How many importers away from a changed module a test is still selected: one
+# that imports it, or imports a module that does. Further out the walk reaches
+# most of the tree through the shared layers, and the module in between has
+# tests of its own at this distance.
+REACH = 2
 # Past this share of the suite the change is wide and the fast gate says so.
 WIDE = 0.6
 # What extensions render through. A change here reaches their pages, which no
@@ -218,9 +223,9 @@ def owner(path: str, apps: dict[str, str]) -> str | None:
 def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple[set[str], set[str]]:
     """(modules reachable from the change through importers, apps it touches).
 
-    A change in an app also selects every test that imports any of the app: a
-    test that drives its views through the client imports its models, never
-    its views.
+    A change in an app also selects the app's own tests and every test that
+    imports any of the app: a test that drives its views through the client
+    imports its models, never its views.
     """
 
     reverse = importers(files)
@@ -239,25 +244,28 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
             # further would reach every module through the shared layers.
             prefixes = [prefix.replace("/", ".") for prefix, label in apps.items() if label == pkg]
             members = {m for m in modules if any(m == prefix or m.startswith(prefix + ".") for prefix in prefixes)}
+            seen |= members
             seen.update(i for m in members for i in reverse[m])
-    visited: set[str] = set()
-    stack = list(seeds)
-    while stack:
-        current = stack.pop()
-        if current in visited:
-            continue
-        visited.add(current)
-        seen.add(current)
-        stack.extend(reverse.get(current, ()))
-    return seen, touched
+    reached = frontier = seeds
+    for _ in range(REACH):
+        frontier = {i for m in frontier for i in reverse.get(m, ())} - reached
+        reached |= frontier
+    return seen | reached, touched
 
 
 def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tuple[list[str], int]:
     by_module = {module_name(p): p for p in files if is_test(p)}
     tests = set(by_module)
     chosen = {t for t in tests if t in reached}
-    # A test that names an app (a URL namespace, a label) exercises it.
-    words = [re.compile(rf"\b{re.escape(app)}\b") for app in touched]
+    # A test that names an app exercises it: a URL namespace ("projects:list"),
+    # a model label ("projects.Project") or the app label given to Django.
+    words = [
+        re.compile(
+            rf"""["']{re.escape(app)}(?::|\.[A-Z])"""
+            rf"""|(?:app_label\W+|get_model\(\s*|get_app_config\(\s*)["']{re.escape(app)}["']"""
+        )
+        for app in touched
+    ]
     for name, path in by_module.items():
         text = (ROOT / path).read_text(encoding="utf-8")
         if any(word.search(text) for word in words):
@@ -327,17 +335,17 @@ def main(argv: list[str]) -> int:
         return 0
 
     env = {**os.environ, "DJANGO_DEBUG": "true", "SEVERINO_LOG_LEVEL": "CRITICAL"}
+    # The committed records describe the host alone.
+    host = {key: value for key, value in env.items() if key != "SEVERINO_HQ_PLUGINS"}
     py = [c for c in changed if c.endswith(".py") or c.endswith(".pyi")]
     typed = mypy_targets(changed)
     checks: list[tuple[str, list[str], dict[str, str] | None]] = [
         *([("ruff (changed files)", [ruff, "check", *py], None)] if py else []),
         ("manage.py check", [python, "manage.py", "check"], env),
         ("migration drift", [python, "manage.py", "makemigrations", "--check", "--dry-run"], env),
-        (
-            "OpenAPI drift",
-            [python, "manage.py", "api_openapi", "--check"],
-            {key: value for key, value in env.items() if key != "SEVERINO_HQ_PLUGINS"},
-        ),
+        ("OpenAPI drift", [python, "manage.py", "api_openapi", "--check"], host),
+        ("SDK contract drift", [python, "manage.py", "sdk_contract", "--check"], host),
+        ("API client drift", ["scripts/generate-clients.sh", "--check"], None),
         ("controller contract drift", [python, "manage.py", "bridge_contract", "--check"], env),
         ("connections reference drift", [python, "manage.py", "connections_reference", "--check"], env),
         *([("mypy (changed typed modules)", [python, "-m", "mypy", *typed], env)] if typed else []),

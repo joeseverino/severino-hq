@@ -24,9 +24,7 @@ class Command(BaseCommand):
         path = reference_path()
         if options["check"]:
             if not path.exists() or path.read_text(encoding="utf-8") != current:
-                raise CommandError(
-                    "docs/Connections.md is behind the providers; run `manage.py connections_reference`."
-                )
+                raise CommandError("docs/Connections.md is behind the providers; run `mise run regen`.")
             self.stdout.write("docs/Connections.md is current.")
             return
         path.write_text(current, encoding="utf-8")

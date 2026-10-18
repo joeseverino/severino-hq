@@ -49,7 +49,6 @@ class Command(BaseCommand):
             )
         if stale:
             raise CommandError(
-                f"{', '.join(stale)} is behind the registry; run `manage.py bridge_contract`, "
-                "then `go generate ./...` in controller/, and commit the result."
+                f"{', '.join(stale)} is behind the registry; run `mise run regen` and commit the result."
             )
         self.stdout.write("The controller's contracts are current.")

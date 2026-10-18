@@ -87,9 +87,9 @@ export's parameters, fields, enum members and public methods, without
 annotations so it is identical across the interpreter matrix. A test fails when
 the exports drift from the file, because an extension's binding to a renamed
 field or a new required parameter is a change this repository cannot otherwise
-see. Regenerate it with `python manage.py sdk_contract`, read the diff as the
-review, and decide there whether `PLUGIN_API_VERSION` moves;
-`sdk_contract --check` is the CI form.
+see. Regenerate it with `mise run regen`, read the diff as the review, and
+decide there whether `PLUGIN_API_VERSION` moves; `mise run regen --check`
+fails on drift.
 
 Capability input models inherit `StrictCommand`, so unknown JSON keys fail at
 the boundary instead of being dropped. Class-based views inherit

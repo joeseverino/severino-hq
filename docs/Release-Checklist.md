@@ -9,10 +9,8 @@ only by a merged pull request.
       so the composed pass runs.
 - [ ] A change to templates or CSS passes `mise run browser` and has been
       walked in a real browser through the workflow it serves.
-- [ ] A changed route, capability or connection shape has its derived
-      documents regenerated: `manage.py api_openapi`, `manage.py
-      bridge_contract` (then `go generate ./...` in `controller/`),
-      `manage.py sdk_contract`.
+- [ ] A changed route, capability, SDK export or connection shape has its
+      derived files regenerated: `mise run regen`.
 - [ ] A new constraint on a table that holds rows has passed
       `manage.py constraint_preflight --path <database>` against production
       data.

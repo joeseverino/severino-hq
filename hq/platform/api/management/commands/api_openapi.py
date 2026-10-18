@@ -36,8 +36,7 @@ class Command(BaseCommand):
                     ending="",
                 )
                 raise CommandError(
-                    f"{DOCUMENT_PATH.name} is behind the API; run `manage.py api_openapi` "
-                    "(with no extensions installed) and commit the result."
+                    f"{DOCUMENT_PATH.name} is behind the API; run `mise run regen` and commit the result."
                 )
             self.stdout.write(f"{DOCUMENT_PATH.name} is current.")
             return

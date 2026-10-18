@@ -48,6 +48,31 @@ class FastGateMappingTests(SimpleTestCase):
         self.assertIn("hq.platform.application.tests.test_domains", labels)
         self.assertNotIn("hq.platform.mcp.tests", labels)
 
+    def test_a_model_change_selects_its_app_and_not_an_unrelated_domain(self):
+        labels = self.labels("hq/domains/projects/models.py")
+        own = [
+            fast_gate.module_name(p)
+            for p in self.files
+            if fast_gate.is_test(p) and p.parts[:3] == ("hq", "domains", "projects")
+        ]
+        self.assertTrue(own)
+        self.assertLessEqual(set(own), set(labels))
+        self.assertFalse([label for label in labels if label.startswith("hq.domains.receipts.")])
+
+    def test_an_app_label_in_prose_is_not_a_reference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, text in {
+                "namespace": 'reverse("projects:list")',
+                "model": 'apps.get_model("projects", "Project")',
+                "prose": '"""Covers the projects page and its core."""',
+            }.items():
+                (root / f"test_{name}.py").write_text(text)
+            files = sorted(Path(p.name) for p in root.iterdir())
+            with patch.object(fast_gate, "ROOT", root):
+                chosen, _ = fast_gate.test_labels(files, set(), {"projects"})
+            self.assertEqual(chosen, ["test_model", "test_namespace"])
+
     def test_a_test_change_selects_that_test_and_the_architecture_tests(self):
         labels = self.labels("hq/platform/core/tests/test_security.py")
         self.assertIn("hq.platform.core.tests.test_security", labels)

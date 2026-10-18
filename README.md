@@ -116,7 +116,7 @@ uv run --locked python manage.py migrate
 uv run --locked python manage.py createsuperuser
 mise run dev              # the ASGI server on 127.0.0.1:8000, with reload
 mise run fast             # what the change reaches
-mise run check            # the suite three ways: DEBUG on, off, and composed
+mise run check            # every Checks and Tests gate, and the suite composed
 mise run preflight        # ready: every CI gate, the composed suite, the host
 ```
 

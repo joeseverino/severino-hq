@@ -42,7 +42,7 @@ with every default group omitted.
 | Command | Answers |
 | :--- | :--- |
 | `mise run fast [BASE]` | the inner loop: only what the change reaches, by import graph (`--list` prints the selection) |
-| `mise run check` | do my changes work? The source tests, the suite as production configures it, and the suite composed with the extensions |
+| `mise run check` | do my changes work? Every Checks gate, the Tests gates on one Python, and the suite composed with the extensions, one at a time ([AGENTS.md](../AGENTS.md#start-here)) |
 | `mise run ci` | will the pipeline accept them? Every gate CI runs, including CodeQL, Scorecard, the image and the browser gate |
 | `mise run preflight` | is it ready? `ci`, the composed suite as the image runs it with the extensions required, and a read-only check of the deploy host |
 
@@ -67,8 +67,10 @@ carry `@tag("source")` and run once, in `checks:source`. A whole-suite run
 leaves them out, so the image never runs a test against files it does not
 ship. `mise run suite:as-image` runs the composed suite in a copy of only the
 files the image is built from, configured as the image is; preflight runs it.
-`docs/Connections.md` is generated: `tests:connections-reference` fails when it
-is behind the providers, and `manage.py connections_reference` rewrites it.
+Derived files (the SDK contract, the API document and its clients, the
+controller's contracts and Go types, `docs/Connections.md`) are never edited:
+`mise run regen` rewrites every one from its source, and `mise run regen
+--check` fails on drift. `mise run fast` runs the same drift checks.
 
 The suite runs in parallel, one worker per core (per performance core on
 Apple silicon; `DJANGO_TEST_PROCESSES` overrides it). `CHECK_PARALLEL=1 mise run fast` rules

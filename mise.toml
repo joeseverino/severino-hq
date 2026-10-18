@@ -75,6 +75,13 @@ raw = true
 env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "development-not-a-real-secret", DJANGO_DEBUG = "1", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver" }
 run = "mkdir -p var/db && uv run --locked python manage.py"
 
+[tasks.regen]
+description = "Rewrite every derived file from its source; --check fails on drift instead"
+depends = ["setup:openapi"]
+raw = true
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "development-not-a-real-secret", DJANGO_DEBUG = "1", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver" }
+run = "mkdir -p var/db && scripts/regen.sh"
+
 [tasks.preflight]
 description = "Ready to release: every gate, the composed suite and the deploy host"
 raw = true
@@ -89,22 +96,16 @@ run = "scripts/failure-logs.sh"
 
 [tasks.fast]
 description = "Inner loop: lint, types and tests for what the change touches"
+depends = ["setup:openapi"]
 env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3" }
 run = "uv run --locked python scripts/fast_gate.py"
 
 [tasks.check]
-description = "Does my change work: lint, contracts, the source checks, the suite, and the suite composed"
-depends = [
-    "checks:conflicts",
-    "checks:patch",
-    "checks:ruff",
-    "checks:openapi",
-    "checks:workflows",
-    "checks:shell",
-    "checks:source",
-    "tests:*",
-    "suite:composed",
-]
+description = "Does my change work: every Checks gate, the Tests gates on one Python, and the suite composed"
+# Named by aggregate and glob, so a new gate joins without an edit here. One
+# task at a time: each suite starts a worker per core, and two at once exhaust
+# a small machine's memory. CI runs each job's aggregate, never this task.
+run = "mise run -c -j 1 checks ::: 'tests:*' ::: suite:composed"
 
 [tasks.ci]
 description = "Every gate the pipeline runs"

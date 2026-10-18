@@ -28,7 +28,9 @@ import logging
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 from django.conf import settings
 from django.db import connections
@@ -39,6 +41,8 @@ from django.test.runner import (
     RemoteTestRunner,
     _init_worker,
 )
+
+from hq.config.sandbox import sweep_abandoned
 
 
 def performance_cores() -> int | None:
@@ -320,6 +324,9 @@ class SeverinoTestRunner(DiscoverRunner):
         return super().get_resultclass() or CompositionTextResult
 
     def setup_databases(self, **kwargs):
+        # Here, in the process that starts the run and before it makes files
+        # of its own: a killed run never reached its teardown.
+        sweep_abandoned(Path(tempfile.gettempdir()), os.getpid())
         # Build the database first and clone it second, rather than letting one
         # call do both, because the checkpoint has to happen between the two.
         requested = self.parallel

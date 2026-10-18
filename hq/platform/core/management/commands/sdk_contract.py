@@ -55,7 +55,7 @@ class Command(BaseCommand):
                 for line in differences:
                     self.stderr.write(line)
                 raise CommandError(
-                    "The SDK's committed record is behind the host; run `manage.py sdk_contract`, "
+                    "The SDK's committed record is behind the host; run `mise run regen`, "
                     "review the diff, and decide whether PLUGIN_API_VERSION must move."
                 )
             self.stdout.write("hq_sdk contract is current.")

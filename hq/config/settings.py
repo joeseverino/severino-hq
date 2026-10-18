@@ -14,7 +14,6 @@ import os
 import secrets
 import shlex
 import sys
-import tempfile
 from importlib import import_module
 from pathlib import Path
 
@@ -28,6 +27,7 @@ from hq.config.devtools import (
 )
 
 from .paths import database_path
+from .sandbox import database_path as test_database_path
 
 # The plugin registry is loaded by name: settings is imported by everything, and
 # a static import here would put it inside the application's own import cycle.
@@ -489,16 +489,14 @@ DATABASES = {
             # gate. Only being a file matters, not where the file is.
             #
             # Named for the process, because two suites on one machine would
-            # otherwise share the file: `mise run check` runs its suites
-            # concurrently, and running it alongside `mise run ci` is the
-            # normal way to check work. A shared file makes them fail each other
-            # with a locked table: a failure that says nothing about the change
-            # and costs a while to attribute. Django's parallel workers suffix
-            # this name per worker, so they stay distinct within a run too.
-            "NAME": os.environ.get(
-                "SEVERINO_TEST_DATABASE_PATH",
-                str(Path(tempfile.gettempdir()) / f"severino-test-{os.getpid()}.sqlite3"),
-            ),
+            # otherwise share the file: two worktrees' gates, or `mise run
+            # fast` beside `mise run ci`. A shared file makes them fail each
+            # other with a locked table: a failure that says nothing about the
+            # change and costs a while to attribute. Django's parallel workers
+            # suffix this name per worker, so they stay distinct within a run
+            # too, and the next run deletes a killed run's files by the name
+            # (config/sandbox.py).
+            "NAME": os.environ.get("SEVERINO_TEST_DATABASE_PATH", test_database_path()),
         },
     }
 }

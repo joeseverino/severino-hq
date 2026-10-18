@@ -30,10 +30,12 @@ gate is a task in `mise.toml` named `<job>:<gate>`;
 
 `mise run fast [BASE]` is the inner loop: the changed files against the merge
 base (`BASE`, `$CHECK_BASE`, then `origin/main`, `main`) are mapped through the
-tree's import graph to the test modules that reach them, plus every test of the
-changed Django apps, the architecture tests, ruff on the changed files, `manage.py
-check`, migration, API document, controller contract and connections reference
-drift, and mypy on changed typed modules. A change to what extensions render
+tree's import graph to the test modules that import them directly or through
+one module between, plus every test of the changed Django apps and every test
+that names one (its URL namespace or app label), the architecture tests, ruff on the changed files, `manage.py
+check`, drift in every derived file (`mise run regen --check` less the Go
+types), and mypy on changed typed modules. Its tests run with `DEBUG` on, the
+one pass that does. A change to what extensions render
 through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
 moment modules, template tags) also runs the extensions' own suites, composed,
 when `mise.local.toml` names a set. `--list` prints the selection. Tens of
@@ -55,12 +57,15 @@ gate list exists once: a gate is added in `mise.toml`, never in a workflow. A
 gate that cannot run fails. `mise run -c ci` keeps going past a failure and
 names every gate that failed.
 
-`mise run check` runs the suite twice: as production configures it, with
-`DJANGO_DEBUG` unset (`tests:suite`), and (when an extension set is supplied)
-composed with the extensions (`suite:composed`). That second pass is the one
-that catches what CI cannot, because the host and its extensions first meet
-during compose, long after the merge button. A setting whose default follows
-`DEBUG` is held by a test that loads the settings both ways.
+`mise run check` runs every gate of the Checks job (`checks:*`), the Tests
+job's gates on the default Python (`tests:*`, the suite among them as
+production configures it, with `DJANGO_DEBUG` unset and the coverage floor),
+and, when an extension set is supplied, the suite composed with the extensions
+(`suite:composed`), one task at a time so no two suites share the machine's
+memory. The composed pass is the one that catches what CI cannot, because the
+host and its extensions first meet during compose, long after the merge
+button. A setting whose default follows `DEBUG` is held by a test that loads
+the settings both ways.
 
 A test that reads the repository rather than running the product (the docs,
 the workflows, the Dockerfile, the source itself) carries `@tag("source")`. It
@@ -155,7 +160,8 @@ topology edges its readings declare are all derived from those, and admission
 fails at import on a duplicate or undeclared name. So is the bridge contract:
 `manage.py bridge_contract` writes the kinds, the connection providers, each
 reading's record and the values both sides check from the same declarations,
-then `go generate ./...` in `controller/` regenerates the Go types. The
+then `go generate ./...` in `controller/` regenerates the Go types
+(`mise run regen` runs both). The
 controller half (its readers, actions and probe) is Go, in
 `controller/providers/`, registered in `providers.New`; a provider is handed
 its own connection as a typed value (`r.Supplied.For`), never a setting by name.
@@ -196,7 +202,7 @@ same review, and should fail when its path matches nothing rather than pass.
   app. `python -m hq_sdk.validation src` enforces this.
 - The shape of `hq_sdk` is committed in `hq_sdk/contract.json` and a test holds
   the exports to it. A change there is a fleet change: regenerate with
-  `manage.py sdk_contract`, review the diff, and decide whether
+  `mise run regen`, review the diff, and decide whether
   `PLUGIN_API_VERSION` moves. What the annotations promise is held from an
   extension's side by `tests/sdk_consumer/consumer.py`, which mypy checks: a
   valid call pins its return with `assert_type`, and a call an extension must
@@ -204,7 +210,7 @@ same review, and should fail when its path matches nothing rather than pass.
   new export a case there; an annotation that slides to `Any` fails it.
 - The machine API's OpenAPI 3.2 document is derived (`hq/platform/api/openapi.py`) and
   served at `/api/v2/openapi.json`; `hq/platform/api/hq-api.openapi.json` is the host's
-  copy for clients. Regenerate it with `manage.py api_openapi` after changing a
+  copy for clients. Regenerate it with `mise run regen` after changing a
   route, capability, resource or domain; `--check` fails the gate on drift.
   The signed-in operator reads it rendered at `/api/docs/` (System > API), a
   vendored Scalar bundle: to upgrade it, replace
@@ -214,8 +220,8 @@ same review, and should fail when its path matches nothing rather than pass.
   messages in `hq/domains/control_plane/bridge_base.json`, joined to what the
   registry declares), `controller/api/hq-connections.openapi.json` and
   `hq/config/controller-connections.json`; `--check` fails the gate when one
-  is behind. Never edit those three files, and regenerate the Go types after
-  (`go generate ./...` in `controller/`).
+  is behind. Never edit those three files: `mise run regen` rewrites them and
+  then the Go types.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
 - A link to a command's form is built by `hq.platform.application.action_links.command_url`
