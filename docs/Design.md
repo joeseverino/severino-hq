@@ -235,6 +235,9 @@ and one card partial (`partials/_work_queue.html`). A card reads, in order:
   which states what is wrong and links to the thing it is about;
 - one or two sentences of what it means;
 - since when, where its owner knows (`Insight(since=...)`), and never a guess;
+- how old the reading it is drawn from is (`Insight(observed_at=...)`). An
+  out-of-date reading never asserts a live condition: its owner says what was
+  read, in the past tense, as a notice;
 - what to do: a command or an instruction is a step, one standing alone and
   several numbered, folded under "Steps" only when long;
 - the reason it cannot be done from here, as a sentence and never as a step;
@@ -262,7 +265,14 @@ and the transport keeps the owner's full workflow. A dismissed card is its
 title and the way back.
 
 A queue of three or fewer is read on the dashboard, under the greeting, on the
-same cards. A longer one is a count and a link to its page.
+same cards. A longer one is a count and a link to its page. There a card is
+its title, one line of what it means, its age and its buttons; its title opens
+the page that shows the whole card, steps included.
+
+**A reading says how old it is.** Wherever a page shows what was read, its age
+is `partials/_reading_age.html`, over the reading's `Freshness` where the page
+has one: "Last read 3 hours ago", and "out of date" beside it past the line
+`application.freshness` draws for its kind.
 
 **A frame is filled.** Facts are `.kv`: each label beside its value, as many
 pairs to a row as the width holds, never a two-column table stretched to the

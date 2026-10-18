@@ -66,8 +66,9 @@ def cadence(kind: str = "") -> Cadence:
         return Cadence(read_every(kind), missed=2)
     if spec is not None and spec.every is not None:
         return Cadence(spec.every, missed=2)
-    # A controller reads on the sweep, whose slowest interval is the idle one.
-    return Cadence(slowest_sweep_interval())
+    # A controller reads on the sweep, whose slowest interval is the idle one;
+    # a reading is stale once it has missed a whole sweep, not when one is due.
+    return Cadence(slowest_sweep_interval(), missed=2)
 
 
 def stale_after(kind: str = "") -> timedelta:

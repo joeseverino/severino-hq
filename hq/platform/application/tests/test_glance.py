@@ -314,7 +314,7 @@ class DashboardGlanceTests(TestCase):
                 self.assertEqual(weather["outdated"], stale)
                 self.assertEqual(weather["payload"]["status"], "good")
                 html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [weather]})
-                self.assertEqual("Out of date" in text(html), stale)
+                self.assertEqual('data-reading-age="stale"' in html, stale)
 
     def test_refresh_preserves_old_readings_and_explains_pending_state(self):
         readings.record(
@@ -637,7 +637,7 @@ class GlanceEndpointTests(TestCase):
             response = self.client.get(reverse("dashboard_glance"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Out of date")
+        self.assertContains(response, 'data-reading-age="stale"')
         self.assertFalse(DashboardRefreshRequest.objects.exists())
         doorbell.assert_not_called()
 

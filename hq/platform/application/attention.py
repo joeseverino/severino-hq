@@ -334,6 +334,7 @@ def tailnet() -> tuple[Insight, ...]:
                 body=(f"Its Tailscale key expires{on}." if days > 0 else f"Its Tailscale key expired{on}."),
                 url=entity_link("machine", name).url,
                 subject=subject_link("machine", name),
+                observed_at=presence.observed_at,
                 since=expires if days <= 0 else None,
                 workflow=instructions(
                     key,
@@ -351,6 +352,7 @@ def tailnet() -> tuple[Insight, ...]:
     # loop below walks, so asking each machine would never find one.
     from .tailnet import policy as tailnet_policy
 
+    read_policy = tailnet_policy()
     items.extend(
         Insight(
             status="serious",
@@ -363,8 +365,9 @@ def tailnet() -> tuple[Insight, ...]:
             url=reverse("control_plane:tailnet"),
             subject=subject_link("machine", name),
             workflow=_sign_key(f"tailnet-locked-out:{name}", name),
+            observed_at=read_policy.observed_at,
         )
-        for name in tailnet_policy().locked_out
+        for name in read_policy.locked_out
     )
     for name, presence in presences:
         if not presence.authorized:
@@ -379,6 +382,7 @@ def tailnet() -> tuple[Insight, ...]:
                     body="It cannot reach anything yet.",
                     url=entity_link("machine", name).url,
                     subject=subject_link("machine", name),
+                    observed_at=presence.observed_at,
                     workflow=instructions(
                         f"tailnet-unauthorized:{name}",
                         "Approve it in the Tailscale admin console, under Machines.",
@@ -400,6 +404,7 @@ def tailnet() -> tuple[Insight, ...]:
                     ),
                     url=entity_link("machine", name).url,
                     subject=subject_link("machine", name),
+                    observed_at=presence.observed_at,
                     workflow=_sign_key(f"tailnet-lock-unsigned:{name}", name),
                 )
             )
@@ -415,6 +420,7 @@ def tailnet() -> tuple[Insight, ...]:
                     body=_update_body(presence, newest),
                     url=entity_link("machine", name).url,
                     subject=subject_link("machine", name),
+                    observed_at=presence.observed_at,
                     workflow=commands(
                         f"tailnet-update:{name}",
                         ((f"On {name}, as an administrator", "tailscale update"),),
@@ -453,6 +459,7 @@ def tailnet() -> tuple[Insight, ...]:
                 ),
                 url=entity_link("machine", name).url,
                 subject=subject_link("machine", name),
+                observed_at=presence.observed_at,
                 actions=_approve_routes(name),
             )
         )
@@ -732,6 +739,8 @@ def services() -> tuple[Insight, ...]:
             action="Open the service",
             url=service.url,
             subject=subject_link("service", service.hostname),
+            # Wiring is declarations and readings together; no one reading dates it.
+            observed_at=None,
         )
         for service in service_catalog()
         if service.faults

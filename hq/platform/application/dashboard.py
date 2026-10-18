@@ -85,6 +85,7 @@ def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
 
     subject = getattr(item, "subject", None)
     since = getattr(item, "since", None)
+    observed_at = getattr(item, "observed_at", None)
     return {
         "key": item_key(source_id, item),
         "revision": item_revision(item),
@@ -102,6 +103,7 @@ def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
         "notice": bool(getattr(item, "notice", False)),
         "family": getattr(item, "family", ""),
         "since": since.isoformat() if since else "",
+        "observed_at": observed_at.isoformat() if observed_at else "",
         "facts": [list(fact) for fact in getattr(item, "facts", ())],
         "links": [asdict(link) for link in getattr(item, "links", ())],
     }

@@ -6,9 +6,9 @@ from dataclasses import replace
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
-from .cadence import slowest_sweep_interval as _slowest_sweep_interval, sweep_interval
+from .cadence import sweep_interval
 from .credential_findings import UNREPORTED
-from .derivations import passed, since
+from .derivations import since
 from .entity_links import kind_label, node_name
 from .finding_model import (
     Finding,
@@ -22,6 +22,7 @@ from .finding_model import (
     machine_step,
     reconcile_remedy,
 )
+from .freshness import freshness
 from .infrastructure import DRIFT_LABEL
 from .labels import lower_first, plural
 from .moments import ago, duration
@@ -60,21 +61,6 @@ def _read_again(label: str = READ_NOW) -> Remedy:
 # ``_STALE_AFTER`` is imported rather than restated: the lens that asks "what
 # was left behind?" and the rule that claims it must not be able to disagree
 # about where that line falls.
-
-# How many sweep intervals a whole kind may go unobserved before the fault is
-# the sweep rather than any one record. Three, because one missed tick is a
-# restart and two is a slow provider.
-#
-# Multiplied against the *slowest* interval HQ is willing to sweep at, not the
-# one currently in force: the live interval changes with whether anyone is
-# watching, and a threshold that moves with the thing it measures cannot be
-# reasoned about.
-#
-# It is still a statement about sweeps, not about liveness: nothing here can
-# notice a controller that died between two scheduled sweeps, because the only
-# evidence it reads is when records were last confirmed. Detecting that needs
-# the controller to check in on its own clock.
-_KIND_SILENT_AFTER = 3
 
 
 def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -154,12 +140,13 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
     perfectly consistent. Ship the two together or the hole is still open,
     and this one is deliberately blunt, an absolute clock against the interval
     HQ itself declares, because that is the only thing left to compare against.
+    Out of date means what it means on every page that shows the reading
+    (``freshness``), so a page and this claim cannot disagree about it.
     """
 
-    interval = _slowest_sweep_interval() * _KIND_SILENT_AFTER
     found = []
     for kind_key, newest in sorted(estate.latest_by_kind.items()):
-        if not passed(newest + interval, now=estate.now) or not is_observable(kind_key):
+        if not freshness(kind_key, newest, estate.now).stale or not is_observable(kind_key):
             continue
         silent = since(newest, now=estate.now)
         # Staleness is a statement about declarations, and a kind HQ declares

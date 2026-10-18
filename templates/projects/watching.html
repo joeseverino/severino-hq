@@ -26,7 +26,7 @@ would be a page about anybody.
     </dl>
   </section>
 
-  <h2>Starred <span class="heading-aside">newest first · read {{ profile.observed_at|ago }}</span></h2>
+  <h2>Starred <span class="heading-aside">newest first · {% include "partials/_reading_age.html" with at=profile.observed_at only %}</span></h2>
   <div class="table-scroll">
     <table class="data-table">
       <thead><tr><th>Repository</th><th>Latest release</th><th>Advisories</th><th>Starred</th></tr></thead>

@@ -536,6 +536,8 @@ def attention() -> tuple[Insight, ...]:
                 action="Open repo checks",
                 url=reverse("posture"),
                 workflow=help_for(check, unmet),
+                # The oldest of the readings it names: the claim is no newer.
+                observed_at=min((repo.observed_at for repo in unmet if repo.observed_at), default=None),
             )
         )
     return tuple(items)

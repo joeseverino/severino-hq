@@ -10,6 +10,7 @@ declaration that says holding it is the container's job.
 """
 
 import shlex
+from datetime import datetime
 from typing import Any
 
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -61,6 +62,7 @@ def attention() -> tuple[Insight, ...]:
                 workflow=by_hand("container-updates", behind_running),
                 # Each one's plan, the same help an advisory carries.
                 actions=_limited(_upgrade_link(item) for item in behind_running),
+                observed_at=_read_at(behind_running),
             )
         )
     return tuple(items)
@@ -158,7 +160,18 @@ def _advisory(label: str, standing: Standing, running: list[Container]) -> Insig
         url=f"{watched.url}#upgrade" if watched else reverse("control_plane:containers"),
         workflow=by_hand(key, running),
         actions=_limited(_upgrade_link(item) for item in running) if plans else (),
+        observed_at=_read_at(running),
     )
+
+
+def _read_at(running: list[Container], *, standing: bool = True) -> datetime | None:
+    """The oldest reading an item about ``running`` is drawn from: where each
+    one runs, and, for what its image stands at, the registry's."""
+
+    found = [item.running.observed_at for item in running]
+    if standing:
+        found.extend(item.standing.read_at for item in running)
+    return min((moment for moment in found if moment is not None), default=None)
 
 
 def _upgrade_action(plan: Any, known: int) -> str:
@@ -232,6 +245,7 @@ def _reach_attention() -> list[Insight]:
                     action="Open containers",
                     url=reverse("control_plane:containers"),
                     actions=_limited(_posture_link(check.id, item) for item in failing),
+                    observed_at=_read_at(failing, standing=False),
                 )
             )
     return items

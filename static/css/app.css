@@ -998,7 +998,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .machine-telemetry .section-head { margin-bottom: var(--space-6); }
 .machine-telemetry .section-head h2 { margin-bottom: var(--space-1); }
 .machine-telemetry .section-head p { margin: 0; font-size: var(--text-xs); }
-.machine-telemetry .section-head time { font-size: var(--text-2xs); white-space: nowrap; }
+.machine-telemetry .section-head > .muted { font-size: var(--text-2xs); }
 .machine-telemetry-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -2007,6 +2007,9 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
 .attention-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--text-xs); }
 .attention-meta > a { overflow-wrap: anywhere; }
+/* How old the reading behind it is: quiet while current, in the attention tone once out of date. */
+.reading-age { white-space: nowrap; }
+.reading-age.is-stale { color: var(--tone-caution-ink); }
 .attention-title { min-width: 0; max-width: 100%; font-size: var(--text-md); font-weight: 650; color: var(--ink); letter-spacing: -.005em; overflow-wrap: anywhere; }
 /* The card's face under its title: what it means, then what to do, then the
    reason it cannot be done from here, then what can be pressed. */
@@ -2052,8 +2055,6 @@ a.kpi:hover { background: var(--surface-2); }
 .action-items-card { padding-top: var(--space-5); }
 /* The open problems about the thing a page shows: the queue's cards under one count. */
 .problems-here { padding-block: var(--space-5); margin-bottom: var(--space-6); border-left: 3px solid var(--tone-ink); }
-.problems-here .attention-row { padding-block: 0; }
-.problems-here .attention-row + .attention-row { padding-top: var(--space-5); margin-top: var(--space-5); }
 .problems-here .attention-detail { margin-top: var(--space-2); }
 /* A problem that is not urgent: one unframed line, its button beside it. */
 .problem-lines { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-3); }
@@ -2063,13 +2064,10 @@ a.kpi:hover { background: var(--surface-2); }
 .problem-line > p > strong { color: var(--ink); }
 .problem-line > .attention-actions { margin: 0; }
 .problem-line > :is(.resolution-workflow, .resolution-fold) { flex-basis: 100%; margin-top: 0; }
-/* The short queue on the dashboard, under the greeting. */
-/* Dashboard Needs you: the heading and its items share one line while they fit. */
-.dash-needs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-6); margin-bottom: var(--stack-gap); }
-.dash-needs > .section-head { flex: 0 0 auto; margin: 0; padding: 0; border: 0; }
-.dash-needs > .attention-list { flex: 1 1 auto; min-width: 0; }
-.dash-needs .attention-row { align-items: center; padding-block: 0; }
-.dash-needs .attention-body { min-width: 0; }
+/* The short queue on the dashboard, under the greeting: a card like any other. */
+.dash-needs { margin-bottom: var(--stack-gap); }
+/* At a glance a card's meaning is one line; the rest is on the page its title opens. */
+.attention-glance .attention-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Steps or checks side by side, each an icon, a title and a sentence. Read
    down each column, as a list is, so however many there are the columns end
    within a step of each other: never a row of five and a row of two. */

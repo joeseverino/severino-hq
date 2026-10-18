@@ -13,7 +13,7 @@
         {% if machine.telemetry.summary %}<p class="muted">{{ machine.telemetry.summary }}</p>{% endif %}
       </div>
       {% if machine.telemetry_observed_at %}
-        <time class="muted" title="{{ machine.telemetry_observed_at }}">Read {{ machine.telemetry_observed_at|ago }}</time>
+        <span class="muted">{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}</span>
       {% endif %}
     </div>
     <dl class="machine-telemetry-metrics">

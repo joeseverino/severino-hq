@@ -46,7 +46,7 @@ never shows two statuses, so two can never disagree.
   <div class="control-metric" data-record-status="{{ status.state }}">
     <span class="control-label">State</span>
     <strong class="control-{{ status.tone }}">{{ status.label }}</strong>
-    <span>{% if status.since %}Since {{ status.since|when }}. {% endif %}{{ status.detail }}{% if status.read_at %} Last read {{ status.read_at|ago }}.{% endif %}{% for line in controller.lines %} {{ line }}{% endfor %}</span>
+    <span>{% if status.since %}Since {{ status.since|when }}. {% endif %}{{ status.detail }}{% if status.read_at %} {% include "partials/_reading_age.html" with at=status.read_at only %}{% endif %}{% for line in controller.lines %} {{ line }}{% endfor %}</span>
   </div>
 </div>
 {% endif %}

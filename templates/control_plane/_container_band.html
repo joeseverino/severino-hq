@@ -57,7 +57,7 @@ of its repository instead: the production deploy, and the repository's alerts.
           <strong>Unknown</strong>
           <small>{{ standing.update_note }}</small>
         {% endif %}
-        {% if standing.read_at %}<small>Checked {{ standing.read_at|ago_short }}</small>{% endif %}
+        {% if standing.read_at %}<small>{% include "partials/_reading_age.html" with at=standing.read_at only %}</small>{% endif %}
       </div>
     </div>
     <div class="band-fact{% if standing.serious %} tone-serious{% elif standing.state == 'vulnerable' %} tone-attention{% elif standing.source or standing.checked %} tone-good{% endif %}">

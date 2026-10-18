@@ -42,7 +42,7 @@
     {% csrf_token %}
     <input type="hidden" name="address" value="{{ address }}">
     <button class="btn" type="submit">{% if reading %}Look up again{% else %}Look up{% endif %}</button>
-    {% if reading.observed_at %}<span class="conn-row-note">Read {{ reading.observed_at|when:"ago" }}</span>{% endif %}
+    {% if reading.observed_at %}<span class="conn-row-note">{% include "partials/_reading_age.html" with at=reading.observed_at only %}</span>{% endif %}
   </form>
 {% endif %}
 </div>

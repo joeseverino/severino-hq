@@ -326,6 +326,8 @@ class Policy:
     # Access rules in the older ``acls`` form, which a policy may still use
     # instead of grants or beside them.
     acls: tuple[dict, ...] = ()
+    # When the policy was read; None for the empty one nothing swept.
+    observed_at: datetime | None = None
 
     @property
     def facts(self) -> tuple[tuple[str, str], ...]:
@@ -467,6 +469,7 @@ def policy() -> Policy:
                 services=tuple(record.get("services") or ()),
                 app_connectors=tuple(record.get("app_connectors") or ()),
                 ssh_rules=tuple(record.get("ssh_rules") or ()),
+                observed_at=snapshot.observed_at,
             )
     return Policy()
 

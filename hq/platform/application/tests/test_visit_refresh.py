@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, ReadRequest
+from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 
 from .. import visit_refresh
 from ..asks import Standing, read_standing, watched
@@ -122,6 +123,13 @@ class VisitRefreshTests(TestCase):
 
         self.assertEqual(sorted(result["requested"]), sorted(kinds))
         self.assertEqual(len(rung), 1)
+
+    def test_opening_the_dashboard_asks_again_for_what_its_queue_says_github_holds(self):
+        store(REPOSITORY_KIND, age=OLD)
+
+        result = request_visit_refresh("page", "dashboard", principal=cli_principal())
+
+        self.assertEqual(result["requested"], [REPOSITORY_KIND])
 
     def test_only_what_the_page_is_made_of_is_asked_for(self):
         for kind in (FAST, "npm.proxy_host", "tailscale.device"):
@@ -312,6 +320,9 @@ class SubjectTests(TestCase):
 
     def test_a_machine_nobody_reported_is_no_page(self):
         self.assertIsNone(visit_refresh.reads_of("machine", "no-such-machine"))
+
+    def test_a_page_hq_does_not_name_is_no_page(self):
+        self.assertIsNone(visit_refresh.reads_of("page", "no-such-page"))
 
     def test_a_hostname_with_nothing_declared_has_a_page_and_nothing_to_read(self):
         self.assertEqual(visit_refresh.reads_of("service", "example.test"), Reads())

@@ -33,6 +33,7 @@ from hq.platform.application.request_path import request_path
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import ListRow
+from hq.platform.application.visit_refresh import worth_asking
 
 # A queue of this many or fewer is read on the dashboard itself, each card
 # with its button; a longer one is a count and a link to its page.
@@ -172,6 +173,9 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             # line that arrives after it is a line that visibly changes.
             request_connection=request_path(self.request).connection,
             controller=controller_standing(),
+            # What the queue is drawn from, asked for again once the page is
+            # showing, when any of it is due.
+            ask_readings=worth_asking("page", "dashboard"),
             # The rows the controller last read: reading them asks no one, so
             # the card is drawn with the page.
             recent_contacts=[

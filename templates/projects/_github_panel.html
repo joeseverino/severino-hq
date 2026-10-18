@@ -4,7 +4,7 @@ what is at the head, whether it passes, what production runs, what is open.
 The page reads a stored reading; nothing here calls GitHub.
 {% endcomment %}
 <section class="github-panel" aria-labelledby="github-heading">
-  <h2 id="github-heading">GitHub <span class="heading-aside"><a class="external-link" href="{{ repo.url }}" rel="noopener">{{ repo.name }}</a>{% if repo.private %} · private{% endif %}{% if repo.observed_at %} · read {{ repo.observed_at|ago_short }}{% endif %}</span></h2>
+  <h2 id="github-heading">GitHub <span class="heading-aside"><a class="external-link" href="{{ repo.url }}" rel="noopener">{{ repo.name }}</a>{% if repo.private %} · private{% endif %} · {% include "partials/_reading_age.html" with reading=repo.reading only %}</span></h2>
   <div class="fact-band">
     <div class="band-fact">
       <span class="band-icon">{% include "partials/_icon.html" with name="commit" %}</span>

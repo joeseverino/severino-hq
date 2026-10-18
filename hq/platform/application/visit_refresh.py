@@ -37,6 +37,7 @@ from typing import Any
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.platform.core.audit import operation_context
 
 from .asks import Standing, read_standing, read_status_url
@@ -106,9 +107,14 @@ def _service_reads(hostname: str) -> Reads | None:
     return Reads(tuple(sorted({claim.kind for facet in service.facets for claim in facet.claims})))
 
 
+# A page about no one thing, by name, and what it is assembled from: the
+# dashboard's queue says what GitHub holds, so opening it asks GitHub again.
+PAGES: dict[str, Reads] = {"dashboard": Reads((REPOSITORY_KIND,))}
+
 SUBJECTS: dict[str, Callable[[str], Reads | None]] = {
     "machine": _machine_reads,
     "service": _service_reads,
+    "page": PAGES.get,
 }
 
 
@@ -136,6 +142,14 @@ def _due(kinds: tuple[str, ...], now: datetime) -> list[str]:
         # One no sweep has stored cannot be answered, so it is not asked for.
         if kind in attempted and kind not in asked and askable(kind) and freshness(PAGE_VISIT, attempted[kind], now).due
     ]
+
+
+def worth_asking(subject: str, name: str) -> bool:
+    """Whether opening the page would ask for anything now. A page that
+    renders its ask only then posts nothing on a visit that would read nothing."""
+
+    reads = reads_of(subject, name)
+    return bool(reads and _due(reads.kinds, timezone.now()))
 
 
 def _watching(kinds: tuple[str, ...]) -> tuple[list[str], datetime | None]:

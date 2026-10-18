@@ -42,7 +42,7 @@ they share a row; either alone takes it.
             {% elif release.behind is False %}Production runs its head, <code>{{ release.head|slice:":7" }}</code>
             {% else %}<span class="muted">Its head or its production deploy has not been read.</span>{% endif %}
             {% if release.runs_deployed is False %}<br><strong>This process is not the commit production last deployed.</strong>{% endif %}
-            <br>{% if repository.url|web_url %}<a class="external-link" href="{{ repository.url|web_url }}" rel="noopener">{{ repository.name }}</a>{% else %}{{ repository.name }}{% endif %}{% if repository.observed_at %} <span class="muted">· read {{ repository.observed_at|when:"ago" }}</span>{% endif %}
+            <br>{% if repository.url|web_url %}<a class="external-link" href="{{ repository.url|web_url }}" rel="noopener">{{ repository.name }}</a>{% else %}{{ repository.name }}{% endif %} <span class="muted">· {% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
           </dd>
         {% endwith %}{% endif %}
         {% if release.image %}
@@ -101,7 +101,7 @@ they share a row; either alone takes it.
 </div>
 
 <section aria-labelledby="hq-work-heading">
-  <h2 id="hq-work-heading">Jobs{% if work.jobs and work.read_at and not work.unread %} <span class="heading-aside">read {{ work.read_at|when:"ago" }}</span>{% endif %}</h2>
+  <h2 id="hq-work-heading">Jobs{% if work.jobs and work.read_at and not work.unread %} <span class="heading-aside">{% include "partials/_reading_age.html" with at=work.read_at only %}</span>{% endif %}</h2>
   {% if work.unread %}
     <p class="muted">{{ work.unread }}</p>
   {% elif work.jobs %}

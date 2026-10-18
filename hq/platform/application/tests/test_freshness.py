@@ -23,6 +23,9 @@ from ..freshness import (
 from ..report_testing import report_connections
 from ..security import cli_principal
 
+# A kind the controller sweeps, read through a provider's API.
+SWEPT = "adguard.rewrite"
+
 
 class FreshnessTests(TestCase):
     def test_states_follow_the_kinds_cadence(self):
@@ -53,9 +56,9 @@ class FreshnessTests(TestCase):
         self.assertEqual(stale_after("registry.digest"), timedelta(days=2))
 
     @override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=3600)
-    def test_a_swept_kind_is_stale_after_the_slowest_sweep(self):
-        self.assertEqual(stale_after("host.perimeter"), timedelta(hours=1))
-        self.assertEqual(stale_after(), timedelta(hours=1))
+    def test_a_swept_kind_is_stale_once_it_misses_a_whole_sweep(self):
+        self.assertEqual(stale_after("host.perimeter"), timedelta(hours=2))
+        self.assertEqual(stale_after(), timedelta(hours=2))
 
     def test_the_join_engine_uses_the_same_rule(self):
         from .. import facts
@@ -127,4 +130,67 @@ class OldestReadingTests(TestCase):
         response = self.client.get(reverse("control_plane:connections"))
 
         self.assertContains(response, 'Oldest reading <a href="#')
-        self.assertContains(response, ">example-old</a>, 5")
+        self.assertContains(response, ">example-old</a> · ")
+        self.assertContains(response, 'data-reading-age="read"')
+
+
+class OneStaleLineTests(TestCase):
+    """A page saying a swept kind is out of date and the finding saying it
+    has not been read draw the line in the same place."""
+
+    def claimed(self, age: timedelta) -> bool:
+        from ..controller_findings import _kind_never_swept
+        from ..finding_model import FindingEstate
+        from ..topology_model import Topology
+
+        now = timezone.now()
+        estate = FindingEstate(
+            topology=Topology(nodes=(), edges=()),
+            now=now,
+            observed={},
+            latest_by_kind={SWEPT: now - age},
+            declared_kinds=frozenset({SWEPT}),
+            declared_counts={},
+            governed={},
+            controllers_by_kind={},
+        )
+        return bool(_kind_never_swept(estate))
+
+    def test_a_kind_is_claimed_unread_exactly_when_its_reading_is_out_of_date(self):
+        line = stale_after(SWEPT)
+        for age in (line - timedelta(minutes=1), line + timedelta(minutes=1)):
+            with self.subTest(age=age):
+                self.assertEqual(self.claimed(age), freshness(SWEPT, timezone.now() - age).stale)
+        self.assertTrue(self.claimed(line + timedelta(minutes=1)))
+
+
+class ReadingAgeTests(TestCase):
+    """One primitive says how old a reading is, in one wording."""
+
+    def render(self, **context) -> str:
+        from django.template.loader import render_to_string
+
+        return render_to_string("partials/_reading_age.html", context)
+
+    def test_a_current_reading_gives_its_age(self):
+        html = self.render(reading=freshness(SWEPT, timezone.now() - timedelta(minutes=5)))
+
+        self.assertIn(f'data-reading-age="{CURRENT}"', html)
+        self.assertIn("<time", html)
+
+    def test_an_out_of_date_reading_says_so_beside_its_age(self):
+        reading = freshness(SWEPT, timezone.now() - stale_after(SWEPT) - timedelta(hours=1))
+
+        html = self.render(reading=reading)
+
+        self.assertIn(f'data-reading-age="{STALE}"', html)
+        self.assertIn(reading.label.lower(), html)
+
+    def test_no_reading_says_there_is_none(self):
+        html = self.render(reading=freshness(SWEPT, None))
+
+        self.assertIn(f'data-reading-age="{NEVER}"', html)
+        self.assertNotIn("<time", html)
+
+    def test_a_bare_moment_gives_its_age(self):
+        self.assertIn("<time", self.render(at=timezone.now()))

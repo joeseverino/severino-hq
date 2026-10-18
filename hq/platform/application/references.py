@@ -739,6 +739,8 @@ def dangling(
                     url=row.get_absolute_url(),
                     key=f"reference:{field.model._meta.label_lower}:{row.pk}:{field.attname}",
                     family="Links to nothing",
+                    # A row's own link, checked against every record and reading at once.
+                    observed_at=None,
                 )
             )
     return tuple(found)

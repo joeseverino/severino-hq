@@ -5,7 +5,7 @@
   <span><strong>{{ connections.connection_count|counted:"connection" }}</strong></span>
   {% for count, state in connections.attention_states %}<span class="is-attention"><strong>{{ count }} {{ state }}</strong></span>{% endfor %}
   {% if connections.all_custodied %}<span>No secrets stored in HQ</span>{% endif %}
-  {% if connections.oldest %}<span>Oldest reading <a href="#{{ connections.oldest.label|connection_anchor }}">{{ connections.oldest.label }}</a>, {{ connections.oldest.observed_at|ago }}</span>{% endif %}
+  {% if connections.oldest %}<span>Oldest reading <a href="#{{ connections.oldest.label|connection_anchor }}">{{ connections.oldest.label }}</a> · {% include "partials/_reading_age.html" with at=connections.oldest.observed_at only %}</span>{% endif %}
   {% if connections.reading_everything_since %}<span>Read all asked {{ connections.reading_everything_since|ago }}, waiting for the controller</span>{% endif %}
 </div>
 
@@ -121,10 +121,10 @@ part's heading shows only when there is more than one.
               together off the edge of a phone.
               {% endcomment %}
               <span class="connection-standing">
-                <span class="connection-state connection-state-{{ row.lifecycle }}"{% if connection.instance.observed_at %} title="Read {{ connection.instance.observed_at|ago }}"{% endif %}>{{ row.state_label }}</span>
+                <span class="connection-state connection-state-{{ row.lifecycle }}">{{ row.state_label }}</span>
                 {% if row.read_requested_at %}<span class="muted narrow-more">Read asked {{ row.read_requested_at|ago }}</span>
                 {% elif row.state_line %}<span class="connection-authority connection-authority-{{ connection.authority }} {% if row.state_line_quiet %}row-more{% else %}narrow-more{% endif %}">{{ row.state_line }}</span>
-                {% elif not row.sight.sights and connection.instance.observed_at %}<span class="muted narrow-more">Read {{ connection.instance.observed_at|ago }}</span>{% endif %}
+                {% elif not row.sight.sights and connection.instance.observed_at %}<span class="muted narrow-more">{% include "partials/_reading_age.html" with at=connection.instance.observed_at only %}</span>{% endif %}
                 {% if row.problems %}<a class="connection-problems" href="{{ row.problems_url }}">{{ row.problems|counted:"problem" }}</a>{% endif %}
               </span>
             </td>

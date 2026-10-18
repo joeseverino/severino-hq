@@ -1,0 +1,14 @@
+{% comment %}
+A reading and its age, in the one wording every page uses.
+
+  {% include "partials/_reading_age.html" with reading=repo.reading only %}
+  {% include "partials/_reading_age.html" with at=standing.read_at only %}
+
+`reading` is an `application.freshness.Freshness`: an out-of-date one says so
+beside its age. `at` is the moment alone, where the page knows when it was read
+and not how often it should be. "Last read" either way, because a page shows
+the last reading there is, and with neither it says there is none.
+{% endcomment %}
+{% if reading %}<span class="reading-age{% if reading.stale %} is-stale{% endif %}" data-reading-age="{{ reading.state }}">{% if reading.observed_at %}Last read {{ reading.observed_at|when:"ago" }}{% if reading.stale %} · {{ reading.label|lower }}{% endif %}{% else %}{{ reading.label }}{% endif %}</span>
+{% elif at %}<span class="reading-age" data-reading-age="read">Last read {{ at|when:"ago" }}</span>
+{% else %}<span class="reading-age" data-reading-age="never">No reading yet</span>{% endif %}

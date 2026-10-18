@@ -8,7 +8,7 @@ default branch failing, a serious alert, an admission about to lapse.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -16,12 +16,15 @@ from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 
 from .containers import SERIOUS
 from .derivations import reached, whole
+from .entity_links import web_url
 from .expiry import days_until
+from .freshness import Freshness, freshness
 from .github_public import github_repository
 from .item_help import cannot_help, commands
 from .projection import read_once
 from .timestamps import moment
 from .ui import Insight, counted
+from .workflow_contracts import ActionLink
 
 # An admission artifact that lapses stops the composition admitting its
 # extension, and nothing else says so until a deploy fails.
@@ -30,6 +33,8 @@ ARTIFACT_SERIOUS_DAYS = 3
 # A deploy held for approval is fine for a while; hours later it is a
 # scheduled run about to be cancelled.
 WAITING_SERIOUS_AFTER = timedelta(hours=1)
+# A run's conclusions that fail it, as the reading's checks count them.
+FAILED = frozenset({"failure", "timed_out", "action_required", "startup_failure"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +58,32 @@ class Repository:
         return declared.get_default(call_default_factory=True)
 
     @property
+    def reading(self) -> Freshness:
+        return freshness(REPOSITORY_KIND, self.observed_at)
+
+    @property
     def short(self) -> str:
         return self.name.split("/", 1)[-1]
 
     @property
     def failing(self) -> bool:
         return self.record.get("checks", {}).get("state") == "failure"
+
+    @property
+    def failing_runs(self) -> tuple[ActionLink, ...]:
+        """A link to each workflow run that failed on the default branch's head,
+        as far as the reading holds them: its newest run of each workflow."""
+
+        sha = (self.head or {}).get("sha", "")
+        found = []
+        for run in self.record.get("runs") or ():
+            url = web_url(run.get("url"))
+            if sha and url and run.get("sha") == sha and run.get("conclusion") in FAILED:
+                name = run.get("name") or "Workflow"
+                found.append(
+                    ActionLink("failing-run", f"{name} run", "read", url, reason=f"{name} failed on this commit.")
+                )
+        return tuple(found)
 
     @property
     def serious_alerts(self) -> int:
@@ -175,62 +200,99 @@ def repository_for(url: str) -> Repository | None:
 def attention() -> tuple[Insight, ...]:
     items: list[Insight] = []
     for repo in sorted(repositories().values(), key=lambda item: item.name):
-        items.extend(_waiting(repo))
-        if repo.failing:
-            failing = repo.record["checks"].get("failing") or []
-            items.append(
-                Insight(
-                    status="serious",
-                    eyebrow="GitHub",
-                    family="Failing workflows",
-                    key=f"github-failing:{repo.name}",
-                    title=f"{repo.short} is failing on {repo.default_branch}",
-                    value=str(len(failing) or 1),
-                    body=", ".join(failing[:4]) + (f" and {len(failing) - 4} more" if len(failing) > 4 else ""),
-                    action="Open checks",
-                    url=f"{repo.url}/commit/{repo.head.get('sha', '')}",
-                    workflow=_failing_help(repo),
-                )
-            )
-        if repo.production_verified is False:
-            failed = [step["name"] for step in repo.production["verified"] if step.get("conclusion") != "success"]
-            items.append(
-                Insight(
-                    status="serious",
-                    eyebrow="GitHub",
-                    family="Unverified commits",
-                    key=f"github-unverified:{repo.name}",
-                    title=f"{repo.short}'s last deploy did not pass its own verification",
-                    value=str(len(failed)),
-                    body=", ".join(failed),
-                    action="Open the deploy",
-                    url=str(repo.production.get("url") or repo.url),
-                    workflow=cannot_help(
-                        f"github-unverified:{repo.name}",
-                        "HQ sees which step failed, not why. The cause is in the deploy's log, "
-                        "and the fix in the repository, which HQ never writes to.",
-                    ),
-                )
-            )
-        if repo.serious_alerts:
-            items.append(
-                Insight(
-                    status="serious" if _has(repo, "critical") else "attention",
-                    eyebrow="GitHub",
-                    family="Security alerts",
-                    key=f"github-alerts:{repo.name}",
-                    title=f"{counted(repo.serious_alerts, 'serious alert', 'serious alerts')} in {repo.short}",
-                    value=str(repo.serious_alerts),
-                    body="High or critical, open.",
-                    action="Open security",
-                    url=f"{repo.url}/security",
-                    workflow=cannot_help(
-                        f"github-alerts:{repo.name}",
-                        "An alert closes when the code is upgraded. HQ never writes to the repository.",
-                    ),
-                )
-            )
-        items.extend(
+        found = [*_waiting(repo), *_failing(repo), *_unverified(repo), *_alerts(repo), *_lapsing(repo)]
+        items.extend(_as_read(repo, item, was) for item, was in found)
+    return tuple(items)
+
+
+def _as_read(repo: Repository, item: Insight, was: str) -> Insight:
+    """``item`` as of the reading it is drawn from.
+
+    Once that reading is out of date the item no longer says the condition
+    holds: it says what was read (``was``, in the past tense) and only as a
+    notice, so an old reading never stands in the queue as a current fact.
+    """
+
+    if not repo.reading.stale:
+        return item
+    # Not "neutral": the queue leaves those out, and an old reading still
+    # stands in it, as what was last known.
+    return replace(item, title=was, status="attention", notice=True)
+
+
+def _failing(repo: Repository) -> list[tuple[Insight, str]]:
+    if not repo.failing:
+        return []
+    failing = repo.record["checks"].get("failing") or []
+    runs = repo.failing_runs
+    one = runs[0] if len(runs) == 1 else None
+    item = Insight(
+        status="serious",
+        eyebrow="GitHub",
+        family="Failing workflows",
+        key=f"github-failing:{repo.name}",
+        title=f"{repo.short} is failing on {repo.default_branch}",
+        value=str(len(failing) or 1),
+        body=", ".join(failing[:4]) + (f" and {len(failing) - 4} more" if len(failing) > 4 else ""),
+        action="Open the failing run" if one else "Open checks",
+        url=one.url if one else f"{repo.url}/commit/{repo.head.get('sha', '')}",
+        workflow=_failing_help(repo, runs),
+        observed_at=repo.observed_at,
+        links=() if one else runs,
+    )
+    return [(item, f"{repo.short} was failing on {repo.default_branch}")]
+
+
+def _unverified(repo: Repository) -> list[tuple[Insight, str]]:
+    if repo.production_verified is not False:
+        return []
+    failed = [step["name"] for step in repo.production["verified"] if step.get("conclusion") != "success"]
+    item = Insight(
+        status="serious",
+        eyebrow="GitHub",
+        family="Unverified commits",
+        key=f"github-unverified:{repo.name}",
+        title=f"{repo.short}'s last deploy did not pass its own verification",
+        value=str(len(failed)),
+        body=", ".join(failed),
+        action="Open the deploy",
+        url=web_url(repo.production.get("url")) or repo.url,
+        workflow=cannot_help(
+            f"github-unverified:{repo.name}",
+            "HQ sees which step failed, not why. The cause is in the deploy's log, "
+            "and the fix in the repository, which HQ never writes to.",
+        ),
+        observed_at=repo.observed_at,
+    )
+    return [(item, f"{repo.short}'s last deploy had not passed its own verification")]
+
+
+def _alerts(repo: Repository) -> list[tuple[Insight, str]]:
+    if not repo.serious_alerts:
+        return []
+    alerts = counted(repo.serious_alerts, "serious alert", "serious alerts")
+    item = Insight(
+        status="serious" if _has(repo, "critical") else "attention",
+        eyebrow="GitHub",
+        family="Security alerts",
+        key=f"github-alerts:{repo.name}",
+        title=f"{alerts} in {repo.short}",
+        value=str(repo.serious_alerts),
+        body="High or critical, open.",
+        action="Open security",
+        url=f"{repo.url}/security",
+        workflow=cannot_help(
+            f"github-alerts:{repo.name}",
+            "An alert closes when the code is upgraded. HQ never writes to the repository.",
+        ),
+        observed_at=repo.observed_at,
+    )
+    return [(item, f"{alerts} were open in {repo.short}")]
+
+
+def _lapsing(repo: Repository) -> list[tuple[Insight, str]]:
+    return [
+        (
             Insight(
                 status="serious" if artifact["days"] <= ARTIFACT_SERIOUS_DAYS else "attention",
                 eyebrow="GitHub",
@@ -246,19 +308,22 @@ def attention() -> tuple[Insight, ...]:
                     "The reading names the artifact but not the workflow that makes it, so HQ "
                     "cannot name the run to repeat.",
                 ),
-            )
-            for artifact in repo.expiring()
+                observed_at=repo.observed_at,
+            ),
+            f"{repo.short}'s admission was due to lapse in {artifact['days']} days",
         )
-    return tuple(items)
+        for artifact in repo.expiring()
+    ]
 
 
-def _failing_help(repo: Repository) -> Any:
-    """The command that lists the failing runs; the fix itself is a code change."""
+def _failing_help(repo: Repository, runs: tuple[ActionLink, ...]) -> Any:
+    """Why HQ cannot fix it, and, where the reading does not hold the failing
+    runs, the command that lists them."""
 
     key = f"github-failing:{repo.name}"
     reason = "HQ reads which checks fail, not their logs, and the fix is a change to the code or a workflow."
     sha = repo.head.get("sha", "")
-    if not sha:
+    if runs or not sha:
         return cannot_help(key, reason)
     return commands(
         key,
@@ -267,30 +332,31 @@ def _failing_help(repo: Repository) -> Any:
     )
 
 
-def _waiting(repo: Repository) -> list[Insight]:
+def _waiting(repo: Repository) -> list[tuple[Insight, str]]:
     items = []
     for run in repo.waiting or ():
         started = moment(run.get("created_at", ""))
         hours = max(0, whole(started, timedelta(hours=1))) if started else 0
         serious = bool(started) and reached(started + WAITING_SERIOUS_AFTER)
         where = ", ".join(run.get("environments") or ()) or "an environment"
-        items.append(
-            Insight(
-                status="serious" if serious else "attention",
-                eyebrow="GitHub",
-                family="Deployments awaiting approval",
-                key=f"github-waiting:{repo.name}:{run.get('id')}",
-                value=f"{hours}h",
-                title=f"{run.get('name') or 'A run'} waits for your approval to deploy to {where}",
-                body=f"{repo.short} · {run.get('sha', '')[:7]}",
-                action="Review deployment",
-                url=str(run.get("url") or repo.url),
-                workflow=cannot_help(
-                    f"github-waiting:{repo.name}:{run.get('id')}",
-                    "Only a required reviewer can approve a deployment, and HQ reads GitHub with read-only tokens.",
-                ),
-            )
+        name = run.get("name") or "A run"
+        item = Insight(
+            status="serious" if serious else "attention",
+            eyebrow="GitHub",
+            family="Deployments awaiting approval",
+            key=f"github-waiting:{repo.name}:{run.get('id')}",
+            value=f"{hours}h",
+            title=f"{name} waits for your approval to deploy to {where}",
+            body=f"{repo.short} · {run.get('sha', '')[:7]}",
+            action="Review deployment",
+            url=web_url(run.get("url")) or repo.url,
+            workflow=cannot_help(
+                f"github-waiting:{repo.name}:{run.get('id')}",
+                "Only a required reviewer can approve a deployment, and HQ reads GitHub with read-only tokens.",
+            ),
+            observed_at=repo.observed_at,
         )
+        items.append((item, f"{name} was waiting for your approval to deploy to {where}"))
     return items
 
 

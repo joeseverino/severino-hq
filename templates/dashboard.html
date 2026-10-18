@@ -33,6 +33,8 @@ here names one.
   </div>
 </header>
 
+{% if ask_readings %}{% include "partials/_visit_refresh.html" with subject="page" name="dashboard" %}{% endif %}
+
 {% comment %}
 Serious items show here as the queue's own cards, fix button included.
 Anything else, or more than NEEDS_YOU_IN_PLACE, is only the count above and in

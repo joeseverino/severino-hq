@@ -24,7 +24,7 @@ reaches closes the table, so nothing the name is made of goes unshown.
             {% if part.certificate_claim and part.certificate_claim.health.state != "healthy" %}<span class="pill control-{{ part.certificate_claim.health.state }}" title="Certificate {{ part.certificate_claim.resource_key }}">Certificate {{ part.certificate_claim.health.label|lower }}</span>{% endif %}
           </td>
           <td class="muted">{{ part.consequence }}</td>
-          <td>{% with source=part.read_from %}{% if source.declared %}<span class="muted">In HQ, not read</span>{% elif source %}{{ source.label }}{% if source.connection %} through {% entity "connection"|entity_of:source.connection %}{% endif %}{% if source.observed_at %} <span class="muted">· {{ source.observed_at|ago_short }}</span>{% endif %}{% elif not hop %}<span class="muted">In HQ, not on the path</span>{% endif %}{% endwith %}</td>
+          <td>{% with source=part.read_from %}{% if source.declared %}<span class="muted">In HQ, not read</span>{% elif source %}{{ source.label }}{% if source.connection %} through {% entity "connection"|entity_of:source.connection %}{% endif %}{% if source.observed_at %} <span class="muted">· {% include "partials/_reading_age.html" with at=source.observed_at only %}</span>{% endif %}{% elif not hop %}<span class="muted">In HQ, not on the path</span>{% endif %}{% endwith %}</td>
         </tr>
       {% endwith %}{% endfor %}
     </tbody>

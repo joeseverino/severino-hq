@@ -131,6 +131,17 @@ class PostureTests(TestCase):
         self.assertEqual((item.key, item.value, item.magnitude), ("github-posture:actions-pinned", "3", 3))
         self.assertTrue(item.body.startswith("alpha, beta, gamma."))
 
+    def test_an_item_is_as_old_as_the_oldest_repository_reading_it_names(self):
+        from hq.domains.control_plane.models import ProviderInventory
+
+        store(private=True, access=kept(token="write"), variables=[])
+        read = timezone.now() - timedelta(hours=2)
+        ProviderInventory.objects.filter(kind="github.repository").update(observed_at=read)
+
+        (item,) = attention()
+
+        self.assertEqual(item.observed_at, read)
+
     def test_the_build_queue_carries_both_the_repository_and_the_standard(self):
         store(private=True, checks={"state": "failure", "failing": ["lint"]}, access=kept(token="write"), variables=[])
 

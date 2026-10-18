@@ -91,12 +91,12 @@
                   {% for link in row.entities %}
                     <li>
                       <span class="topology-relation-value">{% entity link %}</span>
-                      <span class="topology-relation-source muted">{{ link.kind_label }}{% if row.observed_age %} · read {{ row.observed_at|when:"ago" }}{% endif %}</span>
+                      <span class="topology-relation-source muted">{{ link.kind_label }}{% if row.observed_age %} · {% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</span>
                     </li>
                   {% endfor %}
                 </ul>
               {% elif row.detail or row.observed_age %}
-                <p class="topology-relation-source muted">{{ row.detail }}{% if row.detail and row.observed_age %} · {% endif %}{% if row.observed_age %}read {{ row.observed_at|when:"ago" }}{% endif %}</p>
+                <p class="topology-relation-source muted">{{ row.detail }}{% if row.detail and row.observed_age %} · {% endif %}{% if row.observed_age %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</p>
               {% endif %}
             </li>
           {% endfor %}

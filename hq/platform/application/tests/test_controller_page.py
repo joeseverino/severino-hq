@@ -128,7 +128,7 @@ class ControllerPageTests(TestCase):
         self.assertNotContains(response, "<code>adguard.rewrite</code>")
         # A reading 26 hours old against a five-minute cadence is not "due": it is late, and says which.
         self.assertContains(response, "Overdue")
-        self.assertContains(response, "Internal DNS record was last read")
+        self.assertContains(response, "Internal DNS record · ")
 
     def test_the_page_needs_a_session_and_the_dashboard_links_to_it(self):
         self.assertEqual(self.client.get(reverse("control_plane:controller")).status_code, 302)

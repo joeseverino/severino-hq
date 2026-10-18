@@ -29,7 +29,7 @@ for it. Nothing here asks it anything.
     <div>
       <span class="band-label">Next read</span>
       {% if not standing.known %}<strong>After the first run</strong><small>Everything is read every {{ controller.sweep_every }} once it runs.</small>
-      {% elif controller.overdue %}<strong>Overdue</strong><small>{{ controller.oldest.label }} was last read {{ controller.oldest.attempted_at|when:"ago" }} and should be read every {{ controller.sweep_every }}.</small>
+      {% elif controller.overdue %}<strong>Overdue</strong><small>{{ controller.oldest.label }} · {% include "partials/_reading_age.html" with at=controller.oldest.attempted_at only %}. Everything is read every {{ controller.sweep_every }}.</small>
       {% elif controller.sweep_due %}<strong>Within a minute</strong><small>Everything is read every {{ controller.sweep_every }}.</small>
       {% elif controller.next_sweep_at %}<strong>In {{ controller.next_sweep_at|timeuntil }}</strong><small>Everything is read every {{ controller.sweep_every }}.</small>
       {% else %}<strong>After the first run</strong><small>Nothing has been read yet.</small>{% endif %}

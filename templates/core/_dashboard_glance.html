@@ -30,7 +30,7 @@ part, so only a panel that changed is replaced and an open one stays open.
           {% comment %}Said only when it is news: a current reading needs no age.{% endcomment %}
           {% if panel.refreshing or panel.outdated or panel.payload.refresh_failed %}
             <span class="glance-freshness">
-              {% if panel.refreshing %}Reading{% elif panel.payload.refresh_failed %}Reading failed{% elif panel.observed_at %}Out of date · as of {{ panel.observed_at|when:"ago" }}{% else %}Out of date{% endif %}
+              {% if panel.refreshing %}Reading{% elif panel.payload.refresh_failed %}Reading failed{% else %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
             </span>
           {% endif %}
         </summary>
@@ -38,9 +38,9 @@ part, so only a panel that changed is replaced and an open one stays open.
           <header class="glance-expanded-head">
             <strong>{{ panel.label }}</strong>
             {% if panel.payload.summary %}<span>{{ panel.payload.summary }}</span>{% endif %}
-            {% if panel.observed_at %}<time datetime="{{ panel.observed_at|date:'c' }}" title="{{ panel.observed_at }}">Read {{ panel.observed_at|ago }}</time>{% endif %}
+            {% if panel.observed_at %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
           </header>
-          {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-note">The last reading failed ({{ panel.payload.refresh_failed }}). This one is from {% if panel.observed_at %}{{ panel.observed_at|ago }}{% else %}before it{% endif %}.</p>{% endif %}
+          {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-note">The last reading failed ({{ panel.payload.refresh_failed }}). This is the one before it.</p>{% endif %}
           {% if panel.payload.metrics %}
             <dl class="glance-metrics">
               {% for metric in panel.readings %}

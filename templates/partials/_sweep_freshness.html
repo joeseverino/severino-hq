@@ -26,14 +26,14 @@ records. Each state is worded by `credential_sight.standing`: refused, unreadabl
 or out of date.
 {% endcomment %}
 {% if inventory %}
-  {% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %} · {% if snapshot.reachable %}read {{ snapshot.observed_at|ago_short }}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
+  {% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %} · {% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
   {% elif only_kind %}
     <p class="muted">
       {% for snapshot in inventory %}
         {% if snapshot.kind == only_kind %}
           {% if snapshot.reachable %}
-            {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %}, read
-            {{ snapshot.observed_at|ago }}
+            {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %} ·
+            {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}
           {% else %}
             {{ snapshot.state_label|lower }}{% if snapshot.error %} ({{ snapshot.error }}){% endif %}
           {% endif %}
@@ -55,7 +55,7 @@ or out of date.
             {% if snapshot.reachable %}
               <span class="sweep-count">{{ snapshot.count }}</span>
               <span class="sweep-age"{% if snapshot.refused_parts %} title="{{ snapshot.refused_parts|join:'; ' }}"{% endif %}>
-                {% if snapshot.state == "stale" or snapshot.state == "partial" %}{{ snapshot.state_label }} · {% endif %}{{ snapshot.observed_at|ago }}
+                {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% if snapshot.state == "stale" or snapshot.state == "partial" %} · {{ snapshot.state_label|lower }}{% endif %}
               </span>
             {% else %}
               <span class="sweep-count">{% empty_value %}</span>

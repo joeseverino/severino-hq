@@ -30,7 +30,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
       <div>
         <span class="band-label">Updates</span>
         <strong>{% if update_available %}{{ update_available|counted:"has an update,have an update" }}{% elif up_to_date == containers|length %}All up to date{% elif up_to_date %}{{ up_to_date }} of {{ containers|length }} up to date{% else %}Unknown{% endif %}</strong>
-        <small>{% if update_available and up_to_date %}{{ up_to_date }} up to date{% if update_unknown %}, {% endif %}{% endif %}{% if update_unknown and up_to_date != containers|length %}{{ update_unknown }} unknown{% endif %}{% if update_available or update_unknown %} · {% endif %}{% if read_at %}Checked {{ read_at|ago_short }}{% else %}Not checked yet{% endif %}</small>
+        <small>{% if update_available and up_to_date %}{{ up_to_date }} up to date{% if update_unknown %}, {% endif %}{% endif %}{% if update_unknown and up_to_date != containers|length %}{{ update_unknown }} unknown{% endif %}{% if update_available or update_unknown %} · {% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
       </div>
     </div>
     <div class="band-fact{% if pinned == containers|length %} tone-good{% endif %}">

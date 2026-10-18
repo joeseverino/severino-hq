@@ -11,6 +11,7 @@ do is three different things and each is shown as what it is:
 Each action renders once; the transport keeps the owner's complete workflow.
 """
 
+import hashlib
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
@@ -142,6 +143,21 @@ def _origin(item: dict[str, Any]) -> dict[str, Any]:
     return {"source": item.get("source", ""), "key": key, **(rule or {})}
 
 
+def _anchor(key: str) -> str:
+    """Where an item's card is on the queue page, stable while its key is."""
+
+    return "item-" + hashlib.sha256(key.encode()).hexdigest()[:12]
+
+
+def _own_page(subject: dict[str, Any], anchor: str) -> str:
+    """The page that shows an item's whole card: the thing it is about, or the
+    queue with its card in view."""
+
+    from .routes import reverse
+
+    return subject.get("url") or f"{reverse('action_items')}#{anchor}"
+
+
 def decision(item: dict[str, Any]) -> dict[str, Any]:
     actions = list(item.get("actions", ()))
     workflow = item.get("workflow")
@@ -157,9 +173,12 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
             steps.append({**step, "actions": remaining})
     subject = item.get("subject") or {}
     links, advice = _next_step(item, identities)
+    anchor = _anchor(str(item.get("key", "")))
     return {
         **item,
         "href": subject.get("url") or item.get("url") or "",
+        "anchor": anchor,
+        "page": _own_page(subject, anchor),
         "urgency": NOTICE if item.get("notice") else urgency(item.get("status", "")),
         "actions": _one_primary(actions + links),
         "facts": _facts(item.get("facts", ())),

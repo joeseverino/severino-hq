@@ -1,6 +1,7 @@
 """An insight must keep its next step when it reaches a human or machine queue."""
 
 import json
+import re
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -101,6 +102,53 @@ class DashboardQueueTests(TestCase):
         self.assertNotContains(response, "data-attention-item")
         self.assertEqual(response.context["action_queue_count"], len(calm))
         self.assertContains(response, 'href="/action-items/"')
+
+    def test_a_card_on_the_dashboard_opens_its_whole_card_and_shows_how_old_it_is(self):
+        from django.utils import timezone
+
+        from hq.platform.application.item_help import commands
+
+        urgent = Insight(
+            "serious",
+            "Review",
+            "A run is failing",
+            "1",
+            "Two checks fail.",
+            key="example-failing",
+            workflow=commands("example-failing", (("See the failing runs", "example-tool runs --failing"),)),
+            observed_at=timezone.now(),
+        )
+        entries = gather_attention((("example.utility", "Example", lambda: (urgent,)),))
+        with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries):
+            dashboard = self.client.get("/")
+            (page,) = re.findall(r'class="attention-title" href="([^"]+)"', dashboard.content.decode())
+            whole = self.client.get(page)
+
+        self.assertContains(dashboard, "data-reading-age")
+        self.assertNotContains(dashboard, "runs --failing")
+        path, _, anchor = page.partition("#")
+        self.assertEqual(path, "/action-items/")
+        self.assertContains(whole, f'id="{anchor}"')
+        self.assertContains(whole, "runs --failing")
+
+    def test_the_dashboard_asks_for_what_its_queue_is_drawn_from_only_when_it_is_due(self):
+        from datetime import timedelta
+
+        from django.urls import reverse
+        from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderInventory
+
+        ask = f'action="{reverse("control_plane:visit")}"'
+        for age, asks in ((timedelta(0), False), (timedelta(hours=3), True)):
+            with self.subTest(age=age):
+                ProviderInventory.objects.update_or_create(
+                    kind="github.repository",
+                    defaults={"records": [], "reachable": True, "observed_at": timezone.now() - age},
+                )
+                ProviderInventory.objects.filter(kind="github.repository").update(updated_at=timezone.now() - age)
+
+                self.assertEqual(ask in self.client.get("/").content.decode(), asks)
 
     def test_a_long_queue_stays_a_count_on_the_dashboard(self):
         items = [{**work_queue()[0], "key": f"example:{i}", "label": f"Decision {i}"} for i in range(4)]

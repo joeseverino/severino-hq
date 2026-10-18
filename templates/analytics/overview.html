@@ -17,7 +17,7 @@
     {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
 
     <p class="muted reading-note">
-      {{ totals.start|when:"day" }}{% if totals.start|date:"Ymd" != totals.end|date:"Ymd" %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %} · estimated from 1 in {{ totals.sample_interval }} visits{% endif %}{% if observed_at %} · read {{ observed_at|ago }}{% endif %}
+      {{ totals.start|when:"day" }}{% if totals.start|date:"Ymd" != totals.end|date:"Ymd" %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %} · estimated from 1 in {{ totals.sample_interval }} visits{% endif %}{% if observed_at %} · {% include "partials/_reading_age.html" with at=observed_at only %}{% endif %}
       {% if coverage.expected_days and not coverage.complete %}
         · {{ coverage.covered_days }} of {{ coverage.expected_days }} days read so far, the rest still loading
       {% endif %}

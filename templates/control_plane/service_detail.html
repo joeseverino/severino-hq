@@ -55,7 +55,7 @@ is open.
   {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
   <p class="muted">{% for gap in service.path.gaps %}{{ gap|capfirst }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
   {% for hop in service.path.observed %}
-    <p>{{ hop.phrase }}: {% entity hop.link %}{% if hop.source %} <span class="muted">· {{ hop.source.phrase }}{% if hop.source.observed_at %} · {{ hop.source.observed_at|ago }}{% endif %}</span>{% endif %}</p>
+    <p>{{ hop.phrase }}: {% entity hop.link %}{% if hop.source %} <span class="muted">· {{ hop.source.phrase }}{% if hop.source.observed_at %} · {% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}</span>{% endif %}</p>
   {% endfor %}
 {% endfor %}
 </section>
@@ -92,7 +92,7 @@ is open.
               {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
               {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
               {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
-              <dt>Seen</dt><dd>{{ facet.observed.observed_at|when:"ago" }}</dd>
+              <dt>Reading</dt><dd>{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}</dd>
             </dl>
             <span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Change what HQ expects &rarr;</a></span>
           </details>
@@ -167,7 +167,7 @@ is open.
             Only when it differs from the container's own name.
             {% endcomment %}
             {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack }}</code></dd>{% endif %}
-            <dt>Seen</dt><dd>{{ facet.observed.observed_at|when:"ago" }}</dd>
+            <dt>Reading</dt><dd>{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}</dd>
             {% comment %}
             The offer to take it on, only when taking it on would not mean
             building a second one. A container started by compose on the machine
