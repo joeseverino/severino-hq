@@ -1,4 +1,4 @@
-"""The fuzzing harness (fuzz/parsers.py) runs over fixed seeds on every suite.
+"""The fuzzing harness (tests/fuzz/parsers.py) runs over fixed seeds on every suite.
 
 Atheris is not installed here, so a stand-in provides the one call the harness
 makes of it with input: decoding the fuzzer's bytes as text.

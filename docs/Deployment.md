@@ -312,7 +312,7 @@ you sign in; the audit log records the sign-in.
 | :--- | :--- |
 | 502 from the proxy | HQ is not answering on `127.0.0.1:8000`: `journalctl -u severino-hq-web.service` |
 | the web unit stays `activating` | the environment has not rendered: `journalctl -u severino-hq-secrets.service` |
-| CSRF errors after sign-in | `DJANGO_CSRF_TRUSTED_ORIGINS` lacks the full origin, scheme and host |
+| CSRF errors on sign-in | `DJANGO_CSRF_TRUSTED_ORIGINS` lacks the full origin, scheme and host, or `DJANGO_BEHIND_TLS_PROXY` is not `1` |
 | Compose fails in "Resolve the host image" | CI for that commit failed, so the host image was never published |
 | an extension merged and nothing deployed | its admission did not dispatch Compose, or found nothing new: run Compose |
 | the Deploy step failed | the detail is in `/var/log/severino-hq/` on the host |

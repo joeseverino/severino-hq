@@ -139,8 +139,7 @@ class OneParserTests(SimpleTestCase):
     """A new ``datetime.fromisoformat`` outside the kept list is a new copy."""
 
     # Kept on purpose; each has an edge ``moment`` does not share. See the
-    # module docstring of ``application/timestamps.py`` and the PR that
-    # introduced it.
+    # module docstring of ``hq/platform/application/timestamps.py``.
     KEPT = {
         "hq/platform/application/timestamps.py",
         "hq/domains/docs_index/importer.py",

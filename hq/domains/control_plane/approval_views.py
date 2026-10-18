@@ -8,13 +8,6 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import AuthorizationError, safe_next, web_principal
 
 
-class ApprovalListView(View):
-    """Retired: redirects to the audit log's awaiting view."""
-
-    def get(self, request):
-        return redirect(f"{reverse('core:audit_list')}?awaiting=1")
-
-
 class ApprovalDecisionView(View):
     """Agree to a held change, or refuse it. Nothing else can.
 

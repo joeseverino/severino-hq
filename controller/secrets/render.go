@@ -321,9 +321,6 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 
 func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secretstatus.Status) (Result, error) {
 	config := r.Config
-	if err := tree.LegacyKeys(); err != nil {
-		return Result{}, err
-	}
 	registryBytes, err := os.ReadFile(config.RegistryPath)
 	if err != nil {
 		return Result{}, errConfig("the connection registry could not be read")

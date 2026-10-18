@@ -48,9 +48,11 @@ Reads cross the same boundary. `hq.platform.application.resources.ResourceSpec`
 is the registry of readable domains; query projections live in their
 application services and `hq/platform/application/read_models.py`. Adapters
 filter or render those results; they do not import models or rebuild result
-shapes. Projections declare their `select_related()` plans and then opt into
-Django's `FETCH_RAISE` mode, so an omitted relationship fails at the projection
-instead of becoming an N+1 query in production. An architecture test rejects
+shapes. Projections declare their `select_related()` plans and read through
+`projection.guarded`: under `DEBUG` and in tests Django's `FETCH_RAISE` mode
+makes an omitted relationship fail at the projection, and in production
+`FETCH_PEERS` fetches it once for the whole page instead of once per row. An
+architecture test rejects
 model access from the MCP service adapter.
 
 ## Projections
@@ -541,14 +543,8 @@ usual authorization, validation, audit, transaction, policy and retry
 boundaries. How readings become edges is in
 [Derived Facts](Derived-Facts.md#topology).
 
-**Retries.** Every capability whose effect is not `read` accepts an optional
-`idempotency_key` in its payload: `capability_schema`
-(`hq/platform/application/integration_specs.py`) derives that from the effect
-for the published schema and for unknown-field rejection, and
-`execute_capability` replays the first result for a repeated key. A command
-type declares the field only when its handler stores the key with what it
-queues. The API and the Command Center add durable transport replay on top
-([API](API.md#safe-retries)).
+**Retries.** How every write is made safe to retry, in every interface, is in
+[API](API.md#safe-retries).
 
 ## Source of truth
 
@@ -904,5 +900,7 @@ declaration carries HQ's reviews and deletions for it to apply (D1 Write, and
 the connection must manage). The web process holds no Cloudflare credential.
 The records are people's names, addresses and messages, so the reading is
 `withheld`: the generic readings resource counts them and lists none, and only
-the contacts capability reads them. The declaration is `withheld` too, because reviews carry the operator's notes. The records API, MCP, record pages, reports, search and the audit log show its status and never its contents, and the generic writer refuses it. DNS-01 uses its own least-privilege
-connection.
+the contacts capability reads them. The declaration is `withheld` too, because
+reviews carry the operator's notes. The records API, MCP, record pages,
+reports, search and the audit log show its status and never its contents, and
+the generic writer refuses it. DNS-01 uses its own least-privilege connection.

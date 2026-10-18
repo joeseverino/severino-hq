@@ -731,11 +731,6 @@ class SurfaceTests(TestCase):
         self.assertNotContains(settled, "Approve")
         self.assertContains(settled, "Rejected")
 
-    def test_the_old_address_still_lands_on_the_queue(self):
-        response = self.client.get(reverse("control_plane:approvals"))
-
-        self.assertRedirects(response, f"{reverse('core:audit_list')}?awaiting=1")
-
     def test_the_resource_page_says_something_is_waiting(self):
         page = self.client.get(reverse("control_plane:detail", kwargs={"key": POLICY_KEY}))
 

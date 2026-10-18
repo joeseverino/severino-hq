@@ -941,10 +941,6 @@ class SourceBoundaryTests(SimpleTestCase):
             self.assertNotRegex(sources[name], r"(?<![\w.])fetch\(", name)
 
 
-def _directives(policy):
-    return [directive.split()[0] for directive in policy.split(";") if directive.strip()]
-
-
 class CookiePrefixTests(SimpleTestCase):
     """A cookie no neighbouring host can have written, on a deployment whose browser will keep it."""
 

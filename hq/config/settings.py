@@ -528,15 +528,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ----- Auth --------------------------------------------------------------------
 
-# Argon2 hashes every new password. The rest verify a stored hash in an older
-# format, and Django re-hashes it with Argon2 at the next successful sign-in.
-PASSWORD_HASHERS = [
-    "hq.platform.core.hashers.Argon2PasswordHasher",
-    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
-    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
-    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
-    "django.contrib.auth.hashers.ScryptPasswordHasher",
-]
+PASSWORD_HASHERS = ["hq.platform.core.hashers.Argon2PasswordHasher"]
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

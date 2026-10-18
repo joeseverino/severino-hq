@@ -372,11 +372,9 @@ Fields that shape the Command Center form:
 - `execution_notes` describe the registered read, queue and provider boundary
   in the zero-network preview.
 
-Every capability whose effect is not `read` accepts an optional
-`idempotency_key` and replays the first result for a repeated key; a command
-type declares the field only when its handler keeps the key itself, and HQ
-fills it in when the caller sends none. In the browser it is generated and
-hidden.
+HQ gives every capability that writes an `idempotency_key`
+([API](API.md#safe-retries)); a command type declares the field only when its
+handler keeps the key itself.
 
 **Resources.** A `ResourceSpec` may expose a list handler with a
 `ResourceQuery` subclass, a detail handler with one stable identifier, a

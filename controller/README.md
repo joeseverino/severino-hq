@@ -52,16 +52,6 @@ Run `mise run controller` from the repository root (it runs
 Generated contracts and vendor slices must regenerate without a diff. The full
 repository gate is `mise run check`.
 
-The Go worker replaces the Python worker in this change. Captured parity runs
-are historical migration evidence; the Python worker, coercion helpers and
-parity harness are removed. There is no compatibility layer or permanent
-cross-language parity requirement.
-
-Deployment validation remains separate: a real image build and smoke check,
-approved read-only production constraint checks, and an approved edge shadow
-comparison of create/change/leave plans remain outstanding. Do not describe the
-local test results as deployment approval.
-
 ```mermaid
 flowchart LR
   W[Web / CLI / MCP / HTTP API] --> A[HQ application services]

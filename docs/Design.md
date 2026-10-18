@@ -370,11 +370,12 @@ fetched after it: a line that arrives late is a line that visibly changes.
 Beside it, whether the controller is still arriving: every reading on the
 page is the controller's, so one that has stopped leaves them all as they
 were. Nothing on the dashboard is fetched after it has rendered unless
-somebody opens it.
+somebody opens it, or a reading its queue is drawn from is due (below).
 
 **A page about one thing asks for that thing's readings.** A machine's page
 and a service's page include `partials/_visit_refresh.html`, naming which page
-they are. Once the page is showing, it posts that, and HQ works out which kinds
+they are; the dashboard includes it only when a reading its queue is drawn
+from is due (`visit_refresh.PAGES`). Once the page is showing, it posts that, and HQ works out which kinds
 the page is assembled from and asks the controller for those whose last attempt
 is older than their cadence (`hq/platform/application/freshness.py`). Opening a page never
 logs in to a machine: a kind whose reader opens a shell is left to the sweep.

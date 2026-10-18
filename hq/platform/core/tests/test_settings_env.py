@@ -6,7 +6,9 @@ exec'd management command) succeeds with no secrets in its inherited
 environment.
 """
 
+import ast
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -190,3 +192,48 @@ class EnvIntSourceTests(SimpleTestCase):
         source = (REPO_ROOT / "hq" / "config" / "settings.py").read_text(encoding="utf-8")
         self.assertNotIn("int(os.environ", source)
         self.assertNotIn("int(os.getenv", source)
+
+
+ENV_READERS = {"env_bool", "env_int", "env_list", "env_secret", "get", "getenv"}
+
+# Read by settings, and deliberately not the operator's to set in the app env.
+NOT_DEPLOYMENT_SETTINGS = {
+    "SEVERINO_APP_ENV_PATH",  # names the env file itself
+    "SEVERINO_HQ_SOURCE",  # stamped into the image by its build
+    "SEVERINO_HQ_REVISION",
+    "SEVERINO_TEST_DATABASE_PATH",  # the suite's
+    "SEVERINO_DEBUG_TOOLBAR",  # development only, refused with DEBUG off
+    "SEVERINO_DEBUG_TOOLBAR_IPS",
+    "DJANGO_WHITENOISE_AUTOREFRESH",
+    "DJANGO_TEMPLATE_CACHE",
+}
+
+
+def settings_env_names() -> set[str]:
+    """Every variable settings.py reads by a literal name."""
+
+    tree = ast.parse((REPO_ROOT / "hq" / "config" / "settings.py").read_text(encoding="utf-8"))
+    names = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        func = node.func
+        reader = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+        first = node.args[0]
+        if reader in ENV_READERS and isinstance(first, ast.Constant) and str(first.value).isupper():
+            names.add(first.value)
+    return names
+
+
+@tag("source")
+class EnvExampleTests(SimpleTestCase):
+    """.env.example is where an operator learns what a deployment can set."""
+
+    def test_every_deployment_setting_is_documented(self):
+        example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+        documented = set(re.findall(r"^#? ?([A-Z][A-Z0-9_]*)=", example, re.MULTILINE))
+        read = settings_env_names()
+
+        self.assertIn("DJANGO_SECRET_KEY", read)
+        self.assertEqual(read - NOT_DEPLOYMENT_SETTINGS - documented, set())
+        self.assertEqual(NOT_DEPLOYMENT_SETTINGS - read, set(), "an exemption names nothing settings read")

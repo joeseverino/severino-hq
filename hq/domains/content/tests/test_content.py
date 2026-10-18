@@ -292,7 +292,7 @@ class ContentPageTests(TestCase):
             doc_id="writeup-example",
             title="Example writeup",
             doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-            obsidian_path="05 Writeups/example-writeup/index.md",
+            obsidian_path="example/example-writeup/index.md",
         )
         runbook = DocumentationRecord.objects.create(doc_id="rb-example-publish", title="Publish an example")
         item.related_documentation.add(note, runbook)
@@ -300,7 +300,7 @@ class ContentPageTests(TestCase):
         response = self.client.get(item.get_absolute_url())
 
         self.assertContains(response, "<h3>Source document</h3>")
-        self.assertContains(response, 'title="writeup-example">05 Writeups/example-writeup/index.md</a>')
+        self.assertContains(response, 'title="writeup-example">example/example-writeup/index.md</a>')
         self.assertContains(response, 'title="rb-example-publish">Publish an example</a>')
         self.assertNotContains(response, "writeup-example ·")
 

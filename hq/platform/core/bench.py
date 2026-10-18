@@ -212,7 +212,7 @@ def _documentation(scale: float, today: date, projects, assets) -> list[Document
                 environment=environments[index % len(environments)],
                 status=statuses[doc_type][index % len(statuses[doc_type])],
                 sensitivity=sensitivities[index % len(sensitivities)],
-                obsidian_path=f"03 Runbooks/Example runbook {index}.md",
+                obsidian_path=f"example/Example runbook {index}.md",
                 last_reviewed=today - timedelta(days=index % 400),
             )
             for index in range(_count(scale, 150))

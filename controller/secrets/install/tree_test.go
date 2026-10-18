@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 )
@@ -475,28 +474,6 @@ func TestRenameInstallReplacesTheInodeOnlyWhenTheFileDiffers(t *testing.T) {
 	os.MkdirAll(filepath.Join(path, "nested"), 0o700)
 	if !install("five", nil) || read(t, path) != "five" {
 		t.Fatal("a directory at the name was kept")
-	}
-}
-
-func TestLegacyPrivateKeysStopTheRefresh(t *testing.T) {
-	tree := open(t)
-	legacy := filepath.Join(tree.Layout.SecretDir, SSHDirName)
-	if err := tree.LegacyKeys(); err != nil {
-		t.Fatalf("no legacy directory was refused: %v", err)
-	}
-	os.MkdirAll(filepath.Join(legacy, "nested"), 0o700)
-	// Public halves alone do not stop it.
-	os.WriteFile(filepath.Join(legacy, "edge.pub"), []byte("ssh-ed25519 AAAA example\n"), 0o644)
-	if err := tree.LegacyKeys(); err != nil {
-		t.Fatalf("public halves alone were refused: %v", err)
-	}
-	os.WriteFile(filepath.Join(legacy, "nested", "edge"), []byte("-----BEGIN OPENSSH PRIVATE KEY-----\nexample\n"), 0o600)
-	err := tree.LegacyKeys()
-	if !errors.Is(err, ErrHost) || !strings.Contains(err.Error(), legacy) {
-		t.Fatalf("private keys on disk were accepted: %v", err)
-	}
-	if _, statErr := os.Stat(filepath.Join(legacy, "nested", "edge")); statErr != nil {
-		t.Fatal("the renderer removed a key; that is the operator's decision")
 	}
 }
 

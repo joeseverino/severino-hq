@@ -362,7 +362,8 @@ command again; the same key with a different request returns
 `idempotency_conflict`. A request that is refused, or held for approval, keeps
 nothing under its key, so the corrected or approved request runs. A command
 that queues controller work stores the key with the operation it queues, and
-generates one when the caller sent none. A `read` capability takes no key.
+generates one when the caller sent none. A command form in the browser
+generates its key and keeps it hidden. A `read` capability takes no key.
 
 ## Recipe: a narrowly scoped first-party automation
 

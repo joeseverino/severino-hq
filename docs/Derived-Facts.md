@@ -186,7 +186,7 @@ root-owned tree, taking each shipped unit that is not a template and each
 instance of a shipped template that a shipped file starts through `Unit=` or
 `OnFailure=`, so a unit added to the directory is read once installed. The
 launcher asks `systemctl show` for a fixed list of properties
-(`units_properties`, where each is explained) and mounts what it printed; the
+(`UnitProperties` in `controller/host/layout.go`) and mounts what it printed; the
 controller keeps exactly those properties and refuses a value that is not a
 unit name, a systemd state word, a number or an instant. `HostUnitRecord` in
 the bridge contract is emitted from the model of that name

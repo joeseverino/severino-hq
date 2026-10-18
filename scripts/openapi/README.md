@@ -7,7 +7,7 @@ or newer runs the generated TypeScript directly with built-in type stripping.
 `scripts/check-openapi.sh` lints both contracts, checks client drift and runs
 mocked runtime tests. This does not contact a deployed HQ.
 
-Redocly 2.57.0 labels client generation experimental. Its pinned output and
+Redocly labels client generation experimental. Its pinned output and
 runtime tests reduce upgrade risk; they do not make the upstream API stable.
 The committed host-only contract generates these clients. Deployment-specific
 extension operations require generation from that deployment's live document.

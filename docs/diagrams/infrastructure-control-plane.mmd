@@ -15,7 +15,7 @@ flowchart TB
     services --> queue[("Operation queue<br/>idempotency + lease")]
     services --> material[("Sealed certificate material<br/>operator-supplied · key held outside the DB")]
 
-    queue <-->|"minimal resolved contract<br/>+ last observed state<br/>public result"| controller["Privileged homelab controller<br/>systemd · exact scanned image"]
+    queue <-->|"minimal resolved contract<br/>+ last observed state<br/>public result"| controller["Unprivileged controller<br/>disposable container of the image HQ runs<br/>every capability dropped"]
     material -. "only on install, via its own bridge command" .-> controller
     secrets -. "short-lived runtime projection" .-> controller
 

@@ -733,11 +733,6 @@ func TestAnUnsafeHostIsRefusedBeforeAnythingIsRead(t *testing.T) {
 		},
 		"runtime open to others":   func(h *machine) { os.Chmod(h.layout().RuntimeDir, 0o755) },
 		"shared with the doorbell": func(h *machine) { h.runner.Config.Layout.RuntimeDir = "/run/severino-hq" },
-		"private keys left on disk": func(h *machine) {
-			legacy := filepath.Join(h.layout().SecretDir, "ssh")
-			os.MkdirAll(legacy, 0o700)
-			os.WriteFile(filepath.Join(legacy, "edge"), []byte("-----BEGIN OPENSSH PRIVATE KEY-----\nexample\n"), 0o600)
-		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHost(t, apiToken(1, "example", "EXAMPLE"))

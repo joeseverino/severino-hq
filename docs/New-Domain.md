@@ -68,8 +68,7 @@ layers, spacing, colour), `TemplateCommentTests` (what a `{# #}` comment left op
 `CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
 file past 1,000 lines), `CommentHistoryTests` (comments
 describe the present), `AssertionPrecisionTests` (`assertEqual(a, b)`, not
-`assertTrue(a == b)`), `SourceEscapeTests` (no invalid string escapes),
-`CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,
+`assertTrue(a == b)`), `CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,
 nested form, `counted` phrase that cannot agree or `{# #}` comment that spans
 lines, in HQ or an extension; no
 system check reads source), `PlainWordsTests` (no word HQ keeps to itself in

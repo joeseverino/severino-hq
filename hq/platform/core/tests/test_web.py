@@ -1324,9 +1324,9 @@ class ManifestImportTests(TestCase):
         import_manifest_data(
             [
                 {
-                    "doc_id": "writeup-custom-mcp-layer",
-                    "slug": "building-a-custom-mcp-layer",
-                    "title": "Building a Custom MCP Layer",
+                    "doc_id": "writeup-example-article",
+                    "slug": "writing-an-example-article",
+                    "title": "Writing an Example Article",
                     "doc_type": DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
                     "system": "example.com",
                     "environment": DocumentationRecord.Environment.CLOUDFLARE,
@@ -1334,16 +1334,16 @@ class ManifestImportTests(TestCase):
                     "sensitivity": DocumentationRecord.Sensitivity.INTERNAL,
                     "content_type": "portfolio_article",
                     "published": False,
-                    "path": "05 Writeups/building-a-custom-mcp-layer/index.md",
+                    "path": "example/writing-an-example-article/index.md",
                 }
             ]
         )
 
-        record = DocumentationRecord.objects.get(doc_id="writeup-custom-mcp-layer")
-        item = ContentItem.objects.get(slug="building-a-custom-mcp-layer")
+        record = DocumentationRecord.objects.get(doc_id="writeup-example-article")
+        item = ContentItem.objects.get(slug="writing-an-example-article")
 
         self.assertTrue(item.related_documentation.filter(pk=record.pk).exists())
-        self.assertFalse(ContentItem.objects.filter(slug="custom-mcp-layer").exists())
+        self.assertFalse(ContentItem.objects.filter(slug="example-article").exists())
 
     def test_prune_removes_content_item_only_linked_to_orphan_doc(self):
         old_record = DocumentationRecord.objects.create(

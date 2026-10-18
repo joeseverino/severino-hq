@@ -1,15 +1,15 @@
 """Coverage-guided fuzzing of the parsers that read outside input.
 
-The property tests in ``application/tests/test_properties.py`` generate inputs from
+The property tests in ``hq/platform/application/tests/test_properties.py`` generate inputs from
 a strategy; this lets a fuzzer grow them from coverage instead, which finds
 the shapes a strategy did not think to describe. The same four parsers:
 image references, package URLs, provenance sources and failure logs.
 
     pip install atheris
-    DJANGO_SETTINGS_MODULE=config.settings python fuzz/parsers.py -max_total_time=300
+    DJANGO_SETTINGS_MODULE=hq.config.settings python -m tests.fuzz.parsers -max_total_time=300
 
 ``test_one_input`` is also run by the suite over a fixed set of seeds
-(``application/tests/test_fuzz_harness.py``), so the harness cannot rot unnoticed.
+(``hq/platform/application/tests/test_fuzz_harness.py``), so the harness cannot rot unnoticed.
 """
 
 import sys

@@ -101,7 +101,9 @@ controller/    Go: the controller, hq-host and hq-secrets
 templates/     server-rendered pages and shared partials
 static/        CSS, scripts and pinned vendor bundles
 deploy/        systemd units, tmpfiles rule, remote targets, host.json shape
-composition/   the composed image; policy/ holds the admission policy
+composition/   the composed image
+policy/        the extension admission policy
+demo/          the static demo site built from HQ's own pages
 scripts/       gates, pipeline helpers and operator tools
 tests/         synthetic extension fixtures and property tests
 docs/          architecture, operations and guides
@@ -141,6 +143,7 @@ boundary, frontend standards and the definition of done.
 | [Release Checklist](docs/Release-Checklist.md) | from a branch to live, and rolling back |
 | [Secrets](docs/Secrets.md) | the vault, the renderer, connections and credentials |
 | [Security](docs/Security.md) | the security design and the production checklist |
+| [Posture](docs/Posture.md) | the checks every HQ enforces, and the standard Advanced HQ Posture holds it to |
 | [Backup](docs/Backup.md) | the nightly backup and a restore |
 | [Blueprint Setup](docs/Blueprint-Setup.md) | every instance-specific value, for running your own |
 | [Decisions](docs/Decisions.md) | decisions that still shape the code, and why |

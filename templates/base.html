@@ -9,7 +9,7 @@
   {% comment %}
   A page names only itself; the site name is appended once, here, so no title
   omits it or hardcodes the string `SEVERINO_SITE_NAME` is allowed to change.
-  `application/test_architecture.py` fails if a title block names it again.
+  `application/tests/test_architecture.py` fails if a title block names it again.
   {% endcomment %}
   <title>{% block title %}{% endblock %} · {{ SITE_NAME }}</title>
   <link rel="icon" href="{% static 'img/favicon.ico' %}" sizes="any">

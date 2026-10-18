@@ -513,11 +513,9 @@ journalctl -u severino-hq-secrets.service -n 50
 | `class=content`, "a vault that resolved none" | connections were installed, and the vault now holds no item with `connection_ref`; they are kept, and HQ's environment is still rendered | put the items back in the vault `host.json` names, or check `vault` names the right one |
 | `class=content`, "must resolve to exactly one item" | `env_item` matches no item, or two | make the item's title unique and equal to `env_item` |
 | the renderer fails with `status=226/NAMESPACE` | a directory it writes is missing | `install -d -o root -g root -m 0700 /opt/apps/severino-hq/secrets` |
-| the web unit stays `activating` | the environment has not rendered | fix the render above; the web unit waits for it |
 | HQ answers 400 | the host name is not in `DJANGO_ALLOWED_HOSTS` | add it to the item; start `severino-hq-secrets.service` |
-| CSRF error on sign-in | `DJANGO_CSRF_TRUSTED_ORIGINS` lacks the full origin, or `DJANGO_BEHIND_TLS_PROXY` is not `1` | set both on the item |
-| 502 from the proxy | HQ is not answering on `127.0.0.1:8000` | `journalctl -u severino-hq-web.service` |
 | `hq-host deploy` refuses the image | not a digest-pinned reference to your repository's composition, or not signed by its Compose on `main` | use the digest from step 3 |
 
-The rest of the failure classes are in [Secrets](Secrets.md#renderer-behavior),
-and later deploy failures in [Deployment](Deployment.md#verifying).
+The rest of the failure classes are in [Secrets](Secrets.md#renderer-behavior).
+A web unit that stays `activating`, a CSRF error on sign-in, a 502 from the
+proxy and later deploy failures are in [Deployment](Deployment.md#verifying).

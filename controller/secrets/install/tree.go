@@ -14,7 +14,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -238,49 +237,6 @@ func (t *Tree) LockSSH(ctx context.Context) (func(), error) {
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
-}
-
-var privateKey = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`)
-
-// LegacyKeys refuses while private keys remain in the checkout's ssh
-// directory. Private keys on disk outlive every rotation; removing them is the
-// operator's decision, and refusing keeps a refresh from reporting a clean
-// state meanwhile.
-func (t *Tree) LegacyKeys() error {
-	found := false
-	err := fs.WalkDir(t.secret.FS(), SSHDirName, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			if path == SSHDirName && errors.Is(err, fs.ErrNotExist) {
-				return fs.SkipAll
-			}
-			return err
-		}
-		if !entry.Type().IsRegular() {
-			return nil
-		}
-		file, err := t.secret.Open(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		data, err := io.ReadAll(io.LimitReader(file, maxFileBytes))
-		if err != nil {
-			return err
-		}
-		if privateKey.Match(data) {
-			found = true
-			return fs.SkipAll
-		}
-		return nil
-	})
-	if err != nil {
-		return hostError("The checkout's ssh directory could not be read.")
-	}
-	if found {
-		return hostError("Refusing: private keys remain in ", filepath.Join(t.Layout.SecretDir, SSHDirName),
-			". Remove them by hand; identities now come from the vault.")
-	}
-	return nil
 }
 
 // Stage is one run's staging directory on the private tmpfs. Everything is

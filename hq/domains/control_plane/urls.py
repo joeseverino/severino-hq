@@ -39,9 +39,6 @@ urlpatterns = [
     path("controller/", controller_views.ControllerView.as_view(), name="controller"),
     # Before <slug:key>, like the rest: an open page asking for its own readings.
     path("visit/", visit_views.VisitRefreshView.as_view(), name="visit"),
-    # Before <slug:key>, which would otherwise swallow "approvals" as a
-    # resource key.
-    path("approvals/", approval_views.ApprovalListView.as_view(), name="approvals"),
     path(
         "approvals/<uuid:approval_id>/",
         approval_views.ApprovalDecisionView.as_view(),

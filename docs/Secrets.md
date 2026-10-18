@@ -274,8 +274,8 @@ prior tree.
 ## Status document
 
 After every run that held the lock, the renderer writes
-`/run/severino-hq-secrets/status.json` (`secrets.Status` in
-`controller/secrets/status.go`). It holds no secret, no vault or item name and
+`/run/severino-hq-secrets/status.json` (`secretstatus.Status` in
+`controller/secretstatus/status.go`). It holds no secret, no vault or item name and
 no connection ref:
 
 ```json
@@ -298,9 +298,8 @@ no connection ref:
 reported, reduced to short words. Every string in the document besides its
 times is one short word (`WordPattern`).
 
-The type is declared once, in `controller/secretstatus`, which imports nothing
-of the renderer or the controller. The renderer writes it and the controller
-reads it with the same strict decoder (`secretstatus.Decode`): an unknown or
+`controller/secretstatus` imports nothing of the renderer or the controller.
+The renderer writes the document and the controller reads it with the same strict decoder (`secretstatus.Decode`): an unknown or
 repeated member, another `schema_version`, an outcome that is not one of the
 three, or a string that is not a short word is refused.
 
@@ -334,16 +333,15 @@ controller runs on:
 | Finding | When | Severity |
 |---|---|---|
 | `render-failing` | the last run failed; names the class | attention; serious once the last success is past the allowance |
-| `render-stale` | the last recorded run did not fail, and nothing confirmed the files current within 3 hours 15 minutes or read them in full within 27 hours 15 minutes: the renderer is not running, or fails before it takes the lock and so records nothing | serious |
+| `render-stale` | the last recorded run did not fail, and nothing confirmed the files current within the allowance or read them in full within a day and the allowance: the renderer is not running, or fails before it takes the lock and so records nothing | serious |
 | `connect-sync-stalled` | Connect's `sync` dependency is not `ACTIVE`, or is not reported | attention |
 | `render-status-unread` | the document is missing or was refused | attention |
 
-The allowance is three runs at their latest: the timer starts the renderer
-every hour, up to five minutes late (`deploy/systemd/severino-hq-secrets.timer`),
-so three runs take at most 3 hours 15 minutes, and a renderer two runs behind
-is raised as the third falls due. A full read is forced every 24 hours
-(`FullEvery`), so it is overdue that allowance later. Both are measured against
-now and not against when the reading was taken: a controller that cannot start
+The allowance is three runs at their latest, derived from the timer's interval
+and randomized delay (`deploy/systemd/severino-hq-secrets.timer`), so a
+renderer two runs behind is raised as the third falls due. A full read is
+forced every 24 hours (`FullEvery`), so it is overdue that allowance later.
+Both are measured against now and not against when the reading was taken: a controller that cannot start
 because its secrets are gone still raises them. Each finding names the command
 to run on the machine for a renderer whose unit HQ knows (`RENDERER_UNITS`).
 
@@ -382,8 +380,7 @@ connection names its key item in an `identity` field. The renderer writes the
 private half, the public half and a `known_hosts` pinned from the connection's
 Ed25519 host key into `ssh/` on the tmpfs, refuses an item whose halves do not
 match, and installs the set with the connections document as one generation.
-It refuses to run while private keys remain in a `secrets/ssh/` directory on
-disk. Authorize each public key with the narrowest remote account or forced
+Authorize each public key with the narrowest remote account or forced
 command available ([Deployment](Deployment.md#remote-targets)). Rotating a key
 is generating a new item, authorizing its public half, and pointing the
 connection's `identity` at it.
