@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from asgiref.sync import async_to_sync
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.domains.assets.models import Asset
 from hq.domains.docs_index.models import DocumentationRecord
@@ -436,6 +436,47 @@ class MCPBoundaryTests(TestCase):
         status = next(message["status"] for message in sent if "status" in message)
         body = b"".join(message.get("body", b"") for message in sent)
         return status, json.loads(body) if body else {}
+
+    @override_settings(ALLOWED_HOSTS=["hq.example.test"])
+    def test_every_resource_reads_for_a_caller_on_a_host_only_the_boundary_serves(self):
+        """The boundary's hosts are not the web's, and no read holds a caller
+        the boundary let in to the web's."""
+
+        from asgiref.sync import sync_to_async
+
+        from hq.platform.api.openapi import document
+        from hq.platform.application.security import AuthorizationError
+
+        from ..contract import resource_contract
+
+        listable = [resource.name for resource in resource_contract(document()).listable]
+        failed = {}
+
+        def read_every_resource():
+            for name in listable:
+                try:
+                    services.list_resource(name)
+                except AuthorizationError, services.NotFoundError:
+                    continue
+                except Exception as exc:  # noqa: BLE001 - every resource that fails is named, not only the first
+                    failed[name] = repr(exc)
+
+        async def app(scope, receive, send):
+            await sync_to_async(read_every_resource)()
+            await self._allowed_app(scope, receive, send)
+
+        everything = Principal("example-agent", "mcp", frozenset(Capability))
+        with host_only():
+            status, _ = self._request(
+                host="192.0.2.7:8000",
+                allowed_hosts=("192.0.2.7",),
+                verifier=lambda bearer: everything,
+                app=app,
+            )
+
+        self.assertEqual(status, 204)
+        self.assertIn("hq", listable)
+        self.assertEqual(failed, {})
 
     def test_allows_direct_authenticated_tailnet_peer(self):
         status, body = self._request()

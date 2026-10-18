@@ -106,7 +106,7 @@ class MCPBoundary:
         # outlives the response cannot keep acting as whoever last called.
         reset = set_principal(principal)
         # The caller's own request, for the read that describes how it arrived.
-        bound = request_context.bind(request_context.from_scope(scope))
+        bound = request_context.bind(request_context.from_scope(scope, allowed_hosts=self.allowed_hosts))
         try:
             await self.app(scope, receive, send)
         finally:
