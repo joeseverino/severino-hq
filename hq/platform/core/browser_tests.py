@@ -67,13 +67,14 @@ SELECTORS = {
     "calendar_period": "#calendar-period",
     "calendar_next": '#calendar a[rel="next"]',
     "decisions": "[data-attention-item]",
-    "decision_family": "details[data-queue-family] > summary strong",
+    # A family's toggle, the row toggle, and a row's own dismiss.
+    "decision_family": "[data-queue-family] [data-fold-toggle]",
+    "row_toggle": "[data-row-toggle]",
+    "decision_dismiss": "[data-triage] button",
     "decision_title": ".attention-title",
-    "decision_fold": ".resolution-fold",
-    "decision_fold_summary": ".resolution-fold > summary",
     "decision_steps": ".resolution-workflow",
     "decision_detail": ".attention-detail",
-    "decision_actions": ".attention-actions",
+    "decision_actions": ".queue-act .attention-actions",
     "highlights": ".dashboard-highlights > .highlight-card",
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".dash-readings .glance-panel-head",
@@ -123,7 +124,7 @@ SELECTORS = {
     "band_aside": "dialog, .band-meta",
     # A route's hops, and the map's lanes and the box that holds them.
     "route": ".request-path",
-    # A queue card, and what can be pressed at its end.
+    # A dashboard queue card, and what can be pressed at its end.
     "queue_card": ".attention-row",
     "queue_card_end": ".attention-end",
     "route_icon": ".hop-icon",
@@ -1058,8 +1059,9 @@ _UNEVEN_ROUTES = (
 }"""
 )
 
-# A section of queue cards ends every card's buttons at one edge: no card's
-# end stops more than a pixel short of another's in the same section.
+# The dashboard's queue cards end their buttons at one edge: no card's end
+# stops more than a pixel short of another's. The full queue is a table, whose
+# columns hold its rows to one edge.
 _RAGGED_QUEUES = (
     "([card, end]) => {"
     + _DESCRIBE
@@ -1640,39 +1642,49 @@ class LayoutBrowserTests(BrowserGate):
 
     # Rules with a setup of their own.
 
-    def assert_decision_face(self, row):
-        """What a card means is on its face; only long steps fold, and one
-        press of a native summary opens them."""
+    def test_with_no_script_every_queue_row_shows_its_face(self):
+        """No toggle to press: every row of every family, what is wrong, what
+        it means and its buttons are on the page."""
 
-        for detail in row.locator(SELECTORS["decision_detail"]).all():
-            self.assertTrue(detail.is_visible())
-        fold = row.locator(SELECTORS["decision_fold"])
-        if not fold.count():
-            for steps in row.locator(SELECTORS["decision_steps"]).all():
-                self.assertTrue(steps.is_visible())
-            return
-        steps = fold.locator(SELECTORS["decision_steps"])
-        self.assertFalse(steps.is_visible())
-        row.locator(SELECTORS["decision_fold_summary"]).click()
-        self.assertTrue(steps.is_visible())
-        row.locator(SELECTORS["decision_fold_summary"]).click()
-
-    def test_a_card_shows_what_is_wrong_and_its_buttons_without_a_toggle_or_script(self):
         for width in OVERFLOW_WIDTHS:
             with self.subTest(width=width):
                 self.open("action-items", width)
-                # A family of the same kind of item is folded behind its own
-                # native summary: one press, no script, and its rows are there.
-                for family in self.page.locator(SELECTORS["decision_family"]).all():
-                    self.assertTrue(family.is_visible())
-                    family.click()
                 rows = self.page.locator(SELECTORS["decisions"])
                 self.assertGreater(rows.count(), 0)
                 for row in rows.all():
+                    for part in ("decision_title", "decision_detail", "decision_actions"):
+                        for shown in row.locator(SELECTORS[part]).all():
+                            self.assertTrue(shown.is_visible(), part)
+
+    def test_a_queue_row_is_its_words_and_buttons_and_opens_to_its_steps(self):
+        """Closed, a row is what is wrong, what it means and how to dismiss it;
+        its steps are a press away, beneath it, and a family is a press away
+        from its rows."""
+
+        self.start(java_script_enabled=True)
+        for width in (PHONE_SCREEN[0], OVERFLOW_WIDTHS[-1]):
+            with self.subTest(width=width):
+                self.open("action-items", width)
+                families = self.page.locator(SELECTORS["decision_family"])
+                self.assertGreater(families.count(), 0)
+                for family in families.all():
+                    family.click()
+                rows = self.page.locator(SELECTORS["decisions"])
+                opened = 0
+                for row in rows.all():
                     self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
-                    for action in row.locator(SELECTORS["decision_actions"]).all():
-                        self.assertTrue(action.is_visible())
-                    self.assert_decision_face(row)
+                    self.assertTrue(row.locator(SELECTORS["decision_dismiss"]).is_visible())
+                    # Held by its node: opening the row moves it to the line beneath.
+                    steps = row.locator(SELECTORS["decision_steps"]).element_handles()
+                    if not steps:
+                        continue
+                    self.assertFalse(steps[0].is_visible())
+                    row.locator(SELECTORS["row_toggle"]).click()
+                    self.assertTrue(steps[0].is_visible())
+                    row.locator(SELECTORS["row_toggle"]).click()
+                    self.assertFalse(steps[0].is_visible())
+                    opened += 1
+                self.assertGreater(opened, 0)
 
     def test_every_selector_parses(self):
         authored = authored_selectors(Path(finders.find("css/app.css")).read_text())

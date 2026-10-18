@@ -1,31 +1,36 @@
 {% comment %}
 A part of the queue (what needs doing, the notices, what was dismissed) under
-its domains, from `action_items.by_source`. An entry is one item, or a family
-of them folded under its owner's name for it: closed, it is one line saying
-how many and how bad; open, it is the same rows as anywhere else. `aside_url`,
-where the part can be dismissed, lets a family be dismissed whole.
-`titled="0"` when the card around it is already titled by its one area, so
-the area is not said twice.
+its domains, from `action_items.by_source`: one table, a row group per domain,
+so every row shares one set of columns. An entry is one item, or a family of
+them folded under its owner's name for it: a row saying how bad, what kind and
+how many, which opens to the same rows as anywhere else. `aside_url`, where
+the part can be dismissed, lets a family be dismissed whole. `titled="0"` when
+the card around it is already titled by its one area, so the area is not said
+twice.
 {% endcomment %}
-{% for group in groups %}
-  <section class="queue-group"{% if titled != 0 %} aria-labelledby="{{ prefix }}-{{ forloop.counter }}"{% endif %}>
-    {% if titled != 0 %}<h3 id="{{ prefix }}-{{ forloop.counter }}">{{ group.label }} <span class="count" data-queue-count>{{ group.items|length }}</span></h3>{% endif %}
-    <div class="queue-entries">
+<div class="table-scroll">
+  <table class="data-table queue-table">
+    {% for group in groups %}
+    <tbody>
+      {% if titled != 0 %}<tr class="row-group"><th colspan="3" scope="rowgroup">{{ group.label }} <span class="count" data-queue-count>{{ group.items|length }}</span></th></tr>{% endif %}
       {% for entry in group.entries %}
         {% if entry.folded %}
-          <details class="queue-family" data-queue-family>
-            <summary>
-              <span class="pill pill-{{ entry.status }}{% if entry.status != "serious" %} is-mark{% endif %}">{{ entry.status|urgency }}</span>
-              <strong>{{ entry.family }}</strong>
-              <span class="count" data-queue-count>{{ entry.items|length }}</span>
-              {% if aside_url %}{% post_button "Dismiss these" aside_url|add:"&family="|add:entry.id css="btn compact ghost queue-family-end" %}{% endif %}
-            </summary>
-            {% include "partials/_work_queue.html" with items=entry.items grouped=True triage=True %}
-          </details>
+          {% with family_row=prefix|add:"-"|add:entry.id|slugify %}
+          <tr class="queue-family" id="{{ family_row }}" data-folds data-queue-family>
+            <td class="queue-mark">
+              <span class="pill pill-{{ entry.status }} is-mark" tabindex="0" data-tip="{{ entry.status|urgency }}">{{ entry.status|urgency }}</span>
+              <button type="button" class="row-fold" data-row-toggle data-fold-toggle aria-expanded="false" aria-label="{{ entry.family }}"><svg viewBox="0 0 6 10" width="7" height="11" aria-hidden="true"><path d="M1 1l4 4-4 4"/></svg></button>
+            </td>
+            <td class="queue-what"><span class="queue-family-name">{{ entry.family }}</span> <span class="count" data-queue-count>{{ entry.items|length }}</span></td>
+            <td class="queue-act">{% if aside_url %}{% post_button "Dismiss these" aside_url|add:"&family="|add:entry.id css="btn compact ghost" %}{% endif %}</td>
+          </tr>
+          {% include "partials/_queue_rows.html" with items=entry.items grouped=True triage=True folded=family_row %}
+          {% endwith %}
         {% else %}
-          {% include "partials/_work_queue.html" with items=entry.items grouped=True triage=True %}
+          {% include "partials/_queue_rows.html" with items=entry.items grouped=True triage=True folded="" %}
         {% endif %}
       {% endfor %}
-    </div>
-  </section>
-{% endfor %}
+    </tbody>
+    {% endfor %}
+  </table>
+</div>

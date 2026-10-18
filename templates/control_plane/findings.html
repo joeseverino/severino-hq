@@ -19,7 +19,7 @@ first screen on chips before the first finding.
 </form>
 {% endif %}
 
-{% comment %}The queue's own cards, so a problem reads the same wherever it is drawn.{% endcomment %}
+{% comment %}The queue's own table, so a problem reads the same wherever it is drawn.{% endcomment %}
 {% if finding_entries %}
 <section class="card">
 {% include "partials/_work_queue.html" with items=finding_entries grouped=True only %}

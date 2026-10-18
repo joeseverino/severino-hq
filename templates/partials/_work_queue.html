@@ -1,66 +1,16 @@
 {% comment %}
-The one card of the queue, on the dashboard, the queue page and a domain's own
-pages. Its face is `application.decisions`: what is wrong, what it means, since
-when if that is known, then what to do, where a step is a step, a reason is a
-sentence and anything that can be pressed is a button. Under a domain's own
-heading (`grouped`) a card does not repeat the domain. Where the reader sorts
-their own queue (`triage`) a card ends with the one thing they can do to it:
-dismiss it, or restore it. Neither fixes it. A dismissed card is its title.
-On the page of the thing a card is about (`here`) its title is plain text.
-A card drawn from a reading says how old it is (`_reading_age.html`).
-With `glance` (the dashboard) a card is its title, one line of what it means,
-its age and its buttons; its title opens the page that shows the rest (`page`).
-Its buttons and links sit at its end, beside its text, not on rows of their own.
+The queue as one table, wherever it is drawn whole: the findings page, a
+thing's urgent problems, a domain's attention list. Its rows are
+`_queue_rows.html`; the queue page's own sections are `_queue_groups.html`,
+the same rows under their domains. The dashboard's short list is
+`_queue_glance.html`.
 {% endcomment %}
-<ul class="attention-list{% if glance %} attention-glance{% endif %}">
-  {% for entry in items %}
-    {% with item=entry|decision %}
-    <li class="attention-row"{% if triage and not glance %} id="{{ item.anchor }}"{% endif %} data-attention-item>
-      <div class="attention-body">
-        <div class="attention-head">
-          {% if not glance %}{% include "partials/_urgency_pill.html" with item=item mark=True only %}{% endif %}
-          {% if glance %}<a class="attention-title" href="{{ item.page }}">{{ item.label }}</a>
-          {% elif item.href and not here %}<a class="attention-title" href="{{ item.href }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
-          {% if item.since or item.observed_at or not grouped and not glance %}
-          <span class="attention-meta">
-            {% if not grouped and not glance %}<span>{{ item.source }}</span>{% endif %}
-            {% if item.since %}<span>Since {{ item.since|when:"day" }}</span>{% endif %}
-            {% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %}
-          </span>
-          {% endif %}
-        </div>
-        {% if glance %}
-          {% if item.detail and not item.aside %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
-        {% elif not item.aside %}
-          {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
-          {% if item.facts %}{% include "partials/_facts.html" with facts=item.facts only %}{% endif %}
-          {% if item.advice %}<p class="attention-advice">{{ item.advice }}</p>{% endif %}
-          {% include "partials/_resolution_workflow.html" with steps=item.steps fold=item.steps_fold label=item.label only %}
-          {% if item.reason %}<p class="attention-reason">{{ item.reason }}</p>{% endif %}
-        {% endif %}
-      </div>
-      {% if triage or item.actions and not item.aside or item.links and not item.aside and not glance %}
-      <div class="attention-end">
-        {% if not item.aside %}
-          {% if item.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=item.actions only %}</div>{% endif %}
-          {% if item.links and not glance %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}<a class="icon-link" href="{{ link.url }}" data-tip="{{ link.label }}">{% include "partials/_icon.html" with name=icon only %}<span class="visually-hidden">{{ link.label }}</span></a>{% else %}<a href="{{ link.url }}">{{ link.label }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
-        {% endif %}
-        {% if triage %}
-        <div data-triage>
-          {% if item.aside %}
-            {% url 'action_items_bring_back' as triage_url %}
-            {% post_button "Restore" triage_url name="key" value=item|row_value css="btn compact ghost" %}
-          {% else %}
-            {% url 'action_items_set_aside' as triage_url %}
-            {% post_button "Dismiss" triage_url name="key" value=item|row_value css="btn compact ghost" %}
-          {% endif %}
-        </div>
-        {% endif %}
-      </div>
-      {% endif %}
-    </li>
-    {% endwith %}
-  {% empty %}
-    <li class="attention-row"><p class="attention-clear">{{ empty|default:"Nothing needs you." }}</p></li>
-  {% endfor %}
-</ul>
+{% if items %}
+<div class="table-scroll">
+  <table class="data-table queue-table">
+    <tbody>{% include "partials/_queue_rows.html" %}</tbody>
+  </table>
+</div>
+{% else %}
+<p class="attention-clear">{{ empty|default:"Nothing needs you." }}</p>
+{% endif %}

@@ -142,11 +142,11 @@ class FindingCardTests(TestCase):
     def test_the_specific_step_comes_first_and_the_generic_plan_is_gone(self):
         words, held = self.card()
 
-        parts = [element for element in held if element.classes & {"attention-body", "attention-links"}]
+        parts = [element for element in held if element.classes & {"queue-what", "attention-links"}]
         self.assertEqual(
-            [part.classes & {"attention-body", "attention-links"} for part in parts][:2],
+            [part.classes & {"queue-what", "attention-links"} for part in parts][:2],
             [
-                {"attention-body"},
+                {"queue-what"},
                 {"attention-links"},
             ],
         )

@@ -318,13 +318,17 @@ document.addEventListener("click", (event) => {
   hqFetch(was.action, { method: "POST", body, credentials: "same-origin" })
     .then((response) => {
       if (!response.ok) throw new Error(String(response.status));
-      // Counts over the row: its family's, its domain's, its section's.
+      // Counts over the row: its family's row, its domain's row group, its section's.
       const step = dismissing ? -1 : 1;
       const counts = new Set();
       for (let box = row.parentElement; box; box = box.parentElement) {
-        const count = box.querySelector(":scope > summary [data-queue-count], :scope > h3 [data-queue-count], :scope > .section-head [data-queue-count]");
+        const count = box.querySelector(":scope > tr.row-group [data-queue-count], :scope > .section-head [data-queue-count]");
         if (count) counts.add(count);
       }
+      const family = row.dataset.folded && document.getElementById(row.dataset.folded);
+      const familyCount = family?.querySelector("[data-queue-count]");
+      if (familyCount) counts.add(familyCount);
+      if (dismissing) row.querySelector(".row-expand[aria-expanded=true]")?.click();
       counts.forEach((count) => { count.textContent = String(Math.max(0, Number(count.textContent) + step)); });
       if (!row.closest(".action-items-aside")) {
         document.querySelectorAll("[data-action-count]").forEach((badge) => {

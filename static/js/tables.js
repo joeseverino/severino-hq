@@ -252,8 +252,10 @@
     }
     // Still wider than its box with nothing left to give up: the columns are
     // held to the box. Each takes what its own values need on one line, up to
-    // a readable width, and the column that names the row takes the rest.
-    if (overflows()) {
+    // a readable width, and the column that names the row takes the rest. A
+    // table with no headings has nothing to hold its columns by: fixed, each
+    // would take an even share whatever it holds.
+    if (overflows() && headings.length) {
       table.dataset.wrap = "tight";
       const named = headings[0]?.classList.contains("select-column") ? 1 : 0;
       const beside = headings.filter((heading, index) =>
@@ -356,19 +358,36 @@
         });
       }
     });
-    if (!parts.length) return;
-    const list = document.createElement("dl");
-    list.className = "row-columns";
-    parts.forEach(([name, nodes]) => {
-      const term = document.createElement("dt");
-      term.textContent = name;
-      const value = document.createElement("dd");
-      value.append(...nodes);
-      list.append(term, value);
+    // What the row keeps for this line at any width, each part set in under
+    // the cell it came from, where its words started.
+    const rowLeft = row.getBoundingClientRect().left;
+    const below = [...row.querySelectorAll(":is(td, th) .row-below")].map((el) => {
+      const from = el.closest("td, th");
+      const indent = from.getBoundingClientRect().left + parseFloat(getComputedStyle(from).paddingLeft) - rowLeft;
+      const place = document.createComment("");
+      el.replaceWith(place);
+      undo.push(() => {
+        el.style.removeProperty("margin-inline-start");
+        place.replaceWith(el);
+      });
+      return [el, indent];
     });
+    if (!parts.length && !below.length) return;
     const cell = document.createElement("td");
     cell.colSpan = cells.length;
-    cell.append(list);
+    cell.append(...below.map(([el]) => el));
+    if (parts.length) {
+      const list = document.createElement("dl");
+      list.className = "row-columns";
+      parts.forEach(([name, nodes]) => {
+        const term = document.createElement("dt");
+        term.textContent = name;
+        const value = document.createElement("dd");
+        value.append(...nodes);
+        list.append(term, value);
+      });
+      cell.append(list);
+    }
     const detail = document.createElement("tr");
     detail.className = "row-detail";
     // Named by attribute as well, for anything that has to tell a record from
@@ -377,10 +396,12 @@
     detail.append(cell);
     restore.set(detail, undo);
     row.after(detail);
+    const start = cell.getBoundingClientRect().left + parseFloat(getComputedStyle(cell).paddingLeft) - rowLeft;
+    below.forEach(([el, indent]) => el.style.setProperty("margin-inline-start", `${Math.max(0, indent - start)}px`));
   };
 
   const rowSaysMore = (row) =>
-    row.querySelector(":is(td, th) .row-more") !== null
+    row.querySelector(":is(td, th) :is(.row-more, .row-below)") !== null
     || droppedCells(row).length > 0
     || [...row.children].some((cell) => heldBack(cell).length > 0)
     || [...row.querySelectorAll(":is(td, th) *")].some(isCut)
@@ -470,6 +491,44 @@
     });
   });
 
+  // A row that heads rows folded under it (`data-folds`, its rows naming it
+  // in `data-folded`) opens and closes them from anywhere on it but its own
+  // controls. Closing it closes any of its rows that were open, so no line is
+  // left beneath a row that is not there.
+  const foldedUnder = (head) =>
+    head.closest("tbody").querySelectorAll(`:scope > tr[data-folded="${CSS.escape(head.id)}"]`);
+  const setFold = (head, opening) => {
+    head.querySelector("[data-fold-toggle]")?.setAttribute("aria-expanded", String(opening));
+    foldedUnder(head).forEach((row) => {
+      if (!opening && row.classList.contains("is-expanded")) row.querySelector(".row-expand")?.click();
+      row.toggleAttribute("data-open", opening);
+    });
+    markTablesSoon();
+  };
+  document.addEventListener("click", (event) => {
+    const head = event.target.closest("tr[data-folds]");
+    if (!head || event.defaultPrevented) return;
+    const toggle = event.target.closest("[data-fold-toggle]");
+    if (!toggle && event.target.closest("a, button, input, select, label, [data-origin]")) return;
+    setFold(head, head.querySelector("[data-fold-toggle]")?.getAttribute("aria-expanded") !== "true");
+  });
+
+  // A link that names a row lands on it open: inside its fold, and showing
+  // what it holds back.
+  const landOnRow = () => {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    const row = id && document.getElementById(id);
+    if (!(row instanceof HTMLTableRowElement) || !row.closest(".data-table")) return;
+    const head = row.dataset.folded && document.getElementById(row.dataset.folded);
+    if (head && !row.hasAttribute("data-open")) setFold(head, true);
+    // Measured now, since the row may only just have been shown.
+    markTables();
+    const toggle = row.querySelector(".row-expand");
+    if (toggle && toggle.getAttribute("aria-expanded") !== "true") toggle.click();
+    row.scrollIntoView({ block: "start" });
+  };
+  window.addEventListener("hashchange", landOnRow);
+
   // A toggle stands in a gutter of its own at the start of the cell that names
   // the row, and every row of a table that has one keeps the gutter, the
   // heading too: names start on one line down the column whether or not a
@@ -477,7 +536,7 @@
   function markGutters() {
     document.querySelectorAll(".data-table").forEach((table) => {
       const rows = [...table.querySelectorAll(":scope > tbody > tr:not(.row-detail):not(.row-group)")];
-      const any = rows.some((row) => row.querySelector(".row-expand"));
+      const any = rows.some((row) => row.querySelector("[data-row-toggle]"));
       const cells = rows.map(toggleCell).filter(Boolean);
       const first = cells[0];
       const heading = first
@@ -611,6 +670,7 @@
   }
 
   markTables();
+  landOnRow();
   window.addEventListener("resize", markTablesSoon);
   // Everything above is measured in the face the text is drawn in. Measured
   // before that face has loaded, a column's floor is the fallback's width and
