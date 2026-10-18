@@ -27,7 +27,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Any, override
 
-from django.urls import URLPattern, URLResolver, get_resolver, reverse
+from django.urls import URLPattern, reverse
 from pydantic import TypeAdapter
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaValue
 from pydantic_core import core_schema
@@ -79,16 +79,12 @@ def _first_line(doc: str | None) -> str:
 def routes() -> Iterator[tuple[str, URLPattern]]:
     """Every hq_api route with its full path, wherever the project mounts it."""
 
+    from hq.platform.application.routes import routed
+
     ours = {id(pattern) for pattern in urls.urlpatterns}
-
-    def walk(entries: list[Any], prefix: str) -> Iterator[tuple[str, URLPattern]]:
-        for entry in entries:
-            if isinstance(entry, URLResolver):
-                yield from walk(entry.url_patterns, prefix + str(entry.pattern))
-            elif isinstance(entry, URLPattern) and id(entry) in ours:
-                yield prefix + str(entry.pattern), entry
-
-    yield from walk(get_resolver().url_patterns, "/")
+    for route in routed():
+        if id(route.pattern) in ours:
+            yield route.path, route.pattern
 
 
 def _view(pattern: URLPattern) -> Any:

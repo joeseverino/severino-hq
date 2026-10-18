@@ -13,13 +13,18 @@ is how a test that swaps the URL configuration stays correct.
 
 Those two are fixed for one request, and asking Django for them costs more than
 the remembered lookup they key, so a projection asks once.
+
+``routed`` is the one walk of the URL configuration, for whatever lists its
+routes: a page's name and path, its view, the resolvers it is mounted under.
 """
 
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 from django.core.signals import setting_changed
-from django.urls import get_script_prefix, get_urlconf, reverse as _reverse
+from django.urls import URLPattern, URLResolver, get_resolver, get_script_prefix, get_urlconf, reverse as _reverse
 
 from .projection import read_once
 
@@ -59,3 +64,44 @@ def _forget(**_kwargs) -> None:
 
 
 setting_changed.connect(_forget)
+
+
+@dataclass(frozen=True, slots=True)
+class Route:
+    """One routed view, as the URL configuration reaches it."""
+
+    pattern: URLPattern
+    # The resolvers it is mounted under, outermost first.
+    mounts: tuple[URLResolver, ...] = ()
+
+    @property
+    def name(self) -> str:
+        """``namespace:name`` as ``reverse`` takes it, or "" for an unnamed route."""
+
+        if not self.pattern.name:
+            return ""
+        return ":".join([*(mount.namespace for mount in self.mounts if mount.namespace), self.pattern.name])
+
+    @property
+    def path(self) -> str:
+        """The mounts' patterns and its own, joined: ``/control/machines/<str:name>/``."""
+
+        return "/" + "".join(str(mount.pattern) for mount in self.mounts) + str(self.pattern.pattern)
+
+    @property
+    def view(self) -> Any:
+        """Its class, or a function view itself."""
+
+        return getattr(self.pattern.callback, "view_class", self.pattern.callback)
+
+
+def routed(
+    entries: Iterable[URLPattern | URLResolver] | None = None, mounts: tuple[URLResolver, ...] = ()
+) -> Iterator[Route]:
+    """Every routed view in the URL configuration in force, in its order."""
+
+    for entry in get_resolver().url_patterns if entries is None else entries:
+        if isinstance(entry, URLResolver):
+            yield from routed(entry.url_patterns, (*mounts, entry))
+        elif isinstance(entry, URLPattern):
+            yield Route(entry, mounts)

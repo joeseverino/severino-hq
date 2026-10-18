@@ -51,10 +51,11 @@ from django.core.management.base import BaseCommand
 from django.db import connection, transaction
 from django.test import Client, override_settings
 from django.test.utils import CaptureQueriesContext, setup_databases, teardown_databases
-from django.urls import URLPattern, URLResolver, get_resolver, reverse
+from django.urls import URLPattern, reverse
 
 from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.resources import describe_resources
+from hq.platform.application.routes import routed
 from hq.platform.application.security import host_capabilities
 from hq.platform.core.bench import ZONES, Seeded, seed, unchanged_sweep
 
@@ -193,15 +194,12 @@ class Result:
     ahead_ms: float | None = None
 
 
-def _routes(patterns=None, prefix: str = "") -> Iterator[tuple[str, URLPattern]]:
-    for pattern in patterns if patterns is not None else get_resolver().url_patterns:
-        if isinstance(pattern, URLResolver):
-            if pattern.namespace == "djdt":
-                continue
-            space = f"{prefix}{pattern.namespace}:" if pattern.namespace else prefix
-            yield from _routes(pattern.url_patterns, space)
-        elif pattern.name:
-            yield f"{prefix}{pattern.name}", pattern
+def _routes() -> Iterator[tuple[str, URLPattern]]:
+    """Each named route but the debug toolbar's, with its pattern."""
+
+    for route in routed():
+        if route.name and not any(mount.namespace == "djdt" for mount in route.mounts):
+            yield route.name, route.pattern
 
 
 def _answers_get(pattern: URLPattern) -> bool:

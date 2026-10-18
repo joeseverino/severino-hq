@@ -18,10 +18,12 @@ from urllib.parse import urlsplit
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.urls import URLPattern, URLResolver, get_resolver, reverse
+from django.urls import reverse
 
 from hq.platform.core import example_estate
 from hq.platform.core.example_estate import names, records
+
+from ..routes import routed
 
 # Routes that are not pages: machine endpoints, downloads, polled status, and
 # anything that acts when fetched.
@@ -69,16 +71,16 @@ ONE_PLURAL = re.compile(r"(?<![\d.,:/-])\b1 ([a-z]+s)\b")
 BRACKETED = re.compile(r"[a-z]\((?:s|es|ies)\)")
 
 
-def _page_routes(patterns=None, prefix=""):
-    for entry in get_resolver().url_patterns if patterns is None else patterns:
-        pattern = str(entry.pattern)
-        if isinstance(entry, URLResolver):
-            if "<" not in pattern and "(?P" not in pattern:
-                yield from _page_routes(entry.url_patterns, prefix + pattern)
-        elif isinstance(entry, URLPattern) and "<" not in pattern and "(?P" not in pattern:
-            path = "/" + (prefix + pattern).lstrip("^").rstrip("$")
-            if not SKIPPED.search(path):
-                yield path
+def _page_routes():
+    """Every route that takes no argument, as its path."""
+
+    for route in routed():
+        joined = route.path.removeprefix("/")
+        if "<" in joined or "(?P" in joined:
+            continue
+        path = "/" + joined.lstrip("^").rstrip("$")
+        if not SKIPPED.search(path):
+            yield path
 
 
 # Elements with no end tag, so never left open.

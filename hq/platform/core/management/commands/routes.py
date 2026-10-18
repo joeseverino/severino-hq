@@ -10,18 +10,14 @@ from collections.abc import Iterator
 from typing import override
 
 from django.core.management.base import BaseCommand, CommandParser
-from django.urls import URLResolver, get_resolver
+
+from hq.platform.application.routes import routed
 
 
-def named_routes(entries=None, namespace: str = "", mount: str = "/") -> Iterator[tuple[str, str]]:
+def named_routes() -> Iterator[tuple[str, str]]:
     """(name, path) for each named route, with namespaces and mounts joined."""
 
-    for entry in get_resolver().url_patterns if entries is None else entries:
-        if isinstance(entry, URLResolver):
-            space = f"{namespace}{entry.namespace}:" if entry.namespace else namespace
-            yield from named_routes(entry.url_patterns, space, mount + str(entry.pattern))
-        elif entry.name:
-            yield f"{namespace}{entry.name}", mount + str(entry.pattern)
+    return ((route.name, route.path) for route in routed() if route.name)
 
 
 class Command(BaseCommand):

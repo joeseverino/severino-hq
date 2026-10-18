@@ -14,10 +14,11 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings, tag
-from django.urls import Resolver404, URLPattern, URLResolver, get_resolver, resolve, reverse
+from django.urls import Resolver404, resolve, reverse
 from django.urls.resolvers import RoutePattern
 from django.utils import timezone
 
+from hq.platform.application.routes import routed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.network import client_ip, parse_ip
 
@@ -322,16 +323,10 @@ class HealthDisclosureTests(TestCase):
         self.assertIn(response.json()["status"], {"ok", "unavailable"})
 
 
-def _routes(patterns=None, prefix=""):
+def _routes():
     """Every leaf route in the composed URLconf, with its view."""
 
-    if patterns is None:
-        patterns = get_resolver().url_patterns
-    for entry in patterns:
-        if isinstance(entry, URLResolver):
-            yield from _routes(entry.url_patterns, prefix + str(entry.pattern))
-        elif isinstance(entry, URLPattern):
-            yield prefix + str(entry.pattern), entry.callback
+    return ((route.path.removeprefix("/"), route.pattern.callback) for route in routed())
 
 
 # What answers without a session, by path prefix. The reviewed list the
@@ -380,14 +375,12 @@ def _sample(pattern) -> str:
     return regex.replace("\\", "")
 
 
-def _sampled_routes(patterns=None, prefix="/"):
+def _sampled_routes():
     """Every leaf route as a path that should resolve to it, with its view."""
 
-    for entry in get_resolver().url_patterns if patterns is None else patterns:
-        if isinstance(entry, URLResolver):
-            yield from _sampled_routes(entry.url_patterns, prefix + _sample(entry.pattern))
-        elif isinstance(entry, URLPattern):
-            yield prefix + _sample(entry.pattern), entry.callback
+    for route in routed():
+        mounts = "".join(_sample(mount.pattern) for mount in route.mounts)
+        yield "/" + mounts + _sample(route.pattern.pattern), route.pattern.callback
 
 
 def _sent_to_sign_in(response, view) -> bool:

@@ -8,13 +8,13 @@ Connections page offers services in both follow from those names alone, and
 neither is written per page.
 """
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from django.urls import URLPattern, URLResolver, get_resolver, resolve
+from django.urls import resolve
 
-from .routes import reverse
+from .routes import reverse, routed
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,20 +73,10 @@ def remedy(names: Iterable[str]) -> Remedy | None:
     return Remedy(f"Connect {CONNECTION_LABELS[providers[0]]}", setup_url(providers[0]))
 
 
-def _views(patterns: Iterable[URLPattern | URLResolver]) -> Iterator[Any]:
-    """Each routed view: its class, or a function view itself."""
-
-    for pattern in patterns:
-        if isinstance(pattern, URLResolver):
-            yield from _views(pattern.url_patterns)
-        else:
-            yield getattr(pattern.callback, "view_class", pattern.callback)
-
-
 def pages_reading() -> tuple[Any, ...]:
     """Every routed page that names what it reads, once each."""
 
-    return tuple(dict.fromkeys(view for view in _views(get_resolver().url_patterns) if getattr(view, "page_reads", ())))
+    return tuple(dict.fromkeys(route.view for route in routed() if getattr(route.view, "page_reads", ())))
 
 
 def need() -> dict[str, tuple[bool, int]]:

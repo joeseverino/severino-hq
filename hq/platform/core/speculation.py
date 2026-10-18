@@ -21,14 +21,14 @@ speculatively and fails on one that writes without being refused.
 
 import json
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from contextvars import ContextVar
 from functools import cache
 from typing import Any
 from urllib.parse import urlsplit
 
 from django.http import HttpRequest, HttpResponse
-from django.urls import URLPattern, URLResolver, get_resolver, reverse
+from django.urls import reverse
 from django.urls.resolvers import RoutePattern
 from django.utils.cache import patch_vary_headers
 from django.views.decorators.cache import cache_control
@@ -84,16 +84,6 @@ def _withheld(reason: str) -> HttpResponse:
     return response
 
 
-def _routes(patterns: Any = None, prefix: str = "") -> Iterator[tuple[str, URLPattern]]:
-    for pattern in patterns if patterns is not None else get_resolver().url_patterns:
-        if isinstance(pattern, URLResolver):
-            mount = pattern.pattern
-            here = str(mount) if isinstance(mount, RoutePattern) else ""
-            yield from _routes(pattern.url_patterns, prefix + here)
-        else:
-            yield prefix, pattern
-
-
 @cache
 def sessionless() -> tuple[str, ...]:
     """Every route that answers without a session, as a URL pattern.
@@ -103,11 +93,14 @@ def sessionless() -> tuple[str, ...]:
     """
 
     from hq.platform.application.plugins import plugin_token_authenticated_prefixes
+    from hq.platform.application.routes import routed
 
     found = {f"{prefix}*" for prefix in plugin_token_authenticated_prefixes()}
-    for prefix, pattern in _routes():
+    for each in routed():
+        pattern = each.pattern
         if getattr(pattern.callback, "login_required", True):
             continue
+        prefix = "".join(str(mount.pattern) for mount in each.mounts if isinstance(mount.pattern, RoutePattern))
         route = str(pattern.pattern) if isinstance(pattern.pattern, RoutePattern) else "*"
         found.add("/" + re.sub(r"<[^>]+>", "*", prefix + route))
     return tuple(sorted(found))

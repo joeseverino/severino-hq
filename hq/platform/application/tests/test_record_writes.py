@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.forms import modelform_factory
 from django.test import TestCase
-from django.urls import URLPattern, URLResolver, get_resolver, reverse
+from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, UpdateView
 
 from hq.domains.expenses.models import Expense
@@ -15,6 +15,7 @@ from hq.domains.expenses.models import Expense
 from ..domains import host_records, load
 from ..expenses import ExpenseCommand, save_expense
 from ..records import save_form
+from ..routes import routed
 from ..security import AuthorizationError, Principal, cli_principal
 from ..writes import RecordDeleteMixin, RecordFormMixin
 
@@ -23,14 +24,11 @@ from ..writes import RecordDeleteMixin, RecordFormMixin
 SERVICE_WRITTEN = {"receipts"}
 
 
-def _views(patterns=None):
-    for pattern in get_resolver().url_patterns if patterns is None else patterns:
-        if isinstance(pattern, URLResolver):
-            yield from _views(pattern.url_patterns)
-        elif isinstance(pattern, URLPattern):
-            view = getattr(pattern.callback, "view_class", None)
-            if view is not None:
-                yield view
+def _views():
+    for route in routed():
+        view = getattr(route.pattern.callback, "view_class", None)
+        if view is not None:
+            yield view
 
 
 def _refuse_vendor(self):
