@@ -420,6 +420,9 @@ depends on its server having been taught about it. A view may compose only
 what the part shows (the dashboard does for its calendar and links). A part
 whose inputs are known by revision answers an unchanged question with 304.
 
+Pressing a control moves nothing else: its feedback is drawn out of the layout
+or in a line already reserved for it, never inserted beside the button.
+
 A swap keeps what the reader did: the keyboard stays on the control that was
 pressed, a disclosure with an id stays as it was, the page does not scroll,
 and the region is `aria-busy` while it waits. A newer question for a region
@@ -458,6 +461,10 @@ page and fails on one that writes.
    saying what it now covers and why.
 3. A new container of content is a surface: add its selector to the surface
    list, write only its layout.
-4. Run `mise run check` and `mise run browser`, then look at the page at a phone,
+4. A new state of a page (empty, failing, waiting, crowded) gets a fixture in
+   the browser gate, so the layout rules run over it.
+5. Run `mise run check` and `mise run browser`, then look at the page at a phone,
    a tablet and a desktop width. The gates catch classes of mistakes; they do
-   not tell you it reads well.
+   not tell you it reads well. Review by walking a real workflow end to end, not
+   page by page: every entity named is a link, every relationship is visible
+   from both ends, and nothing shows a raw kind name, an empty table or a nag.

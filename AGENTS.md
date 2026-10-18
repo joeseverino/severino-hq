@@ -5,7 +5,9 @@ authoritative for human and agentic development in this public repository.
 
 ## Start here
 
-1. Run `git status --short`; preserve unrelated work.
+1. Run `git status --short`; preserve unrelated work. `git fetch` and compare
+   with `origin/main` before designing: work lands from more than one place,
+   and the mechanism you need may already exist there.
 2. Read the nearest code and tests before changing an interface.
 3. While editing, run `mise run fast` (see below). Run `mise run check` before
    handing work back.
@@ -169,6 +171,11 @@ same review, and should fail when its path matches nothing rather than pass.
 
 ## Rules that eliminate bug classes
 
+- A new mechanism states its security properties in its design. What a
+  resource can do is derived from topology facts, never from a per-kind flag.
+- Never interpolate a newline-separated file list into `eval` or `bash -c`:
+  each line runs as a command. Split it with `set --` or an array and pass
+  `"$@"`.
 - Reject unknown input; Pydantic plugin commands inherit `StrictCommand`.
 - Enforce authorization in the shared capability/view layer, not ad hoc in a
   template or handler.
