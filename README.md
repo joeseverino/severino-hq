@@ -15,8 +15,8 @@ to each other.
 HQ is a host. Extensions add whole domains to it from their own repositories,
 and this repository names none of them: it holds the contracts they meet at.
 
-The [demo](https://demo.jseverino.com/) is HQ's own pages filled with an
-example homelab, saved as a static site.
+The [demo](demo/README.md) is HQ's own pages filled with an example homelab,
+saved as a static site and published with the repository's GitHub Pages.
 
 ![The Severino HQ dashboard, showing the example homelab the demo is built from](docs/images/dashboard.png)
 
