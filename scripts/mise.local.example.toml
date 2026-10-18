@@ -24,18 +24,7 @@ SEVERINO_HQ_DEPLOY_HOST = "deploy.example.test"
 # read at use, or a file path.
 # SEVERINO_FAILURE_LOG_IDENTITY = "op://vault/item/password"
 
-# The rest configure `mise run dev` alone, and are named for it for the same
-# reason. A signing key that outlives a restart, as a password-manager
-# reference; without it each run makes its own and sessions end with it.
-# HQ_DEV_SECRET_REF = "op://vault/item/field"
-# Where it listens. `tailnet` resolves to this machine's tailnet
-# address, which is what a reverse proxy forwards to; omit it for loopback.
-HQ_DEV_HOST = "tailnet"
-# The name it is reached at, and the origin allowed to post to it. A proxy that
-# terminates TLS makes Django check both, so a server that renders a login page
-# refuses the login without them.
-HQ_DEV_ALLOWED_HOSTS = "dev.example.com,localhost,127.0.0.1"
-HQ_DEV_CSRF_TRUSTED_ORIGINS = "https://dev.example.com"
+# Dev HQ's own values live in dev.local.toml (scripts/dev.local.example.toml).
 
 # Optional. The Django Debug Toolbar on the dev server. Needs DJANGO_DEBUG on;
 # the suite ignores it. See hq/config/devtools.py.

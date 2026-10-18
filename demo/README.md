@@ -8,19 +8,17 @@ as HQ; no page is made for the demo alone.
 
 | Command | What it does |
 | --- | --- |
-| `mise run demo:build` | Seeds a throwaway database, signs in, follows every link from the dashboard and saves each page to `var/demo`. |
+| `mise run demo:build [seed]` | Seeds a throwaway database, signs in, follows every link from the dashboard and saves each page to `var/demo` (another seed: `var/demo-<seed>`). |
 | `mise run browser:demo` | Builds, then serves `var/demo` over plain HTTP and checks it in WebKit (below). Part of the `browser` gate, so every pull request runs it. |
-
-To look at it: `python3 -m http.server 8765 -d var/demo`, then open
-http://127.0.0.1:8765/.
+| `mise run dev:demo [seed]` | Builds that seed and serves it on loopback, on a port the system picks; the log names the address. |
 
 ## Three seeds
 
 | Seed | Built with | What it shows |
 | --- | --- | --- |
 | Showcase (default) | the example estate | A small homelab that has run for months: every reading present and current, every service set up, one expense still missing its receipt. Advanced HQ Posture is on. |
-| Standard | `HQ_DEMO_SEED=standard` | The same homelab with Advanced HQ Posture off. |
-| Empty | `HQ_DEMO_SEED=empty` | A fresh install: one signed-in user and nothing else. What someone sees the first time. |
+| Standard | `standard` | The same homelab with Advanced HQ Posture off. |
+| Empty | `empty` | A fresh install: one signed-in user and nothing else. What someone sees the first time. |
 
 ## Two estates, two purposes
 

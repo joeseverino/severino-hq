@@ -69,5 +69,7 @@ CLAUDE.local.md
 .mypy_cache/
 .hypothesis/
 
-# Developer-local mise settings (scripts/mise.local.example.toml).
+# Developer-local mise settings (scripts/mise.local.example.toml), and the
+# proxied development server's own facts (scripts/dev.local.example.toml).
 mise.local.toml
+dev.local.toml

@@ -13,24 +13,38 @@ Install [mise](https://mise.jdx.dev) and uv. mise reads the uv pin from
 git clone https://github.com/joeseverino/severino-hq.git
 cd severino-hq
 mise install
-export DJANGO_DEBUG=1
-uv run --locked python manage.py migrate
-uv run --locked python manage.py createsuperuser
-uv run --locked python manage.py seed_demo
-mise run dev
+mise run dev:scratch --seed showcase
 ```
 
-Open <http://127.0.0.1:8000/> and sign in. `seed_demo` is optional: it fills
-the database with the example estate, the same homelab the public demo shows
-(`hq/platform/core/example_estate/`), and refuses a database that already holds
-records rather than merging into it.
-`mise run dev` collects versioned assets and runs Uvicorn with reload, on the
-same ASGI path as production, so local browser checks exercise compression,
-cache headers and routing. With `DJANGO_DEBUG` off, settings refuse to load
-without a real `DJANGO_SECRET_KEY`, so local commands turn it on;
-`mise run dev` sets it itself. Nothing reads a `.env` file: `.env.example` is
-the production template, rendered by the host and named by
-`SEVERINO_APP_ENV_PATH` ([Deployment](Deployment.md)).
+The log names the address and the throwaway account to sign in as. Nothing
+reads a `.env` file: `.env.example` is the production template, rendered by
+the host and named by `SEVERINO_APP_ENV_PATH` ([Deployment](Deployment.md)).
+
+## Development servers
+
+Each server is a mise task, and its env says where it listens and which
+database it opens; `scripts/dev.sh` refuses what env cannot express. Every one
+collects versioned assets and runs Uvicorn with reload on the production ASGI
+path, watching this checkout and each extension's sources. The extension set
+is the one `mise.local.toml` names ([AGENTS.md](../AGENTS.md#start-here)).
+
+| Task | What it is |
+| --- | --- |
+| `mise run dev:scratch` | A throwaway server: loopback, DEBUG on, a new database under this checkout's `var/dev/scratch/` each start, on a port the system picks. `--keep` reuses the last database, `--seed showcase` or `standard` fills it with the example estate (`seed_demo`), `--port` fixes the port, `--plan` prints the environment and exits. |
+| `mise run dev:session` | Prints a session cookie (`dev_session`) for the scratch server's account, for a browser context or `curl --cookie`. |
+| `mise run dev:manage -- <command>` | `manage.py` against the scratch database, extensions loaded. `routes [filter]` lists each named route and its path. |
+| `mise run dev:demo [seed]` | Builds that demo seed and serves the static site on loopback ([demo](../demo/README.md)). |
+| `mise run dev` | The long-lived server behind a TLS proxy: DEBUG off, single sign-on, its bind, hostnames and database read from the gitignored `dev.local.toml` (copy `scripts/dev.local.example.toml`). It reads its signing key and client secret from the password manager when it starts. `--fresh` deletes its database first; `--plan` prints the environment, without secrets, and exits. |
+
+Only `dev` reads `dev.local.toml`, and a new worktree does not copy it, so the
+others never take its bind or database. Each checkout has its own scratch
+database, so servers in different worktrees run side by side; a second server
+on one database is refused. `dev` refuses a linked worktree and a bind past
+loopback and the tailnet range; scratch refuses anything but loopback.
+
+Every loopback server shares the browser's cookies for `127.0.0.1` whatever the
+port, so signing in to a second one signs the first out: open the second as
+`http://localhost:<port>`.
 
 Python dependencies come from `uv.lock` through `uv run --locked`, which every
 task uses; no virtualenv is made by hand. The default groups are `dev` and
@@ -127,7 +141,7 @@ The Django Debug Toolbar is in the `dev` group and never in the image. It is on
 when `DJANGO_DEBUG` is on and `SEVERINO_DEBUG_TOOLBAR=1`:
 
 ```sh
-SEVERINO_DEBUG_TOOLBAR=1 mise run dev
+SEVERINO_DEBUG_TOOLBAR=1 mise run dev:scratch
 ```
 
 It shows to loopback clients, or the addresses in

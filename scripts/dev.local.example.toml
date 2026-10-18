@@ -1,0 +1,39 @@
+# Copy to `dev.local.toml` in the repository root; git ignores it. Only
+# `mise run dev` reads it, and a new worktree never copies it in, so no other
+# server can take this bind or database. The values below are placeholders.
+#
+# The names are HQ's own settings. mise expands nothing here: write absolute
+# paths. The profile's invariants (DEBUG off, behind a TLS proxy, single
+# sign-on) are set by the task and cannot be changed from this file.
+
+# Where it listens: loopback, or this machine's tailnet address, which a proxy
+# forwards to. Anything wider is refused.
+UVICORN_HOST = "127.0.0.1"
+UVICORN_PORT = "8000"
+
+# The name it is reached at and the origin allowed to post to it: a proxy that
+# terminates TLS makes Django check both. The proxy's address, so the client
+# address it forwards is believed.
+DJANGO_ALLOWED_HOSTS = "dev.example.com,localhost,127.0.0.1"
+DJANGO_CSRF_TRUSTED_ORIGINS = "https://dev.example.com"
+SEVERINO_TRUSTED_PROXIES = "192.0.2.20/32"
+
+# Its data, outside every checkout.
+SEVERINO_DATABASE_PATH = "/path/to/state/hq-dev.sqlite3"
+SEVERINO_MEDIA_ROOT = "/path/to/state/hq-dev-media"
+
+# Single sign-on.
+SEVERINO_OIDC_ISSUER = "https://sso.example.com/application/o/hq-dev/"
+SEVERINO_OIDC_CLIENT_ID = "hq-dev"
+SEVERINO_OIDC_ALLOWED_GROUPS = "admins"
+
+# Production's zone, so dates mean what they mean there.
+DJANGO_TIME_ZONE = "UTC"
+SEVERINO_HQ_SOURCE = "https://github.com/example/severino-hq"
+
+# The signing key and the client secret, as password-manager references read
+# when the server starts; never the values. HQ_DEV_OP is the command that
+# reads one (`<command> read <reference>`), with its arguments.
+HQ_DEV_OP = "op"
+HQ_DEV_SECRET_REF = "op://Vault/Item/field"
+HQ_DEV_OIDC_SECRET_REF = "op://Vault/Item/field"

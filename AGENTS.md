@@ -86,8 +86,7 @@ instead. `mise run suite:as-image` runs the composed suite as the image does:
 in a copy of only the files `Dockerfile.dockerignore` admits, with `DEBUG` off
 and `SEVERINO_HQ_SOURCE` stamped. `mise run preflight` runs it, required.
 
-Local development uses `mise run dev`. It collects assets and runs the same
-ASGI/Uvicorn path as production with reload enabled.
+An agent's server is `mise run dev:scratch` in its own worktree, never `mise run dev` (docs/Development.md, "Development servers").
 
 The gates run the suite in parallel, which roughly halves their time.
 `hq/platform/core/test_runner.py` is what makes that safe on WAL SQLite: read

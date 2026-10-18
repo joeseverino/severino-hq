@@ -1,64 +1,125 @@
 #!/bin/sh
-# Production-like local server: collected static assets + the real ASGI stack.
+# A development server in the profile its mise task names (HQ_DEV_PROFILE):
+# `secure` for `mise run dev`, `scratch` for `mise run dev:scratch`. The task's
+# env says where it listens and what it opens; this refuses what env cannot,
+# then serves the production ASGI path with reload.
 set -eu
 unset CDPATH
 
-repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
-cd "$repo_root"
+root=$(cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$root"
 
-# Run as `mise run dev`: mise supplies mise.local.toml, which is where the
-# extensions are named and found. Without it this serves the host alone.
-# A signing key that outlives a restart, read from 1Password when
-# HQ_DEV_SECRET_REF names one (an op:// reference, in mise.local.toml).
-if [ -z "${DJANGO_SECRET_KEY:-}" ] && [ -n "${HQ_DEV_SECRET_REF:-}" ] && command -v op >/dev/null 2>&1; then
-    DJANGO_SECRET_KEY=$(op read "${HQ_DEV_SECRET_REF}" 2>/dev/null) || true
+die() {
+    echo "$*" >&2
+    exit 2
+}
+
+profile=${HQ_DEV_PROFILE:?run it as mise run dev or mise run dev:scratch}
+host=${UVICORN_HOST:?}
+port=${usage_port:-${UVICORN_PORT:?}}
+database=${SEVERINO_DATABASE_PATH:?}
+
+# How far an address reaches. Tailscale assigns from 100.64.0.0/10.
+reach() {
+    case "$1" in
+        127.* | ::1 | localhost) echo loopback ;;
+        100.6[4-9].* | 100.[7-9][0-9].* | 100.1[01][0-9].* | 100.12[0-7].*) echo tailnet ;;
+        *) echo wide ;;
+    esac
+}
+
+case "$profile" in
+    secure)
+        [ "$(reach "$host")" != wide ] || die "Refusing to listen on '$host': it reaches past loopback and the tailnet."
+        [ "${DJANGO_DEBUG:-}" = 0 ] || die "The proxied server never runs with DEBUG."
+        [ "${DJANGO_BEHIND_TLS_PROXY:-}" = 1 ] || die "The proxied server runs behind its TLS proxy."
+        [ "${SEVERINO_OIDC_ENABLED:-}" = 1 ] || die "The proxied server signs in through single sign-on."
+        ;;
+    scratch)
+        [ "$(reach "$host")" = loopback ] || die "A scratch server listens on loopback only, not '$host'."
+        [ "${DJANGO_DEBUG:-}" = 1 ] || die "A scratch server runs with DEBUG on."
+        case "$database" in
+            "$root"/var/dev/*) ;;
+            *) die "A scratch database lives under this checkout's var/dev, not $database." ;;
+        esac
+        ;;
+    *) die "Unknown profile: $profile" ;;
+esac
+
+# The checkout and each extension's sources are watched for changes. The list
+# is split on spaces, so a path with one is refused rather than half-watched.
+case "${PYTHONPATH:-}" in
+    *' '*) die "PYTHONPATH holds a path with a space, which the reload list cannot carry: $PYTHONPATH" ;;
+esac
+reload_dirs="$root"
+for dir in $(printf '%s' "${PYTHONPATH:-}" | tr ':' ' '); do
+    reload_dirs="$reload_dirs $dir"
+done
+
+if [ "${usage_plan:-false}" = true ]; then
+    # Before any secret is read or any file touched, so the plan holds neither.
+    env | grep -E '^(DJANGO_|SEVERINO_|UVICORN_|HQ_DEV_|PYTHONPATH=)' | grep -Ev '^[A-Z_]*(SECRET_KEY|_SECRET)=' | sort
+    echo "serve: $host:$port, reloading on changes in $reload_dirs"
+    exit 0
+fi
+
+if [ "$profile" = secure ] \
+    && [ "$(git rev-parse --path-format=absolute --git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ]; then
+    die "The proxied server runs from the main checkout, never a linked worktree. Use mise run dev:scratch."
+fi
+
+# A server already on this database would lose it to --fresh or a new scratch
+# run, and two servers on one database answer as one estate that is two.
+pidfile="$database.pid"
+if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+    die "A server already runs on $database (pid $(cat "$pidfile")). Stop it first."
+fi
+
+state=$(dirname -- "$database")
+if [ "$profile" = scratch ] && [ "${usage_keep:-false}" != true ]; then
+    rm -rf -- "$state"
+elif [ "${usage_fresh:-false}" = true ]; then
+    rm -f -- "$database" "$database-wal" "$database-shm"
+fi
+mkdir -p "$state"
+echo $$ > "$pidfile"
+
+if [ "$profile" = secure ]; then
+    # HQ_DEV_OP is the reading command with its arguments, such as `op`.
+    # shellcheck disable=SC2086
+    DJANGO_SECRET_KEY=$($HQ_DEV_OP read "${HQ_DEV_SECRET_REF:?}")
+    # shellcheck disable=SC2086
+    SEVERINO_OIDC_CLIENT_SECRET=$($HQ_DEV_OP read "${HQ_DEV_OIDC_SECRET_REF:?}")
+    export DJANGO_SECRET_KEY SEVERINO_OIDC_CLIENT_SECRET
+elif [ ! -f "$state/secret.env" ]; then
+    # A throwaway key in the file the scratch tasks load, so a session
+    # `mise run dev:session` mints validates here. Worth nothing past this database.
+    (umask 077 && printf 'DJANGO_SECRET_KEY=%s\n' "$(openssl rand -hex 32)" > "$state/secret.env")
+    DJANGO_SECRET_KEY=$(sed -n 's/^DJANGO_SECRET_KEY=//p' "$state/secret.env")
     export DJANGO_SECRET_KEY
 fi
-if [ -z "${DJANGO_SECRET_KEY:-}" ]; then
-    echo "No signing key: one is made for this run, so sessions end when it stops." >&2
-fi
 
-export DJANGO_DEBUG="${DJANGO_DEBUG:-1}"
-export DJANGO_ALLOWED_HOSTS="${HQ_DEV_ALLOWED_HOSTS:-localhost,127.0.0.1}"
-if [ -n "${HQ_DEV_CSRF_TRUSTED_ORIGINS:-}" ]; then
-    export DJANGO_CSRF_TRUSTED_ORIGINS="${HQ_DEV_CSRF_TRUSTED_ORIGINS}"
-fi
-if [ -n "${HQ_LOCAL_PLUGINS:-}" ]; then
-    export SEVERINO_HQ_PLUGINS="${HQ_LOCAL_PLUGINS}"
-    export PYTHONPATH="${HQ_LOCAL_PYTHONPATH:-}"
-fi
-
-# Loopback unless asked otherwise. `tailnet` resolves to this machine's tailnet
-# address, which is what a proxy forwards to: written as a word rather than
-# an address so it survives the address changing, and so the file that asks for
-# it does not have to be edited on a machine where it differs.
-host=${HQ_DEV_HOST:-127.0.0.1}
-if [ "${host}" = "tailnet" ]; then
-    # Found rather than called. On a Mac `tailscale` is usually a shell alias
-    # to the binary inside the app bundle, which a script does not inherit,
-    # so asking for it by name works when typed and fails here.
-    tailscale_bin=$(command -v tailscale 2>/dev/null \
-        || echo /Applications/Tailscale.app/Contents/MacOS/Tailscale)
-    host=$("${tailscale_bin}" ip -4 2>/dev/null | head -1)
-    if [ -z "${host}" ]; then
-        echo "HQ_DEV_HOST=tailnet, but no tailnet address was found." >&2
-        exit 2
+uv run --locked python manage.py migrate --noinput
+if [ "$profile" = scratch ]; then
+    if [ ! -f "$state/login" ]; then
+        password=$(openssl rand -hex 12)
+        DJANGO_SUPERUSER_PASSWORD=$password uv run --locked python manage.py createsuperuser \
+            --noinput --username operator --email operator@example.invalid
+        (umask 077 && echo "operator $password" > "$state/login")
+        if [ -n "${usage_seed:-}" ]; then
+            uv run --locked python manage.py seed_demo
+        fi
     fi
-fi
-port=${HQ_DEV_PORT:-8000}
-
-# Refuse rather than race. Another development server on this port may use a
-# different database, so a second one started here is not a second view of the
-# same state, it is a different estate answering on a nearby port. The symptom
-# is data that appears and disappears depending on which one answered.
-if command -v lsof >/dev/null 2>&1 \
-    && lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "Something already serves port ${port}. Stop it, or pass HQ_DEV_PORT to use another port." >&2
-    exit 3
+    if [ "${usage_seed:-}" = showcase ]; then
+        export SEVERINO_POSTURE=advanced
+    fi
+    echo "Sign in as: $(cat "$state/login")" >&2
 fi
 
 uv run --locked python manage.py collectstatic --noinput --verbosity 0
-exec uv run --locked python -m uvicorn hq.config.asgi:application \
-    --host "$host" \
-    --port "$port" \
-    --reload
+
+set -- --reload
+for dir in $reload_dirs; do
+    set -- "$@" --reload-dir "$dir"
+done
+exec uv run --locked python -m uvicorn hq.config.asgi:application --host "$host" --port "$port" "$@"

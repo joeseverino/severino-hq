@@ -78,10 +78,108 @@ env = { SEVERINO_DATABASE_PATH = "{{ env.HQ_GATE_DATABASE | default(value=config
 
 # --------------------------------------------------------------- operator
 
+# The development servers. Each profile is a task whose env says where it
+# listens and which database it opens; scripts/dev.sh refuses what env cannot.
+
+# The long-lived server behind a TLS proxy. Its facts live only in the
+# gitignored dev.local.toml (scripts/dev.local.example.toml), which no other
+# task reads. The profile's invariants come after the file, so it cannot
+# change them.
 [tasks.dev]
-description = "The development server"
+description = "The server behind a TLS proxy: DEBUG off, single sign-on, the bind dev.local.toml names"
 raw = true
+usage = '''
+flag "--fresh" help="Delete its database and migrate a new one"
+flag "--plan" help="Print what it would run under, without secrets, and exit"
+'''
 run = "scripts/dev.sh"
+
+[tasks.dev.env]
+_.file = "dev.local.toml"
+UVICORN_HOST = { required = "Copy scripts/dev.local.example.toml to dev.local.toml and fill it in" }
+UVICORN_PORT = { required = true }
+DJANGO_ALLOWED_HOSTS = { required = true }
+DJANGO_CSRF_TRUSTED_ORIGINS = { required = true }
+SEVERINO_TRUSTED_PROXIES = { required = true }
+SEVERINO_DATABASE_PATH = { required = true }
+SEVERINO_OIDC_ISSUER = { required = true }
+SEVERINO_OIDC_CLIENT_ID = { required = true }
+DJANGO_TIME_ZONE = { required = true }
+HQ_DEV_OP = { required = true }
+HQ_DEV_SECRET_REF = { required = true }
+HQ_DEV_OIDC_SECRET_REF = { required = true }
+HQ_DEV_PROFILE = "secure"
+DJANGO_DEBUG = "0"
+DJANGO_BEHIND_TLS_PROXY = "1"
+SEVERINO_OIDC_ENABLED = "1"
+# A checkout has no admitted wheels, and admission is required whenever DEBUG is off.
+SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0"
+DJANGO_TEMPLATE_CACHE = "0"
+DJANGO_WHITENOISE_AUTOREFRESH = "1"
+SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = "1"
+SEVERINO_LOG_LEVEL = "INFO"
+SEVERINO_HQ_PLUGINS = "{{ env.HQ_LOCAL_PLUGINS | default(value='') }}"
+PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"
+SEVERINO_HQ_REVISION = "{{ exec(command='git rev-parse HEAD') }}"
+
+# Loopback, DEBUG on, a database of this checkout's own under var/dev/scratch,
+# so each worktree has its own. Shared by the scratch server and the commands
+# that open its database, which read its throwaway key from secret.env.
+[task_templates."dev:scratch-env".env]
+_.file = "var/dev/scratch/secret.env"
+HQ_DEV_PROFILE = "scratch"
+DJANGO_DEBUG = "1"
+UVICORN_HOST = "127.0.0.1"
+UVICORN_PORT = "0"
+DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost"
+SEVERINO_DATABASE_PATH = "{{ config_root }}/var/dev/scratch/db.sqlite3"
+SEVERINO_MEDIA_ROOT = "{{ config_root }}/var/dev/scratch/media"
+SEVERINO_EXPORTS_ROOT = "{{ config_root }}/var/dev/scratch/exports"
+SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0"
+SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = "1"
+SEVERINO_LOG_LEVEL = "INFO"
+SEVERINO_HQ_PLUGINS = "{{ env.HQ_LOCAL_PLUGINS | default(value='') }}"
+PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"
+
+[tasks."dev:scratch"]
+extends = "dev:scratch-env"
+raw = true
+description = "A throwaway server on loopback: DEBUG on, a new database each start, a port the system picks"
+usage = '''
+flag "--keep" help="Reuse the last scratch database"
+flag "--seed <seed>" help="Fill it with the example estate" {
+    choices "showcase" "standard"
+}
+flag "--port <port>" help="A fixed port instead of a free one"
+flag "--plan" help="Print what it would run under and exit"
+'''
+run = "scripts/dev.sh"
+
+[tasks."dev:session"]
+extends = "dev:scratch-env"
+description = "A signed-in session cookie for this checkout's scratch server"
+run = "uv run --locked python manage.py dev_session operator"
+
+[tasks."dev:manage"]
+extends = "dev:scratch-env"
+raw = true
+description = "manage.py against this checkout's scratch database, extensions loaded: mise run dev:manage -- <command>"
+run = "uv run --locked python manage.py"
+
+[tasks."dev:demo"]
+description = "Build a demo seed and serve it on loopback, on a port the system picks"
+raw = true
+usage = '''
+arg "[seed]" default="showcase" {
+    choices "showcase" "standard" "empty"
+}
+'''
+depends = ["demo:build {{ usage.seed }}"]
+run = '''
+site=var/demo
+[ "$usage_seed" = showcase ] || site="var/demo-$usage_seed"
+exec uv run --locked python -u -m http.server --bind 127.0.0.1 --directory "$site" 0
+'''
 
 [tasks.manage]
 description = "manage.py with the development settings the gates use: mise run manage -- <command>"
@@ -530,10 +628,18 @@ fi
 '''
 
 [tasks."demo:build"]
-description = "Build the public demo into var/demo"
+description = "Build the public demo into var/demo; another seed into var/demo-<seed>"
 extends = "django"
-env = { HQ_DEMO_OUT = "{{config_root}}/var/demo" }
-run = "uv run --locked python manage.py test demo.build --noinput --parallel 1"
+usage = '''
+arg "[seed]" default="showcase" {
+    choices "showcase" "standard" "empty"
+}
+'''
+run = '''
+out=var/demo
+[ "$usage_seed" = showcase ] || out="var/demo-$usage_seed"
+HQ_DEMO_SEED="$usage_seed" HQ_DEMO_OUT="$PWD/$out" uv run --locked python manage.py test demo.build --noinput --parallel 1
+'''
 
 [tasks."browser:demo"]
 description = "Build the demo and check it in WebKit"
