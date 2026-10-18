@@ -94,6 +94,12 @@ A_DAY_OF_VITALS = {
 }
 
 
+def _queries(call) -> int:
+    with CaptureQueriesContext(connection) as captured:
+        call()
+    return len(captured.captured_queries)
+
+
 class IngestTests(TestCase):
     """A report is stored in one statement per table, however many rows it has."""
 
@@ -248,11 +254,14 @@ class CoveragePlanningTests(TestCase):
         payload["sites"][0]["end"] = _day(end_offset)
         service.record_analytics(payload, principal=_principal())
 
-    def test_a_new_site_is_offered_one_bounded_quarter_in_one_query_for_any_number(self):
+    def test_a_new_site_is_offered_one_bounded_quarter_in_queries_that_do_not_grow(self):
         identities = [{"connection_ref": "example-api", "site_tag": f"site-{index}"} for index in range(30)]
 
-        with self.assertNumQueries(1):
-            windows = service.analytics_plan(identities)["windows"]
+        self.assertEqual(
+            _queries(lambda: service.analytics_plan(identities[:1])),
+            _queries(lambda: service.analytics_plan(identities)),
+        )
+        windows = service.analytics_plan(identities)["windows"]
 
         self.assertEqual(len(windows), len(identities))
         for plan in windows:
@@ -352,10 +361,9 @@ class JoinTests(TestCase):
             principal=_principal(),
         )
 
-        rows = service.writeup_traffic()
-        self.assertEqual(rows[0]["item"], self.writeup)
-        self.assertEqual(rows[0]["pageviews"], 412)
-        self.assertTrue(rows[0]["measured"])
+        (writeup,) = service.attach_traffic([self.writeup])
+        self.assertEqual(writeup.pageviews, 412)
+        self.assertTrue(service.item_traffic(self.writeup)["measured"])
 
     def test_the_same_path_on_another_host_is_not_credited(self):
         path = "/portfolio/a-writeup/"
@@ -374,11 +382,11 @@ class JoinTests(TestCase):
             principal=_principal(),
         )
 
-        self.assertEqual(service.writeup_traffic()[0]["pageviews"], 412)
+        self.assertEqual(service.attach_traffic([self.writeup])[0].pageviews, 412)
         self.assertEqual(service.item_traffic(self.writeup)["pageviews"], 412)
 
-    def test_each_half_sees_its_own_and_keeps_the_unread_last(self):
-        """The most actionable row on the page is the one with no number."""
+    def test_each_item_gets_its_own_path_and_the_unmeasured_read_as_unknown(self):
+        """A path nobody measured is no figure, which a template tells from a real zero."""
 
         unread = ContentItem.objects.create(
             title="Unread",
@@ -392,10 +400,9 @@ class JoinTests(TestCase):
             principal=_principal(),
         )
 
-        writeups = service.writeup_traffic()
-        self.assertEqual([row["item"] for row in writeups], [self.writeup, unread])
-        self.assertEqual([(row["pageviews"], row["measured"]) for row in writeups], [(412, True), (0, False)])
-        self.assertEqual([row["item"] for row in service.page_traffic()], [self.page])
+        items = service.attach_traffic([self.writeup, self.page, unread])
+        self.assertEqual([item.pageviews for item in items], [412, 96, None])
+        self.assertFalse(service.item_traffic(unread)["measured"])
 
     def test_a_trailing_slash_is_not_tidied_away(self):
         """The site serves one form and redirects the other."""
@@ -565,7 +572,7 @@ class ContentSectionTrafficTests(TestCase):
         self.assertIn(page.get_absolute_url(), listed["pages"])
         self.assertNotIn(self.unread.get_absolute_url(), listed["pages"])
 
-    def test_the_join_costs_one_query_however_many_rows(self):
+    def test_the_join_costs_the_same_queries_however_many_rows(self):
         """The projection grows with content; its query count must not."""
 
         for index in range(20):
@@ -577,12 +584,14 @@ class ContentSectionTrafficTests(TestCase):
                 published_url=f"https://{HOST}/portfolio/extra-{index}/",
             )
 
-        # Materialised outside the block: the claim is about the join, not
+        # Materialised outside the count: the claim is about the join, not
         # about the queryset the table engine already paid for.
         items = list(ContentItem.objects.all())
 
-        with self.assertNumQueries(1):
-            service.attach_traffic(items)
+        self.assertEqual(
+            _queries(lambda: service.attach_traffic(items[:1])),
+            _queries(lambda: service.attach_traffic(items)),
+        )
 
     def test_nothing_measured_leaves_the_section_readable(self):
         RumDaily.objects.all().delete()

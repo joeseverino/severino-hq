@@ -1256,6 +1256,8 @@ class ManifestImportTests(TestCase):
         "doc_id": "writeup-complete",
         "doc_type": "public_article_draft",
         "content_type": "portfolio_article",
+        "slug": "complete",
+        "published": False,
     }
 
     def test_an_entry_off_the_schema_is_refused_by_the_preflight_and_the_write(self):
@@ -1272,6 +1274,8 @@ class ManifestImportTests(TestCase):
             # Not routed to ContentItem, so held to the schema's prefixes.
             ("article without a content type", without(self.CONTENT_DOC, "content_type"), ()),
             ("content missing", without(self.CONTENT_DOC, "system"), ("system",)),
+            ("content without its item", without(self.CONTENT_DOC, "slug", "published"), ("slug", "published")),
+            ("content with a blank slug", {**self.CONTENT_DOC, "slug": ""}, ("slug",)),
         ):
             with self.subTest(case):
                 self._assert_rejected(entry, *names)
@@ -1340,38 +1344,6 @@ class ManifestImportTests(TestCase):
 
         self.assertTrue(item.related_documentation.filter(pk=record.pk).exists())
         self.assertFalse(ContentItem.objects.filter(slug="custom-mcp-layer").exists())
-
-    def test_public_article_without_content_type_prunes_legacy_content_item(self):
-        record = DocumentationRecord.objects.create(
-            doc_id="report-platform-playbook-public",
-            title="Severino Labs Platform Playbook",
-            doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-        )
-        stale_item = ContentItem.objects.create(
-            slug="report-platform-playbook-public",
-            title="Severino Labs Platform Playbook",
-            content_type=ContentItem.Type.PORTFOLIO_PAGE,
-            status=ContentItem.Status.DRAFT,
-        )
-        stale_item.related_documentation.add(record)
-
-        stats = import_manifest_data(
-            [
-                {
-                    "doc_id": "report-platform-playbook-public",
-                    "title": "Severino Labs Platform Playbook",
-                    "doc_type": DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT,
-                    "system": "Severino Labs (cross-cutting)",
-                    "environment": DocumentationRecord.Environment.OTHER,
-                    "status": DocumentationRecord.Status.ACTIVE,
-                    "sensitivity": DocumentationRecord.Sensitivity.INTERNAL,
-                    "path": "02 Infrastructure/00 Reporting/Severino Labs Platform Playbook.md",
-                }
-            ]
-        )
-
-        self.assertEqual(stats["content_items_pruned"], 1)
-        self.assertFalse(ContentItem.objects.filter(slug="report-platform-playbook-public").exists())
 
     def test_prune_removes_content_item_only_linked_to_orphan_doc(self):
         old_record = DocumentationRecord.objects.create(

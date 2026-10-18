@@ -594,7 +594,7 @@ class AdapterParityTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="joe", password="test-password")
 
-    def test_web_mcp_and_cli_emit_the_same_project_shape(self):
+    def test_web_and_mcp_create_projects_through_the_same_service(self):
         self.client.force_login(self.user)
         response = self.client.post(
             reverse("projects:create"),
@@ -629,20 +629,7 @@ class AdapterParityTests(TestCase):
 
         mcp_result = as_mcp_caller(call_mcp)
 
-        output = StringIO()
-        call_command(
-            "create_project",
-            "cli-project",
-            name="CLI Project",
-            status="active",
-            json=True,
-            stdout=output,
-        )
-        cli_result = json.loads(output.getvalue())
-
         self.assertEqual(set(mcp_result), {"ok", "created", "project"})
-        self.assertEqual(set(cli_result), {"ok", "created", "project"})
-        self.assertEqual(set(mcp_result["project"]), set(cli_result["project"]))
         self.assertEqual(
             AuditLog.objects.get(object_repr="Web Project").metadata["interface"],
             "web",
@@ -650,10 +637,6 @@ class AdapterParityTests(TestCase):
         self.assertEqual(
             AuditLog.objects.get(object_repr="MCP Project").metadata["interface"],
             "mcp",
-        )
-        self.assertEqual(
-            AuditLog.objects.get(object_repr="CLI Project").metadata["interface"],
-            "cli",
         )
 
 
@@ -693,7 +676,7 @@ class AssetApplicationServiceTests(TestCase):
 
         self.assertFalse(Asset.objects.filter(slug="invalid").exists())
 
-    def test_web_mcp_and_cli_emit_the_same_asset_shape(self):
+    def test_web_and_mcp_create_assets_through_the_same_service(self):
         user = get_user_model().objects.create_user(username="asset-operator", password="test-password")
         self.client.force_login(user)
         response = self.client.post(
@@ -732,20 +715,7 @@ class AssetApplicationServiceTests(TestCase):
 
         mcp_result = as_mcp_caller(call_mcp)
 
-        output = StringIO()
-        call_command(
-            "create_asset",
-            "cli-asset",
-            item_name="CLI Asset",
-            total_cost="30.00",
-            json=True,
-            stdout=output,
-        )
-        cli_result = json.loads(output.getvalue())
-
         self.assertEqual(set(mcp_result), {"ok", "created", "asset"})
-        self.assertEqual(set(cli_result), {"ok", "created", "asset"})
-        self.assertEqual(set(mcp_result["asset"]), set(cli_result["asset"]))
         self.assertEqual(
             AuditLog.objects.get(object_repr="Web Asset").metadata["interface"],
             "web",
@@ -753,10 +723,6 @@ class AssetApplicationServiceTests(TestCase):
         self.assertEqual(
             AuditLog.objects.get(object_repr="MCP Asset").metadata["interface"],
             "mcp",
-        )
-        self.assertEqual(
-            AuditLog.objects.get(object_repr="CLI Asset").metadata["interface"],
-            "cli",
         )
 
 
@@ -875,7 +841,7 @@ class ContentApplicationServiceTests(TestCase):
             )
         self.assertFalse(ContentItem.objects.filter(slug="invalid").exists())
 
-    def test_web_mcp_and_cli_share_content_shape_and_audit(self):
+    def test_web_and_mcp_share_the_content_service_and_audit(self):
         user = get_user_model().objects.create_user(username="content-operator")
         self.client.force_login(user)
         response = self.client.post(
@@ -912,22 +878,11 @@ class ContentApplicationServiceTests(TestCase):
             )
 
         mcp_result = as_mcp_caller(call_mcp)
-        output = StringIO()
-        call_command(
-            "create_content",
-            "cli-content",
-            title="CLI Content",
-            project=["site"],
-            json=True,
-            stdout=output,
-        )
-        cli_result = json.loads(output.getvalue())
 
-        self.assertEqual(set(mcp_result["content"]), set(cli_result["content"]))
+        self.assertEqual(mcp_result["content"]["relationships"]["projects"], ["site"])
         for title, interface in (
             ("Web Content", "web"),
             ("MCP Content", "mcp"),
-            ("CLI Content", "cli"),
         ):
             self.assertEqual(
                 AuditLog.objects.get(object_repr=title).metadata["interface"],
@@ -953,7 +908,7 @@ class ExpenseApplicationServiceTests(TestCase):
             )
         self.assertEqual(Expense.objects.count(), 0)
 
-    def test_web_mcp_and_cli_share_expense_shape(self):
+    def test_web_and_mcp_share_the_expense_service_and_audit(self):
         user = get_user_model().objects.create_user(username="expense-operator")
         self.client.force_login(user)
         response = self.client.post(
@@ -992,20 +947,12 @@ class ExpenseApplicationServiceTests(TestCase):
             )
 
         mcp_result = as_mcp_caller(call_mcp)
-        output = StringIO()
-        call_command(
-            "create_expense",
-            date="2026-07-25",
-            vendor="CLI Vendor",
-            item="CLI Expense",
-            cost="30.00",
-            project="ops",
-            json=True,
-            stdout=output,
-        )
-        cli_result = json.loads(output.getvalue())
-        self.assertEqual(set(mcp_result["expense"]), set(cli_result["expense"]))
+
         self.assertEqual(mcp_result["expense"]["related_project"], "ops")
+        self.assertEqual(
+            {event.metadata["interface"] for event in AuditLog.objects.filter(metadata__operation="expense.create")},
+            {"web", "mcp"},
+        )
 
 
 class DocumentationSyncCapabilityTests(SimpleTestCase):

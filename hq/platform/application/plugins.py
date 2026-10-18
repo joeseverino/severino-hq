@@ -27,21 +27,6 @@ from .ui import STATUS_VALUES, DomainOverview
 
 PLUGIN_API_VERSION = 4
 
-# The manifest fields plugin API 1 named runtime providers with; API 2 has the
-# single integration_provider entry point. A wheel that passes one fails in
-# the manifest constructor, which names only the first unexpected keyword, so
-# the loader recognises all of them to report the API epoch instead of an
-# unexplained constructor error.
-PLUGIN_API_1_PROVIDER_FIELDS = (
-    "attention_provider",
-    "capability_provider",
-    "connection_provider",
-    "dashboard_provider",
-    "health_provider",
-    "overview_provider",
-    "resource_provider",
-    "search_provider",
-)
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 PLUGIN_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -124,26 +109,7 @@ def _import(spec: str) -> Any:
 
 
 def _load_manifest(reference: str) -> PluginManifest:
-    """Load identity metadata, translating only manifest-constructor breaks."""
-
-    try:
-        manifest = _import(reference)
-    except TypeError as exc:
-        detail = str(exc)
-        if not detail.startswith("PluginManifest.__init__()"):
-            raise
-        legacy_fields = tuple(field for field in PLUGIN_API_1_PROVIDER_FIELDS if field in detail)
-        if legacy_fields:
-            raise ImproperlyConfigured(
-                f"Plugin reference {reference!r} uses plugin API 1 provider "
-                f"fields ({', '.join(legacy_fields)}); HQ supports "
-                f"{PLUGIN_API_VERSION}."
-            ) from exc
-        if "api_version" in detail and "required" in detail:
-            raise ImproperlyConfigured(
-                f"Plugin reference {reference!r} does not declare api_version; HQ supports {PLUGIN_API_VERSION}."
-            ) from exc
-        raise
+    manifest = _import(reference)
     if not isinstance(manifest, PluginManifest):
         raise ImproperlyConfigured(f"{reference!r} did not expose PluginManifest.")
     return manifest

@@ -107,10 +107,28 @@ def _enforce_contract(entry: dict, doc_id: str) -> None:
             f"{', '.join(missing)}"
         )
     if _is_content_entry(entry):
+        _enforce_content_contract(entry, label)
         return
     prefixes = frontmatter_schema.DOC_ID_PREFIXES
     if not doc_id.startswith(prefixes):
         raise ManifestImportError(f"{label}: doc_id must start with one of: {', '.join(prefixes)}")
+
+
+def _enforce_content_contract(entry: dict, label: str) -> None:
+    """A content entry names the item it mirrors to and whether it is live.
+
+    ``published`` may be false, so it is required present rather than truthy.
+    """
+
+    missing = []
+    if _is_blank(entry.get("slug")):
+        missing.append("slug")
+    if "published" not in entry:
+        missing.append("published")
+    if missing:
+        raise ManifestImportError(
+            f"{label}: {counted(len(missing), 'content field missing', 'content fields missing')}: {', '.join(missing)}"
+        )
 
 
 def _build_record_defaults(entry: dict) -> tuple[str, dict, bool]:
@@ -219,35 +237,6 @@ CONTENT_TYPE_MAP = {
 }
 
 
-def _legacy_content_slug_from_doc_id(doc_id: str) -> str:
-    """Return the pre-manifest-slug ContentItem slug for a doc_id."""
-    slug = doc_id
-    for prefix in ("writeup-", "page-", "article-"):
-        if slug.startswith(prefix):
-            return slug.removeprefix(prefix)
-    return slug
-
-
-def _prune_legacy_content_item_for_record(
-    record: DocumentationRecord,
-    stats: dict,
-) -> None:
-    """Remove a stale mirrored ContentItem for records no longer in content."""
-    content_items_to_prune = (
-        ContentItem.objects.filter(
-            slug=_legacy_content_slug_from_doc_id(record.doc_id),
-            related_documentation=record,
-        )
-        .annotate(documentation_count=Count("related_documentation", distinct=True))
-        .filter(documentation_count=1)
-    )
-    content_items_pruned = content_items_to_prune.count()
-    if content_items_pruned:
-        content_items_to_prune.delete()
-        stats.setdefault("content_items_pruned", 0)
-        stats["content_items_pruned"] += content_items_pruned
-
-
 def _upsert_content_item(
     record: DocumentationRecord,
     entry: dict,
@@ -256,25 +245,15 @@ def _upsert_content_item(
 ) -> None:
     """Mirror a public-article DocumentationRecord into ContentItem.
 
-    Keyed by the manifest slug when provided, falling back to a slug derived
-    from `doc_id` for older manifests. Idempotent: if a ContentItem with that
-    slug already exists, its fields are refreshed.
+    Keyed by the manifest slug. Idempotent: if a ContentItem with that slug
+    already exists, its fields are refreshed.
     """
-    doc_id = record.doc_id
-    article_slug = (entry.get("slug") or "").strip()
-    if not article_slug:
-        article_slug = _legacy_content_slug_from_doc_id(doc_id)
+    article_slug = entry["slug"].strip()
 
     ct_raw = (entry.get("content_type") or "").strip().lower()
     content_type = CONTENT_TYPE_MAP.get(ct_raw, ContentItem.Type.PORTFOLIO_PAGE)
 
-    # `published` is the canonical gate. Older records without it fall back
-    # to legacy publish markers.
-    if "published" in entry:
-        is_published = bool(entry.get("published"))
-    else:
-        is_published = bool(defaults.get("published_at") or defaults.get("external_url"))
-    item_status = ContentItem.Status.PUBLISHED if is_published else ContentItem.Status.DRAFT
+    item_status = ContentItem.Status.PUBLISHED if entry["published"] else ContentItem.Status.DRAFT
 
     tags = entry.get("tags") or entry.get("technologies") or []
     tags_str = ", ".join(t for t in tags if t) if isinstance(tags, list) else str(tags)
@@ -387,8 +366,6 @@ def _import_entry(entry: dict, *, doc_id: str, update_existing: bool, stats: dic
 
     if _is_content_entry(entry):
         _upsert_content_item(record, entry, defaults, stats)
-    elif defaults["doc_type"] == DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT:
-        _prune_legacy_content_item_for_record(record, stats)
 
 
 def _reap_orphans(manifest_doc_ids: set[str], *, prune: bool, stats: dict) -> None:

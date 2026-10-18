@@ -26,7 +26,6 @@ from hq.domains.analytics.contracts import (
     completed_window,
 )
 from hq.domains.analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
-from hq.domains.content.models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
 from hq.domains.control_plane.names import normalized_hostname
 
 from .cadence import sweep_interval
@@ -410,40 +409,6 @@ def measured_path_count(*, days: int = DEFAULT_WINDOW_DAYS) -> int:
     )
 
 
-def published_traffic(content_types: frozenset[str], *, days: int = CONTENT_TRAFFIC_DAYS) -> list[dict[str, Any]]:
-    """Published items of one half of the registry, with what each earned.
-
-    Items with no traffic are kept and sorted last. A writeup nobody read is
-    the most actionable row on the page, and dropping it because it has no
-    number would hide exactly the thing worth seeing.
-    """
-
-    items = list(
-        ContentItem.objects.filter(content_type__in=content_types, status=ContentItem.Status.PUBLISHED).only(
-            "title", "slug", "content_type", "published_url", "published_at"
-        )
-    )
-    locations = {location_of(item.published_url) for item in items}
-    traffic = _traffic_for_locations(locations, days=days)
-
-    rows = []
-    for item in items:
-        location = location_of(item.published_url)
-        path = location[1]
-        measured = traffic.get(location, {})
-        rows.append(
-            {
-                "item": item,
-                "path": path,
-                "pageviews": measured.get("pageviews", 0),
-                "visits": measured.get("visits", 0),
-                "measured": bool(measured),
-            }
-        )
-    rows.sort(key=lambda row: (-row["pageviews"], row["item"].title))
-    return rows
-
-
 def attach_traffic(items, *, days: int = CONTENT_TRAFFIC_DAYS):
     """Give each content item what its published URL earned.
 
@@ -508,14 +473,6 @@ def item_traffic(item, *, days: int = CONTENT_TRAFFIC_DAYS) -> dict[str, Any]:
         "days": days,
         "series": rows,
     }
-
-
-def writeup_traffic(*, days: int = CONTENT_TRAFFIC_DAYS) -> list[dict[str, Any]]:
-    return published_traffic(WRITEUP_TYPES, days=days)
-
-
-def page_traffic(*, days: int = CONTENT_TRAFFIC_DAYS) -> list[dict[str, Any]]:
-    return published_traffic(PAGE_TYPES, days=days)
 
 
 def vitals_summary(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
@@ -747,11 +704,8 @@ __all__ = [
     "location_of",
     "measured_path_count",
     "overview",
-    "page_traffic",
     "path_of",
-    "published_traffic",
     "record_analytics",
     "site_totals",
     "vitals_summary",
-    "writeup_traffic",
 ]
