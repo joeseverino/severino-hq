@@ -3,7 +3,7 @@
 # run with its own mypy against the host's typed hq_sdk. From the package root,
 # in check-plugin.sh's environment (SEVERINO_HQ_PLUGINS names the package).
 #   plugin-typecheck.sh PYTHON    # the package's interpreter, with its dev group
-# django-stubs settings: the package names `typecheck_settings`, supplied here.
+# django-stubs settings: the package names `hq.config.settings_typecheck`.
 set -eu
 unset CDPATH
 
@@ -17,5 +17,4 @@ if [ "$declared" != True ]; then
     exit 0
 fi
 
-search_path="$hq_root:$hq_root/scripts/plugin_typecheck"
-MYPYPATH=$search_path PYTHONPATH=$search_path exec "$python" -m mypy
+MYPYPATH=$hq_root PYTHONPATH=$hq_root exec "$python" -m mypy

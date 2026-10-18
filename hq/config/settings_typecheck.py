@@ -1,14 +1,15 @@
-"""Settings the type checker loads (pyproject.toml): the real ones, with no extensions.
+"""Settings the type checker loads: the host's own, with the extension set it is given.
 
 django-stubs imports a settings module to learn the installed apps and models.
-These are the host's own settings, given the throwaway key a process without
-DEBUG needs, and with the extension set cleared so the result describes this
-repository and nothing composed onto it.
+These are the host's settings, given the throwaway key a process without DEBUG
+needs. The host's mypy gate gives no extension set, so its result describes
+this repository alone; an extension's type check (scripts/plugin-typecheck.sh)
+runs with that extension named, so its models are known.
 """
 
 import os
 
 os.environ.setdefault("DJANGO_SECRET_KEY", "type-checker-only-key-0123456789abcdef0123456789abcdef")
-os.environ["SEVERINO_HQ_PLUGINS"] = ""
+os.environ.setdefault("SEVERINO_HQ_PLUGINS", "")
 
 from hq.config.settings import *  # noqa: F403 - every setting, as the host defines it

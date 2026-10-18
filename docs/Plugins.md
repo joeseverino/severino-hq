@@ -136,7 +136,8 @@ clean host environment. That last step reproduces production's dependency
 boundary and catches a missing host pin before composition. A package that
 declares `[tool.mypy]` in its `pyproject.toml` has its own mypy (from its dev
 group) run against the host's typed `hq_sdk`, with django-stubs pointed at
-`typecheck_settings`, which the check supplies; one without the table is
+`hq.config.settings_typecheck`, the host's settings with that package
+installed; one without the table is
 told so and not type checked. In CI it runs
 against host `main`, or the host branch named like the extension's branch when
 one exists ([Coordinated changes](#coordinated-changes)).

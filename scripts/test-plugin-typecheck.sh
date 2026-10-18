@@ -33,7 +33,7 @@ explicit_package_bases = true
 follow_imports = "silent"
 
 [tool.django-stubs]
-django_settings_module = "typecheck_settings"
+django_settings_module = "hq.config.settings_typecheck"
 TOML
 }
 typecheck() {
