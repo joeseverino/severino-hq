@@ -20,10 +20,6 @@
 
 min_version = "2026.10.11"
 
-[settings]
-# .node-version stays the one Node pin; setup-node reads it too.
-idiomatic_version_file_enable_tools = ["node"]
-
 [env]
 # Facts that are not tools: the Python matrix, the coverage floor, the runner
 # image. Shell and workflows read the same file.
@@ -31,6 +27,7 @@ _.file = "scripts/toolchain.env"
 SEVERINO_LOG_LEVEL = "CRITICAL"
 
 [tools]
+node = "24.22.0"
 shellcheck = "0.11.0"
 actionlint = "1.7.12"
 yq = "4.54.1"

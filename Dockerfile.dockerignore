@@ -7,7 +7,6 @@
 !.env.example
 !.gitattributes
 !.github/
-!.node-version
 !AGENTS.md
 !CHANGELOG.md
 !CLAUDE.md
