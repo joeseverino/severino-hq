@@ -131,7 +131,7 @@ runs:
     - name: Read the extension's identity from its package
       id: identity
       shell: bash
-      run: python3 host/scripts/plugin-identity.py "$PACKAGE_DIR" | tee -a "$GITHUB_OUTPUT"
+      run: python3 host/scripts/plugin-identity.py "$PACKAGE_DIR" --repository "$GITHUB_REPOSITORY" | tee -a "$GITHUB_OUTPUT"
 
     - name: Read the host's toolchain pins
       id: pins

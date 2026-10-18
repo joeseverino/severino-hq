@@ -612,6 +612,13 @@ class PluginIdentityTests(SimpleTestCase):
                 plugin_identity().identity(self.package(manifest))
             self.assertIn(reason, str(refused.exception))
 
+    def test_a_manifest_naming_another_repository_is_refused_where_it_is_admitted(self):
+        package = self.package(self.manifest(source_repository='"owner/example-alpha"'))
+        self.assertEqual(plugin_identity().identity(package, "owner/example-alpha")["plugin-id"], "example.alpha")
+        with self.assertRaises(SystemExit) as refused:
+            plugin_identity().identity(package, "owner/example-extensions")
+        self.assertIn("owner/example-extensions", str(refused.exception))
+
     def test_a_manifest_away_from_its_package_is_refused(self):
         with self.assertRaises(SystemExit) as refused:
             plugin_identity().identity(self.package(self.manifest(), name="example-gamma"))

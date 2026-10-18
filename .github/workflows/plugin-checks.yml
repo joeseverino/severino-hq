@@ -147,6 +147,7 @@ jobs:
         env:
           HQ_ROOT: host
           PACKAGE_DIR: ${{ inputs.package-dir }}
+          PLUGIN_REPOSITORY: ${{ github.repository }}
         run: host/scripts/check-plugin.sh --plugin-root "$PACKAGE_DIR"
 
       # A host pin behind its branch fails as a missing name, which reads as a
