@@ -327,12 +327,12 @@ func TestAnUnchangedVaultIsNotReReadItemByItem(t *testing.T) {
 
 	unchanged := func(why string) {
 		t.Helper()
-		before := len(h.fake.Requests)
+		before := len(h.fake.Requests())
 		result := h.ok()
 		if result.Outcome != "current" || result.Changed || h.fake.Count(items) != readItems {
 			t.Fatalf("%s: an unchanged vault was read again: %+v", why, result)
 		}
-		if asked := len(h.fake.Requests) - before; asked != 2 {
+		if asked := len(h.fake.Requests()) - before; asked != 2 {
 			t.Fatalf("%s: an unchanged hour cost %d requests, wanted the vault listing and health", why, asked)
 		}
 		if inodes[0] != inode(t, h.appEnv()) || inodes[1] != inode(t, h.document()) || inodes[2] != inode(t, h.ssh("edge")) {
@@ -362,7 +362,7 @@ func TestAnUnchangedVaultIsNotReReadItemByItem(t *testing.T) {
 
 	// A full read of unchanged content installs nothing: same inodes, even
 	// for the identity, whose OpenSSH encoding differs on every render.
-	h.fake.Edit(func(*connecttest.Fake) {})
+	h.fake.Edit(func(*connecttest.State) {})
 	previous := inodes
 	if result := rendered("a new content version"); result.Changed || previous[0] != inodes[0] || previous[1] != inodes[1] || previous[2] != inodes[2] {
 		t.Fatalf("re-rendering unchanged content replaced a file: %+v", result)
@@ -370,10 +370,10 @@ func TestAnUnchangedVaultIsNotReReadItemByItem(t *testing.T) {
 	unchanged("after the re-read")
 
 	// A rotated credential reaches the controller, and only the controller.
-	h.fake.Edit(func(fake *connecttest.Fake) {
+	h.fake.Edit(func(vault *connecttest.State) {
 		rotated := secretToken + "-rotated"
-		fake.Items[0].Fields[3].Value = &rotated
-		fake.Items[0].Version++
+		vault.Items[0].Fields[3].Value = &rotated
+		vault.Items[0].Version++
 	})
 	previous = inodes
 	if result := rendered("a rotated credential"); !result.Changed || result.WebChanged || previous[1] == inodes[1] || previous[0] != inodes[0] {
@@ -414,9 +414,7 @@ func TestAnUnchangedVaultIsNotReReadItemByItem(t *testing.T) {
 
 	// The vault's own attributes are part of what is current.
 	unchanged("before the vault's attributes change")
-	h.fake.Lock()
-	h.fake.AttributeVersion++
-	h.fake.Unlock()
+	h.fake.Set(func(s *connecttest.State) { s.AttributeVersion++ })
 	rendered("a new attribute version")
 
 	// A full read at least once a day, whatever the versions say.
@@ -525,7 +523,7 @@ func TestARefreshKeepsTheAppEnvironmentInodeAndReplacesTheDocuments(t *testing.T
 	// The deploy that binds the tmpfs copy removes the checkout's: the next
 	// render does not put it back.
 	os.Remove(checkout)
-	h.fake.Edit(func(*connecttest.Fake) {})
+	h.fake.Edit(func(*connecttest.State) {})
 	h.ok()
 	if _, err := os.Lstat(checkout); err == nil {
 		t.Fatal("the checkout's copy was recreated")
@@ -557,7 +555,7 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 	}{
 		{"Connect unavailable", "connect_unavailable", func(h *machine) {
 			h.runner.Config.ConnectTimeout = 100 * time.Millisecond
-			h.fake.Unavailable = 1 << 30
+			h.fake.Set(func(s *connecttest.State) { s.Unavailable = 1 << 30 })
 		}},
 		{"Connect not listening", "connect_unavailable", func(h *machine) {
 			h.runner.Config.ConnectTimeout = 100 * time.Millisecond
@@ -570,32 +568,38 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 		{"no credentials directory", "config", func(h *machine) { h.runner.Config.CredentialsDir = "" }},
 		{"credential name leaves the directory", "config", func(h *machine) { h.runner.Config.ConnectCredential = "../op_connect_example" }},
 		{"remote endpoint", "config", func(h *machine) { h.runner.Config.Endpoint = "https://example.com" }},
-		{"listing fails", "connect_unavailable", func(h *machine) { h.fake.Intercept = answer(listing, 500, `{}`) }},
-		{"listing denied", "connect_denied", func(h *machine) { h.fake.Intercept = answer(listing, 403, `{}`) }},
-		{"listing malformed", "connect_response", func(h *machine) { h.fake.Intercept = answer(listing, 200, `{"not":"a list"}`) }},
-		{"listing empty", "content", func(h *machine) { h.fake.Intercept = answer(listing, 200, `[]`) }},
-		{"an item fails", "connect_unavailable", func(h *machine) { h.fake.Intercept = answer(oneItem, 502, `{}`) }},
-		{"an item is missing", "connect_response", func(h *machine) { h.fake.Intercept = answer(oneItem, 404, `{}`) }},
-		{"an item is malformed", "connect_response", func(h *machine) { h.fake.Intercept = answer(oneItem, 200, `{"id":7}`) }},
+		{"listing fails", "connect_unavailable", func(h *machine) { h.fake.Intercept(answer(listing, 500, `{}`)) }},
+		{"listing denied", "connect_denied", func(h *machine) { h.fake.Intercept(answer(listing, 403, `{}`)) }},
+		{"listing malformed", "connect_response", func(h *machine) { h.fake.Intercept(answer(listing, 200, `{"not":"a list"}`)) }},
+		{"listing empty", "content", func(h *machine) { h.fake.Intercept(answer(listing, 200, `[]`)) }},
+		{"an item fails", "connect_unavailable", func(h *machine) { h.fake.Intercept(answer(oneItem, 502, `{}`)) }},
+		{"an item is missing", "connect_response", func(h *machine) { h.fake.Intercept(answer(oneItem, 404, `{}`)) }},
+		{"an item is malformed", "connect_response", func(h *machine) { h.fake.Intercept(answer(oneItem, 200, `{"id":7}`)) }},
 		{"the vault is not in scope", "connect_response", func(h *machine) { h.runner.Config.Vault = "Another Vault" }},
-		{"no connections", "content", func(h *machine) { h.fake.Items = []item{envItem()} }},
-		{"no environment item", "content", func(h *machine) { h.fake.Items = h.fake.Items[:3] }},
+		{"no connections", "content", func(h *machine) {
+			h.fake.Set(func(s *connecttest.State) { s.Items = []item{envItem()} })
+		}},
+		{"no environment item", "content", func(h *machine) { h.fake.Set(func(s *connecttest.State) { s.Items = s.Items[:3] }) }},
 		{"a required variable missing", "content", func(h *machine) {
 			env := envItem()
 			env.Fields = env.Fields[:3]
-			h.fake.Items[3] = env
+			h.fake.Set(func(s *connecttest.State) { s.Items[3] = env })
 		}},
-		{"duplicate connection", "content", func(h *machine) { h.fake.Items = append(h.fake.Items, apiToken(5, "example", "OTHER")) }},
+		{"duplicate connection", "content", func(h *machine) {
+			h.fake.Set(func(s *connecttest.State) { s.Items = append(s.Items, apiToken(5, "example", "OTHER")) })
+		}},
 		{"identity halves differ", "content", func(h *machine) {
-			h.fake.Items[2] = connecttest.KeyItem(id(3), "Edge deploy key", key.PKCS8, other.Public)
+			h.fake.Set(func(s *connecttest.State) {
+				s.Items[2] = connecttest.KeyItem(id(3), "Edge deploy key", key.PKCS8, other.Public)
+			})
 		}},
 		{"a credential too large for the controller to read", "content", func(h *machine) {
 			value := strings.Repeat("a", connections.MaxBytes)
-			h.fake.Items[0].Fields[3].Value = &value
+			h.fake.Set(func(s *connecttest.State) { s.Items[0].Fields[3].Value = &value })
 		}},
 		{"a multi-line credential", "content", func(h *machine) {
 			value := secretToken + "\nINJECTED=x"
-			h.fake.Items[0].Fields[3].Value = &value
+			h.fake.Set(func(s *connecttest.State) { s.Items[0].Fields[3].Value = &value })
 		}},
 	}
 	for _, c := range cases {
@@ -614,10 +618,8 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 				before[path] = snapshot{read(t, path), inode(t, path)}
 			}
 			succeeded := h.status().LastSuccess
-			h.fake.Lock()
-			h.fake.ContentVersion++
+			h.fake.Edit(func(*connecttest.State) {})
 			c.change(h)
-			h.fake.Unlock()
 			h.now = h.now.Add(time.Hour)
 
 			result, err := h.run()
@@ -666,15 +668,15 @@ func TestAVaultWithNoConnectionsInstallsAnEmptyInventoryWhereNoneIsInstalled(t *
 		t.Fatalf("counts: %+v", counts)
 	}
 	// The connections a later read finds replace the empty inventory.
-	h.fake.Edit(func(fake *connecttest.Fake) {
-		fake.Items = append([]item{apiToken(1, "example", "EXAMPLE")}, fake.Items...)
+	h.fake.Edit(func(vault *connecttest.State) {
+		vault.Items = append([]item{apiToken(1, "example", "EXAMPLE")}, vault.Items...)
 	})
 	h.ok()
 	if document, _ := connections.ReadFile(h.document(), os.Getuid()); len(document.Connections) != 1 {
 		t.Fatal("a connection did not replace the empty inventory")
 	}
 	// Cleared by a reboot, the runtime directory holds nothing to keep.
-	h.fake.Edit(func(fake *connecttest.Fake) { fake.Items = []item{envItem()} })
+	h.fake.Edit(func(vault *connecttest.State) { vault.Items = []item{envItem()} })
 	for _, name := range []string{install.ConnectionsName, stateName} {
 		os.Remove(filepath.Join(h.layout().RuntimeDir, name))
 	}
@@ -693,7 +695,7 @@ func TestAVaultWithNoConnectionsNeverReplacesInstalledOnes(t *testing.T) {
 	h.web.installed = true
 	h.ok()
 	installed, restarts := read(t, h.document()), h.web.restarts
-	h.fake.Edit(func(fake *connecttest.Fake) { fake.Items = []item{envItem()} })
+	h.fake.Edit(func(vault *connecttest.State) { vault.Items = []item{envItem()} })
 	h.rotate()
 	for range 2 {
 		h.now = h.now.Add(time.Hour)
@@ -744,8 +746,8 @@ func TestAnUnsafeHostIsRefusedBeforeAnythingIsRead(t *testing.T) {
 			if Class(err) != "host" {
 				t.Fatalf("wanted a host refusal, got %q: %v", Class(err), err)
 			}
-			if len(h.fake.Requests) != 0 {
-				t.Fatalf("Connect was asked %v before the host was accepted", h.fake.Requests)
+			if len(h.fake.Requests()) != 0 {
+				t.Fatalf("Connect was asked %v before the host was accepted", h.fake.Requests())
 			}
 			if _, statErr := os.Lstat(h.appEnv()); statErr == nil {
 				t.Fatal("a refused host was written to")
@@ -825,8 +827,8 @@ func TestIdentitiesFollowTheirConnections(t *testing.T) {
 	}
 	// A rotated identity replaces the old one, and its pinned host stays.
 	previous := read(t, h.ssh("edge"))
-	h.fake.Edit(func(fake *connecttest.Fake) {
-		fake.Items[1] = connecttest.KeyItem(id(2), "Edge deploy key", other.PKCS8, other.Public)
+	h.fake.Edit(func(vault *connecttest.State) {
+		vault.Items[1] = connecttest.KeyItem(id(2), "Edge deploy key", other.PKCS8, other.Public)
 	})
 	if result := h.ok(); !result.Changed || result.WebChanged {
 		t.Fatalf("rotation: %+v", result)
@@ -835,7 +837,7 @@ func TestIdentitiesFollowTheirConnections(t *testing.T) {
 		t.Fatal("the rotated identity was not installed")
 	}
 	// A connection removed from the vault takes its identity and signing key.
-	h.fake.Edit(func(fake *connecttest.Fake) { fake.Items = fake.Items[2:] })
+	h.fake.Edit(func(vault *connecttest.State) { vault.Items = vault.Items[2:] })
 	h.ok()
 	entries, _ := os.ReadDir(filepath.Dir(h.ssh("x")))
 	if len(entries) != 3 {
@@ -856,9 +858,9 @@ func TestTheWebContainerIsRestartedOnlyForItsOwnEnvironment(t *testing.T) {
 	h.web.installed = true
 	h.web.health = []string{"starting", "starting", "healthy"}
 	rotate := func() {
-		h.fake.Edit(func(fake *connecttest.Fake) {
+		h.fake.Edit(func(vault *connecttest.State) {
 			value := "rotated-" + time.Now().String()
-			fake.Items[len(fake.Items)-1].Fields[1].Value = &value
+			vault.Items[len(vault.Items)-1].Fields[1].Value = &value
 		})
 	}
 	rotate()
@@ -879,9 +881,9 @@ func TestTheWebContainerIsRestartedOnlyForItsOwnEnvironment(t *testing.T) {
 
 // rotate changes one application variable in the vault.
 func (h *machine) rotate() {
-	h.fake.Edit(func(fake *connecttest.Fake) {
-		value := "rotated-" + strconv.Itoa(fake.ContentVersion)
-		fake.Items[len(fake.Items)-1].Fields[1].Value = &value
+	h.fake.Edit(func(vault *connecttest.State) {
+		value := "rotated-" + strconv.Itoa(vault.ContentVersion)
+		vault.Items[len(vault.Items)-1].Fields[1].Value = &value
 	})
 }
 
@@ -987,7 +989,7 @@ func TestARestartIsNeverMadeOntoAFileThatWasNotWritten(t *testing.T) {
 		t.Fatalf("the next run did not write and restart: %+v", result)
 	}
 	// An unchanged render with nothing owed leaves no mark.
-	h.fake.Edit(func(*connecttest.Fake) {})
+	h.fake.Edit(func(*connecttest.State) {})
 	if result := h.ok(); result.Restarted || h.owed() {
 		t.Fatalf("an unchanged environment marked a restart: %+v", result)
 	}
@@ -1013,11 +1015,11 @@ func TestAnUnhealthyRestartIsRetriedUntilItIsHealthy(t *testing.T) {
 	// Connect down does not stand in the way of it either.
 	h.web.health = []string{"healthy"}
 	h.runner.Config.ConnectTimeout = 100 * time.Millisecond
-	h.fake.Unavailable = 1 << 30
+	h.fake.Set(func(s *connecttest.State) { s.Unavailable = 1 << 30 })
 	if result, err := h.run(); Class(err) != "connect_unavailable" || !result.Restarted || h.web.restarts != 4 || h.owed() {
 		t.Fatalf("the owed restart waited for Connect: %v %+v", err, result)
 	}
-	h.fake.Unavailable = 0
+	h.fake.Set(func(s *connecttest.State) { s.Unavailable = 0 })
 	h.runner.Config.ConnectTimeout = 5 * time.Second
 	if result := h.ok(); result.Restarted || h.web.restarts != 4 {
 		t.Fatalf("a healthy container was restarted again: %+v", result)
@@ -1058,9 +1060,9 @@ func TestNothingInstalledIsTouchedWhileALauncherHoldsTheLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.rotate()
-	h.fake.Edit(func(fake *connecttest.Fake) {
+	h.fake.Edit(func(vault *connecttest.State) {
 		rotated := secretToken + "-rotated"
-		fake.Items[0].Fields[3].Value = &rotated
+		vault.Items[0].Fields[3].Value = &rotated
 	})
 	// Long enough for the read before the lock on a loaded machine; the run
 	// then waits on the lock until this ends.
@@ -1108,17 +1110,15 @@ func TestConcurrentRunsDoNotInterleave(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
-	h.fake.Intercept = func(_ http.ResponseWriter, r *http.Request) bool {
+	h.fake.Intercept(func(_ http.ResponseWriter, r *http.Request) bool {
 		if strings.HasSuffix(r.URL.Path, "/items") {
 			once.Do(func() {
-				h.fake.Unlock()
 				close(entered)
 				<-release
-				h.fake.Lock()
 			})
 		}
 		return false
-	}
+	})
 	first := make(chan error, 1)
 	go func() {
 		_, err := h.runner.Run(context.Background())
@@ -1151,13 +1151,13 @@ func TestAVaultEditedMidReadIsReadAgain(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
 	items := "/v1/vaults/" + connecttest.VaultID + "/items/"
 	edits := 1
-	h.fake.Intercept = func(_ http.ResponseWriter, r *http.Request) bool {
+	h.fake.Intercept(func(_ http.ResponseWriter, r *http.Request) bool {
 		if strings.HasPrefix(r.URL.Path, items) && edits > 0 {
 			edits--
-			h.fake.ContentVersion++
+			h.fake.Edit(func(*connecttest.State) {})
 		}
 		return false
-	}
+	})
 	h.ok()
 	if listings := h.fake.Count("/v1/vaults/" + connecttest.VaultID + "/items"); listings < 4 {
 		t.Fatalf("the vault was not read a second time: %d item requests", listings)
@@ -1166,7 +1166,7 @@ func TestAVaultEditedMidReadIsReadAgain(t *testing.T) {
 		t.Fatalf("the recorded version is not the one read: %d", *status.LastSuccess.ContentVersion)
 	}
 	// One that never holds still is refused rather than installed half and half.
-	h.fake.Edit(func(*connecttest.Fake) {})
+	h.fake.Edit(func(*connecttest.State) {})
 	edits = 1 << 30
 	before := read(t, h.document())
 	if _, err := h.run(); !errors.Is(err, ErrChanging) || Class(err) != "connect_unavailable" {
@@ -1177,16 +1177,16 @@ func TestAVaultEditedMidReadIsReadAgain(t *testing.T) {
 	}
 	// An item whose version moved between the listing and its read is the same.
 	edits = 0
-	h.fake.Intercept = func(http.ResponseWriter, *http.Request) bool { return false }
+	h.fake.Intercept(func(http.ResponseWriter, *http.Request) bool { return false })
 	stale := newHost(t, apiToken(1, "example", "EXAMPLE"))
-	stale.fake.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+	stale.fake.Intercept(func(w http.ResponseWriter, r *http.Request) bool {
 		if r.URL.Path == items+id(1) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"id":"` + id(1) + `","version":99,"category":"LOGIN","vault":{"id":"` + connecttest.VaultID + `"}}`))
 			return true
 		}
 		return false
-	}
+	})
 	if _, err := stale.run(); !errors.Is(err, ErrChanging) {
 		t.Fatalf("an item newer than its listing was accepted: %v", err)
 	}
@@ -1210,7 +1210,9 @@ func TestRetiredItemsAreNotRendered(t *testing.T) {
 
 func TestTheVaultMustResolveUniquely(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
-	h.fake.ExtraVaults = []map[string]any{{"id": "wwwwwwwwwwwwwwwwwwwwwwwwww", "name": connecttest.VaultName}}
+	h.fake.Set(func(s *connecttest.State) {
+		s.ExtraVaults = []map[string]any{{"id": "wwwwwwwwwwwwwwwwwwwwwwwwww", "name": connecttest.VaultName}}
+	})
 	if _, err := h.run(); Class(err) != "connect_response" {
 		t.Fatalf("an ambiguous vault name was accepted: %v", err)
 	}
@@ -1220,7 +1222,9 @@ func TestTheVaultMustResolveUniquely(t *testing.T) {
 	if document, _ := connections.ReadFile(h.document(), os.Getuid()); connection(document, "example").Store.Vault != connecttest.VaultID {
 		t.Fatal("the store vault is not the vault as the host names it")
 	}
-	h.fake.ExtraVaults = []map[string]any{{"id": "not-an-identifier", "name": "Another"}}
+	h.fake.Set(func(s *connecttest.State) {
+		s.ExtraVaults = []map[string]any{{"id": "not-an-identifier", "name": "Another"}}
+	})
 	h.runner.Config.Vault = "Another"
 	if _, err := h.run(); Class(err) != "connect_response" {
 		t.Fatalf("a vault with a malformed identifier was accepted: %v", err)
@@ -1229,21 +1233,23 @@ func TestTheVaultMustResolveUniquely(t *testing.T) {
 
 func TestConnectIsUnlockedByTheAuthenticatedRequestAndWaitedFor(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"))
-	h.fake.Unavailable = 4
-	h.fake.SyncStatus = "TOKEN_NEEDED"
+	h.fake.Set(func(s *connecttest.State) {
+		s.Unavailable = 4
+		s.SyncStatus = "TOKEN_NEEDED"
+	})
 	h.ok()
 	if !strings.Contains(h.log.String(), "attempts=5") {
 		t.Fatalf("the retries were not reported: %s", h.log)
 	}
-	if h.fake.Requests[0] != "/v1/vaults" || h.fake.Authorizations[0] != "Bearer "+connecttest.Token {
-		t.Fatalf("the first request was not the authenticated listing: %v", h.fake.Requests[:1])
+	if first := h.fake.Requests()[0]; first != "/v1/vaults" || h.fake.Authorizations()[0] != "Bearer "+connecttest.Token {
+		t.Fatalf("the first request was not the authenticated listing: %s", first)
 	}
 	if status := h.status(); status.Connect.Dependencies[0] != (secretstatus.Dependency{Service: "sync", Status: "TOKEN_NEEDED"}) {
 		t.Fatalf("sync state was not recorded: %+v", status.Connect)
 	}
 	// What an unauthenticated endpoint says is not copied into the document.
-	h.fake.Edit(func(*connecttest.Fake) {})
-	h.fake.SyncStatus = "<script>" + secretToken + "</script>"
+	h.fake.Edit(func(*connecttest.State) {})
+	h.fake.Set(func(s *connecttest.State) { s.SyncStatus = "<script>" + secretToken + "</script>" })
 	h.ok()
 	if status := h.status(); status.Connect.Dependencies[0].Status != "unreadable" {
 		t.Fatalf("free text from /health reached the status document: %+v", status.Connect)
@@ -1264,10 +1270,10 @@ func TestTheWritersTokenReachesTheDocumentByProjection(t *testing.T) {
 		t.Fatal("the second run was not current")
 	}
 	// Rotated in the vault: rendered, to the controller only.
-	h.fake.Edit(func(fake *connecttest.Fake) {
+	h.fake.Edit(func(vault *connecttest.State) {
 		rotated := secretWriter + "-rotated"
-		fake.Items[1].Fields[4].Value = &rotated
-		fake.Items[1].Version++
+		vault.Items[1].Fields[4].Value = &rotated
+		vault.Items[1].Version++
 	})
 	if result := h.ok(); result.Outcome != "rendered" || !result.Changed || result.WebChanged {
 		t.Fatalf("a rotated token was not rendered: %+v", result)
@@ -1300,7 +1306,7 @@ func TestTheConnectPortMustBeOneOnlyRootCanListenOn(t *testing.T) {
 		if !errors.Is(err, connect.ErrPort) || Class(err) != "config" || !strings.Contains(err.Error(), "below 1024") {
 			t.Fatalf("%s was accepted: %v", name, err)
 		}
-		if len(fake.fake.Requests) != 0 || len(h.fake.Requests) != 0 {
+		if len(fake.fake.Requests()) != 0 || len(h.fake.Requests()) != 0 {
 			t.Fatalf("%s was dialed", name)
 		}
 	}

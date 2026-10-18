@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -59,10 +60,9 @@ func B(id, value string) Field {
 // ID is the n-th well-formed item identifier.
 func ID(n int) string { return fmt.Sprintf("item%022d", n) }
 
-// Fake is the server. Change its fields under Lock.
-type Fake struct {
-	sync.Mutex
-	Server *httptest.Server
+// State is what the server answers from. A test reaches it only through Edit
+// or Set, so no write can race a request still being served.
+type State struct {
 	// ContentVersion is the vault's; Edit bumps it.
 	ContentVersion   int
 	AttributeVersion int
@@ -71,38 +71,80 @@ type Fake struct {
 	ExtraVaults []map[string]any
 	// Unavailable answers that many authenticated requests with 503 first.
 	Unavailable int
-	// Intercept, when it returns true, has answered the request itself.
-	Intercept func(w http.ResponseWriter, r *http.Request) bool
 	// SyncStatus is the sync dependency /health reports.
 	SyncStatus string
-	// Requests is every path asked, in order; Authorizations every header sent.
-	Requests       []string
-	Authorizations []string
+}
+
+// An Interceptor, when it returns true, has answered the request itself.
+type Interceptor func(w http.ResponseWriter, r *http.Request) bool
+
+// Fake is the server.
+type Fake struct {
+	Server *httptest.Server
+
+	mu          sync.Mutex
+	state       State
+	interceptor Interceptor
+	// requests is every path asked, in order; authorizations every header sent.
+	requests       []string
+	authorizations []string
+
+	intercepting sync.Mutex
 }
 
 // New starts a Fake holding items and closes it with the test.
 func New(t testing.TB, items ...Item) *Fake {
 	t.Helper()
-	fake := &Fake{ContentVersion: 1, AttributeVersion: 1, Items: items, SyncStatus: "ACTIVE"}
+	fake := &Fake{state: State{ContentVersion: 1, AttributeVersion: 1, Items: items, SyncStatus: "ACTIVE"}}
 	fake.Server = httptest.NewServer(http.HandlerFunc(fake.serve))
 	t.Cleanup(fake.Server.Close)
 	return fake
 }
 
 // Edit changes the vault and bumps its content version, as an edit does.
-func (f *Fake) Edit(change func(*Fake)) {
-	f.Lock()
-	defer f.Unlock()
-	change(f)
-	f.ContentVersion++
+func (f *Fake) Edit(change func(*State)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	change(&f.state)
+	f.state.ContentVersion++
+}
+
+// Set changes the server's state without bumping the content version.
+func (f *Fake) Set(change func(*State)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	change(&f.state)
+}
+
+// Intercept sees every later request first; nil stops it. An interceptor runs
+// outside the state's lock, so it may Edit or Set, and one at a time, so its
+// own variables need no lock of their own.
+func (f *Fake) Intercept(interceptor Interceptor) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.interceptor = interceptor
+}
+
+// Requests is every path asked so far, in order.
+func (f *Fake) Requests() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.requests)
+}
+
+// Authorizations is every Authorization header sent so far, in order.
+func (f *Fake) Authorizations() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.authorizations)
 }
 
 // Count is how many requests were made to a path with this prefix.
 func (f *Fake) Count(prefix string) int {
-	f.Lock()
-	defer f.Unlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	count := 0
-	for _, path := range f.Requests {
+	for _, path := range f.requests {
 		if strings.HasPrefix(path, prefix) {
 			count++
 		}
@@ -110,9 +152,9 @@ func (f *Fake) Count(prefix string) int {
 	return count
 }
 
-func (f *Fake) vault() map[string]any {
-	return map[string]any{"id": VaultID, "name": VaultName, "contentVersion": f.ContentVersion,
-		"attributeVersion": f.AttributeVersion, "items": len(f.Items), "createdAt": "2026-01-01T00:00:00Z"}
+func (s *State) vault() map[string]any {
+	return map[string]any{"id": VaultID, "name": VaultName, "contentVersion": s.ContentVersion,
+		"attributeVersion": s.AttributeVersion, "items": len(s.Items), "createdAt": "2026-01-01T00:00:00Z"}
 }
 
 func summary(item Item) map[string]any {
@@ -153,20 +195,33 @@ func write(w http.ResponseWriter, status int, value any) {
 }
 
 func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
-	f.Lock()
-	defer f.Unlock()
-	f.Requests = append(f.Requests, r.URL.Path)
-	f.Authorizations = append(f.Authorizations, r.Header.Get("Authorization"))
-	if f.Intercept != nil && f.Intercept(w, r) {
+	f.mu.Lock()
+	f.requests = append(f.requests, r.URL.Path)
+	f.authorizations = append(f.authorizations, r.Header.Get("Authorization"))
+	interceptor := f.interceptor
+	f.mu.Unlock()
+	if interceptor != nil && f.intercepted(interceptor, w, r) {
 		return
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.state.answer(w, r)
+}
+
+func (f *Fake) intercepted(interceptor Interceptor, w http.ResponseWriter, r *http.Request) bool {
+	f.intercepting.Lock()
+	defer f.intercepting.Unlock()
+	return interceptor(w, r)
+}
+
+func (s *State) answer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		write(w, http.StatusMethodNotAllowed, map[string]any{"status": 405})
 		return
 	}
 	if r.URL.Path == "/health" {
 		write(w, http.StatusOK, map[string]any{"name": "1Password Connect API", "version": "1.8.1",
-			"dependencies": []map[string]any{{"service": "sync", "status": f.SyncStatus},
+			"dependencies": []map[string]any{{"service": "sync", "status": s.SyncStatus},
 				{"service": "sqlite", "status": "ACTIVE", "message": "Connected to ./example.sqlite"}}})
 		return
 	}
@@ -174,18 +229,18 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		write(w, http.StatusUnauthorized, map[string]any{"status": 401, "message": "Invalid token signature"})
 		return
 	}
-	if f.Unavailable > 0 {
-		f.Unavailable--
+	if s.Unavailable > 0 {
+		s.Unavailable--
 		write(w, http.StatusServiceUnavailable, map[string]any{"status": 503})
 		return
 	}
-	items := append([]Item{}, f.Items...)
+	items := append([]Item{}, s.Items...)
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	switch path := r.URL.Path; {
 	case path == "/v1/vaults":
-		write(w, http.StatusOK, append([]map[string]any{f.vault()}, f.ExtraVaults...))
+		write(w, http.StatusOK, append([]map[string]any{s.vault()}, s.ExtraVaults...))
 	case path == "/v1/vaults/"+VaultID:
-		write(w, http.StatusOK, f.vault())
+		write(w, http.StatusOK, s.vault())
 	case path == "/v1/vaults/"+VaultID+"/items":
 		listing := []map[string]any{}
 		for _, item := range items {

@@ -87,8 +87,8 @@ func TestOnlyAPrivilegedPortIsDialedOutsideATest(t *testing.T) {
 	if _, _, err := rigged.WaitReady(context.Background()); !errors.Is(err, ErrPort) {
 		t.Fatalf("readiness retried a port it may not dial: %v", err)
 	}
-	if len(fake.Requests) != 0 {
-		t.Fatalf("the listener on a high port was reached: %v", fake.Requests)
+	if len(fake.Requests()) != 0 {
+		t.Fatalf("the listener on a high port was reached: %v", fake.Requests())
 	}
 	for _, address := range []string{"127.0.0.1:1024", "127.0.0.1:8080", "127.0.0.1:0", "127.0.0.1:x"} {
 		if err := requireLoopback(address, Privileged); err == nil {
@@ -139,7 +139,7 @@ func TestAClientNeverFormatsItsToken(t *testing.T) {
 
 func TestAListingLongerThanAVaultIsRefused(t *testing.T) {
 	fake := connecttest.New(t)
-	fake.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+	fake.Intercept(func(w http.ResponseWriter, r *http.Request) bool {
 		if !strings.HasSuffix(r.URL.Path, "/items") {
 			return false
 		}
@@ -153,7 +153,7 @@ func TestAListingLongerThanAVaultIsRefused(t *testing.T) {
 		}
 		w.Write([]byte("]"))
 		return true
-	}
+	})
 	if _, err := client(t, fake).Items(context.Background(), connecttest.VaultID); !errors.Is(err, ErrResponse) || !strings.Contains(err.Error(), "more items") {
 		t.Fatalf("an unbounded listing was accepted: %v", err)
 	}
@@ -215,10 +215,10 @@ func TestRedirectsAreRefusedAndTheTokenIsNotForwarded(t *testing.T) {
 	defer target.Close()
 	fake := connecttest.New(t)
 	for _, status := range []int{http.StatusMovedPermanently, http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
-		fake.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+		fake.Intercept(func(w http.ResponseWriter, r *http.Request) bool {
 			http.Redirect(w, r, target.URL+"/v1/vaults", status)
 			return true
-		}
+		})
 		_, err := client(t, fake).Vaults(context.Background())
 		if !errors.Is(err, ErrRedirect) {
 			t.Errorf("redirect %d was followed or misreported: %v", status, err)
@@ -232,10 +232,10 @@ func TestRedirectsAreRefusedAndTheTokenIsNotForwarded(t *testing.T) {
 func TestTheTokenTravelsOnlyInTheAuthorizationHeader(t *testing.T) {
 	fake := connecttest.New(t)
 	var seen []*http.Request
-	fake.Intercept = func(_ http.ResponseWriter, r *http.Request) bool {
+	fake.Intercept(func(_ http.ResponseWriter, r *http.Request) bool {
 		seen = append(seen, r.Clone(context.Background()))
 		return false
-	}
+	})
 	c := client(t, fake)
 	if _, err := c.Vaults(context.Background()); err != nil {
 		t.Fatal(err)
@@ -299,7 +299,7 @@ func TestHostileResponsesAreRefused(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			fake := connecttest.New(t)
-			fake.Intercept = c.intercept
+			fake.Intercept(c.intercept)
 			_, err := client(t, fake).Items(context.Background(), connecttest.VaultID)
 			if !errors.Is(err, ErrResponse) {
 				t.Fatalf("accepted or misclassified: %v", err)
@@ -317,14 +317,14 @@ func TestHostileResponsesAreRefused(t *testing.T) {
 func TestAnItemReadMustReturnTheItemAsked(t *testing.T) {
 	fake := connecttest.New(t, connecttest.Item{ID: connecttest.ID(1)}, connecttest.Item{ID: connecttest.ID(2)})
 	c := client(t, fake)
-	fake.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+	fake.Intercept(func(w http.ResponseWriter, r *http.Request) bool {
 		if strings.HasSuffix(r.URL.Path, connecttest.ID(1)) {
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintf(w, `{"id":%q,"category":"LOGIN","vault":{"id":%q}}`, connecttest.ID(2), connecttest.VaultID)
 			return true
 		}
 		return false
-	}
+	})
 	if _, err := c.Item(context.Background(), connecttest.VaultID, connecttest.ID(1)); !errors.Is(err, ErrResponse) {
 		t.Fatalf("a substituted item was accepted: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestAnItemReadMustReturnTheItemAsked(t *testing.T) {
 	}
 	// The right item, of another vault.
 	other := "wwwwwwwwwwwwwwwwwwwwwwwwww"
-	fake.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+	fake.Intercept(func(w http.ResponseWriter, r *http.Request) bool {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasSuffix(r.URL.Path, connecttest.ID(1)):
@@ -344,25 +344,25 @@ func TestAnItemReadMustReturnTheItemAsked(t *testing.T) {
 			return false
 		}
 		return true
-	}
+	})
 	if _, err := c.Item(context.Background(), connecttest.VaultID, connecttest.ID(1)); !errors.Is(err, ErrResponse) {
 		t.Fatalf("an item of another vault was accepted: %v", err)
 	}
 	if _, err := c.Vault(context.Background(), connecttest.VaultID); !errors.Is(err, ErrResponse) {
 		t.Fatalf("another vault was accepted for the one asked: %v", err)
 	}
-	fake.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+	fake.Intercept(func(w http.ResponseWriter, r *http.Request) bool {
 		if !strings.HasSuffix(r.URL.Path, connecttest.VaultID) {
 			return false
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"name":"No identifier","contentVersion":1}`))
 		return true
-	}
+	})
 	if _, err := c.Vault(context.Background(), connecttest.VaultID); !errors.Is(err, ErrResponse) {
 		t.Fatalf("a vault with no identifier was accepted: %v", err)
 	}
-	fake.Intercept = nil
+	fake.Intercept(nil)
 	before := fake.Count("/")
 	for _, bad := range []string{"", "../x", "UPPERCASEUPPERCASEUPPERCAS", "short", connecttest.ID(1) + "/files", "example-item"} {
 		if _, err := c.Item(context.Background(), connecttest.VaultID, bad); !errors.Is(err, ErrIdentifier) {
@@ -393,7 +393,7 @@ func TestDenialIsFinalAndUnavailabilityIsRetriedUnderTheDeadline(t *testing.T) {
 	}
 
 	// Locked after a restart: unavailable until the authenticated request lands.
-	fake.Unavailable = 3
+	fake.Set(func(s *connecttest.State) { s.Unavailable = 3 })
 	var waits []time.Duration
 	c = client(t, fake)
 	c.Sleep = func(_ context.Context, d time.Duration) error { waits = append(waits, d); return nil }
@@ -409,7 +409,7 @@ func TestDenialIsFinalAndUnavailabilityIsRetriedUnderTheDeadline(t *testing.T) {
 	}
 
 	// Never ready: the context's deadline ends it, with the class intact.
-	fake.Unavailable = 1 << 30
+	fake.Set(func(s *connecttest.State) { s.Unavailable = 1 << 30 })
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	c = client(t, fake)
@@ -461,7 +461,7 @@ func refusingAddress(t *testing.T) string {
 func TestASlowAnswerIsCutOffByTheContext(t *testing.T) {
 	fake := connecttest.New(t)
 	release := make(chan struct{})
-	fake.Intercept = func(http.ResponseWriter, *http.Request) bool { <-release; return true }
+	fake.Intercept(func(http.ResponseWriter, *http.Request) bool { <-release; return true })
 	defer close(release)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -472,7 +472,7 @@ func TestASlowAnswerIsCutOffByTheContext(t *testing.T) {
 
 func TestHealthReportsSyncState(t *testing.T) {
 	fake := connecttest.New(t)
-	fake.SyncStatus = "TOKEN_NEEDED"
+	fake.Set(func(s *connecttest.State) { s.SyncStatus = "TOKEN_NEEDED" })
 	health, err := client(t, fake).Health(context.Background())
 	if err != nil || health.Version != "1.8.1" || len(health.Dependencies) != 2 || *health.Dependencies[0].Status != "TOKEN_NEEDED" {
 		t.Fatalf("health: %+v %v", health, err)
