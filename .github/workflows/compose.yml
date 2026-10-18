@@ -49,8 +49,10 @@ concurrency:
   # Keyed by the branch being composed, so a pull request's composition neither
   # queues behind main's nor delays it: they build different tags and only
   # one of them can deploy.
+  # A pull request's newer push supersedes its older composition, which only
+  # verifies; main's never cancels, since it publishes and deploys.
   group: composition-${{ github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Whether this composition is entitled to publish and deploy: a dispatch on

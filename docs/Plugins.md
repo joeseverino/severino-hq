@@ -415,6 +415,13 @@ a link to the project that names the extension's repository. An extension's
 suite checks its templates for a `{# #}` comment left open with
 `hq_sdk.testing.unclosed_template_comments`.
 
+A list extends `list_page.html` and declares its empty state on the view, never
+in its template: `table_empty` says what an empty list means ("No vehicles
+yet."), `table_empty_why` a sentence beside it, and `get_table_empty_remedy()`
+returns an `hq_sdk.tables.Remedy` where the page's lead action is not what
+fills it. HQ draws the one empty state, and the "nothing matches" state of a
+filtered list, from those.
+
 Wrap a `.data-table` in `.table-scroll`; HQ keeps its headings visible
 through long result sets with sticky cells, and the table stays the one
 semantic and interactive source. Dense pages declare their sections
