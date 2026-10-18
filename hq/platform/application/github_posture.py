@@ -153,12 +153,12 @@ STANDARD: tuple[Check, ...] = (
         "Pin every action its workflows use to a commit, then require pinning in the Actions settings.",
     ),
     Check(
-        "security-fixes",
-        "Dependabot opens security fixes",
+        "vulnerability-alerts",
+        "Vulnerability alerts are on",
         BOTH,
-        _setting("security_fixes", True),
-        "Without it, a vulnerable dependency stays until you notice it.",
-        "Turn on Dependabot security updates.",
+        _setting("vulnerability_alerts", True),
+        "Renovate opens its security fixes from these alerts; without them a vulnerable dependency stays until you notice it.",
+        "Turn on Dependabot alerts in the security settings.",
     ),
     Check(
         "no-variables",
@@ -306,15 +306,6 @@ def _ruleset(name: str, rule: dict[str, Any]) -> Callable[[Repository], Runs]:
     return lambda repo: ((repo.short, f"{_api(repo, 'POST', '/rulesets', '--input -')} <<< {shlex.quote(body)}"),)
 
 
-def _security_fixes(repo: Repository) -> Runs:
-    return (
-        (
-            repo.short,
-            f"{_api(repo, 'PUT', '/vulnerability-alerts')} && {_api(repo, 'PUT', '/automated-security-fixes')}",
-        ),
-    )
-
-
 def _literal(text: str) -> str:
     """``text`` as a literal in a Perl pattern or replacement.
 
@@ -396,7 +387,7 @@ COMMANDS: dict[str, Callable[[Repository], Runs]] = {
     "keys-in-use": _idle_keys,
     "token-read-only": _setting("-f default_workflow_permissions=read", path="/actions/permissions/workflow"),
     "token-no-approvals": _setting("-F can_approve_pull_request_reviews=false", path="/actions/permissions/workflow"),
-    "security-fixes": _security_fixes,
+    "vulnerability-alerts": _setting(path="/vulnerability-alerts"),
     "no-variables": _variables,
     "pull-request-required": _ruleset(
         "Require a pull request",

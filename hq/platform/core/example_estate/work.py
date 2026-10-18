@@ -40,7 +40,7 @@ def repositories():
         "token": "read",
         "token_approves_reviews": False,
         "pinning_required": True,
-        "security_fixes": True,
+        "vulnerability_alerts": True,
         "security": None,
     }
 

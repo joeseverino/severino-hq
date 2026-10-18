@@ -33,7 +33,7 @@ KEPT = {
     "token": "read",
     "token_approves_reviews": False,
     "pinning_required": True,
-    "security_fixes": True,
+    "vulnerability_alerts": True,
     "security": None,
 }
 
@@ -201,20 +201,11 @@ class PostureHelpTests(TestCase):
         store(private=True, **{"access": kept(), "variables": [], **record})
         return {item.key: item for item in attention()}[f"github-posture:{key}"]
 
-    def test_security_fixes_name_the_exact_command_for_the_repository(self):
-        item = self.item("security-fixes", access=kept(security_fixes=False))
+    def test_vulnerability_alerts_name_the_exact_command_for_the_repository(self):
+        item = self.item("vulnerability-alerts", access=kept(vulnerability_alerts=False))
 
         self.assertEqual(item_help(item), COMMAND)
-        self.assertEqual(
-            runs(item),
-            [
-                (
-                    "alpha",
-                    "gh api -X PUT repos/example/alpha/vulnerability-alerts && "
-                    "gh api -X PUT repos/example/alpha/automated-security-fixes",
-                )
-            ],
-        )
+        self.assertEqual(runs(item), [("alpha", "gh api -X PUT repos/example/alpha/vulnerability-alerts")])
 
     def test_pinning_offers_no_setting_while_the_workflows_were_not_read(self):
         item = self.item("actions-pinned", access=kept(pinning_required=False))

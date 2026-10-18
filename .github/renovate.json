@@ -1,0 +1,114 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Every pin in the repository, proposed as one weekly pull request, each major on its own, security fixes at once. The workflow that runs it is .github/workflows/renovate.yml.",
+  "extends": [
+    "config:best-practices",
+    ":semanticCommits",
+    ":semanticCommitType(deps)",
+    ":semanticCommitTypeAll(deps)",
+    ":semanticCommitScopeDisabled"
+  ],
+  "ignorePaths": ["**/node_modules/**"],
+  "schedule": ["* * * * 1"],
+  "minimumReleaseAge": "14 days",
+  "prConcurrentLimit": 3,
+  "labels": ["dependencies"],
+  "automerge": false,
+  "rangeStrategy": "pin",
+  "lockFileMaintenance": {
+    "description": "Moves what only the locks name (uv.lock, mise.lock, the npm lock) in the same Monday window; Renovate never groups it with other updates.",
+    "schedule": ["* * * * 1"]
+  },
+  "vulnerabilityAlerts": {
+    "description": "A fix for a known vulnerability opens at once, outside the schedule and the limit, all open fixes in one pull request.",
+    "groupName": "security fixes"
+  },
+  "osvVulnerabilityAlerts": true,
+  "postUpdateOptions": ["gomodTidy"],
+  "packageRules": [
+    {
+      "description": "Everything short of a major moves together, digests included, so a week's updates are one pull request.",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "groupName": "dependencies",
+      "groupSlug": "weekly"
+    },
+    {
+      "description": "A new Python or Go minor is a new language version that the matrix, the target versions and go.mod move with, so it comes on its own like a major.",
+      "matchPackageNames": ["python", "golang", "go"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "{{depName}} {{newMajor}}.{{newMinor}}",
+      "groupSlug": "{{depName}}-{{newMajor}}.{{newMinor}}"
+    },
+    {
+      "description": "requires-python, engines and the go directive say what the project supports, not what it runs, so they stay ranges.",
+      "matchDepTypes": ["requires-python", "engines", "golang"],
+      "rangeStrategy": "auto"
+    },
+    {
+      "description": "mise records a github: tool's version without the tag's leading v.",
+      "matchManagers": ["mise"],
+      "matchDepNames": ["/^github:/"],
+      "extractVersion": "^v?(?<version>\\d.*)$"
+    },
+    {
+      "description": "The CodeQL bundle's releases are tagged codeql-bundle-v<version> beside the action's own tags; checks:codeql-bundle holds it to the bundle the pinned action runs.",
+      "matchManagers": ["mise"],
+      "matchDepNames": ["github:github/codeql-action"],
+      "extractVersion": "^codeql-bundle-v(?<version>.+)$"
+    },
+    {
+      "description": "The vendored API reference bundle is replaced, not edited: the script fetches the new version, checks its integrity and records its digests.",
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["@scalar/api-reference"],
+      "postUpgradeTasks": {
+        "commands": ["node scripts/vendor-scalar.mjs"],
+        "fileFilters": ["static/vendor/scalar/**"],
+        "executionMode": "update"
+      }
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "The vendored API reference bundle, by the version UPSTREAM records.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^static/vendor/scalar/UPSTREAM$/"],
+      "matchStrings": ["package: (?<depName>\\S+)\\nversion: (?<currentValue>\\S+)"],
+      "datasourceTemplate": "npm",
+      "versioningTemplate": "npm"
+    },
+    {
+      "description": "The Trivy release the image scans run.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts/toolchain\\.env$/"],
+      "matchStrings": ["TRIVY_VERSION=(?<currentValue>\\S+)"],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "description": "The hosted runner image, so a new one moves toolchain.env with every runs-on in the same pull request.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts/toolchain\\.env$/"],
+      "matchStrings": ["RUNNER_IMAGE=(?<depName>ubuntu)-(?<currentValue>\\S+)"],
+      "datasourceTemplate": "github-runners"
+    },
+    {
+      "description": "The Cordon commit admission signs and verifies with, followed on its main branch.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts/toolchain\\.env$/"],
+      "matchStrings": ["CORDON_COMMIT=(?<currentDigest>[0-9a-f]{40})"],
+      "depNameTemplate": "cordon",
+      "packageNameTemplate": "https://github.com/joeseverino/cordon",
+      "currentValueTemplate": "main",
+      "datasourceTemplate": "git-refs"
+    },
+    {
+      "description": "The Renovate image the workflow runs, by version and digest.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/renovate\\.yml$/"],
+      "matchStrings": ["renovate-image: (?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})"],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ]
+}

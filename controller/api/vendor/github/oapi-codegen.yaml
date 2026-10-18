@@ -36,7 +36,7 @@ output-options:
     - issues/list-comments
     - pulls/list
     - rate-limit/get
-    - repos/check-automated-security-fixes
+    - repos/check-vulnerability-alerts
     - repos/get
     - repos/get-all-environments
     - repos/get-branch-rules

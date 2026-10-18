@@ -190,6 +190,28 @@ class LeastPrivilegeTests(SimpleTestCase):
 
 
 @tag("source")
+class RenovateTests(SimpleTestCase):
+    def test_every_command_the_configuration_runs_is_one_the_workflow_allows(self):
+        """Renovate skips a post-upgrade command its runner does not allow, and the
+        pull request then carries a version bump without what it needed."""
+        config = json.loads((ROOT / ".github" / "renovate.json").read_text())
+        commands = [
+            command
+            for rule in config["packageRules"]
+            for command in rule.get("postUpgradeTasks", {}).get("commands", [])
+        ]
+        allowed = json.loads(
+            re.search(r"(?m)^\s+RENOVATE_ALLOWED_COMMANDS: '(.*)'$", workflow("renovate.yml"))
+            .group(1)
+            .replace("''", "'")
+        )
+        self.assertTrue(commands)
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertTrue(any(re.search(pattern, command) for pattern in allowed))
+
+
+@tag("source")
 class ReleaseTests(SimpleTestCase):
     """Only a dispatch on main publishes and signs the image production runs."""
 

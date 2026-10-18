@@ -601,7 +601,7 @@ admission about to lapse.
 `hq.platform.application.github_posture` holds every repository to a standard
 derived from the same record: what every repository is held to (only you have
 access, deploy keys read-only and in use, a read-only workflow token that
-approves nothing, actions pinned to a commit, Dependabot security fixes, no
+approves nothing, actions pinned to a commit, vulnerability alerts on, no
 Actions variables) and, for a public one, what GitHub gives it besides (pull
 requests required, the default branch protected from force pushes and
 deletion, secret scanning, push protection, code scanning). What a plan does

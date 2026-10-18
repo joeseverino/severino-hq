@@ -212,8 +212,9 @@ same review, and should fail when its path matches nothing rather than pass.
   copy for clients. Regenerate it with `mise run regen` after changing a
   route, capability, resource or domain; `--check` fails the gate on drift.
   The signed-in operator reads it rendered at `/api/docs/` (System > API), a
-  vendored Scalar bundle: to upgrade it, replace
-  `static/vendor/scalar/standalone.js` and update `UPSTREAM`.
+  vendored Scalar bundle: to move it, change `version:` in
+  `static/vendor/scalar/UPSTREAM` and run `node scripts/vendor-scalar.mjs`,
+  which Renovate also does.
 - The controller's contracts are derived too. `manage.py bridge_contract`
   writes `controller/api/hq-controller.openapi.json` (the bridge's own
   messages in `hq/domains/control_plane/bridge_base.json`, joined to what the

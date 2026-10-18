@@ -439,34 +439,6 @@
     }
    }
   },
-  "/repos/{owner}/{repo}/automated-security-fixes": {
-   "get": {
-    "operationId": "repos/check-automated-security-fixes",
-    "parameters": [
-     {
-      "name": "owner",
-      "in": "path",
-      "required": true,
-      "schema": {
-       "type": "string"
-      }
-     },
-     {
-      "name": "repo",
-      "in": "path",
-      "required": true,
-      "schema": {
-       "type": "string"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "description": "Response if Dependabot is enabled"
-     }
-    }
-   }
-  },
   "/repos/{owner}/{repo}/check-runs": {
    "post": {
     "operationId": "checks/create",
@@ -1625,6 +1597,34 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/vulnerability-alerts": {
+   "get": {
+    "operationId": "repos/check-vulnerability-alerts",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Response if repository is enabled with vulnerability alerts"
+     }
+    }
+   }
+  },
   "/users/{username}": {
    "get": {
     "operationId": "users/get-by-username",
@@ -1880,21 +1880,6 @@
      "name",
      "expired",
      "expires_at"
-    ]
-   },
-   "check-automated-security-fixes": {
-    "title": "Check Dependabot security updates",
-    "description": "Check Dependabot security updates",
-    "type": "object",
-    "properties": {
-     "enabled": {
-      "type": "boolean",
-      "example": true,
-      "description": "Whether Dependabot security updates are enabled for the repository."
-     }
-    },
-    "required": [
-     "enabled"
     ]
    },
    "check-run": {

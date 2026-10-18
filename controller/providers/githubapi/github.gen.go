@@ -998,14 +998,6 @@ type Artifact struct {
 	} `json:"workflow_run,omitempty"`
 }
 
-// CheckAutomatedSecurityFixes Check Dependabot security updates
-type CheckAutomatedSecurityFixes struct {
-	// Enabled Whether Dependabot security updates are enabled for the repository.
-	//
-	// Example: true
-	Enabled bool `json:"enabled"`
-}
-
 // CheckRun A check performed on the code of a given code change
 type CheckRun struct {
 	// Conclusion Example: neutral

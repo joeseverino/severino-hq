@@ -202,7 +202,7 @@ class ComposedQueueTests(TestCase):
                 "token": "write",
                 "token_approves_reviews": True,
                 "pinning_required": False,
-                "security_fixes": False,
+                "vulnerability_alerts": False,
             },
         )
 

@@ -2,7 +2,7 @@ name: plugin checks
 
 # The reusable pre-admission gate. Every extension repository calls this instead
 # of copying it, so the pinned action SHAs, the Python matrix and the secret
-# scan live in exactly one place: this one, where Dependabot already keeps
+# scan live in exactly one place: this one, where Renovate already keeps
 # them current.
 #
 # This workflow deliberately does NOT sign anything. A job that runs from a

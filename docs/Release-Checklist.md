@@ -20,7 +20,7 @@ only by a merged pull request.
 ## 2. The pull request
 
 - [ ] One pull request per piece of work, with the repository's open
-      Dependabot updates folded in.
+      dependency updates folded in.
 - [ ] **Severino HQ · Review** says *Ready to merge*. *Held* names the gate
       and the fix.
 - [ ] `mise run preflight` (or `mise run preflight --remote` after the push)

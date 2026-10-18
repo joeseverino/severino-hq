@@ -211,7 +211,9 @@ type GitHubAccess struct {
 	PinningRequired      bool                 `json:"pinning_required"`
 	Token                string               `json:"token"`
 	TokenApprovesReviews bool                 `json:"token_approves_reviews"`
-	SecurityFixes        bool                 `json:"security_fixes"`
+	// VulnerabilityAlerts is whether GitHub raises the dependency alerts
+	// Renovate opens its security fixes from.
+	VulnerabilityAlerts bool `json:"vulnerability_alerts"`
 	// Security is each security feature's status; nil where the plan offers
 	// none of them, which is not "off".
 	Security map[string]*string `json:"security"`
@@ -780,7 +782,7 @@ func (g *githubRepository) access(ctx context.Context, repo githubapi.FullReposi
 	if err != nil {
 		return GitHubAccess{}, err
 	}
-	fixes, err := repoGet[githubapi.CheckAutomatedSecurityFixes](ctx, g, "/automated-security-fixes")
+	alerts, err := g.vulnerabilityAlerts(ctx)
 	if err != nil {
 		return GitHubAccess{}, err
 	}
@@ -810,7 +812,7 @@ func (g *githubRepository) access(ctx context.Context, repo githubapi.FullReposi
 		Visibility: visibility, Collaborators: []GitHubCollaborator{}, DeployKeys: []GitHubDeployKey{},
 		AllowedActions: string(actions.AllowedActions), PinningRequired: actions.ShaPinningRequired,
 		Token: string(workflow.DefaultWorkflowPermissions), TokenApprovesReviews: workflow.CanApprovePullRequestReviews,
-		SecurityFixes: fixes.Enabled,
+		VulnerabilityAlerts: alerts,
 	}
 	for _, collaborator := range collaborators {
 		access.Collaborators = append(access.Collaborators, GitHubCollaborator{Login: collaborator.Login, Role: collaborator.RoleName})
@@ -834,6 +836,15 @@ func (g *githubRepository) access(ctx context.Context, repo githubapi.FullReposi
 type githubUsesFound struct {
 	pins   []GitHubPin
 	called []string
+}
+
+// vulnerabilityAlerts is GitHub's answer for the setting: 204 on, 404 off.
+func (g *githubRepository) vulnerabilityAlerts(ctx context.Context) (bool, error) {
+	_, err := g.raw(ctx, "/vulnerability-alerts")
+	if httpStatus(err) == 404 {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // listing is a directory's entries; a 404 is the repository saying it has no
