@@ -18,7 +18,7 @@ Its buttons and links sit at its end, beside its text, not on rows of their own.
     <li class="attention-row"{% if triage and not glance %} id="{{ item.anchor }}"{% endif %} data-attention-item>
       <div class="attention-body">
         <div class="attention-head">
-          {% if not glance %}{% include "partials/_urgency_pill.html" with item=item only %}{% endif %}
+          {% if not glance %}{% include "partials/_urgency_pill.html" with item=item mark=True only %}{% endif %}
           {% if glance %}<a class="attention-title" href="{{ item.page }}">{{ item.label }}</a>
           {% elif item.href and not here %}<a class="attention-title" href="{{ item.href }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
           {% if item.since or item.observed_at or not grouped and not glance %}

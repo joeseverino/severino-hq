@@ -1986,13 +1986,13 @@ a.kpi:hover { background: var(--surface-2); }
   padding: var(--space-5) 0;
   border-top: 1px solid var(--line-2);
 }
-/* As wide as what it says, up to a readable measure, so what acts on it
-   follows it rather than standing at the far edge of a wide card. */
-.attention-body { flex: 0 1 auto; min-width: min(100%, 18rem); max-width: var(--measure); }
+/* What the card says takes the row, its lines held to a readable measure. */
+.attention-body { flex: 1 1 18rem; min-width: 0; }
+.attention-body > * { max-width: var(--measure); }
 /* What can be pressed, then the pages that help look into it, then the
-   reader's own dismiss: beside what the card says, never a row of their own
-   while the row is wide enough for both. */
-.attention-end { flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3) var(--space-4); }
+   reader's own dismiss: at the card's right edge, so every card's buttons line
+   up; under what it says, still at the right, once the row is too narrow. */
+.attention-end { flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3) var(--space-4); margin-left: auto; }
 .attention-end > .attention-actions { margin: 0; justify-content: flex-end; }
 .attention-end > .attention-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; list-style: none; font-size: var(--text-xs); }
 .attention-links .icon-link { min-width: 0; width: 1.6rem; height: 1.6rem; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
@@ -2004,7 +2004,7 @@ a.kpi:hover { background: var(--surface-2); }
 
 /* What is wrong, on one line with how bad it is and what it is about: the
    line a reader scans the queue by. */
-.attention-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
+.attention-head { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
 .attention-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--text-xs); }
 .attention-meta > a { overflow-wrap: anywhere; }
 /* How old the reading behind it is: quiet while current, in the attention tone once out of date. */
@@ -2032,15 +2032,24 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* The queue under its domains: a heading per domain and its count. */
 .queue-group + .queue-group { margin-top: var(--space-8); }
-.queue-group > h3 { display: flex; align-items: baseline; gap: var(--space-4); margin: 0; padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); color: var(--muted); font-size: var(--text-xs); font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+.queue-group > h3 { display: flex; align-items: baseline; gap: var(--space-4); margin: 0; color: var(--muted); font-size: var(--text-xs); font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
 .action-items-aside[open] > summary { margin-bottom: var(--space-6); }
 /* A domain's entries: an item, or a family of them folded. Each after the
    first is ruled off from the one before, whichever it is. */
 .queue-entries > * + * { border-top: 1px solid var(--line-2); }
+/* A card that needs the reader, or only tells them something, is marked by a
+   dot in its tone; only an urgent one says so in words. The dot keeps the
+   pill's tip and its origin panel. */
+.pill.is-mark { flex: none; width: .5rem; height: .5rem; padding: 0; border: 0; border-radius: 50%; background: var(--tone-ink); font-size: 0; }
+/* In a card's head the dot hangs in the margin at the title's first line, so
+   the title and what the card says share one edge, and a long title wraps under
+   itself. */
+.attention-head > .pill.is-mark { position: absolute; left: -.95rem; top: .55rem; }
+.queue-family > summary > .pill.is-mark { position: absolute; left: -.95rem; top: calc(var(--space-5) + .55rem); }
 .queue-entries .attention-row:first-child { padding-top: var(--space-5); }
 /* A family, closed: how bad, what kind, how many, and the one thing that can
    be done to all of them. Open, its rows are set in from the fold's mark. */
-.queue-family > summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-5) 0; cursor: pointer; font-size: var(--text-md); }
+.queue-family > summary { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-5) 0; cursor: pointer; font-size: var(--text-md); }
 /* The fold's mark follows the count, so a family's pill starts where a
    single row's does; the family's own control ends the line. */
 .queue-family > summary::before { order: 1; }
@@ -2099,7 +2108,10 @@ a.kpi:hover { background: var(--surface-2); }
   font-size: var(--text-sm); color: var(--ink-2); counter-reset: step;
 }
 .resolution-workflow > li { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-6); counter-increment: step; }
-.resolution-workflow > li > strong { flex: 0 0 min(40%, 11rem); min-width: 0; }
+/* A short label (a repository, a machine) is a column its command lines up
+   beside; a label that is a whole instruction takes the line, and its command
+   goes under it. */
+.resolution-workflow > li > strong { flex: 0 1 auto; min-width: min(40%, 11rem); max-width: 100%; }
 .resolution-workflow > li > .command { flex: 0 1 auto; }
 .resolution-workflow > li > :not(strong, .command),
 .resolution-workflow > li > .command:first-child { flex-basis: 100%; }

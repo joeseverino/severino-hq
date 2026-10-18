@@ -3,10 +3,11 @@ How urgent a card is, and behind it what raised it (`item.origin`): Cmd- or
 Ctrl-click opens the rule, its severity, what it stands in for and the line
 it is defined at; hovering says the rule and its line in a tooltip. A plain
 click does nothing; the panel is the page's own markup, opened by app.js and
-dismissed like any popover.
+dismissed like any popover. With `mark`, a card that is not urgent shows a dot in
+its tone instead of the word.
 {% endcomment %}
 {% with panel="origin-"|add:item.origin.key|slugify %}
-<span class="pill pill-{% if item.notice %}idea{% else %}{{ item.status }}{% endif %}" data-origin="{{ panel }}" tabindex="0" data-tip="{% if item.origin.rule %}Rule {{ item.origin.rule }}{% if item.origin.where %}, defined at {{ item.origin.where|cut:"hq/platform/application/" }}{% endif %}{% else %}From {{ item.origin.source }}{% endif %}. ⌘-click for more.">{{ item.urgency }}</span>
+<span class="pill pill-{% if item.notice %}idea{% else %}{{ item.status }}{% endif %}{% if mark and item.status != "serious" %} is-mark{% endif %}" data-origin="{{ panel }}" tabindex="0" data-tip="{% if item.origin.rule %}Rule {{ item.origin.rule }}{% if item.origin.where %}, defined at {{ item.origin.where|cut:"hq/platform/application/" }}{% endif %}{% else %}From {{ item.origin.source }}{% endif %}. ⌘-click for more.">{{ item.urgency }}</span>
 <div class="modal origin-panel" id="{{ panel }}" popover>
   <div class="modal-panel">
     <div class="modal-head">

@@ -15,7 +15,7 @@ the area is not said twice.
         {% if entry.folded %}
           <details class="queue-family" data-queue-family>
             <summary>
-              <span class="pill pill-{{ entry.status }}">{{ entry.status|urgency }}</span>
+              <span class="pill pill-{{ entry.status }}{% if entry.status != "serious" %} is-mark{% endif %}">{{ entry.status|urgency }}</span>
               <strong>{{ entry.family }}</strong>
               <span class="count" data-queue-count>{{ entry.items|length }}</span>
               {% if aside_url %}{% post_button "Dismiss these" aside_url|add:"&family="|add:entry.id css="btn compact ghost queue-family-end" %}{% endif %}

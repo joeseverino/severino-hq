@@ -123,6 +123,9 @@ SELECTORS = {
     "band_aside": "dialog, .band-meta",
     # A route's hops, and the map's lanes and the box that holds them.
     "route": ".request-path",
+    # A queue card, and what can be pressed at its end.
+    "queue_card": ".attention-row",
+    "queue_card_end": ".attention-end",
     "route_icon": ".hop-icon",
     "map": ".topology-map",
     "map_lane": ".topology-lane",
@@ -1053,6 +1056,22 @@ _UNEVEN_ROUTES = (
 }"""
 )
 
+# A section of queue cards ends every card's buttons at one edge: no card's
+# end stops more than a pixel short of another's in the same section.
+_RAGGED_QUEUES = (
+    "([card, end]) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const list of document.querySelectorAll('main section:has(' + card + ')')) {
+    const ends = [...list.querySelectorAll(card + ' > ' + end)]
+      .filter((el) => el.checkVisibility()).map((el) => Math.round(box(el).right));
+    if (ends.length > 1 && Math.max(...ends) - Math.min(...ends) > 1) found.push(`${describe(list)}: ends at ${[...new Set(ends)].join(', ')}`);
+  }
+  return found;
+}"""
+)
+
 # The map scrolls with the page, and draws no lane with nothing in it.
 _MAP = """([map, lane, node]) => {
   const box = document.querySelector(map);
@@ -1336,6 +1355,7 @@ class LayoutBrowserTests(BrowserGate):
             self.a_row_has_one_disclosure,
             self.a_band_cell_keeps_its_padding,
             self.a_band_lays_out_as_whole_rows,
+            self.a_queue_ends_its_cards_at_one_edge,
         ]
         if name in DENSE_PAGES:
             rules.append(self.dense_pages_keep_to_their_boxes)
@@ -1515,6 +1535,9 @@ class LayoutBrowserTests(BrowserGate):
 
     def a_route_is_one_row_or_one_column(self, _name):
         self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
+
+    def a_queue_ends_its_cards_at_one_edge(self, _name):
+        self.assertEqual(self.page.evaluate(_RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]), [])
 
     def a_route_across_spaces_its_hops_evenly(self, _name):
         self.assertEqual(self.page.evaluate(_UNEVEN_ROUTES, [SELECTORS["route"], SELECTORS["route_icon"]]), [])
