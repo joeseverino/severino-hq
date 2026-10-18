@@ -27,44 +27,38 @@ async (page) => {
     // card is stretching to a neighbour it should not match, or padding has
     // outlived the content it held.
     const CARD_SLACK = 28;
-    // How much of a card's slack is owed to the pair it sits in. A stretched
-    // pair is equal by construction, so the shorter card's spare height is the
-    // difference between them: that is what "equal" costs, not a defect.
-    // Only the difference is forgiven: slack beyond it is still a fault, so
-    // this cannot quietly excuse an unrelated gap.
+    // A pair's cards are each as tall as what they hold, so nothing in a pair
+    // is forgiven. A grid of cards that ends its rows together on purpose
+    // (the dashboard's) owes a card the difference between what it holds and
+    // what the fullest card on its row holds, and only that: slack beyond it
+    // is still a fault.
+    const PAIRS = '.two-col, .section-flow';
+    const shown = (el) => [...el.children].filter((c) => c.getBoundingClientRect().height > 0);
     const filled = (el) => {
-      const kids = [...el.children].filter(
-        (c) => c.getBoundingClientRect().height > 0,
-      );
+      const kids = shown(el);
       if (!kids.length) return 0;
       return (
         Math.max(...kids.map((k) => k.getBoundingClientRect().bottom)) -
         el.getBoundingClientRect().top
       );
     };
-    const paired = (card) => {
+    const owed = (card) => {
       const row = card.parentElement;
-      if (!row || !row.classList.contains('two-col')) return 0;
-      const kids = [...row.children].filter(
-        (k) => k.getBoundingClientRect().height > 0,
-      );
-      if (kids.length !== 2) return 0;
-      // Compared by *content*, not by box. Once a pair has stretched, the two
-      // boxes are equal by construction and their difference is zero, so
-      // measuring the boxes forgives nothing and flags the shorter card for
-      // slack the stretch itself created. What one card was stretched by is
-      // how much less it had to say than the other.
-      const content = kids.map(filled);
-      return round(Math.max(...content) - filled(card));
+      if (!row || row.matches(PAIRS)) return 0;
+      const top = round(card.getBoundingClientRect().top);
+      // Compared by *content*, not by box: stretched, the boxes are equal by
+      // construction, and what a card was stretched by is how much less it
+      // had to say than the fullest beside it.
+      const beside = shown(row).filter((k) => round(k.getBoundingClientRect().top) === top);
+      return round(Math.max(...beside.map(filled)) - filled(card));
     };
-    document.querySelectorAll('.card, figure.chart-card').forEach((card) => {
-      const kids = [...card.children].filter(
-        (c) => c.getBoundingClientRect().height > 0,
-      );
+    const CARDS = '.card, figure.chart-card, .control-card, :is(' + PAIRS + ') > :is(section, .page-section)';
+    document.querySelectorAll(CARDS).forEach((card) => {
+      const kids = shown(card);
       if (!kids.length) return;
       const bottom = card.getBoundingClientRect().bottom;
       const last = Math.max(...kids.map((k) => k.getBoundingClientRect().bottom));
-      const slack = round(bottom - last) - paired(card);
+      const slack = round(bottom - last) - owed(card);
       if (slack > CARD_SLACK) add('empty-card-bottom', { card: name(card), slack });
     });
 
@@ -324,24 +318,6 @@ async (page) => {
       });
     });
 
-    // A paired row whose two cards end at different points. A pair stretches;
-    // if these differ, something stopped it stretching. Checked here because
-    // fixing it by hand only fixes the data currently on screen.
-    document.querySelectorAll('.two-col').forEach((row) => {
-      const kids = [...row.children].filter(
-        (k) => k.getBoundingClientRect().height > 0,
-      );
-      if (kids.length !== 2) return;
-      // Stacked (the pair's single-column layout on a phone), the two are not
-      // side by side, so there is nothing for them to end together with.
-      const tops = kids.map((k) => round(k.getBoundingClientRect().top));
-      if (Math.abs(tops[0] - tops[1]) > 2) return;
-      const heights = kids.map((k) => round(k.getBoundingClientRect().height));
-      const gap = Math.max(...heights) - Math.min(...heights);
-      if (gap > 2) {
-        add('uneven-pair', { row: name(kids[0]), heights, gap });
-      }
-    });
 
     // A sentence inside a flex row. `.row-main` lays its children out as flex
     // items, so inline emphasis inside a sentence is promoted to a block and

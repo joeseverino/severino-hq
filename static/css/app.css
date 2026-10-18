@@ -1485,6 +1485,13 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    anything that ends a card: a trailing margin inside a padded box is a band
    of empty card. */
 .table-scroll:last-child { margin-bottom: 0; }
+/* A table's frame is as wide as its table needs, up to its box: three short
+   columns stretched across a page are a row of gulfs. It is never narrower
+   than a line of reading, so short tables stacked on a page keep one edge
+   near enough to read as a column. The table inside still fills the frame
+   (`width: 100%` below), and one too wide for its box takes the box, as
+   before, which is all tables.js measures against. */
+.table-scroll:has(> .data-table) { inline-size: fit-content; min-inline-size: min(100%, var(--measure)); }
 /* Refreshes pin column widths (fixed layout); long unbroken tokens must
    wrap inside their cell instead of bleeding across the pinned columns. */
 /* Before tables.js has fitted it, and where there is no script at all, a
@@ -2133,13 +2140,12 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 
 /* ── Section cards / two-col ────────────────────────────────────── */
 
-/* Side-by-side panels share a top and a bottom edge: a ragged lower edge reads
-   as a rendering fault rather than as a layout. Anything short simply has room
-   underneath. */
 /* Two columns at most: a track is never narrower than half the row, so four
    cards pair up 2+2 instead of leaving one orphaned, and below two 320px
-   tracks it is one column with no breakpoint. */
-.two-col { container: pair / inline-size; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(320px, (100% - var(--layout-gap)) / 2)), 1fr)); gap: var(--layout-gap); align-items: stretch; margin: 0 0 var(--stack-gap); }
+   tracks it is one column with no breakpoint. A card is as tall as what it
+   holds: stretched to a taller neighbour, a short card is mostly empty frame,
+   which reads worse than a card that is honestly short. */
+.two-col { container: pair / inline-size; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(320px, (100% - var(--layout-gap)) / 2)), 1fr)); gap: var(--layout-gap); align-items: start; margin: 0 0 var(--stack-gap); }
 
 /* A main panel with a companion. Unlike two equal siblings, the companion is
    sized to its own contents: stretching a three-row list to match a long one
@@ -2166,16 +2172,12 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 /* The wide column second. A drawing sized to itself beside a table of six
    columns wants the narrow half, and reading order puts the drawing first. */
 .two-col > * { min-width: 0; }
-/* Cards sized to their own content rather than to the tallest in the row.
-   Stretching is right when both sides are lists that read as one block, and
-   wrong when one is a short table beside a tall drawing: the short one grows a
-   band of empty card under its last row. */
 /* The sections at the end of a thing's page (what else HQ holds, how it
    relates, what names it) are mostly short: each is a card holding its own
-   heading, two to a row at one height where both fit, and one that is wide
-   (a table of four columns or more, a folded section, a fold of raw
-   readings) takes the whole row. */
-.section-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr)); gap: var(--layout-gap); align-items: stretch; margin: 0 0 var(--stack-gap); }
+   heading, two to a row where both fit, each as tall as what it holds, and one
+   that is wide (a table of four columns or more, a folded section, a fold of
+   raw readings) takes the whole row. */
+.section-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr)); gap: var(--layout-gap); align-items: start; margin: 0 0 var(--stack-gap); }
 /* Short sections collect at the end, so they pair with each other rather than
    each sitting beside the gap a wide one leaves. */
 .section-flow > * { min-width: 0; margin: 0; order: 1; }
@@ -2184,18 +2186,15 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .section-flow > :is(section, .page-section):has(> details.section-fold) { grid-column: 1 / -1; order: 0; }
 /* Sections stacked in one column of a pair, at the pair's own gap. */
 .stack { display: grid; gap: var(--layout-gap); align-content: start; min-width: 0; }
-/* A paired row whose two cards end at different points reads as broken, so
-   the cards stretch and the shorter one gets somewhere to put the difference. A card in a stretched pair is a column, and its drawing
-   sits in the middle of whatever height the row ends up being rather than
-   leaving the slack in one lump at the bottom. */
-.two-col > .card,
+/* Two charts are like with like and end together: each card is a column, its
+   drawing in the middle of whatever height the pair ends up being. */
+.two-col:has(> .chart-card) { align-items: stretch; }
 .two-col > .chart-card {
   display: flex;
   flex-direction: column;
 }
 .two-col > .chart-card > .chart-scroll,
 .two-col > .chart-card > .pie-row { margin-block: auto; }
-.two-col > .card > .table-scroll:only-of-type { margin-bottom: auto; }
 /* Panels that flow rather than pair. Assigning cards to a fixed left and right
    column means their heights are whatever the data made them, so one column
    ends early and the page carries the difference as a hole. Columns balance
@@ -2204,9 +2203,13 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
    the space is not there, so no breakpoint has to say when. */
 .card-columns { columns: 22rem 2; column-gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .card-columns > * { break-inside: avoid; margin: 0 0 var(--layout-gap); display: block; width: 100%; }
-.dashboard-patterns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
+/* Flex rather than a grid of fixed tracks, so a row's last card takes what
+   the row leaves: three cards on a window that fits two put the third across
+   the row, not in half of it beside nothing. */
+.dashboard-patterns { display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
+.dashboard-patterns > * { flex: 1 1 min(100%, 360px); }
 /* Four cards are two rows of two, never three and one left alone. */
-.dashboard-patterns:has(> :nth-child(4):last-child) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); }
+.dashboard-patterns:has(> :nth-child(4):last-child) > * { flex-basis: min(100%, 30rem); }
 /* Overview cards share the available width, so three contributing domains
    stay in one scan on a desktop. Narrow containers naturally stack them. */
 /* As many overviews to a row as fit, sharing it evenly, and a row's cards the

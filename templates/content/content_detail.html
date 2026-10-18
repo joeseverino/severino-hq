@@ -7,28 +7,26 @@
   {% if item.published_at %}<dt>{% if item.is_published %}Published{% else %}Planned date{% endif %}</dt><dd>{{ item.published_at|when }}</dd>{% endif %}
   <dt>Added to HQ</dt><dd class="muted">{{ item.created_at|when }}</dd>
   <dt>Updated</dt><dd class="muted">{{ item.updated_at|when }}</dd>
+  {% comment %}No visits is a fact about the page, said beside the others rather than in a card of its own.{% endcomment %}
+  {% if traffic.path and not traffic.measured %}<dt>Traffic</dt><dd class="muted">No visits in the last {{ traffic.days|counted:"day" }}</dd>{% endif %}
 </dl>
 
-{% if traffic.path %}
+{% if traffic.path and traffic.measured %}
   <section class="card" aria-labelledby="traffic">
     <div class="card-head">
       <h2 id="traffic">Traffic</h2>
       <a class="section-foot" href="{% url 'analytics:overview' %}?days={{ traffic.days }}">All analytics &rarr;</a>
     </div>
-    {% if traffic.measured %}
-      <dl class="vitals-strip">
-        <div class="vital">
-          <dt>Page views ({{ traffic.days|counted:"day" }})</dt>
-          <dd><span class="vital-rate">{{ traffic.pageviews }}</span></dd>
-        </div>
-        <div class="vital">
-          <dt>Visits ({{ traffic.days|counted:"day" }})</dt>
-          <dd><span class="vital-rate">{{ traffic.visits }}</span></dd>
-        </div>
-      </dl>
-    {% else %}
-      <p class="muted">No visits recorded for this page in the last {{ traffic.days|counted:"day" }}.</p>
-    {% endif %}
+    <dl class="vitals-strip">
+      <div class="vital">
+        <dt>Page views ({{ traffic.days|counted:"day" }})</dt>
+        <dd><span class="vital-rate">{{ traffic.pageviews }}</span></dd>
+      </div>
+      <div class="vital">
+        <dt>Visits ({{ traffic.days|counted:"day" }})</dt>
+        <dd><span class="vital-rate">{{ traffic.visits }}</span></dd>
+      </div>
+    </dl>
   </section>
 {% endif %}
 

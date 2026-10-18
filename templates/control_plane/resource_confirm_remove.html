@@ -7,7 +7,7 @@ outright. Then there is nothing to confirm, only the reason and the way back.
 {% if removal_allowed %}
   {{ block.super }}
 {% else %}
-  <section class="card">
+  <section class="card confirm">
     {% include "control_plane/_removal_summary.html" %}
     <p class="msg msg-error">{{ removal_explanation }}</p>
     <p><a class="btn" href="{{ confirm.cancel_url }}">Back</a></p>

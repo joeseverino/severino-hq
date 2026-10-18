@@ -508,6 +508,9 @@ class InfrastructureDetailView(PageMixin, DetailView):
         )
         derived = self.derived
         context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))
+        # A running container is summarised by what it runs, in its own band.
+        if not (self.container and self.container["standing"]):
+            context["page_aside"] = "control_plane/_record_status.html"
         # What this resource does, said by its own provider.
         context["label"] = kind_label(self.object.kind)
         # Relationships names the service it is for; the head says it only when

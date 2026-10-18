@@ -143,13 +143,15 @@ TEXT_CONTRAST = 4.5
 LARGE_TEXT_CONTRAST = 3.0
 
 # Structural rules from scripts/layout-audit.js that hold on every page at
-# every width. The audit's density heuristics (card-too-wide, empty-card-bottom,
-# row-height-hole, horizontal-slack) judge proportions that depend on how much
-# data a page has, so they stay a by-eye tool rather than a gate.
+# every width. A card with a band of empty frame under its last line
+# (empty-card-bottom) is one: a card is as tall as what it holds. The audit's
+# other density heuristics (card-too-wide, row-height-hole, horizontal-slack)
+# judge proportions that depend on how much data a page has, so they stay a
+# by-eye tool rather than a gate.
 AUDIT_RULES = {
     "unwanted-scrollbar",
     "clipped-content",
-    "uneven-pair",
+    "empty-card-bottom",
     "uneven-controls",
     "dead-tooltip",
     "seam-mismatch",

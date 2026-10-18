@@ -37,43 +37,13 @@ declaration's machinery: the controller's actions are the buttons above, and
 {% if container.standing %}
   {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine edit_url=container.edit_url %}
   {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan readiness=container.readiness edit_url=container.edit_url %}{% endif %}
-{% else %}
-{% comment %}
-One line: what state it is in, since when, and what happens next. A page
-never shows two statuses, so two can never disagree.
-{% endcomment %}
-<div class="control-summary">
-  <div class="control-metric" data-record-status="{{ status.state }}">
-    <span class="control-label">State</span>
-    <strong class="control-{{ status.tone }}">{{ status.label }}</strong>
-    <span>{% if status.since %}Since {{ status.since|when }}. {% endif %}{{ status.detail }}{% if status.read_at %} {% include "partials/_reading_age.html" with at=status.read_at only %}{% endif %}{% for line in controller.lines %} {{ line }}{% endfor %}</span>
-  </div>
-</div>
-{% endif %}
-
-{% comment %}
-A certificate from the side of what it serves: each service served with it,
-and the names on it nothing is served under. The service's own page names the
-certificate, so the relation reads from both ends.
-{% endcomment %}
-{% if certificate_use %}
-  <section class="control-card" id="used-by">
-    <h2>Used by</h2>
-    {% if certificate_use.used_by %}
-      <p>{{ certificate_use.used_by|length|counted:"service" }}: {% for hostname in certificate_use.used_by %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
-    {% else %}
-      <p class="muted">No service is served with this certificate.</p>
-    {% endif %}
-    {% if certificate_use.unused and certificate_use.used_by %}
-      <p class="muted">Nothing is served under {% for name in certificate_use.unused %}<code>{{ name }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
-    {% endif %}
-  </section>
 {% endif %}
 
 {% if resolved_spec or resolution_error %}
   <div class="two-col">
     <section class="control-card">
       <h2>Certificate</h2>
+      {% include "control_plane/_record_says.html" %}
       <dl class="kv compact">
         <dt>Name</dt><dd>{{ resolved_spec.certificate_name }}</dd>
         <dt>Issuer</dt><dd>{{ resource.status.issuer|default:"Not read yet" }}</dd>
@@ -124,40 +94,14 @@ certificate, so the relation reads from both ends.
       {% endif %}
     </section>
   </div>
-  {% comment %}
-  Where this certificate's facts are recorded, and whether the last reconcile
-  managed it. A publication that failed is a fact about the certificate, and
-  without this the only record of it is the raw status below.
-  {% endcomment %}
-  {% if resource.status.published_facts %}
-    <section class="control-card">
-      <h2>Saved to 1Password</h2>
-      <table class="data-table compact-table">
-        <thead><tr><th>Item</th><th>Last saved</th></tr></thead>
-        <tbody>
-          {% for publication in resource.status.published_facts %}
-            <tr>
-              <td><strong>{{ publication.target }}</strong></td>
-              <td>
-                {% if publication.detail %}
-                  <span class="pill pill-serious">Not saved</span>
-                  <br><span class="muted">{{ publication.detail }}</span>
-                {% elif publication.written %}
-                  <span class="pill pill-good">Saved</span>
-                  {% if publication.fields or publication.material == "written" %}
-                    <br><span class="muted">{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
-                  {% endif %}
-                {% else %}
-                  <span class="pill pill-good">Already up to date</span>
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </section>
-  {% endif %}
-{% else %}
+{% endif %}
+
+{% comment %}
+The record's own card, what it is used by, where it is saved and how it
+relates: each a card as tall as what it holds, two to a row, so no short one
+stretches across the page.
+{% endcomment %}
+<div class="section-flow">
   {% comment %}
   One card for every kind that is not a certificate, rendered from what the
   provider says about itself rather than from markup that knows what a proxy
@@ -167,9 +111,10 @@ certificate, so the relation reads from both ends.
   are machinery, not a description, and no readout expresses them.
   {% endcomment %}
   {% comment %}A running container says all of this in its Upgrade and How it runs sections.{% endcomment %}
-  {% if not container.item %}
+  {% if not container.item and not resolved_spec and not resolution_error %}
   <section class="control-card">
     <h2>{{ label }}</h2>
+    {% include "control_plane/_record_says.html" %}
     {% comment %}
     The names this serves, and the way through to them: the hostname, and the
     service page where the rest of what answers for that name lives, rather
@@ -261,9 +206,59 @@ certificate, so the relation reads from both ends.
     {% endif %}
   </section>
   {% endif %}
+{% comment %}
+A certificate from the side of what it serves: each service served with it,
+and the names on it nothing is served under. The service's own page names the
+certificate, so the relation reads from both ends.
+{% endcomment %}
+{% if certificate_use %}
+  <section class="control-card" id="used-by">
+    <h2>Used by</h2>
+    {% if certificate_use.used_by %}
+      <p>{{ certificate_use.used_by|length|counted:"service" }}: {% for hostname in certificate_use.used_by %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+    {% else %}
+      <p class="muted">No service is served with this certificate.</p>
+    {% endif %}
+    {% if certificate_use.unused and certificate_use.used_by %}
+      <p class="muted">Nothing is served under {% for name in certificate_use.unused %}<code>{{ name }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+    {% endif %}
+  </section>
 {% endif %}
-
-<div class="section-flow">
+  {% comment %}
+  Where this certificate's facts are recorded, and whether the last reconcile
+  managed it. A publication that failed is a fact about the certificate, and
+  without this the only record of it is the raw status below.
+  {% endcomment %}
+  {% if resource.status.published_facts %}
+    <section class="control-card">
+      <h2>Saved to 1Password</h2>
+      <div class="table-scroll">
+      <table class="data-table compact-table">
+        <thead><tr><th>Item</th><th>Last saved</th></tr></thead>
+        <tbody>
+          {% for publication in resource.status.published_facts %}
+            <tr>
+              <td><strong>{{ publication.target }}</strong></td>
+              <td>
+                {% if publication.detail %}
+                  <span class="pill pill-serious">Not saved</span>
+                  <br><span class="muted">{{ publication.detail }}</span>
+                {% elif publication.written %}
+                  <span class="pill pill-good">Saved</span>
+                  {% if publication.fields or publication.material == "written" %}
+                    <br><span class="muted">{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="pill pill-good">Already up to date</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </section>
+  {% endif %}
 {% include "partials/_relationships.html" %}
 {% referenced_by resource.kind resource.key cards=True %}
 </div>
