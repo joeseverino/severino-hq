@@ -1,9 +1,7 @@
 # Severino HQ
 
 [![CI](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/ci.yml)
-&nbsp;[![CodeQL](https://github.com/joeseverino/severino-hq/actions/workflows/codeql.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/codeql.yml)
 &nbsp;[![Scorecard](https://github.com/joeseverino/severino-hq/actions/workflows/scorecard.yml/badge.svg)](https://github.com/joeseverino/severino-hq/actions/workflows/scorecard.yml)
-&nbsp;![coverage](https://img.shields.io/badge/coverage-90%25%2B-brightgreen)
 &nbsp;![python](https://img.shields.io/badge/python-3.15-blue)
 
 A self-hosted operations app for one operator, reachable only over a tailnet.
@@ -92,8 +90,7 @@ Scorecard, and the image built and tested from inside.
   `hq-host deploy` requires:
   `cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/joeseverino/severino-hq/\.github/workflows/compose\.yml@refs/heads/main$' <image>`.
 - [Scorecard](https://github.com/joeseverino/severino-hq/actions/workflows/scorecard.yml)
-  and [CodeQL](https://github.com/joeseverino/severino-hq/actions/workflows/codeql.yml)
-  publish to code scanning; the ruleset holds a merge on an alert.
+  and CI's CodeQL job publish to code scanning; the ruleset holds a merge on an alert.
 
 ## Repository
 

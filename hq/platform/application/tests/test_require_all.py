@@ -1,7 +1,7 @@
 import ast
 from pathlib import Path
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from ..security import AuthorizationError, Capability, Principal, require_all
 from .source import parsed
@@ -17,6 +17,11 @@ class RequireAllTests(SimpleTestCase):
     def test_one_capability_missing_is_refused(self):
         with self.assertRaises(AuthorizationError):
             require_all(READER, (Capability.READ, Capability.MANAGE_INFRASTRUCTURE))
+
+
+@tag("source")
+class RequireAllSourceTests(SimpleTestCase):
+    """No registry writes the loop again."""
 
     def test_no_registry_writes_the_loop_again(self):
         """Resources, capabilities, search and imports each looped over

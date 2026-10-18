@@ -2,9 +2,8 @@
 
 import re
 from pathlib import Path
-from unittest import skipUnless
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 ROOT = Path(__file__).resolve().parents[4]
 LAUNCHER = ROOT / "controller" / "host" / "controller.go"
@@ -12,7 +11,7 @@ DOCKERFILE = ROOT / "Dockerfile"
 
 
 # The image is built without its Dockerfile, so these run from a checkout.
-@skipUnless(DOCKERFILE.exists(), "the Dockerfile is not in the image")
+@tag("source")
 class ControllerBinaryTests(SimpleTestCase):
     """The container runs the Go controller the image builds, and reaches HQ over its socket."""
 
@@ -32,7 +31,7 @@ class ControllerBinaryTests(SimpleTestCase):
         self.assertIn("GOTOOLCHAIN=local", dockerfile)
 
 
-@skipUnless(DOCKERFILE.exists(), "the Dockerfile is not in the image")
+@tag("source")
 class BridgeSocketDeliveryTests(SimpleTestCase):
     """The bridge socket's directory is private from the image on; how it is mounted is controller/host's."""
 

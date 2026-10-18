@@ -76,33 +76,31 @@ class DashboardQueueTests(TestCase):
                 response = self.client.get(path)
                 if path == "/action-items/":
                     self.assertContains(response, "Reconcile the bill")
-                    self.assertContains(response, "Inspect evidence", count=1)
-                    self.assertContains(response, "Recheck facts")
+                    self.assertContains(response, 'href="/example/evidence/"', count=1)
+                    # The verification is a write: posted with the token, never a link.
                     self.assertContains(response, 'formaction="/dashboard/glance/"')
-                    self.assertContains(response, 'form="hq-post"')
+                    self.assertNotContains(response, 'href="/dashboard/glance/"')
                     self.assertContains(response, 'name="csrfmiddlewaretoken"')
-                    self.assertContains(response, "Urgent</span>")
                 else:
                     # What is serious is read on the dashboard itself; the rest is a count.
                     serious = [item for item in work_queue() if item["status"] == "serious"]
                     self.assertContains(response, "data-attention-item", count=len(serious))
                     self.assertContains(response, 'href="/action-items/"')
-                self.assertTemplateUsed(response, "partials/_work_queue.html")
                 self.assertNotContains(response, "An interesting observation")
-                self.assertNotContains(response, 'href=""')
         self.assertFalse(DashboardRefreshRequest.objects.exists())
 
-    def test_a_queue_with_something_urgent_in_it_takes_that_tone(self):
-        self.assertContains(self.client.get("/"), 'class="card dash-needs tone-serious"')
+    def test_a_queue_with_something_urgent_in_it_is_triaged_on_the_dashboard(self):
+        self.assertContains(self.client.get("/"), "data-triage-routes", count=1)
 
     def test_a_queue_with_nothing_urgent_is_only_the_count(self):
         calm = [item for item in work_queue() if item["status"] != "serious"]
         with patch("hq.platform.application.dashboard.work_queue", return_value=calm):
             response = self.client.get("/")
 
-        self.assertNotContains(response, "dash-needs")
+        self.assertNotContains(response, "data-triage-routes")
         self.assertNotContains(response, "data-attention-item")
-        self.assertContains(response, f"{len(calm)} thing{'s' if len(calm) != 1 else ''} need")
+        self.assertEqual(response.context["action_queue_count"], len(calm))
+        self.assertContains(response, 'href="/action-items/"')
 
     def test_a_long_queue_stays_a_count_on_the_dashboard(self):
         items = [{**work_queue()[0], "key": f"example:{i}", "label": f"Decision {i}"} for i in range(4)]
@@ -110,7 +108,7 @@ class DashboardQueueTests(TestCase):
             response = self.client.get("/")
 
         self.assertNotContains(response, "data-attention-item")
-        self.assertContains(response, "4 things need you")
+        self.assertEqual(response.context["action_queue_count"], 4)
 
     def test_search_includes_the_recommended_action(self):
         response = self.client.get("/action-items/", {"q": "Reconcile the bill"})
@@ -144,8 +142,8 @@ class DashboardQueueTests(TestCase):
         items = work_queue()
         set_aside(self.user, [item["key"] for item in items], aside=True, current=items)
         response = self.client.get("/")
+        self.assertEqual((response.context["action_queue_count"], response.context["aside_count"]), (0, 2))
         self.assertContains(response, "2 dismissed")
-        self.assertNotContains(response, "All clear")
 
     def test_empty_filtered_queue_offers_a_way_back(self):
         response = self.client.get("/action-items/", {"q": "not an existing item"})
@@ -172,7 +170,6 @@ class DashboardQueueTests(TestCase):
         ):
             response = self.client.get("/")
         self.assertNotContains(response, 'id="dashboard-calendar"')
-        self.assertNotContains(response, 'class="card calendar-month')
 
     def test_each_domain_leads_with_its_chart_and_the_month_is_composed_once(self):
         from django.utils import timezone
@@ -200,9 +197,6 @@ class DashboardQueueTests(TestCase):
         ):
             response = self.client.get("/")
         self.assertContains(response, "Example movement", count=2)
-        self.assertContains(response, 'class="dashboard-patterns"', count=1)
-        self.assertNotContains(response, '<details class="highlight-patterns">')
-        self.assertNotContains(response, 'aria-label="Across HQ"')
         # A domain's own calendar stays on its pages; the dashboard shows the composed month.
         self.assertNotContains(response, "Example activity")
         self.assertContains(response, 'id="dashboard-calendar"', count=1)

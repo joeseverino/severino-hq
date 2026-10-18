@@ -22,6 +22,7 @@ from ..projection import projection_scope
 from ..resource_context import record_status
 from ..security import cli_principal
 from ..sweep import record_sweep
+from .host_only import host_only
 
 REWRITE = "adguard.rewrite"
 
@@ -47,10 +48,6 @@ def broken(key: str = "app", message: str = "The service refused the change.") -
         last_observed_at=timezone.now(),
         conditions=[{"type": "Degraded", "status": True, "reason": "Refused", "message": message}],
     )
-
-
-def host_only():
-    return mock.patch("hq.platform.application.domains.extension_domains", return_value=())
 
 
 class ProblemsAboutTests(TestCase):

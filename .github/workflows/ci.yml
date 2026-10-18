@@ -1,11 +1,10 @@
 name: CI
 
-# Everything a change has to pass, on every pull request and every push to
-# main: Checks, Tests, Browser, Controller and Image, and Ready, which writes HQ's review:
-# the one check the ruleset requires, from HQ's app alone. CodeQL runs in its
-# own workflow (codeql.yml), a pull request's
-# composition with the extensions in Compose (compose.yml), and production is
-# Deploy's (deploy.yml), which a pull request never reaches.
+# Every gate a change passes, as one graph. On a pull request the image is
+# also checked and composed with the extensions (compose.yml), and Ready posts
+# HQ's review from the results: the one check the ruleset requires. On main,
+# Release starts Compose once the gates pass; Deploy (deploy.yml) is never
+# reached from a pull request.
 #
 # The gates themselves are declared once, in mise.toml: each job below runs the
 # aggregate of its name, and `mise run ci` runs the same list on a developer's
@@ -147,13 +146,18 @@ jobs:
 
   # Real-browser layout invariants over synthetic example.* pages
   # (hq/platform/core/browser_tests.py). Every request the page makes is answered in
-  # process; the browser reaches nothing.
+  # process; the browser reaches nothing. One job per browser:* gate, side by
+  # side.
   browser:
-    name: Browser
+    name: Browser (${{ matrix.gate }})
     needs: proven
     if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [layout, navigation, demo]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/toolchain
@@ -164,8 +168,19 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
       - name: Browser
-        # Every gate named browser:* in mise.toml.
-        run: mise run -c browser
+        # This leg's browser:* gate. Every leg fails while mise.toml declares
+        # one that no leg runs, so the matrix cannot fall behind it.
+        env:
+          GATE: browser:${{ matrix.gate }}
+          LEGS: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          gates="$(mise tasks ls --json | jq '[.[].name | select(startswith("browser:"))] | length')"
+          if [ "$gates" != "$LEGS" ]; then
+            echo "::error title=Browser gates::mise.toml declares ${gates} browser:* gates and this job runs ${LEGS}: give the new one a leg."
+            exit 1
+          fi
+          mise run "$GATE"
 
   # The Go controller: format, generated types against their specs, vet, and
   # the unit tests under the race detector.
@@ -186,17 +201,34 @@ jobs:
         # Every gate named controller:* in mise.toml.
         run: mise run -c controller
 
+  # Code scanning, on every pull request and push to main: main's analysis is
+  # what a pull request's is compared with. Release does not wait for it.
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          languages: python
+          # The suite is named in the config, beside the one rule it filters.
+          config-file: ./.github/codeql/codeql-config.yml
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          category: "/language:python"
+
   image:
     name: Image
-    # Alongside the other gates, not after them: on a pull request Compose
-    # starts with this run and composes as soon as the image exists. On main
-    # Compose starts only once every gate has passed (Ready), so an image from
-    # a failing commit is never composed for production.
-    #
-    # Also on pull requests: the composition (the only environment that runs
-    # this application the way production does, with DEBUG off and the
-    # extensions loaded) is built on top of this image, so a pull request
-    # needs one to be composed and checked before it merges.
+    # On a pull request the image is published as soon as it is built, so its
+    # checks and its composition start at once. On main it is checked before
+    # it is published and signed, and only Release composes it.
     #
     # Same-repository pull requests only: a fork's token cannot write packages,
     # and handing one the ability to push an image under this name is not a
@@ -216,13 +248,12 @@ jobs:
       # in the certificate, which is the whole point: the signature says which
       # workflow, in which repository, at which commit, produced this image.
       id-token: write
+    outputs:
+      image: ${{ steps.publish.outputs.digest }}
     env:
-      # The commit the composition will look for. On a pull request
-      # `GITHUB_SHA` is the merge commit, while Compose composes the pull
-      # request's head: the branch tip. Tagging by the merge commit would
-      # publish an image the composition then could not find, and the failure
-      # would read as "no such image" rather than "these two disagree about
-      # which commit this is".
+      # The commit the image is tagged for. On a pull request `GITHUB_SHA` is
+      # the merge commit, while the push to main that merges it looks for the
+      # pull request's head, the branch tip (scripts/proven-on-pr.sh).
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       # Set when this tree's image was proven on its pull request: promoted,
       # not rebuilt.
@@ -265,11 +296,13 @@ jobs:
             --build-arg "DEBIAN_SECURITY_RELEASE=$security_release" \
             -t "$image" .
           echo "image=$image" >> "$GITHUB_OUTPUT"
+      # On main only: a pull request's image is checked by Image checks,
+      # alongside its composition.
       - uses: ./.github/actions/toolchain
-        if: env.PROVEN == ''
+        if: env.PROVEN == '' && github.event_name == 'push'
       - name: Every check an image must pass
         # Every gate named image:verify:* in mise.toml, against the image just built.
-        if: env.PROVEN == ''
+        if: env.PROVEN == '' && github.event_name == 'push'
         env:
           IMAGE: ${{ steps.build.outputs.image }}
         run: mise run -c image
@@ -289,8 +322,8 @@ jobs:
         run: |
           set -euo pipefail
           docker push "$IMAGE"
-          # `latest` follows main and nothing else. A pull request builds an
-          # image so it can be composed and checked; it does not get to move
+          # `latest` follows main and nothing else. A pull request publishes
+          # an image so it can be checked and composed; it does not get to move
           # the tag that says what the host currently is.
           if [ "${{ github.event_name }}" = "push" ]; then
             docker tag "$IMAGE" "${IMAGE%:*}:latest"
@@ -324,30 +357,81 @@ jobs:
           DIGEST: ${{ steps.publish.outputs.digest || steps.promote.outputs.digest }}
         run: cosign sign --yes "$DIGEST"
 
-  ready:
-    name: Ready
-    needs: [proven, checks, tests, browser, controller, image]
-    # Waits for every gate, and on a pull request for the same commit's Compose
-    # and CodeQL too, then moves HQ's review to its verdict: ready to merge, or
-    # held, why and what fixes it. That review is the one check the ruleset
-    # requires, accepted only from HQ's app, so a gate added or removed here
-    # never touches the repository's settings.
-    if: always()
+  # A pull request's image, checked from the registry while its composition
+  # runs: the same gates main runs inside Image before it publishes.
+  image-checks:
+    name: Image checks
+    needs: image
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
     permissions:
       contents: read
-      # To read this run's, Compose's and CodeQL's jobs, and a failed job's log.
+      packages: read
+    env:
+      IMAGE: ${{ needs.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull the image by digest
+        run: docker pull --quiet "$IMAGE"
+      - uses: ./.github/actions/toolchain
+      - name: Every check an image must pass
+        # Every gate named image:verify:* in mise.toml.
+        run: mise run -c image
+
+  # A pull request's composition: this image plus every admitted extension,
+  # each extension's tests run inside it (compose.yml). It publishes and signs
+  # nothing: those steps belong to a dispatch on main. A fork's pull request
+  # has no image and no secrets, so it is not composed here: main composes it
+  # before anything is published.
+  compose:
+    name: Composition
+    needs: image
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/compose.yml
+    # What compose.yml's job declares, which a caller must grant: it signs
+    # and publishes only on a dispatch on main, never from here.
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+      id-token: write
+    with:
+      host-image: ${{ needs.image.outputs.image }}
+    secrets:
+      HQ_APP_CLIENT_ID: ${{ secrets.HQ_APP_CLIENT_ID }}
+      HQ_APP_KEY: ${{ secrets.HQ_APP_KEY }}
+      COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
+
+  ready:
+    name: Ready
+    needs: [proven, checks, tests, browser, controller, codeql, image, image-checks, compose]
+    # Moves HQ's review to its verdict from the results of every job above:
+    # ready to merge, or held, why and what fixes it. That review is the one
+    # check the ruleset requires, accepted only from HQ's app, so a gate added
+    # or removed here never touches the repository's settings.
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # To read this run's jobs, and a failed job's log.
       actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # A fork's pull request has no secrets and is not composed, so it gets
-      # the plain answer below and no verdict from HQ's app.
+      # A fork's pull request has no secrets, so it gets the plain answer and
+      # no verdict from HQ's app.
       - name: Mint a token for HQ's verdict
         id: app
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
@@ -355,36 +439,46 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-checks: write
+      - name: Say a fork's pull request is not composed
+        if: github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          message="A fork's pull request cannot read the extensions, so it is not built or composed here; main composes it before anything is published."
+          echo "::notice title=Not composed::$message"
+          echo "$message" >> "$GITHUB_STEP_SUMMARY"
       - name: HQ's verdict
-        if: steps.app.outputs.token != ''
         env:
+          RESULTS: ${{ toJSON(needs) }}
+          # A same-repository pull request is composed, so these must pass,
+          # not be skipped.
+          REQUIRED: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'image image-checks compose' || '' }}
           GH_TOKEN: ${{ github.token }}
           APP_TOKEN: ${{ steps.app.outputs.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          COMPOSED: "true"
           THIS_RUN: ${{ github.run_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: scripts/hq-verdict.sh
+
+  # On main, CI starts the build of HQ for this commit once every gate has
+  # passed, and names the commit, so what Compose builds is exactly what CI
+  # checked. Nothing else about a push starts it. CodeQL is not waited for:
+  # code scanning holds a merge, not a release.
+  release:
+    name: Release
+    needs: [proven, checks, tests, browser, controller, image]
+    if: ${{ !cancelled() && github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Every gate passed
-        if: steps.app.outputs.token == ''
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: |
-          set -euo pipefail
-          failed="$(printf '%s' "$RESULTS" \
-            | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')"
-          if [ -n "$failed" ]; then
-            printf '%s\n' "$failed"
-            echo "::error::Not ready: every gate above must pass."
-            exit 1
-          fi
-          echo "Every gate passed."
-      # On main, CI starts the build of HQ for this commit once every gate has
-      # passed, and names the commit, so what Compose builds is exactly what
-      # CI checked. Nothing else about a push starts it.
+          REQUIRED: image
+        run: scripts/hq-verdict.sh
       - name: Mint a token to start Compose
         id: compose
-        if: github.event_name == 'push'
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
@@ -393,7 +487,6 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-actions: write
       - name: Start Compose for this commit
-        if: steps.compose.outputs.token != ''
         env:
           GH_TOKEN: ${{ steps.compose.outputs.token }}
           COMMIT: ${{ github.sha }}

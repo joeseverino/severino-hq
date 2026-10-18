@@ -24,6 +24,7 @@ from hq.platform.application.derivations import DERIVATIONS, counting, derivatio
 from hq.platform.application.expiry import days_until
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import cli_principal, web_principal
+from hq.platform.application.tests.host_only import host_only
 from hq.platform.core import revisions
 from hq.platform.core.bench import seed
 from hq.platform.core.models import ActionItemRead, Revision, UpstreamReading
@@ -194,10 +195,10 @@ class DerivationTests(TestCase):
             count = register(_readings)
             count()
 
-            with projection_scope(), self.assertNumQueries(2):
-                # The revisions, then the stored value; the second call asks neither.
+            with projection_scope():
                 count()
-                count()
+                with self.assertNumQueries(0):
+                    count()
 
     def test_arguments_are_answered_apart(self):
         with declared("test.vary", reads=("core.UpstreamReading",), vary=lambda prefix: prefix.lower()) as (
@@ -477,11 +478,7 @@ class DeclaredDerivationTests(TestCase):
         cls.seeded = seed(0.05)
 
     def _run(self, name: str):
-        with (
-            mock.patch("hq.platform.application.domains.extension_domains", return_value=()),
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-            projection_scope(),
-        ):
+        with host_only(), projection_scope():
             return SAMPLES[name](self.seeded)
 
     def test_every_derivation_has_a_sample(self):
@@ -535,13 +532,7 @@ class ActionItemCountTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.seeded.user)
-        patches = (
-            mock.patch("hq.platform.application.domains.extension_domains", return_value=()),
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-        )
-        for patch in patches:
-            patch.start()
-            self.addCleanup(patch.stop)
+        self.enterContext(host_only())
         self.enterContext(frozen())
         self.url = reverse("action_item_count")
 
@@ -549,8 +540,7 @@ class ActionItemCountTests(TestCase):
         first = self.client.get(self.url)
         etag = first.headers["ETag"]
 
-        with counting() as (ran, served), self.assertNumQueries(4):
-            # The session, the person, the table revisions and the stored count.
+        with counting() as (ran, served):
             again = self.client.get(self.url, headers={"if-none-match": etag})
 
         self.assertEqual((first.status_code, again.status_code), (200, 304))

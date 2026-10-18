@@ -2,7 +2,7 @@
 # Whether the pull request this push to main merged already proved its tree.
 #   scripts/proven-on-pr.sh >> "$GITHUB_OUTPUT"
 # Prints `pr=` and `digest=` when the merged pull request's last CI run passed
-# (every gate, its composition and CodeQL: Ready waits for all three) and its
+# (every gate, its composition and CodeQL are jobs of that run) and its
 # image was built from this exact tree and signed by that pull request's run.
 # Otherwise it prints nothing and says why on stderr, and the push is checked
 # in full. A squash merge of a branch that was current with main is that tree;

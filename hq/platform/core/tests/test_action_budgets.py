@@ -5,13 +5,12 @@ a constant number of queries whatever the estate holds, a 202 with where to
 follow the work, and nothing read, run or changed by the time it has answered.
 """
 
-from unittest import mock
-
 from django.test import Client, TestCase
 
 from hq.domains.control_plane.models import ProviderInventory, ReadRequest
 from hq.domains.jobs.models import Job
-from hq.platform.core.bench import seed
+from hq.platform.application.tests.host_only import host_only
+from hq.platform.core.bench import Seeded, seed
 from hq.platform.core.management.commands.bench_pages import (
     ACTIONS,
     UNSAFE,
@@ -21,36 +20,23 @@ from hq.platform.core.management.commands.bench_pages import (
     _post,
 )
 
-SMALL, LARGE = 0.05, 0.25
+from .estate_sizes import SMALL, at_both_sizes
+
 SCRIPT = {"X-Requested-With": "XMLHttpRequest"}
 
-# The queries each converted action makes, at any size of estate.
-BUDGETS = {
-    "watching_refresh": 19,
-    "projects:refresh": 9,
-    "control_plane:read_now": 16,
-    "control_plane:visit": 17,
-}
-
-
-def _extensions_out():
-    return (
-        mock.patch("hq.platform.application.domains.extension_domains", return_value=()),
-        mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-    )
+# The actions that ask for work outside the request.
+BUDGETED = ("watching_refresh", "projects:refresh", "control_plane:read_now", "control_plane:visit")
 
 
 class ActionBudgetTests(TestCase):
-    def cost(self, scale: float) -> dict[str, int]:
-        seeded = seed(scale)
+    def cost(self, seeded: Seeded) -> dict[str, int]:
         client = Client(headers=SCRIPT)
         client.force_login(seeded.user)
         exercised, _left = _actions(seeded)
         costs = {}
-        first, second = _extensions_out()
-        with first, second, _held_outside(), _controller_arriving():
+        with host_only(), _held_outside(), _controller_arriving():
             for name, url, action in exercised:
-                if name not in BUDGETS:
+                if name not in BUDGETED:
                     continue
                 # Once to warm what a process caches, then the measured post.
                 _post(client, url, action, seeded)
@@ -59,14 +45,14 @@ class ActionBudgetTests(TestCase):
                 costs[name] = len(statements)
         return costs
 
-    def test_a_small_estate_costs_the_pinned_queries(self):
-        self.assertEqual(self.cost(SMALL), BUDGETS)
+    def test_an_action_costs_the_same_at_any_size(self):
+        small, large = at_both_sizes(self.cost)
 
-    def test_a_large_estate_costs_the_same(self):
-        self.assertEqual(self.cost(LARGE), BUDGETS)
+        self.assertEqual(set(large), set(BUDGETED))
+        self.assertEqual(large, small)
 
     def test_every_action_that_asks_for_outside_work_is_benched(self):
-        self.assertLessEqual(set(BUDGETS), set(ACTIONS))
+        self.assertLessEqual(set(BUDGETED), set(ACTIONS))
         self.assertFalse(set(ACTIONS) & set(UNSAFE))
 
 

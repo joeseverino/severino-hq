@@ -8,7 +8,7 @@ asking for a column that points at infrastructure.
 """
 
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
@@ -231,6 +231,11 @@ class OneWindowTests(TestCase):
 
         self.assertIs(service_context.HOST_TRAFFIC_DAYS, HOST_TRAFFIC_DAYS)
         self.assertIs(topology.HOST_TRAFFIC_DAYS, HOST_TRAFFIC_DAYS)
+
+
+@tag("source")
+class OneWindowSourceTests(SimpleTestCase):
+    """The host window is declared once, read from source and templates."""
 
     def test_no_module_declares_a_host_window_of_its_own(self):
         import pathlib

@@ -1,11 +1,10 @@
 """A navigation entry is called what its page is called."""
 
-from unittest import mock
-
 from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.domains import domain_navigation
+from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.bench import seed
 
 # Entries whose page is one of several things the entry lists, so the page is
@@ -18,10 +17,7 @@ class NavigationNameTests(TestCase):
         seeded = seed(0.05)
         self.client.force_login(seeded.user)
         differing = {}
-        with (
-            mock.patch("hq.platform.application.domains.extension_domains", return_value=()),
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-        ):
+        with host_only():
             for item in domain_navigation():
                 if item.route in NAMED_FOR_ITS_SUBJECT:
                     continue

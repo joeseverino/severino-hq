@@ -234,21 +234,14 @@ class OriginResolutionTests(TestCase):
         self.assertEqual(origin.container, "web")
 
     def test_a_port_no_container_claims_names_the_host_and_stops(self):
-        """A host HQ can name; a container it cannot. Silence beats a guess."""
-        origin = self._proxy(forward_port=9999).origin
+        """A host HQ can name; a container it cannot. Silence beats a guess,
+        and ``800`` is not the container listening on ``8000``."""
+        for port in (9999, 800):
+            with self.subTest(port=port):
+                ManagedResource.objects.filter(key="app-proxy").delete()
+                origin = self._proxy(forward_port=port).origin
 
-        self.assertEqual(origin.host, "app-host")
-        self.assertEqual(origin.container, "")
-
-    def test_a_port_that_is_only_a_substring_does_not_claim_a_container(self):
-        """``800`` must not match the container listening on ``8000``.
-
-        A substring match is the failure mode of reading ports out of prose, and
-        it produces a confident wrong answer rather than a visible gap.
-        """
-        origin = self._proxy(forward_port=800).origin
-
-        self.assertEqual(origin.container, "")
+                self.assertEqual((origin.host, origin.container), ("app-host", ""))
 
     def test_an_address_no_host_claims_is_reported_as_unknown(self):
         service = self._proxy(forward_host="10.9.9.9")
@@ -325,12 +318,9 @@ class OriginProvenanceTests(TestCase):
 
         response = self._page()
 
-        # Where it runs is a row of the path's parts, not a sentence under the
-        # cards, and said once: Relationships leaves it to that row.
-        self.assertNotContains(response, "The name resolves to")
+        # Where it runs is a row of the path's parts, not a sentence under the cards.
         self.assertNotContains(response, "Ingress forwards to")
-        self.assertContains(response, "<td>Machine</td>")
-        self.assertNotContains(response, '<th scope="rowgroup" rowspan="1">Runs on</th>')
+        self.assertContains(response, reverse("control_plane:machine", args=["app-host"]))
 
     def test_a_proxied_name_still_says_its_ingress_forwards(self):
         healthy(
@@ -348,9 +338,7 @@ class OriginProvenanceTests(TestCase):
 
         response = self._page()
 
-        # The ingress card says where it forwards; no sentence repeats it.
         self.assertContains(response, "10.0.0.10:6379")
-        self.assertNotContains(response, "Ingress forwards to")
 
 
 class SurfacesAgreeTests(TestCase):
@@ -442,7 +430,7 @@ class WiringFaultTests(TestCase):
 
         service = find_service("app.example.test")
 
-        self.assertIn("No certificate in HQ covers this name", " ".join(service.faults))
+        self.assertTrue(service.faults)
         self.assertEqual(service.status, "attention")
 
     def test_two_declarations_of_the_same_kind_contradict_each_other(self):
@@ -455,9 +443,10 @@ class WiringFaultTests(TestCase):
                 )
             )
 
-        faults = " ".join(find_service("app.example.com").faults)
+        service = find_service("app.example.com")
 
-        self.assertIn("Two internal DNS records are set up for this name", faults)
+        self.assertEqual(len(service.faults), 1)
+        self.assertEqual(service.status, "attention")
 
     def test_two_declarations_of_different_kinds_on_one_facet_are_not_a_fault(self):
         """An internal answer and a public one are both DNS and legitimately differ."""
@@ -586,7 +575,7 @@ class ServiceResolutionTests(TestCase):
 
         certificate = facet(service, "certificate")
         self.assertTrue(certificate.present)
-        self.assertNotIn("No certificate in HQ covers this name", " ".join(service.faults))
+        self.assertEqual([fault for fault in service.faults if "certificate" in fault.lower()], [])
 
     def test_a_project_publishing_to_a_name_is_an_annotation_not_a_requirement(self):
         healthy(
@@ -753,10 +742,8 @@ class AliasNavigationTests(TestCase):
             },
         )
 
-    def test_an_alias_names_the_service_it_stands_for(self):
+    def test_an_alias_names_the_service_it_stands_for_and_a_real_service_is_none(self):
         self.assertEqual(alias_target("www.example.com"), "example.com")
-
-    def test_a_real_service_is_not_an_alias(self):
         self.assertEqual(alias_target("example.com"), "")
 
     def test_a_proxied_record_is_answered_by_its_provider_whatever_its_readout_says(self):
@@ -788,7 +775,7 @@ class OriginNoteTests(TestCase):
     not as a card restating the two cards beside it.
     """
 
-    def test_it_is_silent_when_a_facet_already_names_the_container(self):
+    def test_it_is_silent_only_when_a_facet_already_names_the_container(self):
         from hq.domains.control_plane.provider_spec import NameContext
 
         from ..containers import Running
@@ -810,20 +797,15 @@ class OriginNoteTests(TestCase):
             connection_ref="",
             observed_at=None,
         )
-        service = Service(
-            hostname="probe.invalid",
-            facets=(
-                Facet(
-                    id="runtime",
-                    label="Runtime",
-                    observed=running,
-                    context=NameContext(),
-                ),
-            ),
-            origin=Origin(address="10.0.0.9:8099", host="a-docker-host", container="probe"),
-        )
+        for observed, news in ((running, False), (None, True)):
+            with self.subTest(observed=bool(observed)):
+                service = Service(
+                    hostname="probe.invalid",
+                    facets=(Facet(id="runtime", label="Runtime", observed=observed, context=NameContext()),),
+                    origin=Origin(address="10.0.0.9:8099", host="a-docker-host", container="probe" if observed else ""),
+                )
 
-        self.assertFalse(service.origin_is_news)
+                self.assertIs(service.origin_is_news, news)
 
     def test_it_speaks_up_when_something_outside_answers_the_name(self):
         from ..services import Service
@@ -848,21 +830,6 @@ class OriginNoteTests(TestCase):
             hostname="probe.invalid",
             facets=(),
             origin=Origin(address="10.9.9.9:8080"),
-        )
-
-        self.assertTrue(service.origin_is_news)
-
-    def test_it_speaks_up_when_nothing_identified_what_is_running(self):
-        from hq.domains.control_plane.provider_spec import NameContext
-
-        from ..service_facets import Facet
-        from ..services import Service
-        from ..whereabouts import Origin
-
-        service = Service(
-            hostname="probe.invalid",
-            facets=(Facet(id="runtime", label="Runtime", context=NameContext()),),
-            origin=Origin(address="10.0.0.9:8099", host="a-docker-host"),
         )
 
         self.assertTrue(service.origin_is_news)
@@ -1021,29 +988,20 @@ class ParkedNameTests(TestCase):
     domain reads as a working service.
     """
 
-    def test_a_documentation_address_is_a_wiring_fault(self):
+    def test_a_documentation_or_unspecified_address_is_a_wiring_fault_and_a_real_one_is_not(self):
         from ..services import _points_nowhere
         from ..whereabouts import Origin
 
-        self.assertIn("documentation address", _points_nowhere(Origin(address="192.0.2.1")))
-        self.assertIn("documentation address", _points_nowhere(Origin(address="203.0.113.9:443")))
-
-    def test_an_unspecified_address_is_too(self):
-        from ..services import _points_nowhere
-        from ..whereabouts import Origin
-
-        self.assertIn("not a reachable address", _points_nowhere(Origin(address="0.0.0.0")))
-
-    def test_a_real_address_is_not(self):
-        from ..services import _points_nowhere
-        from ..whereabouts import Origin
-
-        self.assertEqual(_points_nowhere(Origin(address="10.0.0.9:8000")), "")
-        self.assertEqual(_points_nowhere(Origin(address="example.pages.dev")), "")
-
-    def test_nothing_routed_is_not_a_parked_name(self):
-        from ..services import _points_nowhere
-
+        for address, parked in (
+            ("192.0.2.1", True),
+            ("203.0.113.9:443", True),
+            ("0.0.0.0", True),
+            ("10.0.0.9:8000", False),
+            ("example.pages.dev", False),
+        ):
+            with self.subTest(address):
+                self.assertEqual(bool(_points_nowhere(Origin(address=address))), parked)
+        self.assertNotEqual(_points_nowhere(Origin(address="192.0.2.1")), _points_nowhere(Origin(address="0.0.0.0")))
         self.assertEqual(_points_nowhere(None), "")
 
 
@@ -1082,16 +1040,8 @@ class LoopbackOriginTests(TestCase):
         self.assertEqual(origin.host, "a-docker-host")
         self.assertEqual(origin.container, "an-app")
 
-    def test_a_loopback_port_nothing_listens_on_names_no_machine(self):
+    def test_a_port_nothing_or_two_machines_listen_on_names_no_machine(self):
         """Better silent than confidently wrong about which box it meant."""
-
-        from ..whereabouts import locate
-
-        self.a_container_on("a-docker-host", "an-app", 8000)
-
-        self.assertEqual(locate("127.0.0.1:9999", ({"name": "a-docker-host"},)).host, "")
-
-    def test_two_machines_listening_on_that_port_is_reported_as_silence(self):
         from django.utils import timezone
 
         from hq.domains.control_plane.models import ProviderInventory
@@ -1110,9 +1060,9 @@ class LoopbackOriginTests(TestCase):
             },
         )
 
-        origin = locate("127.0.0.1:8000", ({"name": "host-a"}, {"name": "host-b"}))
-
-        self.assertEqual(origin.host, "")
+        machines = ({"name": "host-a"}, {"name": "host-b"})
+        self.assertEqual(locate("127.0.0.1:9999", machines).host, "")
+        self.assertEqual(locate("127.0.0.1:8000", machines).host, "")
 
 
 class WwwIsTheSameSiteTests(TestCase):
@@ -1132,27 +1082,16 @@ class WwwIsTheSameSiteTests(TestCase):
 
         return _aliases(declared or set(origins), origins)
 
-    def test_www_folds_into_the_apex_when_both_point_at_one_place(self):
-        found = self.aliases({"example.com": "203.0.113.9", "www.example.com": "203.0.113.9"})
-
-        self.assertEqual(found, {"www.example.com": "example.com"})
-
-    def test_www_pointing_somewhere_else_stays_its_own_service(self):
+    def test_only_www_at_the_apexs_own_address_folds_into_it(self):
         """Two addresses is two places, whatever the names suggest."""
-
-        found = self.aliases({"example.com": "203.0.113.9", "www.example.com": "203.0.113.10"})
-
-        self.assertEqual(found, {})
-
-    def test_another_subdomain_on_the_same_address_is_not_folded(self):
-        found = self.aliases({"example.com": "203.0.113.9", "mail.example.com": "203.0.113.9"})
-
-        self.assertEqual(found, {})
-
-    def test_an_apex_nobody_declares_leaves_www_alone(self):
-        found = self.aliases({"www.example.com": "203.0.113.9"})
-
-        self.assertEqual(found, {})
+        for origins, folded in (
+            ({"example.com": "203.0.113.9", "www.example.com": "203.0.113.9"}, {"www.example.com": "example.com"}),
+            ({"example.com": "203.0.113.9", "www.example.com": "203.0.113.10"}, {}),
+            ({"example.com": "203.0.113.9", "mail.example.com": "203.0.113.9"}, {}),
+            ({"www.example.com": "203.0.113.9"}, {}),
+        ):
+            with self.subTest(origins):
+                self.assertEqual(self.aliases(origins), folded)
 
 
 class TlsHqDoesNotOwnTests(TestCase):

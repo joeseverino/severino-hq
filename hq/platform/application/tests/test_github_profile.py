@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -7,6 +9,7 @@ from hq.platform.core.models import LinkedAccount
 
 from .. import github_profile
 from ..security import AuthorizationError, Principal
+from .sentinel import SENTINEL
 
 PROFILE = {
     "login": "example-user",
@@ -169,11 +172,11 @@ class IngestTests(TestCase):
     def test_a_read_replaces_the_reading(self):
         hold(at=timezone.now() - github_profile.PROFILE_EVERY)
 
-        self.record({"ok": True, "records": [{**PROFILE, "followers": 9, "token": "dropped"}]})
+        self.record({"ok": True, "records": [{**PROFILE, "followers": 9, "token": SENTINEL}]})
 
         found = github_profile.profile("Example-User")
         self.assertEqual(found["followers"], 9)
-        self.assertNotIn("token", found)
+        self.assertNotIn(SENTINEL, json.dumps(found, default=str))
         self.assertEqual(found["watched"][0]["release"]["tag"], "v1.2.0")
 
     def test_a_record_over_the_contracts_bounds_is_refused(self):

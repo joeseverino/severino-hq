@@ -35,6 +35,10 @@
         "fields": [],
         "kind": "dataclass",
         "members": {
+          "key": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "touched": {
             "kind": "property"
           }
@@ -50,7 +54,12 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "key": {
+            "kind": "attribute",
+            "type": "str"
+          }
+        }
       },
       "Source": {
         "bases": [
@@ -63,7 +72,12 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "key": {
+            "kind": "attribute",
+            "type": "str"
+          }
+        }
       },
       "Steps": {
         "bases": [
@@ -80,6 +94,10 @@
             "parameters": [
               "self"
             ]
+          },
+          "key": {
+            "kind": "attribute",
+            "type": "str"
           }
         }
       },
@@ -94,6 +112,10 @@
         "fields": [],
         "kind": "dataclass",
         "members": {
+          "key": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "seconds": {
             "kind": "property"
           }
@@ -231,7 +253,12 @@
           "*args"
         ],
         "kind": "class",
-        "members": {}
+        "members": {
+          "code": {
+            "kind": "attribute",
+            "type": "str"
+          }
+        }
       },
       "Capability": {
         "kind": "enum",
@@ -512,6 +539,10 @@
         ],
         "kind": "class",
         "members": {
+          "allow_multiple_selected": {
+            "kind": "attribute",
+            "type": "bool"
+          },
           "media": {
             "kind": "property"
           }
@@ -676,6 +707,9 @@
         "fields": [],
         "kind": "dataclass",
         "members": {
+          "dialogs": {
+            "kind": "property"
+          },
           "lead": {
             "kind": "property"
           },
@@ -702,8 +736,26 @@
         "members": {
           "css": {
             "kind": "property"
+          },
+          "dialog": {
+            "kind": "property"
+          },
+          "modal_id": {
+            "kind": "property"
           }
         }
+      },
+      "PageDialog": {
+        "bases": [],
+        "constructor": [
+          "id",
+          "title",
+          "body_template",
+          "lede="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
       },
       "PageMixin": {
         "bases": [
@@ -748,6 +800,18 @@
             "parameters": [
               "self"
             ]
+          },
+          "page_lede": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "page_reads": {
+            "kind": "attribute",
+            "type": "tuple"
+          },
+          "page_title": {
+            "kind": "attribute",
+            "type": "str"
           }
         }
       },
@@ -1207,6 +1271,12 @@
         }
       }
     },
+    "site": {
+      "host": {
+        "kind": "function",
+        "parameters": []
+      }
+    },
     "tables": {
       "Remedy": {
         "bases": [],
@@ -1299,11 +1369,63 @@
               "self"
             ]
           },
+          "table_columns": {
+            "kind": "attribute",
+            "type": "tuple"
+          },
           "table_context": {
             "kind": "method",
             "parameters": [
               "self"
             ]
+          },
+          "table_default_sort": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "table_empty": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "table_empty_remedy": {
+            "kind": "attribute",
+            "type": "bool"
+          },
+          "table_empty_why": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "table_filters": {
+            "kind": "attribute",
+            "type": "tuple"
+          },
+          "table_search_fields": {
+            "kind": "attribute",
+            "type": "tuple"
+          },
+          "table_search_placeholder": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "table_search_scope": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "table_selectable": {
+            "kind": "attribute",
+            "type": "bool"
+          },
+          "table_sorts": {
+            "kind": "attribute",
+            "type": "tuple"
+          },
+          "table_toggles": {
+            "kind": "attribute",
+            "type": "tuple"
+          },
+          "table_totals": {
+            "kind": "attribute",
+            "type": "tuple"
           },
           "table_totals_for": {
             "kind": "method",
@@ -1364,6 +1486,10 @@
             "parameters": [
               "self"
             ]
+          },
+          "siblings": {
+            "kind": "attribute",
+            "type": "tuple"
           }
         }
       },
@@ -1388,6 +1514,12 @@
       "held_jobs": {
         "kind": "function",
         "parameters": []
+      },
+      "plain": {
+        "kind": "function",
+        "parameters": [
+          "text"
+        ]
       },
       "providers_derived_again": {
         "kind": "function",
@@ -1599,6 +1731,14 @@
         "fields": [],
         "kind": "dataclass",
         "members": {
+          "LIMIT": {
+            "kind": "attribute",
+            "type": "int"
+          },
+          "kind": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "links": {
             "kind": "property"
           },
@@ -1797,6 +1937,22 @@
         "fields": [],
         "kind": "dataclass",
         "members": {
+          "HEIGHT": {
+            "kind": "attribute",
+            "type": "int"
+          },
+          "INSET": {
+            "kind": "attribute",
+            "type": "int"
+          },
+          "WIDTH": {
+            "kind": "attribute",
+            "type": "int"
+          },
+          "kind": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "marks": {
             "kind": "property"
           },
@@ -1894,6 +2050,13 @@
         "kind": "function",
         "parameters": []
       },
+      "template_violations": {
+        "kind": "function",
+        "parameters": [
+          "source_root",
+          "contract="
+        ]
+      },
       "unsupported_hq_imports": {
         "kind": "function",
         "parameters": [
@@ -1923,6 +2086,10 @@
             "parameters": [
               "self"
             ]
+          },
+          "required_capability": {
+            "kind": "attribute",
+            "type": "str"
           }
         }
       },
@@ -2037,6 +2204,14 @@
               "form"
             ]
           },
+          "command": {
+            "kind": "attribute",
+            "type": "NoneType"
+          },
+          "domain_errors": {
+            "kind": "attribute",
+            "type": "tuple"
+          },
           "form_valid": {
             "kind": "method",
             "parameters": [
@@ -2063,6 +2238,18 @@
               "self",
               "command"
             ]
+          },
+          "service": {
+            "kind": "attribute",
+            "type": "NoneType"
+          },
+          "success_message": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "success_url_name": {
+            "kind": "attribute",
+            "type": "str"
           }
         }
       },
@@ -2126,6 +2313,10 @@
         "constructor": [],
         "kind": "class",
         "members": {
+          "REQUIRED": {
+            "kind": "attribute",
+            "type": "tuple"
+          },
           "announce": {
             "kind": "method",
             "parameters": [
@@ -2157,5 +2348,460 @@
       }
     }
   },
-  "sdk_version": 1
+  "sdk_version": 1,
+  "templates": {
+    "classes": [
+      "allocation",
+      "allocation-legend",
+      "btn",
+      "card",
+      "card-columns",
+      "chart-axis",
+      "chart-card",
+      "chart-data",
+      "chart-legend",
+      "compact",
+      "compact-table",
+      "count",
+      "danger",
+      "data-table",
+      "date-col",
+      "domain-charts",
+      "domain-head",
+      "domain-head-copy",
+      "domain-stack",
+      "errors",
+      "eyebrow",
+      "field",
+      "field-row",
+      "figure-hero",
+      "figure-hero-note",
+      "figure-stats",
+      "finding",
+      "finding-evidence",
+      "form",
+      "form-actions",
+      "ghost",
+      "help",
+      "inline",
+      "kv",
+      "list-rows",
+      "msg",
+      "msg-error",
+      "msg-warning",
+      "muted",
+      "notice",
+      "notice-attention",
+      "num-col",
+      "optional-col",
+      "page-lede",
+      "pie-chart",
+      "pie-row",
+      "pill",
+      "pill-attention",
+      "pill-good",
+      "pill-neutral",
+      "pill-serious",
+      "primary",
+      "print-footer",
+      "print-only",
+      "prose-list",
+      "route-frame",
+      "route-line",
+      "route-map",
+      "route-marker",
+      "route-scale",
+      "route-swatch",
+      "row-actions",
+      "row-empty",
+      "row-group",
+      "row-less",
+      "row-main",
+      "row-meta",
+      "row-more",
+      "save-bar",
+      "section-foot",
+      "section-head",
+      "section-period",
+      "split",
+      "stacked",
+      "status-tabs",
+      "subtle-link",
+      "table-scroll",
+      "tight-col",
+      "two-col",
+      "visually-hidden",
+      "worth",
+      "worth-attention",
+      "worth-good",
+      "worth-neutral"
+    ],
+    "django": {
+      "filters": [
+        "add",
+        "addslashes",
+        "capfirst",
+        "center",
+        "cut",
+        "date",
+        "default",
+        "default_if_none",
+        "dictsort",
+        "dictsortreversed",
+        "divisibleby",
+        "escape",
+        "escapejs",
+        "escapeseq",
+        "filesizeformat",
+        "first",
+        "floatformat",
+        "force_escape",
+        "get_digit",
+        "iriencode",
+        "join",
+        "json_script",
+        "last",
+        "length",
+        "linebreaks",
+        "linebreaksbr",
+        "linenumbers",
+        "ljust",
+        "lower",
+        "make_list",
+        "phone2numeric",
+        "pluralize",
+        "pprint",
+        "random",
+        "rjust",
+        "safe",
+        "safeseq",
+        "slice",
+        "slugify",
+        "stringformat",
+        "striptags",
+        "time",
+        "timesince",
+        "timeuntil",
+        "title",
+        "truncatechars",
+        "truncatechars_html",
+        "truncatewords",
+        "truncatewords_html",
+        "unordered_list",
+        "upper",
+        "urlencode",
+        "urlize",
+        "urlizetrunc",
+        "wordcount",
+        "wordwrap",
+        "yesno"
+      ],
+      "libraries": {
+        "humanize": [
+          "apnumber",
+          "intcomma",
+          "intword",
+          "naturalday",
+          "naturaltime",
+          "ordinal"
+        ],
+        "static": [
+          "get_media_prefix",
+          "get_static_prefix",
+          "static"
+        ]
+      },
+      "tags": [
+        "autoescape",
+        "block",
+        "comment",
+        "csp_nonce_attr",
+        "csrf_token",
+        "cycle",
+        "debug",
+        "extends",
+        "filter",
+        "firstof",
+        "for",
+        "if",
+        "ifchanged",
+        "include",
+        "load",
+        "lorem",
+        "now",
+        "partial",
+        "partialdef",
+        "querystring",
+        "regroup",
+        "resetcycle",
+        "spaceless",
+        "templatetag",
+        "url",
+        "verbatim",
+        "widthratio",
+        "with"
+      ]
+    },
+    "filters": {
+      "ago": {
+        "argument": "none"
+      },
+      "counted": {
+        "argument": "required"
+      },
+      "money": {
+        "argument": "optional"
+      },
+      "or_empty": {
+        "argument": "none"
+      },
+      "span": {
+        "argument": "none"
+      },
+      "web_url": {
+        "argument": "none"
+      },
+      "when": {
+        "argument": "optional"
+      }
+    },
+    "frames": {
+      "confirm_page.html": {
+        "about": "A destructive action's confirmation: `consequences` says what will happen.",
+        "blocks": {
+          "consequences": {
+            "given": []
+          }
+        },
+        "reads": [
+          "confirm"
+        ]
+      },
+      "list_page.html": {
+        "about": "A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table, `foot` is its `<tfoot>`.",
+        "blocks": {
+          "foot": {
+            "given": []
+          },
+          "row": {
+            "given": [
+              "forloop",
+              "row"
+            ]
+          },
+          "summary": {
+            "given": []
+          }
+        },
+        "reads": [
+          "object_list",
+          "page",
+          "table"
+        ]
+      },
+      "page.html": {
+        "about": "Any page: the head, actions, dialogs and section navigation, drawn from `page`.",
+        "blocks": {
+          "page": {
+            "given": []
+          }
+        },
+        "reads": [
+          "page"
+        ]
+      }
+    },
+    "hooks": [
+      "data-chart",
+      "data-sort",
+      "data-submit-busy",
+      "data-submit-label",
+      "data-submit-status",
+      "data-tip"
+    ],
+    "partials": {
+      "partials/_activity_calendar.html": {
+        "about": "One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`.",
+        "optional": [
+          "calendar_id"
+        ],
+        "required": [
+          "calendar"
+        ]
+      },
+      "partials/_ask.html": {
+        "about": "A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`.",
+        "optional": [
+          "extra"
+        ],
+        "required": [
+          "ask"
+        ]
+      },
+      "partials/_attention_list.html": {
+        "about": "Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries.",
+        "optional": [],
+        "required": [
+          "empty",
+          "entries"
+        ]
+      },
+      "partials/_cadence.html": {
+        "about": "Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`.",
+        "optional": [],
+        "required": [
+          "cadence"
+        ]
+      },
+      "partials/_cadence_matrix.html": {
+        "about": "Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`.",
+        "optional": [
+          "compact",
+          "label"
+        ],
+        "required": [
+          "matrix"
+        ]
+      },
+      "partials/_chart_tabs.html": {
+        "about": "Up to four charts of one thing in the space of one.",
+        "optional": [],
+        "required": [
+          "charts",
+          "group"
+        ]
+      },
+      "partials/_dropzone.html": {
+        "about": "A file field that also accepts a drop.",
+        "optional": [
+          "hint",
+          "title"
+        ],
+        "required": [
+          "field"
+        ]
+      },
+      "partials/_empty_state.html": {
+        "about": "The one empty state: what is missing, then what would fill it.",
+        "optional": [
+          "action_label",
+          "action_url",
+          "remedy",
+          "why"
+        ],
+        "required": [
+          "message"
+        ]
+      },
+      "partials/_form_field.html": {
+        "about": "Label, control, help text and validation errors for one form field.",
+        "optional": [],
+        "required": [
+          "field"
+        ]
+      },
+      "partials/_insight_grid.html": {
+        "about": "Readings that need interpreting, each with its next step.",
+        "optional": [
+          "label"
+        ],
+        "required": [
+          "items"
+        ]
+      },
+      "partials/_job_progress.html": {
+        "about": "A running job and what it is doing.",
+        "optional": [],
+        "required": [
+          "job"
+        ]
+      },
+      "partials/_kpi_grid.html": {
+        "about": "Responsive linked or static figures.",
+        "optional": [
+          "featured",
+          "label"
+        ],
+        "required": [
+          "items"
+        ]
+      },
+      "partials/_line_chart.html": {
+        "about": "A measure over time on an axis fitted to it.",
+        "optional": [],
+        "required": [
+          "chart"
+        ]
+      },
+      "partials/_record_list.html": {
+        "about": "A compact list of records, from `hq_sdk.ui.ListRow`.",
+        "optional": [
+          "empty",
+          "label"
+        ],
+        "required": [
+          "rows"
+        ]
+      },
+      "partials/_stacked_bar_chart.html": {
+        "about": "Quantities that add up, from `hq_sdk.ui.StackedBarChart`.",
+        "optional": [],
+        "required": [
+          "chart"
+        ]
+      },
+      "partials/_timeline.html": {
+        "about": "Chronological linked events, from `hq_sdk.ui.Timeline`.",
+        "optional": [
+          "plain",
+          "timeline"
+        ],
+        "required": []
+      },
+      "partials/_week_plan.html": {
+        "about": "Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`.",
+        "optional": [],
+        "required": [
+          "plan"
+        ]
+      }
+    },
+    "tags": {
+      "empty_value": {
+        "parameters": []
+      },
+      "entity": {
+        "parameters": [
+          "link",
+          "code=",
+          "label="
+        ]
+      },
+      "post_button": {
+        "parameters": [
+          "label",
+          "url",
+          "*",
+          "name=",
+          "value=",
+          "css=",
+          "title=",
+          "disabled="
+        ]
+      },
+      "reference": {
+        "parameters": [
+          "row",
+          "field"
+        ]
+      },
+      "referenced_by": {
+        "parameters": [
+          "thing",
+          "identity=",
+          "cards="
+        ]
+      }
+    }
+  }
 }

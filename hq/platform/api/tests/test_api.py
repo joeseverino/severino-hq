@@ -7,6 +7,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.platform.application.security import AuthorizationError
+from hq.platform.application.tests.host_only import host_only
+from hq.platform.application.tests.sentinel import (
+    CONNECTION as SENTINEL_CONNECTION,
+    READING as SENTINEL_READING,
+    REWRITE as SENTINEL_REWRITE,
+    SentinelMixin,
+    plant_credentials,
+)
 
 from .. import security, views
 from ..testing import ContractClient
@@ -224,7 +232,7 @@ class CompositionCheckTests(SimpleTestCase):
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
 )
-class TransportTests(TestCase):
+class TransportTests(SentinelMixin, TestCase):
     # Every response below is also held to the OpenAPI document.
     client_class = ContractClient
 
@@ -658,7 +666,6 @@ class TransportTests(TestCase):
         )
         self.assertTrue(core["permitted"])
         self.assertIn("cloudflare.dns_record", {ability["name"] for ability in state["abilities"]})
-        self.assertNotIn("token", state)
 
     def test_connections_never_invoke_a_family_the_token_cannot_read(self):
         with (
@@ -696,10 +703,7 @@ class TransportTests(TestCase):
             probed=True,
             observed_at=timezone.now(),
         )
-        with (
-            _serving(),
-            patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-        ):
+        with _serving(), host_only():
             response = self.client.get(
                 "/api/v2/topology/?focus=resource%3Aapi-zone&direction=inbound&depth=2",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
@@ -716,13 +720,9 @@ class TransportTests(TestCase):
         self.assertTrue(topology["edges"])
         resource = next(node for node in topology["nodes"] if node["id"] == "resource:api-zone")
         self.assertEqual([action["name"] for action in resource["actions"]], ["open"])
-        self.assertNotIn("token", json.dumps(topology).lower())
 
     def test_unknown_topology_focus_is_explicitly_not_applied(self):
-        with (
-            _serving(),
-            patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-        ):
+        with _serving(), host_only():
             response = self.client.get(
                 "/api/v2/topology/?focus=not-a-node&direction=outbound&depth=999",
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
@@ -743,6 +743,32 @@ class TransportTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         catalog.assert_not_called()
+
+    def test_no_read_serves_a_credential_a_controller_reported(self):
+        plant_credentials()
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with _serving():
+            listed = self.client.get("/api/v2/resources/", **headers).json()["data"]["resources"]
+            reads = ["/api/v2/connections/", "/api/v2/topology/", "/api/v2/findings/"] + [
+                f"/api/v2/resources/{spec['name']}/"
+                for spec in listed
+                if spec["permitted"] and spec["operations"].get("list")
+            ]
+            reads += [
+                f"/api/v2/resources/readings/{SENTINEL_READING}/",
+                "/api/v2/resources/infrastructure.resources/sentinel-rewrite/",
+            ]
+            served = ""
+            for url in reads:
+                with self.subTest(url):
+                    response = self.client.get(url, **headers)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertNoSentinel(response.content)
+                    served += response.content.decode()
+
+        # The planted connection and reading were served: the absence is not vacuous.
+        self.assertIn(SENTINEL_CONNECTION, served)
+        self.assertIn(SENTINEL_REWRITE, served)
 
     def test_resource_list_and_detail_share_the_declared_contract(self):
         from hq.domains.projects.models import Project

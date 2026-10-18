@@ -6,7 +6,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -136,6 +136,16 @@ class StoreReferenceTests(TestCase):
 class MinterContractTests(TestCase):
     """Each minter names a script, flags and variables that script really has."""
 
+    def test_store_fields_come_from_the_projection_registry(self):
+        self.assertEqual(projection_field("API_TOKEN"), "credential")
+        self.assertEqual(projection_field("CLIENT_SECRET"), "credential")
+        self.assertEqual(projection_field("CLIENT_ID"), "username")
+
+
+@tag("source")
+class MinterScriptTests(SimpleTestCase):
+    """Each minter against the script that mints it."""
+
     def test_every_minter_matches_its_script(self):
         for provider, minter in MINTERS.items():
             with self.subTest(provider=provider):
@@ -149,11 +159,6 @@ class MinterContractTests(TestCase):
                 if minter.account_flag:
                     self.assertIn(minter.account_flag, script)
                 self.assertTrue(observer_permissions(provider))
-
-    def test_store_fields_come_from_the_projection_registry(self):
-        self.assertEqual(projection_field("API_TOKEN"), "credential")
-        self.assertEqual(projection_field("CLIENT_SECRET"), "credential")
-        self.assertEqual(projection_field("CLIENT_ID"), "username")
 
 
 class PerReadingRefusalTests(TestCase):

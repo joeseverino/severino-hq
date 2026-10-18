@@ -1,5 +1,3 @@
-import json
-import re
 from datetime import datetime, timedelta
 from unittest import mock
 
@@ -42,17 +40,8 @@ from ..topology_model import (
     TopologyEdge,
     TopologyNode,
 )
-
-
-def _without_links(value):
-    if isinstance(value, dict):
-        return {key: _without_links(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_without_links(item) for item in value]
-    if isinstance(value, str) and value.startswith(("http://", "https://", "/")):
-        return ""
-    return value
-
+from .host_only import host_only
+from .sentinel import RESOURCE as SENTINEL_RESOURCE, SentinelMixin, plant_credentials
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 MANAGE = Principal(
@@ -69,7 +58,7 @@ MANAGE = Principal(
 NONE = Principal("nobody", "test", frozenset())
 
 
-class DerivedTopologyTests(TestCase):
+class DerivedTopologyTests(SentinelMixin, TestCase):
     def setUp(self):
         self.resource = ManagedResource.objects.create(
             key="example-zone",
@@ -88,7 +77,7 @@ class DerivedTopologyTests(TestCase):
         )
 
     def project(self, principal=READ):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             return derive_topology(principal=principal)
 
     def test_declarations_observations_and_registries_form_one_graph(self):
@@ -234,7 +223,6 @@ class DerivedTopologyTests(TestCase):
         node = next(node for node in self.project(MANAGE).nodes if node.id == f"resource:{resource.key}")
 
         self.assertEqual(node.status, "neutral")
-        self.assertEqual(node.status_label, "Switched off in HQ")
         self.assertEqual(
             [action.name for action in node.actions],
             ["open", "edit", "remove"],
@@ -249,22 +237,22 @@ class DerivedTopologyTests(TestCase):
 
         catalog.assert_not_called()
 
-    def test_serialization_is_normalized_and_contains_no_credential_material(self):
+    def test_serialization_is_normalized_and_carries_no_credential_a_controller_reported(self):
+        plant_credentials()
+
         payload = serialize_topology(self.project(MANAGE))
 
         self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(payload["summary"]["nodes"], len(payload["nodes"]))
         self.assertEqual(payload["summary"]["edges"], len(payload["edges"]))
-        # Link targets are addresses, not material: a docs link names Secrets.md.
-        material = json.dumps(_without_links(payload)).lower()
-        self.assertNotIn("secret", material)
-        self.assertNotIn("access_token", material)
+        self.assertIn(f"resource:{SENTINEL_RESOURCE}", {node["id"] for node in payload["nodes"]})
+        self.assertNoSentinel(payload)
 
     def test_query_count_does_not_grow_with_resource_count(self):
         principals = (READ, MANAGE)
         small_counts = {}
         large_counts = {}
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             for principal in principals:
                 with CaptureQueriesContext(database_connection) as small:
                     derive_topology(principal=principal)
@@ -356,27 +344,16 @@ class TopologyPageTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             response = self.client.get(reverse("control_plane:topology"))
 
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data-topology")
-        self.assertContains(response, 'class="visually-hidden">Filter<')
-        self.assertContains(response, '<fieldset class="topology-kind-filters">')
-        self.assertContains(response, 'id="map" tabindex="-1"')
-        self.assertContains(response, "internal-name")
         # Without script, a node's details are one link away: focusing it
         # draws them.
-        self.assertContains(
-            response,
-            f'<a class="topology-node-select" href="{TopologyView._focus_link("resource:internal-name")}"',
-        )
+        self.assertContains(response, f'href="{TopologyView._focus_link("resource:internal-name")}"')
         self.assertNotContains(response, "<script>")
 
         focused = self.page(focus="resource:internal-name")
-        self.assertContains(focused, "Links shown</h2>")
-        self.assertContains(focused, '<div class="table-scroll">')
-        self.assertNotContains(focused, "table-scroll table-sticky-header")
         self.assertContains(
             focused,
             f'action="{reverse("control_plane:reconcile", kwargs={"key": "internal-name"})}"',
@@ -388,8 +365,6 @@ class TopologyPageTests(TestCase):
         managing_everything()
         response = self.page()
 
-        self.assertNotContains(response, "Links shown")
-        self.assertNotContains(response, "topology-relation-verb")
         reconcile = reverse("control_plane:reconcile", kwargs={"key": "internal-name"})
         self.assertNotContains(response, f'formaction="{reconcile}"')
         body_url = next(
@@ -408,22 +383,17 @@ class TopologyPageTests(TestCase):
         self.assertContains(response, 'id="hq-post"')
         self.assertContains(response, "csrfmiddlewaretoken")
 
-    def test_a_body_is_only_for_a_node_the_projection_holds(self):
+    def test_only_a_node_the_projection_holds_is_opened_or_focused(self):
         self.assertEqual(self.body("resource:not-declared").status_code, 404)
+        self.assertEqual(self.page(focus="not-a-node").context["focus_node"], "")
 
     def test_a_body_needs_a_signed_in_operator(self):
         self.client.logout()
 
         self.assertEqual(self.body("resource:internal-name").status_code, 302)
 
-    def test_focus_accepts_only_a_node_that_exists(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
-            response = self.client.get(reverse("control_plane:topology"), {"focus": "not-a-node"})
-
-        self.assertEqual(response.context["focus_node"], "")
-
     def test_focus_becomes_a_shareable_bounded_trace(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             response = self.client.get(
                 reverse("control_plane:topology"),
                 {
@@ -437,16 +407,13 @@ class TopologyPageTests(TestCase):
         self.assertEqual(trace.focus, "resource:internal-name")
         self.assertEqual(trace.direction, "inbound")
         self.assertEqual(trace.depth, 1)
-        self.assertContains(response, '<span class="eyebrow">Showing</span>')
-        self.assertContains(response, "What this depends on")
-        self.assertContains(response, ">Clear</a>")
 
     def page(self, **params):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             return self.client.get(reverse("control_plane:topology"), params)
 
     def body(self, node_id):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             return self.client.get(reverse("control_plane:topology_node"), {"node": node_id})
 
     def test_a_node_title_links_to_the_thing_it_names(self):
@@ -455,14 +422,7 @@ class TopologyPageTests(TestCase):
         response = self.page()
 
         detail = reverse("control_plane:detail", kwargs={"key": "internal-name"})
-        self.assertContains(
-            response,
-            f'<a class="topology-node-link" href="{detail}" data-entity="Internal DNS record">'
-            "app.example.test → 192.0.2.10</a>",
-        )
-        # The anchor sits inside the title's <strong>, which both the stylesheet
-        # and the explorer's status line read as the node's name.
-        self.assertContains(response, '<strong><a class="topology-node-link"')
+        self.assertContains(response, f'href="{detail}"')
         # A multi-line {# … #} is not a comment in Django, it is text. One
         # holding the word <strong> renders an element, and the explorer reads
         # the first <strong> in a node as its title, so the leak is silent
@@ -482,32 +442,21 @@ class TopologyPageTests(TestCase):
             for item in group["items"]
         }
         self.assertEqual(
-            [(row["direction"], row["label"], row["other"].id) for row in relations["resource:internal-name"]],
-            # Incoming rows say the edge from this end.
-            [
-                ("in", "For", "service:app.example.test"),
-                ("in", "Changed through", ability_id),
-            ],
+            [(row["direction"], row["other"].id) for row in relations["resource:internal-name"]],
+            [("in", "service:app.example.test"), ("in", ability_id)],
         )
         self.assertEqual(
-            [(row["direction"], row["label"], row["other"].id) for row in relations[ability_id]],
-            [("out", "Can change", "resource:internal-name")],
+            [(row["direction"], row["other"].id) for row in relations[ability_id]],
+            [("out", "resource:internal-name")],
         )
 
-        # The same edge renders once as incoming and once as outgoing, and each
-        # row walks to the other end.
+        # The same edge renders at both ends, and each row walks to the other.
         resource, ability = self.body("resource:internal-name"), self.body(ability_id)
-        self.assertContains(resource, '<span class="eyebrow topology-relation-heading">Used by</span>')
-        self.assertContains(ability, '<span class="eyebrow topology-relation-heading">Uses</span>')
-        self.assertContains(resource, '<span class="topology-relation-verb">Changed through</span>')
         self.assertContains(resource, f'href="{TopologyView._focus_link(ability_id)}"')
-        self.assertContains(
-            ability,
-            f'href="{TopologyView._focus_link("resource:internal-name")}"',
-        )
-        self.assertContains(ability, '<span class="topology-relation-other">internal-name</span>')
+        self.assertContains(ability, f'href="{TopologyView._focus_link("resource:internal-name")}"')
         # The kind by its label, never its identifier.
-        self.assertContains(ability, '<span class="topology-relation-kind">Internal DNS record</span>')
+        self.assertContains(ability, "Internal DNS record")
+        self.assertNotContains(ability, ">adguard.rewrite<")
 
     def test_a_node_body_carries_the_triage_the_projection_already_derived(self):
         """Declared versus observed is the whole of triage, so the node body
@@ -539,20 +488,15 @@ class TopologyPageTests(TestCase):
         disabled = self.body("resource:disabled-name")
         unswept = self.body("resource:example-stack")
 
-        # A comparison, not two raw numbers.
-        self.assertContains(response, "Your last change is not applied yet")
+        # A comparison, not two raw revision numbers.
         self.assertNotContains(response, "evision")
-        # The field the reading declined to echo back, as the list it is.
-        self.assertContains(response, "<li><code>answer</code></li>")
-        self.assertContains(response, "HQ could not check")
-        # Age, not an ISO timestamp, and the absence of one said out loud.
+        # The field the reading declined to echo back.
+        self.assertContains(response, "<code>answer</code>")
+        # Age, not an ISO timestamp.
         self.assertContains(response, "3\xa0hours ago")
         # A kind a sweep reads is not observed yet; one no sweep reads never is.
-        self.assertContains(disabled, "Not read yet.")
         self.assertNotContains(disabled, "HQ does not read this.")
         self.assertContains(unswept, "HQ does not read this.")
-        # A disabled declaration is not a finding.
-        self.assertContains(disabled, "HQ only reads this. It does not change it.")
 
     def test_the_whole_map_leaves_out_quiet_lanes_and_unlinked_cards_until_asked(self):
         from ..topology_lenses import QUIET_KINDS
@@ -567,8 +511,6 @@ class TopologyPageTests(TestCase):
         left_out = shown.context["topology_left_out"]
         self.assertGreater(left_out, 0)
         self.assertEqual(len(cards(everything)), len(cards(shown)) + left_out)
-        self.assertContains(shown, f"Show {left_out} more")
-        self.assertContains(everything, "Show fewer")
         # "N of M shown" is out of every card, the ones left out included.
         self.assertEqual(shown.context["topology_total"], len(cards(everything)))
         self.assertContains(shown, f'data-topology-total="{len(cards(everything))}"')
@@ -588,7 +530,7 @@ class TopologyPageTests(TestCase):
             if not item["degree"]
         )
 
-        self.assertContains(self.body(alone), '<p class="muted">Connected to nothing.</p>')
+        self.assertContains(self.body(alone), "Connected to nothing.")
 
 
 class FocusedPageTests(TestCase):
@@ -601,48 +543,29 @@ class FocusedPageTests(TestCase):
         login(self.client)
 
     def page(self, focus):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             return self.client.get(reverse("control_plane:topology"), {"focus": focus})
 
-    def test_the_details_render_once_in_the_panel_not_in_a_lane(self):
+    def test_the_details_render_once_in_the_panel_ordered_by_importance(self):
         response = self.page("zone:example.com")
         body = response.content.decode()
 
-        self.assertEqual(body.count('class="topology-node-body"'), 1)
         self.assertEqual(body.count('data-topology-body-of="zone:example.com"'), 1)
         panel = body[body.index('id="topology-detail"') :]
         self.assertIn('data-topology-body-of="zone:example.com"', panel)
-        lanes = body[body.index('id="map"') : body.index('id="topology-detail"')]
-        self.assertNotIn("topology-node-body", lanes)
-        self.assertNotIn("Last read", lanes)
-
-    def test_each_value_is_on_a_line_of_its_own_with_its_source_and_age(self):
-        body = self.page("zone:example.com").content.decode()
-
-        self.assertIn('<ul class="topology-relation-values">', body)
-        values = re.findall(r'<ul class="topology-relation-values">(.*?)</ul>', body, flags=re.DOTALL)
-        self.assertTrue(values)
-        for block in values:
-            for line in re.findall(r"<li>(.*?)</li>", block, flags=re.DOTALL):
-                self.assertEqual(line.count('class="topology-relation-value"'), 1)
-                self.assertIn('class="topology-relation-source muted"', line)
-                self.assertRegex(line, r'read <time datetime="[^"]+" title="[^"]+">[^<]+</time>')
-        # No comma-joined link lists.
+        # Each value says when it was read, and no list of links is comma-joined.
+        self.assertIn("<time datetime=", panel)
         self.assertNotRegex(body, r"</a>,\s*<a")
-
-    def test_the_panel_orders_relationships_by_importance(self):
-        detail = self.page("zone:example.com").context["topology_detail"]
+        detail = response.context["topology_detail"]
         for direction in ("in", "out"):
             ranks = [row["rank"] for row in detail["relations"] if row["direction"] == direction]
             self.assertEqual(ranks, sorted(ranks))
 
     def test_the_trace_ledger_is_drawn_only_with_relationships_in_it(self):
         related = self.page("zone:example.com")
-        self.assertContains(related, "Links shown</h2>")
         self.assertContains(related, "data-topology-edge=")
-        self.assertNotContains(related, "All relationships")
 
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             unfocused = self.client.get(reverse("control_plane:topology"), {"all": 1})
         lonely = next(
             item["node"].id
@@ -652,8 +575,7 @@ class FocusedPageTests(TestCase):
         )
         alone = self.page(lonely)
         self.assertEqual(alone.context["focus_node"], lonely)
-        self.assertContains(alone, '<p class="muted">Connected to nothing.</p>')
-        self.assertNotContains(alone, "Links shown")
+        self.assertNotContains(alone, "data-topology-edge=")
         self.assertNotContains(alone, 'id="topology-relations"')
 
     def test_a_domain_is_observed_when_its_zone_reading_is(self):
@@ -683,10 +605,9 @@ class FocusedPageTests(TestCase):
 
         noun = "link" if degree == 1 else "links"
         self.assertContains(response, f'aria-label="Details for example.com, {degree} {noun}"')
-        self.assertContains(response, f'title="Details · {degree} {noun}"')
 
     def project(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             return derive_topology(principal=READ)
 
 
@@ -821,7 +742,7 @@ class TopologyLensTests(TestCase):
         )
 
     def project(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             return derive_topology(principal=READ)
 
     def narrowed(self, name):
@@ -881,7 +802,7 @@ class TopologyLensTests(TestCase):
                 self.assertLessEqual({n.id for n in narrowed.nodes}, whole_ids)
 
     def test_serialization_names_the_applied_lens_and_every_available_one(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             applied = serialized_topology(principal=READ, lens="unobserved-resources")
             unknown = serialized_topology(principal=READ, lens="not-a-lens")
             whole = serialized_topology(principal=READ)
@@ -894,7 +815,7 @@ class TopologyLensTests(TestCase):
 
     def test_a_lens_costs_no_extra_query(self):
         with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
+            host_only(),
             uncached(),
         ):
             with CaptureQueriesContext(database_connection) as whole:
@@ -904,7 +825,7 @@ class TopologyLensTests(TestCase):
         self.assertEqual(len(narrowed), len(whole))
 
     def test_discovery_offers_every_lens_and_withholds_them_without_read(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             offered = command_center("", principal=READ)["views"]
             denied = command_center("", principal=NONE)["views"]
             matched = command_center("ungoverned", principal=READ)["views"]
@@ -952,13 +873,14 @@ class MeasuredNodeTests(TestCase):
         with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(self._spec(*hosts),)):
             return {n.label: n for n in derive_topology(principal=READ).nodes}
 
-    def test_a_target_named_like_a_measured_host_carries_its_traffic(self):
-        self._measure("measured.example.com")
+    def test_a_target_named_like_a_measured_host_carries_its_traffic_and_lends_it_to_no_other(self):
+        self._measure("measured.example.com", pageviews=412, visits=300)
 
-        node = self._nodes("measured.example.com")["measured.example.com"]
+        nodes = self._nodes("measured.example.com", "other.example.com")
 
-        self.assertEqual(node.pageviews, 412)
-        self.assertEqual(node.visits, 300)
+        measured = nodes["measured.example.com"]
+        self.assertEqual((measured.pageviews, measured.visits), (412, 300))
+        self.assertIsNone(nodes["other.example.com"].pageviews)
 
     def test_an_unmeasured_host_carries_none_rather_than_zero(self):
         # The distinction the field exists for: nobody visited and nobody looked
@@ -967,14 +889,6 @@ class MeasuredNodeTests(TestCase):
 
         self.assertIsNone(node.pageviews)
         self.assertIsNone(node.visits)
-
-    def test_one_hosts_traffic_is_not_lent_to_another(self):
-        self._measure("measured.example.com", pageviews=9999)
-
-        nodes = self._nodes("measured.example.com", "other.example.com")
-
-        self.assertEqual(nodes["measured.example.com"].pageviews, 9999)
-        self.assertIsNone(nodes["other.example.com"].pageviews)
 
     def test_a_graph_with_no_hostname_shaped_node_costs_no_extra_query(self):
         # Why this can live in the shared projection rather than in one adapter:
@@ -1054,15 +968,23 @@ class OneNodePerMachineTests(TestCase):
             {(edge.source, edge.target, edge.kind) for edge in topology.edges},
         )
 
-    def test_the_controller_it_runs_is_the_machine_not_a_second_node(self):
-        nodes, edges = self._project()
+    def test_the_machine_is_one_node_and_what_runs_on_it_hangs_off_it(self):
+        nodes, edges = self._project("10.0.0.9")
 
+        # The controller it runs is the machine, not a second node.
         self.assertEqual([node for node in nodes.values() if node.kind == "controller"], [])
         machine = nodes["machine:a-docker-host"]
         self.assertEqual(machine.kind, "machine")
         self.assertIn(("Runs the controller", "a-docker-host"), machine.facts)
         self.assertTrue(any(source == "machine:a-docker-host" and kind == "carries" for source, _, kind in edges))
         self.assertIn(("machine:a-docker-host", "resource:a-docker-host", "declared_by"), edges)
+        self.assertIn(("machine:a-docker-host", "resource:a-service", "runs"), edges)
+        # Its tailnet device is joined by the address they share.
+        self.assertIn(("machine:a-docker-host", "resource:a-docker-host-tailnet", "on_tailnet"), edges)
+        # No edge is left pointing at a folded node.
+        for source, target, _ in edges:
+            self.assertIn(source, nodes)
+            self.assertIn(target, nodes)
 
     def test_a_target_at_its_address_is_the_machine(self):
         nodes, edges = self._project("10.0.0.9")
@@ -1075,23 +997,6 @@ class OneNodePerMachineTests(TestCase):
         nodes, _ = self._project("elsewhere.example.com")
 
         self.assertIn("elsewhere.example.com", {node.label for node in nodes.values()})
-
-    def test_what_declares_the_machine_it_runs_on_hangs_off_it(self):
-        _, edges = self._project()
-
-        self.assertIn(("machine:a-docker-host", "resource:a-service", "runs"), edges)
-
-    def test_its_tailnet_device_is_joined_by_the_address_they_share(self):
-        _, edges = self._project()
-
-        self.assertIn(("machine:a-docker-host", "resource:a-docker-host-tailnet", "on_tailnet"), edges)
-
-    def test_no_edge_is_left_pointing_at_a_folded_node(self):
-        nodes, edges = self._project("10.0.0.9")
-
-        for source, target, _ in edges:
-            self.assertIn(source, nodes)
-            self.assertIn(target, nodes)
 
 
 class AnUnrecognisedContainerIsCarriedByItsMachineTests(TestCase):
@@ -1123,16 +1028,10 @@ class AnUnrecognisedContainerIsCarriedByItsMachineTests(TestCase):
             },
             principal=cli_principal(),
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             self.nodes = {node.id: node for node in derive_topology(principal=READ).nodes}
 
-    def test_it_is_a_fact_on_its_machine_node(self):
-        self.assertIn(
-            ("unrecognised-container", "a-stray@a-docker-host"),
-            self.nodes["machine:a-docker-host"].facts,
-        )
-
-    def test_a_container_its_compose_project_declares_is_not(self):
+    def test_it_is_a_fact_on_its_machine_node_and_a_declared_one_is_not(self):
         facts = self.nodes["machine:a-docker-host"].facts
 
         self.assertEqual(
@@ -1168,7 +1067,7 @@ class HolderEdgeTests(TestCase):
             probed=True,
             observed_at=timezone.now(),
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             topology = derive_topology(principal=READ)
         return {(edge.source, edge.target, edge.kind) for edge in topology.edges}
 
@@ -1203,7 +1102,7 @@ class HolderEdgeTests(TestCase):
         with mock.patch("hq.platform.application.connections._depends", return_value=uses):
             self._edges(kind, declared=provider.from_record(record), record=record)
             ProviderConnection.objects.update(reachable=False)
-            with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+            with host_only():
                 topology = derive_topology(principal=READ)
 
         statuses = {

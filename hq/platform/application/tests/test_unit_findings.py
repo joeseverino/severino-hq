@@ -4,7 +4,7 @@ import re
 from datetime import UTC, timedelta
 from pathlib import Path
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone
 
 from hq.domains.control_plane.bridge_contract import contract
@@ -132,6 +132,7 @@ class RecordTests(SimpleTestCase):
                     self.assertIsNone(re.search(schema["pattern"], sentinel), (name, sentinel))
 
 
+@tag("source")
 class SourceTests(SimpleTestCase):
     """The thresholds are held to the units the repository ships."""
 

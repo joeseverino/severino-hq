@@ -2,7 +2,7 @@
 that names nothing."""
 
 from django.db import connection
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase, tag
 
 from hq.domains.control_plane.models import REFERENCE_COLUMNS, ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
@@ -202,6 +202,11 @@ class RuleTests(TestCase):
             {key for key, _value in nodes["resource:lost"].facts},
             {rules.NO_CONNECTION, rules.NO_PARENT},
         )
+
+
+@tag("source")
+class RuleSourceTests(SimpleTestCase):
+    """The rule's source names no kind of its own."""
 
     def test_the_rule_names_no_kind_of_its_own(self):
         """The relations come from the registry's ``contains``; a second one is covered when declared."""

@@ -37,5 +37,5 @@ reason, in `controller/osv-scanner.toml`.
    `mise lock`, `go mod tidy`).
 2. `mise run check`, then `mise run ci`. A browser or Playwright change can
    move rendering: run `mise run browser`.
-3. A change to the Python matrix or the coverage floor changes the README
-   badges; `checks:badges` fails until they agree.
+3. A change to the Python matrix changes the README badge; `checks:badges`
+   fails until they agree.

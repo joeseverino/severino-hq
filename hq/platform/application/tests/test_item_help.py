@@ -7,7 +7,7 @@ from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone
 
 from ..finding_model import Finding, FindingRule, OperatorStep, Remedy
@@ -66,6 +66,21 @@ def host_modules() -> list[Path]:
 
 
 class EveryItemComesWithHelpTests(SimpleTestCase):
+    def test_every_finding_rule_says_why_hq_cannot_resolve_it(self):
+        for rule in RULES:
+            with self.subTest(rule=rule.name):
+                self.assertTrue(rule.no_help_reason.strip())
+                self.assertNotIn("—", rule.no_help_reason)
+
+    def test_a_rule_without_a_reason_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "why HQ cannot"):
+            FindingRule("example", "Example", "attention", lambda estate: (), "Do it.", no_help_reason=" ")
+
+
+@tag("source")
+class ItemHelpSourceTests(SimpleTestCase):
+    """Every attention item the host source builds carries help."""
+
     def test_every_attention_item_the_host_builds_carries_help(self):
         missing = [
             f"{path.relative_to(ROOT)}:{call.lineno}"
@@ -84,16 +99,6 @@ class EveryItemComesWithHelpTests(SimpleTestCase):
                     any(_unhelped(call) for call in _insight_calls(ROOT / name)),
                     f"{name} carries help now; take it out of PENDING.",
                 )
-
-    def test_every_finding_rule_says_why_hq_cannot_resolve_it(self):
-        for rule in RULES:
-            with self.subTest(rule=rule.name):
-                self.assertTrue(rule.no_help_reason.strip())
-                self.assertNotIn("—", rule.no_help_reason)
-
-    def test_a_rule_without_a_reason_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "why HQ cannot"):
-            FindingRule("example", "Example", "attention", lambda estate: (), "Do it.", no_help_reason=" ")
 
 
 def _finding(**fields) -> Finding:

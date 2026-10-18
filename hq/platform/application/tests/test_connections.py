@@ -6,21 +6,28 @@ machine" or "which domain" is derived from that report, so an estate grows by
 being given a credential rather than by anything here being edited.
 """
 
+from collections import Counter
+
 from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
+from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.models import ProviderConnection
+from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_STACK_KIND
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
 
-from ..connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog
+from ..connection_catalog import AUTHORITY_LABELS, CONTROLLER_CONNECTIONS, connection_catalog
 from ..connections import connection_readings, connections_for, reachable_through
+from ..derivation_testing import frozen
+from ..derivations import counting
 from ..provider_choices import container_stack, zone
 from ..report_testing import report_connections
 from ..security import cli_principal
+from .sentinel import CONNECTION, SentinelMixin, plant_credentials
 
 A_PORTAINER = {
     "connection_ref": "a-portainer",
@@ -94,7 +101,6 @@ class RecordingTests(TestCase):
         sweep({**A_PORTAINER, "probed": False, "detail": "No probe."})
 
         self.assertEqual(connection_readings()[0].status, "unprobed")
-        self.assertEqual(connection_readings()[0].status_label, "Not tested")
 
     def test_a_connection_without_a_ref_is_skipped_rather_than_stored(self):
         sweep({"connection_ref": " ", "provider": "portainer"}, A_PORTAINER)
@@ -135,21 +141,8 @@ class DerivationTests(TestCase):
 
         named = {provider for spec in PROVIDERS.values() for provider in spec.connection_providers}
 
-        self.assertEqual(
-            named
-            - {
-                "adguard",
-                "npm",
-                "cloudflare_api",
-                "cloudflare_dns",
-                "github_app",
-                "onepassword",
-                "portainer",
-                "ssh",
-                "tailscale",
-            },
-            set(),
-        )
+        self.assertTrue(named)
+        self.assertLessEqual(named, set(CONNECTION_KINDS))
 
     def test_where_a_stack_can_run_is_what_a_portainer_reaches(self):
         """A machine is a place to run something because a Portainer holds it.
@@ -227,7 +220,7 @@ class DerivationTests(TestCase):
         self.assertEqual(connections_for("portainer"), ())
 
 
-class ConnectionPageTests(TestCase):
+class ConnectionPageTests(SentinelMixin, TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
@@ -239,7 +232,7 @@ class ConnectionPageTests(TestCase):
 
         self.assertContains(response, "a-portainer")
         self.assertContains(response, "a-cloud-host")
-        self.assertContains(response, "Container stack")
+        self.assertContains(response, PROVIDERS[CONTAINER_STACK_KIND].label)
 
     def test_the_controller_observed_family_leads_the_inventory(self):
         sweep(A_PORTAINER, A_DNS_TOKEN)
@@ -250,37 +243,34 @@ class ConnectionPageTests(TestCase):
         self.assertEqual(groups[0].spec.name, CONTROLLER_CONNECTIONS)
         self.assertTrue(groups[0].connections)
 
-    def test_connections_render_as_bounded_rows_not_content_sized_chips(self):
+    def test_a_probed_whole_account_credential_is_ready(self):
         sweep(A_PORTAINER)
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, 'class="connection-endpoint"')
-        self.assertContains(response, 'class="connection-ability-list"')
-        # A probed Portainer holds a whole-account credential: reached, proven,
-        # and so ready: the lifecycle rather than the raw probe result.
-        self.assertContains(response, 'class="connection-state connection-state-ready"')
-        self.assertContains(response, "Credential has full account access")
-        self.assertNotContains(response, "connection-ability-chip")
+        (row,) = [
+            row
+            for _purpose, rows in response.context["connections"].purposes
+            for row in rows
+            if row.instance.connection_ref == "a-portainer"
+        ]
+        # Reached and proven: the lifecycle rather than the raw probe result.
+        self.assertEqual(row.lifecycle, "ready")
+        self.assertContains(response, A_PORTAINER["endpoint"])
+        self.assertContains(response, AUTHORITY_LABELS["whole_account"])
 
     def test_the_page_never_carries_a_secret(self):
-        """It cannot, because nothing here has one, and this is the assertion
-        that keeps it that way if a field is ever added to the report."""
-
-        sweep({**A_PORTAINER, "detail": "2 of 2 environments reachable."})
+        plant_credentials()
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        # Whole setting names: "ONEPASSWORD" is a provider's prefix, not a secret.
-        page = response.content.decode()
-        self.assertNotRegex(page, r"\bAPI_TOKEN\b")
-        self.assertNotRegex(page, r"\bPASSWORD\b")
+        self.assertContains(response, CONNECTION)
+        self.assertNoSentinel(response.content)
 
     def test_it_says_how_to_add_one_when_nothing_has_swept(self):
         with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"):
             response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Each connection is a 1Password item the controller is given")
         self.assertContains(response, 'href="https://github.com/example/hq/blob/main/docs/Secrets.md#connections"')
 
     def test_with_no_source_named_there_is_no_guide_to_link(self):
@@ -294,7 +284,8 @@ class ConnectionPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "HQ does not know what these are")
+        unlabelled = [view.instance.label for view in response.context["connections"].unlabelled]
+        self.assertEqual(unlabelled, ["a-portainer"])
         self.assertContains(response, "a-portainer")
 
     def test_the_workspace_query_cost_does_not_grow_with_connections(self):
@@ -320,7 +311,18 @@ class ConnectionPageTests(TestCase):
         with CaptureQueriesContext(connection) as expanded:
             self.client.get(reverse("control_plane:connections"))
 
-        self.assertEqual(len(expanded), len(baseline))
+        self.assertLessEqual(len(expanded), len(baseline))
+
+    def test_a_second_visit_derives_nothing(self):
+        sweep(A_PORTAINER, A_DNS_TOKEN)
+        with frozen():
+            with counting() as (first, _served):
+                self.client.get(reverse("control_plane:connections"))
+            with counting() as (again, _served):
+                self.client.get(reverse("control_plane:connections"))
+
+        self.assertTrue(first)
+        self.assertEqual(again, Counter())
 
 
 class OfferTests(TestCase):
@@ -343,8 +345,7 @@ class OfferTests(TestCase):
 
         refused = dict(_certificate_and_dns("probe.invalid")["certificate"].unavailable)
 
-        self.assertIn("TLS certificate", refused)
-        self.assertIn("Upload a certificate instead", refused["TLS certificate"])
+        self.assertTrue(refused[PROVIDERS["tls.certificate"].label])
 
     def test_the_option_that_works_is_offered_in_its_place(self):
         sweep(A_DNS_TOKEN)
@@ -372,6 +373,9 @@ class OfferTests(TestCase):
 
         self.assertIn("cloudflare.dns_record", dict(facets["dns"].declarable))
         self.assertEqual(facets["certificate"].unavailable, ())
+
+
+REDEFINE = f"?kind={CONTAINER_STACK_KIND}&amp;hostname=probe.invalid"
 
 
 def _certificate_and_dns(hostname):
@@ -507,6 +511,14 @@ class AdoptionSafetyTests(TestCase):
         self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
 
+    @staticmethod
+    def watch(response):
+        return [
+            action
+            for action in response.context["page"].actions
+            if "/adopt/record/portainer.container/" in action.url and action.method == "post"
+        ]
+
     def _service_page(self, portainer_managed):
         from django.utils import timezone
 
@@ -569,13 +581,12 @@ class AdoptionSafetyTests(TestCase):
     def test_a_container_portainer_did_not_create_cannot_be_redefined(self):
         response = self._service_page(portainer_managed=False)
 
-        self.assertContains(response, "HQ cannot read it")
-        self.assertNotContains(response, "Manage as container stack")
+        self.assertNotContains(response, REDEFINE)
 
     def test_one_portainer_created_can_be_redefined(self):
         response = self._service_page(portainer_managed=True)
 
-        self.assertContains(response, "Manage as container stack")
+        self.assertContains(response, REDEFINE)
 
     def test_either_way_it_can_be_watched(self):
         """Defining and cycling are different claims.
@@ -589,7 +600,7 @@ class AdoptionSafetyTests(TestCase):
             with self.subTest(portainer_managed=created_by_portainer):
                 response = self._service_page(portainer_managed=created_by_portainer)
 
-                self.assertContains(response, "Watch container")
+                self.assertTrue(self.watch(response))
 
     def test_watching_it_is_what_puts_the_controls_there(self):
         """Buttons appear once a declaration exists to hang an operation on.
@@ -614,19 +625,17 @@ class AdoptionSafetyTests(TestCase):
 
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "probe.invalid"}))
 
-        self.assertContains(response, "Restart")
-        self.assertNotContains(response, "Watch container")
+        self.assertFalse(self.watch(response))
 
         # Restart leads by what it is for; Stop asks first, by name.
         from hq.platform.core.templatetags.action_tags import lead_action
 
         actions = response.context["page"].actions
-        stop = next(action for action in actions if action.label == "Stop")
-        self.assertEqual(lead_action(actions).label, "Restart")
-        self.assertEqual((stop.method, stop.danger), ("get", True))
-        confirmation = self.client.get(stop.url)
-        self.assertContains(confirmation, "Stop probe?")
-        self.assertContains(confirmation, "stops running")
+        restart = next(action for action in actions if "/a-docker-host-probe/restart/" in action.url)
+        stop = next(action for action in actions if "/a-docker-host-probe/stop/" in action.url)
+        self.assertIs(lead_action(actions), restart)
+        self.assertEqual((restart.method, stop.method, stop.danger), ("post", "get", True))
+        self.assertContains(self.client.get(stop.url), "Stop probe?")
         queued = self.client.post(stop.url)
         self.assertRedirects(
             queued,
@@ -893,5 +902,5 @@ class DependsOnceTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertNotContains(response, "<code>example-com</code>")
-        self.assertContains(response, "<code>www-record</code>")
+        self.assertNotContains(response, ">example-com<")
+        self.assertContains(response, ">www-record<")

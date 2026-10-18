@@ -1,11 +1,10 @@
 import json
 from datetime import date, timedelta
 from decimal import Decimal
-from unittest.mock import patch
 
 from django.db import connection
 from django.template.loader import render_to_string
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -14,6 +13,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.derivations import uncached
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.host_only import host_only
 
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from ..dashboard import operating_snapshot
@@ -445,6 +445,11 @@ class CadenceTests(TestCase):
 
         self.assertEqual(week.said, "No data for the week of Sep 22")
 
+
+@tag("source")
+class CadenceStyleTests(SimpleTestCase):
+    """The no-data mark has a style in the stylesheet."""
+
     def test_the_no_data_mark_is_styled(self):
         from pathlib import Path
 
@@ -543,17 +548,8 @@ class DashboardProjectionTests(TestCase):
         )
 
         # The snapshot assembles the whole page (KPIs, the composed queue, the
-        # card row and the recent lists) in one call, so this covers all of it
-        # rather than a part. Section readings and the service join are shared
-        # only for this projection; a later snapshot always reads again.
-        with (
-            patch("hq.platform.application.domains.extension_domains", return_value=()),
-            # Infrastructure attention traverses the composed connection graph.
-            # Removing extension domains alone does not make that graph host-only;
-            # extension connection providers must be excluded from this one
-            # host-cost assertion too.
-            patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-        ):
+        # card row and the recent lists) in one call, so this covers all of it.
+        with host_only():
             queries = self._snapshot_queries()
 
         # Counts only. This assertion runs in the composed image too, where the

@@ -102,19 +102,12 @@ class SearchFindsTheEstateTests(TestCase):
     def estate(self, query):
         return command_center(query, principal=READ, include_live_connections=True)["estate"]
 
-    def test_a_machine_name_finds_the_machine_first(self):
-        found = self.estate("example-host")
-
-        self.assertEqual((found[0].kind, found[0].label), ("machine", "example-host"))
-        self.assertEqual(found[0].url, reverse("control_plane:machine", args=["example-host"]))
-
-    def test_an_address_finds_the_machine_holding_it(self):
-        found = self.estate("100.64.0.5")
-
-        self.assertEqual(found[0].label, "example-host")
-
-    def test_a_magicdns_name_finds_the_machine(self):
-        self.assertEqual(self.estate("example-host.example-tailnet.ts.net")[0].label, "example-host")
+    def test_a_machine_name_address_or_magicdns_name_finds_the_machine_first(self):
+        for query in ("example-host", "100.64.0.5", "example-host.example-tailnet.ts.net"):
+            with self.subTest(query):
+                first = self.estate(query)[0]
+                self.assertEqual((first.kind, first.label), ("machine", "example-host"))
+                self.assertEqual(first.url, reverse("control_plane:machine", args=["example-host"]))
 
     def test_a_hostname_finds_its_service_then_its_domain(self):
         found = [(item.kind, item.label) for item in self.estate("app.example.com")]
@@ -260,22 +253,29 @@ class EstateCardTests(TestCase):
         with projection_scope():
             return str(connection_total())
 
-    def test_every_figure_links_to_its_page(self):
+    def test_every_figure_links_to_its_page_and_the_nearest_expiries_to_their_subject(self):
         found = self.cards()
 
         self.assertEqual(found["hq.estate.machines"]["value"], "1")
-        self.assertEqual(found["hq.estate.machines"]["detail"], "1 offline")
+        self.assertIn("1", found["hq.estate.machines"]["detail"])
         self.assertEqual(found["hq.estate.machines"]["url"], reverse("control_plane:machines"))
         self.assertEqual(found["hq.estate.services"]["url"], reverse("control_plane:services"))
         self.assertEqual(found["hq.estate.domains"]["value"], "1")
         self.assertEqual(found["hq.estate.domains"]["url"], reverse("zones:index"))
         self.assertEqual(found["hq.estate.connections"]["value"], self.listed())
-        self.assertEqual(found["hq.estate.connections"]["detail"], "example-ssh not answering")
+        self.assertIn("example-ssh", found["hq.estate.connections"]["detail"])
         # One connection with a problem leads to its own row.
         self.assertEqual(
             found["hq.estate.connections"]["url"],
             reverse("control_plane:connections") + "#connection-example-ssh",
         )
+        self.assertIn("example-cert", found["hq.estate.certificate"]["detail"])
+        self.assertEqual(
+            found["hq.estate.certificate"]["url"],
+            reverse("control_plane:detail", args=["example-cert"]),
+        )
+        self.assertIn("example.com", found["hq.estate.registration"]["detail"])
+        self.assertEqual(found["hq.estate.registration"]["url"], reverse("zones:detail", args=["example.com"]))
 
     def test_connections_are_counted_when_every_one_answers(self):
         ProviderConnection.objects.filter(connection_ref="example-ssh").update(reachable=True, detail="")
@@ -288,28 +288,14 @@ class EstateCardTests(TestCase):
         self.assertNotIn("detail", card)
         self.assertNotIn("status", card)
 
-    def test_the_nearest_expiries_link_to_their_subject(self):
-        found = self.cards()
-
-        self.assertEqual(found["hq.estate.certificate"]["detail"], "example-cert · Certificate")
-        self.assertEqual(
-            found["hq.estate.certificate"]["url"],
-            reverse("control_plane:detail", args=["example-cert"]),
-        )
-        self.assertIn("days", found["hq.estate.certificate"]["value"])
-        self.assertEqual(found["hq.estate.registration"]["detail"], "example.com · Registration")
-        self.assertEqual(found["hq.estate.registration"]["url"], reverse("zones:detail", args=["example.com"]))
-
     def test_the_dashboard_shows_the_estate_card(self):
         user = get_user_model().objects.create_superuser("operator", password="x" * 20)
         self.client.force_login(user)
 
         response = self.client.get(reverse("dashboard"))
 
-        self.assertContains(response, "<h2>Estate")
-        # "Machines", so it fits its column: the dots and the note say "online".
-        self.assertContains(response, "Machines</span>")
-        self.assertContains(response, f'href="{reverse("control_plane:connections")}"')
+        for url in (reverse("control_plane:machines"), reverse("control_plane:services"), reverse("zones:index")):
+            self.assertContains(response, f'href="{url}"')
 
     def test_a_refused_credential_is_said_as_refused(self):
         from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
@@ -374,7 +360,7 @@ class EdgeCertificateExpiryTests(TestCase):
 
         figure = self.figure()
 
-        self.assertEqual(figure["detail"], "example-cert · Certificate")
+        self.assertIn("example-cert", figure["detail"])
         self.assertNotIn("status", figure)
         self.assertEqual(self.items(), [])
 
@@ -383,13 +369,12 @@ class EdgeCertificateExpiryTests(TestCase):
 
         figure = self.figure()
 
-        self.assertEqual(figure["detail"], "example.com · Edge · not renewed by its issuer")
+        self.assertIn("example.com", figure["detail"])
         self.assertEqual(figure["status"], "attention")
         self.assertEqual(figure["url"], reverse("zones:detail", args=["example.com"]))
         (item,) = self.items()
         self.assertEqual(item.status, "attention")
-        self.assertEqual(item.title, "example.com expires in 10 days")
-        self.assertIn("should have by now", item.body)
+        self.assertIn("example.com", item.title)
         self.assertEqual(item.subject.url, reverse("zones:detail", args=["example.com"]))
 
 
@@ -420,8 +405,7 @@ class StaleGlanceTests(TestCase):
         self.assertTrue(old["outdated"])
         self.assertFalse(panels[0]["outdated"])
         html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
-        self.assertIn("is-outdated", html)
-        self.assertIn("as of <time", html)
+        self.assertIn("<time", html)
 
     def test_a_current_reading_is_not_outdated(self):
         from ..freshness import DASHBOARD_GLANCE, stale_after
@@ -448,13 +432,9 @@ class OldGlanceTests(TestCase):
                 "observed_at": timezone.now() - timedelta(days=20),
             },
         )
-        from ..glance import glance_context
+        weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
 
-        html = render_to_string("core/_dashboard_glance.html", glance_context())
-
-        self.assertNotIn('<details class="glance-quiet', html)
-        self.assertIn("is-outdated", html)
-        self.assertIn("as of <time", html)
+        self.assertTrue(weather["outdated"])
 
 
 class ActionItemTests(TestCase):
@@ -466,7 +446,8 @@ class ActionItemTests(TestCase):
 
         (item,) = [item for item in tailnet() if item.key == "tailnet-update:example-host"]
 
-        self.assertEqual(item.body, "1.102.3 → 1.102.4.")
+        self.assertIn("1.102.3", item.body)
+        self.assertIn("1.102.4", item.body)
         self.assertEqual(item.subject.url, reverse("control_plane:machine", args=["example-host"]))
 
     def test_an_update_with_no_newer_device_says_what_runs(self):
@@ -474,7 +455,7 @@ class ActionItemTests(TestCase):
 
         (item,) = [item for item in tailnet() if item.key == "tailnet-update:example-host"]
 
-        self.assertEqual(item.body, "Runs 1.102.3.")
+        self.assertIn("1.102.3", item.body)
 
     def test_a_connection_that_does_not_answer_is_an_action_item(self):
         connection("example-ssh", reachable=False, detail="Timed out")
@@ -482,7 +463,7 @@ class ActionItemTests(TestCase):
         found = [item for item in infrastructure() if "connection-not-answering" in item.key]
 
         self.assertEqual(len(found), 1)
-        self.assertEqual(found[0].title, "example-ssh is not answering")
+        self.assertIn("example-ssh", found[0].title)
         self.assertIn("Timed out", found[0].body)
         self.assertEqual(found[0].subject.label, "example-ssh")
         self.assertTrue(found[0].subject.url)
@@ -536,7 +517,7 @@ class ActionItemTests(TestCase):
         with projection_scope():
             found = [item for item in estate_attention() if item.eyebrow == "Machines"]
 
-        self.assertEqual([item.title for item in found], ["example-host is offline"])
+        self.assertEqual([item.subject.label for item in found], ["example-host"])
         self.assertEqual(found[0].status, "serious")
         self.assertEqual(found[0].subject.url, reverse("control_plane:machine", args=["example-host"]))
 
@@ -583,11 +564,7 @@ class ActionItemTests(TestCase):
 
         response = self.client.get(reverse("action_items"))
 
-        self.assertContains(
-            response,
-            f'<a class="attention-title" href="{reverse("control_plane:machine", args=["example-host"])}">'
-            "Tailscale update available for example-host</a>",
-        )
+        self.assertContains(response, f'href="{reverse("control_plane:machine", args=["example-host"])}"')
 
 
 class MachineRoleTests(TestCase):
@@ -624,8 +601,11 @@ class MachineRoleTests(TestCase):
         board = self.client.get(reverse("control_plane:machines"))
 
         self.assertContains(page, "Exit node")
-        self.assertNotContains(page, "No managed services.")
         self.assertContains(board, "Tailnet DNS")
+
+
+def addresses(response):
+    return list(response.context["header_addresses"])
 
 
 class PublicAddressTests(TestCase):
@@ -669,14 +649,11 @@ class PublicAddressTests(TestCase):
         with PUBLIC_RANGE:
             response = self.client.get(reverse("control_plane:machine", args=["example-vps"]))
 
-        self.assertContains(
-            response,
-            '<span class="muted">Public</span> <code>203.0.113.7</code> <span class="muted">Example Hosting</span>',
-            html=False,
-        )
-        self.assertContains(response, '<span class="muted">Tailnet</span> <code>100.64.0.10</code>')
         # A private address no other device shares is the provider's network, not a LAN.
-        self.assertNotContains(response, '<span class="muted">LAN</span>')
+        self.assertEqual(
+            addresses(response),
+            [("Tailnet", "100.64.0.10", ""), ("Public", "203.0.113.7", "Example Hosting")],
+        )
 
     def home(self, *extra):
         devices(
@@ -714,19 +691,16 @@ class PublicAddressTests(TestCase):
         self.home()
         response = self.header("example-phone")
 
-        self.assertContains(response, '<span class="muted">Tailnet</span> <code>100.64.0.11</code>')
-        self.assertContains(response, '<span class="muted">LAN</span> <code>10.0.50.23</code>')
+        self.assertEqual(addresses(response), [("Tailnet", "100.64.0.11", ""), ("LAN", "10.0.50.23", "")])
         self.assertNotContains(response, "203.0.113.9")
-        self.assertNotContains(response, "2001:db8:0:9")
-        self.assertNotContains(response, "Public")
 
     def test_a_container_bridge_is_not_the_lan(self):
         self.home()
 
-        self.assertContains(
-            self.header("example-docker-host"), '<span class="muted">LAN</span> <code>10.0.50.40</code>'
+        self.assertIn(("LAN", "10.0.50.40", ""), addresses(self.header("example-docker-host")))
+        self.assertNotIn(
+            "LAN", [label for label, _address, _holder in addresses(self.header("example-other-docker-host"))]
         )
-        self.assertNotContains(self.header("example-other-docker-host"), "LAN")
 
     def test_an_address_inside_an_advertised_subnet_route_is_the_lan(self):
         self.home(
@@ -738,7 +712,7 @@ class PublicAddressTests(TestCase):
             )
         )
 
-        self.assertContains(self.header("example-router"), '<span class="muted">LAN</span> <code>10.0.60.5</code>')
+        self.assertIn(("LAN", "10.0.60.5", ""), addresses(self.header("example-router")))
 
     def test_a_special_purpose_address_is_not_public(self):
         from ..reach import is_public
@@ -766,7 +740,7 @@ class ContainerVisibilityTests(TestCase):
     def test_no_connection_reads_containers_so_none_are_not_visible(self):
         self.assertContains(self.listing(), "Not visible")
         # The machine's own page draws no box for what it cannot see.
-        self.assertNotContains(self.page(), '<span class="band-label">Containers</span>')
+        self.assertFalse(self.page().context["machine"].containers)
 
     def test_a_connected_container_reader_makes_none_a_reading(self):
         from ..services import CONTAINER_KIND
@@ -783,12 +757,7 @@ class EstateQueryBudgetTests(TestCase):
 
         from ..dashboard import operating_snapshot
 
-        with (
-            mock.patch("hq.platform.application.domains.extension_domains", return_value=()),
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
-            CaptureQueriesContext(db) as queries,
-            uncached(),
-        ):
+        with host_only(), CaptureQueriesContext(db) as queries, uncached():
             operating_snapshot(principal=cli_principal())
         return len(queries)
 

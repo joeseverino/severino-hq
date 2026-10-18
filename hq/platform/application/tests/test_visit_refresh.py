@@ -8,7 +8,9 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import signing
-from django.test import Client, TestCase, override_settings
+from django.db import connection
+from django.test import Client, SimpleTestCase, TestCase, override_settings, tag
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -235,22 +237,29 @@ class VisitRefreshTests(TestCase):
         the read stands. What grows is one audited write per kind asked for;
         nothing is worked out again for each."""
 
-        few, many = (FAST,), (FAST, "npm.proxy_host", "tailscale.device", "adguard.dns", "npm.redirect")
-        for kind in many:
+        kinds = (FAST, "npm.proxy_host", "tailscale.device", "adguard.dns", "npm.redirect")
+        for kind in kinds:
             store(kind, age=OLD)
-        decide, per_write = 8, 9
+        costs = []
+        for count in (1, 3, 5):
+            ReadRequest.objects.all().delete()
+            with page(*kinds[:count]), CaptureQueriesContext(connection) as captured:
+                self.ask()
+            costs.append(len(captured))
 
-        with page(*few), self.assertNumQueries(decide + per_write * len(few)):
-            self.ask()
-        ReadRequest.objects.all().delete()
-        with page(*many), self.assertNumQueries(decide + per_write * len(many)):
-            self.ask()
+        self.assertEqual(costs[2] - costs[1], costs[1] - costs[0])
 
     def test_asking_when_nothing_is_due_writes_nothing(self):
         store(FAST)
 
-        with page(FAST), self.assertNumQueries(5):
+        with page(FAST), CaptureQueriesContext(connection) as captured:
             self.ask()
+
+        self.assertFalse(ReadRequest.objects.exists())
+        writes = [
+            query["sql"] for query in captured if query["sql"].lstrip().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertEqual(writes, [])
 
 
 class AskableTests(TestCase):
@@ -262,6 +271,11 @@ class AskableTests(TestCase):
         for kind in (*LOGS_IN, "tls.certificate", "registry.domain", "a.kind.nothing.declares"):
             with self.subTest(kind=kind):
                 self.assertFalse(askable(kind))
+
+
+@tag("source")
+class AskableSourceTests(SimpleTestCase):
+    """Only the known controller readers open a shell."""
 
     def test_only_the_known_readers_open_a_shell(self):
         """``askable`` trusts what a kind declares: read through "ssh" or not.

@@ -91,7 +91,10 @@ class GivesWayTests(TransactionTestCase):
     """A connection waiting for the lock gets it while another writes back to back."""
 
     def test_a_waiting_writer_gets_in_within_about_a_turn(self):
-        stop = threading.Event()
+        stop, going = threading.Event(), threading.Event()
+        commits = [0]
+        # Each importer transaction holds the lock at least this long.
+        held = 0.02
 
         def importing():
             try:
@@ -99,24 +102,27 @@ class GivesWayTests(TransactionTestCase):
                     while not stop.is_set():
                         with transaction.atomic():
                             AuditLog.objects.create(action="imported", object_type="bench", message="batch")
-                            time.sleep(0.02)
+                            time.sleep(held)
+                        commits[0] += 1
+                        if commits[0] == 5:
+                            going.set()
             finally:
                 connection.close()
 
         writer = threading.Thread(target=importing)
         writer.start()
         try:
-            time.sleep(0.3)
-            started = time.monotonic()
+            self.assertTrue(going.wait(10))
+            before = commits[0]
             with transaction.atomic():
                 AuditLog.objects.create(action="updated", object_type="report", message="the controller")
-            waited = time.monotonic() - started
+            landed = commits[0] - before
         finally:
             stop.set()
             writer.join()
 
-        # A turn, plus the disk sync each commit waits for (synchronous=FULL).
-        self.assertLess(waited, database.HOLDS + 2.0)
+        # Within two turns of the importer's writing, however long its commits take.
+        self.assertLessEqual(landed, 2 * database.HOLDS / held)
 
     def test_without_sqlite_or_inside_a_transaction_nothing_changes(self):
         with transaction.atomic(), database.without_waiting():

@@ -240,14 +240,13 @@ class SingleStatementSearchTests(TestCase):
     def test_global_search_reads_the_index_once_and_fetches_only_hit_scopes(self):
         search_ids("projects", "tied", principal=OPERATOR)
 
-        # One read of the index, one record fetch for each scope with a hit.
-        with self.assertNumQueries(3) as queries:
+        with CaptureQueriesContext(connection) as queries:
             outcome = global_search("tied", principal=OPERATOR)
 
-        self.assertEqual(
-            sorted(group["scope"] for group in outcome["groups"] if group["count"]),
-            ["audit", "projects"],
-        )
+        hit = sorted(group["scope"] for group in outcome["groups"] if group["count"])
+        self.assertEqual(hit, ["audit", "projects"])
+        # One read of the index, one record fetch for each scope with a hit.
+        self.assertEqual(len(queries), 1 + len(hit))
         statements = [query["sql"] for query in queries]
         self.assertEqual(len([sql for sql in statements if "search_index_fts" in sql]), 1)
         self.assertEqual(len([sql for sql in statements if "projects_project" in sql]), 1)

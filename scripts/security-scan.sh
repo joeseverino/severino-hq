@@ -6,7 +6,7 @@
 # find out. Their settings are copied from the workflows rather than chosen
 # here, so a local pass means what CI's does:
 #
-#   codeql     .github/workflows/codeql.yml     security-and-quality, less the
+#   codeql     .github/workflows/ci.yml         security-and-quality, less the
 #              .github/codeql/codeql-config.yml one rule that config filters
 #   scorecard  .github/workflows/scorecard.yml  every check local mode can
 #                                               answer, at 10 (scripts/scorecard_report.py)

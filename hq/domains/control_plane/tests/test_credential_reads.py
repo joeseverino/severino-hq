@@ -7,7 +7,7 @@ Derived from ``OBSERVATIONS`` at test time, so a reading registered with a new
 from pathlib import Path
 
 from django.conf import settings
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from ..connection_kinds import CONNECTION_CREDENTIALS
 from ..credential_reads import UNREGISTERED_READS, observer_permissions
@@ -21,6 +21,7 @@ def listed(name: str) -> tuple[str, ...]:
     return tuple(line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#"))
 
 
+@tag("source")
 class ObserverPermissionFileTests(SimpleTestCase):
     def assert_matches(self, provider: str, filename: str) -> None:
         wanted = observer_permissions(provider)

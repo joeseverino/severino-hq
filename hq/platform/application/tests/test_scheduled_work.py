@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, tag
 from django.utils import timezone
 
 from hq.domains.control_plane.bridge_actions import ACTIONS
@@ -75,6 +75,7 @@ class StartTests(TransactionTestCase):
             self.assertFalse(scheduled_work.start("example.work"))
 
 
+@tag("source")
 class ShippedUnitTests(TestCase):
     """The shipped units and the declarations name the same work: a timer
     starts it on a schedule, or a failed unit starts it through OnFailure."""

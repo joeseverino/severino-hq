@@ -1,4 +1,4 @@
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from ..labels import lower_first, plural
 
@@ -38,6 +38,11 @@ class LowerFirstTests(SimpleTestCase):
 
     def test_nothing_stays_nothing(self):
         self.assertEqual(lower_first(""), "")
+
+
+@tag("source")
+class LowerFirstSourceTests(SimpleTestCase):
+    """One definition of lower_first in the source."""
 
     def test_there_is_one_definition(self):
         """The rule lived in four places, and only one of them knew about acronyms."""

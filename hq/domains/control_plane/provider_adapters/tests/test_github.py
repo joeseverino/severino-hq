@@ -5,7 +5,7 @@ delivery; its tests hold the check name, the comment marker and the app's
 registered permissions.
 """
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -20,6 +20,7 @@ class AdoptionTests(SimpleTestCase):
         self.assertTrue(provider.adopts({**record, "production": github.CURRENT}))
 
 
+@tag("source")
 class PipelineReportTests(SimpleTestCase):
     """The workflows say what HQ's code says, and keep what they must apart."""
 

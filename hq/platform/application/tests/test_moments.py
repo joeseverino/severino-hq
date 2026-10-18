@@ -6,7 +6,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from django.template import Context, Template, TemplateSyntaxError
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.utils import formats, timezone
 
 from ..moments import ago, when, when_day, when_exact, when_range
@@ -126,6 +126,20 @@ class WhenFilterTests(SimpleTestCase):
 
 
 class OneOwnerTests(SimpleTestCase):
+    """Django is handed the formats ``moments`` owns."""
+
+    def test_django_is_handed_the_owners_formats(self):
+        from hq.config.formats.en import formats as handed
+
+        from .. import moments
+
+        self.assertEqual(handed.DATE_FORMAT, moments.DAY_YEAR_FORMAT)
+        self.assertEqual(handed.DATETIME_FORMAT, moments.MOMENT_YEAR_FORMAT)
+        self.assertEqual(handed.TIME_FORMAT, moments.CLOCK_FORMAT)
+
+
+@tag("source")
+class TimeOfDayTemplateTests(SimpleTestCase):
     """A page asks ``|when``; it does not spell a clock of its own."""
 
     root = Path(__file__).resolve().parents[4]
@@ -142,15 +156,6 @@ class OneOwnerTests(SimpleTestCase):
         ]
 
         self.assertEqual(spelled, [])
-
-    def test_django_is_handed_the_owners_formats(self):
-        from hq.config.formats.en import formats as handed
-
-        from .. import moments
-
-        self.assertEqual(handed.DATE_FORMAT, moments.DAY_YEAR_FORMAT)
-        self.assertEqual(handed.DATETIME_FORMAT, moments.MOMENT_YEAR_FORMAT)
-        self.assertEqual(handed.TIME_FORMAT, moments.CLOCK_FORMAT)
 
 
 class DaySpanTests(TestCase):

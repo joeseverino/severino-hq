@@ -1,0 +1,90 @@
+{
+  "ago": [
+    {
+      "input": "30 seconds before",
+      "output": "just now"
+    },
+    {
+      "input": "2 hours before",
+      "output": "2\u00a0hours ago"
+    },
+    {
+      "input": "5 days 3 hours before",
+      "output": "5\u00a0days ago"
+    }
+  ],
+  "counted": [
+    {
+      "input": "1, project",
+      "output": "1 project"
+    },
+    {
+      "input": "3, entry",
+      "output": "3 entries"
+    },
+    {
+      "input": "1200, project needs output, projects need output",
+      "output": "1,200 projects need output"
+    }
+  ],
+  "money": [
+    {
+      "input": "1234.5",
+      "output": "$1,234.50"
+    },
+    {
+      "input": "-5",
+      "output": "\u2212$5.00"
+    },
+    {
+      "input": "1234.4, cents=False",
+      "output": "$1,234"
+    },
+    {
+      "input": "None",
+      "output": "\u2013"
+    }
+  ],
+  "span": [
+    {
+      "input": "1",
+      "output": "1 day"
+    },
+    {
+      "input": "46",
+      "output": "46 days"
+    },
+    {
+      "input": "200",
+      "output": "6\u00a0months, 2\u00a0weeks"
+    },
+    {
+      "input": "-3",
+      "output": "3 days overdue"
+    }
+  ],
+  "when": [
+    {
+      "input": "a morning this year",
+      "output": "Oct 3, 9:29 AM"
+    },
+    {
+      "input": "an evening another year",
+      "output": "Oct 3, 2025, 9:05 PM"
+    },
+    {
+      "input": "a bare date",
+      "output": "Oct 3"
+    }
+  ],
+  "when_day": [
+    {
+      "input": "a day this year",
+      "output": "Oct 3"
+    },
+    {
+      "input": "a day another year",
+      "output": "Oct 3, 2025"
+    }
+  ]
+}

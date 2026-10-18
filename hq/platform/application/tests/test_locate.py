@@ -65,26 +65,20 @@ class EndpointParsingTests(TestCase):
     brackets in the host.
     """
 
-    def test_a_host_and_a_port_split(self):
-        self.assertEqual(split_endpoint("10.0.0.5:8000"), ("10.0.0.5", "8000"))
-
-    def test_an_address_with_no_port_is_all_host(self):
-        self.assertEqual(split_endpoint("10.0.0.5"), ("10.0.0.5", ""))
-
-    def test_a_bare_ipv6_address_is_not_split_at_its_last_colon(self):
-        self.assertEqual(split_endpoint("2001:db8::5"), ("2001:db8::5", ""))
-
-    def test_a_bracketed_ipv6_endpoint_keeps_neither_bracket(self):
-        self.assertEqual(split_endpoint("[2001:db8::5]:8000"), ("2001:db8::5", "8000"))
-
-    def test_a_url_is_read_as_the_host_it_names(self):
-        self.assertEqual(
-            split_endpoint("https://control.example:9443/api"),
-            ("control.example", "9443"),
-        )
-
-    def test_nothing_parses_to_nothing_rather_than_to_a_guess(self):
-        self.assertEqual(split_endpoint(""), ("", ""))
+    def test_an_endpoint_splits_into_its_host_and_port(self):
+        cases = {
+            "10.0.0.5:8000": ("10.0.0.5", "8000"),
+            # No port is all host, and a bare IPv6 address is not split at its last colon.
+            "10.0.0.5": ("10.0.0.5", ""),
+            "2001:db8::5": ("2001:db8::5", ""),
+            "[2001:db8::5]:8000": ("2001:db8::5", "8000"),
+            "https://control.example:9443/api": ("control.example", "9443"),
+            # Nothing parses to nothing rather than to a guess.
+            "": ("", ""),
+        }
+        for endpoint, expected in cases.items():
+            with self.subTest(endpoint):
+                self.assertEqual(split_endpoint(endpoint), expected)
 
 
 class NamespaceTests(TestCase):
@@ -151,12 +145,10 @@ class ForwardingAddressTests(TestCase):
 
         self.assertEqual(locate("[2001:db8::5]:8000", declared_machines()).host, "example-six")
 
-    def test_a_bare_ipv6_answer_is_somewhere_else_rather_than_an_ingress(self):
-        """No port means a DNS record named it, which counting colons got wrong."""
+    def test_a_bare_ipv6_answer_is_somewhere_else_and_a_bracketed_one_an_ingress(self):
+        """No port means a DNS record named it."""
 
         self.assertTrue(Origin(address="2001:db8::5").external)
-
-    def test_a_bracketed_ipv6_ingress_is_not_somewhere_else(self):
         self.assertFalse(Origin(address="[2001:db8::5]:8000").external)
 
     def test_a_machine_only_a_credential_names_still_answers(self):
@@ -184,11 +176,11 @@ class OneMachineOneRowTests(TestCase):
 
         return machine_catalog()
 
-    def test_the_credential_does_not_become_a_second_machine(self):
-        self.assertEqual([item.name for item in self.catalog()], ["example-alpha"])
+    def test_the_credential_is_an_alias_rather_than_a_second_machine(self):
+        catalog = self.catalog()
 
-    def test_the_credential_is_kept_as_an_alias(self):
-        self.assertEqual(self.catalog()[0].aliases, ("example-shell",))
+        self.assertEqual([item.name for item in catalog], ["example-alpha"])
+        self.assertEqual(catalog[0].aliases, ("example-shell",))
 
     def test_what_is_served_from_there_is_filed_under_the_same_machine(self):
         """The board and the service page name the same machine."""
@@ -247,14 +239,6 @@ class ProxyPageTests(TestCase):
     def board(self):
         return self.client.get(reverse("control_plane:list"))
 
-    def test_the_board_names_the_machine_a_proxy_forwards_to(self):
-        a_proxy("example-proxy", "dev.example.com", "10.0.0.5")
-
-        self.assertContains(
-            self.board(),
-            reverse("control_plane:machine", kwargs={"name": "example-alpha"}),
-        )
-
     def test_the_board_still_prints_an_address_it_cannot_place(self):
         a_proxy("example-proxy", "dev.example.com", "198.51.100.9")
 
@@ -274,20 +258,16 @@ class ProxyPageTests(TestCase):
         # with and the name is HQ's reading of it.
         self.assertContains(response, "10.0.0.5")
 
-    def test_naming_every_row_costs_no_more_than_naming_one(self):
-        """Read once for the page. Per row it grows with the estate.
-
-        Asserted as a comparison rather than against a number, so the guard is
-        about the shape of the cost and survives an unrelated query being added
-        to the page.
-        """
+    def test_the_board_names_the_machine_a_proxy_forwards_to_at_one_cost_for_every_row(self):
+        """Read once for the page: per row it would grow with the estate."""
 
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
         a_proxy("example-proxy-0", "a0.example.com", "10.0.0.5")
         with CaptureQueriesContext(connection) as one_row:
-            self.board()
+            response = self.board()
+        self.assertContains(response, reverse("control_plane:machine", kwargs={"name": "example-alpha"}))
         for index in range(1, 7):
             a_proxy(f"example-proxy-{index}", f"a{index}.example.com", "10.0.0.5")
         with CaptureQueriesContext(connection) as seven_rows:

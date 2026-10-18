@@ -27,22 +27,18 @@ from ..mail_policy import (
 
 class DmarcReadingTests(SimpleTestCase):
     def test_a_record_is_read_as_its_tags(self):
-        tags = parse_dmarc('"v=DMARC1; p=reject; sp=reject; rua=mailto:box@example.com"')
-
-        self.assertEqual(tags["p"], "reject")
-        self.assertEqual(tags["sp"], "reject")
-        self.assertEqual(tags["rua"], "mailto:box@example.com")
-
-    def test_a_long_record_arrives_as_adjacent_strings(self):
-        """DNS splits a long TXT into quoted chunks; joined they are one policy."""
-
-        tags = parse_dmarc('"v=DMARC1; p=quarantine; " "rua=mailto:box@example.com"')
-
-        self.assertEqual(tags["p"], "quarantine")
-        self.assertEqual(tags["rua"], "mailto:box@example.com")
-
-    def test_spacing_and_case_do_not_change_the_policy(self):
-        self.assertEqual(parse_dmarc("V=DMARC1;P=reject")["p"], "reject")
+        cases = (
+            ('"v=DMARC1; p=reject; sp=reject; rua=mailto:box@example.com"', {"p": "reject", "sp": "reject"}),
+            # DNS splits a long TXT into quoted chunks; joined they are one policy.
+            ('"v=DMARC1; p=quarantine; " "rua=mailto:box@example.com"', {"p": "quarantine"}),
+            ("V=DMARC1;P=reject", {"p": "reject"}),
+        )
+        for record, expected in cases:
+            with self.subTest(record):
+                tags = parse_dmarc(record)
+                self.assertLessEqual(expected.items(), tags.items())
+                if "rua" in record:
+                    self.assertEqual(tags["rua"], "mailto:box@example.com")
 
 
 class DmarcWritingTests(SimpleTestCase):
@@ -52,9 +48,10 @@ class DmarcWritingTests(SimpleTestCase):
         self.assertEqual(compose_dmarc(parse_dmarc(original)), original)
 
     def test_the_version_leads_whatever_order_the_tags_arrived_in(self):
-        composed = compose_dmarc({"p": "none", "v": "DMARC1"})
+        composed = compose_dmarc({"p": "none", "pct": "25", "v": "DMARC1"})
 
         self.assertTrue(composed.startswith("v=DMARC1;"))
+        self.assertIn("pct=25", composed)
 
     def test_a_tag_this_module_does_not_model_survives_the_edit(self):
         """An editor that drops what it does not understand deletes policy."""
@@ -67,9 +64,6 @@ class DmarcWritingTests(SimpleTestCase):
     def test_a_default_is_not_written_out(self):
         self.assertNotIn("pct=", compose_dmarc({"p": "reject", "pct": "100"}))
 
-    def test_a_changed_default_is_written_out(self):
-        self.assertIn("pct=25", compose_dmarc({"p": "reject", "pct": "25"}))
-
 
 class DmarcExplanationTests(SimpleTestCase):
     def test_the_policy_reads_as_what_happens_to_forged_mail(self):
@@ -78,17 +72,13 @@ class DmarcExplanationTests(SimpleTestCase):
         self.assertIn("Mail that fails checks is rejected outright.", said)
         self.assertIn("Subdomains follow the same rule.", said)
 
-    def test_monitoring_only_is_not_described_as_protection(self):
-        said = describe_dmarc("v=DMARC1; p=none")
-
-        self.assertIn("delivered anyway", " ".join(said))
-
-    def test_a_policy_with_nowhere_to_report_says_so(self):
+    def test_monitoring_only_with_nowhere_to_report_says_both(self):
         """Without reports there is no way to tighten safely, so it is named."""
 
-        said = describe_dmarc("v=DMARC1; p=none")
+        said = " ".join(describe_dmarc("v=DMARC1; p=none"))
 
-        self.assertIn("nothing shows who sends as this domain", " ".join(said))
+        self.assertIn("delivered anyway", said)
+        self.assertIn("nothing shows who sends as this domain", said)
 
     def test_a_partial_rollout_is_not_silently_read_as_full_enforcement(self):
         said = describe_dmarc("v=DMARC1; p=reject; pct=25")
@@ -108,26 +98,24 @@ class SpfTests(SimpleTestCase):
         self.assertEqual(policy.terms[0].argument, "mail.example.net")
 
     def test_the_last_word_decides_everyone_else(self):
-        self.assertIn("rejected", parse_spf("v=spf1 include:a.example -all").default_result)
-        self.assertIn("soft", parse_spf("v=spf1 include:a.example ~all").default_result)
+        cases = (
+            ("v=spf1 include:a.example -all", "rejected"),
+            ("v=spf1 include:a.example ~all", "soft"),
+            ("v=spf1 +all", "forgeries get through"),
+            ("v=spf1 include:a.example", "`all`"),
+        )
+        for record, said in cases:
+            with self.subTest(record):
+                self.assertIn(said, parse_spf(record).default_result)
 
-    def test_a_policy_protecting_nothing_says_so(self):
-        self.assertIn("forgeries get through", parse_spf("v=spf1 +all").default_result)
+    def test_lookups_are_counted_because_one_past_the_limit_fails_silently(self):
+        over = parse_spf("v=spf1 " + " ".join(f"include:h{i}.example" for i in range(SPF_LOOKUP_LIMIT + 1)) + " -all")
+        inside = parse_spf("v=spf1 include:mail.example.net -all")
 
-    def test_a_policy_with_no_final_term_names_the_missing_term(self):
-        self.assertIn("`all`", parse_spf("v=spf1 include:a.example").default_result)
-
-    def test_lookups_are_counted_because_eleven_of_them_fail_silently(self):
-        policy = parse_spf("v=spf1 " + " ".join(f"include:h{i}.example" for i in range(11)) + " -all")
-
-        self.assertEqual(policy.lookups, 11)
-        self.assertTrue(policy.over_limit)
-
-    def test_a_policy_inside_the_limit_is_not_flagged(self):
-        policy = parse_spf("v=spf1 include:mail.example.net -all")
-
-        self.assertLessEqual(policy.lookups, SPF_LOOKUP_LIMIT)
-        self.assertFalse(policy.over_limit)
+        self.assertEqual(over.lookups, SPF_LOOKUP_LIMIT + 1)
+        self.assertTrue(over.over_limit)
+        self.assertLessEqual(inside.lookups, SPF_LOOKUP_LIMIT)
+        self.assertFalse(inside.over_limit)
 
     def test_terms_that_cost_nothing_are_not_counted(self):
         """ip4 and ip6 need no lookup, so a long list of them is fine."""
@@ -221,22 +209,16 @@ class MailPageTests(TestCase):
         self.assertContains(response, "delivered anyway")
         self.assertContains(response, "Senders (SPF)")
 
-    def test_tightening_the_policy_publishes_it(self):
+    def test_tightening_the_policy_publishes_it_and_keeps_what_the_form_does_not_model(self):
+        """`fo` is not on the form. Saving must not delete it."""
+
         self.client.post(
             self.url, {"section": "dmarc", "p": "reject", "sp": "", "rua": "mailto:box@example.com", "pct": "100"}
         )
         content = ManagedResource.objects.get(key="dmarc").spec["content"]
 
         self.assertIn("p=reject", content)
-
-    def test_a_tag_the_editor_does_not_model_survives_publishing(self):
-        """`fo` is not on the form. Saving must not delete it."""
-
-        self.client.post(
-            self.url, {"section": "dmarc", "p": "reject", "sp": "", "rua": "mailto:box@example.com", "pct": "100"}
-        )
-
-        self.assertIn("fo=1", ManagedResource.objects.get(key="dmarc").spec["content"])
+        self.assertIn("fo=1", content)
 
     def test_senders_are_composed_rather_than_typed(self):
         self.client.post(

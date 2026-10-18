@@ -3,7 +3,7 @@
 import ast
 from pathlib import Path
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from hq.domains.docs_index.models import DocumentationRecord
 
@@ -53,6 +53,11 @@ class SafeSensitivityTests(SimpleTestCase):
         ):
             with self.subTest(level=level):
                 self.assertNotIn(level, SAFE_SENSITIVITIES)
+
+
+@tag("source")
+class SafeSensitivitySourceTests(SimpleTestCase):
+    """No other module states its own safe set."""
 
     def test_no_other_module_states_its_own(self):
         """A second copy is how one surface ends up wider than the rest."""

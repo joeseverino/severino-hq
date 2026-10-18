@@ -17,7 +17,24 @@ const (
 	RenderBound = 4 * time.Minute
 	// HealthStartPeriod is how long HQ may take to answer healthy.
 	HealthStartPeriod = 60 * time.Second
+	// StartPeriodEnv shortens HealthStartPeriod for one host, so a release
+	// that cannot serve fails its start sooner. Only the boot drill sets it.
+	StartPeriodEnv = "SEVERINO_HQ_HEALTH_START_PERIOD"
 )
+
+// StartPeriod is the health start period StartPeriodEnv asks for:
+// HealthStartPeriod when unset, and never longer, since the web unit's start
+// timeout is bounded by it.
+func StartPeriod(value string) (time.Duration, error) {
+	if value == "" {
+		return HealthStartPeriod, nil
+	}
+	period, err := time.ParseDuration(value)
+	if err != nil || period <= 0 || period > HealthStartPeriod {
+		return 0, fmt.Errorf("%s=%q is not a span of at most %s", StartPeriodEnv, value, HealthStartPeriod)
+	}
+	return period, nil
+}
 
 const (
 	// WebUID and WebGID are the account the image runs HQ as. It owns the

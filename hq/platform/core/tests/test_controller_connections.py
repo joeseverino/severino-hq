@@ -3,6 +3,8 @@
 import unittest
 from pathlib import Path
 
+from django.test import tag
+
 ROOT = Path(__file__).resolve().parents[4]
 
 DOCKERFILE = ROOT / "Dockerfile"
@@ -10,7 +12,7 @@ UNIT = ROOT / "deploy/systemd/severino-hq-secrets.service"
 
 
 # The image is built without its Dockerfile, so these run from a checkout.
-@unittest.skipUnless(DOCKERFILE.exists(), "the Dockerfile is not in the image")
+@tag("source")
 class RendererDeliveryTests(unittest.TestCase):
     """Root runs the programs the signed image built, from the tree synced out of it."""
 

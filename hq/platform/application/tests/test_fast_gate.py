@@ -1,13 +1,11 @@
 """The inner-loop gate maps a change to the tests that reach it."""
 
 import importlib.util
-import shutil
 import tempfile
 from pathlib import Path
-from unittest import skipUnless
 from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 ROOT = Path(__file__).resolve().parents[4]
 spec = importlib.util.spec_from_file_location("fast_gate", ROOT / "scripts" / "fast_gate.py")
@@ -16,7 +14,7 @@ fast_gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fast_gate)
 
 
-@skipUnless(shutil.which("git"), "git is not in the image")
+@tag("source")
 class FastGateMappingTests(SimpleTestCase):
     def setUp(self):
         self.files = fast_gate.python_files()
@@ -63,6 +61,7 @@ class FastGateMappingTests(SimpleTestCase):
         self.assertLessEqual({"expenses", "core", "projects"}, set(fast_gate.django_apps().values()))
 
 
+@tag("source")
 class FastGateConfigTests(SimpleTestCase):
     def test_toml_configuration_bounds_typed_seams_and_excludes_tests(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -85,6 +84,7 @@ class FastGateConfigTests(SimpleTestCase):
                 )
 
 
+@tag("source")
 class FastGateNestedLayoutTests(SimpleTestCase):
     def test_app_config_label_can_differ_from_source_directory(self):
         with tempfile.TemporaryDirectory() as directory:

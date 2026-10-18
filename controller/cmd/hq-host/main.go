@@ -117,6 +117,10 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 	if len(args) != 0 {
 		return errors.New(usage)
 	}
+	period, err := host.StartPeriod(getenv(host.StartPeriodEnv))
+	if err != nil {
+		return err
+	}
 	runner := &host.WebRunner{
 		Release:   host.ReleaseFile,
 		SecretDir: host.WebSecretDir,
@@ -126,8 +130,9 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 		Poll:   2 * time.Second,
 		// The renderer's own bound on a run, so a slow boot render is waited
 		// out and a failed one retried when the unit restarts.
-		Await:  host.RenderBound,
-		Stdout: stdout, Stderr: stderr, Log: log,
+		Await:       host.RenderBound,
+		StartPeriod: period,
+		Stdout:      stdout, Stderr: stderr, Log: log,
 	}
 	return runner.Run(ctx)
 }

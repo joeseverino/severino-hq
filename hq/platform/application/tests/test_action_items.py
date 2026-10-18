@@ -1,11 +1,11 @@
 """Which action items a person has set aside, and the queue under its domains."""
 
-import re
 from datetime import timedelta
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -85,6 +85,7 @@ class IdentityTests(TestCase):
         self.assertEqual(item_key("ext", self.insight(title="Plan a run")), "ext:Finding:Plan a run")
 
 
+@tag("source")
 class HostItemsNameTheirSubjectTests(TestCase):
     def test_every_host_attention_item_carries_a_key(self):
         """Read state follows the key, so a host item without one would fall
@@ -127,19 +128,14 @@ class AsideStateTests(TestCase):
         self.assertTrue(with_aside_state([reworded], self.user)[0]["aside"])
         self.assertFalse(with_aside_state([revised], self.user)[0]["aside"])
 
-    def test_marking_one_item_leaves_the_others_alone(self):
-        set_aside(self.user, [ITEM["key"]], aside=True, current=[ITEM, OTHER])
+    def test_only_current_items_are_marked_and_marking_one_leaves_the_others(self):
+        set_aside(self.user, [ITEM["key"], "example:nothing"], aside=True, current=[ITEM, OTHER])
         set_aside(self.user, [OTHER["key"]], aside=True, current=[OTHER])
 
         self.assertEqual(
             sorted(ActionItemRead.objects.values_list("key", flat=True)),
             sorted([ITEM["key"], OTHER["key"]]),
         )
-
-    def test_only_current_items_can_be_marked(self):
-        set_aside(self.user, [ITEM["key"], "example:nothing"], aside=True, current=[ITEM])
-
-        self.assertEqual(list(ActionItemRead.objects.values_list("key", flat=True)), [ITEM["key"]])
 
     def test_a_mark_for_a_gone_item_is_forgotten_after_a_while(self):
         set_aside(self.user, [ITEM["key"]], aside=True, current=[ITEM])
@@ -187,7 +183,6 @@ class PageTests(TestCase):
         self.assertEqual(self.shown(page), [OTHER["label"]])
         self.assertEqual(self.shown(page, "aside_groups"), [ITEM["label"]])
         self.assertEqual(page.context["profile_action_count"], 1)
-        self.assertContains(page, "Dismissed")
         self.assertEqual(self.client.get(reverse("action_item_count")).json(), {"count": 1})
 
     def test_the_dashboard_counts_what_waits_and_items_not_the_numbers_they_carry(self):
@@ -254,7 +249,6 @@ class PageTests(TestCase):
                 [("Image advisories", True, 3), ("", False, 1)],
             )
             self.assertContains(page, "data-queue-family", count=1)
-            self.assertContains(page, "<strong>Image advisories</strong>")
 
             self.client.post(f"{page.context['aside_all_url']}&family={group['entries'][0]['id']}")
             page = self.client.get(reverse("action_items"))
@@ -272,13 +266,16 @@ class PageTests(TestCase):
     def test_setting_all_aside_means_all_the_filters_show(self):
         page = self.client.get(reverse("action_items"), {"q": "gadget"})
         self.assertFalse(page.context["page"].actions)
-        url = page.context["aside_all_url"]
-        self.assertEqual(url, f"{reverse('action_items_set_aside')}?q=gadget&part=doing")
+        url = urlsplit(page.context["aside_all_url"])
+        self.assertEqual(url.path, reverse("action_items_set_aside"))
+        self.assertEqual(parse_qs(url.query)["q"], ["gadget"])
 
-        self.client.post(url)
+        self.client.post(page.context["aside_all_url"])
 
         self.assertEqual(self.shown(self.client.get(reverse("action_items"))), [ITEM["label"]])
-        self.assertContains(self.client.get(reverse("action_items"), {"q": "gadget"}), "Nothing matches these filters.")
+        filtered = self.client.get(reverse("action_items"), {"q": "gadget"})
+        self.assertEqual(self.shown(filtered), [])
+        self.assertContains(filtered, "data-empty-state")
 
     def test_a_notice_is_kept_apart_from_what_needs_doing_and_out_of_that_count(self):
         told = {**ITEM, "key": "example:run", "label": "A run drifted", "notice": True}
@@ -286,8 +283,6 @@ class PageTests(TestCase):
             page = self.client.get(reverse("action_items"))
             self.assertEqual(self.shown(page), [ITEM["label"]])
             self.assertEqual(self.shown(page, "notice_groups"), [told["label"]])
-            self.assertContains(page, 'class="pill pill-idea"', count=1)
-            self.assertContains(page, ">Notice</span>", count=1)
             # The header counts everything waiting; dismissing the notices
             # leaves what needs doing where it was.
             self.assertEqual(page.context["profile_action_count"], 2)
@@ -303,16 +298,11 @@ class PageTests(TestCase):
         self.assertContains(dashboard, "1 thing needs you")
         self.assertContains(dashboard, "1 notice")
 
-    def test_the_page_is_sections_by_domain_and_a_row_does_not_repeat_its_domain(self):
+    def test_the_page_is_one_section_per_domain(self):
         page = self.client.get(reverse("action_items"))
 
-        self.assertContains(page, '<section class="queue-group"', count=1)
-        # The heading and the source filter. Each card's origin (its tooltip and
-        # the panel a modifier click opens) names its source and is not the row.
-        shown = re.sub(
-            r'<div class="[^"]*origin-panel[^"]*".*?</dl>| data-tip="[^"]*"', "", page.content.decode(), flags=re.DOTALL
-        )
-        self.assertEqual(shown.count("Example"), 1 + 1)
+        self.assertEqual([group["id"] for group in page.context["action_groups"]], ["example"])
+        self.assertContains(page, "data-queue-count", count=1)
 
 
 class RouteTests(TestCase):

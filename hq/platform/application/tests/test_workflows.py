@@ -5,7 +5,8 @@ from django.test import SimpleTestCase
 
 from ..action_links import ActionLink
 from ..ui import Insight
-from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
+from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow, workflow_layout
+from .markup import actions, hrefs
 
 REMEDY = ActionLink(
     "remedy",
@@ -35,7 +36,7 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
 
         self.assertEqual([step.phase for step in plan.steps], ["act", "verify"])
         self.assertEqual(plan.steps[0].state, "recommended")
-        self.assertEqual([action.label for action in plan.steps[0].actions], ["Request fresh sweep"])
+        self.assertEqual(plan.steps[0].actions, (REMEDY,))
         self.assertEqual(plan.steps[1].actions[0].url, "/recheck/")
         self.assertEqual(plan.outcome.kind, "claim_absent")
         self.assertEqual(
@@ -76,10 +77,9 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
             {"entries": ({"item": insight, "source": "Example"},)},
         )
 
-        self.assertIn("Request fresh sweep", html)
-        self.assertIn("Recheck", html)
-        self.assertNotIn("What to do", html)
-        self.assertNotIn("<ol", html)
+        offered = hrefs(html) + actions(html)
+        self.assertIn(REMEDY.url, offered)
+        self.assertIn(VERIFY.url, offered)
 
 
 class WorkflowLayoutTests(SimpleTestCase):
@@ -89,8 +89,6 @@ class WorkflowLayoutTests(SimpleTestCase):
     OPEN = ActionLink("open", "Open", "read", "/connections/")
 
     def layout(self, plan):
-        from ..workflows import workflow_layout
-
         return workflow_layout(plan, investigations=(self.TOPOLOGY,), offers=(self.OPEN,))
 
     def test_remedies_lead_and_the_claims_own_links_follow(self):
@@ -108,16 +106,12 @@ class WorkflowLayoutTests(SimpleTestCase):
         self.assertTrue(layout.links)
 
     def test_two_pages_with_one_name_are_offered_once(self):
-        from ..workflows import workflow_layout
-
         other = ActionLink("open", "Open", "read", "/domains/one/")
         layout = workflow_layout(None, offers=(self.OPEN, other))
 
         self.assertEqual(layout.related, (self.OPEN,))
 
     def test_no_plan_and_no_links_is_an_empty_layout(self):
-        from ..workflows import workflow_layout
-
         layout = workflow_layout(None)
 
         self.assertEqual((layout.fix, layout.links), ((), False))

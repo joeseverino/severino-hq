@@ -1,5 +1,7 @@
 """The reading contract: one registration per kind, and only its fields kept."""
 
+import json
+
 from django.test import SimpleTestCase, TestCase
 
 from hq.domains.control_plane.models import ProviderInventory
@@ -12,6 +14,7 @@ from hq.domains.control_plane.observations import (
 )
 from hq.platform.application.inventory import record_inventory
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.sentinel import SENTINEL
 
 
 class Named(ObservationRecord):
@@ -104,12 +107,12 @@ class IngestTests(TestCase):
                     "record": "perimeter",
                     "connection_ref": "example-edge",
                     "answered_publicly": [443],
-                    "token": "never stored",
+                    "token": SENTINEL,
                 },
             ]
         )
 
-        self.assertNotIn("token", stored.records[0])
+        self.assertNotIn(SENTINEL, json.dumps(stored.records))
         self.assertEqual(stored.records[0]["answered_publicly"], [443])
 
     def test_refused_records_are_said_rather_than_silently_lost(self):

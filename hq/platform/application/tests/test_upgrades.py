@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
@@ -333,24 +333,6 @@ class HelperInstallTests(TestCase):
 
         self.assertEqual([step.id for step in install_steps("example-box", deployed_here=True)], ["allow", "check"])
 
-    def test_elsewhere_the_helper_comes_from_this_build_checked_by_its_digest(self):
-        import hashlib
-        from pathlib import Path
-
-        from django.test import override_settings
-
-        from ..upgrades import HELPER, install_steps
-
-        shipped = Path(__file__).resolve().parents[4] / "scripts" / Path(HELPER).name
-        digest = hashlib.sha256(shipped.read_bytes()).hexdigest()
-        with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq", SEVERINO_HQ_REVISION="a" * 40):
-            fetch, install, *_ = install_steps("example-edge")
-        self.assertIn(f"checkout --detach {'a' * 40}", fetch.detail)
-        self.assertIn(f"echo '{digest}  {HELPER}' | sha256sum -c -", install.detail)
-        with override_settings(SEVERINO_HQ_SOURCE="", SEVERINO_HQ_REVISION=""):
-            fetch, *_ = install_steps("example-edge")
-        self.assertIn("HQ does not know the commit", fetch.detail)
-
     def test_the_sudo_rule_admits_an_upgrade_and_nothing_else(self):
         import re
 
@@ -377,6 +359,29 @@ class HelperInstallTests(TestCase):
         # sudoers reads a comma, colon, equals sign or backslash in arguments
         # literally only behind a backslash.
         self.assertNotRegex(sudoers_command(), r"(?<!\\)[,:=]")
+
+
+@tag("source")
+class HelperInstallSourceTests(SimpleTestCase):
+    """The helper's install steps, digest and sudo rule as shipped."""
+
+    def test_elsewhere_the_helper_comes_from_this_build_checked_by_its_digest(self):
+        import hashlib
+        from pathlib import Path
+
+        from django.test import override_settings
+
+        from ..upgrades import HELPER, install_steps
+
+        shipped = Path(__file__).resolve().parents[4] / "scripts" / Path(HELPER).name
+        digest = hashlib.sha256(shipped.read_bytes()).hexdigest()
+        with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq", SEVERINO_HQ_REVISION="a" * 40):
+            fetch, install, *_ = install_steps("example-edge")
+        self.assertIn(f"checkout --detach {'a' * 40}", fetch.detail)
+        self.assertIn(f"echo '{digest}  {HELPER}' | sha256sum -c -", install.detail)
+        with override_settings(SEVERINO_HQ_SOURCE="", SEVERINO_HQ_REVISION=""):
+            fetch, *_ = install_steps("example-edge")
+        self.assertIn("HQ does not know the commit", fetch.detail)
 
     def test_the_helper_ships_where_the_install_steps_say(self):
         from pathlib import Path

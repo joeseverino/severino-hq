@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from ..timestamps import moment
 from .source import parsed
@@ -134,6 +134,7 @@ class CorrectedCallSiteTests(SimpleTestCase):
         self.assertIsNone(_parse_date(None))
 
 
+@tag("source")
 class OneParserTests(SimpleTestCase):
     """A new ``datetime.fromisoformat`` outside the kept list is a new copy."""
 

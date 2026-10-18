@@ -4,7 +4,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone as dj_timezone
 
 from hq.domains.control_plane.models import ManagedResource
@@ -42,6 +42,11 @@ class DaysUntilTests(SimpleTestCase):
         self.assertEqual(renewal_window({"renewal_window_days": "14"}), 14)
         self.assertEqual(renewal_window({"renewal_window_days": "soon"}), 30)
         self.assertEqual(renewal_opens_at(NOW, 30), NOW - timedelta(days=30))
+
+
+@tag("source")
+class DaysUntilSourceTests(SimpleTestCase):
+    """No other module counts days itself."""
 
     def test_no_other_module_counts_days_itself(self):
         """A second copy of the arithmetic can disagree by a day, so there is one."""

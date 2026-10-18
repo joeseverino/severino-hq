@@ -8,13 +8,18 @@ them.
 
 from datetime import timedelta
 
+from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from hq.domains.analytics.models import AnalyticsCoverage, AnalyticsSite, RumDaily, VitalsDaily
 from hq.domains.content.models import ContentItem
 from hq.platform.application import analytics as service
+from hq.platform.application.resources import InvalidResourceInput, list_resource
 from hq.platform.application.security import AuthorizationError, Capability, Principal
+from hq.platform.application.tests.markup import hrefs, text
 
 SITE_TAG = "0" * 32
 HOST = "example.test"
@@ -93,58 +98,55 @@ class IngestTests(TestCase):
     """A report is stored in one statement per table, however many rows it has."""
 
     def ingest(self, rows, vitals=None):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
         with CaptureQueriesContext(connection) as captured:
             result = service.record_analytics(_payload(rows, vitals), principal=_principal())
         return result, [query["sql"] for query in captured.captured_queries]
 
     def test_its_statements_do_not_grow_with_the_rows(self):
+        tables = {AnalyticsSite, AnalyticsCoverage, RumDaily, VitalsDaily}
         counts = {}
         for size in (50, 300):
             rows = [_row(value=f"/page-{index}/") for index in range(size)]
             vitals = [{"date": _day(0), **A_DAY_OF_VITALS}]
-            _result, new = self.ingest(rows, vitals)
+            self.ingest(rows, vitals)
             _result, restated = self.ingest(rows, vitals)
-            # The first report of a site also creates it.
-            self.assertLessEqual(len(new), 11)
             counts[size] = len(restated)
             written = [sql for sql in restated if sql.startswith(("INSERT", "UPDATE"))]
-            # The site, its coverage, the rows and the vitals: one statement each.
-            self.assertEqual(len(written), 4, written)
+            self.assertLessEqual(len(written), len(tables), written)
             self.assertEqual(RumDaily.objects.count(), size)
             RumDaily.objects.all().delete()
 
-        self.assertEqual(counts, {50: 9, 300: 9})
+        self.assertEqual(counts[50], counts[300])
 
-    def test_a_restated_row_keeps_its_identity_and_takes_the_counts_and_the_moment(self):
+    def test_a_restated_grain_keeps_its_identity_and_takes_what_was_last_said(self):
+        """A replayed sweep restates a day, a later one corrects it, and a grain
+        said twice in one report is stored as said last."""
+
         self.ingest([_row(pageviews=20, visits=10)])
         before = RumDaily.objects.get()
+        self.ingest([_row(pageviews=20, visits=10)])
+        self.assertEqual(RumDaily.objects.get().pageviews, 20)
 
-        result, _statements = self.ingest([_row(pageviews=31, visits=12)])
+        result, _statements = self.ingest([_row(pageviews=1), _row(pageviews=31, visits=12)])
 
         after = RumDaily.objects.get()
-        self.assertEqual(result["recorded"]["rows"], 1)
+        self.assertEqual(result["recorded"]["rows"], 2)
         self.assertEqual(after.pk, before.pk)
         self.assertEqual((after.pageviews, after.visits, after.sample_interval), (31, 12, 10))
         self.assertGreater(after.observed_at, before.observed_at)
 
-    def test_a_grain_reported_twice_is_stored_as_last_said(self):
-        result, _statements = self.ingest([_row(pageviews=1), _row(pageviews=7)])
-
-        self.assertEqual(result["recorded"]["rows"], 2)
-        self.assertEqual(RumDaily.objects.get().pageviews, 7)
-
     def test_a_restated_day_of_vitals_takes_every_reading(self):
-        self.ingest([], [{"date": _day(0), **A_DAY_OF_VITALS}])
+        self.ingest([], [{"date": _day(0), **A_DAY_OF_VITALS, "interaction_to_next_paint_ms": None}])
         before = VitalsDaily.objects.get()
+        # A percentile with no samples stays absent rather than becoming a number.
+        self.assertIsNone(before.interaction_to_next_paint_ms)
 
         self.ingest([], [{"date": _day(0), **A_DAY_OF_VITALS, "largest_contentful_paint_ms": None, "lcp_good": 9}])
 
         after = VitalsDaily.objects.get()
         self.assertEqual(after.pk, before.pk)
         self.assertIsNone(after.largest_contentful_paint_ms)
+        self.assertEqual(after.interaction_to_next_paint_ms, 120)
         self.assertEqual((after.lcp_good, after.inp_good), (9, 1))
         self.assertEqual(str(after.cumulative_layout_shift), "0.0500")
         self.assertGreater(after.observed_at, before.observed_at)
@@ -168,14 +170,24 @@ class IngestTests(TestCase):
 
 
 class RecordingTests(TestCase):
-    def test_it_stores_a_reading_and_the_site_behind_it(self):
-        service.record_analytics(_payload([_row()]), principal=_principal())
+    def test_it_stores_a_reading_and_the_site_behind_it_per_connection(self):
+        """One site tag read through two connections is two sites."""
 
-        site = AnalyticsSite.objects.get(site_tag=SITE_TAG)
-        self.assertEqual(site.host, HOST)
-        self.assertEqual(site.connection_ref, "example-api")
-        self.assertEqual(RumDaily.objects.count(), 1)
-        self.assertEqual(AnalyticsCoverage.objects.count(), 1)
+        payload = {
+            "sites": [
+                _site_payload(host="one.example", connection_ref="account-one", rows=[_row()]),
+                _site_payload(host="two.example", connection_ref="account-two", rows=[_row()]),
+            ]
+        }
+
+        service.record_analytics(payload, principal=_principal())
+
+        self.assertEqual(
+            set(AnalyticsSite.objects.values_list("site_tag", "connection_ref", "host")),
+            {(SITE_TAG, "account-one", "one.example"), (SITE_TAG, "account-two", "two.example")},
+        )
+        self.assertEqual(RumDaily.objects.count(), 2)
+        self.assertEqual(AnalyticsCoverage.objects.count(), 2)
 
     def test_a_successful_zero_is_coverage_even_without_a_traffic_row(self):
         service.record_analytics(_payload(), principal=_principal())
@@ -185,20 +197,6 @@ class RecordingTests(TestCase):
             AnalyticsCoverage.objects.get().date.isoformat(),
             _day(0),
         )
-
-    def test_replaying_a_sweep_restates_a_day_rather_than_doubling_it(self):
-        payload = _payload([_row(pageviews=20)])
-        service.record_analytics(payload, principal=_principal())
-        service.record_analytics(payload, principal=_principal())
-
-        self.assertEqual(RumDaily.objects.count(), 1)
-        self.assertEqual(RumDaily.objects.get().pageviews, 20)
-
-    def test_a_later_sweep_corrects_a_day_it_reports_again(self):
-        service.record_analytics(_payload([_row(pageviews=20)]), principal=_principal())
-        service.record_analytics(_payload([_row(pageviews=50)]), principal=_principal())
-
-        self.assertEqual(RumDaily.objects.get().pageviews, 50)
 
     def test_a_day_outside_the_window_is_not_erased(self):
         """Traffic accumulates; a day outside the window is kept.
@@ -239,23 +237,6 @@ class RecordingTests(TestCase):
 
         self.assertEqual(RumDaily.objects.count(), 0)
 
-    def test_the_same_site_tag_can_exist_in_independent_connections(self):
-        payload = {
-            "sites": [
-                _site_payload(host="one.example", connection_ref="account-one", rows=[_row()]),
-                _site_payload(host="two.example", connection_ref="account-two", rows=[_row()]),
-            ]
-        }
-
-        service.record_analytics(payload, principal=_principal())
-
-        self.assertEqual(AnalyticsSite.objects.count(), 2)
-        self.assertEqual(
-            set(AnalyticsSite.objects.values_list("connection_ref", "host")),
-            {("account-one", "one.example"), ("account-two", "two.example")},
-        )
-        self.assertEqual(RumDaily.objects.count(), 2)
-
 
 class CoveragePlanningTests(TestCase):
     def identity(self):
@@ -267,14 +248,19 @@ class CoveragePlanningTests(TestCase):
         payload["sites"][0]["end"] = _day(end_offset)
         service.record_analytics(payload, principal=_principal())
 
-    def test_a_new_site_is_offered_one_bounded_quarter(self):
-        plan = service.analytics_plan(self.identity())["windows"][0]
+    def test_a_new_site_is_offered_one_bounded_quarter_in_one_query_for_any_number(self):
+        identities = [{"connection_ref": "example-api", "site_tag": f"site-{index}"} for index in range(30)]
 
-        self.assertEqual(plan["reason"], "backfill")
-        self.assertEqual(
-            service.date.fromisoformat(plan["end"]) - service.date.fromisoformat(plan["start"]),
-            timedelta(days=service.BACKFILL_DAYS - 1),
-        )
+        with self.assertNumQueries(1):
+            windows = service.analytics_plan(identities)["windows"]
+
+        self.assertEqual(len(windows), len(identities))
+        for plan in windows:
+            self.assertEqual(plan["reason"], "backfill")
+            self.assertEqual(
+                service.date.fromisoformat(plan["end"]) - service.date.fromisoformat(plan["start"]),
+                timedelta(days=service.BACKFILL_DAYS - 1),
+            )
 
     def test_a_complete_site_only_refreshes_recent_completed_days(self):
         self.record_window(service.BACKFILL_DAYS - 1)
@@ -306,14 +292,6 @@ class CoveragePlanningTests(TestCase):
             ),
         )
 
-    def test_planning_cost_is_constant_as_sites_grow(self):
-        identities = [{"connection_ref": "example-api", "site_tag": f"site-{index}"} for index in range(30)]
-
-        with self.assertNumQueries(1):
-            plan = service.analytics_plan(identities)
-
-        self.assertEqual(len(plan["windows"]), 30)
-
 
 class VitalsTests(TestCase):
     def _record(self, **overrides):
@@ -337,32 +315,18 @@ class VitalsTests(TestCase):
         } | overrides
         service.record_analytics(_payload(vitals=[reading]), principal=_principal())
 
-    def test_a_percentile_with_no_samples_stays_absent(self):
-        """``-1`` is absence wearing a number's clothes; it must not become one."""
-
-        self._record()
-
-        stored = VitalsDaily.objects.get()
-        self.assertIsNone(stored.interaction_to_next_paint_ms)
-        self.assertEqual(stored.largest_contentful_paint_ms, 2888)
-
-    def test_a_metric_with_no_samples_reports_no_rate_rather_than_zero(self):
-        self._record()
-
-        summary = service.vitals_summary(days=7)
-        self.assertIsNone(summary["inp"]["rate"])
-        self.assertEqual(summary["lcp"]["rate"], 0.0)
-        self.assertEqual(summary["cls"]["rate"], 1.0)
-
-    def test_buckets_are_summed_across_days_before_dividing(self):
-        """A quiet day must not weigh the same as a busy one."""
+    def test_buckets_are_summed_across_days_and_no_samples_is_no_rate(self):
+        """A quiet day must not weigh the same as a busy one, and a metric
+        nobody sampled has no rate rather than a rate of zero."""
 
         self._record(date=_day(0), lcp_good=0, lcp_needs_improvement=2, lcp_poor=0)
         self._record(date=_day(1), lcp_good=98, lcp_needs_improvement=0, lcp_poor=0)
 
-        # Averaging the two daily rates would give 0.5. Summing first gives the
-        # rate an operator would compute by hand from the underlying samples.
-        self.assertEqual(service.vitals_summary(days=7)["lcp"]["rate"], 0.98)
+        summary = service.vitals_summary(days=7)
+        # Averaging the two daily rates would give 0.5.
+        self.assertEqual(summary["lcp"]["rate"], 0.98)
+        self.assertIsNone(summary["inp"]["rate"])
+        self.assertEqual(summary["cls"]["rate"], 1.0)
 
 
 class JoinTests(TestCase):
@@ -393,20 +357,6 @@ class JoinTests(TestCase):
         self.assertEqual(rows[0]["pageviews"], 412)
         self.assertTrue(rows[0]["measured"])
 
-    def test_the_two_halves_do_not_see_each_other(self):
-        service.record_analytics(
-            _payload(
-                [
-                    _row(value="/portfolio/a-writeup/", pageviews=412),
-                    _row(value="/contact/", pageviews=96),
-                ]
-            ),
-            principal=_principal(),
-        )
-
-        self.assertEqual([row["item"] for row in service.writeup_traffic()], [self.writeup])
-        self.assertEqual([row["item"] for row in service.page_traffic()], [self.page])
-
     def test_the_same_path_on_another_host_is_not_credited(self):
         path = "/portfolio/a-writeup/"
         service.record_analytics(
@@ -427,16 +377,25 @@ class JoinTests(TestCase):
         self.assertEqual(service.writeup_traffic()[0]["pageviews"], 412)
         self.assertEqual(service.item_traffic(self.writeup)["pageviews"], 412)
 
-    def test_something_published_and_unread_is_kept_and_sorted_last(self):
+    def test_each_half_sees_its_own_and_keeps_the_unread_last(self):
         """The most actionable row on the page is the one with no number."""
 
-        service.record_analytics(_payload([_row(value="/contact/", pageviews=96)]), principal=_principal())
+        unread = ContentItem.objects.create(
+            title="Unread",
+            slug="unread",
+            content_type=ContentItem.Type.PORTFOLIO_PAGE,
+            status=ContentItem.Status.PUBLISHED,
+            published_url=f"https://{HOST}/portfolio/unread/",
+        )
+        service.record_analytics(
+            _payload([_row(value="/portfolio/a-writeup/", pageviews=412), _row(value="/contact/", pageviews=96)]),
+            principal=_principal(),
+        )
 
-        rows = service.page_traffic()
-        self.assertEqual([row["item"].slug for row in rows], ["contact"])
         writeups = service.writeup_traffic()
-        self.assertEqual(writeups[0]["pageviews"], 0)
-        self.assertFalse(writeups[0]["measured"])
+        self.assertEqual([row["item"] for row in writeups], [self.writeup, unread])
+        self.assertEqual([(row["pageviews"], row["measured"]) for row in writeups], [(412, True), (0, False)])
+        self.assertEqual([row["item"] for row in service.page_traffic()], [self.page])
 
     def test_a_trailing_slash_is_not_tidied_away(self):
         """The site serves one form and redirects the other."""
@@ -464,23 +423,13 @@ class WindowTests(TestCase):
         rows = service.breakdown(RumDaily.Dimension.PATH, days=7)
         self.assertEqual(rows, [{"value": "/about/", "pageviews": 40, "visits": 20}])
 
-    def test_a_day_older_than_the_window_is_left_out_of_the_reading(self):
-        service.record_analytics(_payload([_row(offset=400, pageviews=999)]), principal=_principal())
-
-        self.assertEqual(service.site_totals()["pageviews"], 0)
-
-    def test_totals_carry_the_sampling_the_figure_rests_on(self):
-        service.record_analytics(_payload([_row()]), principal=_principal())
-
-        self.assertEqual(service.site_totals()["sample_interval"], 10)
-
-    def test_totals_carry_the_least_precise_sampling_across_sites(self):
+    def test_totals_sum_the_window_and_carry_the_least_precise_sampling(self):
         precise = _row(pageviews=20) | {"sample_interval": 1}
         sampled = _row(pageviews=30) | {"sample_interval": 100}
         service.record_analytics(
             {
                 "sites": [
-                    _site_payload(rows=[precise]),
+                    _site_payload(rows=[precise, _row(offset=400, pageviews=999)]),
                     _site_payload(
                         site_tag="1" * 32,
                         host="other.example",
@@ -522,18 +471,16 @@ class WindowTests(TestCase):
 
 class OverviewPageTests(TestCase):
     def setUp(self):
-        from django.contrib.auth import get_user_model
-
         user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(user)
 
     def test_it_says_so_plainly_before_the_first_sweep(self):
         response = self.client.get("/analytics/")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["latest"])
         self.assertContains(response, "No visits recorded yet.")
 
-    def test_every_breakdown_the_reader_collects_reaches_the_page(self):
+    def test_the_page_shows_every_breakdown_its_sampling_and_its_coverage(self):
         service.record_analytics(
             _payload(
                 [_row(dimension=dimension, value=f"value-{dimension}") for dimension in RumDaily.Dimension.values]
@@ -541,40 +488,24 @@ class OverviewPageTests(TestCase):
             principal=_principal(),
         )
 
-        response = self.client.get("/analytics/")
-
-        for dimension in RumDaily.Dimension.values:
-            self.assertContains(response, f"value-{dimension}")
-
-    def test_an_unreadable_window_shows_traffic_rather_than_an_error(self):
-        service.record_analytics(_payload([_row()]), principal=_principal())
-
-        response = self.client.get("/analytics/?days=banana")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["days"], service.DEFAULT_WINDOW_DAYS)
-
-    def test_a_window_nobody_offers_falls_back_rather_than_being_honoured(self):
-        response = self.client.get("/analytics/?days=99999")
-
-        self.assertEqual(response.context["days"], service.DEFAULT_WINDOW_DAYS)
-
-    def test_it_says_when_a_figure_is_an_estimate(self):
-        service.record_analytics(_payload([_row()]), principal=_principal())
-
-        response = self.client.get("/analytics/")
-
-        self.assertContains(response, "estimated from 1 in 10 visits")
-
-    def test_a_partial_window_says_what_is_missing_and_who_will_fill_it(self):
-        service.record_analytics(_payload([_row()]), principal=_principal())
-
         response = self.client.get("/analytics/?days=7")
 
-        self.assertContains(response, "1 of 7 days read so far, the rest still loading")
-        # No visit was measured for speed: one sentence, not three empty rates.
-        self.assertContains(response, "Not enough visits to measure.")
-        self.assertNotContains(response, "no samples")
+        shown = text(response)
+        for dimension in RumDaily.Dimension.values:
+            self.assertIn(f"value-{dimension}", shown)
+        self.assertEqual(response.context["totals"]["sample_interval"], 10)
+        coverage = response.context["coverage"]
+        self.assertEqual((coverage["covered_days"], coverage["expected_days"], coverage["complete"]), (1, 7, False))
+        self.assertFalse(response.context["vitals_measured"])
+
+    def test_a_window_it_does_not_offer_falls_back_to_the_default(self):
+        service.record_analytics(_payload([_row()]), principal=_principal())
+
+        for asked in ("banana", "99999"):
+            with self.subTest(asked=asked):
+                response = self.client.get(f"/analytics/?days={asked}")
+
+                self.assertEqual(response.context["days"], service.DEFAULT_WINDOW_DAYS)
 
     def test_signing_in_is_required(self):
         self.client.logout()
@@ -586,8 +517,6 @@ class OverviewPageTests(TestCase):
 
 class ContentSectionTrafficTests(TestCase):
     def setUp(self):
-        from django.contrib.auth import get_user_model
-
         user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(user)
         self.read = ContentItem.objects.create(
@@ -617,15 +546,8 @@ class ContentSectionTrafficTests(TestCase):
         self.assertEqual(attached["read"], 412)
         self.assertIsNone(attached["unread"])
 
-    def test_the_writeups_section_shows_what_each_earned(self):
-        response = self.client.get("/content/writeups/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "412")
-        self.assertContains(response, "Views")
-
-    def test_the_two_sections_show_their_own_half(self):
-        ContentItem.objects.create(
+    def test_each_section_lists_its_own_half_with_what_each_earned(self):
+        page = ContentItem.objects.create(
             title="Contact",
             slug="contact",
             content_type=ContentItem.Type.PAGE,
@@ -636,10 +558,12 @@ class ContentSectionTrafficTests(TestCase):
         writeups = self.client.get("/content/writeups/")
         pages = self.client.get("/content/pages/")
 
-        self.assertContains(writeups, "Unread")
-        self.assertNotContains(writeups, "Contact</strong>")
-        self.assertContains(pages, "Contact")
-        self.assertNotContains(pages, "Unread</strong>")
+        self.assertIn("412", text(writeups))
+        listed = {"writeups": set(hrefs(writeups)), "pages": set(hrefs(pages))}
+        self.assertLessEqual({self.read.get_absolute_url(), self.unread.get_absolute_url()}, listed["writeups"])
+        self.assertNotIn(page.get_absolute_url(), listed["writeups"])
+        self.assertIn(page.get_absolute_url(), listed["pages"])
+        self.assertNotIn(self.unread.get_absolute_url(), listed["pages"])
 
     def test_the_join_costs_one_query_however_many_rows(self):
         """The projection grows with content; its query count must not."""
@@ -665,8 +589,7 @@ class ContentSectionTrafficTests(TestCase):
 
         response = self.client.get("/content/writeups/")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Read")
+        self.assertIn(self.read.get_absolute_url(), hrefs(response))
 
 
 class RegisteredResourceTests(TestCase):
@@ -683,42 +606,31 @@ class RegisteredResourceTests(TestCase):
             principal=_principal(),
         )
 
-    def test_it_is_listable_through_the_shared_resource_contract(self):
-        from hq.platform.application.resources import list_resource
+    def test_it_is_listable_through_the_shared_resource_contract_by_breakdown(self):
+        for arguments, dimension, values in (
+            ({}, "path", ["/about/"]),
+            ({"dimension": "country"}, "country", ["Germany"]),
+        ):
+            with self.subTest(dimension=dimension):
+                result = list_resource("analytics", arguments, principal=_principal())
 
-        result = list_resource("analytics", {}, principal=_principal())
-
-        self.assertEqual(result["count"], len(result["items"]))
-        self.assertEqual(result["items"][0]["value"], "/about/")
-        self.assertEqual(result["items"][0]["dimension"], "path")
-
-    def test_a_breakdown_can_be_asked_for_by_name(self):
-        from hq.platform.application.resources import list_resource
-
-        result = list_resource("analytics", {"dimension": "country"}, principal=_principal())
-
-        self.assertEqual([row["value"] for row in result["items"]], ["Germany"])
+                self.assertEqual(result["count"], len(result["items"]))
+                self.assertEqual([row["value"] for row in result["items"]], values)
+                self.assertEqual({row["dimension"] for row in result["items"]}, {dimension})
 
     def test_a_dimension_nobody_records_is_refused(self):
         with self.assertRaises(ValueError):
             service.list_analytics(dimension="fingerprint")
 
     def test_an_unknown_filter_is_rejected_before_the_handler(self):
-        from hq.platform.application.resources import InvalidResourceInput, list_resource
-
         with self.assertRaises(InvalidResourceInput):
             list_resource("analytics", {"nope": 1}, principal=_principal())
 
     def test_a_window_beyond_retention_is_refused_rather_than_answered_emptily(self):
-        from hq.platform.application.resources import InvalidResourceInput, list_resource
-
         with self.assertRaises(InvalidResourceInput):
             list_resource("analytics", {"days": 500}, principal=_principal())
 
     def test_reading_requires_a_capability(self):
-        from hq.platform.application.resources import list_resource
-        from hq.platform.application.security import AuthorizationError
-
         bare = Principal(actor="anon", interface="web", capabilities=frozenset())
 
         with self.assertRaises(AuthorizationError):

@@ -82,7 +82,7 @@ cat >"${bin}/mise" <<'STUB'
 #!/bin/sh
 echo "mise $* REQUIRE_COMPOSED=${REQUIRE_COMPOSED:-}" >>"${TEST_LOG}"
 case "$*" in
-    *suite:composed*) exit "${TEST_FAIL_COMPOSED:-0}" ;;
+    *suite:as-image*) exit "${TEST_FAIL_COMPOSED:-0}" ;;
     *) exit "${TEST_FAIL_CI:-0}" ;;
 esac
 STUB
@@ -119,7 +119,7 @@ expect 0 "a ready release"
 says "[preflight] READY"
 grep -qx "mise run -c ci REQUIRE_COMPOSED=" "${TEST_LOG}" ||
     fail "the pipeline's gates did not run"
-grep -qx "mise run suite:composed REQUIRE_COMPOSED=1" "${TEST_LOG}" ||
+grep -qx "mise run suite:as-image REQUIRE_COMPOSED=1" "${TEST_LOG}" ||
     fail "the composed suite ran without being required"
 grep -qx "ssh -o BatchMode=yes deploy.example.test sh -s" "${TEST_LOG}" ||
     fail "the host was not reached through ssh as expected"

@@ -8,12 +8,13 @@ report it as safe, because every caller lives in another repository.
 
 ``describe()`` walks each export and records its shape (the parameters a
 callable takes, the fields a dataclass or model carries, the members of an
-enum, the public methods a class defines) and deliberately not annotations or
+enum, the public methods and attributes a class defines) and deliberately not annotations or
 docstrings, so the record is identical across the interpreter matrix and moves
 only when the contract does. ``contract.json`` beside this module is the shape
 extensions were built against. A test fails when the two differ, the diff is
 the review, and whether ``PLUGIN_API_VERSION`` must move is the question that
-review answers.
+review answers. Its ``templates`` section is the same record for the host's
+templates (``template_contract``).
 
     python manage.py sdk_contract          # rewrite contract.json
     python manage.py sdk_contract --check  # exit 1 on drift
@@ -33,14 +34,17 @@ from typing import Any
 from pydantic import BaseModel
 
 import hq_sdk
+from hq_sdk import template_contract
 
 CONTRACT_PATH = Path(__file__).with_name("contract.json")
+# Modules that write the record rather than offer anything to an extension.
+_RECORDS = frozenset({"contract", "template_contract", "text_contract"})
 
 
 def module_names() -> tuple[str, ...]:
     """Every SDK module, discovered rather than listed, so none can be missed."""
 
-    return tuple(sorted(info.name for info in pkgutil.iter_modules(hq_sdk.__path__) if info.name != "contract"))
+    return tuple(sorted(info.name for info in pkgutil.iter_modules(hq_sdk.__path__) if info.name not in _RECORDS))
 
 
 def exports(module: ModuleType) -> tuple[str, ...]:
@@ -89,12 +93,28 @@ def _parameters(target: Any) -> list[str] | None:
     return rendered
 
 
+def _fields(cls: type) -> frozenset[str]:
+    """Names the constructor or the model's fields already record."""
+
+    if dataclasses.is_dataclass(cls):
+        return frozenset(field.name for field in dataclasses.fields(cls))
+    if issubclass(cls, BaseModel):
+        return frozenset(cls.model_fields) | {"model_config"}
+    return frozenset()
+
+
 def _members(cls: type) -> dict[str, Any]:
-    """What the class itself defines, not what it inherits."""
+    """What the class itself defines, not what it inherits.
+
+    An attribute an extension sets on a subclass (``table_empty``,
+    ``page_title``) is recorded with the type of its default, so renaming it
+    is drift rather than a silently ignored declaration.
+    """
 
     members: dict[str, Any] = {}
+    fields = _fields(cls)
     for name, value in vars(cls).items():
-        if name.startswith("_"):
+        if name.startswith("_") or name in fields:
             continue
         if isinstance(value, property):
             members[name] = {"kind": "property"}
@@ -105,6 +125,9 @@ def _members(cls: type) -> dict[str, Any]:
             }
         elif inspect.isfunction(value):
             members[name] = {"kind": "method", "parameters": _parameters(value)}
+        elif not callable(value) and not hasattr(type(value), "__get__"):
+            # A descriptor (a model field, a manager) is the framework's, not a declaration.
+            members[name] = {"kind": "attribute", "type": type(value).__name__}
     return members
 
 
@@ -149,6 +172,7 @@ def describe() -> dict[str, Any]:
         "api_version": PLUGIN_API_VERSION,
         "sdk_version": hq_sdk.SDK_VERSION,
         "modules": modules,
+        "templates": template_contract.describe(),
     }
     plain: dict[str, Any] = json.loads(json.dumps(contract, sort_keys=True))
     return plain
@@ -221,4 +245,5 @@ def drift(committed: dict[str, Any], current: dict[str, Any]) -> list[str]:
             lines.append(f"- hq_sdk.{module}")
         else:
             lines.extend(_module_drift(module, before[module], after[module]))
+    lines.extend(template_contract.drift(committed.get("templates", {}), current.get("templates", {})))
     return lines

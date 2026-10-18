@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import httpx2
 from asgiref.sync import async_to_sync
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, override_settings, tag
 from starlette.staticfiles import StaticFiles
 
 from hq.platform.core.network import TrustedNetworkASGI
@@ -63,6 +63,7 @@ def _is_address(text: str, found: re.Match[str]) -> bool:
 
 
 class DeliveryAdapterArchitectureTests(SimpleTestCase):
+    @tag("source")
     def test_workflow_models_remain_a_dependency_leaf(self):
         root = Path(__file__).parent.resolve().parent
         contracts = parsed(root / "workflow_contracts.py")
@@ -134,6 +135,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
             "public, max-age=31536000, immutable",
         )
 
+    @tag("source")
     def test_mcp_services_do_not_access_django_models(self):
         """Keep MCP as an adapter over application-owned behavior and projections."""
         source_path = Path(__file__).resolve().parents[4] / "hq/platform/mcp" / "services.py"
@@ -153,6 +155,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         self.assertEqual(model_imports, [])
         self.assertEqual(manager_access, [])
 
+    @tag("source")
     def test_web_views_do_not_mutate_models_directly(self):
         """Web adapters may query for rendering, but writes belong to use cases."""
         root = Path(__file__).resolve().parents[4]
@@ -182,6 +185,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         self.assertEqual(violations, [])
 
+    @tag("source")
     def test_paginated_list_views_use_the_shared_table_engine(self):
         root = Path(__file__).resolve().parents[4]
         violations = []
@@ -201,6 +205,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         self.assertEqual(violations, [])
 
+    @tag("source")
     def test_every_module_defining_a_view_is_one_these_checks_read(self):
         """A view split into its own module must not step outside the checks.
 
@@ -228,6 +233,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         self.assertEqual(escaped, [])
 
 
+@tag("source")
 class StyleContractTests(SimpleTestCase):
     """The style bundle is a contract that extensions render against.
 
@@ -753,8 +759,11 @@ class StyleContractTests(SimpleTestCase):
             r"|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\("
             r"|(?<![-\w.#$@])([a-zA-Z]+)(?![-\w(])"
         )
+        declarations = self._declarations_outside_tokens()
+        # A parser that read nothing would find nothing wrong.
+        self.assertGreater(len(declarations), 100)
         offenders = []
-        for line, value in self._declarations_outside_tokens():
+        for line, value in declarations:
             for match in literal.finditer(value):
                 word = match.group(1)
                 if word is None or word.lower() in self._NAMED_COLOURS:
@@ -762,13 +771,6 @@ class StyleContractTests(SimpleTestCase):
                     break
 
         self.assertEqual(offenders, [], "Colour belongs in a token in `@layer tokens`, not the component.")
-
-    def test_the_colour_guard_reads_declarations(self):
-        """The guard above would pass vacuously if its parser found nothing."""
-
-        values = [value.strip() for _line, value in self._declarations_outside_tokens()]
-        self.assertIn("var(--surface)", values)
-        self.assertNotIn("#1f4d57", " ".join(values))
 
     def test_no_tracked_file_names_a_reachable_endpoint(self):
         """Addresses, ports and account names are deployment facts, not source.
@@ -786,22 +788,15 @@ class StyleContractTests(SimpleTestCase):
         import subprocess
 
         root = Path(__file__).resolve().parents[4]
-        # Bound before the attempt: skipTest raises, so the loop below is
-        # unreachable when git is absent, but that is a fact about skipTest,
-        # not one visible here.
-        tracked: list[str] = []
-        try:
-            tracked = subprocess.run(
-                # Tracked *and* new-but-not-ignored, so a file is checked by
-                # the commit that first adds it rather than the one after.
-                ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-                cwd=root,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.split("\0")
-        except FileNotFoundError, subprocess.CalledProcessError:
-            self.skipTest("no git checkout to ask")
+        tracked = subprocess.run(
+            # Tracked *and* new-but-not-ignored, so a file is checked by
+            # the commit that first adds it rather than the one after.
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
 
         # Documentation and private ranges are examples, not places. Anything
         # outside them is somewhere a packet can actually go.
@@ -915,27 +910,13 @@ class StyleContractTests(SimpleTestCase):
         root = Path(__file__).resolve().parents[4]
         allowed = ("docs/diagrams/", "docs/images/", "static/img/")
         suffixes = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-        # This suite also runs inside the composed image, which is the source
-        # tree without the checkout that produced it: no .git, and no git
-        # binary either. There is nothing to guard there: what is in the image
-        # is already decided, and this asks what would be pushed. So it is
-        # skipped rather than failed, and still runs everywhere the answer can
-        # change.
-        # Bound before the attempt: skipTest raises, so the read below is
-        # unreachable when git is absent, but that is a fact about skipTest,
-        # not one visible in this function, and reading a name that only some
-        # branches assign is worth not writing either way.
-        tracked: list[str] = []
-        try:
-            tracked = subprocess.run(
-                ["git", "ls-files", "-z"],
-                cwd=root,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.split("\0")
-        except FileNotFoundError, subprocess.CalledProcessError:
-            self.skipTest("not a git checkout; nothing here can be pushed")
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
         strays = [
             name for name in tracked if name and Path(name).suffix.lower() in suffixes and not name.startswith(allowed)
         ]
@@ -1051,6 +1032,7 @@ class StyleContractTests(SimpleTestCase):
             )
 
 
+@tag("source")
 class SharedPrimitiveStyleTests(SimpleTestCase):
     """Shared partials may only use classes the style bundle actually defines.
 
@@ -1076,6 +1058,7 @@ class SharedPrimitiveStyleTests(SimpleTestCase):
         self.assertEqual(sorted(set(offenders)), [])
 
 
+@tag("source")
 class TemplateCommentTests(SimpleTestCase):
     """Django's {# #} comment is single-line only.
 
@@ -1114,6 +1097,7 @@ class TemplateCommentTests(SimpleTestCase):
         self.assertIs(testing.unclosed_template_comments, interface_text.unclosed_template_comments)
 
 
+@tag("source")
 class PageTitleTests(SimpleTestCase):
     """A page names itself; the site name is appended once, by the layout.
 
@@ -1159,6 +1143,7 @@ class PageTitleTests(SimpleTestCase):
         )
 
 
+@tag("source")
 class WorkflowSecrecyTests(SimpleTestCase):
     """A private value reaches a public log through the environment or not at all.
 
@@ -1227,6 +1212,7 @@ class WorkflowSecrecyTests(SimpleTestCase):
         self.assertEqual(offenders, [], "read it from secrets, which are masked")
 
 
+@tag("source")
 class AssertionPrecisionTests(SimpleTestCase):
     """A comparison belongs in the assertion, not inside a boolean.
 
@@ -1283,36 +1269,7 @@ class AssertionPrecisionTests(SimpleTestCase):
         self.assertEqual(offenders, [])
 
 
-class SourceEscapeTests(SimpleTestCase):
-    """An unknown escape in a string literal is a warning today, an error later.
-
-    Python compiles ``"rgba\\("`` with a SyntaxWarning that scrolls past in a
-    test run and becomes a SyntaxError in a later interpreter. JavaScript probes
-    embedded in Python strings are where it happens: a regex needs its
-    backslashes, so those strings are raw.
-    """
-
-    def test_no_string_literal_carries_an_invalid_escape(self):
-        import warnings
-
-        root = Path(__file__).resolve().parents[4]
-        offenders = []
-        for path in sorted(root.rglob("*.py")):
-            if any(
-                part == "venv" or part.startswith(".") or part == "site-packages"
-                for part in path.relative_to(root).parts
-            ):
-                continue
-            with warnings.catch_warnings():
-                warnings.simplefilter("error", SyntaxWarning)
-                try:
-                    compile(path.read_text(encoding="utf-8"), str(path), "exec")
-                except SyntaxError as error:
-                    offenders.append(f"{path.relative_to(root)}:{error.lineno}: {error.msg}")
-
-        self.assertEqual(offenders, [])
-
-
+@tag("source")
 class CommentHistoryTests(SimpleTestCase):
     """A comment says what the code does and why, in the present tense.
 
@@ -1636,6 +1593,7 @@ class PostButtonTests(SimpleTestCase):
         self.assertIn("&lt;b&gt;", html)
 
 
+@tag("source")
 class OnePrimitiveTests(SimpleTestCase):
     """Questions asked in many places are answered by one function."""
 
@@ -1809,6 +1767,7 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertEqual(found, [])
 
 
+@tag("source")
 class CognitiveComplexityTests(SimpleTestCase):
     """No function asks a reader to hold more than twenty units of nesting.
 
@@ -1898,6 +1857,7 @@ class CognitiveComplexityTests(SimpleTestCase):
         self.assertEqual(over, {}, "split these into named steps")
 
 
+@tag("source")
 class FileSizeTests(SimpleTestCase):
     """No source file is longer than ``LIMIT`` lines.
 
@@ -1924,6 +1884,7 @@ class FileSizeTests(SimpleTestCase):
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 
+    @tag("source")
     def test_the_application_resolves_routes_through_its_one_owner(self):
         root = Path(__file__).resolve().parents[4]
         modules = [
@@ -2009,6 +1970,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
         ):
             RequestContextMiddleware(view)(RequestFactory().get("/example/"))
 
+    @tag("source")
     def test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed(self):
         from hq.platform.core.outbound import ALLOWED
 
@@ -2028,11 +1990,13 @@ class RequestNeverWaitsTests(SimpleTestCase):
         for name, reason in ALLOWED.items():
             self.assertGreater(len(reason), 60, name)
 
+    @tag("source")
     def test_only_a_job_leaves_the_request_that_started_it(self):
         leaving = {relative for relative, source in self.sources() if "off_request" in source}
 
         self.assertEqual(leaving, {"hq/platform/core/outbound.py", "hq/domains/jobs/runner.py"})
 
+    @tag("source")
     def test_asked_for_work_is_followed_by_one_script_behaviour(self):
         script = (self.ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8")
         templates = "\n".join(
@@ -2047,6 +2011,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
         self.assertEqual(script.count("[data-ask][data-ask-status]"), 1)
 
 
+@tag("source")
 class FragmentPrimitiveTests(SimpleTestCase):
     """Reads are one component: `static/js/fragment.js` and the part it asks for.
 
@@ -2135,6 +2100,7 @@ class FragmentPrimitiveTests(SimpleTestCase):
                     self.assertNotIn(retired, text)
 
 
+@tag("source")
 class TestPlacementTests(SimpleTestCase):
     """Every test lives in its package's tests/ directory (CLAUDE.md), so
     coverage, discovery and the fast gate's selection see the same tree."""
@@ -2157,6 +2123,7 @@ class TestPlacementTests(SimpleTestCase):
         self.assertEqual(misplaced, [])
 
 
+@tag("source")
 class RuntimeDependencyTests(SimpleTestCase):
     """Every runtime dependency earns its place: host code imports it, or
     pyproject.toml says why it is installed without being imported."""

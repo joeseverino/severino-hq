@@ -2,7 +2,10 @@
 
 Changed files against the merge base are mapped to the test modules that reach
 them, by the import graph of the tree itself (nothing here lists an app). The
-architecture tests always run. ```mise run check``` stays the gate before a push.
+architecture tests always run. A change to what extensions render through
+(templates, static, hq_sdk, the shared page and table layer) also runs the
+extensions' own suites, composed, when HQ_LOCAL_PLUGINS names a set.
+```mise run check``` stays the gate before a push.
 
 Usage: mise run fast [--list] [BASE]
 BASE defaults to $CHECK_BASE, then origin/main, then main. --list prints the
@@ -27,6 +30,37 @@ SKIP_PARTS = {"node_modules", "controller", "browser_tests", ".venv", "staticfil
 ALWAYS = ("architecture", "new_domain")
 # Past this share of the suite the change is wide and the fast gate says so.
 WIDE = 0.6
+# What extensions render through. A change here reaches their pages, which no
+# host test imports, so with an extension set named their suites run too.
+SHARED_UI = (
+    "templates/",
+    "static/",
+    "hq_sdk/",
+    "hq/platform/application/tables.py",
+    "hq/platform/application/pages.py",
+    "hq/platform/application/ui.py",
+    "hq/platform/application/moments.py",
+)
+
+
+def touches_shared_ui(paths: list[str]) -> bool:
+    return any(path.startswith(SHARED_UI) or "/templatetags/" in path for path in paths)
+
+
+def composed_env(env: dict[str, str]) -> dict[str, str] | None:
+    """The environment the extensions' suites run in, or None when no set is named."""
+
+    plugins = env.get("HQ_LOCAL_PLUGINS")
+    if not plugins:
+        return None
+    composed = {key: value for key, value in env.items() if key != "DJANGO_DEBUG"}
+    composed |= {
+        "SEVERINO_HQ_PLUGINS": plugins,
+        "PYTHONPATH": env.get("HQ_LOCAL_PYTHONPATH", ""),
+        "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
+        "DJANGO_SECRET_KEY": env.get("DJANGO_SECRET_KEY") or "check-not-a-real-secret",
+    }
+    return composed
 
 
 def git(*args: str) -> list[str]:
@@ -305,6 +339,7 @@ def main(argv: list[str]) -> int:
             {key: value for key, value in env.items() if key != "SEVERINO_HQ_PLUGINS"},
         ),
         ("controller contract drift", [python, "manage.py", "bridge_contract", "--check"], env),
+        ("connections reference drift", [python, "manage.py", "connections_reference", "--check"], env),
         *([("mypy (changed typed modules)", [python, "-m", "mypy", *typed], env)] if typed else []),
     ]
     ok = side_by_side(checks)
@@ -313,6 +348,14 @@ def main(argv: list[str]) -> int:
         [python, "manage.py", "test", "--noinput", "--parallel", os.environ.get("CHECK_PARALLEL", "auto"), *labels],
         env,
     )
+    composed = composed_env(dict(os.environ)) if touches_shared_ui([*changed, *deleted]) else None
+    if composed is not None:
+        parallel = os.environ.get("CHECK_PARALLEL", "auto")
+        ok &= step(
+            "extension suites, composed (shared UI changed)",
+            [python, "manage.py", "test", "--installed-plugins", "--noinput", "--parallel", parallel],
+            composed,
+        )
     ok &= step("patch integrity", ["git", "diff", "--check", base])
     print(
         f"[fast] {'passed' if ok else 'FAILED'} in {time.monotonic() - started:.1f}s (full gate before push: `mise run check`)"

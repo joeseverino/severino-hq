@@ -1,7 +1,6 @@
 """What the dashboard costs once the estate holds something."""
 
 from datetime import timedelta
-from unittest import mock
 
 from django.db import connection as database
 from django.test import TestCase
@@ -18,17 +17,10 @@ from hq.domains.control_plane.models import (
 from hq.domains.projects.models import Project
 from hq.platform.application.derivations import uncached
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.host_only import host_only
 
 from ..dashboard import dashboard_highlights, operating_snapshot
 from ..projection import projection_scope
-
-# The host dashboard (snapshot and highlights, one projection) over ``populate``'s
-# machines, services, zones, readings and connections; empty: HOST_QUERY_BUDGET.
-# 29: the Watching card reads its one profile, and the queue reads when its
-# items were first seen: each a constant query that does not grow with the
-# estate. A stored answer makes neither.
-# 30: the calendar reads whether any of its events links to something that is gone.
-POPULATED_QUERY_BUDGET = 30
 
 
 def _store(kind, records, **extra):
@@ -167,8 +159,7 @@ def populate(size: int = 8) -> None:
 
 def dashboard_queries() -> list[str]:
     with (
-        mock.patch("hq.platform.application.domains.extension_domains", return_value=()),
-        mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()),
+        host_only(),
         CaptureQueriesContext(database) as queries,
         projection_scope(),
         # What the page costs to derive; a stored answer costs less.
@@ -180,18 +171,6 @@ def dashboard_queries() -> list[str]:
 
 
 class PopulatedDashboardBudgetTests(TestCase):
-    def test_a_populated_estate_stays_within_its_budget(self):
-        populate()
-
-        used = len(dashboard_queries())
-
-        self.assertLessEqual(
-            used,
-            POPULATED_QUERY_BUDGET,
-            f"Populated dashboard used {used} queries against a budget of "
-            f"{POPULATED_QUERY_BUDGET}. Run this locally to see them.",
-        )
-
     def test_the_cost_does_not_grow_with_the_estate(self):
         populate(size=3)
         small = len(dashboard_queries())

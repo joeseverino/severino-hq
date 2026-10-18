@@ -17,9 +17,8 @@ waits on a schedule.
 
 | Workflow | Started by | Does |
 | :--- | :--- | :--- |
-| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser, Controller and Image (build, boot healthy, Trivy, publish and sign the host image), then **Ready**, which writes HQ's review |
-| **CodeQL** (`codeql.yml`) | every pull request and push to `main`, and weekly | code scanning; the ruleset holds a merge while it has an alert |
-| **Compose** (`compose.yml`) | a pull request (verify only); CI's Ready on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application; on `main`, published and signed |
+| **CI** (`ci.yml`) | every pull request and push to `main` | Checks, Tests, Browser, Controller, CodeQL and Image (build, boot healthy, publish and sign the host image); on a pull request the image's checks and its composition beside them, then **Ready**, which writes HQ's review from their results; on `main`, **Release**, which starts Compose |
+| **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application; on `main`, published and signed |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
 Each CI job runs the `mise` aggregate of its name, so the gates are declared

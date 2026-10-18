@@ -1,7 +1,9 @@
 """Capability policy: what an operator decided must happen before a credential acts."""
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource
@@ -10,7 +12,7 @@ from hq.platform.core.models import AgentIdentity, AuditLog
 
 from ..approvals import approve
 from ..capabilities import capability_registry, execute_capability
-from ..capability_policy import Rule, Scope, decide, field_name, matrix, set_rule
+from ..capability_policy import RULE_LABELS, Rule, Scope, decide, field_name, matrix, set_rule
 from ..labels import human_label
 from ..security import AuthorizationError, Capability, Principal, cli_principal, web_principal
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
@@ -280,10 +282,11 @@ class SettingTests(PolicyTestCase):
         messages = list(
             AuditLog.objects.filter(object_type="Capability policy").order_by("id").values_list("message", flat=True)
         )
-        self.assertEqual(
-            messages,
-            ["mcp · project.delete: Default → Ask me first", "mcp · project.delete: Ask me first → Default"],
-        )
+        before, after = "Default", RULE_LABELS[Rule.APPROVE]
+        self.assertEqual(len(messages), 2)
+        for message, (old, new) in zip(messages, ((before, after), (after, before)), strict=True):
+            self.assertIn("project.delete", message)
+            self.assertLess(message.index(old), message.index(new))
         self.assertFalse(CapabilityRule.objects.exists())
 
     def test_setting_what_already_holds_changes_and_records_nothing(self):
@@ -322,27 +325,19 @@ class PageTests(PolicyTestCase):
         # Every action: the page opens on the rules that differ, and here none do.
         return self.client.get(reverse("agent_policy"), {"all": 1})
 
-    def test_it_shows_both_surfaces_and_every_agent_seen(self):
+    def test_it_shows_both_surfaces_and_every_agent_seen_and_offers_only_what_was_granted(self):
         page = self.page()
+        columns, _groups = matrix()
 
-        for text in (
-            "All MCP agents",
-            "All API clients",
-            "example-agent",
-            "permissions from your sign-in",
-            "Projects",
-            "0 rules changed from the default",
-            "Agents are allowed",
-        ):
-            self.assertContains(page, text)
-        # Nothing waits, so nothing says how many wait.
-        self.assertNotContains(page, "waiting for your approval")
-
-    def test_an_agent_cannot_be_offered_what_pocket_id_did_not_grant(self):
-        page = self.page().content.decode()
-
-        self.assertIn("Pocket ID does not allow this", page)
-        self.assertNotIn(f'name="{field_name(Scope.AGENT, "example-agent", "project.delete")}"', page)
+        self.assertEqual(
+            [(column.scope, column.subject) for column in columns],
+            [(Scope.SURFACE, "mcp"), (Scope.SURFACE, "api"), (Scope.AGENT, "example-agent")],
+        )
+        for column in columns:
+            self.assertContains(page, column.label)
+        self.assertContains(page, f'name="{field_name(Scope.AGENT, "example-agent", "project.create")}"')
+        self.assertContains(page, "Pocket ID does not allow this")
+        self.assertNotContains(page, f'name="{field_name(Scope.AGENT, "example-agent", "project.delete")}"')
 
     def test_a_read_offers_no_approval(self):
         _columns, groups = matrix()
@@ -358,10 +353,11 @@ class PageTests(PolicyTestCase):
 
         self.assertContains(response, "Saved 1 change")
         self.assertEqual(CapabilityRule.objects.get().rule, Rule.APPROVE)
-        self.assertContains(response, "policy-select rule-approve")
         # Deletes are off for MCP in this deployment: the rule is armed for
-        # the day they are switched on, and the page says so.
-        self.assertContains(response, "is-dormant")
+        # the day they are switched on.
+        _columns, groups = matrix()
+        cell = next(cell for group in groups for row in group.rows for cell in row.cells if cell.field == field)
+        self.assertEqual((cell.rule, cell.dormant), (Rule.APPROVE, True))
 
     def test_saving_an_unchanged_page_records_nothing(self):
         response = self.client.post(
@@ -409,30 +405,42 @@ class PageTests(PolicyTestCase):
         _, groups = matrix()
         rows = {row.name: row for group in groups for row in group.rows}
 
-        self.assertEqual(rows["hq.import"].label, "Import projects and assets")
-        self.assertEqual(rows["documentation.sync"].label, "Sync documentation")
-        self.assertEqual(rows["project.delete"].effect_label, "Deletes")
-        self.assertEqual(rows["project.create"].effect_label, "Changes HQ")
-        self.assertEqual(rows["contact.submissions.list"].effect_label, "")
+        for name, row in rows.items():
+            with self.subTest(name):
+                self.assertEqual(row.label, spec(name).title)
+                self.assertEqual(bool(row.effect_label), row.effect != "read")
+        self.assertNotEqual(rows["project.delete"].effect_label, rows["project.create"].effect_label)
 
     def test_a_default_says_what_happens_in_the_words_the_choices_use(self):
         _, groups = matrix()
         rows = {row.name: row for group in groups for row in group.rows}
+        choices = {label for row in rows.values() for cell in row.cells for _value, label in cell.options}
 
-        self.assertEqual(rows["project.delete"].default, "Ask me first")
-        self.assertEqual(rows["project.create"].default, "Allow")
-        self.assertTrue(rows["infrastructure.resource.update"].default.startswith("Ask me first for "))
-        self.assertNotIn("gated", rows["infrastructure.resource.update"].default)
+        self.assertEqual(rows["project.delete"].default, RULE_LABELS[Rule.APPROVE])
+        self.assertEqual(rows["project.create"].default, RULE_LABELS[Rule.ALLOW])
+        self.assertTrue(rows["infrastructure.resource.update"].default.startswith(f"{RULE_LABELS[Rule.APPROVE]} for "))
+        self.assertLessEqual(
+            {row.default for row in rows.values()} - {rows["infrastructure.resource.update"].default}, choices
+        )
 
     def test_only_acronyms_are_capitalised(self):
         self.assertEqual(human_label("example.pace.set"), "Example Pace Set")
         self.assertEqual(human_label("tls.certificate"), "TLS Certificate")
 
-    def test_the_matrix_costs_the_same_however_many_capabilities_and_agents(self):
-        AgentIdentity.objects.create(client_id="second-agent", granted=["read"])
+    def test_the_matrix_costs_the_same_however_many_agents(self):
+        def cost():
+            with CaptureQueriesContext(connection) as queries:
+                matrix()
+            return len(queries)
 
-        with self.assertNumQueries(3):
-            matrix()
+        few = cost()
+        for index in range(8):
+            AgentIdentity.objects.create(client_id=f"agent-{index}", granted=["read"])
+            CapabilityRule.objects.create(
+                scope=Scope.AGENT, subject=f"agent-{index}", capability="project.create", rule=Rule.DENY
+            )
+
+        self.assertEqual(cost(), few)
 
 
 class CommandTitleTests(TestCase):
@@ -441,8 +449,8 @@ class CommandTitleTests(TestCase):
     def test_a_declared_label_is_the_title(self):
         from ..capabilities import capability_title
 
-        self.assertEqual(spec("project.create").title, "Create project")
-        self.assertEqual(capability_title("contact.submission.delete"), "Delete a message")
+        for name in ("project.create", "contact.submission.delete"):
+            self.assertEqual(capability_title(name), spec(name).label)
 
     def test_a_command_with_no_label_reads_as_its_name(self):
         from ..capabilities import capability_title
@@ -485,5 +493,5 @@ class CommandTitleTests(TestCase):
             operator,
         )
 
-        self.assertEqual(state.action.label, "Delete a message")
+        self.assertEqual(state.action.label, spec("contact.submission.delete").title)
         self.assertEqual(state.action.effect, "destructive")

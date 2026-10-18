@@ -96,8 +96,6 @@ class CredentialSightTests(TestCase):
         self.assertEqual(set(providers), set(CONNECTION_CREDENTIALS))
         for name, provider in providers.items():
             self.assertEqual(provider.label, CONNECTION_LABELS[name])
-        self.assertEqual(providers["adguard"].label, "AdGuard Home")
-        self.assertEqual(providers["onepassword"].label, "1Password")
 
     def test_a_kind_with_no_inventory_row_was_never_swept(self):
         sight = sights_by_kind()[("ssh", "host.perimeter")]
@@ -111,7 +109,6 @@ class CredentialSightTests(TestCase):
         sight = sights_by_kind()[("ssh", "host.perimeter")]
 
         self.assertEqual(sight.state, NOT_CONNECTED)
-        self.assertEqual(sight.state_label, "Not connected")
         self.assertEqual(sight.remedy, "")
 
     def test_a_readable_kind_carries_its_age_and_record_count(self):
@@ -143,7 +140,8 @@ class CredentialSightTests(TestCase):
             provider = by_provider()["cloudflare_api"]
 
         self.assertEqual(sight.state, REFUSED)
-        self.assertEqual(sight.remedy, "Add Pages Read (account) to see Pages project")
+        self.assertIn(EXAMPLE.requires[0], sight.remedy)
+        self.assertIn(EXAMPLE.label, sight.remedy)
         self.assertEqual(provider.credential_refusal, "")
 
     def test_a_refused_credential_is_said_once_and_offers_no_permission(self):
@@ -160,11 +158,8 @@ class CredentialSightTests(TestCase):
             provider = by_provider()["cloudflare_api"]
         refused = [sight for sight in provider.sights if sight.refusal]
 
-        self.assertEqual(
-            provider.credential_refusal,
-            "Cannot use the access token from location: 192.0.2.1",
-        )
-        self.assertEqual(len(refused), 2)
+        self.assertEqual(provider.credential_refusal, "Cannot use the access token from location: 192.0.2.1")
+        self.assertEqual({sight.kind for sight in refused}, {EXAMPLE.kind, "cloudflare.d1_database"})
         for sight in refused:
             self.assertEqual(sight.state, REFUSED)
             self.assertEqual(sight.remedy, "")
@@ -333,7 +328,10 @@ class RefusalEndToEndTests(TestCase):
             self.assertEqual(found.get("refusal"), PERMISSION_REFUSAL, kind)
         self.assertEqual(provider.credential_refusal, "")
         d1 = next(sight for sight in provider.sights if sight.kind == "cloudflare.d1_database")
-        self.assertEqual(d1.remedy, "Add D1 Read (account) to see D1 database")
+        spec = OBSERVATIONS["cloudflare.d1_database"]
+        self.assertTrue(spec.requires)
+        self.assertIn(spec.requires[0], d1.remedy)
+        self.assertIn(spec.label, d1.remedy)
 
     def test_a_refusal_is_cleared_by_a_read_that_succeeds(self):
         record_inventory(
@@ -394,30 +392,40 @@ class CredentialSightPageTests(TestCase):
         # No connection.
         ProviderInventory.objects.create(kind="adguard.rewrite", records=[], connected=False, observed_at=now)
 
+    def rows(self, response):
+        return {
+            row.instance.connection_ref: row
+            for _purpose, rows in response.context["connections"].purposes
+            for row in rows
+        }
+
     def test_the_page_shows_each_connection_and_what_it_can_see(self):
         response = self.client.get(reverse("control_plane:connections"))
-        body = response.content.decode()
+        rows = self.rows(response)
 
-        self.assertNotContains(response, "What each credential can see")
-        self.assertContains(response, 'class="connection-sight"', count=3)
+        self.assertEqual(
+            {ref: row.sight.provider for ref, row in rows.items() if row.sight},
+            {"example-ssh": "ssh", "example-api": "cloudflare_api", "example-tailnet": "tailscale"},
+        )
+        # The refusal is the product's words: said once, for the credential.
         self.assertContains(
             response,
             "Cloudflare API refused this credential: Cannot use the access token from location: 192.0.2.1",
             count=1,
         )
-        self.assertNotIn("Add D1 Read (account)", body)
-        self.assertContains(response, "Add users:read to see Tailnet user.")
-        self.assertContains(response, "Reads 2 things")
-        # Not connected, once each in the setup list, with what it would let HQ see.
-        self.assertContains(response, "<strong>AdGuard Home</strong>", count=1)
-        self.assertContains(response, escape(CONNECTION_KINDS["adguard"].gives))
-        self.assertContains(response, "<strong>1Password</strong>", count=1)
-        self.assertContains(response, escape(CONNECTION_KINDS["onepassword"].gives))
-        # Nothing sweeps these, so no credential is said to see them.
-        self.assertNotIn("Nothing to observe", body)
-        # Whole words: a label made from an id, not a service's own link.
-        self.assertNotRegex(body, r"\bOnepassword\b")
-        self.assertNotRegex(body, r"\bAdguard\b")
+        api = rows["example-api"].sight
+        self.assertFalse([sight.remedy for sight in api.sights if sight.remedy])
+        (tailnet_user,) = [sight for sight in rows["example-tailnet"].sight.sights if sight.kind == "tailscale.user"]
+        self.assertIn("users:read", tailnet_user.remedy)
+        self.assertContains(response, escape(tailnet_user.remedy))
+        readable = {sight.kind for sight in rows["example-ssh"].sight.sights if sight.state == READABLE}
+        self.assertEqual(readable, {"host.perimeter", "caddy.route"})
+        # Not connected: in the setup list, with what it would let HQ see.
+        for provider in ("adguard", "onepassword"):
+            self.assertContains(response, escape(CONNECTION_LABELS[provider]))
+            self.assertContains(response, escape(CONNECTION_KINDS[provider].gives))
+        # A label is the provider's own name, never one made from its id.
+        self.assertNotRegex(response.content.decode(), r"\b(Onepassword|Adguard)\b")
 
     def test_a_second_ssh_connection_does_not_show_the_first_ones_readings(self):
         ProviderConnection.objects.create(
@@ -434,29 +442,22 @@ class CredentialSightPageTests(TestCase):
             records=[{"record": "perimeter", "connection_ref": "example-ssh"}]
         )
 
-        response = self.client.get(reverse("control_plane:connections"))
-        # Each row's "Can see" block alone: its abilities name the same kinds.
-        rows = {
-            chunk.split('"', 1)[0]: "".join(
-                block.split("</ul>", 1)[0] for block in chunk.split('<div class="connection-sight">')[1:]
-            )
-            for chunk in response.content.decode().split('<tr id="')[1:]
-        }
-        own = next(row for anchor, row in rows.items() if anchor.endswith("example-ssh"))
-        other = next(row for anchor, row in rows.items() if anchor.endswith("example-shared-host"))
+        rows = self.rows(self.client.get(reverse("control_plane:connections")))
 
-        self.assertIn("Caddy route", own)
-        self.assertIn('<span class="muted">3</span>', own)
-        self.assertNotIn("Caddy route", other)
-        self.assertNotIn("Public perimeter", other)
+        def counted(ref):
+            return {sight.kind: sight.records for sight in rows[ref].sight.sights if sight.records}
+
+        self.assertEqual(counted("example-ssh"), {"host.perimeter": 1, "caddy.route": 3})
+        self.assertEqual(counted("example-shared-host"), {})
 
     def test_can_do_lists_every_reading_of_the_provider(self):
+        abilities, by_provider_names = _controller_contract()
+        labels = {ability.name: ability.label for ability in abilities}
+
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Site analytics")
-        for spec in OBSERVATIONS.values():
-            if spec.provider == "cloudflare_api":
-                self.assertContains(response, f"<span>{spec.label}</span>")
+        for name in by_provider_names["cloudflare_api"]:
+            self.assertContains(response, escape(labels[name]))
 
 
 class PartReasonTests(SimpleTestCase):

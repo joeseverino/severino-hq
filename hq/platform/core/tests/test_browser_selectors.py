@@ -12,7 +12,7 @@ from functools import cache
 from pathlib import Path
 
 from django.conf import settings
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from hq.platform.core import browser_tests
 
@@ -111,6 +111,7 @@ class SelectorExtractionTests(SimpleTestCase):
         self.assertTrue(rendered("attribute", "data-chart"))
 
 
+@tag("source")
 class BrowserGateSelectorTests(SimpleTestCase):
     def test_every_gate_selector_names_rendered_markup(self):
         missing = sorted(
@@ -159,6 +160,7 @@ class BrowserGateSelectorTests(SimpleTestCase):
         self.assertEqual(offences, [])
 
 
+@tag("source")
 class LayoutAuditSelectorTests(SimpleTestCase):
     def test_the_audit_reads_selectors(self):
         self.assertGreater(len(audit_selectors(AUDIT.read_text(encoding="utf-8"))), 5)

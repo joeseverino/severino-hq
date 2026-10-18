@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
@@ -88,6 +88,7 @@ class DomainRegistryTests(SimpleTestCase):
         ids = [domain.id for domain in all_domains()]
         self.assertEqual(sorted(ids), sorted(set(ids)))
 
+    @tag("source")
     def test_the_registry_is_the_only_list_of_sections(self):
         """No module may keep a second roster of what HQ contains.
 
@@ -103,6 +104,7 @@ class DomainRegistryTests(SimpleTestCase):
             "core.context_processors declares sections again; derive them from application.domains instead.",
         )
 
+    @tag("source")
     def test_apps_and_urls_are_read_off_the_declarations(self):
         """settings and the root urlconf name no domain; each declares itself."""
         root = Path(settings.BASE_DIR) / "hq/config"
@@ -126,6 +128,7 @@ class DomainRegistryTests(SimpleTestCase):
         self.assertEqual({spec.name for spec in CORE_CAPABILITY_SPECS} & verbs, set())
         self.assertEqual({member.value for member in Capability} & permissions, set())
 
+    @tag("source")
     def test_the_view_keeps_no_code_to_url_table(self):
         """The queue's links come from the domains, not from a lookup here.
 

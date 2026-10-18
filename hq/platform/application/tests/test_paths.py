@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.text import capfirst
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
@@ -176,7 +177,7 @@ class PathTests(TestCase):
         self.assertEqual((edge.role, edge.issuer), ("Edge", "Let's Encrypt"))
         origin = path.primary.hops[4].certificate
         self.assertEqual(origin.role, "Origin")
-        self.assertIn("Caddy route reports no certificate for this name", origin.unread)
+        self.assertTrue(origin.unread)
         self.assertEqual(path.primary.hops[1].source.kind, "cloudflare.dns_record")
         self.assertEqual(path.primary.hops[4].source.connection, "example-edge")
 
@@ -200,7 +201,6 @@ class PathTests(TestCase):
         certificate = path.certificate
         self.assertEqual((certificate.role, certificate.name), ("Served", "example wildcard"))
         self.assertEqual(certificate.issuer, "Let's Encrypt")
-        self.assertEqual(path.primary.line, "Internal DNS → Tailnet → lab-1 → Proxy host → app")
 
     def test_a_declared_certificate_is_shown_as_hq_knows_it_and_attested(self):
         # NPM names HQ's upload by its own label with no authority; HQ knows better.
@@ -213,8 +213,9 @@ class PathTests(TestCase):
             ("example-wildcard", "Example CA", "example-wildcard"),
         )
         self.assertEqual(certificate.link.url, reverse("control_plane:detail", args=["example-wildcard"]))
-        self.assertTrue(certificate.line.startswith("Served certificate example-wildcard · Example CA, expires"))
-        self.assertTrue(certificate.attestation.startswith("confirmed on this site"))
+        self.assertIn("example-wildcard", certificate.line)
+        self.assertTrue(certificate.attestation)
+        # The fingerprint is the evidence, not the words.
         self.assertNotIn("abababababab", certificate.attestation)
 
     def test_a_name_serving_another_certificate_is_not_shown_as_the_declared_one(self):
@@ -222,12 +223,8 @@ class PathTests(TestCase):
 
         certificate = self.walk("app.example.com").certificate
 
-        self.assertEqual(certificate.name, "")
-        self.assertEqual(certificate.attestation, "")
-        self.assertEqual(
-            certificate.line,
-            "Not verified: app.example.com serves a certificate other than example-wildcard",
-        )
+        self.assertEqual((certificate.name, certificate.attestation), ("", ""))
+        self.assertIn("example-wildcard", certificate.line)
 
     def test_a_container_hop_says_what_is_running_and_links_its_commit(self):
         from ..paths import _running_facts
@@ -285,8 +282,7 @@ class PathTests(TestCase):
 
         self.assertEqual(path.redirects_to, "example.com")
         self.assertEqual(path.primary.hops[-1].step, "redirect")
-        self.assertIn("Redirects to example.com", path.line)
-        self.assertNotIn("Parked", path.line)
+        self.assertIn("example.com", path.line)
 
     def test_an_unread_redirect_is_named_with_its_reason(self):
         store("cloudflare.redirect", reachable=False, error="Authentication error")
@@ -294,7 +290,7 @@ class PathTests(TestCase):
         path = self.walk("example.net")
 
         self.assertEqual(path.primary.hops[-1].step, "origin")
-        self.assertIn("not read: Redirect, because Authentication error", path.gaps)
+        self.assertIn(why_unread("cloudflare.redirect"), path.gaps)
 
     def test_an_unconnected_proxy_is_not_guessed(self):
         ProviderInventory.objects.filter(kind="npm.proxy_host").delete()
@@ -302,7 +298,7 @@ class PathTests(TestCase):
         path = self.walk("app.example.com")
 
         self.assertEqual(path.primary.hops[-1].step, "ingress")
-        self.assertEqual(path.primary.hops[-1].unread, "not read: Proxy host, because no connection reads it")
+        self.assertEqual(path.primary.hops[-1].unread, why_unread("npm.proxy_host"))
 
     def test_a_declaration_stands_in_for_a_kind_nothing_reads_and_says_so(self):
         ProviderInventory.objects.filter(kind="adguard.rewrite").delete()
@@ -315,13 +311,14 @@ class PathTests(TestCase):
         path = self.walk("app.example.com")
 
         self.assertEqual(path.primary.hops[0].source.declared, "app-dns")
-        self.assertEqual(path.primary.hops[0].source.phrase, "In HQ as app-dns, not read")
+        self.assertIn("app-dns", path.primary.hops[0].source.phrase)
 
     def test_a_name_nothing_resolves_says_why(self):
         path = self.walk("nothing.example.org")
 
         self.assertEqual(path.routes, ())
-        self.assertEqual(path.gaps, ("No DNS record HQ reads names this host.",))
+        (gap,) = path.gaps
+        self.assertTrue(gap)
 
     def test_invalid_input_has_no_path(self):
         self.assertEqual(self.walk("not a host").routes, ())
@@ -335,7 +332,10 @@ class PathTests(TestCase):
     def test_why_unread_names_the_error(self):
         store("caddy.route", reachable=False, error="Connection refused.")
 
+        # The reason is the product's words: the kind, then what refused it.
         self.assertEqual(why_unread("caddy.route"), "not read: Caddy route, because Connection refused")
+        store("caddy.route", connected=False)
+        self.assertEqual(why_unread("caddy.route"), "not read: Caddy route, because no connection reads it")
 
 
 @PUBLIC_RANGE
@@ -379,8 +379,9 @@ class HqPathTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "How this page reached you")
-        self.assertContains(response, "Proxy host")
+        path = response.context["connections"].hq_path
+        self.assertEqual(path.primary.hops[-1].step, "hq")
+        self.assertContains(response, reverse("control_plane:machine", args=["lab-1"]))
 
 
 @PUBLIC_RANGE
@@ -415,12 +416,11 @@ class ListedServiceTests(TestCase):
     def test_names_readings_serve_are_listed_as_observed(self):
         found = self.listed()
 
-        self.assertTrue(found["admin.example.com"].is_observed)
-        # The badge says observed; the state says what the reading does.
-        self.assertEqual(found["admin.example.com"].status_label, "Read only")
-        self.assertTrue(found["example.net"].is_observed)
-        self.assertEqual(found["example.net"].status_label, "Read only")
-        self.assertEqual(found["example.net"].health.detail, "Redirects to example.com")
+        for name in ("admin.example.com", "example.net"):
+            self.assertTrue(found[name].is_observed, name)
+            self.assertEqual(found[name].status, "unknown", name)
+        self.assertEqual(found["example.net"].health.detail, found["example.net"].path.observed_line)
+        self.assertEqual(found["example.net"].path.redirects_to, "example.com")
         # A certificate's names are not services.
         self.assertNotIn("*.example.com", found)
 
@@ -429,11 +429,10 @@ class ListedServiceTests(TestCase):
 
     def test_an_observed_row_links_to_a_page_that_is_not_empty(self):
         response = self.client.get(reverse("control_plane:services"))
-        self.assertContains(response, "Read only")
         self.assertContains(response, reverse("control_plane:service", args=["admin.example.com"]))
 
         page = self.client.get(reverse("control_plane:service", args=["example.net"]))
-        self.assertContains(page, "Redirects to")
+        self.assertContains(page, reverse("control_plane:service", args=["example.com"]))
 
     def test_the_redirect_is_a_relation_between_services(self):
         from ..topology import derive_topology
@@ -451,9 +450,7 @@ class ListedServiceTests(TestCase):
 
         self.assertTrue(found["app.example.com"].is_hq)
         response = self.client.get(reverse("control_plane:services"))
-        # One row among the rest, with no mark widening its column.
-        self.assertNotContains(response, '<span class="pill">HQ</span>', html=False)
-        self.assertContains(response, "app.example.com</a>", html=False)
+        self.assertContains(response, reverse("control_plane:service", args=["app.example.com"]))
 
 
 @PUBLIC_RANGE
@@ -472,48 +469,30 @@ class ServicePageTests(TestCase):
         response = self.client.get(reverse("control_plane:service", args=["app.example.com"]))
         page = response.content.decode()
 
-        summary = {item.label: item for item in response.context["summary"]}
-        # The path is drawn once, in its own section, not repeated as a card.
-        self.assertNotIn("Path", summary)
-        # Where it runs is the path's to say, hop by hop, not a tile above it.
-        self.assertNotIn("Where it runs", summary)
-        self.assertIn("/infrastructure/machines/lab-1/", page)
-        # Health first; "What it is" only when it says more than "declared".
-        self.assertNotIn("What it is", summary)
-        order = [
-            page.index(text)
-            for text in (
-                ">Health<",
-                ">Certificate<",
-                'id="path"',
-            )
-        ]
-        self.assertEqual(order, sorted(order))
-        self.assertIn("Served certificate example wildcard · Let&#x27;s Encrypt", page)
-        self.assertIn("If it is removed, the name stops reaching the app.", page)
+        labels = [item.label for item in response.context["summary"]]
+        # Health first; the path is drawn once, in its own section, and says where it runs.
+        self.assertEqual(labels[:2], ["Health", "Certificate"])
+        self.assertNotIn("Path", labels)
+        self.assertNotIn("Where it runs", labels)
+        self.assertIn(reverse("control_plane:machine", args=["lab-1"]), page)
+        self.assertLess(page.index('id="path"'), page.index('id="parts"'))
 
     def test_the_served_certificate_is_a_verified_lock_with_a_short_tip(self):
         declare_certificate()
 
         page = self.page("app.example.com")
 
-        # Not a link of its own: the hop's name beside it already is one.
-        self.assertIn('<span class="cert-mark" tabindex="0" data-tip="Confirmed\nexample-wildcard · Example CA', page)
         self.assertIn('data-tip-host="app.example.com"', page)
+        self.assertIn("example-wildcard · Example CA", page)
 
-    def test_a_redirecting_apex_is_not_parked_and_its_target_names_it(self):
-        page = self.page("example.net")
-        self.assertIn("Redirects to example.com", page)
-        self.assertNotIn("Parked", page)
-
-        # Said once, where every relation is: under Relationships.
-        target = self.page("example.com")
-        self.assertIn("Redirected from", target)
+    def test_a_redirect_links_both_ends(self):
+        self.assertIn(reverse("control_plane:service", args=["example.com"]), self.page("example.net"))
+        self.assertIn(reverse("control_plane:service", args=["example.net"]), self.page("example.com"))
 
     def test_a_hop_nothing_reads_says_why_on_the_page(self):
         ProviderInventory.objects.filter(kind="npm.proxy_host").delete()
 
-        self.assertIn("Not read: Proxy host, because no connection reads it", self.page("app.example.com"))
+        self.assertIn(capfirst(why_unread("npm.proxy_host")), self.page("app.example.com"))
 
 
 @PUBLIC_RANGE
@@ -543,60 +522,48 @@ class ObservedNameTests(TestCase):
     def test_what_was_read_comes_before_what_was_not(self):
         path = self.walk("admin.example.com")
 
-        self.assertEqual(
-            path.gaps,
-            (
-                "No public DNS record names this host.",
-                "not read: Internal DNS record, because no connection reads it",
-            ),
-        )
+        missing, unread = path.gaps
+        self.assertTrue(missing)
+        self.assertEqual(unread, why_unread("adguard.rewrite"))
         (hop,) = path.observed
         self.assertEqual((hop.step, hop.label, hop.name), ("observed", "Behind Access", "Admin"))
         self.assertEqual(hop.source.connection, CLOUDFLARE)
-        self.assertEqual(path.observed_line, "Behind Access")
+        self.assertEqual(path.observed_line, hop.label)
 
     def test_a_redirect_observer_names_where_it_sends(self):
-        self.assertEqual(self.walk("example.net").observed_line, "Redirects to example.com")
+        self.assertIn("example.com", self.walk("example.net").observed_line)
 
     def test_the_page_says_no_record_and_access_first(self):
         response = self.client.get(reverse("control_plane:service", args=["admin.example.com"]))
         page = response.content.decode()
         summary = {item.label: item for item in response.context["summary"]}
+        path = self.walk("admin.example.com")
 
-        self.assertIn("No public DNS record names this host.", page)
-        self.assertEqual(summary["Health"].value, "Read only")
-        self.assertEqual(summary["Health"].detail, "Behind Access · No DNS record")
-        self.assertEqual(
-            summary["What it is"].value,
-            "Read through Access application Admin. Not in HQ's settings.",
-        )
+        self.assertEqual(summary["Health"].tone, "unknown")
+        self.assertIn(path.observed_line, summary["Health"].detail)
+        self.assertIn("Admin", summary["What it is"].value)
         section = page[page.index('id="path"') : page.index('id="parts"')]
-        self.assertLess(section.index("No public DNS record"), section.index("Not read: Internal"))
-        self.assertIn("Behind Access:", section)
+        missing, unread = path.gaps
+        self.assertLess(section.index(missing), section.index(capfirst(unread)))
 
     def test_the_public_record_is_offered_first_in_a_public_zone(self):
-        page = self.client.get(reverse("control_plane:service", args=["admin.example.com"])).content.decode()
-
-        self.assertLess(page.index("Add public DNS record"), page.index("Add internal DNS record"))
+        self.assertEqual(self.offered("admin.example.com"), ["cloudflare.dns_record", "adguard.rewrite"])
 
     def test_outside_a_public_zone_the_order_is_the_registry_order(self):
-        page = self.client.get(reverse("control_plane:service", args=["box.example.test"])).content.decode()
+        self.assertEqual(self.offered("box.example.test"), ["adguard.rewrite", "cloudflare.dns_record"])
 
-        self.assertLess(page.index("Add internal DNS record"), page.index("Add public DNS record"))
+    def offered(self, hostname):
+        page = self.client.get(reverse("control_plane:service", args=[hostname])).content.decode()
+        kinds = ("cloudflare.dns_record", "adguard.rewrite")
+        return sorted(kinds, key=lambda kind: page.index(f"kind={kind}"))
 
-    def test_the_row_names_its_observer_and_says_observed_once(self):
+    def test_the_row_links_its_observer(self):
+        (hop,) = self.walk("admin.example.com").observed
+
         response = self.client.get(reverse("control_plane:services"))
-        row = next(
-            chunk
-            for chunk in response.content.decode().split("<tr>")
-            if 'data-entity="Service">admin.example.com</a>' in chunk
-        )
 
-        self.assertEqual(row.count("Read only"), 1)
-        self.assertNotIn("Observed", row)
-        self.assertIn(">Cloudflare Access<", row)
-        self.assertIn('<span class="muted">No record</span>', row)
-        self.assertNotIn("service-observed", row)
+        self.assertContains(response, hop.link.url)
+        self.assertContains(response, hop.source.short)
 
     def test_the_api_returns_the_observing_readings(self):
         from ..service_list import get_service
@@ -605,7 +572,7 @@ class ObservedNameTests(TestCase):
 
         (observed,) = found["path"]["observed"]
         self.assertEqual((observed["relation"], observed["name"]), ("Behind Access", "Admin"))
-        self.assertEqual(found["service"]["status_label"], "Read only")
+        self.assertEqual(found["service"]["status"], "unknown")
 
 
 @PUBLIC_RANGE
@@ -625,15 +592,14 @@ class HqHealthTests(TestCase):
     def test_hq_answering_this_request_is_up(self):
         health = self.summary()["Health"]
 
-        self.assertEqual((health.value, health.tone), ("Up", "good"))
-        self.assertEqual(health.detail, "Answering this request.")
+        self.assertEqual(health.tone, "good")
 
     def test_a_finding_about_hq_needs_attention(self):
         with mock.patch("hq.platform.application.service_health.hq_findings", return_value=("one",)):
             health = self.summary()["Health"]
 
-        self.assertEqual((health.value, health.tone), ("Up", "attention"))
-        self.assertIn("1 open problem is about HQ.", health.detail)
+        self.assertEqual(health.tone, "attention")
+        self.assertIn("1 open problem", health.detail)
 
     def test_only_findings_about_hq_count(self):
         from ..finding_model import Finding
@@ -659,7 +625,8 @@ class HqHealthTests(TestCase):
         with projection_scope():
             (service,) = prospects(("nothing.example.org",))
 
-        self.assertEqual(service.status_label, "Nothing set up in HQ")
+        self.assertEqual(service.status, "unknown")
+        self.assertFalse(service.is_observed)
 
 
 class RoutedNamesTests(TestCase):

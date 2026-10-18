@@ -1,12 +1,11 @@
 """The secret render reading, and what HQ says when the secrets go stale."""
 
 import re
-import unittest
 from datetime import UTC, datetime, timedelta
 from html import unescape
 from pathlib import Path
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -165,7 +164,7 @@ class RecordTests(SimpleTestCase):
                 self.assertEqual(SPEC.clean([unread(reason)]), ([unread(reason)], 0))
 
 
-@unittest.skipUnless((ROOT / "controller" / "secretstatus").is_dir(), "the controller's source is not in the image")
+@tag("source")
 class OneDeclarationTests(SimpleTestCase):
     """What HQ restates of the renderer, held to where the renderer declares it."""
 

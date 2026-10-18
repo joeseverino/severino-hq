@@ -6,7 +6,7 @@ from math import ceil
 from pathlib import Path
 
 from django.conf import settings
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 _RULE = re.compile(r"(@container \(min-width: (\d+)px\) \{)|([^{}]+)\{([^{}]*)\}|(\})")
 _HAS = re.compile(r":has\(> ([^)]*\)?[^)]*)\)")
@@ -51,6 +51,7 @@ def columns(count: int, width: int) -> int:
     return chosen
 
 
+@tag("source")
 class HighlightGridTests(SimpleTestCase):
     def test_no_count_leaves_one_cell_alone_on_a_row(self):
         for count in (2, 4, 5, 6):

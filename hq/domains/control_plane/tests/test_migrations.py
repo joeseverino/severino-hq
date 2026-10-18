@@ -13,8 +13,10 @@ from importlib import import_module
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.tests.migration_steps import MigrationStepTestCase
 
 # A migration module's name starts with a digit, so it is reached by import
 # rather than named in a from-import.
@@ -383,3 +385,70 @@ class DerivedReferencesMigrationTests(TransactionTestCase):
         self.assertEqual(found["odd-links"][1:], ("7", '{"nested":true}'))
         for key in ("no-links", "null-links", "empty", "a-list", "a-string", "a-number"):
             self.assertEqual(found[key][1:], ("", ""), key)
+
+
+class MachineDataMigrationTests(MigrationStepTestCase):
+    """The machine rows three data migrations reshape, from the state each one starts in."""
+
+    def test_fields_nothing_reads_leave_machines_and_come_back_empty(self):
+        apps = self.migrate(("control_plane", "0015_tailnet_device_keys_say_what_they_are"))
+        Resource = apps.get_model("control_plane", "ManagedResource")
+        Resource.objects.create(
+            key="example-box",
+            kind="machine",
+            spec={
+                "name": "example-box",
+                "operating_system": "linux",
+                "form": "tower",
+                "ssh_alias": "box",
+                "ssh_port": 22,
+            },
+        )
+        Resource.objects.create(
+            key="example-zone", kind="cloudflare.zone", spec={"zone": "example.com", "form": "kept"}
+        )
+
+        apps = self.migrate(("control_plane", "0016_machines_stop_authoring_the_tailnet_reading"))
+        specs = dict(apps.get_model("control_plane", "ManagedResource").objects.values_list("key", "spec"))
+        self.assertEqual(specs["example-box"], {"name": "example-box"})
+        self.assertEqual(specs["example-zone"], {"zone": "example.com", "form": "kept"})
+
+        apps = self.migrate(("control_plane", "0015_tailnet_device_keys_say_what_they_are"))
+        restored = apps.get_model("control_plane", "ManagedResource").objects.get(key="example-box").spec
+        self.assertEqual(
+            restored, {"name": "example-box", "operating_system": "", "form": "", "ssh_alias": "", "ssh_port": None}
+        )
+
+    def test_the_machine_the_dashboard_showed_is_its_first_placement(self):
+        apps = self.migrate(("control_plane", "0017_dashboard_observations"))
+        machine = apps.get_model("control_plane", "ManagedResource").objects.create(
+            key="example-box", kind="machine", spec={"name": "example-box"}
+        )
+        apps.get_model("control_plane", "DashboardConfiguration").objects.create(machine=machine)
+
+        apps = self.migrate(("control_plane", "0018_dashboard_supports_multiple_machines"))
+
+        placed = apps.get_model("control_plane", "DashboardMachine").objects.get()
+        self.assertEqual((placed.machine_id, placed.position), (machine.pk, 0))
+
+    def test_telemetry_moves_from_status_to_a_stored_reading(self):
+        targets = (("control_plane", "0021_capability_rule"), ("core", "0009_upstream_reading"))
+        apps = self.migrate(*targets)
+        Resource = apps.get_model("control_plane", "ManagedResource")
+        seen = timezone.now()
+        Resource.objects.create(
+            key="example-box",
+            kind="machine",
+            status={"telemetry": {"cpu": 12}, "kept": True},
+            last_observed_at=seen,
+        )
+        Resource.objects.create(key="never-seen", kind="machine", status={"telemetry": {"cpu": 3}})
+
+        apps = self.migrate(("control_plane", "0022_machine_telemetry_is_a_reading"), targets[1])
+
+        statuses = dict(apps.get_model("control_plane", "ManagedResource").objects.values_list("key", "status"))
+        self.assertEqual(statuses, {"example-box": {"kept": True}, "never-seen": {}})
+        reading = apps.get_model("core", "UpstreamReading").objects.get()
+        self.assertEqual(
+            (reading.key, reading.value, reading.observed_at), ("machine-telemetry:example-box", {"cpu": 12}, seen)
+        )

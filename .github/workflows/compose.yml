@@ -5,10 +5,11 @@ name: Compose
 # themselves and build no image of their own, so deploying one never replaces
 # the others.
 #
-# Started by events only: CI finishing on a commit (ci.yml), an extension's
-# admission, or by hand. On a pull request it composes and verifies, and CI's
-# Ready waits for it. On main it publishes and signs, and Deploy (deploy.yml)
-# takes it from there.
+# On a pull request it is a job of CI (ci.yml), handed the image CI just
+# published: it composes and verifies, and Ready reads its result. On main it
+# is started by events only: CI passing on a commit, an extension's admission,
+# or by hand. There it publishes and signs, and Deploy (deploy.yml) takes it
+# from there.
 #
 # The file keeps its name: the composition is signed by it, and the deploy
 # script on the host pins this path.
@@ -16,10 +17,20 @@ name: Compose
 on:
   # A pull request composes and verifies (DEBUG off, the extensions loaded, as
   # production assembles it) before merge. It does not publish and cannot
-  # deploy. It starts with the pull request, so it can outrun the host image it
-  # needs; "Resolve the host image" waits for that image rather than assuming it.
-  pull_request:
-    branches: [main]
+  # deploy: only a dispatch on main is a release.
+  workflow_call:
+    inputs:
+      host-image:
+        description: The host image CI built in this run, by digest.
+        type: string
+        required: true
+    secrets:
+      HQ_APP_CLIENT_ID:
+        required: true
+      HQ_APP_KEY:
+        required: true
+      COMPOSITION_EXTENSIONS:
+        required: true
   # Everything else is a dispatch naming what to compose: CI once a push to
   # main has passed every gate, an extension's admission, or a person. Each is
   # started by what came before it, so no run of anything else can start one.
@@ -69,9 +80,8 @@ jobs:
   compose:
     name: Build HQ
     # A fork's pull request is not composed: reading the extensions' admission
-    # artifacts needs a secret a fork cannot have, so it would fail on the
-    # download step with a permissions error that looks like a broken pipeline
-    # rather than a fork doing exactly what forks are supposed to do.
+    # artifacts needs a secret a fork cannot have. CI does not call this for
+    # one, and this holds should anything else.
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
@@ -80,8 +90,8 @@ jobs:
     permissions:
       contents: read
       packages: write
-      # Read-only, and only so "Resolve the host image" can ask whether the host
-      # build it is waiting for has already failed.
+      # Read-only, so "Resolve the host image" can ask whether the host build
+      # it is waiting for has already failed, and a failure can name its step.
       actions: read
       # Keyless signing of the published composition. Granted to this job
       # alone: the deploy job verifies signatures and never makes one, and a
@@ -178,6 +188,8 @@ jobs:
           # Dispatch payloads are untrusted input: passed as data, never
           # interpolated into the script.
           HOST_REF: ${{ inputs.commit || github.event.pull_request.head.sha || github.sha }}
+          GIVEN: ${{ inputs.host-image }}
+          REPOSITORY: ${{ github.repository }}
         # Derived from the commit being composed, so there is no pin to bump by
         # hand and no way for the composition to be built on a stale host.
         run: |
@@ -187,17 +199,24 @@ jobs:
             exit 1
           fi
           ref="$HOST_REF"
-          image="ghcr.io/${{ github.repository }}:sha-${ref:0:12}"
-          # On a pull request this workflow and the host build start together,
-          # so the image may not exist yet. Waited for rather than assumed:
-          # failing instantly here would report "no such image" for a build that
-          # is simply still running, which is the least useful true statement
-          # available. 20 minutes is well past a host build and well short of
-          # the job timeout.
+          # Called by CI: the image its Image job published in this run.
+          if [ -n "$GIVEN" ]; then
+            if [[ ! "$GIVEN" =~ ^ghcr\.io/${REPOSITORY}@sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error title=Invalid host image::The host image is not this repository's, by digest."
+              exit 1
+            fi
+            echo "image=$GIVEN" >> "$GITHUB_OUTPUT"
+            echo "sha=$ref" >> "$GITHUB_OUTPUT"
+            echo "host image: $GIVEN"
+            exit 0
+          fi
+          image="ghcr.io/${REPOSITORY}:sha-${ref:0:12}"
+          # An admission's dispatch composes main as it is now, whose host
+          # build may still be running, so the image may not exist yet. Waited
+          # for rather than assumed: failing instantly here would report "no
+          # such image" for a build that is simply still running. 20 minutes is
+          # well past a host build and well short of the job timeout.
           digest=""
-          # Polled every five seconds: on a pull request this waits for a build
-          # that started at the same moment, and any longer interval is time
-          # spent after the image is already there.
           for attempt in $(seq 1 240); do
             if digest=$(docker buildx imagetools inspect "$image" \
                           --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"'); then
@@ -209,8 +228,7 @@ jobs:
             # Every 30 seconds, ask whether there is still a build to wait for:
             # a host build that failed will never publish.
             if [ $((attempt % 6)) -eq 0 ]; then
-              # The Image job, not the run: CI's Ready waits for this
-              # composition, so the run as a whole cannot conclude first.
+              # The Image job, not the run, which concludes minutes later.
               ci_run=$(gh api \
                 "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$ref&per_page=30" \
                 --jq '[.workflow_runs[] | select(.name == "CI") | .id] | first' 2>/dev/null || true)
@@ -262,7 +280,9 @@ jobs:
         #
         # The identity is pinned to this repository's own `ci` workflow, so an
         # image pushed to the same name by anything else fails here rather than
-        # becoming the base of a production composition.
+        # becoming the base of a production composition. An image CI handed
+        # over by digest was built by this same run.
+        if: inputs.host-image == ''
         env:
           HOST_IMAGE: ${{ steps.host.outputs.image }}
           REPOSITORY: ${{ github.repository }}
@@ -276,10 +296,8 @@ jobs:
             signer_ref='refs/(heads/main|pull/[0-9]+/merge)$'
           fi
           # Retried, because the host build pushes the image and signs it in
-          # two steps and this job is watching for the push. On a pull request
-          # the two workflows run concurrently, so the manifest can exist for a
-          # few seconds before its signature does, which is indistinguishable
-          # from an unsigned image on the first attempt and is not one.
+          # two steps and the wait above ends at the push, so the manifest can
+          # exist for a few seconds before its signature does.
           for attempt in $(seq 1 12); do
             if cosign verify \
                  --certificate-oidc-issuer https://token.actions.githubusercontent.com \

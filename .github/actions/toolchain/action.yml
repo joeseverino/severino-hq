@@ -43,7 +43,7 @@ runs:
           echo "trivy=$TRIVY_VERSION"
         } >> "$GITHUB_OUTPUT"
         # Nothing installs that mise.lock does not record. The CodeQL bundle is
-        # the local mirror of codeql.yml and age belongs to Compose; neither is
+        # the local mirror of CI's CodeQL job and age belongs to Compose; neither is
         # a gate of these jobs.
         {
           echo "MISE_LOCKED=1"

@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% comment %}
 The frame every page shares. A view supplies `page` (application.pages); this
-draws its trail, head, actions and section navigation, and the page fills only
-`{% block page %}`.
+draws its trail, head, actions, section navigation and the dialogs its actions
+open (`PageDialog`), and the page fills only `{% block page %}`.
 {% endcomment %}
 {% block title %}{{ page.title }}{% endblock %}
 {% block content %}
 {% include "partials/_page_head.html" %}
 {% if page.navigation %}{% include "partials/_page_navigation.html" with navigation=page.navigation %}{% endif %}
 {% block page %}{% endblock %}
+{% for dialog in page.dialogs %}{% include "partials/_modal.html" with id=dialog.id title=dialog.title lede=dialog.lede body_template=dialog.body_template %}{% endfor %}
 {% endblock %}

@@ -8,7 +8,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.templatetags.static import static
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 STATIC = Path(settings.BASE_DIR) / "static"
@@ -81,12 +81,18 @@ class ReferencePageTests(TestCase):
         self._sign_in()
         self.assertContains(self.client.get(reverse("dashboard")), f'href="{self.url}"')
 
+
+@tag("source")
+class VendoredBundleTests(SimpleTestCase):
+    """The vendored reference bundle against its recorded digest."""
+
     def test_the_vendored_bundle_is_the_recorded_one(self):
         recorded = dict(line.split(": ", 1) for line in (VENDOR / "UPSTREAM").read_text(encoding="utf-8").splitlines())
         digest = hashlib.sha256((VENDOR / "standalone.js").read_bytes()).hexdigest()
         self.assertEqual(digest, recorded["sha256"])
 
 
+@tag("source")
 class ReferenceStyleTests(SimpleTestCase):
     """The viewer is drawn from HQ's tokens, through names the bundle reads."""
 
@@ -120,6 +126,7 @@ class ReferenceStyleTests(SimpleTestCase):
         )
 
 
+@tag("source")
 class ReferenceConfigurationTests(SimpleTestCase):
     """What the page asks of the viewer, read from the script that mounts it."""
 

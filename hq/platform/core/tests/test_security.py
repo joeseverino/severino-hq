@@ -7,13 +7,14 @@ whose loss is invisible in review of the change that causes it.
 """
 
 import re
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
-from django.urls import Resolver404, URLPattern, URLResolver, get_resolver, resolve
+from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings, tag
+from django.urls import Resolver404, URLPattern, URLResolver, get_resolver, resolve, reverse
 from django.urls.resolvers import RoutePattern
 from django.utils import timezone
 
@@ -255,7 +256,7 @@ class SingleSignOnOnlyTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Pocket ID refused HQ&#x27;s client credentials.")
-        self.assertContains(response, "Sign in with single sign-on")
+        self.assertContains(response, f'href="{reverse("oidc_authentication_init")}')
 
     def test_signing_in_goes_straight_to_the_provider(self):
         response = self.client.get("/accounts/login/", REMOTE_ADDR="100.64.0.1")
@@ -430,25 +431,10 @@ class AnonymousSweepTests(TestCase):
         writes a model directly, with no capability, approval or audit
         attribution, so it is not installed, not routed and not registered."""
 
-        from pathlib import Path
-
         from django.apps import apps
 
         self.assertFalse(apps.is_installed("django.contrib.admin"))
         self.assertFalse(any(route.startswith("admin/") for route, _view in _routes()))
-        root = Path(settings.BASE_DIR)
-        imports = re.compile(
-            r"^\s*(from django\.contrib\.admin\b|import django\.contrib\.admin\b"
-            r"|from django\.contrib import [^\n]*\badmin\b)",
-            re.MULTILINE,
-        )
-        registered = [
-            str(path.relative_to(root))
-            for package in ("hq", "hq_sdk")
-            for path in (root / package).rglob("*.py")
-            if imports.search(path.read_text())
-        ]
-        self.assertEqual(registered, [])
         for user in (None, get_user_model().objects.create_superuser("root-example", password="unused-test-pass")):
             client = Client()
             if user is not None:
@@ -902,13 +888,42 @@ class BrowserBoundaryTests(TestCase):
         self.assertIn("trusted-types hq-fragment;", f"{policy};")
         self.assertNotIn("allow-duplicates", policy)
 
+    def test_the_policy_names_somewhere_to_report_a_violation(self):
+        response = self.client.get("/accounts/login/")
+
+        self.assertIn("report-uri /csp-report/", response["Content-Security-Policy"])
+        self.assertIn('csp="/csp-report/"', response["Reporting-Endpoints"])
+
+    def test_nothing_here_may_be_loaded_by_another_origin(self):
+        response = self.client.get("/accounts/login/")
+
+        self.assertEqual(response["Cross-Origin-Resource-Policy"], "same-origin")
+
+
+@tag("source")
+class SourceBoundaryTests(SimpleTestCase):
+    """What the shipped sources may contain, read from the checkout."""
+
+    def test_nothing_imports_the_admin(self):
+        root = Path(settings.BASE_DIR)
+        imports = re.compile(
+            r"^\s*(from django\.contrib\.admin\b|import django\.contrib\.admin\b"
+            r"|from django\.contrib import [^\n]*\badmin\b)",
+            re.MULTILINE,
+        )
+        registered = [
+            str(path.relative_to(root))
+            for package in ("hq", "hq_sdk")
+            for path in (root / package).rglob("*.py")
+            if imports.search(path.read_text())
+        ]
+        self.assertEqual(registered, [])
+
     def test_only_the_shared_helper_turns_a_string_into_markup(self):
         """The directive is worth exactly as much as this stays true.
 
         Any second `DOMParser` is a second sink the policy header cannot see.
         """
-
-        from pathlib import Path
 
         root = Path(__file__).resolve().parents[4] / "static" / "js"
         sources = {path.name: path.read_text("utf-8") for path in root.glob("*.js")}
@@ -924,8 +939,6 @@ class BrowserBoundaryTests(TestCase):
                     )
 
     def test_every_enhanced_request_uses_the_session_renewal_boundary(self):
-        from pathlib import Path
-
         root = Path(__file__).resolve().parents[4] / "static" / "js"
         sources = {path.name: path.read_text("utf-8") for path in root.glob("*.js")}
 
@@ -934,50 +947,26 @@ class BrowserBoundaryTests(TestCase):
             self.assertNotIn("window.fetch(", sources[name], name)
             self.assertNotRegex(sources[name], r"(?<![\w.])fetch\(", name)
 
-    def test_the_policy_names_somewhere_to_report_a_violation(self):
-        response = self.client.get("/accounts/login/")
-
-        self.assertIn("report-uri /csp-report/", response["Content-Security-Policy"])
-        self.assertIn('csp="/csp-report/"', response["Reporting-Endpoints"])
-
-    def test_nothing_here_may_be_loaded_by_another_origin(self):
-        response = self.client.get("/accounts/login/")
-
-        self.assertEqual(response["Cross-Origin-Resource-Policy"], "same-origin")
-
 
 def _directives(policy):
     return [directive.split()[0] for directive in policy.split(";") if directive.strip()]
 
 
 class CookiePrefixTests(SimpleTestCase):
-    """A cookie no neighbouring host can have written."""
+    """A cookie no neighbouring host can have written, on a deployment whose browser will keep it."""
 
-    def test_a_secure_deployment_prefixes_the_cookies_it_sets(self):
-        names = _cookie_names(secure=True)
-
-        self.assertEqual(names, ("__Host-sessionid", "__Host-csrftoken"))
-
-    def test_a_plain_http_deployment_does_not(self):
-        """The browser refuses to store a `__Host-` cookie that is not Secure.
-
-        Hard-coding the prefix would work in production and silently break
-        every plain-HTTP development session, in the way that looks like
-        sign-in is broken rather than like a cookie was rejected.
-        """
-
-        names = _cookie_names(secure=False)
-
-        self.assertEqual(names, ("sessionid", "csrftoken"))
-
-
-def _cookie_names(*, secure):
-    """The names settings.py derives, evaluated the way settings.py does."""
-
-    return (
-        "__Host-sessionid" if secure else "sessionid",
-        "__Host-csrftoken" if secure else "csrftoken",
-    )
+    def test_a_cookie_carries_the_host_prefix_exactly_when_it_is_secure(self):
+        # A browser refuses a `__Host-` cookie that is not Secure, scoped to a
+        # domain, or narrower than the whole site.
+        for name, secure in (
+            (settings.SESSION_COOKIE_NAME, settings.SESSION_COOKIE_SECURE),
+            (settings.CSRF_COOKIE_NAME, settings.CSRF_COOKIE_SECURE),
+        ):
+            with self.subTest(cookie=name):
+                self.assertIs(name.startswith("__Host-"), bool(secure))
+        if settings.SESSION_COOKIE_SECURE:
+            self.assertIsNone(settings.SESSION_COOKIE_DOMAIN)
+            self.assertEqual(settings.SESSION_COOKIE_PATH, "/")
 
 
 @override_settings(SEVERINO_TRUSTED_NETWORKS=["100.64.0.0/10", "127.0.0.0/8"])
@@ -1036,8 +1025,9 @@ class PolicyReportTests(TestCase):
             ' "blocked-uri": "https://evil.test/%s"}}' % ("a" * 2_000)
         )
 
-        event = AuditLog.objects.get(object_type="ContentSecurityPolicy")
-        self.assertEqual(len(event.metadata["blocked"]), 200)
+        blocked = AuditLog.objects.get(object_type="ContentSecurityPolicy").metadata["blocked"]
+        self.assertTrue(blocked.startswith("https://evil.test/"))
+        self.assertLess(len(blocked), 2_000)
 
     def test_it_is_not_a_readable_surface(self):
         self.assertEqual(self.client.get("/csp-report/").status_code, 405)
@@ -1084,3 +1074,64 @@ class CanonicalEntryTests(TestCase):
             response = self.client.get("/health/ready/", REMOTE_ADDR="127.0.0.1")
 
         self.assertEqual(response.status_code, 200)
+
+
+class SafeNextTests(SimpleTestCase):
+    """Where `next` may send a caller: back to this host, and within a scope when one is given."""
+
+    def destination(self, next_, *, scope="", secure=False, method="get"):
+        from hq.platform.application.security import safe_next
+
+        request = getattr(RequestFactory(), method)("/", {"next": next_}, secure=secure)
+        return safe_next(request, fallback="/fallback/", scope=scope)
+
+    def test_what_is_honoured_and_what_falls_back(self):
+        cases = (
+            ("/calendar/2026/", "", True),
+            ("/expenses/", "", True),
+            ("/calendar/2026/", "/calendar/", True),
+            ("/expenses/", "/calendar/", False),
+            ("https://example.net/calendar/", "/calendar/", False),
+            ("//example.net/calendar/", "", False),
+            ("https://example.net/", "", False),
+            ("", "", False),
+        )
+        for next_, scope, honoured in cases:
+            with self.subTest(next=next_, scope=scope):
+                self.assertEqual(self.destination(next_, scope=scope), next_ if honoured else "/fallback/")
+
+    def test_a_secure_request_is_not_sent_back_over_plain_http(self):
+        self.assertEqual(self.destination("http://testserver/expenses/", secure=True), "/fallback/")
+        self.assertEqual(self.destination("https://testserver/expenses/", secure=True), "https://testserver/expenses/")
+
+    def test_a_form_names_its_destination_in_its_body(self):
+        self.assertEqual(self.destination("/expenses/", method="post"), "/expenses/")
+
+
+MCP_SWITCHES = (
+    "SEVERINO_MCP_ENABLE_WRITES",
+    "SEVERINO_MCP_ENABLE_DOC_SYNC",
+    "SEVERINO_MCP_ENABLE_PRUNE",
+    "SEVERINO_MCP_ENABLE_DELETES",
+    "SEVERINO_MCP_ENABLE_INFRASTRUCTURE",
+    "SEVERINO_MCP_ENABLE_CERT_RENEWAL",
+    "SEVERINO_MCP_ENABLE_LOOKUP",
+    "SEVERINO_MCP_ENABLE_CALENDAR",
+)
+
+
+class McpCeilingTests(SimpleTestCase):
+    def test_a_switch_left_unset_is_off(self):
+        from hq.platform.application.security import mcp_principal
+
+        for on in ((), ("SEVERINO_MCP_ENABLE_WRITES",), ("SEVERINO_MCP_ENABLE_WRITES", "SEVERINO_MCP_ENABLE_DELETES")):
+            rest = [name for name in MCP_SWITCHES if name not in on]
+            with self.subTest(on=on):
+                with override_settings(**dict.fromkeys(on, True), **dict.fromkeys(rest, False)):
+                    switched_off = mcp_principal().capabilities
+                with override_settings(**dict.fromkeys(on, True)):
+                    for name in rest:
+                        delattr(settings, name)
+                    unset = mcp_principal().capabilities
+
+                self.assertEqual(unset, switched_off)

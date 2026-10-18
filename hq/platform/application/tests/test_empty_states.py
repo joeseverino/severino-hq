@@ -3,7 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.template.loader import render_to_string
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -28,28 +28,6 @@ def _templates():
 
 class OneEmptyStateTests(SimpleTestCase):
     """An empty state is drawn by the one partial, so it reads the same everywhere."""
-
-    def test_only_the_partial_draws_an_empty_state(self):
-        for name, text in _templates():
-            if name == PARTIAL:
-                continue
-            with self.subTest(template=name):
-                self.assertNotRegex(text, r'class="empty[ "]', "include partials/_empty_state.html instead")
-                self.assertNotIn("{% block empty %}", text, "a list says what empty means with table_empty")
-
-    def test_an_empty_state_is_one_line_and_one_remedy(self):
-        include = re.compile(r'\{% include "partials/_empty_state\.html"(.*?)%\}', re.DOTALL)
-        for name, text in _templates():
-            for arguments in include.findall(text):
-                with self.subTest(template=name, arguments=arguments):
-                    self.assertNotIn("compact=", arguments, "the surface rule frames it, or not")
-                    self.assertIn("message=", arguments)
-
-    def test_no_page_names_an_identity_provider(self):
-        comment = re.compile(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", re.DOTALL)
-        for name, text in _templates():
-            with self.subTest(template=name):
-                self.assertNotIn("Pocket ID", comment.sub("", text), "say 'your sign-in'; HQ works with any")
 
     def test_it_is_a_card_holding_one_paragraph(self):
         html = render_to_string(
@@ -78,6 +56,33 @@ class OneEmptyStateTests(SimpleTestCase):
         )["page"]
 
         self.assertEqual(page.remedy.label, "New asset")
+
+
+@tag("source")
+class EmptyStateTemplateTests(SimpleTestCase):
+    """Templates draw an empty state only through the partial."""
+
+    def test_only_the_partial_draws_an_empty_state(self):
+        for name, text in _templates():
+            if name == PARTIAL:
+                continue
+            with self.subTest(template=name):
+                self.assertNotRegex(text, r'class="empty[ "]', "include partials/_empty_state.html instead")
+                self.assertNotIn("{% block empty %}", text, "a list says what empty means with table_empty")
+
+    def test_an_empty_state_is_one_line_and_one_remedy(self):
+        include = re.compile(r'\{% include "partials/_empty_state\.html"(.*?)%\}', re.DOTALL)
+        for name, text in _templates():
+            for arguments in include.findall(text):
+                with self.subTest(template=name, arguments=arguments):
+                    self.assertNotIn("compact=", arguments, "the surface rule frames it, or not")
+                    self.assertIn("message=", arguments)
+
+    def test_no_page_names_an_identity_provider(self):
+        comment = re.compile(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", re.DOTALL)
+        for name, text in _templates():
+            with self.subTest(template=name):
+                self.assertNotIn("Pocket ID", comment.sub("", text), "say 'your sign-in'; HQ works with any")
 
 
 class PageReadsTests(TestCase):

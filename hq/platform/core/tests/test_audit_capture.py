@@ -499,15 +499,11 @@ class SameRecordTests(TestCase):
         self.assertEqual(actual_queries, expected_queries)
         return actual
 
-    def test_every_script_leaves_the_same_rows_as_registered(self):
-        for script in SCRIPTS:
-            with self.subTest(script=script.__name__):
-                self.assert_same(AS_REGISTERED, script)
-
-    def test_every_script_leaves_the_same_rows_with_secret_fields(self):
-        for script in SCRIPTS:
-            with self.subTest(script=script.__name__):
-                self.assert_same(WITH_SECRETS, script)
+    def test_every_script_leaves_the_same_rows_as_registered_and_with_secret_fields(self):
+        for registered, options in (("as registered", AS_REGISTERED), ("with secrets", WITH_SECRETS)):
+            for script in SCRIPTS:
+                with self.subTest(registered, script=script.__name__):
+                    self.assert_same(options, script)
 
     def test_the_scripts_use_the_models_the_host_audits(self):
         labels = audited_labels()
@@ -554,12 +550,16 @@ class RecordedChangeTests(TestCase):
             ],
         )
 
-    def test_values_are_shown_as_text_the_log_can_store(self):
-        changed = self.changes(AS_REGISTERED, create_update_delete)[0]
+    def test_values_are_shown_as_text_and_the_connection_and_reason_are_recorded(self):
+        rows, _ = run(register_audit, AS_REGISTERED, create_update_delete)
+        changed = next(row[6]["changes"] for row in rows if row[0] == AuditLog.Action.UPDATED)
         self.assertEqual(changed["total_cost"], ["10.00", "12.50"])
         self.assertEqual(changed["date"], ["2026-01-02", "2026-02-03"])
         self.assertEqual(changed["business_use_percentage"], [100, 50])
         self.assertEqual(changed["notes"], ["", "n" * 200])
+        by_type = {(row[1], row[0]): row for row in rows}
+        self.assertEqual(by_type[("Expense", AuditLog.Action.DELETED)][4], "Entered twice")
+        self.assertEqual(by_type[("Managed resource", AuditLog.Action.UPDATED)][5], "example-dns")
 
     def test_a_secret_field_is_named_and_its_values_withheld(self):
         changed = self.changes(WITH_SECRETS, create_update_delete)[0]
@@ -612,12 +612,6 @@ class RecordedChangeTests(TestCase):
                 (AuditLog.Action.DELETED, None),
             ],
         )
-
-    def test_the_connection_and_the_reason_are_recorded(self):
-        rows, _ = run(register_audit, AS_REGISTERED, create_update_delete)
-        by_type = {(row[1], row[0]): row for row in rows}
-        self.assertEqual(by_type[("Expense", AuditLog.Action.DELETED)][4], "Entered twice")
-        self.assertEqual(by_type[("Managed resource", AuditLog.Action.UPDATED)][5], "example-dns")
 
 
 class ReadCostTests(TestCase):

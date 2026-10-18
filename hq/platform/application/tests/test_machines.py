@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import (
     ManagedResource,
@@ -128,16 +129,13 @@ class TieTests(TestCase):
         self.assertEqual(len(found.containers), 2)
         self.assertEqual(found.running, 1)
 
-    def test_a_credential_that_answered_makes_the_machine_reachable(self):
+    def test_a_machine_is_reachable_while_its_credential_answers(self):
         self.assertTrue(machine("a-docker-host").reachable)
+        self.assertIsNone(machine("nowhere"))
 
-    def test_a_credential_that_did_not_answer_does_not(self):
         ProviderConnection.objects.update(reachable=False)
 
         self.assertFalse(machine("a-docker-host").reachable)
-
-    def test_an_unreported_name_is_not_a_machine(self):
-        self.assertIsNone(machine("nowhere"))
 
 
 class MachinePageTests(TestCase):
@@ -209,14 +207,11 @@ class DeclaredMachineTests(TestCase):
 
         return machine("a-laptop")
 
-    def test_it_appears_without_anything_reaching_it(self):
-        self.assertIsNotNone(self.machine())
+    def test_it_appears_without_anything_reaching_it_as_it_was_declared(self):
+        found = self.machine()
 
-    def test_it_links_the_declaration_that_describes_it(self):
-        self.assertEqual(self.machine().declaration, "a-laptop")
-
-    def test_it_shows_an_address_it_was_told_about(self):
-        self.assertEqual(self.machine().address, "10.0.0.5")
+        self.assertEqual(found.declaration, "a-laptop")
+        self.assertEqual(found.address, "10.0.0.5")
 
     def test_it_projects_telemetry_from_the_same_declaration(self):
         from django.utils import timezone
@@ -360,11 +355,12 @@ class TailnetPresenceTests(TestCase):
 
         self.assertEqual(tailnet_presence()["a-relayed-peer"].peer_path, "relayed")
 
-    def test_a_route_offered_and_never_approved_is_named_as_unapproved(self):
+    def test_only_a_route_offered_and_never_approved_is_named_as_unapproved(self):
         """The silent failure. `--advertise-routes` succeeds, the machine
         reports the route for as long as it runs, and the coordination server
         hands it to nobody, so a subnet route can be configured, documented,
-        believed, and dead, with every side of it reporting success."""
+        believed, and dead, with every side of it reporting success. A queue
+        entry per machine that routes nothing would be every machine."""
 
         from ..tailnet_presence import tailnet_presence
 
@@ -375,59 +371,33 @@ class TailnetPresenceTests(TestCase):
                 "enabled_routes": ["198.51.100.0/24"],
                 "offers_exit_node": True,
                 "exit_node_approved": False,
-            }
-        )
-
-        presence = tailnet_presence()["a-router"]
-
-        self.assertEqual(presence.unapproved_routes, ("0.0.0.0/0", "::/0"))
-        self.assertTrue(presence.offers_exit_node)
-        self.assertFalse(presence.exit_node_approved)
-
-    def test_a_machine_advertising_nothing_raises_nothing(self):
-        """A queue entry per machine that routes nothing would be every machine."""
-
-        from ..tailnet_presence import tailnet_presence
-
-        self.sweep(self.device("a-laptop"))
-
-        self.assertEqual(tailnet_presence()["a-laptop"].unapproved_routes, ())
-
-    def test_every_advertised_route_approved_is_silent(self):
-        from ..tailnet_presence import tailnet_presence
-
-        self.sweep(
+            },
             {
-                **self.device("a-router"),
+                **self.device("an-approved-router"),
                 "advertised_routes": ["198.51.100.0/24"],
                 "enabled_routes": ["198.51.100.0/24"],
-            }
+            },
+            self.device("a-laptop"),
         )
 
-        self.assertEqual(tailnet_presence()["a-router"].unapproved_routes, ())
+        found = tailnet_presence()
 
-    def test_a_machine_only_the_tailnet_knows_is_still_a_machine(self):
+        self.assertEqual(found["a-router"].unapproved_routes, ("0.0.0.0/0", "::/0"))
+        self.assertTrue(found["a-router"].offers_exit_node)
+        self.assertFalse(found["a-router"].exit_node_approved)
+        self.assertEqual(found["an-approved-router"].unapproved_routes, ())
+        self.assertEqual(found["a-laptop"].unapproved_routes, ())
+
+    def test_a_machine_only_the_tailnet_knows_is_a_machine_on_or_off(self):
         from ..machines import machine
 
-        self.sweep(self.device("a-laptop"))
+        for online in (True, False):
+            with self.subTest(online=online):
+                self.sweep(self.device("a-laptop", online=online))
 
-        self.assertIsNotNone(machine("a-laptop"))
-
-    def test_it_reports_being_on_the_tailnet(self):
-        from ..machines import machine
-
-        self.sweep(self.device("a-laptop", online=True))
-
-        self.assertTrue(machine("a-laptop").presence.online)
-
-    def test_a_machine_that_is_off_says_so_rather_than_going_missing(self):
-        from ..machines import machine
-
-        self.sweep(self.device("a-laptop", online=False))
-
-        found = machine("a-laptop")
-        self.assertIsNotNone(found)
-        self.assertFalse(found.presence.online)
+                found = machine("a-laptop")
+                self.assertIsNotNone(found)
+                self.assertEqual(found.presence.online, online)
 
     def test_a_machine_with_no_tailnet_record_has_no_presence(self):
         from hq.domains.control_plane.models import ManagedResource
@@ -542,21 +512,19 @@ class OneMachineManyNamesTests(TestCase):
 
         return [found.name for found in machine_catalog()]
 
-    def test_the_tailnet_name_does_not_become_a_second_machine(self):
-        self.assertNotIn("Someone's Laptop", self.names())
+    def test_the_name_hq_already_uses_is_kept_and_the_tailnet_name_is_not_a_second_machine(self):
+        """A machine HQ has no address for stays its own row: HQ declining to claim two things are one."""
 
-    def test_the_name_hq_already_uses_is_the_one_kept(self):
-        self.assertIn("a-laptop", self.names())
+        names = self.names()
+
+        self.assertIn("a-laptop", names)
+        self.assertNotIn("Someone's Laptop", names)
+        self.assertIn("a-stranger", names)
 
     def test_presence_follows_the_machine_rather_than_the_name(self):
         from ..machines import machine
 
         self.assertTrue(machine("a-laptop").presence.online)
-
-    def test_a_machine_hq_has_no_address_for_stays_its_own_row(self):
-        """Not a missed duplicate: HQ declining to claim two things are one."""
-
-        self.assertIn("a-stranger", self.names())
 
 
 class WhoeverSweptTests(TestCase):
@@ -590,21 +558,16 @@ class WhoeverSweptTests(TestCase):
             }
         )
 
-    def test_the_containers_are_on_the_machine_running_them(self):
+    def test_the_containers_are_on_the_machine_running_them_under_its_declared_name(self):
+        """The sweep's name is kept as an alias: discarding it would leave nothing explaining the fold."""
+
         found = machine("a-docker-host")
+        names = [item.name for item in machine_catalog()]
 
         self.assertEqual([item.name for item in found.containers], ["a-service"])
-
-    def test_the_machine_that_swept_does_not_become_a_second_row(self):
-        self.assertNotIn("a-laptop-that-swept", [found.name for found in machine_catalog()])
-
-    def test_the_declared_name_is_the_one_kept(self):
-        self.assertIn("a-docker-host", [found.name for found in machine_catalog()])
-
-    def test_the_name_the_sweep_used_is_kept_as_an_alias(self):
-        """Discarding it would leave nothing explaining the fold."""
-
-        self.assertIn("a-laptop-that-swept", machine("a-docker-host").aliases)
+        self.assertIn("a-laptop-that-swept", found.aliases)
+        self.assertIn("a-docker-host", names)
+        self.assertNotIn("a-laptop-that-swept", names)
 
     def test_another_name_finds_the_machine_and_its_page_redirects_there(self):
         from django.contrib.auth import get_user_model
@@ -722,13 +685,13 @@ class ObservedAddressAnnotationTests(TestCase):
 
         return machine_address_notes()["addresses"]
 
-    def test_an_address_the_tailnet_reports_is_marked_as_seen(self):
-        self.assertIn("100.101.102.103", self._notes())
+    def test_only_an_address_the_tailnet_reports_is_marked_as_seen(self):
+        """One nothing reports is not unverified: it is the only place that address exists."""
 
-    def test_an_address_nothing_reports_is_left_unmarked(self):
-        """It is not unverified. It is the only place that address exists."""
+        notes = self._notes()
 
-        self.assertNotIn("192.0.2.50", self._notes())
+        self.assertIn("100.101.102.103", notes)
+        self.assertNotIn("192.0.2.50", notes)
 
     def test_the_form_carries_the_marks_onto_the_field(self):
         from hq.platform.application.provider_forms import spec_form_class
@@ -740,21 +703,27 @@ class ObservedAddressAnnotationTests(TestCase):
             "seen on the tailnet",
         )
 
-    def test_a_machine_still_declares_an_address_nothing_can_see(self):
-        """The printer case, which is why this is annotated and not locked."""
+    def test_a_save_keeps_both_an_address_nothing_can_see_and_one_it_did_not_ask_about(self):
+        """The printer case is why this is annotated and not locked; an observed
+        address rendered read-only still has to come back on submit."""
 
         from hq.platform.application.provider_forms import spec_form_class
 
-        form = spec_form_class("machine")(data={"name": "laserjet", "addresses": ["192.0.2.137"]})
+        cases = (
+            ({"name": "laserjet", "addresses": ["192.0.2.137"]}, ["192.0.2.137"]),
+            ({"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]}, ["192.0.2.50", "100.101.102.103"]),
+        )
+        for data, kept in cases:
+            with self.subTest(data["name"]):
+                form = spec_form_class("machine")(data=data)
 
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.spec["addresses"], ["192.0.2.137"])
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertCountEqual(form.spec["addresses"], kept)
 
-    def test_an_observed_address_is_not_offered_for_removal(self):
-        """HQ holds it whether or not this field does.
-
-        Offering to remove it would be offering to delete a fact, and the
-        tailnet's addresses in the index are what resolution relies on.
+    def test_an_observed_address_comes_first_and_is_not_offered_for_removal(self):
+        """HQ holds it whether or not this field does, and it is where the machine
+        answers. Offering to remove it would be offering to delete a fact, and
+        the tailnet's addresses in the index are what resolution relies on.
         """
 
         from hq.platform.application.provider_forms import spec_form_class
@@ -762,43 +731,10 @@ class ObservedAddressAnnotationTests(TestCase):
         form = spec_form_class("machine")(initial={"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]})
         rendered = str(form["addresses"])
 
+        self.assertLess(rendered.index("100.101.102.103"), rendered.index("192.0.2.50"))
         self.assertIn('value="100.101.102.103"', rendered)
         self.assertIn('aria-label="Remove 192.0.2.50"', rendered)
         self.assertNotIn('aria-label="Remove 100.101.102.103"', rendered)
-
-    def test_a_save_keeps_the_observed_address_it_did_not_ask_about(self):
-        """Rendered read-only, it still has to come back on submit."""
-
-        from hq.platform.application.provider_forms import spec_form_class
-
-        form = spec_form_class("machine")(
-            data={
-                "name": "a-box",
-                "addresses": ["192.0.2.50", "100.101.102.103"],
-            }
-        )
-
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertIn("100.101.102.103", form.spec["addresses"])
-
-    def test_what_hq_found_comes_before_what_only_this_field_records(self):
-        """The observed address is where the machine actually answers.
-
-        A read-only row between two inputs also pushed the blank row for adding
-        one away from the rest of them.
-        """
-
-        from hq.platform.application.provider_forms import spec_form_class
-
-        form = spec_form_class("machine")(
-            initial={
-                "name": "a-box",
-                "addresses": ["192.0.2.50", "100.101.102.103"],
-            }
-        )
-        rendered = str(form["addresses"])
-
-        self.assertLess(rendered.index("100.101.102.103"), rendered.index("192.0.2.50"))
 
 
 class IdentifierIsFixedTests(TestCase):
@@ -899,7 +835,7 @@ class OneStateTests(TestCase):
 
         listing = self.client.get(reverse("control_plane:machines"))
 
-        self.assertContains(listing, '<code>example-ssh</code></a> <span class="muted">not answering</span>')
+        self.assertIn("example-ssh not answering", " ".join(strip_tags(listing.content.decode()).split()))
 
     def test_nothing_reaching_it_says_so(self):
         containers({"name": "probe", "host": "somewhere", "state": "running"})

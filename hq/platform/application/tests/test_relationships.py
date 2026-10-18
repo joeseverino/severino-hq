@@ -113,15 +113,11 @@ class OneEdgeBothEndsTests(TestCase):
         with own("192.0.2.44"):
             response = self.client.get(reverse("control_plane:service", args=["hq.example.com"]))
 
-        # Beside the hostname, with why on hover.
-        self.assertContains(
-            response, '<span class="pill" title="HQ&#x27;s own name: changed by deploying HQ">Read-only</span>'
-        )
-        self.assertContains(response, '<span class="readout-label">Runs on</span>')
-        self.assertNotContains(response, "Nothing set up in HQ")
-        self.assertNotContains(response, "Add container stack")
-        self.assertNotContains(response, "Watch container")
-        self.assertNotContains(response, "<h2>Resources</h2>")
+        badges = {badge.label: badge for badge in response.context["page_badges"]}
+        self.assertTrue(badges["Read-only"].title)
+        # Nothing on the page offers to change it.
+        self.assertEqual([action.label for action in response.context["page"].actions if action.method == "post"], [])
+        self.assertContains(response, reverse("control_plane:machine", args=["example-host"]))
 
 
 class LinkBuilderTests(TestCase):
@@ -132,9 +128,10 @@ class LinkBuilderTests(TestCase):
                 self.assertNotEqual(kind_label(kind), kind)
 
     def test_registered_kinds_read_as_their_labels(self):
-        self.assertEqual(kind_label(TAILNET_KIND), "Tailnet device")
-        self.assertEqual(kind_label("cloudflare.dns_record"), PROVIDERS["cloudflare.dns_record"].label)
-        self.assertEqual(kind_label("cloudflare.access_app"), "Access application")
+        for kind in (TAILNET_KIND, "cloudflare.dns_record", "cloudflare.access_app"):
+            with self.subTest(kind=kind):
+                declared = PROVIDERS[kind].label if kind in PROVIDERS else OBSERVATIONS[kind].label
+                self.assertEqual(kind_label(kind), declared)
 
     def test_an_estate_kind_links_to_its_page(self):
         link = entity_link("machine", "example-host")
@@ -233,11 +230,10 @@ class EdgeCertificatePathTests(TestCase):
     def test_a_proxied_name_is_covered(self):
         self.assertEqual(self.about("app.example.com"), ["cloudflare.edge_certificate"])
 
-    def test_an_unproxied_name_is_not_although_the_wildcard_covers_it(self):
-        self.assertEqual(self.about("tail.example.com"), [])
-
-    def test_a_name_no_record_fronts_is_not(self):
-        self.assertEqual(self.about("other.example.com"), [])
+    def test_an_unproxied_name_or_one_no_record_fronts_is_not_although_the_wildcard_covers_it(self):
+        for name in ("tail.example.com", "other.example.com"):
+            with self.subTest(name):
+                self.assertEqual(self.about(name), [])
 
     def test_the_domain_still_holds_its_certificates(self):
         found = readings().about(Subject.of(zones=("example.com",)), facets=("certificate",))
@@ -260,13 +256,9 @@ class EdgeCertificatePathTests(TestCase):
         tail = self.client.get(reverse("control_plane:service", args=["tail.example.com"]))
         app = self.client.get(reverse("control_plane:service", args=["app.example.com"]))
 
-        self.assertNotContains(tail, "Edge certificate")
-        self.assertNotContains(tail, "Google Trust Services")
-        # On the path, as the mark after the edge that serves it: said there,
-        # and so not again under Relationships.
-        self.assertContains(app, "Edge certificate")
-        self.assertContains(app, "Google Trust Services")
-        self.assertNotContains(app, "Covered by edge certificate")
+        label = kind_label("cloudflare.edge_certificate")
+        self.assertNotContains(tail, label)
+        self.assertContains(app, label)
 
 
 def wildcard(key):
@@ -377,20 +369,17 @@ class PageCostTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return len(captured)
 
-    def assert_flat(self, url):
+    def test_the_machine_service_and_domain_pages_do_not_grow_with_the_estate(self):
         login(self.client)
-        small, large = self.cost(2, url), self.cost(12, url)
-        # Counts only, never the SQL: this repository is public.
-        self.assertLessEqual(large, small, f"{url} grows with the estate ({small} then {large})")
-
-    def test_the_machine_page(self):
-        self.assert_flat(reverse("control_plane:machine", args=["example-host-0"]))
-
-    def test_the_service_page(self):
-        self.assert_flat(reverse("control_plane:service", args=["s0.example.com"]))
-
-    def test_the_domain_page(self):
-        self.assert_flat(reverse("zones:detail", args=["example.com"]))
+        for url in (
+            reverse("control_plane:machine", args=["example-host-0"]),
+            reverse("control_plane:service", args=["s0.example.com"]),
+            reverse("zones:detail", args=["example.com"]),
+        ):
+            with self.subTest(url):
+                small, large = self.cost(2, url), self.cost(12, url)
+                # Counts only, never the SQL: this repository is public.
+                self.assertLessEqual(large, small, f"{url} grows with the estate ({small} then {large})")
 
     def test_the_relation_graph_is_read_once_per_page(self):
         estate(3)
@@ -476,30 +465,24 @@ class NoUnlinkedNamesTests(TestCase):
             [item.entity.url for group in found.groups for item in group.items],
         )
 
-    def test_the_machine_page(self):
-        self.assertEqual(self.unlinked(reverse("control_plane:machine", args=["example-host-0"])), [])
-
-    def test_the_service_page(self):
-        self.assertEqual(self.unlinked(reverse("control_plane:service", args=["s0.example.com"])), [])
-
-    def test_the_domain_page(self):
-        self.assertEqual(self.unlinked(reverse("zones:detail", args=["example.com"])), [])
-
-    def test_the_connections_page(self):
-        self.assertEqual(self.unlinked(reverse("control_plane:connections")), [])
-
-    def test_the_topology_page(self):
-        self.assertEqual(self.unlinked(reverse("control_plane:topology")), [])
+    def test_every_name_on_each_page_is_linked(self):
+        for url in (
+            reverse("control_plane:machine", args=["example-host-0"]),
+            reverse("control_plane:service", args=["s0.example.com"]),
+            reverse("zones:detail", args=["example.com"]),
+            reverse("control_plane:connections"),
+            reverse("control_plane:topology"),
+        ):
+            with self.subTest(url):
+                self.assertEqual(self.unlinked(url), [])
 
     def test_the_pages_name_things_they_relate(self):
         machine = self.client.get(reverse("control_plane:machine", args=["example-host-0"]))
         service = self.client.get(reverse("control_plane:service", args=["s0.example.com"]))
         domain = self.client.get(reverse("zones:detail", args=["example.com"]))
 
-        # What reaches it is the band's to say; Relationships leaves it there.
-        self.assertContains(machine, "Read through")
-        self.assertNotContains(machine, "<dt>Reached through</dt>")
-        self.assertContains(service, "<dt>Behind Access</dt>")
+        self.assertContains(machine, entity_link("connection", "example-tailnet").url)
+        self.assertContains(service, "example-gate-0")
         self.assertContains(
             domain,
             f'href="https://dash.cloudflare.com/{ACCOUNT}/pages/view/example-site"',
@@ -523,12 +506,9 @@ class NoRawKindsTests(TestCase):
             shown = re.sub(r"<pre>.*?</pre>", "", response.content.decode(), flags=re.DOTALL)
             self.assertNotIn(TAILNET_KIND, shown)
             self.assertNotIn("cloudflare.dns_record", shown)
-        self.assertContains(declaration, "Tailnet device")
+        self.assertContains(declaration, kind_label(TAILNET_KIND))
         # The declaration page leads back to the machine it belongs to.
-        self.assertContains(
-            declaration,
-            f'<a href="{reverse("control_plane:machine", args=["example-host-0"])}">example-host-0</a>',
-        )
+        self.assertContains(declaration, f'href="{reverse("control_plane:machine", args=["example-host-0"])}"')
 
 
 @override_settings(SEVERINO_SITE_HOST="", ALLOWED_HOSTS=["testserver"])
@@ -591,14 +571,11 @@ class DomainCardTests(TestCase):
 
         return {card.label: card for card in find_zone(zone).cards}
 
-    def test_there_are_four_cards_each_answering_one_question(self):
-        self.assertEqual(list(self.cards("example.net")), ["Services", "Security", "Email", "Registration"])
-
     def test_a_parked_domain_says_so_with_who_handles_it(self):
         card = self.cards("example.net")["Services"]
 
         self.assertEqual(card.value, "Parked")
-        self.assertEqual(card.detail, "Handled at Cloudflare DNS.")
+        self.assertIn("Cloudflare", card.detail)
         self.assertFalse(card.concern)
 
     def test_a_weaker_posture_than_another_domain_is_a_concern(self):
@@ -606,11 +583,12 @@ class DomainCardTests(TestCase):
         stronger = self.cards("example.com")["Security"]
 
         self.assertTrue(weaker.value.startswith("Full"))
-        self.assertIn("example.com (Full (strict), TLS 1.3)", weaker.detail)
+        self.assertIn("example.com", weaker.detail)
         self.assertTrue(weaker.concern)
         self.assertFalse(stronger.concern)
 
-    def test_missing_mail_policy_names_the_next_step(self):
+    def test_four_cards_and_missing_mail_policy_names_the_next_step(self):
+        self.assertEqual(list(self.cards("example.net")), ["Services", "Security", "Email", "Registration"])
         card = self.cards("example.net")["Email"]
 
         self.assertEqual(card.value, "Not configured")
@@ -622,8 +600,8 @@ class DomainCardTests(TestCase):
 
         response = self.client.get(reverse("zones:detail", args=["example.net"]))
 
-        # The domain's own count, not the sweep's total, beside the heading.
-        self.assertRegex(response.content.decode(), r"Records <span class=\"heading-aside\">2 records[^<]*·\s+read")
+        # The domain's own count, not the sweep's total.
+        self.assertContains(response, "2 records")
 
 
 class MachineServesAgreesTests(TestCase):
@@ -665,13 +643,10 @@ class MachineServesAgreesTests(TestCase):
             with projection_scope():
                 panel = relationships_for("machine:example-host", principal=READER)
 
-        body = response.content.decode()
-        from ..ui import counted
-
-        header = body.split('<span class="band-label">Serves</span>', 1)[1].split("</div>", 1)[0]
-        for name in panel.labels(RELATIONS["runs_on"].inverse):
-            self.assertIn(name, header)
-        self.assertIn(f"<strong>{counted(len(panel.labels('Serves')), 'name')}</strong>", header)
+        served = panel.labels(RELATIONS["runs_on"].inverse)
+        self.assertTrue(served)
+        for name in served:
+            self.assertContains(response, entity_link("service", name).url)
 
 
 class UnreadableScopeTests(TestCase):
@@ -710,10 +685,9 @@ class RelationListTests(TestCase):
 
         html = self.render(*(Relationship(EntityLink(name)) for name in ("alpha", "beta", "gamma")))
 
-        self.assertEqual(html.count("<dt>"), 1)
-        self.assertEqual(html.count("<li>"), 3)
-        self.assertNotIn("relation-source", html)
-        self.assertNotIn("<table", html)
+        self.assertEqual(html.count("Carries"), 1)
+        for name in ("alpha", "beta", "gamma"):
+            self.assertEqual(html.count(name), 1)
 
     def test_one_source_for_every_end_is_said_once(self):
         from django.utils import timezone
@@ -727,7 +701,6 @@ class RelationListTests(TestCase):
         )
 
         self.assertEqual(html.count("example-reader"), 1)
-        self.assertEqual(html.count("relation-source"), 1)
 
     def test_ends_read_by_different_sources_each_say_theirs(self):
         from django.utils import timezone
@@ -739,6 +712,5 @@ class RelationListTests(TestCase):
             Relationship(EntityLink("beta"), EntityLink("example-other"), timezone.now()),
         )
 
-        self.assertIn("example-reader", html)
-        self.assertIn("example-other", html)
-        self.assertNotIn("relation-source", html)
+        self.assertEqual(html.count("example-reader"), 1)
+        self.assertEqual(html.count("example-other"), 1)

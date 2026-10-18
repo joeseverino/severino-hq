@@ -33,6 +33,12 @@ def site_label() -> str:
     return str(getattr(settings, "SEVERINO_SITE_NAME", "") or "")
 
 
+def site_host() -> str:
+    """The name HQ is reached at, as the deployment declares it."""
+
+    return str(getattr(settings, "SEVERINO_SITE_HOST", "") or "")
+
+
 def __getattr__(name: str) -> str:
     # ``LABEL`` reads the setting when it is imported, for callers that import it.
     if name == "LABEL":

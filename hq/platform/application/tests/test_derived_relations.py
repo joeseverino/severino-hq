@@ -17,11 +17,8 @@ from ..entity_links import entity_link
 from ..resource_context import RecordStatus, record_list
 from ..security import cli_principal
 from ..services import certificate_use
+from .host_only import host_only
 from .test_relationships import connected, estate
-
-
-def host_only():
-    return mock.patch("hq.platform.application.domains.extension_domains", return_value=())
 
 
 class NamedBacklogTests(TestCase):
@@ -66,7 +63,7 @@ class ConnectionRowsTests(TestCase):
         ProviderConnection.objects.filter(connection_ref="example-broken").update(reachable=False)
 
     def context(self):
-        with host_only(), mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             return connections_context(principal=cli_principal())
 
     def test_every_connection_sits_under_the_part_of_hq_that_uses_it(self):

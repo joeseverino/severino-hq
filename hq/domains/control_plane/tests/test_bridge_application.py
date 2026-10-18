@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 from django.urls import Resolver404, resolve
 from jsonschema import Draft202012Validator
 
@@ -352,6 +352,30 @@ class ReachabilityTests(TestCase):
                 with self.subTest(path=path, method=method):
                     self.assertEqual(bridge_client.request(path, method=method).status, 404)
 
+    def test_without_a_socket_named_no_bridge_is_served(self):
+        import asyncio
+
+        from hq.config import asgi
+
+        async def entered() -> bool:
+            with patch("hq.platform.core.unix_server.serving") as serving:
+                async with asgi.bridge_serving():
+                    return serving.called
+
+        with self.settings(SEVERINO_BRIDGE_SOCKET=""):
+            self.assertFalse(asyncio.run(entered()))
+
+    def test_a_request_is_json_and_sorted_as_the_controller_reads_it(self):
+        answer = bridge_client.request("/registry")
+        self.assertEqual(answer.status, 200)
+        self.assertEqual(answer.media_type, "application/json")
+        self.assertEqual(answer.body, json.dumps(answer.json(), sort_keys=True).encode())
+
+
+@tag("source")
+class ListenerSourceTests(SimpleTestCase):
+    """Which listener is handed the bridge, read from the launcher source."""
+
     def test_only_the_socket_listener_is_given_the_bridge_application(self):
         """Source rule: one module hands the application to a listener, and it is the Unix one."""
 
@@ -375,22 +399,3 @@ class ReachabilityTests(TestCase):
                 "async with serving(bridge_application, settings.SEVERINO_BRIDGE_SOCKET):",
             ],
         )
-
-    def test_without_a_socket_named_no_bridge_is_served(self):
-        import asyncio
-
-        from hq.config import asgi
-
-        async def entered() -> bool:
-            with patch("hq.platform.core.unix_server.serving") as serving:
-                async with asgi.bridge_serving():
-                    return serving.called
-
-        with self.settings(SEVERINO_BRIDGE_SOCKET=""):
-            self.assertFalse(asyncio.run(entered()))
-
-    def test_a_request_is_json_and_sorted_as_the_controller_reads_it(self):
-        answer = bridge_client.request("/registry")
-        self.assertEqual(answer.status, 200)
-        self.assertEqual(answer.media_type, "application/json")
-        self.assertEqual(answer.body, json.dumps(answer.json(), sort_keys=True).encode())

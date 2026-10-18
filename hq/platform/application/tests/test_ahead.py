@@ -538,21 +538,30 @@ class OneThreadDerivesTests(TransactionTestCase):
         return thread
 
     def test_the_second_waits_for_the_first_and_is_served_its_answer(self):
-        started, release = threading.Event(), threading.Event()
+        started, release, waiting = threading.Event(), threading.Event(), threading.Event()
+        awaited = derivations._awaited
 
         def slow():
             started.set()
             release.wait(10)
             return _readings()
 
-        with declared("test.flight.slow", reads=(READING,)) as (register, calls):
+        def awaiting(key):
+            if key in derivations._IN_FLIGHT:
+                waiting.set()
+            return awaited(key)
+
+        with (
+            declared("test.flight.slow", reads=(READING,)) as (register, calls),
+            mock.patch.object(derivations, "_awaited", awaiting),
+        ):
             read = register(slow)
             found: list[int] = []
             first = self._ask_from_another_thread(read, found)
             self.assertTrue(started.wait(10))
             second = self._ask_from_another_thread(read, found)
             # The second is waiting on the first, not deriving beside it.
-            time.sleep(0.1)
+            self.assertTrue(waiting.wait(10))
             self.assertEqual(len(calls), 1)
             release.set()
             first.join(10)
@@ -685,13 +694,22 @@ class OneThreadDerivesTests(TransactionTestCase):
             self.assertTrue(started.wait(10))
             self.assertFalse(derivations._NO_REQUEST.is_set())
 
-            with mock.patch.object(derivations, "GIVES_WAY", 0.2):
-                began = time.monotonic()
+            waited = []
+            wait = derivations._NO_REQUEST.wait
+
+            def giving_way(timeout=None):
+                waited.append((timeout, wait(timeout)))
+                return waited[-1][1]
+
+            with (
+                mock.patch.object(derivations, "GIVES_WAY", 0.2),
+                mock.patch.object(derivations._NO_REQUEST, "wait", giving_way),
+            ):
                 derive_ahead()
-                waited = time.monotonic() - began
             release.set()
             asking.join(10)
 
-        self.assertGreaterEqual(waited, 0.2)
+        # The pass waited its turn behind the request still deriving, and was not let in.
+        self.assertIn((0.2, False), waited)
         self.assertEqual(len(calls), 2)
         self.assertTrue(derivations._NO_REQUEST.is_set())

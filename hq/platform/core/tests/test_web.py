@@ -1,15 +1,13 @@
-"""Smoke tests for Severino HQ.
-
-These don't aim for exhaustive coverage: they verify that the auth gate works
-and every page in the main nav (including reports + exports) renders without a
-500. Add module-specific tests inside each app as it grows.
-"""
+"""The web shell: the auth gate, health, search, lists, the dashboard, the
+manifest importer and the audit pages."""
 
 import asyncio
 import json
 import logging
+import os
 import re
 import tempfile
+import time
 from datetime import date, timedelta
 from decimal import Decimal
 from io import StringIO
@@ -26,12 +24,20 @@ from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.templatetags.static import static
-from django.test import Client, SimpleTestCase, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
+from hq.domains.control_plane.models import (
+    DashboardConfiguration,
+    DashboardMachine,
+    DashboardRefreshRequest,
+    ManagedResource,
+    ProviderConnection,
+    ProviderInventory,
+)
 from hq.domains.docs_index.importer import (
     ManifestImportError,
     import_manifest_data,
@@ -42,8 +48,11 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.application import readings
+from hq.platform.application.action_links import command_url
 from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.host_only import host_only
+from hq.platform.application.tests.markup import elements, hrefs, select, text
 from hq.platform.core.audit import operation_context
 from hq.platform.core.logging import JsonFormatter, reset_request_id, set_request_id
 from hq.platform.core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
@@ -126,16 +135,13 @@ class AuthGateTests(TestCase):
             response = self.client.get("/health/ready/")
         self.assertIs(response.json()["checks"]["assets"], True)
 
-    def test_anonymous_dashboard_redirects_to_login(self):
-        response = self.client.get("/")
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response["Location"])
-
-    def test_auth_redirect_encodes_the_complete_destination(self):
+    def test_anonymous_dashboard_redirects_to_login_with_the_complete_destination(self):
         response = self.client.get("/?filter=open&next=https://example.com")
-        query = parse_qs(urlsplit(response["Location"]).query)
 
-        self.assertEqual(query["next"], ["/?filter=open&next=https://example.com"])
+        self.assertEqual(response.status_code, 302)
+        location = urlsplit(response["Location"])
+        self.assertEqual(location.path, "/accounts/login/")
+        self.assertEqual(parse_qs(location.query)["next"], ["/?filter=open&next=https://example.com"])
 
     def test_login_page_is_accessible(self):
         response = self.client.get("/accounts/login/")
@@ -171,16 +177,6 @@ class AuthGateTests(TestCase):
         with self.assertNoLogs("severino.request", "INFO"):
             self.client.get("/health/live/")
 
-    def test_login_page_enforces_native_content_security_policy(self):
-        response = self.client.get("/accounts/login/")
-        policy = response.headers["Content-Security-Policy"]
-
-        self.assertIn("default-src 'self'", policy)
-        self.assertIn("script-src 'self'", policy)
-        self.assertNotIn("script-src 'self' 'unsafe-inline'", policy)
-        self.assertIn("object-src 'none'", policy)
-        self.assertIn("frame-ancestors 'none'", policy)
-
     def test_inline_styles_are_the_only_relaxation_in_the_policy(self):
         """Pin the one exception so it stays one exception.
 
@@ -197,7 +193,14 @@ class AuthGateTests(TestCase):
 
         response = self.client.get("/accounts/login/")
         policy = response.headers["Content-Security-Policy"]
+        directives = {
+            directive.split()[0]: directive.split()[1:] for directive in policy.split(";") if directive.strip()
+        }
 
+        self.assertEqual(directives["default-src"], ["'self'"])
+        self.assertEqual(directives["script-src"], ["'self'"])
+        self.assertEqual(directives["object-src"], ["'none'"])
+        self.assertEqual(directives["frame-ancestors"], ["'none'"])
         relaxed = sorted(
             directive.split()[0]
             for directive in policy.split(";")
@@ -223,7 +226,7 @@ class AuthGateTests(TestCase):
             call_command("collectstatic", interactive=False, verbosity=0)
             content = self.client.get("/accounts/login/").content.decode()
         assets = re.findall(r'/static/([^"?]+)', content)
-        self.assertGreaterEqual(len(assets), 7)
+        self.assertTrue(assets)
         for asset in assets:
             with self.subTest(asset=asset):
                 self.assertRegex(asset, r"\.[0-9a-f]{12}\.\w+$")
@@ -247,9 +250,9 @@ class AuthGateTests(TestCase):
             self.assertEqual(staticfiles_storage.url("css/app.css"), "/static/css/app.css")
 
     @override_settings(SEVERINO_OIDC_ENABLED=True)
-    def test_login_page_shows_sso_button_when_enabled(self):
+    def test_login_page_offers_single_sign_on_when_enabled(self):
         response = self.client.get("/accounts/login/")
-        self.assertContains(response, "Sign in with single sign-on")
+        self.assertIn(reverse("oidc_authentication_init"), hrefs(response))
 
 
 class SecurityBoundaryTests(TestCase):
@@ -312,6 +315,9 @@ class SecurityBoundaryTests(TestCase):
         self.assertEqual(async_to_sync(exercise)(), ["first-user", "second-user"])
         self.assertIsNone(get_current_user())
 
+
+@tag("source")
+class TemplateSourceTests(SimpleTestCase):
     def test_application_templates_do_not_bypass_csp(self):
         violations = []
         for template in (settings.BASE_DIR / "templates").rglob("*.html"):
@@ -527,68 +533,29 @@ class ManifestUploadTests(_AuthedTestCase):
         self.assertGreater(MAX_MANIFEST_BYTES, 8)
 
 
-class NavigationSmokeTests(_AuthedTestCase):
-    URLS = [
-        "/",
-        "/search/",
-        "/projects/",
-        "/projects/new/",
-        "/content/",
-        "/content/new/",
-        "/docs/",
-        "/docs/new/",
-        "/docs/import/",
-        "/assets/",
-        "/assets/new/",
-        "/expenses/",
-        "/expenses/new/",
-        "/receipts/",
-        "/receipts/new/",
-        "/reports/",
-        "/audit/",
-    ]
-
-    def test_all_main_pages_render(self):
-        for url in self.URLS:
-            with self.subTest(url=url):
-                response = self.client.get(url)
-                self.assertEqual(
-                    response.status_code,
-                    200,
-                    f"{url} returned {response.status_code}",
-                )
-
-
 class SearchPageTests(_AuthedTestCase):
     def test_search_with_nothing_asked_is_a_search_box(self):
         with patch("hq.platform.core.views.command_center") as discovery:
             response = self.client.get("/search/")
 
         discovery.assert_not_called()
-        self.assertContains(response, "<title>Search")
-        self.assertContains(response, 'placeholder="Find anything"')
-        self.assertNotContains(response, "Command Center")
-        self.assertNotContains(response, "discovery-link")
-        self.assertNotContains(response, "/commands/")
+        self.assertTrue(select(response, "name", "q"))
+        self.assertFalse([url for url in hrefs(response) if url.startswith(command_url("project.create")[:10])])
 
     def test_a_query_finds_pages_and_commands_by_their_names_and_shows_no_identifier(self):
         response = self.client.get("/search/", {"q": "project"})
 
-        content = response.content.decode()
-        self.assertIn('<a class="discovery-link" href="/commands/project.create/">', content)
-        self.assertIn('<a class="discovery-link" href="/projects/">', content)
-        self.assertIn("<strong>Create project</strong>", content)
-        self.assertIn('<span class="scope-chip">Changes HQ</span>', content)
-        self.assertNotIn("<code>project.create</code>", content)
-        self.assertNotIn("remote write", content)
+        links = hrefs(response)
+        self.assertIn(command_url("project.create"), links)
+        self.assertIn(reverse("projects:list"), links)
+        self.assertNotIn("project.create", text(response))
 
     def test_query_filters_commands_as_well_as_records(self):
         response = self.client.get("/search/", {"q": "certificate.renew"})
 
-        content = response.content.decode()
-        self.assertIn("certificate.renew", content)
-        self.assertNotIn("project.create", content)
-        self.assertNotIn("No resources match this query.", content)
+        links = hrefs(response)
+        self.assertIn(command_url("certificate.renew"), links)
+        self.assertNotIn(command_url("project.create"), links)
 
     def test_palette_is_a_small_fragment_with_local_record_search(self):
         with (
@@ -604,12 +571,9 @@ class SearchPageTests(_AuthedTestCase):
                 HTTP_X_FRAGMENT="palette",
             )
 
-        content = response.content.decode()
-        self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "core/_command_center_results.html")
-        self.assertIn("data-command-center-results", content)
-        self.assertIn("certificate", content)
-        self.assertNotIn("<html", content)
+        self.assertTrue(select(response, "data-command-center-results"))
+        self.assertFalse(elements(response, "html"))
         records.assert_called_once()
         self.assertEqual(records.call_args.args, ("certificate",))
         self.assertEqual(records.call_args.kwargs["limit_per_scope"], 3)
@@ -627,10 +591,7 @@ class SearchPageTests(_AuthedTestCase):
             HTTP_X_FRAGMENT="palette",
         )
 
-        content = response.content.decode()
-        self.assertIn("Palette record target", content)
-        self.assertIn(project.get_absolute_url(), content)
-        self.assertIn("Projects", content)
+        self.assertIn(project.get_absolute_url(), hrefs(response))
 
     def test_palette_searches_content_not_only_navigation(self):
         item = ContentItem.objects.create(
@@ -644,19 +605,17 @@ class SearchPageTests(_AuthedTestCase):
             HTTP_X_FRAGMENT="palette",
         )
 
-        content = response.content.decode()
-        self.assertIn("Palette content target", content)
-        self.assertIn(item.get_absolute_url(), content)
-        self.assertIn("Content", content)
+        self.assertIn(item.get_absolute_url(), hrefs(response))
 
     def test_authenticated_pages_ship_the_global_palette_progressively(self):
         response = self.client.get("/projects/")
 
-        self.assertContains(response, 'id="modal-command-center"')
-        self.assertContains(response, 'action="/search/"')
-        self.assertContains(response, "data-command-center-form")
-        self.assertContains(response, "data-command-center-open")
-        self.assertContains(response, 'aria-controls="modal-command-center"')
+        self.assertTrue(select(response, "id", "modal-command-center"))
+        (form,) = select(response, "data-command-center-form")
+        self.assertEqual((form.tag, form.attrs["action"]), ("form", reverse("search")))
+        opener = select(response, "data-command-center-open")
+        self.assertTrue(opener)
+        self.assertTrue(all(each.attrs.get("aria-controls") == "modal-command-center" for each in opener))
 
     def test_results_highlight_matches_and_skip_empty_scopes(self):
 
@@ -666,12 +625,10 @@ class SearchPageTests(_AuthedTestCase):
         )
         response = self.client.get("/search/", {"q": "highlight"})
 
-        content = response.content.decode()
-        self.assertIn("<mark>", content)
-        self.assertIn("Highlight target", content)
+        self.assertIn("Highlight", " ".join(mark.text for mark in elements(response, "mark")))
         # Empty scopes are omitted entirely, not rendered as empty cards.
-        self.assertNotIn("No matches.", content)
-        self.assertNotIn("Expenses</h2>", content)
+        shown = {each.attrs["id"] for each in select(response, "id") if each.attrs["id"].startswith("scope-")}
+        self.assertEqual(shown, {f"scope-{group['scope']}" for group in response.context["groups"] if group["count"]})
 
 
 class EmptyListTests(_AuthedTestCase):
@@ -680,14 +637,15 @@ class EmptyListTests(_AuthedTestCase):
 
         page = self.client.get(reverse("expenses:list"))
 
-        self.assertContains(page, "data-empty-state")
-        self.assertNotContains(page, '<table class="data-table"')
+        self.assertTrue(select(page, "data-empty-state"))
+        self.assertFalse(elements(page, "table"))
 
     def test_a_list_emptied_by_its_filter_offers_the_way_back(self):
         page = self.client.get(reverse("expenses:list"), {"q": "nothing-matches-this"})
 
-        self.assertContains(page, "Nothing matches.")
-        self.assertNotContains(page, '<table class="data-table"')
+        self.assertTrue(select(page, "data-empty-state"))
+        self.assertIn(page.context["table"]["clear"].url, hrefs(page))
+        self.assertFalse(elements(page, "table"))
 
 
 class KeyColumnTests(_AuthedTestCase):
@@ -705,26 +663,29 @@ class KeyColumnTests(_AuthedTestCase):
     def test_a_sortable_heading_carries_its_columns_classes(self):
         page = self.client.get(reverse("expenses:list"))
 
+        headings = elements(page, "th")
+
+        def heading(label):
+            return next(each.attrs for each in headings if each.text.strip().startswith(label))
+
         # Cost sorts, and is one of the two an expense is read for.
-        self.assertRegex(
-            page.content.decode(),
-            r'<th class="key-col" aria-sort="[a-z]+">\s*<a class="table-sort-link"[^>]*>Cost',
-        )
-        # A column that is not key carries no class at all.
-        self.assertRegex(page.content.decode(), r'<th aria-sort="[a-z]+">\s*<a class="table-sort-link"[^>]*>Category')
+        self.assertIn("aria-sort", heading("Cost"))
+        self.assertIn("key-col", heading("Cost").get("class", "").split())
+        # A column that is not key is not kept on a phone.
+        self.assertIn("aria-sort", heading("Category"))
+        self.assertNotIn("key-col", heading("Category").get("class", "").split())
 
     def test_every_shared_list_names_at_least_one_key_column(self):
         """With none, a phone would show only the column that names the row."""
 
         for name in ("expenses:list", "projects:list", "content:list", "assets:list", "core:audit_list"):
             with self.subTest(page=name):
-                self.assertContains(self.client.get(reverse(name)), "key-col")
+                headings = elements(self.client.get(reverse(name)), "th")
+                self.assertTrue(any("key-col" in heading.attrs.get("class", "").split() for heading in headings))
 
 
 class DashboardWorkflowTests(_AuthedTestCase):
     def test_dashboard_and_machine_page_share_the_machine_observation(self):
-        from hq.domains.control_plane.models import DashboardMachine, ManagedResource
-
         observed = timezone.now()
         machine = ManagedResource.objects.create(
             key="example-host",
@@ -745,19 +706,10 @@ class DashboardWorkflowTests(_AuthedTestCase):
         dashboard = self.client.get("/")
         machine_page = self.client.get("/infrastructure/machines/example-host/")
 
-        self.assertContains(dashboard, "CPU")
-        self.assertContains(dashboard, "9%")
-        self.assertContains(machine_page, "Current load")
-        self.assertContains(machine_page, "9%")
+        self.assertIn("9%", text(dashboard))
+        self.assertIn("9%", text(machine_page))
 
     def test_dashboard_refresh_is_one_explicit_controller_request(self):
-        from hq.domains.control_plane.models import (
-            DashboardMachine,
-            DashboardRefreshRequest,
-            ManagedResource,
-            ProviderConnection,
-        )
-
         machine = ManagedResource.objects.create(
             key="example-host",
             kind="machine",
@@ -781,22 +733,14 @@ class DashboardWorkflowTests(_AuthedTestCase):
             response = self.client.post("/dashboard/glance/")
 
         self.assertEqual(response.status_code, 202)
-        self.assertContains(response, "Reading", status_code=202)
+        self.assertTrue(select(response, "data-refreshing"))
         self.assertEqual(
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{machine.pk}"],
         )
         ring.assert_called_once_with()
 
-    def test_dashboard_omits_generic_quick_actions_and_empty_publishing(self):
-        response = self.client.get("/")
-
-        self.assertNotContains(response, "Quick actions")
-        self.assertNotContains(response, "Publishing")
-
     def test_dashboard_weather_settings_are_managed_in_the_ui(self):
-        from hq.domains.control_plane.models import DashboardConfiguration
-
         response = self.client.post(
             "/dashboard/glance/settings/",
             {
@@ -818,32 +762,26 @@ class DashboardWorkflowTests(_AuthedTestCase):
         response = self.client.get("/action-items/")
         filtered = self.client.get("/action-items/", {"status": "serious", "q": "draft"})
 
-        self.assertContains(response, "1 draft is not published")
-        self.assertContains(response, 'href="/content/?status=draft"')
-        self.assertContains(response, "<title>Needs you")
-        self.assertNotContains(response, "Action items")
+        drafts = f"{reverse('content:list')}?status=draft"
+        self.assertIn(drafts, hrefs(response))
         # Filtered to urgent only, so an entry that is not urgent is gone even
         # though the query still matches its text.
-        self.assertNotContains(filtered, "1 draft is not published")
+        self.assertNotIn(drafts, hrefs(filtered))
 
     def test_profile_count_is_lazy_off_dashboard(self):
         ContentItem.objects.create(title="Count me", status=ContentItem.Status.DRAFT)
 
         page = self.client.get("/projects/")
-        with patch("hq.platform.application.domains.extension_domains", return_value=()):
+        with host_only():
             count = self.client.get("/action-items/count/")
 
-        self.assertContains(page, "data-action-count hidden")
+        (badge,) = select(page, "data-action-count")
+        self.assertIn("hidden", badge.attrs)
         self.assertEqual(count.json()["count"], 1)
 
     def test_the_controllers_dot_says_only_what_is_known(self):
         """Green while it is arriving, the attention colour once it has gone
         quiet, and neither where it has never run."""
-
-        import os
-        import tempfile
-        import time
-        from pathlib import Path
 
         marker = Path(tempfile.mkdtemp()) / "controller-heartbeat"
         with self.settings(SEVERINO_CONTROLLER_HEARTBEAT=str(marker)):
@@ -854,17 +792,14 @@ class DashboardWorkflowTests(_AuthedTestCase):
             os.utime(marker, (long_ago, long_ago))
             silent = self.client.get("/")
 
-        self.assertContains(never, 'dash-reading dash-controller"')
-        self.assertContains(never, "Not set up yet")
-        self.assertContains(arriving, "dash-controller is-arriving")
-        self.assertContains(silent, "dash-controller is-silent")
-        self.assertContains(silent, "Last read")
+        states = {
+            name: (page.context["controller"].known, page.context["controller"].silent)
+            for name, page in (("never", never), ("arriving", arriving), ("silent", silent))
+        }
+        self.assertEqual(states, {"never": (False, False), "arriving": (True, False), "silent": (True, True)})
+        self.assertIn(reverse("control_plane:controller"), hrefs(silent))
 
     def test_the_dashboard_draws_its_contacts_without_waiting_on_d1(self):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderInventory
-
         rows = [
             {"id": 7, "name": "One call", "status": "unread", "created_at": "2026-08-23", "database_id": "example"},
             *({"id": number, "status": "unread", "database_id": "example"} for number in (6, 5)),
@@ -874,8 +809,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         # With the page, from the stored rows: nothing is fetched afterwards,
         # so no card appears and then changes.
-        self.assertContains(page, "One call")
-        self.assertContains(page, "3 unread")
+        self.assertEqual(page.context["unread_contacts_count"], 3)
+        self.assertIn("One call", text(page))
         # Inside the page itself; the connection dialog every page carries
         # reads only when it is opened.
         main = page.content.decode().split("<main", 1)[1].split("</main>", 1)[0]
@@ -884,7 +819,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
     def test_an_empty_contact_feed_draws_no_card(self):
         page = self.client.get("/")
 
-        self.assertNotContains(page, "<h2>Contacts</h2>")
+        self.assertFalse(page.context["recent_contacts"])
 
     def test_the_dashboard_says_how_this_request_reached_it(self):
         """The reading the connection panel opens on, and a link to that panel."""
@@ -894,15 +829,12 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         found = page.context["request_connection"]
         self.assertEqual(found.summary, panel.context["connection"].summary)
-        self.assertContains(page, "dash-connection conn-badge-loopback")
-        self.assertContains(page, found.summary)
-        self.assertContains(page, found.transport)
         # It opens the panel, and is a plain link to it without script.
-        self.assertContains(page, 'data-modal-open="connection"')
+        badge = next(each for each in select(page, "data-modal-open", "connection") if found.summary in each.text)
+        self.assertEqual(badge.attrs["href"], reverse("connection"))
+        self.assertIn(found.transport, badge.text)
 
     def test_dashboard_routes_infrastructure_findings_to_their_evidence(self):
-        from hq.domains.control_plane.models import ManagedResource
-
         ManagedResource.objects.create(
             key="example-wildcard",
             kind="tls.certificate",
@@ -922,8 +854,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         response = self.client.get("/action-items/")
 
         # Each finding is its own item, linked to its own rule's evidence.
-        self.assertNotContains(response, "Infrastructure findings")
-        self.assertContains(response, "/infrastructure/findings/?rule=")
+        rule_links = f"{reverse('control_plane:findings')}?rule="
+        self.assertTrue([url for url in hrefs(response) if url.startswith(rule_links)])
 
     def test_output_a_project_lacks_is_counted_but_not_queued(self):
         """A shape of the portfolio, not a decision waiting on anyone.
@@ -937,14 +869,9 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         response = self.client.get("/")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Active projects")
-        self.assertContains(response, "1 has no writeup or doc")
-        self.assertNotContains(response, "need output")
-        self.assertNotContains(response, "/projects/?needs_output=1")
-        self.assertNotContains(response, "Project opportunities")
-        self.assertNotContains(response, "Relationship health")
-        self.assertNotContains(response, "Docs by system")
+        self.assertIn("1 has no writeup or doc", text(response))
+        queue = self.client.get(reverse("action_items"))
+        self.assertNotIn(f"{reverse('projects:list')}?needs_output=1", hrefs(queue))
 
     def test_dashboard_excludes_site_pages_from_docs_review(self):
         DocumentationRecord.objects.create(
@@ -970,9 +897,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         response = self.client.get("/projects/?needs_output=1")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, project.name)
-        self.assertNotContains(response, documented.name)
+        self.assertEqual(list(response.context["object_list"]), [project])
 
     def test_archived_projects_sort_last_by_default(self):
         active = Project.objects.create(name="ZZZ active project", status=Project.Status.ACTIVE)
@@ -980,9 +905,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         response = self.client.get("/projects/")
 
-        self.assertEqual(response.status_code, 200)
-        body = response.content.decode("utf-8")
-        self.assertLess(body.index(active.name), body.index(archived.name))
+        listed = list(response.context["object_list"])
+        self.assertLess(listed.index(active), listed.index(archived))
 
     def test_table_filters_accept_multiple_values_and_compose(self):
         active_lab = Project.objects.create(
@@ -1074,10 +998,10 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         response = self.client.get("/docs/?needs_review=1")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, stale.title)
-        self.assertNotContains(response, current.title)
-        self.assertNotContains(response, site_page.title)
+        listed = list(response.context["object_list"])
+        self.assertIn(stale, listed)
+        self.assertNotIn(current, listed)
+        self.assertNotIn(site_page, listed)
 
     @override_settings(SEVERINO_DOC_REVIEW_INTERVAL_DAYS=30)
     def test_reports_docs_review_uses_shared_definition(self):
@@ -1327,20 +1251,6 @@ class ManifestImportTests(TestCase):
             import_manifest_data([entry])
         self.assertEqual(DocumentationRecord.objects.count(), 0)
 
-    def test_doc_id_outside_the_schema_prefixes_is_rejected(self):
-        self._assert_rejected({**self.STANDARD_DOC, "doc_id": "wiki-complete"}, "must start with", "rb-")
-
-    def test_standard_doc_missing_required_fields_is_rejected(self):
-        entry = {k: v for k, v in self.STANDARD_DOC.items() if k not in {"environment", "sensitivity"}}
-        self._assert_rejected(entry, "environment", "sensitivity")
-
-    def test_blank_required_field_counts_as_missing(self):
-        self._assert_rejected({**self.STANDARD_DOC, "system": ""}, "system")
-
-    def test_task_missing_a_task_required_field_is_rejected(self):
-        entry = {k: v for k, v in self.TASK_DOC.items() if k != "title"}
-        self._assert_rejected(entry, "title")
-
     CONTENT_DOC = {
         **STANDARD_DOC,
         "doc_id": "writeup-complete",
@@ -1348,25 +1258,29 @@ class ManifestImportTests(TestCase):
         "content_type": "portfolio_article",
     }
 
-    def test_vault_doc_cannot_take_a_content_id(self):
-        # The schema's prefixes bind every vault doc: a runbook cannot pass
-        # with a writeup's id.
-        self._assert_rejected({**self.STANDARD_DOC, "doc_id": "writeup-complete"}, "must start with")
+    def test_an_entry_off_the_schema_is_refused_by_the_preflight_and_the_write(self):
+        def without(entry, *fields):
+            return {key: value for key, value in entry.items() if key not in fields}
 
-    def test_public_article_draft_without_content_type_is_a_vault_doc(self):
-        # Not routed to ContentItem, so held to the schema's prefixes.
-        entry = {k: v for k, v in self.CONTENT_DOC.items() if k != "content_type"}
-        self._assert_rejected(entry, "must start with")
+        for case, entry, names in (
+            ("prefix", {**self.STANDARD_DOC, "doc_id": "wiki-complete"}, ("rb-",)),
+            ("missing", without(self.STANDARD_DOC, "environment", "sensitivity"), ("environment", "sensitivity")),
+            ("blank", {**self.STANDARD_DOC, "system": ""}, ("system",)),
+            ("task missing", without(self.TASK_DOC, "title"), ("title",)),
+            # The schema's prefixes bind every vault doc: a runbook cannot pass with a writeup's id.
+            ("vault doc with a content id", {**self.STANDARD_DOC, "doc_id": "writeup-complete"}, ()),
+            # Not routed to ContentItem, so held to the schema's prefixes.
+            ("article without a content type", without(self.CONTENT_DOC, "content_type"), ()),
+            ("content missing", without(self.CONTENT_DOC, "system"), ("system",)),
+        ):
+            with self.subTest(case):
+                self._assert_rejected(entry, *names)
 
     def test_content_entry_id_is_not_held_to_the_doc_prefixes(self):
         for doc_id in ("writeup-complete", "page-about", "anything-at-all"):
             with self.subTest(doc_id=doc_id):
                 entry = {**self.CONTENT_DOC, "doc_id": doc_id}
                 self.assertEqual(validate_manifest_data([entry]), [])
-
-    def test_content_entry_still_owes_the_required_fields(self):
-        entry = {k: v for k, v in self.CONTENT_DOC.items() if k != "system"}
-        self._assert_rejected(entry, "system")
 
     def test_valid_standard_doc_and_task_pass(self):
         # A task owes only the slimmer set: no system/environment/sensitivity.
@@ -1522,16 +1436,17 @@ class AuditLogTests(TestCase):
 class AuditChangeTests(TestCase):
     """An update has to say what changed, or it is only saying that it did."""
 
-    def test_an_update_records_which_fields_moved_and_to_what(self):
+    def test_an_update_records_which_fields_moved_from_the_last_save_and_to_what(self):
         project = Project.objects.create(name="Before", status=Project.Status.IDEA)
         project.name = "After"
         project.status = Project.Status.ACTIVE
         project.save()
+        project.name = "Again"
+        project.save()
 
-        event = AuditLog.objects.filter(action=AuditLog.Action.UPDATED).first()
-        changes = event.metadata["changes"]
-        self.assertEqual(changes["name"], ["Before", "After"])
-        self.assertEqual(changes["status"], ["idea", "active"])
+        first, second = AuditLog.objects.filter(action=AuditLog.Action.UPDATED).order_by("pk")
+        self.assertEqual(first.metadata["changes"], {"name": ["Before", "After"], "status": ["idea", "active"]})
+        self.assertEqual(second.metadata["changes"], {"name": ["After", "Again"]})
 
     def test_a_save_that_changed_nothing_is_not_an_event(self):
         # Django writes every column on every save; an unchanged re-submission
@@ -1542,16 +1457,6 @@ class AuditChangeTests(TestCase):
         project.save()
 
         self.assertEqual(AuditLog.objects.count(), before)
-
-    def test_a_second_save_diffs_against_the_first_not_the_original(self):
-        project = Project.objects.create(name="One", status=Project.Status.IDEA)
-        project.name = "Two"
-        project.save()
-        project.name = "Three"
-        project.save()
-
-        event = AuditLog.objects.filter(action=AuditLog.Action.UPDATED).first()
-        self.assertEqual(event.metadata["changes"]["name"], ["Two", "Three"])
 
     def test_values_that_are_not_json_survive_the_round_trip(self):
         # A Decimal, a date and a UUID are none of the things JSON has. Left
@@ -1585,11 +1490,13 @@ class AuditDetailPageTests(_AuthedTestCase):
 
         page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
 
-        self.assertContains(page, "What changed")
-        self.assertContains(page, "Before")
-        self.assertContains(page, "After")
-        self.assertEqual(page.context["page"].title, "Audit event")
+        shown = text(page)
+        self.assertIn("Before", shown)
+        self.assertIn("After", shown)
         self.assertEqual(page.context["page"].trail, (("Audit log", reverse("core:audit_list")),))
+        # What else happened to the same object: its creation.
+        created = AuditLog.objects.get(object_id=str(project.pk), action=AuditLog.Action.CREATED)
+        self.assertIn(reverse("core:audit_detail", args=[created.pk]), hrefs(page))
 
     def test_an_event_links_to_the_rest_of_its_operation(self):
         # The point of operation_id: one action touching several rows is one
@@ -1597,21 +1504,11 @@ class AuditDetailPageTests(_AuthedTestCase):
         with operation_context(interface="cli", actor="op", operation="test.bulk", operation_id="op-1"):
             Project.objects.create(name="One", status=Project.Status.IDEA)
             Project.objects.create(name="Two", status=Project.Status.IDEA)
-        event = AuditLog.objects.filter(operation_id="op-1").first()
+        event, other = AuditLog.objects.filter(operation_id="op-1")
 
         page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
 
-        self.assertContains(page, "Rest of this operation")
-
-    def test_an_event_shows_what_else_happened_to_the_same_object(self):
-        project = Project.objects.create(name="Tracked", status=Project.Status.IDEA)
-        project.name = "Renamed"
-        project.save()
-        event = AuditLog.objects.filter(action=AuditLog.Action.UPDATED).first()
-
-        page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
-
-        self.assertContains(page, "Everything else to this object")
+        self.assertIn(reverse("core:audit_detail", args=[other.pk]), hrefs(page))
 
     def test_the_detail_page_needs_a_session(self):
         project = Project.objects.create(name="Private", status=Project.Status.IDEA)

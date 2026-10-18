@@ -11,6 +11,13 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.platform.application import projection
 from hq.platform.application.security import Capability, Principal, is_interactive
+from hq.platform.application.tests.host_only import host_only
+from hq.platform.application.tests.sentinel import (
+    CONNECTION as SENTINEL_CONNECTION,
+    READING as SENTINEL_READING,
+    SentinelMixin,
+    plant_credentials,
+)
 
 from .. import services
 from ..security import MCPBoundary
@@ -54,7 +61,27 @@ class SecretSettingsTests(SimpleTestCase):
             env_secret("TEST_MCP_TOKEN")
 
 
-class ServiceTests(TestCase):
+# Every tool the server lists, and whether it only reads.
+TOOLS = {
+    "audit_registry": True,
+    "dashboard_snapshot": True,
+    "describe_capabilities": True,
+    "describe_connections": True,
+    "describe_resources": True,
+    "documentation_status": True,
+    "execute_capability": False,
+    "export_year_summary": True,
+    "get_findings": True,
+    "get_resource": True,
+    "get_topology": True,
+    "list_connections": True,
+    "list_resource": True,
+    "recent_activity": True,
+    "system_health": True,
+}
+
+
+class ServiceTests(SentinelMixin, TestCase):
     """The tools themselves, called as an authenticated agent at the ceiling.
 
     Bound explicitly: a tool reached with no caller is refused, and these tests
@@ -146,17 +173,13 @@ class ServiceTests(TestCase):
         with self.assertRaisesRegex(services.NotFoundError, "No 'assets' record"):
             services.get_resource("assets", "missing")
 
-    def test_registry_audit_is_a_registered_read_tool(self):
+    def test_registry_audit_names_the_orphans(self):
         Project.objects.create(name="Unreferenced", slug="unreferenced")
 
         result = services.audit_registry()
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["orphan_projects"], ["unreferenced"])
-        self.assertIsNotNone(mcp.tools.get("audit_registry"))
-
-    def test_operating_snapshot_is_a_registered_read_tool(self):
-        self.assertIsNotNone(mcp.tools.get("dashboard_snapshot"))
 
     def test_resource_kinds_are_derived_from_the_live_document(self):
         from hq.platform.api.openapi import document
@@ -173,7 +196,7 @@ class ServiceTests(TestCase):
         self.assertIn(catalogue(contract.listable), tools["list_resource"].description)
         self.assertIn(catalogue(contract.addressable), tools["get_resource"].description)
 
-    def test_the_listed_tools_carry_their_annotations(self):
+    def test_each_tool_is_served_once_and_only_execute_writes(self):
         from hq.platform.mcp.server import mcp as served
 
         async def listed():
@@ -181,26 +204,11 @@ class ServiceTests(TestCase):
 
         tools = {tool.name: tool for tool in async_to_sync(listed)().tools}
 
-        self.assertTrue(tools["system_health"].annotations.read_only_hint)
-        self.assertFalse(tools["execute_capability"].annotations.read_only_hint)
-
-    def test_resource_reads_have_one_path(self):
-        names = {tool.name for tool in mcp.tools.values()}
-
-        self.assertEqual(len(names), 15)
-        for wrapper in (
-            "list_projects",
-            "get_project",
-            "list_assets",
-            "get_asset",
-            "list_managed_resources",
-            "get_managed_resource",
-            "list_services",
-            "get_service",
-            "list_expenses",
-            "list_receipts",
-        ):
-            self.assertNotIn(wrapper, names)
+        self.assertEqual(set(tools), set(TOOLS))
+        for name, read_only in TOOLS.items():
+            with self.subTest(name):
+                self.assertIs(tools[name].annotations.read_only_hint, read_only)
+                self.assertTrue(callable(getattr(services, name)))
 
     def test_resource_registry_is_discoverable_and_generically_readable(self):
         project = Project.objects.create(name="Generic resource")
@@ -217,23 +225,41 @@ class ServiceTests(TestCase):
         self.assertEqual(project_create["resource"], "projects")
         self.assertEqual(listed["items"][0]["slug"], project.slug)
         self.assertEqual(detail["slug"], project.slug)
-        self.assertIsNotNone(mcp.tools.get("describe_resources"))
-        self.assertIsNotNone(mcp.tools.get("list_resource"))
-        self.assertIsNotNone(mcp.tools.get("get_resource"))
 
-    def test_connections_are_discoverable_without_credential_material(self):
-        described = services.describe_connections()
-        listed = services.list_connections()
+    def test_no_read_tool_answers_with_a_credential_a_controller_reported(self):
+        from hq.platform.api.openapi import document
 
-        self.assertIn(
-            "infrastructure.controllers",
-            [item["name"] for item in described["connections"]],
-        )
-        self.assertTrue(listed["ok"])
-        self.assertIsNotNone(mcp.tools.get("describe_connections"))
-        self.assertIsNotNone(mcp.tools.get("list_connections"))
+        from ..contract import resource_contract
 
-    def test_derived_topology_is_a_registered_safe_read_tool(self):
+        plant_credentials()
+        listable = [resource.name for resource in resource_contract(document()).listable]
+        with host_only():
+            answers = {
+                "describe_connections": services.describe_connections(),
+                "list_connections": services.list_connections(),
+                "get_findings": services.get_findings(),
+                "get_topology": services.get_topology(),
+                "dashboard_snapshot": services.dashboard_snapshot(),
+                "system_health": services.system_health(),
+                "get_resource readings": services.get_resource("readings", SENTINEL_READING),
+                **{f"list_resource {name}": self.readable(services.list_resource, name) for name in listable},
+            }
+
+        for name, answer in answers.items():
+            with self.subTest(name):
+                self.assertNoSentinel(answer)
+        # The planted connection was served: the absence is not vacuous.
+        self.assertIn(SENTINEL_CONNECTION, json.dumps(answers["list_connections"], default=str))
+
+    def readable(self, read, *args):
+        from hq.platform.application.security import AuthorizationError
+
+        try:
+            return read(*args)
+        except AuthorizationError, services.NotFoundError:
+            return {}
+
+    def test_derived_topology_traces_from_a_focus(self):
         from hq.domains.control_plane.models import ManagedResource
 
         ManagedResource.objects.create(
@@ -241,14 +267,12 @@ class ServiceTests(TestCase):
             kind="cloudflare.zone",
             spec={"zone": "example.com", "connection_ref": "mcp-cloudflare"},
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             topology = services.get_topology(focus="resource:mcp-zone", direction="inbound", depth=2)
 
         self.assertIn("resource:mcp-zone", {node["id"] for node in topology["nodes"]})
         self.assertEqual(topology["trace"]["focus"], "resource:mcp-zone")
         self.assertEqual(topology["trace"]["direction"], "inbound")
-        self.assertIsNotNone(mcp.tools.get("get_topology"))
-        self.assertNotIn("secret", json.dumps(topology).lower())
 
     def test_an_agent_can_ask_the_topology_one_standing_question(self):
         from hq.domains.control_plane.models import ManagedResource
@@ -256,7 +280,7 @@ class ServiceTests(TestCase):
         ManagedResource.objects.create(
             key="mcp-lonely", kind="adguard.rewrite", spec={"domain": "app.example.test", "answer": "192.0.2.10"}
         )
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             whole = services.get_topology()
             narrowed = services.get_topology(lens="unobserved-resources")
         self.assertEqual(narrowed["lens"], "unobserved-resources")
@@ -264,13 +288,11 @@ class ServiceTests(TestCase):
         self.assertIn("resource:mcp-lonely", {n["id"] for n in narrowed["nodes"]})
         self.assertLess(narrowed["summary"]["nodes"], whole["summary"]["nodes"])
 
-    def test_findings_are_a_registered_safe_read_tool(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+    def test_findings_name_every_rule(self):
+        with host_only():
             found = services.get_findings()
         self.assertTrue(found["ok"])
         self.assertTrue(found["rules"])
-        self.assertIsNotNone(mcp.tools.get("get_findings"))
-        self.assertNotIn("secret", json.dumps(found).lower())
 
     def test_an_unknown_payload_field_is_named_to_the_agent(self):
         from django.test import override_settings

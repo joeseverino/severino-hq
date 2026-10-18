@@ -1,6 +1,7 @@
 from django.shortcuts import render
 
 from hq_sdk.outbound import ask
+from hq_sdk.pages import page_context
 from hq_sdk.ui import Kpi
 
 from .outbound import ARCHIVED, LOOKUP, NOTES, stored
@@ -11,6 +12,7 @@ def index(request):
         request,
         "example_hq_plugin/index.html",
         {
+            **page_context("Example Notes", "A minimal plugin composed entirely from the HQ UI contract."),
             "example_metrics": (Kpi("Notes", len(NOTES), "Two notes and an archived one"),),
             # What is stored, and the control that asks for it to be read
             # again. The view reaches nothing outside the process.

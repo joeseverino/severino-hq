@@ -5,7 +5,9 @@ from datetime import UTC, timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -459,13 +461,17 @@ class ScheduledWorkTests(TestCase):
     def test_every_piece_with_a_cadence_has_a_row_and_none_without(self):
         self.assertEqual(set(self.rows()), {"audit.prune", "content.sync", "registry.refresh", "sessions.clear"})
 
-    def test_three_queries_however_many_jobs_there_are(self):
-        for hours in range(40):
+    def test_the_cost_does_not_grow_with_the_jobs(self):
+        self.ran("content.sync", timedelta(hours=0))
+        with CaptureQueriesContext(connection) as one:
+            self.rows()
+        for hours in range(1, 40):
             self.ran("content.sync", timedelta(hours=hours))
 
-        with self.assertNumQueries(3):
+        with CaptureQueriesContext(connection) as forty:
             rows = self.rows()
 
+        self.assertEqual(len(forty), len(one))
         self.assertEqual(len(rows["content.sync"].runs.shown), 12)
 
     def test_the_resource_carries_the_rows_without_the_drawing(self):

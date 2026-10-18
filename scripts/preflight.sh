@@ -10,7 +10,8 @@
 #      or, with --remote, every check GitHub ran on this exact commit, waited
 #      for and required to pass: the same gates, on GitHub's machines. The
 #      commit must be pushed.
-#   2. `mise run suite:composed`, required (SEVERINO_HQ_PLUGINS set)
+#   2. `mise run suite:as-image`, the extensions required: the composed suite
+#      over only the files the image ships, configured as the image is
 #   3. scripts/preflight-host.sh on the deploy host over SSH: read-only checks
 #      of the runner's sudo rule, the host against the release it runs
 #      (`hq-host verify`), the installed units and free disk.
@@ -95,7 +96,7 @@ if [ "${remote}" -eq 1 ]; then
 else
     gate "every gate the pipeline runs" mise run -c ci
 fi
-gate "the suite composed with the extensions" env REQUIRE_COMPOSED=1 mise run suite:composed
+gate "the composed suite, as the image runs it" env REQUIRE_COMPOSED=1 mise run suite:as-image
 
 # The host half's inputs, derived from this commit and from main.
 host_payload() {

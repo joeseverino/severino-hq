@@ -161,3 +161,23 @@ func TestNotifySpeaksTheProtocol(t *testing.T) {
 		t.Errorf("sent %q", buffer[:n])
 	}
 }
+
+func TestOnlyAShorterHealthStartPeriodIsTaken(t *testing.T) {
+	image := "ghcr.io/example/hq@" + digest
+	for given, want := range map[string]string{"": HealthStartPeriod.String(), "20s": "20s"} {
+		period, err := StartPeriod(given)
+		if err != nil {
+			t.Fatalf("%q refused: %v", given, err)
+		}
+		args := strings.Join(Web{Image: image, StartPeriod: period}.Args(), " ")
+		if !strings.Contains(args, "--health-start-period "+want+" ") {
+			t.Errorf("%q: the container is not given a %s start period: %s", given, want, args)
+		}
+	}
+	// Longer than the unit's start timeout allows, or no span at all.
+	for _, given := range []string{"2m", "0s", "-5s", "soon"} {
+		if _, err := StartPeriod(given); err == nil {
+			t.Errorf("%q taken", given)
+		}
+	}
+}

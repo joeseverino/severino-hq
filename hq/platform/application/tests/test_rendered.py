@@ -6,7 +6,7 @@ route that takes no argument and follows the links it finds, so detail pages
 are reached without anyone listing them. Extensions installed alongside HQ are
 crawled the same way, which is how the extension gate covers their pages.
 
-Each rendered page must have one heading, no form inside a form, no id used
+Every page it reaches must answer, and each must have one heading, no form inside a form, no id used
 twice, and no em dash or count that disagrees with its noun ("1 resources",
 "account(s)") in what it says.
 """
@@ -23,11 +23,11 @@ from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from hq.platform.core import example_estate
 from hq.platform.core.example_estate import names, records
 
-# Routes that are not pages: machine endpoints, downloads, and anything that
-# acts when fetched.
+# Routes that are not pages: machine endpoints, downloads, polled status, and
+# anything that acts when fetched.
 SKIPPED = re.compile(
     r"^/(api|mcp|static|media|accounts|oidc|health|csp-report)/"
-    r"|/(export|download|file|report|count|glance|logout|refresh|callback|complete)/"
+    r"|/(export|download|file|report|count|glance|logout|refresh|callback|complete|status)/"
     r"|\.(json|csv|md|pem|txt|ics)$"
 )
 PAGE_LIMIT = 400
@@ -147,16 +147,26 @@ class RenderedPageTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
-    def crawl(self):
-        queue = deque(sorted(set(_page_routes())))
+    def crawl(self, refused: list[str]):
+        routes = set(_page_routes())
+        queue = deque(sorted(routes))
         seen: set[str] = set()
         while queue and len(seen) < PAGE_LIMIT:
             path = queue.popleft()
-            if path in seen:
+            if path in seen or SKIPPED.search(path):
                 continue
             seen.add(path)
             response = self.client.get(path)
-            if response.status_code != 200 or "text/html" not in response.get("Content-Type", ""):
+            if response.status_code in {301, 302, 303, 307, 308}:
+                queue.append(urlsplit(response["Location"]).path)
+                continue
+            # A route that takes no argument and refuses a GET is an action, not a page.
+            if response.status_code == 405 and path in routes:
+                continue
+            if response.status_code != 200:
+                refused.append(f"{path}: answered {response.status_code}")
+                continue
+            if "text/html" not in response.get("Content-Type", ""):
                 continue
             html = response.content.decode()
             page = _Page()
@@ -174,9 +184,9 @@ class RenderedPageTests(TestCase):
                 queue.append(parts.path)
 
     def test_every_page_keeps_the_rules(self):
-        problems = []
+        problems: list[str] = []
         crawled = set()
-        for path, page in self.crawl():
+        for path, page in self.crawl(problems):
             crawled.add(path)
             text = " ".join(" ".join(page.text).split())
             if page.h1 != 1:

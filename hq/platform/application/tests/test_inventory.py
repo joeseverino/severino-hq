@@ -73,7 +73,7 @@ class RecordingTests(TestCase):
 
         self.assertEqual(len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1)
 
-    def test_an_unreachable_provider_is_recorded_as_unreachable(self):
+    def test_a_provider_first_seen_unreachable_is_recorded_as_unreachable(self):
         record_sweep(
             {"adguard.rewrite": {"ok": False, "records": [], "error": "timed out"}},
             principal=cli_principal(),
@@ -82,6 +82,7 @@ class RecordingTests(TestCase):
         snapshot = ProviderInventory.objects.get(kind="adguard.rewrite")
         self.assertFalse(snapshot.reachable)
         self.assertEqual(snapshot.error, "timed out")
+        self.assertEqual(snapshot.records, [])
 
     def test_an_unreachable_provider_does_not_erase_what_it_last_held(self):
         """ "Could not ask" and "nothing there" are different facts.
@@ -107,14 +108,6 @@ class RecordingTests(TestCase):
         # And dated to when they were seen, not to the sweep that missed them,
         # so the surfaces that age this data tell the truth about it.
         self.assertEqual(snapshot.observed_at, first)
-
-    def test_a_provider_first_seen_unreachable_is_still_recorded(self):
-        record_sweep(
-            {"adguard.rewrite": {"ok": False, "records": [], "error": "timed out"}},
-            principal=cli_principal(),
-        )
-
-        self.assertEqual(ProviderInventory.objects.get(kind="adguard.rewrite").records, [])
 
     def test_a_kind_this_hq_does_not_know_is_ignored_not_rejected(self):
         """A controller ahead of this HQ must not take the whole sweep down."""
@@ -178,10 +171,9 @@ class ReadingStandingTests(TestCase):
 
         response = self.client.get(reverse("control_plane:services"))
 
-        self.assertContains(
-            response,
-            '<span class="sweep-age" title="The address answered with a web page.">Could not be read</span>',
-            html=False,
+        self.assertRegex(
+            response.content.decode(),
+            r'title="The address answered with a web page\."\s*>\s*Could not be read<',
         )
         self.assertNotContains(response, ">unreachable<")
 
@@ -215,29 +207,23 @@ class UnmanagedTests(TestCase):
             },
         )
 
-    def test_a_declaration_accounts_for_its_record(self):
-        ManagedResource.objects.create(
-            key="app-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-        )
-
-        self.assertNotIn("app.example.com", [item.hostname for item in unmanaged()])
-
-    def test_matching_is_by_hostname_not_by_the_declared_value(self):
+    def test_a_declaration_accounts_for_its_record_by_hostname_not_by_value(self):
         """The reconcilers find their record by hostname, so this must too.
 
         A declaration whose answer has drifted from the live record is still the
         same record: offering to adopt it would create a second declaration
         for one rewrite.
         """
-        ManagedResource.objects.create(
-            key="app-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.9.9.9"},
-        )
+        for answer in ("10.0.0.10", "10.9.9.9"):
+            with self.subTest(answer=answer):
+                resource = ManagedResource.objects.create(
+                    key="app-dns",
+                    kind="adguard.rewrite",
+                    spec={"domain": "app.example.com", "answer": answer},
+                )
 
-        self.assertNotIn("app.example.com", [item.hostname for item in unmanaged()])
+                self.assertNotIn("app.example.com", [item.hostname for item in unmanaged()])
+                resource.delete()
 
     def test_a_disabled_declaration_does_not_account_for_a_live_record(self):
         """HQ is not managing it, and the record is still out there serving."""
@@ -276,23 +262,7 @@ class AdoptionTests(TestCase):
         self.assertTrue(spec["trust_forwarded_proto"])
         self.assertTrue(spec["websocket"])
         self.assertEqual(spec["forward_port"], 3000)
-
-    def test_the_adopted_spec_is_one_the_model_accepts_unchanged(self):
-        adopt(
-            AdoptCommand(kind="npm.proxy_host", hostname="shop.example.com"),
-            principal=cli_principal(),
-        )
-
-        spec = ManagedResource.objects.get(kind="npm.proxy_host").spec
         self.assertEqual(validate_spec("npm.proxy_host", spec), spec)
-
-    def test_adopting_names_it_after_the_hostname(self):
-        adopt(
-            AdoptCommand(kind="adguard.rewrite", hostname="app.example.com"),
-            principal=cli_principal(),
-        )
-
-        self.assertTrue(ManagedResource.objects.filter(key="app-example-com-dns").exists())
 
     def test_an_adopted_record_stops_being_offered(self):
         adopt(
@@ -321,7 +291,7 @@ class AdoptionTests(TestCase):
                 principal=cli_principal(),
             )
 
-    def test_the_spec_is_read_from_the_record_not_from_the_request(self):
+    def test_the_spec_is_read_from_the_record_and_named_after_its_hostname(self):
         """A browser could post a stale or edited copy; adoption captures truth."""
         ProviderInventory.objects.filter(kind="adguard.rewrite").update(
             records=[{"domain": "app.example.com", "answer": "10.0.0.55"}],
@@ -333,10 +303,9 @@ class AdoptionTests(TestCase):
             principal=cli_principal(),
         )
 
-        self.assertEqual(
-            ManagedResource.objects.get(kind="adguard.rewrite").spec["answer"],
-            "10.0.0.55",
-        )
+        adopted = ManagedResource.objects.get(kind="adguard.rewrite")
+        self.assertEqual(adopted.key, "app-example-com-dns")
+        self.assertEqual(adopted.spec["answer"], "10.0.0.55")
 
 
 class AdoptionWebTests(TestCase):
@@ -431,8 +400,11 @@ class AdoptServiceTests(TestCase):
         self.assertEqual([s.hostname for s in services], ["shop.example.com"])
         self.assertEqual(len(services[0].items), 2)
 
-    def test_the_grouped_columns_match_the_service_view(self):
-        """Both tables render the same columns, so a row lines up with a row."""
+    def test_the_grouped_columns_match_the_service_view_and_carry_values(self):
+        """Both tables render the same columns, so a row lines up with a row.
+
+        A cell carries the value and not its label: the heading already says DNS.
+        """
         from hq.domains.control_plane.providers import service_facets
 
         facets = unmanaged_services()[0].facets
@@ -443,15 +415,10 @@ class AdoptServiceTests(TestCase):
         )
         # A facet nothing supplies for *this* service renders empty rather than
         # being dropped, so the columns still line up.
-        empty = {facet_id: value for facet_id, _, value in facets}
-        self.assertEqual(empty["certificate"], "")
-
-    def test_a_column_carries_the_value_and_not_its_label(self):
-        """The heading already says DNS; "Answers with" in the cell is noise."""
-        facets = {facet_id: value for facet_id, _, value in unmanaged_services()[0].facets}
-
-        self.assertEqual(facets["dns"], "10.0.0.20")
-        self.assertEqual(facets["proxy"], "http://10.0.0.20:3000")
+        values = {facet_id: value for facet_id, _, value in facets}
+        self.assertEqual(values["certificate"], "")
+        self.assertEqual(values["dns"], "10.0.0.20")
+        self.assertEqual(values["proxy"], "http://10.0.0.20:3000")
 
     def test_adopting_a_hostname_takes_everything_behind_it(self):
         adopt_service(
@@ -487,38 +454,6 @@ class AdoptServiceTests(TestCase):
             )
 
         self.assertEqual(ManagedResource.objects.count(), 1)
-
-
-class AdoptedIsObservedTests(TestCase):
-    """Adoption is the one write that starts in sync, so it must say so.
-
-    Everything else is born unobserved and waits for a controller to look,
-    because a typed declaration is a claim nobody has checked. An adopted spec
-    is read from the live record. Left unmarked it stays "never reported":
-    nothing queues a reconcile for a resource that has not drifted, so the
-    first look never comes and every service assembled from it reads as
-    incomplete while it is running.
-    """
-
-    def setUp(self):
-        managing_everything()
-        record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
-        adopt_discovered("adguard.rewrite", principal=cli_principal())
-        self.resource = ManagedResource.objects.get(kind="adguard.rewrite")
-
-    def test_it_is_not_waiting_to_be_looked_at(self):
-        self.assertEqual(self.resource.observed_generation, self.resource.generation)
-
-    def test_it_carries_when_it_was_seen(self):
-        self.assertIsNotNone(self.resource.last_observed_at)
-
-    def test_its_status_is_what_the_provider_was_holding(self):
-        self.assertEqual(self.resource.status.get("domain"), A_REWRITE["domain"])
-
-    def test_it_reads_as_healthy_rather_than_merely_recorded(self):
-        from hq.platform.application.infrastructure import resource_health
-
-        self.assertEqual(resource_health(self.resource)["state"], "healthy")
 
 
 class NothingWaitsToBeOptedInTests(TestCase):
@@ -579,6 +514,7 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
     Nothing queues a reconcile for a resource that has not drifted, so if only
     a reconcile recorded an observation, an untouched declaration would read
     "never reported" indefinitely while every part of its service is running.
+    Adoption is the one write that starts in sync, so it says so too.
     """
 
     def setUp(self):
@@ -586,13 +522,18 @@ class ASweepConfirmsWhatItFindsTests(TestCase):
         record_sweep(a_sweep(**{"adguard.rewrite": [A_REWRITE]}), principal=cli_principal())
         self.resource = ManagedResource.objects.get(kind="adguard.rewrite")
 
-    def test_a_declaration_the_sweep_found_unchanged_is_observed(self):
-        self.assertEqual(self.resource.observed_generation, self.resource.generation)
-
-    def test_it_reads_as_healthy_rather_than_awaiting_a_first_check(self):
+    def test_what_a_sweep_adopted_or_found_unchanged_is_observed_and_healthy(self):
         from hq.platform.application.infrastructure import resource_health
 
-        self.assertEqual(resource_health(self.resource)["state"], "healthy")
+        for step in ("swept", "adopted again"):
+            with self.subTest(step):
+                if step == "adopted again":
+                    adopt_discovered("adguard.rewrite", principal=cli_principal())
+                    self.resource.refresh_from_db()
+                self.assertEqual(self.resource.observed_generation, self.resource.generation)
+                self.assertIsNotNone(self.resource.last_observed_at)
+                self.assertEqual(self.resource.status.get("domain"), A_REWRITE["domain"])
+                self.assertEqual(resource_health(self.resource)["state"], "healthy")
 
     def test_a_declaration_that_has_drifted_is_left_for_a_reconcile(self):
         """Calling drift "observed" hides the difference this model exists for."""
@@ -650,11 +591,11 @@ class ASweepAdoptsOnlyWhatAComposeProjectDeclaresTests(TestCase):
     def names(self):
         return {resource.spec.get("name") for resource in ManagedResource.objects.filter(kind="portainer.container")}
 
-    def test_a_container_its_compose_project_declares_is_adopted(self):
-        self.assertIn("a-web", self.names())
+    def test_only_a_container_its_compose_project_declares_is_adopted(self):
+        names = self.names()
 
-    def test_a_container_no_compose_project_declares_is_not_adopted(self):
-        self.assertNotIn("a-stray", self.names())
+        self.assertIn("a-web", names)
+        self.assertNotIn("a-stray", names)
 
     def test_it_stays_unmanaged_and_says_it_is_not_adoptable(self):
         (item,) = unmanaged()
@@ -718,7 +659,7 @@ class ADeletedContainerIsForgottenTests(TestCase):
             principal=cli_principal(),
         )
 
-    def test_one_its_machine_no_longer_lists_is_forgotten(self):
+    def test_one_its_machine_no_longer_lists_is_forgotten_until_it_returns(self):
         kept = {**A_COMPOSED_CONTAINER, "name": "a-db"}
 
         result = self.sweep(kept, self.ELSEWHERE)
@@ -730,6 +671,10 @@ class ADeletedContainerIsForgottenTests(TestCase):
                 action=AuditLog.Action.DELETED, message__contains="no longer on its machine"
             ).exists()
         )
+
+        self.sweep(A_COMPOSED_CONTAINER, self.ELSEWHERE)
+
+        self.assertIn("a-web", self.names())
 
     def test_a_machine_the_sweep_did_not_list_keeps_its_containers(self):
         """Unreachable lists nothing, which says nothing about what runs there."""
@@ -753,12 +698,6 @@ class ADeletedContainerIsForgottenTests(TestCase):
         resource.save(update_fields=["spec"])
 
         self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"}, self.ELSEWHERE)
-
-        self.assertIn("a-web", self.names())
-
-    def test_it_is_adopted_again_if_it_returns(self):
-        self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"}, self.ELSEWHERE)
-        self.sweep(A_COMPOSED_CONTAINER, self.ELSEWHERE)
 
         self.assertIn("a-web", self.names())
 
@@ -864,14 +803,11 @@ class UnobservableFieldTests(TestCase):
         record_sweep(a_sweep(**{"npm.proxy_host": [record or A_PROXY]}), principal=self.principal)
         self.resource.refresh_from_db()
 
-    def test_a_host_naming_a_certificate_is_confirmed_by_a_sweep(self):
+    def test_a_host_naming_a_certificate_is_confirmed_by_a_sweep_that_cannot_see_it(self):
         self.assertIsNone(self.resource.last_observed_at)
         self.sweep()
         self.assertIsNotNone(self.resource.last_observed_at)
         self.assertEqual(self.resource.conditions[0]["reason"], "Observed")
-
-    def test_the_certificate_a_sweep_cannot_see_is_never_erased(self):
-        self.sweep()
         self.assertEqual(self.resource.spec["certificate_resource"], "example-wildcard")
 
     def test_drift_in_an_observable_field_is_still_refused(self):
@@ -893,7 +829,8 @@ class UnobservableFieldTests(TestCase):
         sampled = {k for k, p in PROVIDERS.items() if p.sample_record}
         self.assertEqual(adoptable - sampled, set())
 
-    def test_a_provider_blanking_a_field_it_declares_must_say_so(self):
+    def test_a_blanked_field_is_declared_unobservable_and_a_declared_one_is_really_blanked(self):
+        """Exemptions accrete, and each one forgives drift forever."""
         for kind, provider in _adoptable():
             rebuilt = provider.from_record(provider.sample_record)
             for field, value in rebuilt.items():
@@ -908,6 +845,12 @@ class UnobservableFieldTests(TestCase):
                         f"{kind}.{field} is blanked by from_record but not declared "
                         "unobservable, so a declaration naming it is never confirmed",
                     )
+            for field in provider.unobservable_fields:
+                supplied = provider.sample_record.get(field, "")
+                if supplied == "":
+                    continue
+                with self.subTest(kind=kind, field=field, exemption=True):
+                    self.assertNotEqual(str(rebuilt.get(field, "")), str(supplied))
 
     def test_a_field_the_reading_never_carries_is_declared_even_when_omitted(self):
         """The guard above skips fields its sample record omits, which is
@@ -956,17 +899,6 @@ class UnobservableFieldTests(TestCase):
                         "can clear. Declare it in unobservable_fields.",
                     )
 
-    def test_an_unobservable_field_that_does_round_trip_is_a_false_exemption(self):
-        """Exemptions accrete, and each one forgives drift forever."""
-        for kind, provider in _adoptable():
-            rebuilt = provider.from_record(provider.sample_record)
-            for field in provider.unobservable_fields:
-                supplied = provider.sample_record.get(field, "")
-                if supplied == "":
-                    continue
-                with self.subTest(kind=kind, field=field):
-                    self.assertNotEqual(str(rebuilt.get(field, "")), str(supplied))
-
     def test_a_swept_record_confirms_the_declaration_it_matches(self):
         """The invariant, asked of every adoptable provider.
 
@@ -1007,25 +939,19 @@ class ObservationIsNotAnEventTests(TestCase):
     def updates(self):
         return AuditLog.objects.filter(object_type="Managed resource", action=AuditLog.Action.UPDATED)
 
-    def test_confirming_an_unchanged_declaration_writes_no_audit_row(self):
+    def test_confirming_an_unchanged_declaration_writes_the_stamp_and_no_audit_row(self):
+        """Silencing the event must not silence the fact it records."""
         # The first sweep is a real event: status, conditions and the observed
         # generation all move from empty to observed. Every sweep after it
         # changes only the stamp, and those are the thousands of rows.
         self.sweep()
+        first = self.resource.last_observed_at
         AuditLog.objects.all().delete()
         for _ in range(5):
             self.sweep()
-        self.assertIsNotNone(self.resource.last_observed_at)
-        self.assertEqual(self.updates().count(), 0)
-
-    def test_the_stamp_is_still_written_so_staleness_still_works(self):
-        """Silencing the event must not silence the fact it records."""
-        self.sweep()
-        first = self.resource.last_observed_at
-        AuditLog.objects.all().delete()
-        self.sweep()
         self.assertIsNotNone(first)
         self.assertGreaterEqual(self.resource.last_observed_at, first)
+        self.assertFalse(self.updates().exists())
 
     def test_a_sweep_that_finds_something_different_is_still_an_event(self):
         self.sweep()
@@ -1051,52 +977,31 @@ class LineEndingsAreNotDriftTests(TestCase):
 
     DOCUMENT = '{\n  "grants": [],\n  "groups": {}\n}'
 
-    def test_crlf_and_lf_are_the_same_declaration(self):
-        from ..inventory import _differences
-
-        declared = {"document": self.DOCUMENT.replace("\n", "\r\n")}
-        found = {"document": self.DOCUMENT}
-
-        self.assertEqual(_differences("tailscale.policy", declared, found), ())
-
-    def test_a_document_really_changing_is_still_drift(self):
-        """The normalisation must not swallow a difference that matters."""
-
-        from ..inventory import _differences
-
-        declared = {"document": self.DOCUMENT.replace("\n", "\r\n")}
-        found = {"document": self.DOCUMENT.replace("grants", "grant")}
-
-        self.assertNotEqual(_differences("tailscale.policy", declared, found), ())
-
-    def test_minified_and_pretty_printed_are_the_same_declaration(self):
-        """HQ stores the policy it applied on one line; Tailscale returns it
-        across hundreds. Formatting alone must not read as drift.
-        """
+    def test_layout_is_not_drift_and_a_real_change_is(self):
+        """CRLF against LF, one line against hundreds (HQ stores the policy it
+        applied minified; Tailscale returns it pretty-printed) and object key
+        order are layout. A list's order is not: in a policy the order of grants
+        is the policy. The normalisation must not swallow a difference that
+        matters."""
 
         import json
 
         from ..inventory import _differences
 
+        crlf = self.DOCUMENT.replace("\n", "\r\n")
         minified = json.dumps(json.loads(self.DOCUMENT), separators=(",", ":"))
-        declared = {"document": minified}
-        found = {"document": self.DOCUMENT}
-
-        self.assertNotEqual(minified, self.DOCUMENT)
-        self.assertEqual(_differences("tailscale.policy", declared, found), ())
-
-    def test_key_order_is_layout_but_list_order_is_not(self):
-        """Object keys carry no order in JSON. A list does, and in a policy the
-        order of grants is the policy, so reordering one is still drift."""
-
-        from ..inventory import _differences
-
-        declared = {"document": '{"groups":{},"grants":[{"a":1},{"b":2}]}'}
-        rekeyed = {"document": '{"grants":[{"a":1},{"b":2}],"groups":{}}'}
-        reordered = {"document": '{"groups":{},"grants":[{"b":2},{"a":1}]}'}
-
-        self.assertEqual(_differences("tailscale.policy", declared, rekeyed), ())
-        self.assertNotEqual(_differences("tailscale.policy", declared, reordered), ())
+        keyed = '{"groups":{},"grants":[{"a":1},{"b":2}]}'
+        cases = (
+            ("crlf and lf", crlf, self.DOCUMENT, False),
+            ("minified and pretty", minified, self.DOCUMENT, False),
+            ("key order", keyed, '{"grants":[{"a":1},{"b":2}],"groups":{}}', False),
+            ("list order", keyed, '{"groups":{},"grants":[{"b":2},{"a":1}]}', True),
+            ("a real change", crlf, self.DOCUMENT.replace("grants", "grant"), True),
+        )
+        for name, declared, found, drifted in cases:
+            with self.subTest(name):
+                differences = _differences("tailscale.policy", {"document": declared}, {"document": found})
+                self.assertEqual(bool(differences), drifted)
 
     def test_a_document_that_is_not_json_is_still_compared_as_text(self):
         """A policy kept as HuJSON, with comments, does not parse. It falls back

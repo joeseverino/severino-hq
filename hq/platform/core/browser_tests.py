@@ -797,6 +797,19 @@ _TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' +
     && table.getBoundingClientRect().width > box.clientWidth + 1)
   .map(([box, table]) => (table.querySelector('th') || table).textContent.trim().slice(0, 24)
     + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
+# Every disclosure open, and the tables fitted again for it: each fitted table
+# loses its mark and the window says it resized, so the mark's return is the
+# refit having run.
+_OPEN_AND_REFIT = """(scroll) => {
+  document.querySelectorAll('details').forEach((d) => { d.open = true; });
+  window.refitting = [...document.querySelectorAll(scroll + ' > table')].filter((table) => 'fit' in table.dataset);
+  window.refitting.forEach((table) => { delete table.dataset.fit; });
+  window.dispatchEvent(new Event('resize'));
+}"""
+# A frame has been drawn and nothing is moving.
+_PAINTED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
+_STILL = """() => document.getAnimations()
+  .every((motion) => motion.playState !== 'running' || motion.effect?.getComputedTiming().iterations === Infinity)"""
 _NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' > table')]
   .filter((table) => table.checkVisibility() && table.querySelector('tbody button[aria-expanded]'))
   .map((table) => {
@@ -1126,6 +1139,12 @@ class BrowserGate(SimpleTestCase):
         self.context.set_default_timeout(5000)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
+
+    def settle(self):
+        """Wait until the page has drawn what it just did and nothing is moving."""
+
+        self.page.evaluate(_PAINTED)
+        self.page.wait_for_function(_STILL)
 
     def respond(self, route):
         path = urlsplit(route.request.url).path
@@ -1541,9 +1560,8 @@ class LayoutBrowserTests(BrowserGate):
         either. Every page, with every disclosure open.
         """
 
-        self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
-        self.page.evaluate("() => window.dispatchEvent(new Event('resize'))")
-        self.page.wait_for_timeout(200)
+        self.page.evaluate(_OPEN_AND_REFIT, SELECTORS["table_scroll"])
+        self.page.wait_for_function("() => window.refitting.every((table) => 'fit' in table.dataset)")
         self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
     # Rules with a setup of their own.
@@ -1833,7 +1851,17 @@ _REFERENCE_HEADING = """(title) => {
     floor: Math.round(document.querySelector('header').getBoundingClientRect().bottom),
     window: innerHeight, hash: location.hash};
 }"""
+# The heading has been scrolled to and has stopped moving: the same place on three polls running.
+_REFERENCE_AT_REST = f"""(title) => {{
+  const found = ({_REFERENCE_HEADING})(title);
+  if (!found || !found.hash) return false;
+  const last = (window.resting ??= {{}})[title] ?? {{runs: 0}};
+  window.resting[title] = {{top: found.top, runs: last.top === found.top ? last.runs + 1 : 0}};
+  return window.resting[title].runs >= 3;
+}}"""
 _REFERENCE_OPEN_MENU = "(root) => document.querySelector(root).querySelector('header button').click()"
+_REFERENCE_LISTED = """(title) => [...document.querySelectorAll('aside a[href]')]
+  .some((a) => a.textContent.trim().startsWith(title))"""
 
 
 def reference_outline(document):
@@ -1925,14 +1953,14 @@ class ReferenceBrowserTests(BrowserGate):
             for offset in (0, 600, height // 2, height):
                 with self.subTest(width=width, offset=offset):
                     self.page.evaluate("(y) => window.scrollTo(0, y)", offset)
-                    self.page.wait_for_timeout(150)
+                    self.settle()
                     self.assert_framed(self.frame())
 
     def test_a_phone_reaches_the_sidebar_under_the_header(self):
         self.visit(REFERENCE_PHONE)
         self.assert_framed(self.frame())
         self.page.evaluate(_REFERENCE_OPEN_MENU, SELECTORS["reference"])
-        self.page.wait_for_timeout(300)
+        self.settle()
         self.assert_framed(self.frame())
         entries = self.page.evaluate(_REFERENCE_OUTLINE)
         self.assertGreater(len(entries), 1)
@@ -1993,7 +2021,7 @@ class ReferenceBrowserTests(BrowserGate):
         )
 
         def landed():
-            self.page.wait_for_timeout(1500)
+            self.page.wait_for_function(_REFERENCE_AT_REST, arg=title, polling=100)
             heading = self.page.evaluate(_REFERENCE_HEADING, title)
             self.assertIsNotNone(heading)
             self.assertGreaterEqual(heading["top"], heading["floor"])
@@ -2002,7 +2030,8 @@ class ReferenceBrowserTests(BrowserGate):
 
         self.visit(1360)
         self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, tag["summary"]))
-        self.page.wait_for_timeout(500)
+        self.page.wait_for_function(_REFERENCE_LISTED, arg=title)
+        self.page.wait_for_function(_REFERENCE_AT_REST, arg=tag["summary"], polling=100)
         self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, title))
         fragment = landed()
         self.assertNotEqual(fragment, "")
@@ -2092,11 +2121,18 @@ class FragmentBrowserTests(BrowserGate):
         return route.fulfill(status=404, body="Not in the synthetic fixture")
 
     def test_a_polled_region_takes_only_what_changed_and_stops_when_told(self):
+        self.page.clock.install()
         self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
         self.page.evaluate(
             "() => { const first = document.querySelector('[data-fragment-part=\"first\"]');"
             " first.kept = true; first.open = true; }"
         )
+        # Its first turn reads it again and keeps polling; the second is told to stop.
+        self.page.clock.run_for(1000)
+        self.page.wait_for_function(
+            "() => document.querySelector('[data-fragment-part=\"second\"]').textContent.includes('read again')"
+        )
+        self.page.clock.run_for(1000)
         self.page.wait_for_function("() => document.querySelector('[data-fragment-poll]') === null")
         state = self.page.evaluate(_PROBE_STATE, SELECTORS["fragment_failure"])
 
@@ -2106,7 +2142,9 @@ class FragmentBrowserTests(BrowserGate):
         self.assertTrue(state["firstOpen"])
         self.assertEqual(state["second"].strip(), "Secondread again")
         asked = self.asked.count(("/probe-strip/", ""))
-        self.page.wait_for_timeout(2500)
+        self.page.clock.run_for(5000)
+        # A request after those turns is answered after any they made.
+        self.page.evaluate("() => fetch('/probe-slot/')")
         self.assertEqual(self.asked.count(("/probe-strip/", "")), asked)
         self.assertEqual(self.errors, [])
 

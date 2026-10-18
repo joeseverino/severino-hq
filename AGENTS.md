@@ -29,17 +29,20 @@ manage.py ...`.
 base (`BASE`, `$CHECK_BASE`, then `origin/main`, `main`) are mapped through the
 tree's import graph to the test modules that reach them, plus every test of the
 changed Django apps, the architecture tests, ruff on the changed files, `manage.py
-check`, migration and API document drift, and mypy on changed typed modules.
-`--list` prints the selection. Tens of seconds for a one-domain change; a change
-to a shared layer reaches most of the suite and says so. It reads Python imports
-and app names, so a rule tested only through a string or a template it cannot
-see needs `mise run check`. It never replaces `mise run check`, which also runs
-the suite with `DEBUG` off. A new host domain: `docs/New-Domain.md`.
+check`, migration, API document, controller contract and connections reference
+drift, and mypy on changed typed modules. A change to what extensions render
+through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
+moment modules, template tags) also runs the extensions' own suites, composed,
+when `mise.local.toml` names a set. `--list` prints the selection. Tens of
+seconds for a one-domain change; a change to a shared layer reaches most of the
+suite and says so. It reads Python imports and app names, so a rule tested
+only through a string or a template it cannot see needs `mise run check`. It
+never replaces `mise run check`. A new host domain: `docs/New-Domain.md`.
 
 `mise run check` answers "do my changes work?". `mise run ci` answers "will the
 pipeline accept them?": the aggregates `checks` (ruff and mypy at the locked
-versions, the lockfile, the workflows, the shell gates, the Django deployment
-check, `pip-audit`, the structural bar, Scorecard), `tests` on every Python in
+versions, the lockfile, the workflows, the shell gates, the source tests, the
+Django deployment check, `pip-audit`, the structural bar, Scorecard), `tests` on every Python in
 `PYTHON_VERSIONS` (`scripts/toolchain.env`), `browser`, `controller`, `scan`
 (CodeQL) and `image`: the image build and what an image must pass (it comes
 up healthy and under its unit, carries the host programs and the controller,
@@ -49,11 +52,19 @@ gate list exists once: a gate is added in `mise.toml`, never in a workflow. A
 gate that cannot run fails. `mise run -c ci` keeps going past a failure and
 names every gate that failed.
 
-`mise run check` runs the suite three ways: with `DEBUG` on (`tests:suite`),
-with it off as production runs it (`suite:production`), and (when an extension
-set is supplied) composed with the extensions (`suite:composed`). That third
-pass is the one that catches what CI cannot, because the host and its
-extensions first meet during compose, long after the merge button.
+`mise run check` runs the suite twice: as production configures it, with
+`DJANGO_DEBUG` unset (`tests:suite`), and (when an extension set is supplied)
+composed with the extensions (`suite:composed`). That second pass is the one
+that catches what CI cannot, because the host and its extensions first meet
+during compose, long after the merge button. A setting whose default follows
+`DEBUG` is held by a test that loads the settings both ways.
+
+A test that reads the repository rather than running the product (the docs,
+the workflows, the Dockerfile, the source itself) carries `@tag("source")`. It
+runs once, on the checkout, in `checks:source`. A whole-suite run leaves the
+tag out, so no image or composed pass runs a test against files the image does
+not ship; a run that names a label runs what it names. A run that asks for a
+tag no test carries fails.
 
 Name the extension set once in a gitignored `mise.local.toml` (copy
 `scripts/mise.local.example.toml`): `HQ_LOCAL_PYTHONPATH` says where the
@@ -63,7 +74,9 @@ by accident. Without it the
 composed pass says it did not run and passes, so public CI and a fresh checkout
 are unaffected, but locally that means the gate covers less, which is the
 reason the file exists. `REQUIRE_COMPOSED=1 mise run suite:composed` fails
-instead; `mise run preflight` runs it that way.
+instead. `mise run suite:as-image` runs the composed suite as the image does:
+in a copy of only the files `Dockerfile.dockerignore` admits, with `DEBUG` off
+and `SEVERINO_HQ_SOURCE` stamped. `mise run preflight` runs it, required.
 
 Local development uses `mise run dev`. It collects assets and runs the same
 ASGI/Uvicorn path as production with reload enabled.

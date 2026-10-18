@@ -77,7 +77,7 @@ ruleset before they can publish anything.
 **For:** the host runs the composed image your repository publishes, pinned by
 digest. For this repository that is `ghcr.io/joeseverino/severino-hq/composition`.
 
-Merge to `main`. CI's **Ready** starts **Compose**, which publishes and signs
+Merge to `main`. CI's **Release** starts **Compose**, which publishes and signs
 the composition. To run it by hand: Actions, **Compose**, Run workflow, on
 `main`.
 

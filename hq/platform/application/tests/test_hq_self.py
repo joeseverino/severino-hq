@@ -11,6 +11,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest, P
 
 from ..hq_self import LABEL, hq_hostnames, hq_service, served_at
 from ..machines import machine
+from .host_only import host_only
 
 SITE = override_settings(
     SEVERINO_SITE_HOST="hq.example.com",
@@ -211,7 +212,7 @@ class TopologyTests(TestCase):
         declare("example-host", "192.0.2.44")
         reader = Principal("reader", "test", frozenset({Capability.READ}))
 
-        with own("192.0.2.44"), mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with own("192.0.2.44"), host_only():
             topology = derive_topology(principal=reader)
 
         nodes = {node.id: node for node in topology.nodes}
@@ -230,7 +231,7 @@ class TopologyTests(TestCase):
         tailnet_device("example-laptop", ("100.64.0.5",))
         reader = Principal("reader", "test", frozenset({Capability.READ}))
 
-        with own(), mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with own(), host_only():
             topology = derive_topology(principal=reader, request=_Request("100.64.0.5"))
 
         self.assertIn(

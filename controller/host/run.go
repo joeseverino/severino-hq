@@ -29,7 +29,9 @@ type WebRunner struct {
 	// Poll is how often the environment and the health are looked at; Await
 	// bounds the wait for the environment, after which the start fails and
 	// the unit tries again.
-	Poll, Await    time.Duration
+	Poll, Await time.Duration
+	// StartPeriod is the container's health start period (Web.StartPeriod).
+	StartPeriod    time.Duration
 	Stdout, Stderr io.Writer
 	Log            *slog.Logger
 }
@@ -58,7 +60,7 @@ func (r *WebRunner) Run(ctx context.Context) error {
 	_ = r.Docker(ctx, "rm", "--force", Container).Run()
 
 	// Not ctx: cancelling it would kill the client; the stop below ends HQ.
-	container := r.Docker(context.WithoutCancel(ctx), Web{Image: image}.Args()...)
+	container := r.Docker(context.WithoutCancel(ctx), Web{Image: image, StartPeriod: r.StartPeriod}.Args()...)
 	container.Stdout, container.Stderr = r.Stdout, r.Stderr
 	if err := container.Start(); err != nil {
 		return fmt.Errorf("docker could not start the container: %w", err)

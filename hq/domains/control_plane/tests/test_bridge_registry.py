@@ -18,7 +18,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from hq.domains.control_plane import bridge_contract, bridge_registry
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
@@ -36,16 +36,8 @@ def _base() -> dict:
     return json.loads(bridge_contract.BASE_PATH.read_text(encoding="utf-8"))
 
 
-class EmittedFilesTests(SimpleTestCase):
-    def test_every_committed_file_is_the_derived_one(self):
-        for path, derived in bridge_contract.emitted().items():
-            with self.subTest(file=path.name):
-                self.assertEqual(
-                    path.read_text(encoding="utf-8"),
-                    derived,
-                    "run `manage.py bridge_contract`, then `go generate ./...` in controller/",
-                )
-
+@tag("source")
+class CheckCommandTests(SimpleTestCase):
     def test_the_command_reports_drift_and_writes_nothing_when_checking(self):
         derived = bridge_contract.emitted()
         stale = {path: text + " " for path, text in derived.items()}
@@ -85,6 +77,9 @@ class JoinTests(SimpleTestCase):
         ):
             bridge_registry.schemas()
 
+
+@tag("source")
+class WrittenFileTests(SimpleTestCase):
     def test_python_reads_no_fact_back_from_a_file_it_writes(self):
         """Only ``bridge_contract`` names the written files, and only to write them."""
 
@@ -280,6 +275,7 @@ _VALUES = {
 }
 
 
+@tag("source")
 class RequiredAppVariablesTests(SimpleTestCase):
     """The renderer refuses an item without what production cannot run without, and nothing else."""
 

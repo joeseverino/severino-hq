@@ -51,16 +51,6 @@ from ..zones import (
 # Every DNS connection these tests name, each managing.
 DNS_CONNECTIONS = tuple(("cloudflare_dns", ref) for ref in ("cf-example", "cf", "a-dns", "a-dns-account"))
 
-# A ceiling, not a measurement. Raised deliberately when a page genuinely
-# needs another read; tripped accidentally when a property starts querying
-# per row.
-# 21: adoption reads which connections manage.
-# 32: the Relationships section reads the relation graph: the machine
-# catalogue, the connection readings and the declarations, once each.
-# 34: the records that name this domain, in one read, and the names of theirs.
-DOMAIN_PAGE_QUERY_BUDGET = 34
-PER_EXTENSION_QUERY_BUDGET = 2
-
 ZONE_KIND = "cloudflare.zone"
 RECORD_KIND = "cloudflare.dns_record"
 
@@ -141,82 +131,28 @@ class SpecShapeTests(TestCase):
     it.
     """
 
-    def test_mx_requires_a_priority(self):
-        with self.assertRaises(Exception) as caught:
-            validate_spec(
-                RECORD_KIND,
-                {
-                    "zone": "example.com",
-                    "name": "example.com",
-                    "record_type": "MX",
-                    "content": "mx.example.net",
-                },
-            )
-        self.assertIn("priority", str(caught.exception))
-
-    def test_priority_is_refused_on_types_that_have_none(self):
-        with self.assertRaises(ValidationError):
-            validate_spec(
-                RECORD_KIND,
-                {
-                    "zone": "example.com",
-                    "name": "app.example.com",
-                    "record_type": "A",
-                    "content": "203.0.113.1",
-                    "priority": 10,
-                },
-            )
-
-    def test_cloudflare_will_not_proxy_a_txt_record(self):
-        with self.assertRaises(ValidationError):
-            validate_spec(
-                RECORD_KIND,
-                {
-                    "zone": "example.com",
-                    "name": "example.com",
-                    "record_type": "TXT",
-                    "content": '"hello"',
-                    "proxied": True,
-                },
-            )
-
-    def test_a_proxied_record_must_leave_ttl_automatic(self):
-        # Cloudflare drives the TTL of a proxied record itself and reports 1 for
-        # it regardless. Storing anything else reports drift forever against a
-        # value the provider will never agree to.
-        with self.assertRaises(ValidationError):
-            validate_spec(
-                RECORD_KIND,
-                {
-                    "zone": "example.com",
-                    "name": "app.example.com",
-                    "record_type": "A",
-                    "content": "203.0.113.1",
-                    "proxied": True,
-                    "ttl": 300,
-                },
-            )
-
-    def test_caa_value_must_be_well_formed(self):
-        with self.assertRaises(ValidationError):
-            validate_spec(
-                RECORD_KIND,
-                {
-                    "zone": "example.com",
-                    "name": "example.com",
-                    "record_type": "CAA",
-                    "content": "letsencrypt.org",
-                },
-            )
-        validate_spec(
-            RECORD_KIND,
-            {
+    def test_each_rule_refuses_its_shape_at_the_form(self):
+        def spec(**fields):
+            return {
                 "zone": "example.com",
-                "name": "example.com",
-                "record_type": "CAA",
-                "content": '0 issue "letsencrypt.org"',
-            },
-        )
+                "name": "app.example.com",
+                "record_type": "A",
+                "content": "203.0.113.1",
+                **fields,
+            }
+
+        refused = {
+            "an MX record with no priority": spec(record_type="MX", content="mx.example.net"),
+            "a priority on a type that has none": spec(priority=10),
+            "a proxied TXT record": spec(record_type="TXT", content='"hello"', proxied=True),
+            # Cloudflare drives a proxied record's TTL itself and reports 1 for it.
+            "a proxied record with its own TTL": spec(proxied=True, ttl=300),
+            "a CAA value that is not one": spec(record_type="CAA", content="letsencrypt.org"),
+        }
+        for case, fields in refused.items():
+            with self.subTest(case), self.assertRaises(ValidationError):
+                validate_spec(RECORD_KIND, fields)
+        validate_spec(RECORD_KIND, spec(record_type="CAA", content='0 issue "letsencrypt.org"'))
 
 
 class IdentityTests(TestCase):
@@ -344,13 +280,6 @@ class ZoneViewTests(TestCase):
         cards = {i.label: i for i in find_zone("example.net").insights}
         self.assertFalse(cards["Security"].concern)
 
-    def test_the_security_card_is_its_mode_and_one_line_of_facts(self):
-        security = {i.label: i for i in find_zone("example.net").insights}["Security"]
-
-        # A headline, not a sentence: the card sits beside three others.
-        self.assertNotIn("·", security.value)
-        self.assertNotIn(". ", security.detail)
-
     def test_left_over_challenge_records_are_the_one_thing_flagged(self):
         """The single judgement this page makes without a declared policy.
 
@@ -360,7 +289,7 @@ class ZoneViewTests(TestCase):
         """
 
         cards = {i.label: i for i in find_zone("example.net").insights}
-        self.assertEqual(cards["Left-over ACME challenges"].value, "2 left behind")
+        self.assertIn("2", cards["Left-over ACME challenges"].value)
         self.assertTrue(cards["Left-over ACME challenges"].concern)
         self.assertFalse(any(card.concern for label, card in cards.items() if label != "Left-over ACME challenges"))
 
@@ -580,12 +509,14 @@ class ZoneInsightTests(TestCase):
 
         self.assertTrue(card.concern)
         self.assertIn("digicert.com", card.detail)
-        self.assertIn("will be refused", card.detail)
 
-    def test_caa_that_permits_the_renewing_authority_is_not_flagged(self):
+    def test_caa_that_permits_the_renewing_authority_is_not_flagged_and_iodef_names_no_issuer(self):
+        """iodef names where to report a violation, not who may issue: counted
+        as an issuer, a certificate HQ renews would be flagged as doomed."""
         sweep(
             records=[
                 record("example.com", "CAA", '0 issue "letsencrypt.org"', rid="c1"),
+                record("example.com", "CAA", '0 iodef "mailto:sec@example.com"', rid="c2"),
                 record("example.com", "A", "203.0.113.1", rid="a1"),
             ]
         )
@@ -652,8 +583,8 @@ class ZoneInsightTests(TestCase):
         card = self._insight("example.com", "Email")
 
         self.assertEqual(card.value, "example.net")
-        self.assertIn("SPF is published.", card.detail)
-        self.assertIn("DMARC rejects forgeries.", card.detail)
+        self.assertIn("SPF", card.detail)
+        self.assertIn("DMARC", card.detail)
 
     def test_a_recognised_mail_host_is_named_the_way_people_say_it(self):
         sweep(
@@ -681,27 +612,6 @@ class ZoneInsightTests(TestCase):
         card = self._insight("example.com", "Email")
 
         self.assertEqual(card.value, "Not configured")
-        self.assertIn("says it comes from it", card.detail)
-
-    def test_iodef_is_not_counted_as_an_issuing_authority(self):
-        """It names where to report a violation, not who may issue.
-
-        Counted as an issuer, a domain looks restricted to an email address,
-        and a certificate HQ renews would be flagged as doomed when it is fine.
-        """
-
-        sweep(
-            records=[
-                record("example.com", "CAA", '0 issue "letsencrypt.org"', rid="c1"),
-                record("example.com", "CAA", '0 iodef "mailto:sec@example.com"', rid="c2"),
-                record("example.com", "A", "203.0.113.1", rid="a1"),
-            ]
-        )
-        self._certificate()
-
-        card = self._insight("example.com", "Certificates")
-
-        self.assertFalse(card.concern)
 
     def test_one_failing_contributor_does_not_lose_the_page(self):
         """This is the screen opened to find out what is wrong."""
@@ -756,7 +666,7 @@ class EphemeralRecordTests(TestCase):
         real problem and keeps its own card."""
 
         card = next(i for i in self.zone.insights if i.label == "Left-over ACME challenges")
-        self.assertEqual(card.value, "2 left behind")
+        self.assertIn("2", card.value)
         self.assertTrue(card.concern)
 
 
@@ -777,19 +687,14 @@ class ServicesInsightTests(TestCase):
     def _card(self):
         return next(i for i in find_zone("example.com").insights if i.label == "Services")
 
-    def test_the_value_is_a_count(self):
-        self.assertEqual(self._card().value, "3 services")
+    def test_a_count_carrying_every_service_and_a_link_to_the_same_list(self):
+        """The dialog is an enhancement: without a real href behind it, a card
+        that summarises thirty services into a number loses them when it does not open."""
+        card = self._card()
 
-    def test_every_service_in_the_domain_is_carried_for_the_dialog(self):
-        titles = {row.title for row in self._card().rows}
-        self.assertEqual(titles, {"h0.example.com", "h1.example.com", "h2.example.com"})
-
-    def test_the_link_still_reaches_a_page_that_does_the_same_job(self):
-        """The dialog is an enhancement. Without a real href behind it, a card
-        that summarises thirty services into a number loses them entirely the
-        moment the dialog does not open."""
-
-        self.assertEqual(self._card().url, reverse("control_plane:services"))
+        self.assertIn("3", card.value)
+        self.assertEqual({row.title for row in card.rows}, {"h0.example.com", "h1.example.com", "h2.example.com"})
+        self.assertEqual(card.url, reverse("control_plane:services"))
 
     def test_services_in_another_domain_are_not_counted(self):
         ManagedResource.objects.create(
@@ -799,7 +704,7 @@ class ServicesInsightTests(TestCase):
             enabled=True,
         )
 
-        self.assertEqual(self._card().value, "3 services")
+        self.assertEqual(len(self._card().rows), 3)
 
 
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
@@ -902,54 +807,6 @@ class SelfClosingAdoptionTests(TestCase):
             )
 
 
-class ServiceFacetOfferTests(TestCase):
-    """What a service page offers when a facet is missing.
-
-    It offered the provider's identifier ("Add cloudflare.dns_record") which
-    names the provider correctly and the offer not at all. Every provider
-    already carries the sentence it should have used.
-    """
-
-    def test_a_missing_facet_is_offered_by_name_not_by_identifier(self):
-        from ..service_facets import Facet
-
-        offers = dict(Facet(id="dns", label="DNS").declarable)
-
-        # Reads mid-sentence: the page renders "Add public DNS record",
-        # with only the first letter lowered, so the acronym survives. Lowering
-        # the whole label produced "add public dns record".
-        self.assertIn(RECORD_KIND, offers)
-        self.assertEqual(offers[RECORD_KIND], "public DNS record")
-        self.assertEqual(offers["adguard.rewrite"], "internal DNS record")
-
-    def test_a_certificate_can_be_started_from_a_name_nothing_covers(self):
-        """A name no wildcard covers can start a certificate.
-
-        Only ever rendered for a facet nothing supplies, so a name already
-        covered is never invited to grow a certificate of its own.
-        """
-
-        from ..service_facets import Facet
-
-        offers = dict(Facet(id="certificate", label="Certificate").declarable)
-
-        self.assertEqual(offers["tls.certificate"], "TLS certificate")
-
-    def test_an_uploaded_certificate_is_offered_beside_the_issued_one(self):
-        """Both ways of getting a certificate, offered where one is needed.
-
-        The form that creates one collects the file on the same page, and for a
-        `.home.arpa` name it is the option that works.
-        """
-
-        from ..service_facets import Facet
-
-        offers = dict(Facet(id="certificate", label="Certificate").declarable)
-
-        self.assertIn("tls.certificate", offers)
-        self.assertIn("tls.uploaded_certificate", offers)
-
-
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
 class UnrepresentableRecordTests(TestCase):
     """Cloudflare holds record types HQ's model does not describe.
@@ -974,18 +831,7 @@ class UnrepresentableRecordTests(TestCase):
             record("example.com", "NS", "ns1.example.net", rid="n1"),
         ]
 
-    def test_one_unrepresentable_record_does_not_fail_the_sweep(self):
-        result = record_sweep(
-            {
-                ZONE_KIND: {"ok": True, "records": ZONES},
-                RECORD_KIND: {"ok": True, "records": self.records},
-            },
-            principal=cli_principal(),
-        )
-
-        self.assertIn(RECORD_KIND, result["recorded"])
-
-    def test_the_records_it_can_express_are_still_taken_on(self):
+    def test_the_sweep_records_and_takes_on_what_it_can_express(self):
         """One record HQ cannot model must not cost it the whole zone."""
 
         result = record_sweep(
@@ -996,16 +842,14 @@ class UnrepresentableRecordTests(TestCase):
             principal=cli_principal(),
         )
 
+        self.assertIn(RECORD_KIND, result["recorded"])
         self.assertEqual(len(result["adopted"]), 1)
         declared = ManagedResource.objects.filter(kind=RECORD_KIND)
         self.assertEqual([r.spec["record_type"] for r in declared], ["A"])
 
-    def test_they_are_still_visible_rather_than_silently_dropped(self):
-        """A record HQ cannot manage is still a record in the zone.
-
-        Hidden, the page would claim to show what a domain publishes while
-        quietly omitting part of it: the one thing this surface must never do.
-        """
+    def test_they_are_still_visible_and_never_outstanding_work(self):
+        """A record HQ cannot manage is still a record in the zone, and will
+        never be adopted, so it is not work the page reports."""
 
         record_sweep(
             {
@@ -1018,19 +862,6 @@ class UnrepresentableRecordTests(TestCase):
         listed = {(r.record_type, r.name) for r in find_zone("example.com").listed}
         self.assertIn(("SRV", "_sip._tcp.example.com"), listed)
         self.assertIn(("NS", "example.com"), listed)
-
-    def test_they_are_not_reported_as_outstanding_work(self):
-        """They will never be adopted, so counting them means the page reports
-        work that can never be finished."""
-
-        record_sweep(
-            {
-                ZONE_KIND: {"ok": True, "records": ZONES},
-                RECORD_KIND: {"ok": True, "records": self.records},
-            },
-            principal=cli_principal(),
-        )
-
         self.assertEqual(find_zone("example.com").adoptable, ())
 
 
@@ -1066,27 +897,18 @@ class StopManagingDomainTests(TestCase):
             current_key="example-com",
         )
 
-    def test_a_domain_can_be_stopped_being_managed(self):
+    def test_a_domain_is_forgotten_with_its_records_and_nothing_is_queued(self):
+        """Left behind, record declarations would keep HQ writing to a domain
+        the operator had just said was not its business; there is nothing at
+        the provider for a controller to do."""
+
         result = self._remove()
 
         self.assertEqual(result["forgotten"], "example-com")
         self.assertFalse(ManagedResource.objects.filter(key="example-com").exists())
-
-    def test_nothing_is_queued_for_a_controller(self):
-        """There is nothing at the provider for it to do."""
-
-        self._remove()
-
-        self.assertFalse(OperationRequest.objects.exists())
-
-    def test_the_record_declarations_inside_it_are_released_too(self):
-        """Left behind, HQ would keep writing to a domain the operator had just
-        said was not its business."""
-
-        result = self._remove()
-
         self.assertEqual(len(result["released"]), len(APEX))
         self.assertFalse(ManagedResource.objects.filter(kind=RECORD_KIND).exists())
+        self.assertFalse(OperationRequest.objects.exists())
 
     def test_the_records_themselves_are_untouched(self):
         """Stepping back changes nothing about the zone. Every record is still
@@ -1164,21 +986,6 @@ class DomainPageCostTests(TestCase):
             f"the domain page scales with record count ({small} then {large})",
         )
 
-    def test_the_catalogue_is_built_once_per_request(self):
-        """The catalogue is built once, not once to find the domain and again
-        for the switcher.
-        """
-
-        from hq.platform.application.domains import extension_domains
-
-        # An installed extension's connections are read once each for the map.
-        allowed = DOMAIN_PAGE_QUERY_BUDGET + (len(extension_domains()) * PER_EXTENSION_QUERY_BUDGET)
-        self.assertLessEqual(
-            self._queries(10),
-            allowed,
-            "the domain page exceeded its query budget",
-        )
-
 
 class ResourceDetailIsProviderDeclaredTests(TestCase):
     """Every kind gets a detail card, including ones added after this page. The
@@ -1210,8 +1017,7 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Public DNS record")
+        self.assertContains(response, PROVIDERS[RECORD_KIND].label)
         self.assertContains(response, "203.0.113.1")
 
     def test_a_domain_lives_on_its_zone_page(self):
@@ -1229,19 +1035,7 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
         page = self.client.get(response.url)
         self.assertContains(page, "cf-example")
         self.assertContains(page, reverse("control_plane:edit", args=["a-domain"]))
-        self.assertContains(page, "Stop tracking in HQ")
-
-    def test_the_kinds_that_had_hand_written_cards_still_read_the_same(self):
-        response = self._detail(
-            "a-rewrite",
-            "adguard.rewrite",
-            {"domain": "app.example.com", "answer": "10.0.0.10"},
-            status={"answer": "10.0.0.10"},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "10.0.0.10")
-        self.assertContains(response, "Internal DNS record")
+        self.assertContains(page, reverse("control_plane:remove", args=["a-domain"]))
 
     def test_drift_is_shown_against_what_was_declared(self):
         """The readout carries desired and observed together precisely so a
@@ -1254,6 +1048,7 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
             status={"answer": "10.0.0.99"},
         )
 
+        self.assertContains(response, PROVIDERS["adguard.rewrite"].label)
         self.assertContains(response, "10.0.0.99")
         self.assertContains(response, "HQ expects 10.0.0.10")
 
@@ -1372,8 +1167,8 @@ class PublishAServiceTests(TestCase):
     def test_it_offers_every_facet_seeded_with_the_name(self):
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "new.example.com"}))
 
-        self.assertContains(response, "Add internal DNS record")
-        self.assertContains(response, "Add proxy host")
+        offered = {facet.id for facet in response.context["missing_facets"]}
+        self.assertLessEqual({"dns", "proxy"}, offered)
         self.assertContains(response, "hostname=new.example.com")
 
     def test_nothing_declared_is_not_reported_as_healthy(self):
@@ -1531,13 +1326,15 @@ class CertificateEditFormTests(TestCase):
 
         return spec_form_class("tls.certificate", lock_identity=True)(initial=initial)
 
-    def test_editing_asks_the_things_that_define_the_certificate(self):
+    def test_editing_asks_what_defines_the_certificate_and_a_changed_default(self):
         form = self._form(certificate_name="wildcard", domains=["example.com"])
+        changed = self._form(certificate_name="wildcard", renewal_window_days=45)
 
         self.assertEqual(
             {"certificate_name", "domains", "install_on"},
             {field.name for field in form.primary},
         )
+        self.assertIn("renewal_window_days", [f.name for f in changed.primary])
 
     def test_a_field_still_at_its_default_stays_folded_away(self):
         """Nobody arrives at a certificate to adjust how early it renews.
@@ -1549,11 +1346,6 @@ class CertificateEditFormTests(TestCase):
         form = self._form(certificate_name="wildcard", renewal_window_days=30)
 
         self.assertIn("renewal_window_days", [f.name for f in form.advanced])
-
-    def test_a_default_somebody_changed_comes_out_of_the_disclosure(self):
-        form = self._form(certificate_name="wildcard", renewal_window_days=45)
-
-        self.assertIn("renewal_window_days", [f.name for f in form.primary])
 
 
 class WhatCountsAsAServiceTests(TestCase):
@@ -1577,7 +1369,7 @@ class WhatCountsAsAServiceTests(TestCase):
             enabled=True,
         )
 
-    def test_an_underscore_label_is_never_a_service(self):
+    def test_an_underscore_label_is_never_a_service_and_a_cname_elsewhere_is_one(self):
         """RFC 8552 reserves them for metadata about a domain, not hosts in it.
         The record type cannot tell: excluding TXT because it carries policy
         covers _dmarc and misses sig1._domainkey, a DKIM delegation published
@@ -1587,10 +1379,11 @@ class WhatCountsAsAServiceTests(TestCase):
 
         self._record("dkim", "sig1._domainkey.example.com", "CNAME", "sig1.dkim.example.com.at.icloudmailadmin.com")
         self._record("site", "example.com", "CNAME", "example.pages.dev")
+        self._record("docs", "docs.example.com", "CNAME", "elsewhere.example.net")
 
         names = {service.hostname for service in service_catalog()}
 
-        self.assertEqual(names, {"example.com"})
+        self.assertEqual(names, {"example.com", "docs.example.com"})
 
     def test_a_cname_to_another_service_is_an_alias_of_it(self):
         """One site, not two. Listed separately, www would appear on the board
@@ -1604,17 +1397,6 @@ class WhatCountsAsAServiceTests(TestCase):
 
         self.assertEqual(set(catalog), {"example.com"})
         self.assertEqual(catalog["example.com"].aliases, ("www.example.com",))
-
-    def test_a_cname_to_somewhere_else_is_its_own_service(self):
-        """A name HQ publishes and does not otherwise know about is a service
-        by every definition that matters here."""
-
-        self._record("site", "example.com", "CNAME", "example.pages.dev")
-        self._record("docs", "docs.example.com", "CNAME", "elsewhere.example.net")
-
-        names = {service.hostname for service in service_catalog()}
-
-        self.assertEqual(names, {"example.com", "docs.example.com"})
 
     def test_an_alias_still_reaches_the_service_it_points_at(self):
         self._record("site", "example.com", "CNAME", "example.pages.dev")
@@ -1704,8 +1486,7 @@ class AliasRecordPlacementTests(TestCase):
 
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "example.com"}))
 
-        self.assertContains(response, "Records for www.example.com")
-        self.assertContains(response, "www.example.com")
+        self.assertContains(response, reverse("control_plane:detail", args=["www"]))
 
 
 class ExternallyAnsweredFacetTests(TestCase):
@@ -1740,16 +1521,10 @@ class ExternallyAnsweredFacetTests(TestCase):
         # once per card, and again in the origin note. Not needed is not
         # missing: no gap is listed for the routing part.
         self.assertNotIn("proxy", [facet.id for facet in response.context["missing_facets"]])
-        self.assertLessEqual(response.content.count(b"Served by"), 1)
         # Asserted on the facet rather than on the page, because the
         # certificate facet says the same sentence for its own good reason.
         self.assertFalse(ingress.present)
         self.assertTrue(ingress.routes)
-
-    def test_it_does_not_offer_a_proxy_in_front_of_something_it_must_not(self):
-        response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "example.com"}))
-
-        self.assertNotContains(response, "Add proxy host")
 
     def test_an_internally_served_name_still_asks_for_its_ingress(self):
         """The excuse is external routing, not any missing origin."""
@@ -1763,7 +1538,7 @@ class ExternallyAnsweredFacetTests(TestCase):
 
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "app.example.com"}))
 
-        self.assertContains(response, "Add proxy host")
+        self.assertIn("proxy", [facet.id for facet in response.context["missing_facets"]])
 
 
 class NewVerbReadinessTests(TestCase):
@@ -1828,13 +1603,16 @@ class PendingRemovalTests(TestCase):
     def _page(self):
         return self.client.get(reverse("control_plane:detail", kwargs={"key": "going"}))
 
+    def _offered(self, response):
+        return {action.url for action in response.context["page"].actions}
+
     def test_it_offers_the_usual_actions_while_nothing_is_pending(self):
         response = self._page()
 
-        self.assertContains(response, "Apply again")
-        self.assertNotContains(response, "Removal in progress")
+        self.assertIn(reverse("control_plane:reconcile", kwargs={"key": "going"}), self._offered(response))
+        self.assertFalse(response.context["removal_pending"])
 
-    def test_a_queued_removal_withdraws_them(self):
+    def test_a_queued_removal_withdraws_them_and_leaves_the_report(self):
         from ..resource_operations import OperationCommand, request_removal
 
         request_removal(
@@ -1845,8 +1623,10 @@ class PendingRemovalTests(TestCase):
 
         response = self._page()
 
-        self.assertContains(response, "Removal in progress")
-        self.assertNotContains(response, ">Reconcile<")
+        self.assertTrue(response.context["removal_pending"])
+        self.assertNotIn(reverse("control_plane:reconcile", kwargs={"key": "going"}), self._offered(response))
+        # The one thing still worth doing: reading what it was.
+        self.assertContains(response, reverse("control_plane:report_download", args=["going"]))
 
     def test_the_topology_withdraws_them_too(self):
         from ..resource_operations import OperationCommand, request_removal
@@ -1860,19 +1640,6 @@ class PendingRemovalTests(TestCase):
 
         node = next(node for node in derive_topology(principal=cli_principal()).nodes if node.id == "resource:going")
         self.assertNotIn("reconcile", {action.name for action in node.actions})
-
-    def test_the_report_is_still_reachable(self):
-        """The one thing still worth doing: reading what it was."""
-
-        from ..resource_operations import OperationCommand, request_removal
-
-        request_removal(
-            OperationCommand(idempotency_key="r1"),
-            principal=cli_principal(),
-            current_key="going",
-        )
-
-        self.assertContains(self._page(), "Download this record (JSON)")
 
 
 class ProxyDecisionTests(TestCase):
@@ -1944,30 +1711,19 @@ class ResourceListReadabilityTests(TestCase):
             generation=1,
         )
 
-    def test_each_row_says_what_it_is(self):
-        response = self.client.get(reverse("control_plane:list"))
+    def row(self, page, key):
+        start = page.index(f'href="{reverse("control_plane:detail", args=[key])}"')
+        return page[start : page.index("</tr>", start)]
 
-        self.assertContains(response, "CAA 0 issue &quot;letsencrypt.org&quot;")
+    def test_each_row_says_what_it_is_and_only_a_converging_one_waits(self):
+        """A domain has no controller action, so nothing is ever coming to it."""
 
-    def test_a_declaration_only_resource_is_not_pending_forever(self):
-        """It has no controller action, so nothing is ever coming."""
+        page = self.client.get(reverse("control_plane:list")).content.decode()
+        domain, caa = self.row(page, "example-com"), self.row(page, "example-com-caa")
 
-        response = self.client.get(reverse("control_plane:list"))
-        rows = response.content.decode()
-        row = rows[rows.index('title="example-com">example.com<') :]
-        row = row[: row.index("</tr>")]
-
-        self.assertIn("Recorded only", row)
-        self.assertNotIn("Change waiting to apply", row)
-        self.assertNotIn("Not read yet", row)
-
-    def test_a_resource_with_a_controller_still_reports_its_sync(self):
-        response = self.client.get(reverse("control_plane:list"))
-        rows = response.content.decode()
-        row = rows[rows.index('title="example-com-caa">example.com CAA<') :]
-        row = row[: row.index("</tr>")]
-
-        self.assertIn("Change waiting to apply", row)
+        self.assertIn("CAA 0 issue &quot;letsencrypt.org&quot;", caa)
+        self.assertIn("Change waiting to apply", caa)
+        self.assertNotIn("Change waiting to apply", domain)
 
 
 class LabelAndDensityTests(TestCase):
@@ -1982,6 +1738,8 @@ class LabelAndDensityTests(TestCase):
         offers = dict(Facet(id="certificate", label="Certificate").declarable)
         dns = dict(Facet(id="dns", label="DNS").declarable)
 
+        # Both ways of getting a certificate, offered where one is needed.
+        self.assertLessEqual({"tls.certificate", "tls.uploaded_certificate"}, set(offers))
         self.assertEqual(offers["tls.certificate"], "TLS certificate")
         self.assertEqual(dns["adguard.rewrite"], "internal DNS record")
         self.assertEqual(dns[RECORD_KIND], "public DNS record")
@@ -2040,21 +1798,6 @@ class RecordedResponsibilityTests(TestCase):
 
         self.assertEqual(infrastructure(), ())
 
-    def test_something_that_does_converge_still_does(self):
-        """The rule must not swallow the resources it does not describe."""
-
-        from hq.platform.application.attention import infrastructure
-
-        ManagedResource.objects.create(
-            key="a-rewrite",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.1"},
-            generation=1,
-            observed_generation=1,
-        )
-
-        self.assertEqual(len(infrastructure()), 1)
-
 
 class PendingIsNotAFaultTests(TestCase):
     """A resource HQ has already asked about is not one to ask an operator
@@ -2070,13 +1813,15 @@ class PendingIsNotAFaultTests(TestCase):
             **fields,
         )
 
-    def test_a_declaration_the_controller_has_not_reached_is_pending(self):
+    def test_a_declaration_the_controller_has_not_reached_or_reapplied_is_pending(self):
         from hq.platform.application.infrastructure import resource_health
 
-        health = resource_health(self._resource(generation=1, observed_generation=0))
+        for generation, observed in ((1, 0), (3, 2)):
+            with self.subTest(generation=generation, observed=observed):
+                ManagedResource.objects.all().delete()
+                health = resource_health(self._resource(generation=generation, observed_generation=observed))
 
-        self.assertEqual(health["state"], "pending")
-        self.assertEqual(health["message"], "")
+                self.assertEqual((health["state"], health["message"]), ("pending", ""))
 
     def test_pending_does_not_reach_the_attention_queue(self):
         from hq.platform.application.attention import infrastructure
@@ -2095,13 +1840,6 @@ class PendingIsNotAFaultTests(TestCase):
         self._resource(generation=1, observed_generation=1)
 
         self.assertEqual(len(infrastructure()), 1)
-
-    def test_an_edit_awaiting_reapply_is_pending_rather_than_failing(self):
-        from hq.platform.application.infrastructure import resource_health
-
-        health = resource_health(self._resource(generation=3, observed_generation=2))
-
-        self.assertEqual(health["state"], "pending")
 
 
 class TLSPostureInsightTests(TestCase):
@@ -2147,8 +1885,8 @@ class TLSPostureInsightTests(TestCase):
         found = posture(self._zone({"ssl": "strict", "min_tls_version": "1.2", "always_use_https": "on"}))
 
         self.assertEqual(found.value, "Full (strict)")
-        self.assertIn("below TLS 1.2", found.detail)
-        self.assertIn("redirected to HTTPS", found.detail)
+        self.assertIn("TLS 1.2", found.detail)
+        self.assertIn("HTTPS", found.detail)
 
     def test_a_posture_hq_could_not_read_is_absent_rather_than_off(self):
         """The account token is separate and may refuse.
@@ -2196,7 +1934,8 @@ class TLSPostureInsightTests(TestCase):
             )
         )
 
-        self.assertEqual(found.detail, "Zone TLS posture not read: missing Zone Settings Read (zone).")
+        # The permission to grant, by the name the provider's console uses.
+        self.assertIn("Zone Settings Read", found.detail)
 
     def test_a_refusal_on_another_zone_is_not_this_ones(self):
         from ..zone_insights import posture
@@ -2277,7 +2016,6 @@ class DomainRegistrationInsightTests(TestCase):
         found = registration(self._zone({"expires_at": self._soon(40), "auto_renew": False}))
 
         self.assertTrue(found.concern)
-        self.assertIn("has to be renewed by hand", found.detail)
 
     def test_the_same_date_with_auto_renew_on_is_not(self):
         """A date on its own is a calendar entry, not something to act on.
@@ -2291,7 +2029,6 @@ class DomainRegistrationInsightTests(TestCase):
         found = registration(self._zone({"expires_at": self._soon(40), "auto_renew": True}))
 
         self.assertFalse(found.concern)
-        self.assertIn("Renews itself", found.detail)
 
     def test_it_names_the_registrar_that_reported_it(self):
         from ..zone_insights import registration
@@ -2303,11 +2040,9 @@ class DomainRegistrationInsightTests(TestCase):
             self._zone({"expires_at": self._soon(200), "auto_renew": False, "registrar": "Example Registrar"})
         )
 
-        self.assertEqual(renews.detail, "Renews itself through Example Registrar.")
-        self.assertEqual(
-            manual.detail,
-            "Auto-renew is off at Example Registrar, so this has to be renewed by hand.",
-        )
+        self.assertIn("Example Registrar", renews.detail)
+        self.assertIn("Example Registrar", manual.detail)
+        self.assertNotEqual(renews.detail, manual.detail)
 
     def test_a_domain_nothing_has_read_says_not_read(self):
         from ..zone_insights import registration

@@ -11,7 +11,7 @@ from hq.platform.application.connections import machines_once
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
 from hq.platform.application.machine_context import machine_links, sections_for as machine_sections
 from hq.platform.application.machines import declaration_seed, machine
-from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.pages import PageAction, PageDialog, PageMixin
 from hq.platform.application.resource_capabilities import resource_capabilities
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
@@ -110,7 +110,12 @@ class TailnetView(PageMixin, TemplateView):
                 "Policy test",
                 reverse("control_plane:tailnet"),
                 primary=True,
-                modal="whatif",
+                modal=PageDialog(
+                    "whatif",
+                    "Policy test",
+                    "control_plane/_whatif_form.html",
+                    lede="Check whether the policy allows a connection. Tailscale evaluates it.",
+                ),
             ),
             *(
                 (

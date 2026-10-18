@@ -1,5 +1,6 @@
 """Conformance helpers for plugin test suites."""
 
+import re
 import time
 
 from django.db.models import Manager
@@ -52,6 +53,24 @@ def reaches_out() -> None:
     time.sleep(0)
 
 
+_NO_BREAK = re.compile(r"[\u00a0\u202f]|&nbsp;|&#160;|&#x0*a0;", re.IGNORECASE)
+
+
+def plain(text: str | bytes) -> str:
+    """Text with the host's no-break spaces read as spaces.
+
+    The host keeps a number with its unit ("2\u00a0weeks") and may change
+    where it does. A test comparing words it chose against what a page or a
+    value says reads both through this, so that choice is never its to pin:
+
+        self.assertIn("Renewed for 2 weeks", plain(response.content))
+    """
+
+    if isinstance(text, bytes):
+        text = text.decode("utf-8")
+    return _NO_BREAK.sub(" ", text)
+
+
 # Entering the substituting scope is a test affordance, not part of the
 # contract: production turns it on from the operator's session and a domain
 # only ever reads it. Exposed here so an extension can prove what its own
@@ -64,6 +83,7 @@ __all__ = [
     "audit_writer",
     "demo_scope",
     "held_jobs",
+    "plain",
     "providers_derived_again",
     "reaches_out",
     "sibling",

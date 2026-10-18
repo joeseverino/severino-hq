@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, assert_type
 
-from hq_sdk import capabilities, demo, jobs, money, outbound, pages, reads, resources, tables
+from hq_sdk import capabilities, demo, jobs, money, outbound, pages, reads, resources, site, tables, testing
 
 
 def the_clock(moment: datetime) -> None:
@@ -121,3 +121,37 @@ def an_empty_table(view: tables.TableListMixin) -> None:
     assert_type(view.get_table_empty(), str)
     assert_type(view.get_table_empty_remedy(), tables.Remedy | None)
     assert_type(tables.Remedy("Connect a bank", "/connections/").url, str)
+
+
+def a_dialog() -> None:
+    dialog = pages.PageDialog("import", "Import records", "example/_import_form.html", lede="Known files are skipped.")
+    action = pages.PageAction("Import", "/example/import/", primary=True, modal=dialog)
+    assert_type(action.dialog, pages.PageDialog | None)
+    assert_type(action.modal_id, str)
+    assert_type(pages.page_context("Example", actions=(action,))["page"].dialogs, tuple[pages.PageDialog, ...])
+
+    pages.PageDialog("import", "Import records")  # type: ignore[call-arg]
+    pages.PageAction("Import", "/example/import/", modal=3)  # type: ignore[arg-type]
+
+
+class Things(tables.TableListMixin, pages.PageMixin):
+    # What a list declares, held to the types the host reads them as.
+    page_title = "Things"
+    table_empty = "No things yet."
+    table_empty_why = "Add one in the vault."
+    table_columns = (tables.TableColumn("Name", "name"),)
+    table_search_fields = ("name",)
+    table_default_sort = "name"
+
+
+class WronglyDeclared(tables.TableListMixin):
+    table_empty = None  # type: ignore[assignment]
+    table_columns = ("Name",)  # type: ignore[assignment]
+
+
+def the_deployment() -> None:
+    assert_type(site.host(), str)
+    assert_type(testing.plain(b"2\xc2\xa0weeks"), str)
+    assert_type(testing.plain("2 weeks"), str)
+
+    testing.plain(2)  # type: ignore[arg-type]

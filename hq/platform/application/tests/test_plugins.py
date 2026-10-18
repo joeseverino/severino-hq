@@ -11,7 +11,7 @@ from unittest import TestCase, mock
 
 from django.core.exceptions import ImproperlyConfigured
 from django.template.loader import render_to_string
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 from django.utils import timezone
 
 from ..domains import domain_navigation
@@ -92,33 +92,6 @@ class PluginContractTests(TestCase):
     def tearDown(self):
         clear_plugin_composition_cache()
 
-    def test_every_statement_of_the_plugin_api_names_the_one_this_host_runs(self):
-        root = Path(__file__).resolve().parents[4]
-        policy = json.loads((root / "policy" / "plugin-admission-v1.json").read_text())
-        self.assertEqual(policy["plugin_api_version"], PLUGIN_API_VERSION)
-        for path in (*root.glob("*.md"), *root.glob("docs/*.md"), *root.glob("tests/fixtures/*/plugin.py")):
-            for found in re.findall(r"api_version=(\d+)", path.read_text()):
-                with self.subTest(path=path.name):
-                    self.assertEqual(int(found), PLUGIN_API_VERSION)
-
-    def test_every_host_path_the_admission_action_reads_exists(self):
-        """An extension's admission checks this repository out as ``host``."""
-
-        root = Path(__file__).resolve().parents[4]
-        sources = (
-            root / ".github" / "actions" / "admit-plugin" / "action.yml",
-            *(root / ".github" / "workflows").glob("*.yml"),
-        )
-        named = {
-            path
-            for source in sources
-            for path in re.findall(r"(?<![\w/])host/([A-Za-z0-9_./-]+\.[a-z]+)", source.read_text())
-        }
-        self.assertIn("hq/platform/application/plugins.py", named)
-        for path in sorted(named):
-            with self.subTest(path=path):
-                self.assertTrue((root / path).exists())
-
     def load(self, manifest=VALID):
         clear_plugin_composition_cache()
         env = mock.patch.dict(
@@ -144,25 +117,6 @@ class PluginContractTests(TestCase):
         with mock.patch.dict(os.environ, {"SEVERINO_HQ_PLUGINS": ""}):
             clear_plugin_composition_cache()
             self.assertEqual(installed_plugins(), ())
-
-    def test_the_committed_inventory_stays_a_shape_and_not_a_list(self):
-        """`composition/extensions.json` documents the format, never the set.
-
-        The set is supplied at composition time through
-        `COMPOSITION_EXTENSIONS`, so the host builds and runs identically with a
-        different one, or with none. A committed list would make this file the
-        thing that has to change to add an extension, which is the coupling the
-        runtime variable exists to avoid.
-        """
-
-        root = Path(__file__).resolve().parents[4]
-        document = json.loads((root / "composition" / "extensions.json").read_text(encoding="utf-8"))
-        self.assertEqual(
-            document["extensions"],
-            [],
-            "the installed set belongs in COMPOSITION_EXTENSIONS at composition time, not in the host source",
-        )
-        self.assertEqual(document["retired"], [], "a retired extension is named in the secret, not here")
 
     def test_the_host_source_never_names_an_installed_extension(self):
         """The host must not know which extensions exist.
@@ -675,6 +629,57 @@ class PluginContractTests(TestCase):
                 self.assertRaisesRegex(ImproperlyConfigured, "version does not match"),
             ):
                 installed_plugins()
+
+
+@tag("source")
+class PluginContractSourceTests(SimpleTestCase):
+    """What the repository states about the plugin contract."""
+
+    def test_every_statement_of_the_plugin_api_names_the_one_this_host_runs(self):
+        root = Path(__file__).resolve().parents[4]
+        policy = json.loads((root / "policy" / "plugin-admission-v1.json").read_text())
+        self.assertEqual(policy["plugin_api_version"], PLUGIN_API_VERSION)
+        for path in (*root.glob("*.md"), *root.glob("docs/*.md"), *root.glob("tests/fixtures/*/plugin.py")):
+            for found in re.findall(r"api_version=(\d+)", path.read_text()):
+                with self.subTest(path=path.name):
+                    self.assertEqual(int(found), PLUGIN_API_VERSION)
+
+    def test_every_host_path_the_admission_action_reads_exists(self):
+        """An extension's admission checks this repository out as ``host``."""
+
+        root = Path(__file__).resolve().parents[4]
+        sources = (
+            root / ".github" / "actions" / "admit-plugin" / "action.yml",
+            *(root / ".github" / "workflows").glob("*.yml"),
+        )
+        named = {
+            path
+            for source in sources
+            for path in re.findall(r"(?<![\w/])host/([A-Za-z0-9_./-]+\.[a-z]+)", source.read_text())
+        }
+        self.assertIn("hq/platform/application/plugins.py", named)
+        for path in sorted(named):
+            with self.subTest(path=path):
+                self.assertTrue((root / path).exists())
+
+    def test_the_committed_inventory_stays_a_shape_and_not_a_list(self):
+        """`composition/extensions.json` documents the format, never the set.
+
+        The set is supplied at composition time through
+        `COMPOSITION_EXTENSIONS`, so the host builds and runs identically with a
+        different one, or with none. A committed list would make this file the
+        thing that has to change to add an extension, which is the coupling the
+        runtime variable exists to avoid.
+        """
+
+        root = Path(__file__).resolve().parents[4]
+        document = json.loads((root / "composition" / "extensions.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            document["extensions"],
+            [],
+            "the installed set belongs in COMPOSITION_EXTENSIONS at composition time, not in the host source",
+        )
+        self.assertEqual(document["retired"], [], "a retired extension is named in the secret, not here")
 
 
 class AttentionContractTests(TestCase):

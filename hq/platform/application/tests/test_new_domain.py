@@ -3,9 +3,8 @@
 import ast
 import re
 from pathlib import Path
-from unittest import skipUnless
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 ROOT = Path(__file__).resolve().parents[4]
 CHECKLIST = ROOT / "docs" / "New-Domain.md"
@@ -30,7 +29,7 @@ def rules() -> dict[str, set[str]]:
     return found
 
 
-@skipUnless(CHECKLIST.exists(), "the docs are not in the image")
+@tag("source")
 class NewDomainChecklistTests(SimpleTestCase):
     def setUp(self):
         self.text = CHECKLIST.read_text(encoding="utf-8")

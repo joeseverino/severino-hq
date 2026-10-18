@@ -1,6 +1,9 @@
 package host
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"time"
+)
 
 // Web is the web container as the host runs it. Everything about how it is
 // run is here, in one typed place: the unit runs `hq-host run-web`, which
@@ -8,12 +11,19 @@ import "path/filepath"
 type Web struct {
 	// Image is the digest-pinned reference ReleaseFile names.
 	Image string
+	// StartPeriod is how long HQ may take to answer healthy; zero is
+	// HealthStartPeriod.
+	StartPeriod time.Duration
 }
 
 // Args are the `docker run` arguments, after "docker". The container is
 // removed when it stops and has no restart policy: the unit restarts it, so
 // one thing decides when HQ runs.
 func (w Web) Args() []string {
+	period := w.StartPeriod
+	if period == 0 {
+		period = HealthStartPeriod
+	}
 	args := []string{
 		"run", "--rm", "--name", Container,
 		// The real socket peer reaches HQ, not a bridge gateway address.
@@ -27,7 +37,7 @@ func (w Web) Args() []string {
 		"--memory", "1g",
 		// Checked every 2s while starting, not at the image's 30s interval, so
 		// the unit is ready when HQ is.
-		"--health-start-period", HealthStartPeriod.String(),
+		"--health-start-period", period.String(),
 		"--health-start-interval", "2s",
 		// Where the database, uploads and exports live is the image's to say
 		// (Dockerfile). A request body is spooled whole and an upload written

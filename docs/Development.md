@@ -42,9 +42,9 @@ with every default group omitted.
 | Command | Answers |
 | :--- | :--- |
 | `mise run fast [BASE]` | the inner loop: only what the change reaches, by import graph (`--list` prints the selection) |
-| `mise run check` | do my changes work? The suite with `DEBUG` on, off, and composed with the extensions |
+| `mise run check` | do my changes work? The source tests, the suite as production configures it, and the suite composed with the extensions |
 | `mise run ci` | will the pipeline accept them? Every gate CI runs, including CodeQL, Scorecard, the image and the browser gate |
-| `mise run preflight` | is it ready? `ci`, the composed suite with the extensions required, and a read-only check of the deploy host |
+| `mise run preflight` | is it ready? `ci`, the composed suite as the image runs it with the extensions required, and a read-only check of the deploy host |
 
 Every gate is a task in [`mise.toml`](../mise.toml) named `<job>:<gate>`, and
 each CI job runs the aggregate of its name, so the list exists once. `mise
@@ -59,7 +59,16 @@ destination. The extension set for the composed suite is named in a gitignored
 [`scripts/mise.local.example.toml`](../scripts/mise.local.example.toml):
 `HQ_LOCAL_PYTHONPATH` (where the extensions' sources are) and
 `HQ_LOCAL_PLUGINS` (which to enable). Without it the composed pass says it did
-not run, and covers less.
+not run, and covers less. With it, `mise run fast` also runs the extensions'
+suites when a change reaches what they render through.
+
+Tests that read the repository (docs, workflows, the Dockerfile, the source)
+carry `@tag("source")` and run once, in `checks:source`. A whole-suite run
+leaves them out, so the image never runs a test against files it does not
+ship. `mise run suite:as-image` runs the composed suite in a copy of only the
+files the image is built from, configured as the image is; preflight runs it.
+`docs/Connections.md` is generated: `tests:connections-reference` fails when it
+is behind the providers, and `manage.py connections_reference` rewrites it.
 
 The suite runs in parallel, one worker per core (per performance core on
 Apple silicon; `DJANGO_TEST_PROCESSES` overrides it). `CHECK_PARALLEL=1 mise run fast` rules

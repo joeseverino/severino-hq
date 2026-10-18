@@ -16,7 +16,7 @@ import json
 import shutil
 import subprocess
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 
 from .. import frontmatter_schema
 from ..models import DocumentationRecord
@@ -72,6 +72,7 @@ class ModelChoicesMatchSchemaTests(SimpleTestCase):
         )
 
 
+@tag("source")
 class CommittedSchemaMatchesMcpTests(SimpleTestCase):
     def test_committed_schema_matches_mcp(self) -> None:
         cli = shutil.which("severino-vault-mcp")

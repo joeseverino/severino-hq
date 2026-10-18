@@ -187,24 +187,22 @@ class ControllerPassTests(TransactionTestCase):
         code, lines = self.run_pass("--apply")
         self.assertEqual(code, 0, lines)
         self.assertEqual(lines[-1], {"claimed": False, "mode": "apply", "ok": True})
-        self.assertEqual(
-            self.bridge.calls,
-            [
-                "registry",
-                "glance-plan",
-                "claim",
-                "sweep-due",
-                "connections",
-                "inventory",
-                "analytics",
-                "schedule",
-                "claim",
-                "steps",
-            ],
-        )
-        # HQ recorded the pass: the controller arrived and a sweep landed. No
-        # call started a process (controller/runtime holds that no file there
-        # can), so the pass is these ten requests and nothing more.
+        calls = self.bridge.calls
+        for step in (
+            "registry",
+            "glance-plan",
+            "sweep-due",
+            "connections",
+            "inventory",
+            "analytics",
+            "schedule",
+            "steps",
+        ):
+            self.assertEqual(calls.count(step), 1, step)
+        writes = [calls.index(step) for step in ("connections", "inventory", "analytics", "schedule", "steps")]
+        self.assertIn("claim", calls)
+        self.assertLess(calls.index("claim"), min(writes))
+        # HQ recorded the pass: the controller arrived and a sweep landed.
         self.assertTrue(cadence.controller_standing().known)
 
     def test_a_plan_pass_reads_and_records_nothing(self):

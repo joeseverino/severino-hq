@@ -1,12 +1,14 @@
 """A stylesheet is served without its comments, and nothing else is taken."""
 
 import re
+import tempfile
 from pathlib import Path
 
 from django.conf import settings
-from django.test import SimpleTestCase
+from django.core.files.base import ContentFile
+from django.test import SimpleTestCase, tag
 
-from hq.platform.core.static import without_comments
+from hq.platform.core.static import HashedStaticStorage, without_comments
 
 
 class WithoutCommentsTests(SimpleTestCase):
@@ -25,6 +27,11 @@ class WithoutCommentsTests(SimpleTestCase):
 
         self.assertEqual(without_comments(css), css)
 
+
+@tag("source")
+class StylesheetSourceTests(SimpleTestCase):
+    """The shipped stylesheet keeps every rule once its comments go."""
+
     def test_the_stylesheet_keeps_every_rule(self):
         source = (Path(settings.BASE_DIR) / "static/css/app.css").read_text()
         served = without_comments(source)
@@ -38,6 +45,33 @@ def _in_comments(css: str, mark: str) -> int:
     return sum(comment.count(mark) for comment in re.findall(r"/\*.*?\*/", css, re.DOTALL))
 
 
+class SavedAssetTests(SimpleTestCase):
+    """What collecting writes for one asset: the whole file, minified, whatever read it before."""
+
+    def saved(self, name, text):
+        with tempfile.TemporaryDirectory() as root:
+            content = ContentFile(text.encode())
+            # Hashing reads the file to its end before it is saved.
+            content.read()
+            stored = HashedStaticStorage(location=root).save(name, content)
+            return (Path(root) / stored).read_text()
+
+    def test_a_stylesheet_is_saved_whole_without_its_comments(self):
+        saved = self.saved("css/example.css", ".a { color: red; }\n/* note */\n.b { color: blue; }\n")
+
+        self.assertEqual(saved, ".a { color: red; }\n.b { color: blue; }\n")
+
+    def test_a_script_is_minified_and_keeps_its_licence(self):
+        source = "/*! Licence: keep me */\nfunction example(first, second) {\n  return first + second;\n}\n"
+
+        saved = self.saved("js/example.js", source)
+
+        self.assertTrue(saved.startswith("/*! Licence: keep me */"))
+        self.assertIn("function example(", saved)
+        self.assertLess(len(saved), len(source))
+
+
+@tag("source")
 class CollectedStylesheetTests(SimpleTestCase):
     """What a collect writes, read back the way the server sends it."""
 

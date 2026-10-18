@@ -10,6 +10,7 @@ Class-based views mix in ``PageMixin``; function views pass ``page_context``
 to ``render``.
 """
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
@@ -17,13 +18,35 @@ from typing import Any
 from .fragments import FragmentMixin
 from .ui import PageNavigation
 
+PAGE_DIALOG_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
+
+
+@dataclass(frozen=True, slots=True)
+class PageDialog:
+    """A dialog a head action opens, drawn once by ``page.html``.
+
+    ``body_template`` is rendered with the page's own context. The action's
+    link still reaches a page that does the same job, so the control works
+    when the dialog does not open.
+    """
+
+    id: str
+    title: str
+    body_template: str
+    lede: str = ""
+
+    def __post_init__(self):
+        if not PAGE_DIALOG_ID.match(self.id):
+            raise ValueError(f"A dialog id is lowercase words joined by hyphens, not {self.id!r}.")
+
 
 @dataclass(frozen=True, slots=True)
 class PageAction:
     """One control in a page's head.
 
-    A GET action is a link, and may open a dialog on the page (``modal``) while
-    still pointing at a page that does the same job. A POST action is a
+    A GET action is a link, and may open a dialog (``modal``) while still
+    pointing at a page that does the same job: a ``PageDialog`` the page draws,
+    or the id of one the host already draws on every page. A POST action is a
     ``post_button``, so it needs no form of its own.
     """
 
@@ -32,7 +55,7 @@ class PageAction:
     method: str = "get"
     primary: bool = False
     danger: bool = False
-    modal: str = ""
+    modal: PageDialog | str = ""
     value: str = ""
     title: str = ""
     # Shown but not usable, with ``title`` saying why.
@@ -43,6 +66,18 @@ class PageAction:
             raise ValueError(f"PageAction method must be get or post, not {self.method!r}.")
         if self.modal and self.method != "get":
             raise ValueError("Only a GET action can open a dialog.")
+
+    @property
+    def dialog(self) -> PageDialog | None:
+        """The dialog this action brings to the page, if it brings one."""
+
+        return self.modal if isinstance(self.modal, PageDialog) else None
+
+    @property
+    def modal_id(self) -> str:
+        """The id the link opens, wherever the dialog is drawn."""
+
+        return self.modal.id if isinstance(self.modal, PageDialog) else self.modal
 
     @property
     def css(self) -> str:
@@ -93,6 +128,13 @@ class Page:
         """The page's own way to add what it lists: its primary link."""
 
         return next((action for action in self.actions if action.primary and action.method == "get"), None)
+
+    @property
+    def dialogs(self) -> tuple[PageDialog, ...]:
+        """Every dialog the head's actions open, each drawn once."""
+
+        found = (getattr(action, "dialog", None) for action in self.actions)
+        return tuple(dict.fromkeys(dialog for dialog in found if dialog is not None))
 
 
 def page_context(

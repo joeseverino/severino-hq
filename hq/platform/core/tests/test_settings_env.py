@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -180,6 +180,11 @@ class EnvIntTests(SimpleTestCase):
         for raw in ("59", "soon"):
             with self.subTest(raw=raw), self.assertRaisesMessage(RuntimeError, f"{self.NAME} must be at least 60."):
                 self.read(raw, 86400, minimum=60)
+
+
+@tag("source")
+class EnvIntSourceTests(SimpleTestCase):
+    """Settings read every integer through env_int."""
 
     def test_settings_read_every_integer_through_env_int(self):
         source = (REPO_ROOT / "hq" / "config" / "settings.py").read_text(encoding="utf-8")

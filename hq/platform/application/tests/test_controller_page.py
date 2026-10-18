@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -138,6 +138,7 @@ class ControllerPageTests(TestCase):
         self.assertContains(self.client.get("/"), f'href="{reverse("control_plane:controller")}"')
 
 
+@tag("source")
 class HostLayoutTests(SimpleTestCase):
     """The unit names HQ tells an operator to inspect are the host's own."""
 

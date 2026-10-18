@@ -3,8 +3,10 @@
 from datetime import date
 
 from django.core.exceptions import FieldFetchBlocked
+from django.db import connection
 from django.db.models import FETCH_RAISE
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
@@ -38,10 +40,17 @@ class GuardedTests(TestCase):
 
     @override_settings(SEVERINO_STRICT_FETCH=False)
     def test_in_production_it_is_fetched_once_for_the_page(self):
-        with self.assertNumQueries(2):
-            names = {expense.related_project.name for expense in guarded(Expense.objects.all())}
+        def read() -> tuple[int, int]:
+            with CaptureQueriesContext(connection) as captured:
+                names = [expense.related_project.name for expense in guarded(Expense.objects.all())]
+            return len(names), len(captured)
 
-        self.assertEqual(len(names), 3)
+        few, cost = read()
+        _expenses(5)
+        many, again = read()
+
+        self.assertEqual((few, many), (3, 8))
+        self.assertEqual(again, cost)
 
     def test_every_table_and_every_listing_is_guarded(self):
         class View(TableListMixin):

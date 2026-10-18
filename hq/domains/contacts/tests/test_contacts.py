@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -277,6 +277,17 @@ class NoCredentialTests(TestCase):
     def test_no_cloudflare_token_setting_exists(self):
         self.assertFalse(hasattr(settings, "CLOUDFLARE_API_TOKEN"))
 
+    def test_no_connection_family_is_declared_for_contacts(self):
+        from hq.platform.application.domains import host_domains
+
+        contacts = next(domain for domain in host_domains() if domain.id == "hq.contacts")
+        self.assertIsNone(contacts.integration.connections)
+
+
+@tag("source")
+class NoCredentialSourceTests(SimpleTestCase):
+    """The contacts code, read for a token setting."""
+
     def test_the_contacts_code_reads_no_token_setting(self):
         root = Path(settings.BASE_DIR)
         sources = [
@@ -288,12 +299,6 @@ class NoCredentialTests(TestCase):
             for node in ast.walk(parsed(path)):
                 if isinstance(node, ast.Constant) and isinstance(node.value, str):
                     self.assertNotRegex(node.value, r"(?i)_(TOKEN|SECRET|PASSWORD|API_KEY)$", path.name)
-
-    def test_no_connection_family_is_declared_for_contacts(self):
-        from hq.platform.application.domains import host_domains
-
-        contacts = next(domain for domain in host_domains() if domain.id == "hq.contacts")
-        self.assertIsNone(contacts.integration.connections)
 
 
 NOTE = "example private note"

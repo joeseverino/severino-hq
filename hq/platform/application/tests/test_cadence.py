@@ -4,18 +4,28 @@ Two properties. Applying queued work must not wait for a polling interval, and
 sweeping must not cost a provider call a minute for records that change monthly.
 """
 
+import os
 import tempfile
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
+from hq.domains.control_plane.models import (
+    ManagedResource,
+    OperationRequest,
+    ProviderConnection,
+    ProviderInventory,
+    ReadRequest,
+)
+from hq.platform.core.models import AuditLog
 
 from .. import cadence
 from ..cadence import (
@@ -525,6 +535,9 @@ class PassDueTests(TestCase):
         self.assertTrue(doorbell.ask())
         self.assertTrue((self.directory / "doorbell").exists())
 
+
+@tag("source")
+class ControllerTimerTests(SimpleTestCase):
     def test_the_floor_is_the_controller_timers(self):
         timer = Path(settings.BASE_DIR) / "deploy/systemd/severino-hq-controller.timer"
         declared = dict(
@@ -533,3 +546,181 @@ class PassDueTests(TestCase):
 
         self.assertEqual(declared["OnUnitInactiveSec"], f"{int(cadence.CONTROLLER_FLOOR.total_seconds() // 60)}min")
         self.assertGreater(cadence.CONTROLLER_SILENT_AFTER, cadence.CONTROLLER_FLOOR)
+
+
+# The cadence knobs an installation may leave unset; the defaults below are what it then gets.
+CADENCE_SETTINGS = (
+    "SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS",
+    "SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS",
+    "SEVERINO_ACTIVE_WINDOW_SECONDS",
+    "SEVERINO_ACTIVITY_THROTTLE_SECONDS",
+    "SEVERINO_SSH_PROBE_INTERVAL_SECONDS",
+    "SEVERINO_READ_REQUEST_SECONDS",
+)
+
+
+class UnconfiguredCadenceTests(TestCase):
+    """With no cadence setting at all: five minutes in use, twelve hours idle."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp())
+        self.enterContext(override_settings(SEVERINO_ACTIVITY_MARKER=str(self.directory / "activity")))
+        for name in CADENCE_SETTINGS:
+            if hasattr(settings, name):
+                delattr(settings, name)
+
+    def test_each_interval_has_its_documented_default(self):
+        self.assertEqual(sweep_interval(), timedelta(hours=12))
+        self.assertEqual(cadence.slowest_sweep_interval(), timedelta(hours=12))
+        self.assertEqual(cadence.ssh_probe_interval(), timedelta(hours=1))
+        self.assertEqual(cadence.read_request_lifetime(), timedelta(minutes=15))
+
+        note_activity()
+
+        self.assertEqual(sweep_interval(), timedelta(minutes=5))
+
+    def test_use_counts_for_a_quarter_hour(self):
+        note_activity()
+        touched = (self.directory / "activity").stat().st_mtime
+
+        self.assertTrue(recently_used(now=touched + 15 * 60))
+        self.assertFalse(recently_used(now=touched + 15 * 60 + 1))
+
+    def test_the_marker_is_rewritten_once_a_minute_at_most(self):
+        marker = self.directory / "activity"
+        marker.touch()
+        long_ago = 1_000_000_000
+        os.utime(marker, (long_ago, long_ago))
+
+        for age, rewritten in ((59, False), (60, True)):
+            with self.subTest(age=age):
+                with mock.patch.object(cadence, "time", SimpleNamespace(time=lambda age=age: long_ago + age)):
+                    note_activity()
+                self.assertIs(marker.stat().st_mtime != long_ago, rewritten)
+
+
+@override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=3600)
+class SweepBoundaryTests(TestCase):
+    def setUp(self):
+        self.enterContext(markers()[0])
+        self.now = timezone.now()
+        self.enterContext(mock.patch("django.utils.timezone.now", return_value=self.now))
+
+    def test_a_sweep_is_due_the_moment_its_interval_has_passed(self):
+        for age, due in ((3599, False), (3600, True)):
+            with self.subTest(age=age):
+                swept(age_seconds=age)
+
+                verdict = sweep_due()
+
+                self.assertIs(verdict["due"], due)
+                self.assertIs(verdict["ok"], True)
+
+
+@override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=3600, SEVERINO_SSH_PROBE_INTERVAL_SECONDS=3600)
+class AskedReadCarryTests(TestCase):
+    """A sweep due only because somebody asked leaves SSH as it was; a sweep due anyway probes the failing."""
+
+    def setUp(self):
+        self.enterContext(markers()[0])
+        for ref, reachable in (("down", False), ("up", True)):
+            ProviderConnection.objects.create(
+                controller_id="here",
+                connection_ref=ref,
+                provider="ssh",
+                reachable=reachable,
+                probed=True,
+                observed_at=timezone.now() - timedelta(minutes=5),
+            )
+        ReadRequest.objects.create(kind="adguard.rewrite", requested_at=timezone.now())
+
+    def test_an_ask_alone_carries_every_ssh_connection_and_says_why(self):
+        swept(age_seconds=60, kind="adguard.rewrite", tried_seconds=120)
+
+        verdict = sweep_due("here")
+
+        self.assertTrue(verdict["due"])
+        self.assertEqual(verdict["carry"], ["down", "up"])
+        self.assertEqual(verdict["only_kinds"], ["adguard.rewrite"])
+        self.assertIn("not due", verdict["reason"])
+        self.assertIn("adguard.rewrite", verdict["reason"])
+
+    def test_a_sweep_due_on_its_own_clock_asks_the_failing_one_again(self):
+        swept(age_seconds=7200, kind="adguard.rewrite")
+
+        verdict = sweep_due("here")
+
+        self.assertTrue(verdict["due"])
+        self.assertEqual(verdict["carry"], ["up"])
+        self.assertEqual(verdict["only_kinds"], [])
+        self.assertNotIn("adguard.rewrite", verdict["reason"])
+
+
+class AnsweredReadTests(TestCase):
+    """A read is answered only by what was stored after it was asked for."""
+
+    def setUp(self):
+        self.asked = timezone.now() - timedelta(minutes=1)
+
+    def ask(self, **subject):
+        ReadRequest.objects.create(requested_at=self.asked, **subject)
+
+    def store(self, kind, at):
+        ProviderInventory.objects.update_or_create(
+            kind=kind, defaults={"records": [], "reachable": True, "observed_at": at}
+        )
+        ProviderInventory.objects.filter(kind=kind).update(updated_at=at)
+
+    def test_a_connection_probed_at_the_moment_it_was_asked_for_is_still_owed(self):
+        ProviderConnection.objects.create(
+            connection_ref="example-tailnet", provider="tailscale", observed_at=self.asked
+        )
+        self.ask(connection_ref="example-tailnet")
+        for kind in cadence.forced_kinds("example-tailnet", ""):
+            self.store(kind, self.asked + timedelta(seconds=5))
+
+        self.assertEqual(len(cadence.forced_reads()), 1)
+
+        ProviderConnection.objects.update(observed_at=self.asked + timedelta(seconds=5))
+        self.assertEqual(cadence.forced_reads(), ())
+
+    def test_everything_is_answered_by_a_sweep_stored_after_the_ask(self):
+        self.ask()
+        self.store("adguard.rewrite", self.asked)
+
+        self.assertEqual(len(cadence.forced_reads()), 1)
+
+        self.store("adguard.rewrite", self.asked + timedelta(seconds=1))
+        self.assertEqual(cadence.forced_reads(), ())
+
+    def test_settling_an_answered_read_says_what_was_read(self):
+        self.ask(kind="adguard.rewrite")
+        self.store("adguard.rewrite", self.asked + timedelta(seconds=1))
+
+        self.assertEqual(cadence.settle_read_requests(), 1)
+
+        gone = AuditLog.objects.filter(object_type="Read request", action=AuditLog.Action.DELETED).get()
+        self.assertIn("adguard.rewrite", gone.message)
+
+    def test_an_unanswered_read_forces_sweeps_for_its_lifetime_only(self):
+        self.ask(kind="adguard.rewrite")
+        lifetime = cadence.read_request_lifetime()
+        now = self.asked + lifetime
+
+        with mock.patch("django.utils.timezone.now", return_value=now):
+            self.assertEqual(len(cadence.forced_reads()), 1)
+        with mock.patch("django.utils.timezone.now", return_value=now + timedelta(seconds=1)):
+            self.assertEqual(cadence.forced_reads(), ())
+
+
+class ControllerSilenceTests(TestCase):
+    def setUp(self):
+        self.marker = Path(tempfile.mkdtemp()) / "not" / "yet" / "controller-heartbeat"
+        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(self.marker)))
+
+    def test_a_controller_unseen_for_half_an_hour_is_silent(self):
+        cadence.note_controller()
+        seen = cadence.controller_standing().seen_at
+
+        self.assertFalse(cadence.controller_standing(seen + timedelta(minutes=30)).silent)
+        self.assertTrue(cadence.controller_standing(seen + timedelta(minutes=30, seconds=1)).silent)

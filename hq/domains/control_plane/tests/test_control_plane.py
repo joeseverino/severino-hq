@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -5,35 +6,49 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from pydantic import ValidationError
 
+from hq.platform.application.action_links import ActionLink
+from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.controller import (
     ControllerReport,
+    claim_next_operation,
     report_operation,
     schedule_automatic_operations,
 )
+from hq.platform.application.finding_model import Finding
 from hq.platform.application.infrastructure import (
     ManagedResourceCommand,
     PolicyError,
     controller_contract,
-    delivery_targets as delivery_targets_for_test,
+    delivery_targets,
+    resolved_spec,
     save_managed_resource,
 )
 from hq.platform.application.resource_operations import (
     OperationCommand,
     request_certificate_renewal,
     request_reconcile,
+    request_removal,
 )
 from hq.platform.application.security import cli_principal, mcp_principal
+from hq.platform.application.tests.markup import actions, hrefs, select, text
+from hq.platform.application.topology_model import TopologyNode
 
 from ..desired_state import advance_dependents
 from ..models import (
+    DashboardMachine,
     ManagedResource,
     OperationRequest,
     ProviderConnection,
     ProviderInventory,
 )
-from ..providers import PROVIDERS, describe_providers
+from ..provider_adapters.cloudflare import _dns_record_readout
+from ..provider_adapters.declarations import TLSDeliveryTargetSpec
+from ..provider_adapters.tls import OnePasswordPublication
+from ..provider_spec import ProviderResolutionContext
+from ..providers import PROVIDERS, describe_providers, resolve_provider_spec, validate_spec
 from . import bridge_client
 
 
@@ -209,29 +224,16 @@ class DerivedConsumerTests(TestCase):
             spec=certificate_spec(),
         )
 
-    def _caddy_consumer(self):
-        from hq.platform.application.infrastructure import resolved_spec
+    def test_a_consumer_is_a_covered_name_served_at_the_target_or_a_written_one(self):
+        """A covered name answering at the target is a consumer without being
+        listed, and a written name is kept beside it, since a target may serve
+        a name no sweep can see. Sharing a host without being covered, or being
+        covered and answering elsewhere, is not consuming."""
 
         resolved = resolved_spec(self._estate())
-        return next(consumer for consumer in resolved["consumers"] if consumer["connection_ref"] == "edge")
+        consumer = next(consumer for consumer in resolved["consumers"] if consumer["connection_ref"] == "edge")
 
-    def test_a_name_served_at_the_target_is_a_consumer_without_being_listed(self):
-        self.assertIn("status.example.com", self._caddy_consumer()["verify_domains"])
-
-    def test_the_written_names_are_kept_beside_the_derived_ones(self):
-        """A target may serve a name no sweep can see, so declaring still adds."""
-
-        self.assertIn("health.example.com", self._caddy_consumer()["verify_domains"])
-
-    def test_a_name_the_certificate_does_not_cover_is_not_a_consumer(self):
-        """Sharing a host is not being covered by the same certificate."""
-
-        self.assertNotIn("unrelated.invalid", self._caddy_consumer()["verify_domains"])
-
-    def test_a_covered_name_answering_elsewhere_is_not_a_consumer(self):
-        """Coverage alone would make every name a consumer of every target."""
-
-        self.assertNotIn("elsewhere.example.com", self._caddy_consumer()["verify_domains"])
+        self.assertEqual(set(consumer["verify_domains"]), {"status.example.com", "health.example.com"})
 
     def test_a_target_reached_by_name_is_placed_like_one_reached_by_address(self):
         """The endpoint is a name, so it is one hop from being a machine.
@@ -263,8 +265,6 @@ class DerivedConsumerTests(TestCase):
             spec=certificate_spec(),
         )
 
-        from hq.platform.application.infrastructure import resolved_spec
-
         consumer = next(item for item in resolved_spec(certificate)["consumers"] if item["connection_ref"] == "edge")
 
         self.assertIn("status.example.com", consumer["verify_domains"])
@@ -294,8 +294,6 @@ class DerivedConsumerTests(TestCase):
             spec=certificate_spec(),
         )
 
-        from hq.platform.application.infrastructure import resolved_spec
-
         consumer = next(item for item in resolved_spec(certificate)["consumers"] if item["connection_ref"] == "edge")
 
         self.assertNotIn("pending.example.com", consumer["verify_domains"])
@@ -306,8 +304,6 @@ class DesiredStateOwnershipTests(TestCase):
 
     def setUp(self):
         super().setUp()
-        from hq.platform.application.adoption_testing import managing_everything
-
         managing_everything()
 
     def _certificate(self):
@@ -326,16 +322,12 @@ class DesiredStateOwnershipTests(TestCase):
         self.assertEqual(resource.spec["domains"], DOMAINS)
 
     def test_a_target_supplies_the_settings_the_certificate_does_not(self):
-        from hq.platform.application.infrastructure import resolved_spec
-
         resolved = resolved_spec(self._certificate())
 
         self.assertEqual(resolved["consumers"], resolved_certificate_spec()["consumers"])
 
     def test_a_certificate_naming_a_target_that_is_gone_covers_nothing(self):
         """Reported as an uncovered name, which is exactly what is true."""
-
-        from hq.platform.application.infrastructure import resolved_spec
 
         resource = self._certificate()
         ManagedResource.objects.filter(kind="tls.delivery_target").delete()
@@ -344,8 +336,6 @@ class DesiredStateOwnershipTests(TestCase):
 
     def test_a_second_certificate_is_named_after_itself_at_a_shared_target(self):
         """Two certificates at one target must not collide on one name."""
-
-        from hq.platform.application.infrastructure import resolved_spec
 
         self._certificate()
         other = ManagedResource.objects.create(
@@ -368,8 +358,6 @@ class DesiredStateOwnershipTests(TestCase):
         HQ holds has not moved at all.
         """
 
-        from hq.platform.application.infrastructure import delivery_targets
-
         resource = self._certificate()
         advance_dependents(delivery_targets())
         resource.refresh_from_db()
@@ -390,8 +378,6 @@ class DesiredStateOwnershipTests(TestCase):
         does not exist.
         """
 
-        from hq.platform.application.infrastructure import delivery_targets
-
         resource = self._certificate()
         self.assertEqual(resource.desired_fingerprint, "")
 
@@ -404,14 +390,8 @@ class DesiredStateOwnershipTests(TestCase):
     def test_saving_a_target_advances_them_without_a_separate_step(self):
         """Editing the target is the whole action; nothing else has to be run."""
 
-        from hq.platform.application.infrastructure import (
-            ManagedResourceCommand,
-            save_managed_resource,
-        )
-        from hq.platform.application.security import cli_principal
-
         resource = self._certificate()
-        advance_dependents(delivery_targets_for_test())
+        advance_dependents(delivery_targets())
         resource.refresh_from_db()
         settled = resource.generation
 
@@ -430,8 +410,6 @@ class DesiredStateOwnershipTests(TestCase):
         self.assertEqual(resource.generation, settled + 1)
 
     def test_nothing_moves_when_nothing_resolved_differently(self):
-        from hq.platform.application.infrastructure import delivery_targets
-
         resource = self._certificate()
         advance_dependents(delivery_targets())
         resource.refresh_from_db()
@@ -461,8 +439,6 @@ class RegistrySymmetryTests(TestCase):
         this" while the box serving it is in HQ's own inventory.
         """
 
-        from ..providers import PROVIDERS
-
         silent = sorted(
             kind for kind, provider in PROVIDERS.items() if provider.answers is not None and provider.origin is None
         )
@@ -476,8 +452,6 @@ class RegistrySymmetryTests(TestCase):
 
     def test_every_facet_provider_agrees_on_what_a_hostname_is(self):
         """A facet is a column, and two providers must fill it the same way."""
-
-        from ..providers import PROVIDERS
 
         missing = sorted(
             kind
@@ -581,8 +555,6 @@ class ProviderContractTests(TestCase):
 
 class InfrastructureWebTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
-
         managing_everything()
         self.user = get_user_model().objects.create_user(
             username="operator",
@@ -601,8 +573,6 @@ class InfrastructureWebTests(TestCase):
         self.resource = ManagedResource.objects.get(key="example-wildcard")
 
     def test_machine_edit_can_choose_the_dashboard_telemetry_owner(self):
-        from hq.domains.control_plane.models import DashboardMachine
-
         machine = ManagedResource.objects.create(
             key="example-host",
             kind="machine",
@@ -626,13 +596,11 @@ class InfrastructureWebTests(TestCase):
             },
         )
 
-        self.assertContains(page, "Show on dashboard")
+        self.assertTrue(select(page, "name", "show_on_dashboard"))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(DashboardMachine.objects.get().machine, machine)
 
     def test_detail_shows_active_observation_and_policy_gated_renewal(self):
-        from hq.platform.application.adoption_testing import managing_everything
-
         managing_everything()
         self.resource.status = {
             "not_after": (timezone.now() + timedelta(days=89, hours=23)).isoformat(),
@@ -652,17 +620,17 @@ class InfrastructureWebTests(TestCase):
         response = self.client.get(reverse("control_plane:detail", kwargs={"key": self.resource.key}))
 
         # One status line: this certificate's first change has not been applied.
-        self.assertEqual(response.content.decode().count("data-record-status="), 1)
-        self.assertContains(response, 'data-record-status="pending"')
-        self.assertContains(response, "Change waiting to apply")
-        self.assertContains(response, "Renews automatically from")
-        self.assertNotContains(response, "resumes after restarts")
-        self.assertNotContains(response, "Renewal policy")
-        self.assertContains(response, "hq.example.com")
-        self.assertContains(response, "sso.example.com")
-        self.assertNotContains(response, "BEGIN CERTIFICATE")
-        self.assertContains(response, "certificate_available")
-        self.assertContains(response, "&quot;certificate_available&quot;: true")
+        self.assertEqual(
+            [line.attrs["data-record-status"] for line in select(response, "data-record-status")], ["pending"]
+        )
+        shown = text(response)
+        self.assertIn("Renews automatically from", shown)
+        self.assertIn("hq.example.com", shown)
+        self.assertIn("sso.example.com", shown)
+        # The public certificate is offered as a download, never printed.
+        self.assertNotIn("BEGIN CERTIFICATE", shown)
+        self.assertTrue(json.loads(response.context["diagnostic_status"])["certificate_available"])
+        self.assertIn(reverse("control_plane:certificate_download", args=[self.resource.key]), hrefs(response))
 
     def test_a_proxy_host_and_its_upstream_are_distinct_machine_edges(self):
         ManagedResource.objects.create(
@@ -700,11 +668,10 @@ class InfrastructureWebTests(TestCase):
 
         self.assertEqual(response.context["provider_machine"]["name"], "example-host")
         self.assertEqual(response.context["origin_machine"].name, "app-server")
-        # Two edges, two sentences. A container managed by a Portainer one box
-        # over names two machines: the one it runs on, and the one its provider
-        # runs on, so one "Runs on" cannot cover both.
-        self.assertContains(response, "Managed on")
-        self.assertContains(response, "Forwards to")
+        # Two edges: the machine its provider runs on and the one it forwards to.
+        links = hrefs(response)
+        for name in ("example-host", "app-server"):
+            self.assertIn(reverse("control_plane:machine", kwargs={"name": name}), links)
 
     def test_public_certificate_download_never_serves_private_key(self):
         self.resource.status = {"certificate_pem": "-----BEGIN PRIVATE KEY-----\nunsafe\n"}
@@ -732,8 +699,6 @@ class InfrastructureWebTests(TestCase):
 
 class OperationPolicyTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
-
         managing_everything()
         declare_targets()
         save_managed_resource(
@@ -751,8 +716,6 @@ class OperationPolicyTests(TestCase):
         they have been sending `next` all along while the view returned to the
         resource record regardless."""
 
-        from django.contrib.auth import get_user_model
-
         user = get_user_model().objects.create_superuser("op", password="x" * 20)
         self.client.force_login(user)
 
@@ -769,8 +732,6 @@ class OperationPolicyTests(TestCase):
 
     def test_a_destination_off_this_host_is_refused(self):
         """`next` is operator input, so it goes through the shared check."""
-
-        from django.contrib.auth import get_user_model
 
         user = get_user_model().objects.create_superuser("op2", password="x" * 20)
         self.client.force_login(user)
@@ -986,20 +947,14 @@ class DeliveryTargetConfirmationTests(TestCase):
     def _confirmed(self, connection_ref):
         return ManagedResource.objects.get(key=f"{connection_ref}-certificate-target").last_observed_at
 
-    def test_a_target_the_certificate_was_verified_at_is_confirmed(self):
-        declare_targets()
-
-        self._report([{"consumer": "edge-caddy", "domain": "health.example.com"}])
-
-        self.assertIsNotNone(self._confirmed("edge"))
-
-    def test_a_target_nothing_reached_is_left_unconfirmed(self):
+    def test_only_the_target_the_certificate_was_verified_at_is_confirmed(self):
         """Confirming all three off one observation would be inventing evidence."""
 
         declare_targets()
 
         self._report([{"consumer": "edge-caddy", "domain": "health.example.com"}])
 
+        self.assertIsNotNone(self._confirmed("edge"))
         self.assertIsNone(self._confirmed("a-shared-host"))
 
     def test_a_report_with_no_observations_confirms_nothing(self):
@@ -1033,22 +988,19 @@ class InfrastructureViewsTests(TestCase):
             },
         )
 
-        listing = self.client.get(reverse("control_plane:list"))
+        shown = text(self.client.get(reverse("control_plane:list")))
 
-        self.assertContains(listing, "app.example.com → 10.0.0.10:8000")
-        self.assertNotContains(listing, "http://10.0.0.10:8000")
+        self.assertIn("10.0.0.10:8000", shown)
+        self.assertNotIn("http://10.0.0.10:8000", shown)
 
     def test_private_dashboard_and_public_certificate_download(self):
         dashboard = self.client.get(reverse("control_plane:list"))
-        self.assertContains(dashboard, "example-wildcard")
+        self.assertIn(self.resource.get_absolute_url(), hrefs(dashboard))
 
         download = self.client.get(reverse("control_plane:certificate_download", args=[self.resource.key]))
-        self.assertEqual(download.status_code, 200)
         self.assertEqual(download.content, b"PUBLIC CERTIFICATE ONLY")
-        self.assertNotIn(b"PRIVATE", download.content)
 
         report = self.client.get(reverse("control_plane:report_download", args=[self.resource.key]))
-        self.assertEqual(report.status_code, 200)
         self.assertEqual(report.json()["resource"]["key"], self.resource.key)
 
     def test_findings_page_explains_the_claim_and_its_evidence(self):
@@ -1064,17 +1016,13 @@ class InfrastructureViewsTests(TestCase):
 
         response = self.client.get(reverse("control_plane:findings"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Findings")
-        self.assertContains(response, "Internal DNS records have never been read")
-        self.assertNotContains(response, "adguard.rewrite record")
-        self.assertContains(response, reverse("action_items"))
+        self.assertIn("kind-never-swept", [rule.name for rule in response.context["finding_rules"]])
+        self.assertGreaterEqual(response.context["finding_counts"].get("serious", 0), 1)
+        links = hrefs(response)
+        self.assertIn(f"{reverse('control_plane:findings')}?rule=kind-never-swept", links)
+        self.assertIn(reverse("action_items"), links)
 
     def test_findings_render_only_offers_the_projection_authorized(self):
-        from hq.platform.application.action_links import ActionLink
-        from hq.platform.application.finding_model import Finding
-        from hq.platform.application.topology_model import TopologyNode
-
         subject = TopologyNode(
             "controller:one",
             "controller",
@@ -1094,9 +1042,9 @@ class InfrastructureViewsTests(TestCase):
             response = self.client.get(reverse("control_plane:findings"))
 
         # Pages to look into it are links, never buttons: the projection's own.
-        self.assertContains(response, '<a href="/connections/">Open connections</a>')
-        self.assertContains(response, 'href="/topology/?trace"')
-        self.assertContains(response, "Trace impact")
+        for url in ("/connections/", "/topology/?trace"):
+            self.assertIn(url, hrefs(response))
+            self.assertNotIn(url, actions(response))
 
     def test_legacy_operation_evidence_is_not_mislabeled_as_a_mismatch(self):
         OperationRequest.objects.create(
@@ -1124,8 +1072,8 @@ class InfrastructureViewsTests(TestCase):
 
         detail = self.client.get(reverse("control_plane:detail", args=[self.resource.key]))
 
-        self.assertNotContains(detail, "serves a different certificate")
-        self.assertNotContains(detail, "did not match")
+        (operation,) = detail.context["operations"]
+        self.assertFalse(operation["affected"])
 
     def test_failed_operation_renders_guidance_and_expected_observed_evidence(self):
         OperationRequest.objects.create(
@@ -1162,13 +1110,14 @@ class InfrastructureViewsTests(TestCase):
 
         detail = self.client.get(reverse("control_plane:detail", args=[self.resource.key]))
 
-        self.assertContains(detail, "One consumer serves the previous certificate.")
-        self.assertNotContains(detail, "Provider reason:")
-        self.assertNotContains(detail, "No action is required")
-        self.assertContains(detail, "1 name serves a different certificate")
-        self.assertContains(detail, "Expected")
-        self.assertContains(detail, "observed")
-        self.assertContains(detail, "Raw result")
+        (operation,) = detail.context["operations"]
+        self.assertEqual(
+            [(item["consumer"], item["domain"]) for item in operation["affected"]], [("npm", "hq.example.test")]
+        )
+        self.assertTrue(operation["raw_result"])
+        shown = text(detail)
+        self.assertIn("One consumer serves the previous certificate.", shown)
+        self.assertIn("1 name serves a different certificate", shown)
 
     def test_controller_rejects_secret_material_in_status(self):
         operation = OperationRequest.objects.create(
@@ -1253,8 +1202,6 @@ class DnsRecordReadoutTests(TestCase):
     """A record that matches the world must not report drift against itself."""
 
     def test_a_matching_record_reports_no_drift(self):
-        from hq.domains.control_plane.provider_adapters.cloudflare import _dns_record_readout
-
         spec = {
             "zone": "example.com",
             "name": "example.com",
@@ -1268,26 +1215,18 @@ class DnsRecordReadoutTests(TestCase):
         _label, desired, observed = _dns_record_readout(spec, status)[0]
         self.assertEqual(desired, observed)
 
-    def test_a_changed_record_still_reports_drift(self):
-        from hq.domains.control_plane.provider_adapters.cloudflare import _dns_record_readout
-
-        spec = {"record_type": "CNAME", "content": "new.pages.dev", "priority": None}
-        status = {"record_type": "CNAME", "content": "old.pages.dev", "priority": None}
-        _, desired, observed = _dns_record_readout(spec, status)[0]
-        self.assertNotEqual(desired, observed)
-
-    def test_priority_is_compared_on_both_sides(self):
-        from hq.domains.control_plane.provider_adapters.cloudflare import _dns_record_readout
-
-        spec = {"record_type": "MX", "content": "mx.example.com", "priority": 10}
-        status = {**spec}
-        _, desired, observed = _dns_record_readout(spec, status)[0]
-        self.assertEqual(desired, observed)
-        self.assertIn("10", desired)
+    def test_a_changed_content_or_priority_reports_drift(self):
+        for field, desired_value, observed_value in (
+            ("content", "new.pages.dev", "old.pages.dev"),
+            ("priority", 10, 20),
+        ):
+            with self.subTest(field=field):
+                spec = {"record_type": "MX", "content": "mx.example.com", "priority": 10, field: desired_value}
+                status = {**spec, field: observed_value}
+                _, desired, observed = _dns_record_readout(spec, status)[0]
+                self.assertNotEqual(desired, observed)
 
     def test_an_unobserved_record_reports_nothing_rather_than_drift(self):
-        from hq.domains.control_plane.provider_adapters.cloudflare import _dns_record_readout
-
         spec = {"record_type": "A", "content": "192.0.2.1", "priority": None}
         _, desired, observed = _dns_record_readout(spec, {})[0]
         self.assertEqual(observed, "")
@@ -1303,8 +1242,6 @@ class QueueHeadTests(TestCase):
     """
 
     def setUp(self):
-        from hq.platform.application.controller import claim_next_operation
-
         self.claim = claim_next_operation
         declare_targets()
         self.certificate = ManagedResource.objects.create(
@@ -1364,9 +1301,6 @@ class QueueHeadTests(TestCase):
     def test_removing_a_target_stops_the_certificate_reporting_itself_in_sync(self):
         """Removing one is as much a change as editing one."""
 
-        from hq.platform.application.resource_operations import OperationCommand, request_removal
-        from hq.platform.application.security import cli_principal
-
         self.certificate.desired_fingerprint = "settled"
         self.certificate.observed_generation = self.certificate.generation
         self.certificate.save()
@@ -1394,8 +1328,6 @@ class ReadoutsSayNothingBlankTests(TestCase):
     """
 
     def _rows(self, kind, spec, status=None):
-        from ..providers import PROVIDERS
-
         provider = PROVIDERS[kind]
         return provider.readout(spec, status or {}) if provider.readout else ()
 
@@ -1471,9 +1403,6 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     }
 
     def _resolve(self, *targets, install_on=None):
-        from ..provider_spec import ProviderResolutionContext
-        from ..providers import resolve_provider_spec
-
         return resolve_provider_spec(
             "tls.certificate",
             {
@@ -1540,10 +1469,6 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
         quietly written to a password manager.
         """
 
-        from pydantic import ValidationError
-
-        from ..provider_adapters.tls import OnePasswordPublication
-
         with self.assertRaises(ValidationError):
             OnePasswordPublication(
                 kind="onepassword",
@@ -1563,8 +1488,6 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_recording_target_declares_no_name_to_check_it_at(self):
         """Nothing is served there, so a name typed here would never be probed."""
 
-        from ..provider_adapters.declarations import TLSDeliveryTargetSpec
-
         with self.assertRaisesRegex(ValueError, "serves nothing"):
             TLSDeliveryTargetSpec(
                 kind="onepassword",
@@ -1576,8 +1499,6 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
             )
 
     def test_a_recording_target_needs_both_the_vault_and_the_item(self):
-        from ..provider_adapters.declarations import TLSDeliveryTargetSpec
-
         with self.assertRaisesRegex(ValueError, "needs a vault and an item"):
             TLSDeliveryTargetSpec(
                 kind="onepassword",
@@ -1589,8 +1510,6 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_vault_named_against_another_kind_of_target_is_refused(self):
         """Ignored, it would sit there looking configured and be read by nothing."""
 
-        from ..provider_adapters.declarations import TLSDeliveryTargetSpec
-
         with self.assertRaisesRegex(ValueError, "applies only to onepassword targets"):
             TLSDeliveryTargetSpec(
                 kind="npm",
@@ -1601,9 +1520,6 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
 
     def test_a_certificate_hq_did_not_issue_cannot_be_recorded(self):
         """There are no observed facts to publish, only the declaration."""
-
-        from ..provider_spec import ProviderResolutionContext
-        from ..providers import resolve_provider_spec
 
         with self.assertRaisesRegex(ValueError, "cannot be recorded in 1Password"):
             resolve_provider_spec(
@@ -1619,29 +1535,16 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
 class MachineNamesRouteTests(TestCase):
     """A machine's name is a path segment of its page."""
 
-    def test_a_name_with_a_slash_is_refused(self):
-        from pydantic import ValidationError
-
-        from ..providers import validate_spec
-
+    def test_a_name_with_a_slash_is_refused_and_a_plain_one_accepted(self):
         with self.assertRaises(ValidationError):
             validate_spec("machine", {"name": "a/b"})
-
-    def test_a_plain_name_is_accepted(self):
-        from ..providers import validate_spec
-
         self.assertEqual(validate_spec("machine", {"name": "a-box"})["name"], "a-box")
 
-    def test_an_unroutable_stored_name_falls_back_to_the_detail_page(self):
-        resource = ManagedResource(key="a-box", kind="machine", spec={"name": "a/b"})
-        self.assertEqual(
-            resource.get_absolute_url(),
-            reverse("control_plane:detail", kwargs={"key": "a-box"}),
-        )
-
-    def test_a_routable_name_gets_the_machine_page(self):
-        resource = ManagedResource(key="a-box", kind="machine", spec={"name": "a-box"})
-        self.assertEqual(
-            resource.get_absolute_url(),
-            reverse("control_plane:machine", kwargs={"name": "a-box"}),
-        )
+    def test_a_routable_name_gets_the_machine_page_and_a_stored_slash_the_detail_page(self):
+        for name, page in (
+            ("a-box", reverse("control_plane:machine", kwargs={"name": "a-box"})),
+            ("a/b", reverse("control_plane:detail", kwargs={"key": "a-box"})),
+        ):
+            with self.subTest(name=name):
+                resource = ManagedResource(key="a-box", kind="machine", spec={"name": name})
+                self.assertEqual(resource.get_absolute_url(), page)

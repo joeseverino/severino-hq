@@ -87,7 +87,7 @@ env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3" }
 run = "uv run --locked python scripts/fast_gate.py"
 
 [tasks.check]
-description = "Does my change work: lint, contracts, the suite as dev and as production runs it"
+description = "Does my change work: lint, contracts, the source checks, the suite, and the suite composed"
 depends = [
     "checks:conflicts",
     "checks:patch",
@@ -95,8 +95,9 @@ depends = [
     "checks:openapi",
     "checks:workflows",
     "checks:shell",
+    "checks:source",
     "tests:*",
-    "suite:*",
+    "suite:composed",
 ]
 
 [tasks.ci]
@@ -130,7 +131,7 @@ description = "CI job Controller"
 depends = ["controller:*"]
 
 [tasks.scan]
-description = "Code scanning, as the CodeQL workflow runs it"
+description = "Code scanning, as CI's CodeQL job runs it"
 depends = ["scan:*"]
 
 [tasks.image]
@@ -168,18 +169,13 @@ env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3" }
 run = "uv run --locked python -m mypy"
 
 [tasks."checks:badges"]
-description = "The README badges and the test matrix state the toolchain"
+description = "The README badge and the test matrix state the toolchain"
 run = '''
 set -eu
 expected="$(printf '%s\n' $PYTHON_VERSIONS | paste -sd'|' -)"
 claimed="$(sed -nE 's/.*badge\/python-(.*)-blue.*/\1/p' README.md | head -1 | sed 's/%20%7C%20/|/g')"
 if [ "$expected" != "$claimed" ]; then
     echo "README python badge says '$claimed'; the toolchain declares '$expected'." >&2
-    exit 1
-fi
-floor="$(sed -nE 's/.*badge\/coverage-([0-9]+)%25%2B-.*/\1/p' README.md | head -1)"
-if [ "$floor" != "$COVERAGE_FLOOR" ]; then
-    echo "README coverage badge says '${floor}%+'; the floor is ${COVERAGE_FLOOR}%." >&2
     exit 1
 fi
 # A workflow matrix cannot read the toolchain, so it is held to it.
@@ -237,8 +233,8 @@ run = '''
 set -eu
 # scan:codeql and CI must run the same queries: the bundle pinned above is the
 # one the action's commit defaults to (its src/defaults.json).
-sha="$(sed -nE 's#^.*github/codeql-action/init@([0-9a-f]{40}) .*$#\1#p' .github/workflows/codeql.yml)"
-[ -n "$sha" ] || { echo "No pinned codeql-action/init in codeql.yml." >&2; exit 1; }
+sha="$(sed -nE 's#^.*github/codeql-action/init@([0-9a-f]{40}) .*$#\1#p' .github/workflows/ci.yml)"
+[ -n "$sha" ] || { echo "No pinned codeql-action/init in ci.yml." >&2; exit 1; }
 want="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/github/codeql-action/${sha}/src/defaults.json" | jq -r .cliVersion)"
 have="$(yq -p toml -oy '.tools."github:github/codeql-action".version' mise.toml)"
 if [ "$want" != "$have" ]; then
@@ -314,6 +310,13 @@ done
 exit "$failed"
 '''
 
+[tasks."checks:source"]
+description = "The tests that read the repository, run once on the checkout"
+# Tagged "source"; a whole-suite run leaves them out (hq/platform/core/test_runner.py),
+# so no image or composed pass runs them.
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+run = "uv run --locked python manage.py test --tag source --noinput --parallel auto"
+
 [tasks."checks:bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"
 env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
@@ -372,14 +375,22 @@ description = "The machine API's OpenAPI document is current"
 env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
 run = "uv run --locked python manage.py api_openapi --check"
 
+[tasks."tests:connections-reference"]
+description = "docs/Connections.md is what the providers declare"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+run = "uv run --locked python manage.py connections_reference --check"
+
 [tasks."tests:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
 env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
 run = "uv run --locked python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
 
 [tasks."tests:suite"]
-description = "The suite, with the coverage floor"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+description = "The suite as production configures it, with the coverage floor"
+# DJANGO_DEBUG unset: the settings take the defaults production takes (secure
+# cookies, cached templates, no live static). The development defaults are
+# held by tests that load the settings with it on.
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
 # Parallel across the cores; hq/platform/core/test_runner.py makes workers safe
 # on the WAL database. Coverage follows the workers (pyproject.toml) and is
 # combined before it is judged.
@@ -391,7 +402,7 @@ status=0
 # A run judges only its own data: a worker's file left by a run that was
 # stopped would otherwise be combined into this one's total.
 uv run --locked coverage erase
-uv run --locked coverage run manage.py test --noinput --parallel auto --durations 10 >"$log" 2>&1 || status=$?
+env -u DJANGO_DEBUG uv run --locked coverage run manage.py test --noinput --parallel auto --durations 10 >"$log" 2>&1 || status=$?
 cat "$log"
 [ "$status" -eq 0 ]
 uv run --locked coverage combine --quiet
@@ -415,13 +426,8 @@ fi
 '''
 
 # ------------------------------------------------------------------ suite
-# The suite as production runs it. Not jobs of the CI workflow: Compose runs
-# the composition against the real extension set.
-
-[tasks."suite:production"]
-description = "The suite with DEBUG off, as production runs it"
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "check-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "testserver" }
-run = "env -u DJANGO_DEBUG uv run --locked python manage.py test --noinput --parallel auto"
+# The suite composed with the extensions mise.local.toml names. CI composes
+# the real set in the image (compose.yml).
 
 [tasks."suite:composed"]
 description = "The suite composed with the extensions mise.local.toml names"
@@ -439,6 +445,11 @@ fi
 env -u DJANGO_DEBUG SEVERINO_HQ_PLUGINS="$HQ_LOCAL_PLUGINS" PYTHONPATH="${HQ_LOCAL_PYTHONPATH:-}" \
     uv run --locked python manage.py test --noinput --parallel auto
 '''
+
+[tasks."suite:as-image"]
+description = "The composed suite as the image runs it: only the files the image ships"
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "check-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "testserver", SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0" }
+run = "scripts/suite-as-image.sh"
 
 # ---------------------------------------------------------------- browser
 
@@ -466,11 +477,19 @@ depends = ["setup:webkit", "demo:build"]
 env = { HQ_DEMO_OUT = "{{config_root}}/var/demo" }
 run = "uv run --locked --group browser python -m unittest demo.check -v"
 
+# Each browser:* gate is one CI job, the classes split for balance. A new
+# browser test class is named in one of them (test_browser_gate_tasks).
 [tasks."browser:layout"]
-description = "Real-browser layout invariants over the stress estate and the example estate"
+description = "Real-browser layout invariants over the stress estate"
 depends = ["setup:webkit"]
 env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
-run = "uv run --locked --group browser python manage.py test hq.platform.core.browser_tests hq.platform.core.estate_browser_tests --noinput --parallel 1"
+run = "uv run --locked --group browser python manage.py test hq.platform.core.browser_tests.LayoutBrowserTests --noinput --parallel 1"
+
+[tasks."browser:navigation"]
+description = "Real-browser invariants over the example estate, the frame around a page and its fragments"
+depends = ["setup:webkit"]
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "ci-only-secret-key-not-for-production", DJANGO_ALLOWED_HOSTS = "127.0.0.1,testserver" }
+run = "uv run --locked --group browser python manage.py test hq.platform.core.estate_browser_tests hq.platform.core.browser_tests.ReferenceBrowserTests hq.platform.core.browser_tests.FragmentBrowserTests --noinput --parallel 1"
 
 # ------------------------------------------------------------- controller
 
@@ -531,7 +550,6 @@ esac
 [tasks."image:verify:host-boot"]
 description = "It boots under its unit: waits for its environment, survives a crash and a reboot"
 depends = ["image:build"]
-wait_for = ["image:verify:healthy"]
 run = 'scripts/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'
 
 [tasks."image:verify:secrets"]

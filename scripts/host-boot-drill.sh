@@ -30,10 +30,11 @@ secrets=/run/severino-hq-secrets/web
 env_file="$secrets/severino_hq_env"
 registry=severino-hq-drill-registry
 registry_image=registry:3@sha256:ddf754342cfc8acc51a56d5d0ab6af06826461864460636d8bd5c546dab2a7b8
+dropin=/etc/systemd/system/severino-hq-web.service.d
 
 cleanup() {
   sudo systemctl stop severino-hq-web.service 2>/dev/null || true
-  sudo rm -f /etc/systemd/system/severino-hq-web.service
+  sudo rm -rf /etc/systemd/system/severino-hq-web.service "$dropin"
   sudo systemctl daemon-reload
   sudo docker rm --force severino-hq "$registry" >/dev/null 2>&1 || true
   sudo rm -rf "$lib" /var/lib/severino-hq /run/severino-hq-secrets
@@ -109,6 +110,10 @@ sudo docker rm "$container" >/dev/null
 sudo chmod 0755 "$lib/deploy/bin/hq-host"
 printf '%s\n' "$pinned" | sudo tee /var/lib/severino-hq/release >/dev/null
 sudo install -m 0644 "$root/deploy/systemd/severino-hq-web.service" /etc/systemd/system/severino-hq-web.service
+# The image's own start period rather than a host's: a release that cannot
+# serve fails its start after this, and a healthy one is ready well inside it.
+sudo install -d -m 0755 "$dropin"
+printf '[Service]\nEnvironment=SEVERINO_HQ_HEALTH_START_PERIOD=20s\n' | sudo tee "$dropin/drill.conf" >/dev/null
 sudo systemd-tmpfiles --create "$root/deploy/tmpfiles/severino-hq.conf"
 sudo systemctl daemon-reload
 

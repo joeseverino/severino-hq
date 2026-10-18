@@ -152,6 +152,33 @@ this network"), or the record's own details. Never a table of contents of the
 page, a pointer to another page (link to it instead), or how HQ works inside
 (a file path, a background mechanism).
 
+**Say what HQ knows, once.** A sentence on a page is derived from the record
+that holds its answer (the registrar the zone record names, the issuer and
+expiry a certificate's status holds), never a generic placeholder or a
+hardcoded string. Each fact appears once, where it belongs: a card does not
+repeat the strip beside it.
+
+**A title states the fact it checks.** "Tokens hold only the permissions HQ
+uses", "Keys are kept in a vault": what was checked, in plain words. Not a
+sweeping claim ("every credential is limited to what HQ needs"), and not
+"knows", "ensures" or "limited".
+
+**A zero is information.** A count of zero says the thing was checked and there
+is none; it stays on the page. Hiding it leaves the reader wondering whether it
+was counted.
+
+**Dense, never empty.** Content sits on a surface; when one is too big or too
+loud, make it compact (one row, tighter padding, an urgent tone only when
+urgent), never bare on the page background. A verdict sits where it belongs (on
+the link between two ends), evidence beside its value, one line per check with
+detail on demand, side-by-side cards of similar height. A card that is mostly
+empty, or a row with a gulf in it, is a layout to redesign, not padding to trim.
+
+**The header is one row.** When room runs out, the search field collapses to a
+button that opens over the navigation, then the sections move behind the
+toggle. The navigation never shrinks below its own content, and the bar's
+controls all take their size from `--control-size`.
+
 **One menu.** `.overflow-menu` for "more actions", the nav dropdown for
 navigation. Every dropdown carries `data-menu`, which gives it the shared
 dismissal (outside click, Escape). Inside a menu every control is a plain row;

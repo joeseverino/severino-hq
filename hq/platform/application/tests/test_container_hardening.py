@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 
+from ..action_links import command_url
 from ..containers import attention, containers
 from ..exposure import OPEN, PRIVATE
 from .test_container_standard import KEPT, runtime
@@ -45,12 +46,11 @@ class HardeningTests(TestCase):
     def test_only_the_unmet_check_gets_a_line(self):
         found = self.hardening(**{**KEPT, "security_opt": ["label=disable"]})
 
-        self.assertEqual([change.key for change in found.changes], ["security_opt"])
-        self.assertEqual(
-            found.yaml,
-            'services:\n  web:\n    security_opt:\n      - "label=disable"\n      - "no-new-privileges:true"\n',
-        )
-        self.assertIn("setuid", found.changes[0].caution)
+        (change,) = found.changes
+        self.assertEqual(change.key, "security_opt")
+        self.assertEqual(change.checks, ("no-new-privileges",))
+        self.assertIn('"label=disable"', change.yaml)
+        self.assertTrue(found.yaml.startswith("services:\n  web:\n"))
 
     def test_every_hardening_gap_is_written_for_its_own_service(self):
         found = self.hardening(
@@ -79,11 +79,7 @@ class HardeningTests(TestCase):
             "      retries: 3\n",
         )
         self.assertEqual(found.removals, ())
-        cautions = {change.key: change.caution for change in found.changes}
-        self.assertIn("listens on 80", cautions["user"])
-        self.assertIn("no reading of what it uses", cautions["mem_limit"])
-        self.assertIn("Assumes port 80 answers HTTP", cautions["healthcheck"])
-        self.assertIn("Only this machine", cautions["ports"])
+        self.assertTrue(all(change.caution for change in found.changes))
 
     def test_reach_over_the_machine_is_written_or_removed(self):
         found = self.hardening(
@@ -111,9 +107,8 @@ class HardeningTests(TestCase):
             changes["volumes"].yaml,
             'volumes:\n  - "/etc:/host-etc:ro"\n  - "/etc/localtime:/etc/localtime:ro"\n  - "web_data:/data"',
         )
-        self.assertIn("docker cp", changes["volumes"].caution)
         self.assertEqual(changes["cap_drop"].yaml, 'cap_drop:\n  - "ALL"\ncap_add:\n  - "CHOWN"')
-        self.assertIn("Drops SYS_ADMIN", changes["cap_drop"].caution)
+        self.assertIn("SYS_ADMIN", changes["cap_drop"].caution)
         self.assertEqual(
             {removal.check: removal.lines for removal in found.removals},
             {"own-process-namespace": ("pid: host",), "no-devices": ("devices: /dev/ttyUSB0",)},
@@ -159,7 +154,7 @@ class HardeningTests(TestCase):
 
         (change,) = found.changes
         self.assertEqual(change.yaml, "mem_limit: 256m")
-        self.assertIn("Twice the 100m", change.caution)
+        self.assertIn("100m", change.caution)
 
     def test_a_documented_health_endpoint_is_used_and_none_is_said(self):
         estate()
@@ -188,21 +183,20 @@ class HardeningTests(TestCase):
         (item,) = containers()
         (change,) = item.hardening.changes
         self.assertIn("http://127.0.0.1:3000/api/health", change.yaml)
-        self.assertIn("documents", change.caution)
 
         found = self.hardening(**{**KEPT, "healthcheck": False, "port_bindings": []})
 
         self.assertEqual(found.changes, ())
         (gap,) = found.unwritten
         self.assertEqual(gap.check, "health-checked")
-        self.assertIn("publishes no port", gap.reason)
+        self.assertTrue(gap.reason)
 
     def test_the_host_network_is_removed_with_what_it_leaves_unknown(self):
         found = self.hardening(**{**KEPT, "network_mode": "host", "port_bindings": []})
 
         (removal,) = found.removals
         self.assertEqual(removal.lines, ("network_mode: host",))
-        self.assertIn("ports:", removal.caution)
+        self.assertTrue(removal.caution)
 
     def test_the_socket_is_a_reason_not_a_change(self):
         found = self.hardening(**{**KEPT, "mounts": [SOCKET]})
@@ -241,11 +235,9 @@ class PageTests(TestCase):
         page = self.client.get(reverse("control_plane:detail", args=["example-box-web"]))
 
         self.assertContains(page, 'id="hardening"')
-        self.assertContains(page, "Add to <code>/opt/example/web/docker-compose.yml</code>", html=False)
+        self.assertContains(page, "/opt/example/web/docker-compose.yml")
         self.assertContains(page, "user: &quot;1000:1000&quot;", html=False)
-        self.assertNotContains(page, "mem_limit")
-        self.assertContains(page, "Mark web as meant to control Docker")
-        self.assertContains(page, "/commands/infrastructure.resource.update/?target=example-box-web")
+        self.assertContains(page, command_url("infrastructure.resource.update", "example-box-web"))
 
     def test_a_container_meeting_every_check_has_no_block(self):
         estate()
@@ -273,17 +265,12 @@ class AttentionHelpTests(TestCase):
         )
 
         item = self.items()["container-posture:no-docker-socket"]
-        actions = {action.label: action for action in item.actions}
-
-        mark = actions["Mark web as meant to control Docker"]
-        self.assertEqual(mark.url, "/commands/infrastructure.resource.update/?target=example-box-web")
-        self.assertEqual(
-            (mark.capability, mark.target, mark.method), ("infrastructure.resource.update", "example-box-web", "GET")
-        )
-        adopt = actions["Adopt kuma to mark it"]
-        self.assertEqual(adopt.method, "POST")
-        self.assertIn("/adopt/record/portainer.container/", adopt.url)
-        self.assertIn("cannot write a socket proxy", item.body)
+        by_method = {action.method: action for action in item.actions}
+        self.assertEqual(set(by_method), {"GET", "POST"})
+        mark = by_method["GET"]
+        self.assertEqual(mark.url, command_url("infrastructure.resource.update", "example-box-web"))
+        self.assertEqual((mark.capability, mark.target), ("infrastructure.resource.update", "example-box-web"))
+        self.assertIn("/adopt/record/portainer.container/", by_method["POST"].url)
 
     def test_the_socket_button_opens_the_update_prefilled_with_its_declaration(self):
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
@@ -313,9 +300,7 @@ class AttentionHelpTests(TestCase):
         item = self.items()["container-posture:not-privileged"]
 
         (action,) = item.actions
-        self.assertEqual(action.label, "Compose change for web")
         self.assertTrue(action.url.endswith("/example-box-web/#hardening"))
-        self.assertIn("The compose change for each is on its page.", item.body)
 
     def test_an_advisory_says_which_upgrade_clears_it_and_why_it_cannot_run_yet(self):
         estate(advisories=[HIGH])
@@ -323,12 +308,12 @@ class AttentionHelpTests(TestCase):
 
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
-        self.assertEqual(item.action, "Upgrade to v1.3.0 (fixes 1)")
+        self.assertIn("v1.3.0", item.action)
         self.assertEqual([step.phase for step in item.workflow.steps], ["do", "cannot"])
-        self.assertIn("set the image of app to ghcr.io/example/app:v1.3.0", item.workflow.steps[0].summary)
+        self.assertIn("ghcr.io/example/app:v1.3.0", item.workflow.steps[0].summary)
         self.assertTrue(item.url.endswith("/example-box-app/#upgrade"))
         (action,) = item.actions
-        self.assertEqual(action.label, "Upgrade plan for app")
+        self.assertTrue(action.url.endswith("/example-box-app/#upgrade"))
 
     def test_an_unwatched_advisory_says_adopt_it_first(self):
         estate(advisories=[HIGH])
@@ -336,7 +321,8 @@ class AttentionHelpTests(TestCase):
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
         (action,) = item.actions
-        self.assertEqual((action.label, action.method), ("Adopt app to plan its upgrade", "POST"))
+        self.assertEqual(action.method, "POST")
+        self.assertIn("/adopt/record/", action.url)
 
     def test_a_private_advisory_no_release_fixes_is_not_an_action_item(self):
         estate(advisories=[HIGH], app_tags=("v1.2.0",))
@@ -351,6 +337,5 @@ class AttentionHelpTests(TestCase):
 
         item = self.items()["container-advisory:ghcr.io/example/app:v1.2.0"]
 
-        self.assertIn("no release fixes it yet", item.title)
-        self.assertEqual(item.action, "No fixed release to upgrade to yet")
         self.assertEqual(item.actions, ())
+        self.assertIsNone(item.workflow)

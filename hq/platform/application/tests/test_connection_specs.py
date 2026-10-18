@@ -23,6 +23,8 @@ from ..connections import (
 )
 from ..integrations import integration_graph
 from ..security import Capability, Principal
+from .host_only import host_only
+from .sentinel import CONNECTION as SENTINEL_CONNECTION, SENTINEL, SentinelMixin, plant_credentials
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 NONE = Principal("nobody", "test", frozenset())
@@ -80,7 +82,7 @@ def _finance_spec() -> ConnectionSpec:
     )
 
 
-class ConnectionExecutionTests(TestCase):
+class ConnectionExecutionTests(SentinelMixin, TestCase):
     def test_hyphenated_plugin_route_names_are_valid(self):
         spec = replace(
             _finance_spec(),
@@ -91,9 +93,10 @@ class ConnectionExecutionTests(TestCase):
         with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
             self.assertIn(spec, integration_graph().connections.values())
 
-    def test_core_spec_derives_controller_abilities_and_safe_state(self):
+    def test_core_spec_derives_controller_abilities_and_carries_no_credential(self):
         from django.utils import timezone
 
+        plant_credentials()
         ProviderConnection.objects.create(
             connection_ref="example-cloudflare",
             controller_id="controller",
@@ -115,9 +118,9 @@ class ConnectionExecutionTests(TestCase):
             "cloudflare.dns_record",
             {ability["name"] for ability in connection["abilities"]},
         )
-        self.assertNotIn("token", connection)
-        self.assertNotIn("credential", connection)
         self.assertEqual(connection["controller_id"], "controller")
+        self.assertIn(SENTINEL_CONNECTION, {instance["label"] for instance in core["instances"]})
+        self.assertNoSentinel(outcome)
 
     def test_scope_coverage_is_derived_for_every_ability(self):
         with mock.patch(
@@ -197,9 +200,7 @@ class ConnectionExecutionTests(TestCase):
 
         action = connection.recommended_action
         self.assertIsNotNone(action)
-        self.assertEqual(action.name, "manage")
-        self.assertEqual(action.label, "Review access")
-        self.assertIn("Missing 1 permission it needs.", action.reason)
+        self.assertEqual((action.name, action.url), ("manage", reverse("dashboard")))
 
     def test_a_command_link_requires_scope_evidence_and_hq_authority(self):
         base = _finance_spec()
@@ -236,7 +237,6 @@ class ConnectionExecutionTests(TestCase):
             ["open", "manage", "relationships"],
         )
         self.assertTrue(next(action["recommended"] for action in instance["actions"] if action["name"] == "manage"))
-        self.assertNotIn("secret", str(instance["actions"]).casefold())
 
     def test_connection_families_authorize_before_calling_their_provider(self):
         provider = mock.Mock(return_value=())
@@ -292,7 +292,7 @@ class ConnectionRegistrationTests(TestCase):
         self.assertEqual(discovered["connections"][0].badges, ("healthy",))
 
     def test_two_letter_query_matches_word_starts_not_word_middles(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             discovered = command_center("sp", principal=READ)
 
         self.assertNotIn(
@@ -300,19 +300,19 @@ class ConnectionRegistrationTests(TestCase):
             {item.name for item in discovered["commands"]},
         )
 
-    def test_command_center_finds_a_connection_by_its_declared_ability(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
-            discovered = command_center("tailscale", principal=READ)
+    def test_command_center_finds_a_connection_by_the_abilities_its_terms_match(self):
+        for query, matched in (
+            ("tailscale", {"Tailnet device", "Tailnet policy"}),
+            ("tailnet proxy", {"Proxy host", "Tailnet device"}),
+        ):
+            with self.subTest(query), host_only():
+                discovered = command_center(query, principal=READ)
 
-        self.assertEqual(
-            [item.name for item in discovered["connections"]],
-            ["infrastructure.controllers"],
-        )
-        self.assertIn("Tailnet device", discovered["connections"][0].badges)
-        self.assertIn("Tailnet policy", discovered["connections"][0].badges)
+                self.assertEqual([item.name for item in discovered["connections"]], ["infrastructure.controllers"])
+                self.assertLessEqual(matched, set(discovered["connections"][0].badges))
 
     def test_matching_ability_derives_its_authorized_commands(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             discovered = command_center("tailscale", principal=INFRA_OPERATOR)
 
         commands = {item.name: item for item in discovered["commands"]}
@@ -343,23 +343,15 @@ class ConnectionRegistrationTests(TestCase):
         self.assertNotIn("certificate.renew", commands)
 
     def test_command_center_caps_broad_ability_match_explanations(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             discovered = command_center("e", principal=READ)
 
         core = next(item for item in discovered["connections"] if item.name == "infrastructure.controllers")
-        self.assertEqual(len(core.badges), 4)
+        self.assertLessEqual(len(core.badges), 4)
         self.assertRegex(core.badges[-1], r"^\+\d+ more$")
 
-    def test_command_center_explains_terms_matched_across_abilities(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
-            discovered = command_center("tailnet proxy", principal=READ)
-
-        core = discovered["connections"][0]
-        self.assertIn("Proxy host", core.badges)
-        self.assertIn("Tailnet device", core.badges)
-
     def test_command_center_does_not_leak_connection_abilities_without_read(self):
-        with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=()):
+        with host_only():
             discovered = command_center("tailscale", principal=NONE)
 
         self.assertEqual(discovered["connections"], ())
@@ -475,31 +467,21 @@ class ConnectionRegistrationTests(TestCase):
         ):
             connection_catalog(principal=FINANCE)
 
-    def test_credential_userinfo_in_an_endpoint_fails_closed(self):
-        spec = _finance_spec()
-        instance = replace(
-            spec.instance_provider()[0],
-            endpoint="https://operator:secret@example.test/api",
-        )
-        spec = replace(spec, instance_provider=lambda: (instance,))
-        with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
-            self.assertRaisesRegex(ImproperlyConfigured, "private URL parts"),
+    def test_credential_parts_in_an_endpoint_fail_closed_before_any_adapter_can_render_them(self):
+        for endpoint in (
+            f"https://operator:{SENTINEL}@example.test/api",
+            f"https://api.example.test/link?access_token={SENTINEL}",
         ):
-            list_connections(principal=FINANCE)
-
-    def test_endpoint_queries_fail_closed_before_any_adapter_can_render_them(self):
-        spec = _finance_spec()
-        instance = replace(
-            spec.instance_provider()[0],
-            endpoint="https://api.example.test/link?access_token=secret",
-        )
-        spec = replace(spec, instance_provider=lambda: (instance,))
-        with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
-            self.assertRaisesRegex(ImproperlyConfigured, "private URL parts"),
-        ):
-            list_connections(principal=FINANCE)
+            spec = _finance_spec()
+            instance = replace(spec.instance_provider()[0], endpoint=endpoint)
+            spec = replace(spec, instance_provider=lambda instance=instance: (instance,))
+            with (
+                self.subTest(endpoint),
+                mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
+                self.assertRaisesRegex(ImproperlyConfigured, "private URL parts") as refused,
+            ):
+                list_connections(principal=FINANCE)
+            self.assertNotIn(SENTINEL, str(refused.exception))
 
     def test_blank_controller_identity_fails_closed(self):
         spec = _finance_spec()
@@ -535,23 +517,21 @@ class ConnectionWorkspaceTests(TestCase):
         self.user = get_user_model().objects.create_user(username="operator", password="not-a-real-password")
         self.client.force_login(self.user)
 
-    def test_a_plugin_spec_renders_without_a_host_template_change(self):
+    def test_a_plugin_spec_renders_what_it_declares_without_a_host_template_change(self):
+        spec = _finance_spec()
+        instance = replace(spec.instance_provider()[0], kind="unclassified")
+        spec = replace(spec, instance_provider=lambda: (instance,))
         with (
-            mock.patch(
-                "hq.platform.application.plugins.plugin_connection_specs",
-                return_value=(_finance_spec(),),
-            ),
+            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
             mock.patch("hq.domains.control_plane.connection_views.web_principal", return_value=FINANCE),
         ):
             response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Financial institutions")
-        self.assertContains(response, "Capital One")
-        self.assertContains(response, "Sync transactions")
-        self.assertContains(response, "Permission missing")
-        self.assertContains(response, "Secrets in Example Vault")
-        self.assertContains(response, "Security checks")
-        self.assertContains(response, "The proxy lets in tailnet addresses only")
+        for declared in ("Financial institutions", "Capital One", "Sync transactions", "Example Vault"):
+            with self.subTest(declared):
+                self.assertContains(response, declared)
+        # A kind the host does not classify draws no controller prose.
+        self.assertNotContains(response, "Not yet classified")
 
     def page_for(self, credential_model):
         spec = _finance_spec()
@@ -576,18 +556,6 @@ class ConnectionWorkspaceTests(TestCase):
 
         self.assertContains(response, "Does not say where its secret is kept")
         self.assertNotContains(response, "No key needed")
-
-    def test_a_plugin_unclassified_kind_does_not_trigger_controller_prose(self):
-        spec = _finance_spec()
-        instance = replace(spec.instance_provider()[0], kind="unclassified")
-        spec = replace(spec, instance_provider=lambda: (instance,))
-        with (
-            mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)),
-            mock.patch("hq.domains.control_plane.connection_views.web_principal", return_value=FINANCE),
-        ):
-            response = self.client.get(reverse("control_plane:connections"))
-
-        self.assertNotContains(response, "Not yet classified")
 
 
 class GrantEvidenceTests(TestCase):
@@ -760,7 +728,6 @@ class GrantEvidenceTests(TestCase):
         self.assertEqual(by_ref["a-cloudflare_dns"]["authority"], "undeclared")
         self.assertEqual(by_ref["a-cloudflare_dns"]["lifecycle"], "reachable")
         self.assertTrue(all(a["evidence"] == "unverified" for a in by_ref["a-cloudflare_dns"]["abilities"]))
-        self.assertNotIn("token", by_ref["a-ssh"])
 
     def test_every_connection_provider_declares_a_credential_model(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
