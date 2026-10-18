@@ -42,9 +42,13 @@ FIRST_USE = frozenset(
 )
 
 
-def _deferred(importer: str, name: str, fromlist: tuple[str, ...] | None) -> bool:
-    del importer, fromlist
-    return name.partition(".")[0] in FIRST_USE
+def _deferred(importer: str | None, name: str, fromlist: tuple[str, ...] | None) -> bool:
+    # Deferred from outside the package only: a package's own imports run
+    # eagerly, because its __init__ may work on what it just imported (httpcore2
+    # sets each export's __module__), which a lazy placeholder refuses.
+    del fromlist
+    package = name.partition(".")[0]
+    return package in FIRST_USE and (importer or "").partition(".")[0] != package
 
 
 def load_on_first_use() -> None:

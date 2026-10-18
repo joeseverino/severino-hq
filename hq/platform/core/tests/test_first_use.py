@@ -24,7 +24,34 @@ print(json.dumps(sorted({name.partition(".")[0] for name in sys.modules} & FIRST
 """
 
 
+# Every deferred package, used once it has been deferred: its own import-time
+# work must run against real modules, never against its lazy placeholders.
+_USE = """
+import importlib
+from hq.config.first_use import FIRST_USE, load_on_first_use
+load_on_first_use()
+for name in sorted(FIRST_USE):
+    vars(importlib.import_module(name))
+import httpx2
+httpx2.Client().close()
+print("used")
+"""
+
+
 class FirstUseTests(SimpleTestCase):
+    def test_a_deferred_package_imports_its_own_modules_eagerly(self):
+        used = subprocess.run(
+            [sys.executable, "-c", _USE],
+            cwd=settings.BASE_DIR,
+            env={**os.environ, "DJANGO_SETTINGS_MODULE": "hq.config.settings"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(used.returncode, 0, used.stderr)
+        self.assertEqual(used.stdout.strip().splitlines()[-1], "used")
+
     def test_every_deferred_name_is_an_installed_package(self):
         # A name that matches nothing defers nothing, and says so here.
         self.assertEqual(sorted(name for name in FIRST_USE if importlib.util.find_spec(name) is None), [])
