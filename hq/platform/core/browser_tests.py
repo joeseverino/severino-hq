@@ -123,6 +123,7 @@ SELECTORS = {
     "band_aside": "dialog, .band-meta",
     # A route's hops, and the map's lanes and the box that holds them.
     "route": ".request-path",
+    "route_icon": ".hop-icon",
     "map": ".topology-map",
     "map_lane": ".topology-lane",
     "map_node": ".topology-node",
@@ -1034,6 +1035,24 @@ _WRAPPED_ROUTES = (
 }"""
 )
 
+# A route across its box spaces its icons evenly: no gap between two hops'
+# icons is a pixel longer than another.
+_UNEVEN_ROUTES = (
+    "([route, icon]) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + route)) {
+    const icons = [...el.querySelectorAll(icon)].filter((mark) => mark.checkVisibility()).map(box);
+    if (icons.length < 3 || new Set(icons.map((mark) => Math.round(mark.top))).size > 1) continue;
+    const centres = icons.map((mark) => mark.left + mark.width / 2);
+    const gaps = centres.slice(1).map((centre, i) => centre - centres[i]);
+    if (Math.max(...gaps) - Math.min(...gaps) > 1) found.push(`${describe(el)}: gaps ${gaps.map(Math.round).join(', ')}`);
+  }
+  return found;
+}"""
+)
+
 # The map scrolls with the page, and draws no lane with nothing in it.
 _MAP = """([map, lane, node]) => {
   const box = document.querySelector(map);
@@ -1321,7 +1340,7 @@ class LayoutBrowserTests(BrowserGate):
         if name in DENSE_PAGES:
             rules.append(self.dense_pages_keep_to_their_boxes)
         if name in ROUTE_PAGES:
-            rules.append(self.a_route_is_one_row_or_one_column)
+            rules.extend((self.a_route_is_one_row_or_one_column, self.a_route_across_spaces_its_hops_evenly))
         return rules
 
     def unscripted_openings(self, name, width):
@@ -1496,6 +1515,9 @@ class LayoutBrowserTests(BrowserGate):
 
     def a_route_is_one_row_or_one_column(self, _name):
         self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
+
+    def a_route_across_spaces_its_hops_evenly(self, _name):
+        self.assertEqual(self.page.evaluate(_UNEVEN_ROUTES, [SELECTORS["route"], SELECTORS["route_icon"]]), [])
 
     # With script: the page a person reads is the one its script has fitted.
 

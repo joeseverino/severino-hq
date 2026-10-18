@@ -3220,7 +3220,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .request-path li {
   position: relative;
   display: grid;
-  grid-template-columns: 26px 8rem minmax(0, 1fr) auto;
+  grid-template-columns: 26px 8rem minmax(0, 1fr);
   align-items: center;
   column-gap: var(--space-5);
   min-width: 0;
@@ -3253,11 +3253,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 .hop-body > small { margin: 0; color: var(--muted); font-size: var(--text-2xs); line-height: 1.35; }
 /* Too narrow for the kind beside the name: the kind over it. */
 @container route (max-width: 24rem) {
-  .request-path li { grid-template-columns: 26px minmax(0, 1fr) auto; row-gap: 0; }
+  .request-path li { grid-template-columns: 26px minmax(0, 1fr); row-gap: 0; }
   .request-path .hop-icon { grid-row: 1 / span 2; }
   .request-path .hop-label { grid-column: 2; grid-row: 1; }
   .request-path .hop-body { grid-column: 2; grid-row: 2; }
-  .request-path .hop-proof { grid-column: 3; grid-row: 1 / span 2; }
 }
 /* Across: every hop gets 9rem, enough for its kind and an address with
    its port, or the route goes down. Counted off the route itself. */
@@ -3268,28 +3267,28 @@ a.discovery-link:hover strong { color: var(--accent); }
 @container route (min-width: 54rem) { .request-path:has(> li:nth-child(6):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
 @container route (min-width: 63rem) { .request-path:has(> li:nth-child(7):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
 @container route (min-width: 72rem) { .request-path:has(> li:nth-child(8):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
-/* Across, a hop is its icon on the line, its kind, then what it is. */
+/* Across, every hop is one equal column, centred: its icon on the line, its
+   kind, then what it is. The icons fall evenly and the line runs first to last. */
 @container style(--across: 1) {
-  .request-path li { grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; align-items: start; row-gap: var(--space-2); padding: 0; }
-  .request-path li::before { left: 13px; right: calc(-1 * var(--space-6) - 13px); top: 12px; bottom: auto; width: auto; height: 2px; }
+  .request-path li { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; justify-items: center; align-items: start; row-gap: var(--space-2); padding: 0; text-align: center; }
+  .request-path li::before { left: 50%; right: calc(-50% - var(--space-6)); top: 12px; bottom: auto; width: auto; height: 2px; }
   .request-path li:first-child::before { top: 12px; }
   .request-path li:last-child::before { display: none; }
-  .request-path .hop-label { grid-column: 1 / -1; grid-row: 2; }
-  .request-path .hop-body { grid-column: 1 / -1; grid-row: 3; }
+  .request-path .hop-label { grid-row: 2; }
+  .request-path .hop-body { grid-row: 3; justify-items: center; }
+  .request-path .hop-body > strong { justify-content: center; }
   .request-path .hop-icon { grid-row: 1; }
-  .request-path .hop-proof { grid-column: 3; grid-row: 1; align-self: center; }
 }
 /* A hop's certificate: a check in a circle after its name, in the name's colour
    once the controller has verified it, faint until then. */
 .cert-mark { display: inline-flex; margin-left: .35em; font-size: 1.15em; color: var(--accent-2); vertical-align: -.15em; cursor: default; }
 .cert-mark.is-pending { color: var(--muted-2); }
-/* A hop this very request was proven to pass through: a dot at the hop's end,
-   its reason on hover; the evidence is the connection page's. */
-.hop-proof { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
-.request-path li.is-proven .hop-proof { background: var(--ok); box-shadow: 0 0 0 3px var(--tone-positive-bg); }
-.request-path li.is-attention .hop-proof { background: var(--danger); }
+/* A hop this very request was proven to pass through: its icon in the positive
+   tone, its reason on hover; the evidence is the connection page's. */
+.request-path li.is-proven .hop-icon,
+.hop-proof-key { background: linear-gradient(var(--tone-positive-bg) 0 0), var(--surface); color: var(--ok); }
 .path-proof-note { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-4) 0 0; color: var(--muted); font-size: var(--text-sm); }
-.hop-proof-key { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--tone-positive-bg); }
+.hop-proof-key { display: grid; flex-shrink: 0; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-sm); font-size: var(--text-sm); }
 .request-path li.is-unknown .hop-icon { background: linear-gradient(var(--line-2) 0 0), var(--surface); color: var(--muted-2); }
 .request-path li.is-attention .hop-icon { background: linear-gradient(var(--tone-critical-tint) 0 0), var(--surface); color: var(--danger); }
 .connection-control-grid {
