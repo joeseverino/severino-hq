@@ -1,0 +1,21 @@
+#!/bin/sh
+# The type check an extension declares in its pyproject.toml's [tool.mypy],
+# run with its own mypy against the host's typed hq_sdk. From the package root,
+# in check-plugin.sh's environment (SEVERINO_HQ_PLUGINS names the package).
+#   plugin-typecheck.sh PYTHON    # the package's interpreter, with its dev group
+# django-stubs settings: the package names `typecheck_settings`, supplied here.
+set -eu
+unset CDPATH
+
+[ "$#" -eq 1 ] || { echo "usage: $0 PYTHON" >&2; exit 2; }
+python=$1
+hq_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
+
+declared=$("$python" -c 'import tomllib; print("mypy" in tomllib.load(open("pyproject.toml", "rb")).get("tool", {}))')
+if [ "$declared" != True ]; then
+    echo "pyproject.toml declares no [tool.mypy]: no type check to run."
+    exit 0
+fi
+
+search_path="$hq_root:$hq_root/scripts/plugin_typecheck"
+MYPYPATH=$search_path PYTHONPATH=$search_path exec "$python" -m mypy

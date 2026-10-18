@@ -49,6 +49,7 @@ export DJANGO_SETTINGS_MODULE=hq.config.settings
 export SEVERINO_DATABASE_PATH="$scratch/check.sqlite3"
 export PYTHONPATH="$hq_root"
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
+"$hq_root/scripts/plugin-typecheck.sh" "$virtualenv/bin/python"
 "$virtualenv/bin/python" "$hq_root/manage.py" check
 "$virtualenv/bin/python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
 # InterfaceTextTests reads the plugin's wording and markup with the host's.

@@ -170,11 +170,14 @@ def _own_libraries(root: Path) -> dict[str, frozenset[str]]:
 
 
 def _own_templates(root: Path) -> dict[str, Path]:
+    """Every file under a ``templates`` directory: Django loads any of them by name."""
+
     found = {}
     for directory in sorted(root.rglob("templates")):
         if directory.is_dir():
-            for template in sorted(directory.rglob("*.html")):
-                found[template.relative_to(directory).as_posix()] = template
+            for template in sorted(directory.rglob("*")):
+                if template.is_file():
+                    found[template.relative_to(directory).as_posix()] = template
     return found
 
 
@@ -289,6 +292,7 @@ class _Template:
 
     def _include(self, bits: list[str], line: int) -> None:
         if len(bits) < 2 or bits[1][:1] not in {'"', "'"}:
+            self.problem(line, "includes a template named at render time, which no check can hold to the contract")
             return
         name = bits[1].strip("\"'")
         partial = self.contract["partials"].get(name)
@@ -350,12 +354,20 @@ def template_violations(source_root: str | Path, contract: dict[str, Any] | None
     templates = (contract or json.loads(_CONTRACT.read_text(encoding="utf-8")))["templates"]
     own_templates = _own_templates(root)
     own_libraries = _own_libraries(root)
-    violations = []
+    found: list[tuple[str, int, str]] = []
+    # A file is checked once, though a nested templates directory names it twice.
+    checked: set[Path] = set()
     for name, path in sorted(own_templates.items()):
+        if path in checked:
+            continue
+        checked.add(path)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue  # an image or font kept beside the templates is no template
         reader = _Template(name, templates, own_templates, own_libraries)
-        for line, message in reader.check(path.read_text(encoding="utf-8")):
-            violations.append(f"{path.relative_to(root)}:{line}: {message}")
-    return sorted(set(violations))
+        found.extend((path.relative_to(root).as_posix(), line, message) for line, message in reader.check(text))
+    return [f"{path}:{line}: {message}" for path, line, message in sorted(found)]
 
 
 def main() -> int:
@@ -364,6 +376,10 @@ def main() -> int:
     )
     parser.add_argument("source_root", type=Path)
     args = parser.parse_args()
+    if not any(args.source_root.rglob("*.py")):
+        # A root that holds no package would pass every check by checking nothing.
+        print(f"{args.source_root} holds no Python package to check.")
+        return 2
     failed = False
     imports = unsupported_hq_imports(args.source_root)
     if imports:

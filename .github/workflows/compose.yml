@@ -399,6 +399,77 @@ jobs:
           echo "found=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "coordinated extension branches named $BRANCH: $count"
 
+      - name: Check out each extension as this pull request meets it
+        # Its coordinated branch when one was found above, else its default
+        # branch: what each will be checked and admitted with once this
+        # merges. Without .git, so no copy carries the reader token.
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p extensions "$WITHHELD_DIR"
+          while read -r repo; do
+            dir="extensions/$(basename "$repo")"
+            if ! gh repo clone "$repo" "$dir" -- --quiet 2> "$WITHHELD_DIR/clone-$(basename "$repo").log"; then
+              echo "::error title=Extension not checked out::An extension repository could not be cloned; the reason is in this run's sealed failure logs."
+              exit 1
+            fi
+            sha=$(awk -F= -v r="$repo" '$1 == r { print $2 }' coordinated.txt)
+            if [ -n "$sha" ]; then
+              git -C "$dir" checkout --quiet --detach "$sha"
+            fi
+            rm -rf "$dir/.git"
+            chmod -R a+rwX "$dir"
+          done < <(jq -r '.extensions[].repository' composition-set.json | sort -u)
+
+      - name: Build the extension installer
+        # The host's Python ABI and uv, holding none of this job's
+        # credentials: where extension code is checked and built below.
+        if: github.event_name == 'pull_request'
+        run: |
+          docker build -f composition/Dockerfile --target installer-base \
+            -t "severino-hq-installer:$GITHUB_SHA" .
+
+      - name: Check each extension against this host
+        # The checks an extension passes before admission (plugin-checks.yml),
+        # run with this pull request's host and check-plugin.sh. The
+        # composition below reuses wheels admitted against main, so only this
+        # step sees a host change that breaks an extension before it merges.
+        # Every extension is checked before the step fails, so one run names
+        # all that broke.
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          host="$RUNNER_TEMP/host"
+          mkdir -p "$host"
+          git archive HEAD | tar -x -C "$host"
+          chmod -R a+rwX "$host"
+          failed=0
+          total=0
+          while IFS=$'\t' read -r id repo package; do
+            total=$((total + 1))
+            # A copy, so the coordinated build below reads the branch as
+            # cloned rather than as a check left it.
+            work="$RUNNER_TEMP/check-$total"
+            cp -a "extensions/$(basename "$repo")" "$work"
+            if docker run --rm --network bridge --user 10001:10001 \
+              --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never --env PLUGIN_REPOSITORY="$repo" \
+              --volume "$host:/host" --volume "$work:/src" \
+              --entrypoint sh "severino-hq-installer:$GITHUB_SHA" \
+              /host/scripts/check-plugin.sh --plugin-root "/src/$package" \
+              > "$WITHHELD_DIR/extension-check-$id.log" 2>&1; then
+              echo "extension $total: passed"
+            else
+              failed=$((failed + 1))
+              echo "extension $total: failed"
+            fi
+          done < <(jq -r '.extensions[] | [.id, .repository, (.path // ".")] | @tsv' composition-set.json)
+          if [ "$failed" -gt 0 ]; then
+            echo "::error title=An extension fails this host::$failed of $total extensions fail their checks against this pull request's host. Which, and why, is in this run's sealed failure logs."
+            exit 1
+          fi
+
       - name: Decide whether anything changed
         id: fingerprint
         env:
@@ -630,23 +701,13 @@ jobs:
         # with no token, credential file or docker socket, from a copy with no
         # .git. This is the same Python ABI as the verified host image.
         if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
-        env:
-          GH_TOKEN: ${{ steps.reader.outputs.token }}
-          HQ_IMAGE: ${{ steps.host.outputs.image }}
         run: |
           set -euo pipefail
-          mkdir -p candidate-wheels candidates "$WITHHELD_DIR"
+          mkdir -p candidate-wheels
           chmod 0777 candidate-wheels
-          docker build -f composition/Dockerfile --target installer-base \
-            --build-arg HQ_IMAGE="$HQ_IMAGE" \
-            -t "severino-hq-installer:$GITHUB_SHA" .
-          while IFS='=' read -r repo sha; do
+          while IFS='=' read -r repo _; do
             [ -n "$repo" ] || continue
-            dir="candidates/$(basename "$repo")"
-            gh repo clone "$repo" "$dir" -- --quiet
-            git -C "$dir" checkout --quiet --detach "$sha"
-            rm -rf "$dir/.git"
-            chmod -R a+rwX "$dir"
+            dir="extensions/$(basename "$repo")"
             # A repository may hold several extensions: each one the set lists
             # is built from its path, which must declare that id, and nothing
             # else in the repository is. Read without running the branch's code.

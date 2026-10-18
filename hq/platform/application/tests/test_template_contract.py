@@ -1,5 +1,7 @@
 """The host's templates as a contract: what an extension may use, and the record of it."""
 
+import io
+from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
@@ -8,7 +10,7 @@ from django.template import engines
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings, tag
 
-from hq_sdk import contract, template_contract, text_contract
+from hq_sdk import contract, template_contract, text_contract, validation
 from hq_sdk.pages import PageAction, PageDialog, page_context
 from hq_sdk.site import host
 from hq_sdk.testing import plain
@@ -75,6 +77,64 @@ class TemplateValidationTests(SimpleTestCase):
             with self.subTest(place=place):
                 self.assertTrue(any(place in line and name in line for line in found), f"{place} {name} not in {found}")
         self.assertEqual(len(found), len(expected), found)
+
+
+# The shapes a report can lose: a violation inside a block override, the same
+# violation twice in one template and twice on one line, a template no view
+# renders, a template that is not HTML, and an include named at render time.
+EVERY = {
+    "example_pkg/__init__.py": "",
+    "example_pkg/templates/example/list.html": (
+        '{% extends "list_page.html" %}\n{% block page %}\n{{ block.super }}\n'
+        '{% include "partials/_modal.html" with id="import" %}\n{% endblock %}\n'
+        "{% block row %}<td>{{ row.name }}</td>{% endblock %}"
+    ),
+    "example_pkg/templates/example/detail.html": (
+        '{% extends "page.html" %}\n{% block page %}\n{% if empty %}\n'
+        '{% include "partials/_empty_state.html" with message="None." compact=True %}\n{% else %}\n'
+        '{% include "partials/_empty_state.html" with message="Nothing." compact=True %}\n{% endif %}\n'
+        '{% include "partials/_empty_state.html" with message="A." compact=True %}'
+        '{% include "partials/_empty_state.html" with message="B." compact=True %}\n{% endblock %}'
+    ),
+    "example_pkg/templates/example/_unrendered.html": '{% include "partials/_modal.html" %}',
+    "example_pkg/templates/example/email.txt": "{{ total|readable }}",
+    "example_pkg/templates/example/chosen.html": "{% include chosen %}",
+    "example_pkg/templates/example/icon.png": b"\x89PNG\r\n\x1a\n\xff\xfe",
+}
+
+
+class TemplateValidationCompletenessTests(SimpleTestCase):
+    def test_every_violation_in_every_template_is_reported(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, content in EVERY.items():
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                if isinstance(content, bytes):
+                    (root / name).write_bytes(content)
+                else:
+                    (root / name).write_text(content, encoding="utf-8")
+            found = template_violations(root)
+
+        def at(place: str, name: str) -> list[str]:
+            return [line for line in found if f"/{place}:" in line and name in line]
+
+        self.assertEqual(len(at("list.html:2", "block page")), 1, found)
+        self.assertEqual(len(at("list.html:4", "partials/_modal.html")), 1, found)
+        self.assertEqual(len(at("detail.html:4", "compact")), 1, found)
+        self.assertEqual(len(at("detail.html:6", "compact")), 1, found)
+        self.assertEqual(len(at("detail.html:8", "compact")), 2, found)
+        self.assertEqual(len(at("_unrendered.html:1", "partials/_modal.html")), 1, found)
+        self.assertEqual(len(at("email.txt:1", "readable")), 1, found)
+        self.assertEqual(len(at("chosen.html:1", "render time")), 1, found)
+        self.assertEqual(len(found), 9, found)
+
+    def test_a_root_with_no_package_fails_rather_than_passes(self):
+        with (
+            TemporaryDirectory() as directory,
+            mock.patch("sys.argv", ["validation", directory]),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(validation.main(), 2)
 
 
 class TemplateRecordTests(SimpleTestCase):

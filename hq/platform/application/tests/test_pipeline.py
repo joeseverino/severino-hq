@@ -226,6 +226,40 @@ class ReleaseTests(SimpleTestCase):
 
 
 @tag("source")
+class ExtensionsAgainstHostTests(SimpleTestCase):
+    """A pull request cannot pass its composition while an extension fails its checks against that host."""
+
+    def setUp(self):
+        self.steps = steps(jobs(workflow("compose.yml"))["compose"])
+
+    def test_every_listed_extension_runs_this_hosts_checks_before_the_composition_passes(self):
+        checks = [step for step in self.steps if "check-plugin.sh" in code(step)]
+        self.assertEqual(len(checks), 1)
+        (check,) = checks
+        run = code(check)
+        self.assertEqual(condition(check), "github.event_name == 'pull_request'")
+        self.assertNotIn("continue-on-error", check)
+        self.assertIn("composition-set.json", run)
+        self.assertIn(".extensions[]", run)
+        self.assertIn("git archive HEAD", run)
+        self.assertIn("/host/scripts/check-plugin.sh --plugin-root", run)
+        self.assertIn('"$WITHHELD_DIR/', run)
+        self.assertIn("exit 1", run)
+        self.assertNotIn("GH_TOKEN", check)
+        verify = next(index for index, step in enumerate(self.steps) if "scripts/composed-suite.sh" in step)
+        self.assertLess(self.steps.index(check), verify)
+
+    def test_an_extension_is_checked_from_its_coordinated_branch_or_its_default_branch(self):
+        (clone,) = [step for step in self.steps if "gh repo clone" in step]
+        self.assertEqual(condition(clone), "github.event_name == 'pull_request'")
+        run = code(clone)
+        self.assertIn("coordinated.txt", run)
+        self.assertIn(".extensions[].repository", run)
+        check = next(index for index, step in enumerate(self.steps) if "check-plugin.sh" in code(step))
+        self.assertLess(self.steps.index(clone), check)
+
+
+@tag("source")
 class DeployTests(SimpleTestCase):
     """Production is reached through one approval, by a runner that holds nothing worth taking."""
 
