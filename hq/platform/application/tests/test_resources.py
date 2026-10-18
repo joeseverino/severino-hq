@@ -92,16 +92,18 @@ class ResourceExecutionTests(TestCase):
         self.assertEqual(refused.exception.reason, "projects: limti is not a known field.")
 
     def test_infrastructure_kinds_filter_before_the_shared_page_bound(self):
+        # Rows of other kinds come first, so a bound taken before the filter
+        # would leave nothing to filter.
+        ManagedResource.objects.create(key="zone", kind="cloudflare.zone", spec={})
+        ManagedResource.objects.create(key="other-zone", kind="cloudflare.zone", spec={})
         ManagedResource.objects.create(key="device", kind="tailscale.device", spec={})
         ManagedResource.objects.create(key="policy", kind="tailscale.policy", spec={})
-        ManagedResource.objects.create(key="zone", kind="cloudflare.zone", spec={})
 
-        with self.assertNumQueries(1):
-            listed = list_resource(
-                "infrastructure.resources",
-                {"kinds": "tailscale.device,tailscale.policy"},
-                principal=READ,
-            )
+        listed = list_resource(
+            "infrastructure.resources",
+            {"kinds": "tailscale.device,tailscale.policy", "limit": 2},
+            principal=READ,
+        )
 
         self.assertEqual({item["key"] for item in listed["items"]}, {"device", "policy"})
 

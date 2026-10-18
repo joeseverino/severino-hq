@@ -12,6 +12,7 @@ from ..credential_mint import address_fields
 from ..findings import findings
 from ..report_testing import report_connections
 from ..security import Capability, Principal, cli_principal
+from .markup import select, within
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 SIGN_IN = (
@@ -132,26 +133,42 @@ class FindingCardTests(TestCase):
         self.client.force_login(user)
 
     def card(self):
-        page = self.client.get(reverse("control_plane:findings")).content.decode()
-        start = page.index("data-attention-item")
-        return page[start : page.index("</li>\n    \n", start) if "</li>\n    \n" in page[start:] else len(page)]
+        """The first card's words, and what it holds in page order."""
+
+        page = self.client.get(reverse("control_plane:findings"))
+        card = select(page, "data-attention-item")[0]
+        return card.words, [element for element in within(page, "data-attention-item") if card in element.ancestors]
 
     def test_the_specific_step_comes_first_and_the_generic_plan_is_gone(self):
-        card = self.card()
+        words, held = self.card()
 
-        self.assertLess(card.index("attention-body"), card.index("attention-links"))
-        self.assertNotIn("What to do", card)
-        self.assertNotIn("Fix it", card)
+        parts = [element for element in held if element.classes & {"attention-body", "attention-links"}]
+        self.assertEqual(
+            [part.classes & {"attention-body", "attention-links"} for part in parts][:2],
+            [
+                {"attention-body"},
+                {"attention-links"},
+            ],
+        )
+        self.assertNotIn("What to do", words)
+        self.assertNotIn("Fix it", words)
         # A connection that does not answer is a reading: confirming it reads now.
-        self.assertIn("Check again", card)
-        self.assertIn('formaction="/infrastructure/connections/read/?connection_ref=example-npm', card)
+        self.assertIn("Check again", words)
+        self.assertTrue(
+            any(
+                element.attrs.get("formaction", "").startswith(
+                    "/infrastructure/connections/read/?connection_ref=example-npm"
+                )
+                for element in held
+            )
+        )
 
     def test_open_connections_is_a_link_not_the_fix(self):
-        card = self.card()
-        links = card[card.index('class="attention-links"') :]
+        words, held = self.card()
+        (links,) = [element for element in held if "attention-links" in element.classes]
 
-        self.assertIn("Open connections", links)
-        self.assertNotIn("Open connections", card[: card.index('class="attention-links"')])
+        self.assertIn("Open connections", links.words)
+        self.assertEqual(words.count("Open connections"), 1)
 
     def test_the_api_shape_is_unchanged(self):
         found = finding()

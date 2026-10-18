@@ -11,6 +11,8 @@ from django.templatetags.static import static
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
+from hq.platform.application.tests.markup import select
+
 STATIC = Path(settings.BASE_DIR) / "static"
 VENDOR = STATIC / "vendor" / "scalar"
 
@@ -46,14 +48,11 @@ class ReferencePageTests(TestCase):
         self.assertContains(response, static("css/api-reference.css"))
         # Something is said while the bundle loads, outside what it mounts on,
         # and if it never does, where the document itself is.
-        page = response.content.decode()
-        status = page.split('<div class="api-reference-status" role="status">', 1)[1].split(
-            '<div class="api-reference"', 1
-        )[0]
-        self.assertIn("Loading the reference.", status)
-        self.assertIn(
-            f'The reference did not load. The document itself is at <a href="{reverse("hq_api:openapi")}">', status
-        )
+        (status,) = select(response, "role", "status")
+        (mount,) = select(response, "data-url")
+        self.assertIn("Loading the reference.", status.text)
+        self.assertIn(f"The reference did not load. The document itself is at {reverse('hq_api:openapi')}", status.text)
+        self.assertEqual(mount.text.strip(), "")
 
     def test_it_sends_hqs_policy_minus_only_trusted_types(self):
         """The one exception to the policy, pinned.

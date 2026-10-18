@@ -14,7 +14,10 @@ from hq.platform.application.domains import Domain, domain_dashboard_cards
 from hq.platform.application.drawings import Dot, Dots, Trend
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
+from hq.platform.application.tests.markup import all_elements, elements, hrefs, links, select, text, with_class
 from hq.platform.application.ui import DomainOverview, Kpi
+
+SHAPES = frozenset({"circle", "line", "path", "polyline", "rect"})
 
 
 def contributor(number, *, overview=None):
@@ -81,9 +84,9 @@ class DashboardHighlightTests(SimpleTestCase):
             "core/_dashboard_highlights.html",
             {"dashboard_highlights": result["highlights"]},
         )
-        self.assertIn("Through Aug 21, 2026", html)
-        self.assertIn('href="/example/"', html)
-        self.assertNotIn("First</span>", html)
+        self.assertIn("Through Aug 21, 2026", text(html))
+        self.assertIn("/example/", hrefs(html))
+        self.assertNotIn("First", text(html))
 
     def test_cross_domain_card_collisions_are_still_rejected(self):
         domain = contributor(1)
@@ -122,16 +125,18 @@ class FigureDrawingTests(SimpleTestCase):
         html = self.render(Kpi("Machines", "3", "2 offline", drawing=drawing))
 
         self.assertEqual([dot.filled for dot in drawing.shown], [True, True, True, False, False])
-        self.assertEqual(html.count("kpi-dot is-filled"), 3)
-        self.assertEqual(html.count("<i "), 5)
+        (dots,) = with_class(html, "kpi-dots")
+        shown = with_class(html, "kpi-dot")
+        self.assertEqual(len(shown), 5)
+        self.assertEqual(["is-filled" in dot.classes for dot in shown], [True, True, True, False, False])
         # Decoration: the note already says it, so it is not announced.
-        self.assertIn('<span class="kpi-dots" aria-hidden="true">', html)
-        self.assertIn("2 offline", html)
+        self.assertEqual(dots.attrs.get("aria-hidden"), "true")
+        self.assertIn("2 offline", text(html))
 
     def test_a_whole_too_large_to_count_at_a_glance_draws_no_dots(self):
         for drawing in (Dots.of(40, 90), Dots.of(0, 0)):
             self.assertEqual(drawing.shown, ())
-            self.assertNotIn("kpi-dots", self.render(Kpi("Records", "40", drawing=drawing)))
+            self.assertEqual(with_class(self.render(Kpi("Records", "40", drawing=drawing)), "kpi-dot"), [])
 
     def test_a_part_larger_than_its_whole_is_refused(self):
         for filled, whole in ((6, 5), (-1, 5)):
@@ -149,22 +154,24 @@ class FigureDrawingTests(SimpleTestCase):
 
         # Filled first, whatever order they were given in.
         self.assertEqual([dot.tip.split(" ")[0] for dot in drawing.shown], ["alpha", "beta"])
-        self.assertIn(
-            'href="/machines/alpha/" aria-label="alpha · 192.0.2.1 · online" data-tip="alpha · 192.0.2.1 · online"',
-            html,
+        (alpha,) = select(html, "aria-label", "alpha · 192.0.2.1 · online")
+        self.assertEqual(
+            (alpha.attrs["href"], alpha.attrs["data-tip"]), ("/machines/alpha/", "alpha · 192.0.2.1 · online")
         )
         # A link cannot hold links: the cell stops being one, and the value
         # carries the figure's own page instead.
-        self.assertIn('<div class="kpi">', html)
-        self.assertIn('<a class="value" href="/machines/">1</a>', html)
+        self.assertEqual(hrefs(html), ["/machines/", "/machines/alpha/", "/machines/beta/"])
+        self.assertIn(("1", "/machines/"), links(html))
         # Links are announced, so these dots are not hidden from a reader.
-        self.assertIn('<span class="kpi-dots">', html)
+        (dots,) = with_class(html, "kpi-dots")
+        self.assertNotIn("aria-hidden", dots.attrs)
 
     def test_dots_that_lead_nowhere_leave_the_figure_one_link(self):
         html = self.render(Kpi("Machines", "3", url="/machines/", drawing=Dots.of(3, 5)))
 
-        self.assertIn('<a class="kpi" href="/machines/">', html)
-        self.assertIn('<span class="value">3</span>', html)
+        (cell,) = elements(html, "a")
+        self.assertEqual(cell.attrs["href"], "/machines/")
+        self.assertEqual(cell.words, "Machines 3")
 
     # ----- trend
 
@@ -181,7 +188,7 @@ class FigureDrawingTests(SimpleTestCase):
         for values in ((), (4.0,)):
             drawing = Trend(values)
             self.assertEqual(drawing.points, "")
-            self.assertNotIn("kpi-trend", self.render(Kpi("Balance", "$4", drawing=drawing)))
+            self.assertEqual(select(self.render(Kpi("Balance", "$4", drawing=drawing)), "data-tip"), [])
 
     def test_a_flat_trend_sits_mid_box_rather_than_dividing_by_zero(self):
         points = Trend((2.0, 2.0)).points.split()
@@ -192,18 +199,17 @@ class FigureDrawingTests(SimpleTestCase):
         drawing = Trend((1.0, 3.0), ("Sep 1 · $1", "Sep 2 · $3"))
         html = self.render(Kpi("Balance", "$3", drawing=drawing))
 
-        self.assertIn('data-tip="Sep 1 · $1"', html)
-        self.assertIn('data-tip="Sep 2 · $3"', html)
+        self.assertEqual([mark.attrs["data-tip"] for mark in select(html, "data-tip")], ["Sep 1 · $1", "Sep 2 · $3"])
         # The strips meet in the middle and cover the box between them.
         self.assertEqual(
             [(mark["left"], mark["width"]) for mark in drawing.marks],
             [("0.0", "50.0"), ("50.0", "50.0")],
         )
         # The newest reading keeps its dot; the others show theirs when pointed at.
-        self.assertEqual(html.count("is-latest"), 1)
+        self.assertEqual(len(with_class(html, "is-latest")), 1)
         # The line is decoration beside a figure that says the number.
-        self.assertIn('class="kpi-trend"', html)
-        self.assertIn('aria-hidden="true"', html)
+        (line,) = elements(html, "svg")
+        self.assertEqual(line.attrs.get("aria-hidden"), "true")
 
     def test_a_reading_without_words_names_its_number(self):
         self.assertEqual([mark["tip"] for mark in Trend((4.0, 5.5)).marks], ["4", "5.5"])
@@ -219,25 +225,30 @@ class FigureDrawingTests(SimpleTestCase):
 
         plain = self.render(Kpi("Domains", "4"))
 
-        self.assertNotIn("kpi-dots", plain)
-        self.assertNotIn("kpi-trend", plain)
-        self.assertIn('<span class="value">4</span>', plain)
+        self.assertEqual(elements(plain, "svg") + with_class(plain, "kpi-dot"), [])
+        self.assertEqual(text(plain), "Domains 4")
 
     def test_a_card_given_as_a_mapping_still_renders(self):
         html = self.render({"label": "First", "value": 1, "url": "/"})
 
-        self.assertIn('<a class="kpi" href="/">', html)
-        self.assertIn('<span class="value">1</span>', html)
-        self.assertNotIn("kpi-dots", html)
-        self.assertNotIn("kpi-trend", html)
+        (cell,) = elements(html, "a")
+        self.assertEqual((cell.attrs["href"], cell.words), ("/", "First 1"))
+        self.assertEqual(elements(html, "svg") + with_class(html, "kpi-dot"), [])
 
     def test_an_icon_goes_before_the_label_and_an_unknown_one_draws_nothing(self):
         known = self.render(Kpi("Domains", "4", icon="globe"))
         unknown = self.render(Kpi("Domains", "4", icon="no-such-icon"))
 
-        self.assertRegex(known, r'<span class="label">\s*<svg class="icon"[^>]*>.*<circle')
-        self.assertNotIn("<circle", unknown)
-        self.assertIn("Domains", unknown)
+        def drawn(html):
+            return [element for element in all_elements(html) if element.tag in SHAPES]
+
+        page = all_elements(known)
+        (label,) = with_class(known, "label")
+        self.assertEqual(page[page.index(label) + 1].tag, "svg")
+        self.assertEqual(label.words, "Domains")
+        self.assertTrue(drawn(known))
+        self.assertEqual(drawn(unknown), [])
+        self.assertIn("Domains", text(unknown))
 
 
 class DashboardHighlightQueryTests(TestCase):

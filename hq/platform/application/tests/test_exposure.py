@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from ..exposure import GATED, OPEN, PRIVATE, UNKNOWN, UNROUTED, exposure_of_name, status_at
 from ..projection import projection_scope
+from .markup import select
 from .test_paths import CLOUDFLARE, PUBLIC_RANGE, estate, record, store
 
 
@@ -119,12 +120,9 @@ class ServiceReachTests(TestCase):
         return self.client.get(reverse("control_plane:service", args=[name])).content.decode()
 
     def test_each_name_says_who_can_reach_it(self):
-        body = self.page().content.decode()
+        (said,) = select(self.page(), "title", "Open to the internet as example.com")
 
-        self.assertIn(
-            '<span class="exposure exposure-open" title="Open to the internet as example.com">Internet</span>',
-            body,
-        )
+        self.assertEqual(said.words, "Internet")
 
     def test_a_private_name_offers_no_gate(self):
         body = self.service("app.example.com")

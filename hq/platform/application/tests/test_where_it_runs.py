@@ -9,6 +9,7 @@ from hq.domains.docs_index.models import DocumentationRecord
 from ..entity_links import EntityLink, container_link
 from ..projection import projection_scope
 from ..where_it_runs import named_links, where_it_runs
+from .markup import links, text
 from .test_relationships import estate
 
 
@@ -40,9 +41,16 @@ class WhereItRunsTests(TestCase):
 
         drawn = Template('{% include "partials/_runs_on.html" %}').render(Context({"runs_on": runs}))
 
-        self.assertIn('Runs on <a href="/infrastructure/machines/example-box/"', drawn)
-        self.assertIn('container <a href="/infrastructure/machines/example-box/#container-app"', drawn)
-        self.assertIn('Served as <a href="/infrastructure/services/app.example.com/"', drawn)
+        self.assertEqual(
+            links(drawn),
+            [
+                ("example-box", "/infrastructure/machines/example-box/"),
+                ("app", "/infrastructure/machines/example-box/#container-app"),
+                ("app.example.com", "/infrastructure/services/app.example.com/"),
+            ],
+        )
+        for said in ("Runs on example-box", "container app", "Served as app.example.com"):
+            self.assertIn(said, text(drawn))
 
 
 class NamedLinksTests(TestCase):

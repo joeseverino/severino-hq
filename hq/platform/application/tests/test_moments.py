@@ -11,6 +11,7 @@ from django.utils import formats, timezone
 
 from ..moments import ago, when, when_day, when_exact, when_range
 from ..ui import MISSING
+from .markup import elements, text, with_class
 
 CHICAGO = ZoneInfo("America/Chicago")
 UTC = ZoneInfo("UTC")
@@ -80,44 +81,41 @@ class WhenFilterTests(SimpleTestCase):
         source = "{{ value|when }}" if form is None else f'{{{{ value|when:"{form}" }}}}'
         return Template(source).render(Context({"value": value}))
 
+    def moment(self, value, form=None) -> tuple[str, str, str]:
+        """The one time element drawn: what it sorts on, what it says on hover, and its words."""
+
+        (drawn,) = elements(self.render(value, form), "time")
+        return drawn.attrs["datetime"], drawn.attrs.get("title", ""), drawn.text
+
     def test_a_moment_is_a_time_element_a_table_can_sort_on(self):
         moment = this_year(10, 3, 9, 29, 15)
 
-        self.assertEqual(
-            self.render(moment),
-            f'<time datetime="{moment.isoformat()}" title="{when_exact(moment)}">Oct 3, 9:29 AM</time>',
-        )
+        self.assertEqual(self.moment(moment), (moment.isoformat(), when_exact(moment), "Oct 3, 9:29 AM"))
 
     def test_an_age_keeps_the_exact_moment_behind_it(self):
         moment = timezone.now() - timedelta(days=5, hours=15)
 
-        self.assertEqual(
-            self.render(moment, "ago"),
-            f'<time datetime="{moment.isoformat()}" title="{when_exact(moment)}">5\xa0days ago</time>',
-        )
+        self.assertEqual(self.moment(moment, "ago"), (moment.isoformat(), when_exact(moment), "5\xa0days ago"))
 
     def test_a_date_is_a_date(self):
-        self.assertEqual(
-            self.render(date(2019, 10, 3)),
-            '<time datetime="2019-10-03" title="Oct 3, 2019">Oct 3, 2019</time>',
-        )
-        self.assertIn(">Oct 3, 2019</time>", self.render(date(2019, 10, 3), "ago"))
+        self.assertEqual(self.moment(date(2019, 10, 3)), ("2019-10-03", "Oct 3, 2019", "Oct 3, 2019"))
+        self.assertEqual(self.moment(date(2019, 10, 3), "ago")[2], "Oct 3, 2019")
 
     def test_the_day_and_exact_forms(self):
         moment = datetime(2019, 10, 3, 9, 29, 15, tzinfo=CHICAGO)
 
-        self.assertIn(">Oct 3, 2019</time>", self.render(moment, "day"))
-        self.assertIn(">Oct 3, 2019, 9:29:15 AM CDT</time>", self.render(moment, "exact"))
+        self.assertEqual(self.moment(moment, "day")[2], "Oct 3, 2019")
+        self.assertEqual(self.moment(moment, "exact")[2], "Oct 3, 2019, 9:29:15 AM CDT")
 
     def test_an_iso_stamp_reads_like_the_instant_it_names(self):
         moment = this_year(10, 3, 9, 29, 15)
 
-        self.assertEqual(self.render(moment.isoformat()), self.render(moment))
-        self.assertIn('<time datetime="2019-10-03"', self.render("2019-10-03"))
+        self.assertEqual(self.moment(moment.isoformat()), self.moment(moment))
+        self.assertEqual(self.moment("2019-10-03")[0], "2019-10-03")
 
     def test_nothing_is_the_missing_mark_and_other_text_is_left_alone(self):
-        self.assertIn(MISSING, self.render(None))
-        self.assertIn('class="empty-value"', self.render(""))
+        self.assertEqual(text(self.render(None)), MISSING)
+        self.assertEqual([mark.words for mark in with_class(self.render(""), "empty-value")], [MISSING])
         self.assertEqual(self.render("Tailnet"), "Tailnet")
 
     def test_an_unknown_form_is_refused(self):

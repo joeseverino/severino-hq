@@ -4,6 +4,14 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.tests.markup import links
+
+
+def offers(page, label: str, href: str) -> bool:
+    """Whether the page links ``href`` under words that start with ``label``."""
+
+    return any(words.startswith(label) and target == href for words, target in links(page))
+
 
 class EmptyListTests(TestCase):
     @classmethod
@@ -17,16 +25,12 @@ class EmptyListTests(TestCase):
         response = self.client.get(reverse("assets:list"))
 
         self.assertContains(response, "No assets yet.")
-        self.assertContains(
-            response, f'<a class="empty-cta" href="{reverse("assets:create")}">New asset &rarr;</a>', html=True
-        )
+        self.assertTrue(offers(response, "New asset", reverse("assets:create")))
         self.assertNotContains(response, "Nothing matches.")
 
     def test_a_list_emptied_by_its_search_offers_the_way_back(self):
         response = self.client.get(reverse("assets:list"), {"q": "no such asset"})
 
         self.assertContains(response, "Nothing matches.")
-        self.assertContains(
-            response, '<a class="empty-cta" href="?">Clear the search and filters &rarr;</a>', html=True
-        )
+        self.assertTrue(offers(response, "Clear the search and filters", "?"))
         self.assertNotContains(response, "No assets yet.")

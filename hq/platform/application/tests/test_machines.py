@@ -23,6 +23,7 @@ from hq.domains.control_plane.models import (
 
 from ..machines import machine, machine_catalog
 from ..services import CONTAINER_KIND
+from .markup import all_elements, texts
 
 
 def a_connection(ref, provider, endpoint="", reaches=(), reachable=True):
@@ -812,10 +813,11 @@ class OneStateTests(TestCase):
         self.assertEqual(found.state, ("offline", "unreachable"))
         for response in (listing, page):
             with self.subTest(page=response.request["PATH_INFO"]):
-                self.assertContains(response, ">offline<")
-                self.assertNotContains(response, ">reachable<")
-                self.assertNotContains(response, ">down<")
-                self.assertContains(response, "<code>example-tailnet</code>")
+                said = [element.words for element in all_elements(response)]
+                self.assertIn("offline", said)
+                self.assertNotIn("reachable", said)
+                self.assertNotIn("down", said)
+                self.assertIn("example-tailnet", texts(response, "code"))
 
     def test_an_online_device_reads_as_online(self):
         self.device(online=True)

@@ -26,6 +26,7 @@ from ..certificates import (
 )
 from ..infrastructure import serialize_resource
 from ..security import cli_principal
+from .markup import all_elements
 
 A_KEY = "test-only-secret-store-key-long-enough"
 
@@ -343,4 +344,4 @@ class UploadFormTests(SimpleTestCase):
         rendered = str(form["private_key"])
 
         self.assertNotIn("example-secret-material", rendered)
-        self.assertIn("<textarea", rendered)
+        self.assertEqual([field.tag for field in all_elements(rendered)], ["textarea"])

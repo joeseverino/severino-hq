@@ -23,6 +23,7 @@ from ..services import service_or_prospect
 from ..tailnet import TAILNET_KIND
 from ..topology import relation_graph
 from ..topology_model import READING_RANKS, RELATIONS
+from .markup import hrefs
 from .test_hq_self import SITE, declare, own
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
@@ -103,10 +104,10 @@ class OneEdgeBothEndsTests(TestCase):
             service = self.client.get(reverse("control_plane:service", args=["hq.example.com"]))
 
         # The machine end is "Names it answers", which lists what it serves.
-        self.assertContains(machine, 'href="/infrastructure/services/hq.example.com/"')
+        self.assertIn("/infrastructure/services/hq.example.com/", hrefs(machine))
         # The service end is its path, which names the machine hop by hop, and
         # the trace in the topology sits beside it.
-        self.assertContains(service, 'href="/infrastructure/machines/example-host/"')
+        self.assertIn("/infrastructure/machines/example-host/", hrefs(service))
         self.assertContains(service, "?focus=service%3Ahq.example.com")
 
     def test_hqs_own_service_is_read_only(self):

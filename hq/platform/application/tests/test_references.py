@@ -23,6 +23,7 @@ from ..assets import AssetCommand, save_asset
 from ..calendar_entries import EntryCommand, save_entry
 from ..references import Referable, Reference, ReferenceField, Target
 from ..security import Principal, cli_principal, internal_principal
+from .markup import all_elements, elements, hrefs, links, select, text, texts
 
 
 def one(items):
@@ -44,6 +45,38 @@ def a_machine(name: str = "lab-1") -> None:
         probed=True,
         observed_at=timezone.now(),
     )
+
+
+class Picker(dict[str, list[tuple[str, str]]]):
+    """A reference picker's choices by group, each as its value and the words shown."""
+
+    @property
+    def all(self) -> list[tuple[str, str]]:
+        return [choice for choices in self.values() for choice in choices]
+
+
+def picker(page) -> Picker:
+    found = Picker()
+    for option in elements(page, "option"):
+        group = next((outer.attrs.get("label", "") for outer in option.ancestors if outer.tag == "optgroup"), "")
+        found.setdefault(group, []).append((option.attrs.get("value", ""), option.words))
+    return found
+
+
+def fact(page, term: str) -> tuple[str, list]:
+    """What a definition list says for ``term``, and the links in it."""
+
+    page_elements = all_elements(page)
+    for index, element in enumerate(page_elements):
+        if element.tag == "dt" and element.words == term:
+            definition = next(later for later in page_elements[index + 1 :] if later.tag == "dd")
+            linked = [
+                inner
+                for inner in page_elements
+                if inner.tag == "a" and any(outer is definition for outer in inner.ancestors)
+            ]
+            return definition.words, linked
+    raise AssertionError(f"No {term!r} on the page.")
 
 
 def an_expense(**fields) -> Expense:
@@ -195,18 +228,20 @@ class ResolveTests(TestCase):
 
         self.assertEqual(link.url, "")
 
-    def test_a_page_of_references_is_one_statement_for_its_records(self):
+    def test_a_page_of_references_costs_what_one_reference_does(self):
         Asset.objects.create(item_name="A router", slug="a-router")
         Project.objects.create(name="An Example Project", slug="an-example")
         expense = an_expense()
 
+        with CaptureQueriesContext(connection) as one:
+            references.resolve_many([("asset:a-router", "")], principal=self.principal)
         with CaptureQueriesContext(connection) as queries:
             links = references.resolve_many(
                 [("asset:a-router", ""), ("project:an-example", ""), (f"expense:{expense.pk}", ""), ("", "")],
                 principal=self.principal,
             )
 
-        self.assertEqual(len(queries), 1)
+        self.assertEqual(len(queries), len(one))
         self.assertEqual(
             [link.label if link else None for link in links],
             ["A router", "An Example Project", "Example Registrar · Renewal", None],
@@ -263,10 +298,10 @@ class PickerTests(TestCase):
 
         response = self.client.get(reverse("calendar:entry_new"))
 
-        self.assertContains(response, '<optgroup label="Machines">')
-        self.assertContains(response, '<option value="machine:lab-1">lab-1</option>')
-        self.assertContains(response, '<option value="project:an-example">An Example Project</option>')
-        self.assertContains(response, '<option value="asset:a-router">A router</option>')
+        offered = picker(response)
+        self.assertIn(("machine:lab-1", "lab-1"), offered["Machines"])
+        self.assertIn(("project:an-example", "An Example Project"), offered.all)
+        self.assertIn(("asset:a-router", "A router"), offered.all)
         # A kind with a row per purchase is never a list to scroll.
         self.assertNotContains(response, 'value="expense:')
 
@@ -294,8 +329,9 @@ class PickerTests(TestCase):
 
         response = self.client.get(reverse("assets:create"))
 
-        self.assertContains(response, '<option value="machine:lab-1">lab-1</option>')
-        self.assertNotContains(response, 'value="project:an-example"')
+        offered = picker(response)
+        self.assertIn(("machine:lab-1", "lab-1"), offered.all)
+        self.assertNotIn("project:an-example", [value for value, _ in offered.all])
 
     def test_choosing_one_saves_it_with_its_name(self):
         a_machine()
@@ -327,8 +363,11 @@ class PickerTests(TestCase):
 
         response = self.client.get(reverse("calendar:entry_edit", args=[entry.uid]))
 
-        self.assertContains(response, '<optgroup label="No longer in HQ">')
-        self.assertContains(response, '<option value="machine:lab-9" selected>lab-9</option>')
+        self.assertEqual(picker(response)["No longer in HQ"], [("machine:lab-9", "lab-9")])
+        self.assertIn(
+            "machine:lab-9",
+            [option.attrs["value"] for option in elements(response, "option") if "selected" in option.attrs],
+        )
 
 
 class ReferencedByTests(TestCase):
@@ -354,15 +393,21 @@ class ReferencedByTests(TestCase):
         self.assertEqual(found["On the calendar"][0].note, "Mar 1")
         self.assertEqual(found["Expenses"][0].note, "Mar 1 · $12.00")
 
-    def test_it_is_one_statement_however_many_models_hold_a_reference(self):
+    def test_it_costs_the_same_however_many_models_hold_a_reference(self):
         Entry.objects.create(title="Replace the fan", starts_on=date(2026, 3, 1), about="machine:lab-1")
         an_expense(about="machine:lab-1")
-        self.assertGreater(len(references.reference_fields()), 2)
+        every = tuple(field for field in references.reference_fields() if field.accepts("machine"))
+        self.assertGreater(len(every), 2)
 
-        with CaptureQueriesContext(connection) as queries:
-            references.referenced_by("machine", "lab-1", principal=self.principal)
+        def cost(fields):
+            with (
+                mock.patch("hq.platform.application.references.reference_fields", return_value=fields),
+                CaptureQueriesContext(connection) as queries,
+            ):
+                references.referenced_by("machine", "lab-1", principal=self.principal)
+            return len(queries)
 
-        self.assertEqual(len(queries), 1)
+        self.assertEqual(cost(every), cost(every[:1]))
 
     def test_a_repeating_event_says_how_it_repeats(self):
         Entry.objects.create(
@@ -455,11 +500,14 @@ class PageTests(TestCase):
         response = self.client.get(self.asset.get_absolute_url())
 
         machine = reverse("control_plane:machine", kwargs={"name": "lab-1"})
-        self.assertContains(
-            response, f'<dt>This is</dt><dd>Machine <a href="{machine}" data-entity="Machine">lab-1</a></dd>', html=True
+        said, linked = fact(response, "This is")
+        self.assertEqual(said, "Machine lab-1")
+        self.assertEqual(
+            [(link.words, link.attrs["href"], link.attrs["data-entity"]) for link in linked],
+            [("lab-1", machine, "Machine")],
         )
-        self.assertContains(response, "<h3>On the calendar</h3>", html=True)
-        self.assertContains(response, f'href="{entry.get_absolute_url()}"'.replace("&", "&amp;"))
+        self.assertIn("On the calendar", text(response))
+        self.assertIn(entry.get_absolute_url(), hrefs(response))
 
     def test_an_asset_whose_machine_has_gone_shows_its_name_as_text(self):
         Asset.objects.filter(pk=self.asset.pk).update(infrastructure="machine:lab-9", infrastructure_name="lab-9")
@@ -467,15 +515,16 @@ class PageTests(TestCase):
         response = self.client.get(self.asset.get_absolute_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<dd>Machine <span data-entity="Machine">lab-9</span></dd>', html=True)
+        self.assertEqual(fact(response, "This is"), ("Machine lab-9", []))
+        self.assertIn("lab-9", [named.words for named in select(response, "data-entity", "Machine")])
 
     def test_an_expense_page_links_what_it_was_for(self):
         expense = an_expense(about="machine:lab-1", about_name="lab-1")
 
         response = self.client.get(expense.get_absolute_url())
 
-        self.assertContains(response, "<dt>For</dt>", html=True)
-        self.assertContains(response, 'data-entity="Machine">lab-1</a>')
+        _, linked = fact(response, "For")
+        self.assertEqual([(link.words, link.attrs["data-entity"]) for link in linked], [("lab-1", "Machine")])
 
     def test_an_event_says_what_it_is_about(self):
         entry = Entry.objects.create(
@@ -484,11 +533,8 @@ class PageTests(TestCase):
 
         response = self.client.get(entry.get_absolute_url())
 
-        self.assertContains(
-            response,
-            f'About asset <a href="{self.asset.get_absolute_url()}" data-entity="Asset">A server</a>',
-            html=True,
-        )
+        self.assertIn("About asset A server", text(response))
+        self.assertIn(("A server", self.asset.get_absolute_url()), links(response))
 
     def test_the_tag_lists_what_names_a_kind_and_identity(self):
         from django.template import Context, Template
@@ -498,8 +544,8 @@ class PageTests(TestCase):
         request.user = self.user
         drawn = Template('{% referenced_by "machine" "lab-1" cards=True %}').render(Context({"request": request}))
 
-        self.assertIn("<h2>Assets</h2>", drawn)
-        self.assertIn(f'href="{self.asset.get_absolute_url()}"', drawn)
+        self.assertIn("Assets", texts(drawn, "h2"))
+        self.assertIn(self.asset.get_absolute_url(), hrefs(drawn))
 
     def test_pages_keep_their_query_budgets(self):
         Entry.objects.create(title="Replace the fan", starts_on=date(2026, 3, 1), about="asset:a-server")

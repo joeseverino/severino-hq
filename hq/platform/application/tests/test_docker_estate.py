@@ -14,6 +14,7 @@ from ..relationships import relationships_for
 from ..security import Capability, Principal
 from ..topology import relation_graph
 from ..topology_model import RELATIONS
+from .markup import select
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
 ON_LAB = {"connection_ref": "example-portainer", "environment_id": 1, "host": "lab-1", "host_address": "192.0.2.10"}
@@ -215,7 +216,7 @@ class MachinePageTests(TestCase):
         response = self.client.get(reverse("control_plane:machine", args=["lab-1"]))
 
         self.assertNotContains(response, "Where data lives")
-        self.assertNotContains(response, 'id="docker-images"')
+        self.assertFalse(select(response, "id", "docker-images"))
 
     def refuse_edge(self):
         store(

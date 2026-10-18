@@ -24,6 +24,7 @@ from ..action_items import (
 )
 from ..security import cli_principal
 from ..ui import Insight
+from .markup import select
 
 ITEM = {
     "key": "example:widgets",
@@ -350,7 +351,7 @@ class GlanceSettingsLinkTests(TestCase):
 
         response = self.client.get(reverse("dashboard_glance_settings"))
 
-        self.assertContains(response, 'name="weather_point"')
+        self.assertTrue(select(response, "name", "weather_point"))
 
 
 class ReadableValueTests(TestCase):

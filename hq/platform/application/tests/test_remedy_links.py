@@ -28,6 +28,7 @@ from ..paths import routed_names
 from ..projection import MAX_PAGE_SIZE, projection_scope
 from ..security import web_principal
 from ..topology import derive_topology
+from .markup import elements, texts
 from .test_approvals import POLICY_KEY, declare_policy
 from .test_finding_fixes import document
 from .test_paths import PUBLIC_RANGE, estate, record, store
@@ -35,6 +36,10 @@ from .test_tailnet_posture import policy as tailnet_policy, tailnet_connection
 
 TRAP = "This replaces the whole record"
 UNOFFERED = "cannot be used here"
+
+
+def chosen(page) -> list[str]:
+    return [option.attrs["value"] for option in elements(page, "option") if "selected" in option.attrs]
 
 
 def an_operator():
@@ -81,7 +86,7 @@ class EveryTargetedCommandPreselectsTests(TestCase):
                 response = self.client.get(command_url(spec.name, key))
 
                 self.assertEqual(response.status_code, 200)
-                self.assertContains(response, f'<option value="{key}" selected>')
+                self.assertIn(key, chosen(response))
                 self.assertNotContains(response, UNOFFERED)
 
     def test_a_target_the_command_does_not_act_on_is_said_not_silently_dropped(self):
@@ -215,7 +220,7 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 target = parse_qs(urlsplit(url).query).get("target", [""])[0]
                 if target:
-                    self.assertContains(response, f'<option value="{target}" selected>')
+                    self.assertIn(target, chosen(response))
                 self.assertNotContains(response, UNOFFERED)
                 self.assertNotContains(response, TRAP)
-                self.assertNotContains(response, "<strong>Destructive</strong>")
+                self.assertNotIn("Destructive", texts(response, "strong"))

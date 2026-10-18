@@ -5,11 +5,12 @@ from dataclasses import asdict
 
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
-from django.utils.html import escape
 
 from hq.platform.application.decisions import decision, urgency, workflow_parts
 from hq.platform.application.item_help import cannot_step, commands, do_step, run_step
 from hq.platform.application.workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
+
+from .markup import elements, hrefs, select, text, texts, with_class, within
 
 
 def card(item) -> str:
@@ -53,10 +54,10 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual(shown["actions"], [asdict(action)])
         self.assertEqual([step["phase"] for step in shown["workflow"]["steps"]], ["verify"])
         html = card(item)
-        self.assertEqual(html.count('href="/example/review/"'), 1)
-        self.assertIn('formaction="/example/check/"', html)
-        self.assertIn('form="hq-post"', html)
-        self.assertNotIn("<form", html)
+        self.assertEqual(hrefs(html).count("/example/review/"), 1)
+        (recheck,) = select(html, "formaction", "/example/check/")
+        self.assertEqual(recheck.attrs["form"], "hq-post")
+        self.assertEqual(elements(html, "form"), [])
 
     def test_what_is_wrong_and_its_buttons_are_on_the_face_of_the_card(self):
         fix = ActionLink("fix", "Restore the example", "remote_write", "/example/fix/", recommended=True)
@@ -70,11 +71,9 @@ class DecisionTests(SimpleTestCase):
             )
         )
 
-        self.assertNotIn("<details", html)
-        self.assertNotIn("<ol", html)
-        self.assertIn(escape("What it means for the reader."), html)
-        self.assertIn("Restore the example", html)
-        self.assertIn("Check again", html)
+        self.assertEqual(elements(html, "details") + elements(html, "ol"), [])
+        for words in ("What it means for the reader.", "Restore the example", "Check again"):
+            self.assertIn(words, text(html))
 
     def test_a_lone_check_is_a_button_and_never_a_step(self):
         check = ActionLink("verify", "Check again", "read", "/example/check/", method="POST")
@@ -100,10 +99,9 @@ class DecisionTests(SimpleTestCase):
 
         self.assertEqual(shown["reason"], "Only the registrar can renew it.")
         self.assertEqual(shown["steps"], [])
-        self.assertIn('<p class="attention-reason">Only the registrar can renew it.</p>', html)
-        self.assertNotIn("<ol", html)
-        self.assertNotIn("<li>", html.split("attention-body", 1)[1])
-        self.assertNotIn("Why HQ cannot", html)
+        self.assertIn("Only the registrar can renew it.", texts(html, "p"))
+        self.assertEqual([step for step in within(html, "data-attention-item") if step.tag in {"ol", "li"}], [])
+        self.assertNotIn("Why HQ cannot", text(html))
 
     def test_one_command_stands_alone_and_several_are_numbered(self):
         one = card(self.item(steps=(run_step("On the machine", "example --fix"),)))
@@ -116,11 +114,11 @@ class DecisionTests(SimpleTestCase):
             )
         )
 
-        self.assertIn('<ul class="resolution-workflow">', one)
-        self.assertIn("<code>example --fix</code>", one)
-        self.assertIn('<ol class="resolution-workflow">', two)
-        self.assertIn("<p>Then sign in again.</p>", two)
-        self.assertNotIn("<details", one + two)
+        self.assertEqual([steps.tag for steps in with_class(one, "resolution-workflow")], ["ul"])
+        self.assertIn("example --fix", texts(one, "code"))
+        self.assertEqual([steps.tag for steps in with_class(two, "resolution-workflow")], ["ol"])
+        self.assertIn("Then sign in again.", text(two))
+        self.assertEqual(elements(one, "details") + elements(two, "details"), [])
 
     def test_long_steps_fold_and_short_ones_do_not(self):
         long = commands("k", (("In the repository", "example " + "--flag " * 40),))
@@ -129,7 +127,9 @@ class DecisionTests(SimpleTestCase):
         self.assertFalse(workflow_parts(commands("k", (("Here", "example"),)))["fold"])
         for plan in (long, many):
             html = card({**self.item(), "workflow": asdict(plan)})
-            self.assertIn('<details class="resolution-fold"><summary>Steps', html)
+            (fold,) = elements(html, "details")
+            self.assertTrue(texts(html, "summary")[0].startswith("Steps"))
+            self.assertIn("example", fold.words)
 
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
         subject = asdict(ActionLink("subject", "example-host", "read", "/machines/example-host/"))
@@ -143,21 +143,24 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual((advice["actions"], advice["advice"]), ([], "Count this run as a hard session."))
 
     def test_a_card_says_since_when_only_when_its_owner_knows(self):
-        self.assertNotIn("Since", card(self.item()))
-        self.assertIn("Since <time", card(self.item(since="2026-10-03T09:29:15+00:00")))
+        self.assertNotIn("Since", text(card(self.item())))
+        known = card(self.item(since="2026-10-03T09:29:15+00:00"))
+        self.assertIn("Since", text(known))
+        self.assertEqual(len(elements(known, "time")), 1)
 
     def test_a_dismissed_card_is_its_title(self):
         fix = ActionLink("fix", "Restore the example", "remote_write", "/example/fix/", recommended=True)
         html = card(self.item(actions=(fix,), aside=True))
 
-        self.assertIn("Example needs a decision", html)
-        self.assertNotIn("What it means for the reader.", html)
-        self.assertNotIn("Restore the example", html)
+        self.assertIn("Example needs a decision", text(html))
+        self.assertNotIn("What it means for the reader.", text(html))
+        self.assertNotIn("Restore the example", text(html))
 
     def test_urgency_is_said_in_one_set_of_words(self):
         self.assertEqual((urgency("serious"), urgency("attention")), ("Urgent", "Needs attention"))
-        self.assertIn(">Urgent</span>", card(self.item(status="serious")))
-        self.assertIn(">Notice</span>", card(self.item(notice=True)))
+        for item, said in ((self.item(status="serious"), "Urgent"), (self.item(notice=True), "Notice")):
+            (pill,) = select(card(item), "data-origin")
+            self.assertEqual(pill.words, said)
 
     def test_owner_actions_win_and_only_identical_method_and_url_are_removed(self):
         get = ActionLink("open", "Open", "read", "/example/")
@@ -188,10 +191,11 @@ class DecisionTests(SimpleTestCase):
     def test_destructive_post_actions_keep_the_shared_safety_and_escaping(self):
         action = ActionLink("remove", "Remove <example>", "destructive", "/example/remove/", method="POST")
         html = render_to_string("partials/_action_links.html", {"actions": (action,)})
-        self.assertIn('formaction="/example/remove/"', html)
-        self.assertIn("ghost danger", html)
-        self.assertIn("Remove &lt;example&gt;", html)
-        self.assertNotIn('href="/example/remove/"', html)
+        (remove,) = select(html, "formaction", "/example/remove/")
+        self.assertLessEqual({"ghost", "danger"}, remove.classes)
+        self.assertEqual(remove.words, "Remove <example>")
+        self.assertEqual(elements(html, "example"), [])
+        self.assertNotIn("/example/remove/", hrefs(html))
 
 
 class OriginTests(SimpleTestCase):
@@ -216,5 +220,6 @@ class OriginTests(SimpleTestCase):
 
         html = render_to_string("partials/_urgency_pill.html", {"item": item})
 
-        self.assertIn('data-origin="origin-exampledomainx"', html)
-        self.assertIn('id="origin-exampledomainx" popover', html)
+        (pill,) = select(html, "data-origin")
+        (panel,) = select(html, "id", pill.attrs["data-origin"])
+        self.assertIn("popover", panel.attrs)

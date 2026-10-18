@@ -10,6 +10,7 @@ from hq.domains.assets.models import Asset
 from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.tests.markup import links, text
 
 
 class ReportsPageTests(TestCase):
@@ -22,9 +23,10 @@ class ReportsPageTests(TestCase):
 
         response = self.client.get(reverse("reports:dashboard"))
 
-        self.assertContains(response, f'<a href="{reverse("projects:list")}?status=active">Active 1</a>')
-        self.assertContains(response, f'<a href="{reverse("content:list")}?status=draft">Draft 1</a>')
-        self.assertContains(response, "<strong>Writeups and pages</strong>")
+        found = links(response)
+        self.assertIn(("Active 1", f"{reverse('projects:list')}?status=active"), found)
+        self.assertIn(("Draft 1", f"{reverse('content:list')}?status=draft"), found)
+        self.assertIn("Writeups and pages", text(response))
         self.assertNotContains(response, "Content · draft")
 
     def test_categories_are_named_as_the_forms_name_them(self):
@@ -39,12 +41,12 @@ class ReportsPageTests(TestCase):
 
         response = self.client.get(reverse("reports:dashboard"), {"year": 2030})
 
-        self.assertContains(
-            response,
-            f'<a href="{reverse("expenses:list")}?category=content_production&amp;year=2030">Content production</a>',
+        found = links(response)
+        self.assertIn(
+            ("Content production", f"{reverse('expenses:list')}?category=content_production&year=2030"), found
         )
-        self.assertContains(response, f'<a href="{reverse("assets:list")}?category=networking">Networking gear</a>')
-        self.assertContains(response, "1 expense</a>")
+        self.assertIn(("Networking gear", f"{reverse('assets:list')}?category=networking"), found)
+        self.assertIn("1 expense", [label for label, _href in found])
 
     def test_the_page_is_about_money_and_documents_only(self):
         response = self.client.get(reverse("reports:dashboard"))

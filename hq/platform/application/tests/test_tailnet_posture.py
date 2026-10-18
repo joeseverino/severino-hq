@@ -13,6 +13,7 @@ from ..findings import findings
 from ..inventory_testing import store
 from ..security import Capability, Principal
 from ..tailnet import WELL_KNOWN_PORTS, grant_ports
+from .markup import texts
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 
@@ -257,7 +258,7 @@ class PortNameTests(TestCase):
 
         response = self.client.get(reverse("control_plane:tailnet"))
 
-        self.assertContains(response, "<code>tcp:7722 · SSH</code>", html=False)
+        self.assertIn("tcp:7722 · SSH", texts(response, "code"))
 
 
 class TrustedNetworksWidthTests(TestCase):

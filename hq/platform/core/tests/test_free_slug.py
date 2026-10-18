@@ -1,6 +1,8 @@
 """A record's slug is made once, from its name, and never collides."""
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from hq.domains.projects.models import Project
 
@@ -42,9 +44,15 @@ class FreeSlugTests(TestCase):
 
         self.assertEqual(project.slug, "home-lab")
 
-    def test_finding_a_free_slug_is_one_query_however_crowded(self):
-        for _ in range(5):
+    def test_finding_a_free_slug_costs_the_same_however_crowded(self):
+        def cost(expected):
+            with CaptureQueriesContext(connection) as queries:
+                self.assertEqual(free_slug(Project(name="Home Lab"), "Home Lab", "project"), expected)
+            return len(queries)
+
+        Project.objects.create(name="Home Lab")
+        uncrowded = cost("home-lab-2")
+        for _ in range(4):
             Project.objects.create(name="Home Lab")
 
-        with self.assertNumQueries(1):
-            self.assertEqual(free_slug(Project(name="Home Lab"), "Home Lab", "project"), "home-lab-6")
+        self.assertEqual(cost("home-lab-6"), uncrowded)

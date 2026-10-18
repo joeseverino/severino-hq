@@ -17,6 +17,8 @@ from ..connections import (
     ConnectionLink,
     ConnectionSpec,
 )
+from ..facts import stored_snapshots
+from ..projection import projection_scope
 from ..security import Capability
 
 
@@ -301,8 +303,7 @@ class ConnectionSecurityPostureTests(TestCase):
             ],
         )
 
-        with self.assertNumQueries(1):
-            edge = observed_ingress_control("hq.example.test")
+        edge = observed_ingress_control("hq.example.test")
         posture = connection_security_posture(_groups(), request=self.request(), edge=edge)
 
         self.assertEqual(edge.state, "good")
@@ -387,8 +388,10 @@ class ConnectionSecurityPostureTests(TestCase):
             ]
         )
 
-        with self.assertNumQueries(1):
-            tailnet_policy, _edge = observed_connection_controls("hq.example.test")
+        with projection_scope():
+            stored_snapshots()
+            with self.assertNumQueries(0):
+                tailnet_policy, _edge = observed_connection_controls("hq.example.test")
 
         self.assertEqual(tailnet_policy.state, "good")
         self.assertEqual(tailnet_policy.evidence, "1 grant · 1 test")

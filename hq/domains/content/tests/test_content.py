@@ -13,6 +13,7 @@ from hq.domains.content.content_sync import (
 )
 from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
+from hq.platform.application.tests.markup import elements, links, select, text
 
 
 def _payload():
@@ -236,12 +237,14 @@ class ContentPageTests(TestCase):
         drafted = self.client.get(draft.get_absolute_url())
         published = self.client.get(live.get_absolute_url())
 
-        self.assertContains(drafted, "<dt>Planned date</dt>")
-        self.assertNotContains(drafted, "<dt>Published</dt>")
-        self.assertContains(published, "<dt>Published</dt>")
+        drafted_terms = [term.text for term in elements(drafted, "dt")]
+        published_terms = [term.text for term in elements(published, "dt")]
+        self.assertIn("Planned date", drafted_terms)
+        self.assertNotIn("Published", drafted_terms)
+        self.assertIn("Published", published_terms)
         self.assertContains(published, "Open live page")
-        self.assertNotContains(published, "<dt>Slug</dt>")
-        self.assertContains(published, "<dt>Added to HQ</dt>")
+        self.assertNotIn("Slug", published_terms)
+        self.assertIn("Added to HQ", published_terms)
 
     def _published(self, slug: str, url: str) -> ContentItem:
         return ContentItem.objects.create(title=slug, slug=slug, status=ContentItem.Status.PUBLISHED, published_url=url)
@@ -256,12 +259,8 @@ class ContentPageTests(TestCase):
 
         response = self.client.get(reverse("content:writeups"))
 
-        self.assertContains(
-            response,
-            f'<p class="muted">Published on <a href="{site.get_absolute_url()}" data-entity="Project">example.com</a></p>',
-            html=True,
-        )
-        self.assertEqual(response.content.decode().count("Published on"), 1)
+        self.assertEqual(text(response).count("Published on example.com"), 1)
+        self.assertIn(("example.com", site.get_absolute_url()), links(response))
 
     def test_a_site_no_project_publishes_is_named_without_a_page(self):
         from django.urls import reverse
@@ -270,7 +269,8 @@ class ContentPageTests(TestCase):
 
         response = self.client.get(reverse("content:writeups"))
 
-        self.assertContains(response, 'Published on <span data-entity="Site">example.com</span>', html=True)
+        self.assertIn("Published on example.com", text(response))
+        self.assertNotIn("example.com", [link for link, _href in links(response)])
 
     def test_two_sites_or_none_are_not_said(self):
         from django.urls import reverse
@@ -299,9 +299,11 @@ class ContentPageTests(TestCase):
 
         response = self.client.get(item.get_absolute_url())
 
-        self.assertContains(response, "<h3>Source document</h3>")
-        self.assertContains(response, 'title="writeup-example">example/example-writeup/index.md</a>')
-        self.assertContains(response, 'title="rb-example-publish">Publish an example</a>')
+        self.assertIn("Source document", [heading.text for heading in elements(response, "h3")])
+        (source,) = select(response, "title", "writeup-example")
+        (runbook_link,) = select(response, "title", "rb-example-publish")
+        self.assertEqual(source.text.strip(), "example/example-writeup/index.md")
+        self.assertEqual(runbook_link.text.strip(), "Publish an example")
         self.assertNotContains(response, "writeup-example ·")
 
     def test_each_list_names_what_it_adds(self):
@@ -316,10 +318,9 @@ class ContentPageTests(TestCase):
         self.assertContains(writeups, "New writeup")
         # One type on the list: the column and its filter say nothing.
         self.assertNotIn("Type", [column.label for column in writeups.context["table"]["columns"]])
-        self.assertContains(
-            pages, 'No pages yet. <a class="empty-cta" href="/content/new/?content_type=page">New page &rarr;</a>'
-        )
-        self.assertContains(everything, "<h1>Content</h1>")
+        self.assertIn("No pages yet.", text(pages))
+        self.assertIn(("New page →", f"{reverse('content:create')}?content_type=page"), links(pages))
+        self.assertEqual(everything.context["page"].title, "Content")
         self.assertContains(everything, "New writeup or page")
         self.assertContains(everything, "No source document")
         for gone in ("Content pipeline", "New content item", "Missing documentation", "reverse"):
@@ -330,6 +331,6 @@ class ContentPageTests(TestCase):
 
         response = self.client.get(reverse("content:create"), {"content_type": "page"})
 
-        self.assertContains(response, "<h1>New page</h1>")
+        self.assertEqual(response.context["page"].title, "New page")
         self.assertContains(response, "Save page")
         self.assertEqual(response.context["form"].initial["content_type"], "page")

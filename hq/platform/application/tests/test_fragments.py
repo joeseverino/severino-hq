@@ -8,6 +8,8 @@ from django.urls import reverse
 
 from hq.platform.application import fragments
 
+from .markup import elements, select
+
 PART = {"X-Fragment": "calendar"}
 
 
@@ -43,9 +45,9 @@ class PagePartTests(TestCase):
         page = self.client.get(url)
         part = self.client.get(url, headers=PART)
 
-        self.assertContains(page, "<html")
-        self.assertNotContains(part, "<html")
-        self.assertContains(part, 'id="calendar"')
+        self.assertTrue(elements(page, "html"))
+        self.assertEqual(elements(part, "html"), [])
+        self.assertTrue(select(part, "id", "calendar"))
         self.assertLess(len(part.content), len(page.content))
         # One address, two documents: a cache is told which header chose.
         for response in (page, part):
@@ -54,7 +56,7 @@ class PagePartTests(TestCase):
     def test_a_part_the_page_does_not_define_is_answered_with_the_page(self):
         response = self.client.get(reverse("calendar:month"), headers={"X-Fragment": "nothing"})
 
-        self.assertContains(response, "<html")
+        self.assertTrue(elements(response, "html"))
 
     def test_the_dashboard_composes_only_the_part_asked_for(self):
         with patch(
@@ -64,7 +66,7 @@ class PagePartTests(TestCase):
             response = self.client.get("/?month=2026-01", headers=PART)
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "<html")
+        self.assertEqual(elements(response, "html"), [])
 
     def test_saving_the_links_is_answered_with_the_links(self):
         response = self.client.post(
@@ -72,19 +74,19 @@ class PagePartTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "<html")
+        self.assertEqual(elements(response, "html"), [])
 
     def test_the_connection_dialog_is_answered_with_the_panel(self):
         response = self.client.get(reverse("connection"), headers={"X-Fragment": "connection"})
 
         self.assertContains(response, "data-connection-panel")
-        self.assertNotContains(response, "<html")
+        self.assertEqual(elements(response, "html"), [])
 
     def test_the_policy_test_is_answered_with_its_result(self):
         response = self.client.get(reverse("control_plane:tailnet"), headers={"X-Fragment": "whatif"})
 
-        self.assertContains(response, 'id="whatif-result"')
-        self.assertNotContains(response, "<html")
+        self.assertTrue(select(response, "id", "whatif-result"))
+        self.assertEqual(elements(response, "html"), [])
 
 
 class UnchangedPartTests(TestCase):

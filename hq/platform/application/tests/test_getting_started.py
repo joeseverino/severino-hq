@@ -10,6 +10,7 @@ from hq.domains.control_plane.models import DashboardMachine, ManagedResource, P
 from .. import cadence
 from ..getting_started import remaining, steps
 from ..projection import projection_scope
+from .markup import hrefs, text, with_class
 
 
 class GettingStartedTests(TestCase):
@@ -89,9 +90,9 @@ class GettingStartedRowTests(TestCase):
         with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"):
             response = self.client.get("/")
 
-        self.assertContains(response, '<li class="is-done">', count=1)
-        self.assertContains(response, "2 left")
-        self.assertContains(response, 'href="https://github.com/example/hq/blob/main/docs/Install.md"')
+        self.assertEqual(len(with_class(response, "is-done")), 1)
+        self.assertIn("2 left", text(response))
+        self.assertIn("https://github.com/example/hq/blob/main/docs/Install.md", hrefs(response))
 
 
 class ControllerTileTests(TestCase):

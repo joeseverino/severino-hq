@@ -10,6 +10,7 @@ from hq.domains.control_plane.models import ManagedResource
 from ..action_links import command_url
 from ..containers import attention, containers
 from ..exposure import OPEN, PRIVATE
+from .markup import select
 from .test_container_standard import KEPT, runtime
 from .test_containers import HIGH, estate, exposed, inventory
 
@@ -234,7 +235,7 @@ class PageTests(TestCase):
 
         page = self.client.get(reverse("control_plane:detail", args=["example-box-web"]))
 
-        self.assertContains(page, 'id="hardening"')
+        self.assertTrue(select(page, "id", "hardening"))
         self.assertContains(page, "/opt/example/web/docker-compose.yml")
         self.assertContains(page, "user: &quot;1000:1000&quot;", html=False)
         self.assertContains(page, command_url("infrastructure.resource.update", "example-box-web"))
@@ -246,7 +247,7 @@ class PageTests(TestCase):
 
         page = self.client.get(reverse("control_plane:detail", args=["example-box-web"]))
 
-        self.assertNotContains(page, 'id="hardening"')
+        self.assertFalse(select(page, "id", "hardening"))
 
 
 class AttentionHelpTests(TestCase):

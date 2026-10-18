@@ -8,6 +8,7 @@ from hq.domains.control_plane.credential_reads import MINTERS, observer_permissi
 
 from ..connection_setup import setups
 from .host_only import host_only
+from .markup import hrefs
 
 
 class DeclarationTests(TestCase):
@@ -78,7 +79,7 @@ class PageTests(TestCase):
         self.assertContains(response, "Connect a service")
         for kind in CONNECTION_KINDS.values():
             self.assertContains(response, escape(kind.create))
-        self.assertContains(response, 'href="https://github.com/example/hq/blob/main/docs/Secrets.md#connections"')
+        self.assertIn("https://github.com/example/hq/blob/main/docs/Secrets.md#connections", hrefs(response))
 
     def test_a_connected_provider_is_listed_above_not_offered_below(self):
         from hq.domains.control_plane.models import ProviderConnection
@@ -117,7 +118,7 @@ class PageTests(TestCase):
 
         self.assertContains(response, "Connect another account")
         self.assertContains(response, escape(CONNECTION_KINDS["portainer"].create))
-        self.assertContains(response, 'href="/infrastructure/connections/#connection-setup-heading"')
+        self.assertIn("/infrastructure/connections/#connection-setup-heading", hrefs(response))
 
     def test_the_way_to_add_one_leads_the_page(self):
         response = self.client.get(reverse("control_plane:connections"))

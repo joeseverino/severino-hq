@@ -17,6 +17,7 @@ from ..machines import machine, machine_catalog
 from ..relationships import relationships_for
 from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND
+from .markup import hrefs, text, texts
 
 CONTROLLER = "example-controller"
 TAILNET_REF = "example-tailnet"
@@ -118,10 +119,10 @@ class ReachedThroughTests(TestCase):
         listing = self.client.get(reverse("control_plane:machines"))
         page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
 
-        self.assertContains(listing, f"<code>{TAILNET_REF}</code>")
-        self.assertContains(page, f"<code>{TAILNET_REF}</code>")
-        self.assertNotContains(page, "no connection reads it")
-        self.assertNotContains(page, "not monitored")
+        self.assertIn(TAILNET_REF, texts(listing, "code"))
+        self.assertIn(TAILNET_REF, texts(page, "code"))
+        self.assertNotIn("no connection reads it", text(page))
+        self.assertNotIn("not monitored", text(page))
 
     def test_the_connections_page_names_the_devices(self):
         reading = next(r for r in connection_readings() if r.connection_ref == TAILNET_REF)
@@ -183,11 +184,11 @@ class PanelTests(TestCase):
 
         page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
 
-        self.assertContains(page, "<h2>Relationships</h2>")
-        self.assertNotContains(page, "What HQ knows")
-        self.assertNotContains(page, "Not readable:")
-        self.assertContains(page, "?focus=machine%3Aexample-host")
-        self.assertContains(page, "Raw readings")
+        self.assertIn("Relationships", texts(page, "h2"))
+        self.assertNotIn("What HQ knows", text(page))
+        self.assertNotIn("Not readable:", text(page))
+        self.assertTrue(any("?focus=machine%3Aexample-host" in href for href in hrefs(page)))
+        self.assertIn("Raw readings", text(page))
 
     def test_an_unconnected_kind_yields_no_facts(self):
         facts = facts_about(("example-host",), ("100.64.0.1",))

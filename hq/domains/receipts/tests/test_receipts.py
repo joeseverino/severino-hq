@@ -12,6 +12,7 @@ from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BYTES, validate_receipt_file
+from hq.platform.application.tests.markup import links, text
 
 
 def _receipt(**fields):
@@ -32,14 +33,11 @@ class ReceiptLinkTests(TestCase):
 
         response = self.client.get(reverse("receipts:list"))
 
-        self.assertContains(
-            response, f'<a href="{self.expense.get_absolute_url()}" data-entity="Expense">Example Host · Hosting</a>'
-        )
-        self.assertContains(
-            response, f'<a href="{self.asset.get_absolute_url()}" data-entity="Asset">Example Switch</a>'
-        )
+        found = links(response)
+        self.assertIn(("Example Host · Hosting", self.expense.get_absolute_url()), found)
+        self.assertIn(("Example Switch", self.asset.get_absolute_url()), found)
         # A receipt with no vendor is named by its file.
-        self.assertContains(response, "<strong>scan.pdf</strong>")
+        self.assertIn("scan.pdf", text(response))
         self.assertContains(response, "No expense or asset")
         self.assertNotContains(response, ">expense</a>")
 
@@ -56,7 +54,7 @@ class ReceiptLinkTests(TestCase):
 
         response = self.client.get(receipt.get_absolute_url())
 
-        self.assertContains(response, "<dt>File type</dt><dd>PDF</dd>", html=True)
+        self.assertIn("File type PDF", text(response))
         self.assertNotContains(response, "application/pdf")
 
     def test_uploading_from_an_expense_starts_on_that_expense(self):
@@ -75,7 +73,7 @@ class ReceiptLinkTests(TestCase):
 
         response = self.client.get(reverse("receipts:edit", args=[receipt.pk]))
 
-        self.assertContains(response, f'<a href="{reverse("receipts:file", args=[receipt.pk])}">scan.pdf</a>')
+        self.assertIn(("scan.pdf", reverse("receipts:file", args=[receipt.pk])), links(response))
         self.assertNotContains(response, "/_internal-media/")
 
 

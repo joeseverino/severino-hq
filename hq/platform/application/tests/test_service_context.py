@@ -18,6 +18,7 @@ from hq.platform.core.models import AuditLog
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import service_or_prospect
 from ..ui import MISSING
+from .markup import select, with_class
 
 
 def a_service(hostname="probe.example.com"):
@@ -122,12 +123,13 @@ class PageTests(TestCase):
         # The project is a tile of the band.
         self.assertContains(response, ">Project<")
         self.assertContains(response, "example/a")
-        self.assertContains(response, 'aria-label="On this page"')
-        self.assertNotContains(response, 'id="delivery"')
+        self.assertTrue(select(response, "aria-label", "On this page"))
+        self.assertFalse(select(response, "id", "delivery"))
         service = response.context["service"]
         # Health once, first in the band, its tile in its tone.
-        self.assertContains(response, f'<div class="band-fact tone-{service.status}">', count=1)
-        self.assertContains(response, f"<strong>{service.status_label}</strong>")
+        facts = with_class(response, "band-fact")
+        self.assertEqual(len([fact for fact in facts if f"tone-{service.status}" in fact.classes]), 1)
+        self.assertIn(service.status_label, facts[0].words)
 
     def test_a_service_nothing_else_knows_about_grows_no_bands(self):
         a_service()
@@ -208,14 +210,22 @@ class TrafficSectionTests(TestCase):
             120,
         )
 
-    def test_traffic_for_many_hosts_costs_one_query(self):
-        for index in range(5):
-            self._measure(f"h{index}.example.com")
+    def test_traffic_for_many_hosts_costs_no_more_than_for_one(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
         from ..analytics import traffic_for_hosts
 
         hosts = {f"h{index}.example.com" for index in range(5)}
-        with self.assertNumQueries(1):
+        for host in hosts:
+            self._measure(host)
+
+        with CaptureQueriesContext(connection) as one:
+            self.assertEqual(len(traffic_for_hosts({"h0.example.com"}, days=7)), 1)
+        with CaptureQueriesContext(connection) as many:
             self.assertEqual(len(traffic_for_hosts(hosts, days=7)), 5)
+
+        self.assertEqual(len(many), len(one))
 
 
 class OneWindowTests(TestCase):

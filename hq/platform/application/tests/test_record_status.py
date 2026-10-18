@@ -15,6 +15,7 @@ from ..inventory import confirm_observed
 from ..projection import projection_scope
 from ..resource_context import record_status
 from ..resource_operations import changes, operation_summary
+from .markup import all_elements, select, texts
 
 READY = [{"type": "Ready", "status": True, "reason": "Observed", "message": "Matches HQ's settings."}]
 
@@ -62,9 +63,10 @@ class RecordNameTests(TestCase):
     def test_the_link_builder_shows_the_name_and_keeps_the_key(self):
         rewrite()
 
-        with projection_scope(), self.assertNumQueries(1):
+        with projection_scope():
             first = entity_link("resource", "app-dns")
-            again = entity_link("resource", "app-dns")
+            with self.assertNumQueries(0):
+                again = entity_link("resource", "app-dns")
 
         self.assertEqual(first.label, "app.example.com → 192.0.2.10")
         self.assertEqual((first.identity, first.title), ("app-dns", "app-dns"))
@@ -84,19 +86,22 @@ class RecordPageTests(TestCase):
     def test_the_page_is_titled_by_the_name_and_says_each_setting_once(self):
         response = self.client.get(reverse("control_plane:detail", args=["app-dns"]))
 
-        self.assertContains(response, "<title>app.example.com → 192.0.2.10")
+        self.assertTrue(texts(response, "title")[0].startswith("app.example.com → 192.0.2.10"))
         # Its two settings are its name and its readout, so nothing is left to repeat.
         self.assertNotContains(response, "Other settings")
-        self.assertContains(response, 'data-record-status="working"')
+        self.assertTrue(select(response, "data-record-status", "working"))
         self.assertContains(response, "Matches HQ&#x27;s settings.")
 
     def test_the_list_names_it_and_gives_one_state(self):
         response = self.client.get(reverse("control_plane:list"))
-        row = response.content.decode().split('title="app-dns">')[1].split("</tr>")[0]
+        page = all_elements(response)
+        (name,) = [element for element in page if element.attrs.get("title") == "app-dns"]
+        row = next(outer for outer in reversed(name.ancestors) if outer.tag == "tr")
+        cells = [element for element in page if any(outer is row for outer in element.ancestors)]
 
-        self.assertTrue(row.startswith("app.example.com → 192.0.2.10</a>"))
-        self.assertEqual(row.count('class="pill'), 1)
-        self.assertIn("Working", row)
+        self.assertEqual(name.words, "app.example.com → 192.0.2.10")
+        self.assertEqual(len([cell for cell in cells if "pill" in cell.classes]), 1)
+        self.assertIn("Working", row.words)
 
     def test_a_row_about_its_own_service_shows_where_the_record_leads(self):
         from ..service_declarations import Claim
@@ -205,7 +210,7 @@ class ReportedFieldTests(TestCase):
         page = response.content.decode()
 
         self.assertEqual(page.count("data-record-status="), 1)
-        self.assertContains(response, 'data-record-status="degraded"')
+        self.assertTrue(select(response, "data-record-status", "degraded"))
         self.assertContains(response, "Deploy run 9 finished without deploying it.")
         for dead_end in (
             "Keep the live version",

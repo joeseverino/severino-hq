@@ -10,12 +10,25 @@ from hq.platform.core.models import Appearance, AuditLog
 
 from ..appearance import set_theme, theme_for
 from ..security import AuthorizationError, Capability, Principal
+from .markup import elements, select
 
 
-def _html_tag(response) -> str:
-    body = response.content.decode()
-    start = body.index("<html")
-    return body[start : body.index(">", start) + 1]
+def drawn_theme(response) -> str | None:
+    """The theme the page is drawn in, as the stylesheet reads it."""
+
+    (document,) = elements(response, "html")
+    return document.attrs.get("data-theme")
+
+
+def color_scheme(response) -> str:
+    (meta,) = select(response, "name", "color-scheme")
+    return meta.attrs["content"]
+
+
+def pressed(response) -> list[str]:
+    """The theme the switch shows as chosen."""
+
+    return [choice.attrs["value"] for choice in select(response, "aria-pressed", "true") if "value" in choice.attrs]
 
 
 class ThemeServiceTests(TestCase):
@@ -73,20 +86,17 @@ class ThemeSwitchTests(TestCase):
                 response = self.choose(theme)
                 self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
                 page = self.client.get(reverse("dashboard"))
-                self.assertEqual(_html_tag(page), f'<html lang="en" data-theme="{theme}">')
-                self.assertContains(page, f'<meta name="color-scheme" content="{meta}">')
-                self.assertContains(
-                    page,
-                    f'value="{theme}" class="menu-item menu-theme-option" aria-pressed="true"',
-                )
+                self.assertEqual(drawn_theme(page), theme)
+                self.assertEqual(color_scheme(page), meta)
+                self.assertEqual(pressed(page), [theme])
 
     def test_system_removes_the_attribute(self):
         self.choose("dark")
         self.choose("system")
 
         page = self.client.get(reverse("dashboard"))
-        self.assertEqual(_html_tag(page), '<html lang="en">')
-        self.assertContains(page, '<meta name="color-scheme" content="light dark">')
+        self.assertIsNone(drawn_theme(page))
+        self.assertEqual(color_scheme(page), "light dark")
         self.assertEqual(theme_for(self.user), "system")
 
     def test_invalid_input_is_refused_and_changes_nothing(self):
@@ -121,7 +131,7 @@ class ThemeSwitchTests(TestCase):
         other = get_user_model().objects.create_user("other", password="x" * 20)
         self.client.force_login(other)
 
-        self.assertEqual(_html_tag(self.client.get(reverse("dashboard"))), '<html lang="en">')
+        self.assertIsNone(drawn_theme(self.client.get(reverse("dashboard"))))
 
     def test_the_form_is_protected_against_cross_site_posts(self):
         from django.test import Client

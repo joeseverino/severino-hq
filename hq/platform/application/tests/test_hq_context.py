@@ -20,6 +20,7 @@ from ..drawings import Dot, Dots
 from ..hq_context import hq_context
 from ..inventory_testing import store
 from ..ui import Insight
+from .markup import all_elements, links, select, text, with_class
 
 # The package exports a function named work, so the module is named by its path.
 work_module = importlib.import_module("hq.platform.application.hq_context.work")
@@ -313,8 +314,8 @@ class PageTests(TestCase):
         response = self.client.get(reverse("hq_self"))
 
         self.assertEqual(response.status_code, 200)
-        for text in ("Release", "Runs on", "Reached through", "Jobs", "Readings"):
-            self.assertContains(response, text)
+        for words in ("Release", "Runs on", "Reached through", "Jobs", "Readings"):
+            self.assertContains(response, words)
         self.assertContains(response, "Delete old routine log entries")
 
     def test_a_problem_is_drawn_under_the_part_it_is_about_and_the_status_leads_to_it(self):
@@ -329,13 +330,15 @@ class PageTests(TestCase):
         with mock.patch("hq.platform.application.problems._host_entries", return_value=(entry(problem),)):
             response = self.client.get(reverse("hq_self"))
 
-        html = response.content.decode()
-        self.assertContains(response, '<a class="pill pill-attention" href="#hq-where-heading">1 needs attention</a>')
+        self.assertIn(("1 needs attention", "#hq-where-heading"), links(response))
         # Not urgent, so a line under its part and nothing framed above the page.
-        self.assertNotContains(response, "problems-here")
-        where, line = html.index('id="hq-where-heading"'), html.index('class="problem-line"')
+        self.assertEqual(select(response, "id", "problems-here"), [])
+        page = all_elements(response)
+        where = next(index for index, element in enumerate(page) if element.attrs.get("id") == "hq-where-heading")
+        line = next(index for index, element in enumerate(page) if "problem-line" in element.classes)
+        work = next(index for index, element in enumerate(page) if element.attrs.get("id") == "hq-work-heading")
         self.assertLess(where, line)
-        self.assertLess(line, html.index('id="hq-work-heading"'))
+        self.assertLess(line, work)
 
     def test_an_urgent_problem_is_framed_above_the_page(self):
         from ..ui import ActionLink
@@ -349,11 +352,13 @@ class PageTests(TestCase):
         with mock.patch("hq.platform.application.problems._host_entries", return_value=(entry(problem),)):
             response = self.client.get(reverse("hq_self"))
 
-        html = response.content.decode()
-        self.assertContains(response, 'href="#problems-here">1 urgent</a>')
-        self.assertContains(response, "1 urgent problem")
-        self.assertLess(html.index('id="problems-here"'), html.index('class="fact-band"'))
-        self.assertNotContains(response, 'class="problem-line"')
+        self.assertIn(("1 urgent", "#problems-here"), links(response))
+        self.assertIn("1 urgent problem", text(response))
+        page = all_elements(response)
+        framed = next(index for index, element in enumerate(page) if element.attrs.get("id") == "problems-here")
+        facts = next(index for index, element in enumerate(page) if "fact-band" in element.classes)
+        self.assertLess(framed, facts)
+        self.assertEqual(with_class(response, "problem-line"), [])
 
     def test_unreadable_units_render_as_a_sentence(self):
         estate()

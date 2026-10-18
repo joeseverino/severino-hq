@@ -34,6 +34,7 @@ from ..deletion import DeleteCommand, delete_calendar_entry
 from ..domains import Domain, domain_navigation, host_domains
 from ..plugins import NavigationItem, PluginIntegration
 from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal
+from .markup import all_elements, hrefs, select, text, texts, with_class
 
 TODAY = date(2026, 10, 14)
 
@@ -335,24 +336,23 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("calendar:month"))
 
-        upcoming = response.content.decode().split('aria-labelledby="calendar-upcoming-title"', 1)[1]
-        self.assertIn("Renew the example.com certificate before it lapses", upcoming.split("</section>", 1)[0])
+        (upcoming,) = select(response, "aria-labelledby", "calendar-upcoming-title")
+        self.assertIn("Renew the example.com certificate before it lapses", upcoming.words)
 
     def test_the_month_the_day_and_an_entry_link_together(self):
         entry = _entry(title="Dentist", starts_on=timezone.localdate())
         response = self.client.get(reverse("calendar:month"), {"day": timezone.localdate().isoformat()})
-        self.assertContains(response, "Dentist")
-        self.assertContains(response, entry.get_absolute_url().replace("&", "&amp;"))
-        self.assertContains(response, 'data-hotkey="t"')
-        self.assertContains(response, "Add event")
-        self.assertNotContains(response, "My Calendar")
+        self.assertIn("Dentist", text(response))
+        self.assertIn(entry.get_absolute_url(), hrefs(response))
+        self.assertTrue(select(response, "data-hotkey", "t"))
+        self.assertIn("Add event", text(response))
+        self.assertNotIn("My Calendar", text(response))
         # An entry opens beside its day: once, with what can be done to it.
         opened = self.client.get(entry.get_absolute_url())
-        self.assertContains(opened, '<article class="day-panel-entry"')
-        self.assertContains(opened, reverse("calendar:entry_edit", args=[entry.uid]))
-        panel = opened.content.decode().split('<section class="card day-panel"', 1)[1].split("</section>", 1)[0]
-        listed = panel.split("</article>", 1)[1]
-        self.assertNotIn("Dentist", listed)
+        self.assertEqual(len(select(opened, "aria-label", "Dentist")), 1)
+        self.assertIn(reverse("calendar:entry_edit", args=[entry.uid]), hrefs(opened))
+        (panel,) = select(opened, "id", "day-panel")
+        self.assertEqual(panel.words.count("Dentist"), 1)
         # The entry's own route redirects to it beside its day.
         self.assertRedirects(
             self.client.get(reverse("calendar:entry", args=[entry.uid])),
@@ -364,23 +364,21 @@ class PageTests(TestCase):
         response = self.client.get(reverse("calendar:month"))
 
         # Under its name, where a phone can read it; the operator's own events lead under no heading.
-        self.assertContains(
-            response,
-            '<span>My events<small class="calendar-source-note">Events you or your agents added.</small></span>',
-        )
-        self.assertNotContains(response, "<h3></h3>")
-        self.assertNotContains(response, "My calendars")
+        (note,) = [note for note in with_class(response, "calendar-source-note") if note.words.startswith("Events you")]
+        self.assertEqual(note.ancestors[-1].words, "My events Events you or your agents added.")
+        self.assertNotIn("", texts(response, "h3"))
+        self.assertNotIn("My calendars", text(response))
 
     def test_one_label_adds_an_event(self):
         month = self.client.get(reverse("calendar:month"), {"day": timezone.localdate().isoformat()})
         form = self.client.get(reverse("calendar:entry_new"))
 
-        self.assertEqual(month.content.decode().count("Add event"), 2)  # the head and the day panel
-        self.assertContains(form, "<h1>Add event</h1>")
-        self.assertContains(form, '<button type="submit" class="primary">Add event</button>')
+        self.assertEqual(text(month).count("Add event"), 2)  # the head and the day panel
+        self.assertEqual(texts(form, "h1"), ["Add event"])
+        self.assertIn("Add event", [button.words for button in select(form, "type", "submit")])
         for gone in ("New entry", "Add to calendar"):
-            self.assertNotContains(month, gone)
-            self.assertNotContains(form, gone)
+            self.assertNotIn(gone, text(month))
+            self.assertNotIn(gone, text(form))
 
     def test_a_bar_keeps_its_height_across_the_week(self):
         """Marks share the date's row, so a dot in one cell and not the next
@@ -389,11 +387,16 @@ class PageTests(TestCase):
         _entry(title="Trip", starts_on=timezone.localdate(), ends_on=timezone.localdate() + timedelta(days=2))
         mark = CalendarEvent("mark", "Mark", timezone.localdate(), mark=True, state="done")
         with _with(_domain([_source("example.marks", [mark])])):
-            body = self.client.get(reverse("calendar:month")).content.decode()
-        cell = body[body.rindex("<td", 0, body.index('class="month-mark')) :]
-        cell = cell[: cell.index("</td>")]
-        self.assertLess(cell.index("month-day-head"), cell.index("month-mark"))
-        self.assertLess(cell.index("month-mark"), cell.index("month-span"))
+            page = all_elements(self.client.get(reverse("calendar:month")))
+        mark = next(element for element in page if "month-mark" in element.classes)
+        cell = next(ancestor for ancestor in reversed(mark.ancestors) if ancestor.tag == "td")
+        inside = [element for element in page if any(ancestor is cell for ancestor in element.ancestors)]
+
+        def first(name):
+            return next(index for index, element in enumerate(inside) if name in element.classes)
+
+        self.assertLess(first("month-day-head"), first("month-mark"))
+        self.assertLess(first("month-mark"), first("month-span"))
 
     def test_checking_a_source_returns_to_the_month_it_was_chosen_on(self):
         here = f"{reverse('calendar:month')}?month=2026-10"

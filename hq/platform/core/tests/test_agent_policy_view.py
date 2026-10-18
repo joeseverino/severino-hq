@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.capability_policy import Cell, Column, Group, Row, Scope
+from hq.platform.application.tests.markup import with_class
 
 
 def _cell(column: Column, *, dormant: bool) -> Cell:
@@ -45,4 +46,4 @@ class DormantColumnTests(TestCase):
             response = self.client.get(reverse("agent_policy"), {"all": 1})
 
         self.assertEqual([head["dormant"] for head in response.context["column_heads"]], [True, False])
-        self.assertContains(response, '<span class="policy-off">off in HQ\'s settings</span>', count=1)
+        self.assertEqual([off.words for off in with_class(response, "policy-off")], ["off in HQ's settings"])

@@ -1,9 +1,11 @@
-"""What each credential can see: derived from the registries, read in one query."""
+"""What each credential can see: derived from the registries, at a cost that does not grow."""
 
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import SimpleTestCase, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
@@ -30,6 +32,12 @@ from ..credential_sight import (
 )
 from ..inventory import record_inventory
 from ..security import cli_principal
+
+
+def _cost(call) -> int:
+    with CaptureQueriesContext(connection) as queries:
+        call()
+    return len(queries)
 
 
 class ExampleRecord(ObservationRecord):
@@ -180,14 +188,14 @@ class CredentialSightTests(TestCase):
         self.assertEqual(sight.remedy, "")
         self.assertEqual(sight.error, "Cloudflare request failed: TimeoutError.")
 
-    def test_every_inventory_row_is_read_in_one_query(self):
+    def test_more_inventory_rows_cost_no_more_queries(self):
         now = timezone.now()
+        ProviderInventory.objects.create(kind="host.perimeter", reachable=False, error="refused", observed_at=now)
+        one_row = _cost(credential_sight)
         for kind in list(PROVIDERS)[:5]:
             ProviderInventory.objects.create(kind=kind, records=[{}], observed_at=now)
-        ProviderInventory.objects.create(kind="host.perimeter", reachable=False, error="refused", observed_at=now)
 
-        with self.assertNumQueries(1):
-            credential_sight()
+        self.assertEqual(_cost(credential_sight), one_row)
 
     def test_providers_without_a_connection_are_split_out(self):
         connected, unconnected = sight_by_connection({"edge": "ssh"})
@@ -247,9 +255,13 @@ class PerConnectionSightTests(TestCase):
             states = {sight.kind: sight.state for sight in connected[ref].sights}
             self.assertEqual(states["host.perimeter"], UNREADABLE)
 
-    def test_one_query_for_every_connection(self):
-        with self.assertNumQueries(1):
-            sight_by_connection({"edge": "ssh", "shared-host": "ssh", "dns": "cloudflare_dns"})
+    def test_more_connections_cost_no_more_queries(self):
+        one = _cost(lambda: sight_by_connection({"edge": "ssh"}))
+
+        self.assertEqual(
+            _cost(lambda: sight_by_connection({"edge": "ssh", "shared-host": "ssh", "dns": "cloudflare_dns"})),
+            one,
+        )
 
     def test_a_per_connection_kind_that_names_no_connection_is_refused(self):
         from hq.domains.control_plane.attribution import (

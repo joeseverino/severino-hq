@@ -21,6 +21,7 @@ from hq.platform.core.models import AuditLog
 
 from ..projects import refresh_project
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal
+from .markup import select
 
 DIRECTORY = Path(tempfile.mkdtemp())
 MARKERS = override_settings(
@@ -182,7 +183,7 @@ class RefreshButtonTests(TestCase):
         self.assertRedirects(response, reverse("projects:detail", args=["alpha"]))
         shown = [str(message) for message in response.context["messages"]]
         self.assertTrue(any("Reading GitHub." in message for message in shown), shown)
-        self.assertContains(response, 'aria-disabled="true"')
+        self.assertTrue(select(response, "aria-disabled", "true"))
 
     def test_a_second_refresh_while_one_runs_is_refused_and_says_why(self):
         from hq.domains.jobs.testing import held_jobs

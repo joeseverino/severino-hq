@@ -617,13 +617,20 @@ class RecordedChangeTests(TestCase):
 class ReadCostTests(TestCase):
     """Reading rows pays for a capture, never for a query or a conversion."""
 
-    def test_reading_rows_is_one_query_and_the_diff_is_none(self):
-        for day in range(1, 21):
+    def test_reading_rows_costs_the_same_at_any_count_and_the_diff_is_none(self):
+        def read(queryset):
+            with CaptureQueriesContext(connection) as queries:
+                rows = list(queryset)
+            return rows, len(queries)
+
+        an_expense(date=date(2026, 1, 1))
+        _, full_once = read(Expense.objects.order_by("pk"))
+        _, narrow_once = read(Expense.objects.only("vendor").order_by("pk"))
+        for day in range(2, 21):
             an_expense(date=date(2026, 1, day))
-        with self.assertNumQueries(1):
-            rows = list(Expense.objects.order_by("pk"))
-        with self.assertNumQueries(1):
-            narrow = list(Expense.objects.only("vendor").order_by("pk"))
+        rows, full = read(Expense.objects.order_by("pk"))
+        narrow, narrowed = read(Expense.objects.only("vendor").order_by("pk"))
+        self.assertEqual((full, narrowed), (full_once, narrow_once))
         names = _tracked(Expense)
         narrow[1].vendor = "Moved"
         # Everything the save receiver computes, on a full and a narrow row.

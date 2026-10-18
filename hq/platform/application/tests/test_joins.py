@@ -29,6 +29,7 @@ from ..topology import derive_topology
 from ..zone_insights import certificates, registration
 from ..zones import ZONE_KIND, find_zone
 from .host_only import host_only
+from .markup import select
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 CLOUDFLARE = "example-cloudflare"
@@ -323,7 +324,7 @@ class RegistrationFallbackTests(TestCase):
         card = registration(find_zone("example.com"))
         self.assertIn("Domains Read (account)", card.note)
         self.assertContains(response, escape(card.note))
-        self.assertContains(response, 'title="Cloudflare refused the request: Forbidden"')
+        self.assertTrue(select(response, "title", "Cloudflare refused the request: Forbidden"))
 
     def test_a_refused_credential_still_says_so(self):
         refused_registration("Cloudflare refused the request: Invalid API Token", "credential")
@@ -439,7 +440,7 @@ class ServiceColumnTests(TestCase):
     def test_the_service_page_shows_what_its_readings_say(self):
         response = self.client.get(reverse("control_plane:service", kwargs={"hostname": "admin.example.com"}))
 
-        self.assertContains(response, '<span data-entity="Access application">Admin</span>')
+        self.assertIn("Admin", [named.words for named in select(response, "data-entity", "Access application")])
 
     def test_provider_readings_use_labels_and_hide_what_is_not_connected(self):
         store("cloudflare.d1_database", connected=False)

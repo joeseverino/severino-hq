@@ -5,6 +5,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.tests.markup import elements
+
 
 class SignInRouteTests(TestCase):
     def test_the_route_and_the_redirects_are_the_setting(self):
@@ -17,4 +19,5 @@ class SignInRouteTests(TestCase):
 
         response = self.client.get(reverse("dashboard"))
 
-        self.assertContains(response, f'<body data-sign-in="{settings.LOGIN_URL}">')
+        (body,) = elements(response, "body")
+        self.assertEqual(body.attrs["data-sign-in"], settings.LOGIN_URL)

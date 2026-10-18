@@ -16,6 +16,7 @@ from ..connection_setup import setups
 from ..entity_links import connection_anchor
 from ..page_reads import Remedy, need, pages_reading, readers, remedy, setup_url
 from ..pages import PageAction, page_context
+from .markup import all_elements, elements, hrefs, text as page_text, texts, with_class
 
 PARTIAL = "partials/_empty_state.html"
 TEMPLATES = Path(settings.BASE_DIR) / "templates"
@@ -34,21 +35,22 @@ class OneEmptyStateTests(SimpleTestCase):
             PARTIAL, {"message": "No containers yet.", "remedy": Remedy("Connect Portainer", "/connect/")}
         )
 
-        self.assertIn('class="empty card"', html)
-        self.assertEqual(html.count("<p>"), 1)
-        self.assertIn('No containers yet. <a class="empty-cta" href="/connect/">Connect Portainer', html)
+        (card,) = with_class(html, "empty")
+        self.assertIn("card", card.classes)
+        (line,) = texts(html, "p")
+        self.assertTrue(line.startswith("No containers yet. Connect Portainer"))
+        self.assertEqual(hrefs(html), ["/connect/"])
 
     def test_a_qualifying_sentence_stays_in_the_one_line(self):
         html = render_to_string(PARTIAL, {"message": "No problems found.", "why": "Example coverage."})
 
-        self.assertEqual(html.count("<p>"), 1)
-        self.assertIn("No problems found. Example coverage.", html)
+        self.assertEqual(texts(html, "p"), ["No problems found. Example coverage."])
 
     def test_a_remedy_with_no_page_is_said_not_linked(self):
         html = render_to_string(PARTIAL, {"message": "Nothing yet.", "remedy": Remedy("Ask the owner")})
 
-        self.assertIn('<span class="empty-cta">Ask the owner</span>', html)
-        self.assertNotIn("<a ", html)
+        self.assertEqual(page_text(html), "Nothing yet. Ask the owner")
+        self.assertEqual(elements(html, "a"), [])
 
     def test_a_list_without_reads_offers_its_own_lead_action(self):
         page = page_context(
@@ -134,8 +136,14 @@ class PageReadsTests(TestCase):
 
         response = self.client.get(setup_url("portainer"))
 
-        self.assertContains(response, 'id="setup-portainer"')
-        self.assertRegex(response.content.decode(), r'id="setup-portainer">\s*<details open>')
+        page = all_elements(response)
+        (setup,) = [element for element in page if element.attrs.get("id") == "setup-portainer"]
+        opened = [
+            element
+            for element in page
+            if element.tag == "details" and any(ancestor is setup for ancestor in element.ancestors)
+        ]
+        self.assertIn("open", opened[0].attrs)
 
 
 class SetupOrderTests(TestCase):

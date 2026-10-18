@@ -9,6 +9,7 @@ from hq_sdk import money as sdk
 
 from ..money import MINUS, money
 from ..ui import MISSING
+from .markup import text, with_class
 
 
 class MoneyTests(SimpleTestCase):
@@ -37,9 +38,8 @@ class MoneyTests(SimpleTestCase):
             Context({"a": Decimal("-1234.5"), "nothing": None})
         )
 
-        self.assertEqual(
-            drawn, f"{MINUS}$1,234.50 {MINUS}$1,234 " + '<span class="empty-value" title="None">' + MISSING + "</span>"
-        )
+        self.assertEqual(text(drawn), f"{MINUS}$1,234.50 {MINUS}$1,234 {MISSING}")
+        self.assertEqual([mark.words for mark in with_class(drawn, "empty-value")], [MISSING])
 
     def test_the_filter_refuses_a_form_it_does_not_have(self):
         with self.assertRaises(TemplateSyntaxError):

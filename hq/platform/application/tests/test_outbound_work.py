@@ -14,8 +14,10 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
+from django.db import connection
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase, TestCase, modify_settings, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import include, path, reverse
 from django.utils import timezone
 
@@ -138,14 +140,21 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         self.assertRedirects(response, self.page, fetch_redirect_response=False)
         self.assertEqual(Job.objects.get().state, "queued")
 
-    def test_the_page_reaches_nothing_and_costs_one_query_a_control(self):
-        with held_jobs() as held:
-            self.press(headers=SCRIPT)
-            held.run()
-        self.registry.asked.clear()
+    def test_the_page_reaches_nothing_and_a_control_costs_the_same_however_often_it_ran(self):
+        def cost_after_a_run():
+            with held_jobs() as held:
+                self.press(headers=SCRIPT)
+                held.run()
+            self.registry.asked.clear()
+            with CaptureQueriesContext(connection) as queries:
+                found = ask(example.LOOKUP, "first-note")
+            return found, len(queries)
 
-        with self.assertNumQueries(1):
-            control = ask(example.LOOKUP, "first-note")
+        _, once = cost_after_a_run()
+        cost_after_a_run()
+        control, thrice = cost_after_a_run()
+
+        self.assertEqual(thrice, once)
         self.assertContains(self.client.get(self.page), "Look up")
 
         self.assertEqual((control.standing.state, control.url, control.value), ("idle", self.route, "first-note"))

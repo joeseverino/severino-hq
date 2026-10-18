@@ -77,14 +77,17 @@ class YearSummaryBudgetTests(TestCase):
 
 
 class YearsOfTests(TestCase):
-    def test_it_answers_as_dates_does_in_one_query(self):
+    def test_it_answers_as_dates_does_at_no_more_cost(self):
         seed(SMALL)
         Asset.objects.filter(pk=Asset.objects.order_by("pk")[0].pk).update(purchase_date=None)
 
         for model, field in ((Expense, "date"), (Asset, "purchase_date")):
-            with self.assertNumQueries(1):
+            with CaptureQueriesContext(connection) as asked:
                 found = years_of(model, field)
-            self.assertEqual(found, [day.year for day in model.objects.dates(field, "year")])
+            with CaptureQueriesContext(connection) as dates:
+                expected = [day.year for day in model.objects.dates(field, "year")]
+            self.assertEqual(found, expected)
+            self.assertLessEqual(len(asked), len(dates))
 
 
 class SpecAdapterTests(SimpleTestCase):

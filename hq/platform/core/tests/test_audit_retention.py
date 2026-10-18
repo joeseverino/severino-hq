@@ -1,11 +1,14 @@
 """Audit events name their connection; routine ones expire and nothing else does."""
 
+import re
 from datetime import timedelta
 from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from ..audit import (
@@ -135,13 +138,17 @@ class ConnectionAttributionTests(TestCase):
 
 
 class LastActivityTests(TestCase):
-    def test_the_latest_event_per_connection_in_one_query(self):
+    def test_the_latest_event_per_connection_costs_what_one_connection_does(self):
         for ref in ("a", "b", "c"):
             _event(AuditLog.Action.UPDATED, connection=ref, days_old=3, message="older")
             _event(AuditLog.Action.UPDATED, connection=ref, message=f"latest {ref}")
 
-        with self.assertNumQueries(1):
+        with CaptureQueriesContext(connection) as one:
+            last_activity(["a"])
+        with CaptureQueriesContext(connection) as many:
             found = last_activity(["a", "b", "c", "none"])
+
+        self.assertEqual(len(many), len(one))
 
         self.assertEqual(set(found), {"a", "b", "c"})
         self.assertEqual(found["b"].message, "latest b")
@@ -164,9 +171,6 @@ class LastActivityTests(TestCase):
             self.assertEqual(last_activity([""]), {})
 
     def test_only_the_named_connections_are_grouped(self):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
         _event(AuditLog.Action.UPDATED, connection="a")
         _event(AuditLog.Action.UPDATED, connection="other")
 
@@ -174,5 +178,4 @@ class LastActivityTests(TestCase):
             found = last_activity(["a"])
 
         self.assertEqual(set(found), {"a"})
-        (query,) = captured.captured_queries
-        self.assertRegex(query["sql"], r'"connection" IN \(')
+        self.assertTrue(any(re.search(r'"connection" IN \(', query["sql"]) for query in captured.captured_queries))

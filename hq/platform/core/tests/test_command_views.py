@@ -5,7 +5,9 @@ from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
@@ -13,10 +15,32 @@ from hq.platform.api.models import IdempotencyRecord
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_targets import capability_target_options
 from hq.platform.application.security import Capability, Principal
+from hq.platform.application.tests.markup import elements, links, select, text, texts, with_class, within
 from hq.platform.application.ui import MISSING
 from hq.platform.core.models import AuditLog
 
 User = get_user_model()
+
+
+def fields(page) -> set[str]:
+    return {element.attrs["name"] for element in select(page, "name") if element.tag in {"input", "select", "textarea"}}
+
+
+def submits(page):
+    return [element for element in within(page, "data-command-form") if element.attrs.get("type") == "submit"]
+
+
+def options(page) -> list[str]:
+    return [option.attrs["value"] for option in elements(page, "option")]
+
+
+def chosen_options(page) -> list[str]:
+    return [option.attrs["value"] for option in elements(page, "option") if "selected" in option.attrs]
+
+
+def result_title(page) -> str | None:
+    found = select(page, "id", "command-result-title")
+    return found[0].words if found else None
 
 
 class CommandViewTests(TestCase):
@@ -59,18 +83,16 @@ class CommandViewTests(TestCase):
         response = self.client.get("/commands/project.create/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'name="name"')
-        self.assertContains(response, 'name="slug"')
-        self.assertContains(response, 'name="__execution_key"')
-        self.assertNotContains(response, 'name="__target"')
+        self.assertLessEqual({"name", "slug", "__execution_key"}, fields(response))
+        self.assertNotIn("__target", fields(response))
 
     def test_the_page_is_a_title_what_it_changes_and_one_button(self):
         response = self.client.get("/commands/project.create/")
 
-        self.assertContains(response, '<button class="btn primary" type="submit">Create project</button>')
-        self.assertContains(response, "Add a new project.")
+        self.assertEqual([button.words for button in submits(response)], ["Create project"])
+        self.assertIn("Add a new project.", text(response))
+        self.assertNotIn("project.create", text(response))
         for built in (
-            "<code>project.create",
             "manage_projects",
             "Handler",
             "JSON Schema",
@@ -88,21 +110,22 @@ class CommandViewTests(TestCase):
         chosen = self.client.get("/commands/certificate.renew/", {"target": "example-certificate"})
         open_ = self.client.get("/commands/certificate.renew/")
 
-        self.assertContains(chosen, "<strong>example-certificate</strong>")
-        self.assertContains(chosen, 'href="/commands/certificate.renew/">Change</a>')
-        self.assertContains(chosen, '<select name="__target" hidden')
-        self.assertContains(chosen, '<option value="example-certificate" selected>')
-        self.assertNotContains(open_, '<select name="__target" hidden')
-        self.assertContains(open_, "Choose one…")
+        (target,) = select(chosen, "name", "__target")
+        self.assertIn("hidden", target.attrs)
+        self.assertEqual(chosen_options(chosen), ["example-certificate"])
+        self.assertIn("example-certificate", text(chosen))
+        self.assertIn(("Change", "/commands/certificate.renew/"), links(chosen))
+        (target,) = select(open_, "name", "__target")
+        self.assertNotIn("hidden", target.attrs)
+        self.assertIn("Choose one…", text(open_))
 
     def test_targeted_command_derives_its_target_control(self):
         Project.objects.create(name="HQ", slug="hq")
         response = self.client.get("/commands/project.update/", {"target": "hq"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'name="__target"')
-        self.assertContains(response, 'value="hq"')
-        self.assertContains(response, 'name="__expected_updated_at"')
+        self.assertLessEqual({"__target", "__expected_updated_at"}, fields(response))
+        self.assertEqual(chosen_options(response), ["hq"])
 
     def test_retry_keys_are_automatic_and_target_language_is_operator_facing(self):
         ManagedResource.objects.create(
@@ -117,31 +140,38 @@ class CommandViewTests(TestCase):
         )
         response = self.client.get("/commands/certificate.renew/")
 
-        self.assertContains(response, '<label for="id___target">Certificate</label>')
-        self.assertContains(response, "The certificate to renew.")
-        self.assertContains(response, '<option value="example-certificate">')
-        self.assertNotContains(response, '<option value="example-zone">')
-        self.assertContains(response, 'type="hidden" name="idempotency_key"')
-        self.assertNotContains(response, ">Idempotency Key<")
+        (label,) = select(response, "for", "id___target")
+        self.assertEqual(label.words, "Certificate")
+        self.assertIn("The certificate to renew.", text(response))
+        self.assertIn("example-certificate", options(response))
+        self.assertNotIn("example-zone", options(response))
+        (key,) = select(response, "name", "idempotency_key")
+        self.assertEqual(key.attrs["type"], "hidden")
+        self.assertNotIn("Idempotency Key", text(response))
         self.assertNotContains(response, "request_certificate_renewal")
         self.assertNotContains(response, "provider work runs outside this page request")
 
-    def test_target_choices_are_one_local_query_and_never_a_provider_lookup(self):
-        ManagedResource.objects.create(
-            key="example-certificate",
-            kind="tls.certificate",
-            spec={},
-        )
+    def test_target_choices_cost_the_same_however_many_targets(self):
         principal = Principal(
             "operator",
             "web",
             frozenset({Capability.READ, Capability.REQUEST_CERTIFICATE_RENEWAL}),
         )
 
-        with self.assertNumQueries(1):
-            options = capability_target_options(capability_registry()["certificate.renew"], principal=principal)
+        def options_and_cost():
+            with CaptureQueriesContext(connection) as queries:
+                options = capability_target_options(capability_registry()["certificate.renew"], principal=principal)
+            return [option.value for option in options or ()], len(queries)
 
-        self.assertEqual([option.value for option in options or ()], ["example-certificate"])
+        ManagedResource.objects.create(key="example-certificate", kind="tls.certificate", spec={})
+        one, one_cost = options_and_cost()
+        for index in range(4):
+            ManagedResource.objects.create(key=f"example-certificate-{index}", kind="tls.certificate", spec={})
+        many, many_cost = options_and_cost()
+
+        self.assertEqual(one, ["example-certificate"])
+        self.assertEqual(len(many), 5)
+        self.assertEqual(many_cost, one_cost)
 
     def test_discovery_context_filters_and_explains_infrastructure_targets(self):
         ManagedResource.objects.create(
@@ -157,12 +187,8 @@ class CommandViewTests(TestCase):
 
         response = self.client.get("/commands/infrastructure.reconcile/", {"kind": "tailscale.device"})
 
-        self.assertContains(
-            response,
-            '<option value="example-device">example-device</option>',
-            html=True,
-        )
-        self.assertNotContains(response, '<option value="example-zone">')
+        self.assertIn("example-device", options(response))
+        self.assertNotIn("example-zone", options(response))
 
     def test_update_hydrates_the_selected_resource_and_concurrency_guard(self):
         resource = ManagedResource.objects.create(
@@ -190,7 +216,7 @@ class CommandViewTests(TestCase):
         response = self.client.post("/commands/project.create/", self._create_payload(), follow=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2 id="command-result-title">Done</h2>')
+        self.assertEqual(result_title(response), "Done")
         self.assertTrue(Project.objects.filter(slug="browser-command").exists())
         self.assertEqual(IdempotencyRecord.objects.count(), 1)
         audit = AuditLog.objects.get(object_type="Project")
@@ -209,8 +235,7 @@ class CommandViewTests(TestCase):
 
         response = self.client.post("/commands/project.create/", payload, follow=True)
 
-        self.assertContains(response, f'href="{source}"')
-        self.assertContains(response, f'href="{source}">Back</a>')
+        self.assertIn(("Back", source), links(response))
 
     def test_a_command_never_returns_to_an_external_site(self):
         response = self.client.get("/commands/project.create/", {"next": "https://attacker.example/"})
@@ -265,8 +290,8 @@ class CommandViewTests(TestCase):
         hidden = self.client.get("/commands/project.create/", {"result": "wrong"})
         shown = self.client.get("/commands/project.create/", {"result": query["result"][0]})
 
-        self.assertNotContains(hidden, 'id="command-result-title"')
-        self.assertContains(shown, 'id="command-result-title"')
+        self.assertIsNone(result_title(hidden))
+        self.assertEqual(result_title(shown), "Done")
 
 
 class CommandResultProjectionTests(TestCase):
@@ -317,13 +342,14 @@ class CommandResultProjectionTests(TestCase):
         self.assertEqual(table["label"], "answers")
         self.assertEqual(table["columns"], ("name", "type", "value", "ttl"))
         self.assertEqual(table["rows"][0], ("example.test", "A", "192.0.2.1", MISSING))
-        self.assertContains(response, "<th>type</th>")
-        self.assertContains(response, "answers · 2")
-        self.assertContains(response, '<h2 id="command-result-title">Done</h2>')
+        self.assertIn("type", texts(response, "th"))
+        self.assertIn("answers · 2", text(response))
+        self.assertEqual(result_title(response), "Done")
         # The JSON is still there for anyone checking HQ against another tool,
         # closed because the answer is already on the page.
-        self.assertContains(response, '<details class="command-result-json">')
-        self.assertContains(response, "&quot;resolver&quot;: &quot;Example&quot;")
+        (raw,) = with_class(response, "command-result-json")
+        self.assertNotIn("open", raw.attrs)
+        self.assertIn('"resolver": "Example"', raw.words)
 
     def test_a_shape_the_rules_do_not_fit_shows_the_json_open(self):
         payload = {"ok": True, "nested": {"deep": [1, 2]}, "mixed": [{"a": 1}, {"b": {"c": 2}}]}
@@ -332,7 +358,8 @@ class CommandResultProjectionTests(TestCase):
 
         self.assertEqual(response.context["result_facts"], ())
         self.assertIsNone(response.context["result_table"])
-        self.assertContains(response, '<details class="command-result-json" open>')
+        (raw,) = with_class(response, "command-result-json")
+        self.assertIn("open", raw.attrs)
 
     def test_the_projection_is_pure_and_keeps_column_order(self):
         from hq.platform.core.command_views import _result_projection

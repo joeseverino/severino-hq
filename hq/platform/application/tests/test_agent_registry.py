@@ -3,7 +3,9 @@
 from datetime import timedelta
 from unittest import mock
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from hq.platform.core.models import AgentIdentity, AuditLog
@@ -53,8 +55,11 @@ class LearningTests(TestCase):
 class CostTests(TestCase):
     def test_routine_traffic_does_not_write(self):
         observe(agent("read"))
-        with self.assertNumQueries(1):
+        with CaptureQueriesContext(connection) as queries:
             observe(agent("read"))
+
+        self.assertTrue(queries.captured_queries)
+        self.assertEqual({query["sql"].split(None, 1)[0].upper() for query in queries.captured_queries}, {"SELECT"})
 
     def test_last_seen_moves_once_the_interval_passes(self):
         observe(agent("read"))

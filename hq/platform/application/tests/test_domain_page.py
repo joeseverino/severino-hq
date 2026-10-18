@@ -9,6 +9,8 @@ from hq.domains.control_plane.zone_views import _page_relationships, _records_le
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
 
+from .markup import text, texts
+
 
 def group(phrase: str, *ends: EntityLink) -> RelationGroup:
     return RelationGroup(phrase, 0, tuple(Relationship(end) for end in ends))
@@ -123,8 +125,8 @@ class RecordTableTests(SimpleTestCase):
     def test_a_ttl_is_said_with_its_unit_and_only_when_it_was_set(self):
         html = self.table(self.record(), self.record(name="slow.example.com", ttl=300))
 
-        self.assertNotIn("Auto", html)
-        self.assertIn("<td>300 s</td>", html)
+        self.assertNotIn("Auto", text(html))
+        self.assertIn("300 s", texts(html, "td"))
 
     def test_an_empty_half_says_where_the_records_are(self):
         self.assertIn("No records.", self.table())

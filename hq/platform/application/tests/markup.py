@@ -1,6 +1,6 @@
 """What a rendered page offers, read the way a browser reads it: links, hooks and text."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import override
 
@@ -12,6 +12,18 @@ class Element:
     tag: str
     attrs: dict[str, str]
     text: str = ""
+    ancestors: tuple[Element, ...] = field(default=(), repr=False, compare=False)
+    chunks: list[str] = field(default_factory=list, repr=False, compare=False)
+
+    @property
+    def classes(self) -> frozenset[str]:
+        return frozenset(self.attrs.get("class", "").split())
+
+    @property
+    def words(self) -> str:
+        """The element's text as a reader sees it: whitespace collapsed, a space between elements."""
+
+        return " ".join(" ".join(self.chunks).split())
 
 
 class _Page(HTMLParser):
@@ -23,7 +35,7 @@ class _Page(HTMLParser):
 
     @override
     def handle_starttag(self, tag, attrs):
-        element = Element(tag, {name: value or "" for name, value in attrs})
+        element = Element(tag, {name: value or "" for name, value in attrs}, ancestors=tuple(self._open))
         self.elements.append(element)
         if tag not in _VOID:
             self._open.append(element)
@@ -40,6 +52,7 @@ class _Page(HTMLParser):
         self.words.append(data)
         for element in self._open:
             element.text += data
+            element.chunks.append(data)
 
 
 def _page(html) -> _Page:
@@ -47,6 +60,12 @@ def _page(html) -> _Page:
     page.feed(html.content.decode() if hasattr(html, "content") else str(html))
     page.close()
     return page
+
+
+def all_elements(html) -> list[Element]:
+    """Every element, in page order."""
+
+    return _page(html).elements
 
 
 def select(html, attribute: str, value: str | None = None) -> list[Element]:
@@ -63,6 +82,45 @@ def elements(html, tag: str) -> list[Element]:
     """Every ``tag`` element, in page order."""
 
     return [element for element in _page(html).elements if element.tag == tag]
+
+
+def with_class(html, name: str) -> list[Element]:
+    """Every element whose class list includes ``name``, in page order."""
+
+    return [element for element in _page(html).elements if name in element.classes]
+
+
+def within(html, attribute: str, value: str | None = None) -> list[Element]:
+    """Every element inside one carrying ``attribute``, in page order.
+
+    With ``value``, only inside one whose attribute equals it; for ``class``,
+    one whose class list includes it.
+    """
+
+    def holds(ancestor: Element) -> bool:
+        if attribute not in ancestor.attrs:
+            return False
+        if value is None:
+            return True
+        return value in ancestor.classes if attribute == "class" else ancestor.attrs[attribute] == value
+
+    return [element for element in _page(html).elements if any(holds(ancestor) for ancestor in element.ancestors)]
+
+
+def links(html) -> list[tuple[str, str]]:
+    """Each link's words and its target, in page order."""
+
+    return [
+        (element.words, element.attrs["href"])
+        for element in _page(html).elements
+        if element.tag == "a" and "href" in element.attrs
+    ]
+
+
+def texts(html, tag: str) -> list[str]:
+    """The words of each ``tag`` element, whitespace collapsed, in page order."""
+
+    return [element.words for element in elements(html, tag)]
 
 
 def hrefs(html) -> list[str]:

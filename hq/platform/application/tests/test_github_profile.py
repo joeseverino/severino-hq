@@ -9,6 +9,7 @@ from hq.platform.core.models import LinkedAccount
 
 from .. import github_profile
 from ..security import AuthorizationError, Principal
+from .markup import hrefs, select
 from .sentinel import SENTINEL
 
 PROFILE = {
@@ -232,7 +233,7 @@ class PageTests(TestCase):
         self.assertRedirects(response, reverse("watching"))
         self.assertContains(response, "Reading @example-user from GitHub.")
         self.assertContains(response, "data-ask-status=")
-        self.assertContains(response, 'aria-disabled="true"')
+        self.assertTrue(select(response, "aria-disabled", "true"))
         self.assertContains(response, "Waiting for the controller.")
 
     def test_the_status_says_when_the_read_landed_or_was_refused(self):
@@ -261,7 +262,7 @@ class PageTests(TestCase):
 
         self.assertContains(response, "@example-user")
         self.assertContains(response, "This is your GitHub account, according to your sign-in.")
-        self.assertContains(response, 'href="https://github.com/example-user?tab=followers"')
+        self.assertIn("https://github.com/example-user?tab=followers", hrefs(response))
         self.assertContains(response, "v1.2.0")
         self.assertContains(response, "CVE-2026-0001")
         # The advisory says what it is about, where a phone can read it.

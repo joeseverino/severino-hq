@@ -9,6 +9,7 @@ from django.urls import reverse
 from hq.domains.assets.models import Asset
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
+from hq.platform.application.tests.markup import elements, links, select, text
 
 
 class _Signed(TestCase):
@@ -20,9 +21,8 @@ class ExpenseListTests(_Signed):
     def test_an_empty_list_offers_the_way_forward_and_no_empty_controls(self):
         response = self.client.get(reverse("expenses:list"))
 
-        self.assertContains(
-            response, 'No expenses yet. <a class="empty-cta" href="/expenses/new/">New expense &rarr;</a>'
-        )
+        self.assertIn("No expenses yet.", text(response))
+        self.assertIn(("New expense →", reverse("expenses:create")), links(response))
         self.assertNotContains(response, "Filtered")
         self.assertNotContains(response, "$0.00")
         # A year to filter by once an expense has one.
@@ -35,9 +35,9 @@ class ExpenseListTests(_Signed):
         whole = self.client.get(reverse("expenses:list"))
         narrowed = self.client.get(reverse("expenses:list"), {"category": "miscellaneous", "q": ""})
 
-        self.assertContains(whole, "Total <strong>$20.00</strong>")
+        self.assertIn("Total $20.00", text(whole))
         self.assertNotContains(whole, "Matching:")
-        self.assertContains(narrowed, "Matching: <strong>$20.00</strong> total")
+        self.assertIn("Matching: $20.00 total", text(narrowed))
         self.assertIn("Year", [item["label"] for item in whole.context["table"]["filters"]])
 
     def test_the_list_says_what_each_category_adds_up_to_as_a_link_to_it(self):
@@ -61,13 +61,11 @@ class ExpenseListTests(_Signed):
                 ("Domains", Decimal("8.00"), "?year=2030&category=domains"),
             ],
         )
-        self.assertContains(
-            whole, '<a class="chip" href="?year=2030&amp;category=hosting">Hosting <strong>$24.00</strong></a>'
-        )
-        self.assertContains(whole, "Matching: <strong>$32.00</strong> total")
+        self.assertIn(("Hosting $24.00", "?year=2030&category=hosting"), links(whole))
+        self.assertIn("Matching: $32.00 total", text(whole))
         # A list already narrowed to one category is not divided by category.
         self.assertEqual(chosen.context["by_category"], ())
-        self.assertContains(chosen, "Matching: <strong>$24.00</strong> total")
+        self.assertIn("Matching: $24.00 total", text(chosen))
 
     def test_one_category_is_not_a_division(self):
         Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting", total_cost=Decimal("12.00"))
@@ -75,7 +73,7 @@ class ExpenseListTests(_Signed):
         response = self.client.get(reverse("expenses:list"))
 
         self.assertEqual(response.context["by_category"], ())
-        self.assertNotContains(response, 'class="chip"')
+        self.assertEqual(select(response, "aria-label", "Totals by category"), [])
 
     def test_the_totals_of_a_list_with_a_toggle_on_count_each_expense_once(self):
         from hq.domains.receipts.models import Receipt
@@ -100,21 +98,26 @@ class ExpenseListTests(_Signed):
             [("Domains", Decimal("8.00")), ("Hosting", Decimal("5.00"))],
         )
 
-    def test_the_totals_and_the_categories_are_one_statement(self):
+    def test_adding_up_the_categories_does_not_cost_a_query_each(self):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
-        Expense.objects.create(
-            date="2030-01-02", vendor="Example Host", item="Hosting", category="hosting", total_cost=Decimal("12.00")
-        )
-        Expense.objects.create(
-            date="2030-02-02", vendor="Example Registrar", item="Domain", category="domains", total_cost=Decimal("8.00")
-        )
+        def sums() -> int:
+            with CaptureQueriesContext(connection) as queries:
+                self.client.get(reverse("expenses:list"))
+            return len([query for query in queries if "SUM(" in query["sql"]])
 
-        with CaptureQueriesContext(connection) as queries:
-            self.client.get(reverse("expenses:list"))
+        for category in ("hosting", "domains"):
+            Expense.objects.create(
+                date="2030-01-02", vendor="Example Host", item="Hosting", category=category, total_cost=Decimal(1)
+            )
+        two = sums()
+        for category in ("software", "hardware", "miscellaneous"):
+            Expense.objects.create(
+                date="2030-01-02", vendor="Example Host", item="Hosting", category=category, total_cost=Decimal(1)
+            )
 
-        self.assertEqual(len([query for query in queries if "SUM(" in query["sql"]]), 1)
+        self.assertEqual(sums(), two)
 
     def test_an_expense_names_its_document_by_title(self):
         record = DocumentationRecord.objects.create(doc_id="rb-example-renewal", title="Renew the example domain")
@@ -124,8 +127,8 @@ class ExpenseListTests(_Signed):
 
         response = self.client.get(expense.get_absolute_url())
 
-        self.assertContains(response, 'title="rb-example-renewal">Renew the example domain</a>')
-        self.assertNotContains(response, ">rb-example-renewal<")
+        (link,) = select(response, "title", "rb-example-renewal")
+        self.assertEqual(link.text.strip(), "Renew the example domain")
 
 
 class AssetPageTests(_Signed):
@@ -134,9 +137,9 @@ class AssetPageTests(_Signed):
 
         response = self.client.get(asset.get_absolute_url())
 
-        self.assertContains(response, '<dt>Cost</dt><dd class="muted">Not recorded</dd>', html=True)
+        self.assertIn("Cost Not recorded", text(response))
         self.assertNotContains(response, "$0.00")
-        self.assertNotContains(response, "<dt>Slug</dt>")
+        self.assertNotIn("Slug", [term.text for term in elements(response, "dt")])
         self.assertContains(response, "Nothing is linked to this asset yet.")
 
     def test_a_domain_asset_links_the_domain_hq_manages(self):
@@ -149,7 +152,7 @@ class AssetPageTests(_Signed):
             response = self.client.get(asset.get_absolute_url())
             unrelated = self.client.get(other.get_absolute_url())
 
-        self.assertContains(response, "<dt>Domain page</dt>")
+        self.assertIn("Domain page", [term.text for term in elements(response, "dt")])
         self.assertContains(response, f'href="{reverse("zones:detail", args=["example.com"])}"')
         self.assertNotContains(unrelated, "Domain page")
 
@@ -158,6 +161,6 @@ class AssetPageTests(_Signed):
 
         response = self.client.get(reverse("assets:list"))
 
-        self.assertContains(response, "Total <strong>$100.00</strong>")
+        self.assertIn("Total $100.00", text(response))
         self.assertContains(response, "Business use")
         self.assertNotContains(response, "% biz")

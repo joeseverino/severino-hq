@@ -36,6 +36,7 @@ from ..ui import (
     line_chart,
     stacked_bar_chart,
 )
+from .markup import all_elements, elements, links, select, text, with_class
 
 
 class UiProjectionTests(TestCase):
@@ -110,10 +111,10 @@ class UiProjectionTests(TestCase):
         self.assertIn("View chart data", rendered)
         # The tooltip names its period as well as its series: hovering a bar
         # without being told which week it is answers half a question.
-        self.assertIn('data-tip="Aug 10 · Run: 45 minutes"', rendered)
+        self.assertIn("Aug 10 · Run: 45 minutes", [mark.attrs["data-tip"] for mark in select(rendered, "data-tip")])
         # No SVG <title>: that is the browser's own tooltip, which waits a
         # second or two and would double up with the host's.
-        self.assertNotIn("<title>", rendered)
+        self.assertEqual(elements(rendered, "title"), [])
 
     def test_stacked_chart_rejects_misaligned_series(self):
         with self.assertRaises(ValueError):
@@ -271,10 +272,14 @@ class LineChartTests(TestCase):
         rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
         # `.chart-series-N` sets `fill`, which would render the path as a
         # filled blob. Lines use the stroke classes.
-        self.assertIn('class="chart-line chart-line-1"', rendered)
-        self.assertIn("chart-trend", rendered)
-        self.assertIn("View chart data", rendered)
-        self.assertNotIn("<title>", rendered)
+        paths = elements(rendered, "path")
+        self.assertEqual(len(paths), 2)
+        for path in paths:
+            self.assertIn("chart-line-1", path.classes)
+            self.assertFalse({name for name in path.classes if name.startswith("chart-series-")})
+        self.assertTrue(with_class(rendered, "chart-trend"))
+        self.assertIn("View chart data", text(rendered))
+        self.assertEqual(elements(rendered, "title"), [])
 
     def test_each_point_has_a_target_big_enough_to_hit(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm")
@@ -282,18 +287,24 @@ class LineChartTests(TestCase):
         # The visible dot is three pixels across, which is smaller than a
         # pointer can be aimed: the tooltip worked and could not be reached.
         # The tip belongs to an invisible circle several times its size.
-        self.assertIn('class="chart-hit"', rendered)
-        self.assertIn('r="11"', rendered)
-        self.assertNotIn('r="3" data-tip', rendered)
+        drawn = [element for element in all_elements(rendered) if element.tag in {"path", "circle"}]
+        targets = [index for index, element in enumerate(drawn) if "data-tip" in element.attrs]
+        self.assertEqual(len(targets), len(chart.series[0].points))
+        for index in targets:
+            self.assertGreaterEqual(float(drawn[index].attrs["r"]), 10)
         # And the target has to be drawn after the lines, or a line crossing it
         # takes the pointer first.
-        self.assertGreater(rendered.index("chart-hit"), rendered.rindex("chart-line-"))
+        lines = [index for index, element in enumerate(drawn) if element.tag == "path"]
+        self.assertGreater(min(targets), max(lines))
 
     def test_every_point_carries_the_hosts_own_tooltip(self):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm")
         rendered = render_to_string("partials/_line_chart.html", {"chart": chart})
-        self.assertIn("Jan 1, 2026 · Resting heart rate: 52 bpm", rendered)
-        self.assertNotIn("title=", rendered)
+        self.assertIn(
+            "Jan 1, 2026 · Resting heart rate: 52 bpm",
+            [mark.attrs["data-tip"] for mark in select(rendered, "data-tip")],
+        )
+        self.assertEqual(select(rendered, "title"), [])
 
     def test_a_slot_outside_the_palette_is_refused(self):
         with self.assertRaises(ValueError):
@@ -327,8 +338,10 @@ class ChartDataTableTests(TestCase):
     """The table under a chart says each value as the chart's tooltip does."""
 
     def table(self, template, chart):
+        """The words in each cell of the table under the chart."""
+
         rendered = render_to_string(template, {"chart": chart})
-        return rendered[rendered.index('<details class="chart-data">') :]
+        return [cell.words for cell in elements(rendered, "td") + elements(rendered, "th")]
 
     def test_a_line_charts_table_rounds_as_its_tooltip_does(self):
         chart = line_chart(
@@ -340,8 +353,8 @@ class ChartDataTableTests(TestCase):
 
         table = self.table("partials/_line_chart.html", chart)
 
-        self.assertIn('<td class="num-col">52.2</td>', table)
-        self.assertIn('<td class="num-col">1,250</td>', table)
+        self.assertIn("52.2", table)
+        self.assertIn("1,250", table)
         self.assertNotIn("52.25", table)
         self.assertIn("Resting heart rate (bpm)", table)
         for point, row in zip(chart.series[0].points, chart.table_rows, strict=False):
@@ -358,8 +371,8 @@ class ChartDataTableTests(TestCase):
 
         table = self.table("partials/_stacked_bar_chart.html", chart)
 
-        self.assertIn("<td>30</td>", table)
-        self.assertIn("<td>45.5</td>", table)
+        self.assertIn("30", table)
+        self.assertIn("45.5", table)
         self.assertNotIn("30.0", table)
         self.assertIn("Run (minutes)", table)
 
@@ -373,9 +386,9 @@ class ChartDataTableTests(TestCase):
 
         table = self.table("partials/_line_chart.html", chart)
 
-        self.assertIn('<td class="num-col">$12,346</td>', table)
-        self.assertIn('<td class="num-col">\u2212$980</td>', table)
-        self.assertIn('<th class="num-col">Balance</th>', table)
+        self.assertIn("$12,346", table)
+        self.assertIn("\u2212$980", table)
+        self.assertIn("Balance", table)
         self.assertIn("Balance: $12,346", chart.series[0].points[0].tooltip)
 
     def test_a_unit_the_series_already_names_is_said_once(self):
@@ -426,19 +439,19 @@ class CadenceTests(TestCase):
     def test_the_strip_draws_no_data_apart_from_a_miss(self):
         rendered = render_to_string("partials/_cadence.html", {"cadence": Cadence("", "", self.WEEKS)})
 
-        self.assertEqual(rendered.count("cadence-mark is-no-data"), 2)
-        self.assertEqual(rendered.count("cadence-mark is-hit"), 2)
-        self.assertEqual(rendered.count('<span class="visually-hidden">No data</span>'), 2)
-        self.assertIn('<span class="cadence-count">2/3</span>', rendered)
+        self.assertEqual(len(with_class(rendered, "is-no-data")), 2)
+        self.assertEqual(len(with_class(rendered, "is-hit")), 2)
+        self.assertEqual(text(rendered).count("No data"), 2)
+        self.assertIn("2/3", text(rendered))
 
     def test_the_matrix_draws_no_data_apart_from_a_miss(self):
         matrix = CadenceMatrix(tuple(week.label for week in self.WEEKS), (CadenceRow("Chest", self.WEEKS),))
 
         rendered = render_to_string("partials/_cadence_matrix.html", {"matrix": matrix})
 
-        self.assertEqual(rendered.count("cadence-mark is-no-data"), 2)
-        self.assertEqual(rendered.count('<span class="visually-hidden">No data</span>'), 2)
-        self.assertIn('<td class="cadence-total">2/3</td>', rendered)
+        self.assertEqual(len(with_class(rendered, "is-no-data")), 2)
+        self.assertEqual(text(rendered).count("No data"), 2)
+        self.assertIn("2/3", [cell.words for cell in elements(rendered, "td")])
 
     def test_the_owners_own_words_for_a_period_are_kept(self):
         week = CadenceWeek("Sep 22", False, detail="No data for the week of Sep 22", no_data=True)
@@ -470,7 +483,7 @@ class SharedPartialLabelTests(TestCase):
 
         rendered = render_to_string("partials/_week_plan.html", {"plan": plan})
 
-        self.assertIn('<a class="subtle-link" href="/example/plan/">Change plan</a>', rendered)
+        self.assertIn(("Change plan", "/example/plan/"), links(rendered))
         self.assertNotIn("&rarr;", rendered)
         self.assertNotIn("\u2192", rendered)
 
@@ -485,8 +498,8 @@ class SharedPartialLabelTests(TestCase):
 
         rendered = render_to_string("partials/_activity_calendar.html", {"calendar": calendar})
 
-        self.assertIn('<a class="calendar-now" href="/example/calendar/">Today</a>', rendered)
-        self.assertNotIn(">Now<", rendered)
+        self.assertIn(("Today", "/example/calendar/"), links(rendered))
+        self.assertNotIn("Now", dict(links(rendered)))
 
 
 class ChartAxisSpanTests(TestCase):

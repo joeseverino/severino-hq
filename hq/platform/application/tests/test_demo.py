@@ -10,6 +10,7 @@ from django.urls import reverse
 from hq.platform.core.models import AuditLog
 
 from ..demo import amount, day, demo_scope, label, showing_demo
+from .markup import with_class
 
 
 class SubstitutionTests(TestCase):
@@ -160,13 +161,13 @@ class ToggleTests(TestCase):
         element is the fact and the rendering is not.
         """
 
-        self.assertNotContains(self.client.get(reverse("dashboard")), 'class="demo-flag"')
+        self.assertEqual(with_class(self.client.get(reverse("dashboard")), "demo-flag"), [])
 
         self.client.post(reverse("demo_mode"))
 
         page = self.client.get(reverse("dashboard"))
-        self.assertContains(page, 'class="demo-flag"')
-        self.assertContains(page, "Demo")
+        (flag,) = with_class(page, "demo-flag")
+        self.assertIn("Demo", flag.words)
 
     def test_the_switch_carries_the_state_rather_than_the_label(self):
         """A menu entry that renames itself makes you read the button to work

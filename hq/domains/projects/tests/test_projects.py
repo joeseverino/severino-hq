@@ -13,6 +13,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.plugin_testing import ComposedPluginTestCase, sibling
 from hq.platform.application.plugins import NavigationItem
 from hq.platform.application.projects import hq_sections, refresh_summary
+from hq.platform.application.tests.markup import elements, links, select, text
 
 
 def _document(doc_id, title, doc_type="runbook", status="active"):
@@ -39,14 +40,13 @@ class ProjectPageTests(TestCase):
 
         response = self.page()
 
-        self.assertContains(response, '<h3>Runbooks <span class="heading-aside">1</span></h3>', html=True)
-        self.assertContains(response, '<h3>Open tasks <span class="heading-aside">1</span></h3>', html=True)
+        headings = [" ".join(heading.text.split()) for heading in elements(response, "h3")]
+        self.assertIn("Runbooks 1", headings)
+        self.assertIn("Open tasks 1", headings)
         # Closed tasks wait behind their count.
-        self.assertContains(
-            response,
-            '<details class="section-fold"><summary><h3>Done tasks <span class="heading-aside">2</span></h3></summary>',
-        )
-        self.assertContains(response, 'title="rb-example-deploy">Deploy the example tool</a>')
+        self.assertIn("Done tasks 2", [" ".join(fold.text.split()) for fold in elements(response, "summary")])
+        (link,) = select(response, "title", "rb-example-deploy")
+        self.assertEqual(link.text.strip(), "Deploy the example tool")
         # The id is on hover, never the words of the link.
         self.assertNotContains(response, "rb-example-deploy ·")
         self.assertNotContains(response, ">task-example-open")
@@ -61,10 +61,8 @@ class ProjectPageTests(TestCase):
 
         response = self.page()
 
-        self.assertContains(response, "<h3>Related projects</h3>")
-        self.assertContains(
-            response, f'<a href="{self.other.get_absolute_url()}" data-entity="Project">Example Site</a>'
-        )
+        self.assertIn("Related projects", [heading.text for heading in elements(response, "h3")])
+        self.assertIn(("Example Site", self.other.get_absolute_url()), links(response))
         self.assertNotContains(response, "Example Site notes")
         self.assertNotContains(response, 'title="project-example-tool"')
         # A note for a project HQ does not hold stays a document.
@@ -83,12 +81,10 @@ class ProjectPageTests(TestCase):
 
         response = self.page()
 
-        self.assertContains(response, "<h3>Writeups and pages</h3>")
+        self.assertIn("Writeups and pages", [heading.text for heading in elements(response, "h3")])
         self.assertNotContains(response, "Content items")
         self.assertContains(response, f'href="{item.get_absolute_url()}"')
-        self.assertContains(
-            response, f'<a href="{expense.get_absolute_url()}" data-entity="Expense">Example Host · Hosting</a>'
-        )
+        self.assertIn(("Example Host · Hosting", expense.get_absolute_url()), links(response))
 
     def test_a_project_with_nothing_linked_says_so_plainly(self):
         self.assertContains(self.page(), "Nothing is linked to this project yet.")
@@ -100,7 +96,7 @@ class ProjectPageTests(TestCase):
         response = self.page()
 
         self.assertContains(response, 'href="https://github.com/example/tool"')
-        self.assertContains(response, "github.com/example/tool</a>")
+        self.assertIn(("github.com/example/tool", "https://github.com/example/tool"), links(response))
         self.assertContains(response, "Edited ")
 
 
@@ -130,7 +126,7 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
         self.assertEqual(hq_sections(built), (("Alpha", reverse("projects:list")),))
         self.assertEqual(hq_sections(other), ())
         response = self.client.get(reverse("projects:detail", args=[built.slug]))
-        self.assertContains(response, f'<a href="{reverse("projects:list")}">Alpha in HQ</a>')
+        self.assertIn(("Alpha in HQ", reverse("projects:list")), links(response))
 
     def test_an_extension_names_the_project_it_is_built_from(self):
         from hq_sdk.pages import built_from
@@ -159,10 +155,11 @@ class ProjectListTests(TestCase):
 
         response = self.client.get(reverse("projects:list"))
 
-        self.assertNotContains(response, '<span class="muted">example</span>')
-        self.assertContains(response, '<span class="muted">tool</span>')
+        page = text(response)
+        self.assertIn("Example Tool tool", page)
+        self.assertNotIn("Example example", page)
         # The first three technologies, the rest behind the row's toggle.
-        self.assertContains(response, '<span class="muted row-less">+2</span>')
+        self.assertIn("Go SQLite Django +2", page)
         self.assertContains(response, "Edited ")
 
     def test_filters_and_sorts_say_what_they_do(self):

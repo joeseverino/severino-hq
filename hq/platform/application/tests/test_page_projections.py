@@ -23,6 +23,7 @@ from ..resources import (
 )
 from ..security import AuthorizationError, Capability, Principal, cli_principal
 from ..tailnet_context import TailnetContext
+from .markup import select
 
 NOW = timezone.now()
 
@@ -237,7 +238,7 @@ class ConnectionProjectionTests(TestCase):
         self.assertContains(response, "Would also see Tailnet user with users:read")
         self.assertContains(response, "Reached over the internet")
         self.assertContains(response, "Read all now")
-        self.assertContains(response, 'formaction="/infrastructure/connections/read/?connection_ref=example-host"')
+        self.assertTrue(select(response, "formaction", "/infrastructure/connections/read/?connection_ref=example-host"))
 
     def test_a_read_asked_for_shows_on_its_row(self):
         self.client.post(reverse("control_plane:read_now"), {"connection_ref": "example-tailnet"})

@@ -6,6 +6,7 @@ from django.test import Client, RequestFactory, SimpleTestCase, TestCase, overri
 from django.urls import path
 
 from hq.config.urls import urlpatterns as site_urls
+from hq.platform.application.tests.markup import text, texts, with_class
 from hq.platform.core.error_views import server_error
 
 
@@ -21,10 +22,10 @@ class ServerErrorTests(SimpleTestCase):
         response = server_error(RequestFactory().get("/calendar/"))
         body = response.content.decode()
         self.assertEqual(response.status_code, 500)
-        self.assertIn("Something broke · Severino HQ</title>", body)
-        self.assertIn('class="brand"', body)
-        self.assertIn("Trying again is safe.", body)
-        self.assertNotIn("request id", body)
+        self.assertEqual(texts(body, "title"), ["Something broke · Severino HQ"])
+        self.assertTrue(with_class(body, "brand"))
+        self.assertIn("Trying again is safe.", text(body))
+        self.assertNotIn("request id", text(body))
 
     def test_a_500_gives_the_request_id_the_log_carries(self):
         request = RequestFactory().get("/calendar/")
@@ -32,7 +33,8 @@ class ServerErrorTests(SimpleTestCase):
 
         body = server_error(request).content.decode()
 
-        self.assertIn("under request id <code>0123abcd</code>", body)
+        self.assertIn("under request id 0123abcd", text(body))
+        self.assertIn("0123abcd", texts(body, "code"))
 
 
 @override_settings(ROOT_URLCONF=__name__)
@@ -46,9 +48,9 @@ class RefusalTests(TestCase):
         response = self.client.get("/example/refused/")
 
         self.assertEqual(response.status_code, 403)
-        self.assertContains(response, "Not allowed · Severino HQ</title>", status_code=403)
-        self.assertContains(response, "You can't open this", status_code=403)
-        self.assertContains(response, 'class="brand"', status_code=403)
+        self.assertEqual(texts(response, "title"), ["Not allowed · Severino HQ"])
+        self.assertIn("You can't open this", text(response))
+        self.assertTrue(with_class(response, "brand"))
         self.assertNotContains(response, "manage_example", status_code=403)
 
     def test_a_stale_form_is_answered_on_the_same_page_and_says_so(self):

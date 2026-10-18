@@ -23,6 +23,7 @@ from ..github_posture import (
 )
 from ..item_help import COMMAND, item_help
 from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
+from .markup import hrefs
 from .test_github_estate import store
 
 # What a well-kept repository reads as: only its owner, one read-only key in
@@ -173,7 +174,7 @@ class PostureViewTests(TestCase):
 
         response = self.client.get(reverse("posture"))
 
-        self.assertContains(response, f'href="{project.get_absolute_url()}"')
+        self.assertIn(project.get_absolute_url(), hrefs(response))
         self.assertEqual(response.context["unmet"], [])
 
     def test_nothing_read_says_so(self):

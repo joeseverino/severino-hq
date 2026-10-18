@@ -47,6 +47,7 @@ from ..zones import (
     find_zone,
     zone_catalog,
 )
+from .markup import texts
 
 # Every DNS connection these tests name, each managing.
 DNS_CONNECTIONS = tuple(("cloudflare_dns", ref) for ref in ("cf-example", "cf", "a-dns", "a-dns-account"))
@@ -1136,7 +1137,7 @@ class ResourcePageAfterWalkthroughTests(TestCase):
 
         response = self.client.get(reverse("control_plane:remove", kwargs={"key": "a-cname"}))
 
-        self.assertNotContains(response, "<code>None</code>")
+        self.assertNotIn("None", texts(response, "code"))
 
     def test_every_provider_says_what_removing_it_costs(self):
         """Only DNS record types declared this, so deleting a proxy host

@@ -8,6 +8,7 @@ from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AuditLog
 
 from ..models import HEARTBEAT_GRACE, Job
@@ -380,19 +381,19 @@ class JobNameTests(TestCase):
 
         Job.objects.create(kind="sessions.clear", label="sessions.clear", state=Job.State.SUCCEEDED, actor="timer")
 
-        page = self.client.get(reverse("jobs:list")).content.decode()
+        page = text(self.client.get(reverse("jobs:list")))
 
-        self.assertIn(f'{named("sessions.clear").label} <code class="row-more">sessions.clear</code>', page)
+        self.assertIn(f"{named('sessions.clear').label} sessions.clear", page)
 
     def test_work_no_longer_declared_keeps_the_name_its_run_stored(self):
         Job.objects.create(kind="example.gone", label="Example work", state=Job.State.SUCCEEDED, actor="timer")
 
-        self.assertContains(self.client.get(reverse("jobs:list")), "Example work <code")
+        self.assertIn("Example work example.gone", text(self.client.get(reverse("jobs:list"))))
 
     def test_jobs_and_the_audit_log_link_to_each_other(self):
-        jobs = self.client.get(reverse("jobs:list")).content.decode()
-        audit = self.client.get(reverse("core:audit_list")).content.decode()
+        jobs = self.client.get(reverse("jobs:list"))
+        audit = self.client.get(reverse("core:audit_list"))
 
         # In the page's own head, not only the navigation.
-        self.assertRegex(jobs, rf'class="btn[^"]*" href="{reverse("core:audit_list")}"')
-        self.assertRegex(audit, rf'class="btn[^"]*" href="{reverse("jobs:list")}"')
+        self.assertIn(reverse("core:audit_list"), [action.url for action in jobs.context["page"].actions])
+        self.assertIn(reverse("jobs:list"), [action.url for action in audit.context["page"].actions])

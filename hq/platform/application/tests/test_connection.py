@@ -6,7 +6,6 @@ security surface is worse than nothing: it is read as a measurement. So most of
 what follows takes a fact away and asserts the page notices.
 """
 
-import re
 from datetime import UTC, datetime
 from unittest import mock
 
@@ -28,6 +27,7 @@ from ..request_headers import headers_of
 from ..request_path import address_chain
 from ..ui import MISSING
 from .host_only import host_only
+from .markup import select, texts
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -553,8 +553,8 @@ class ConnectionPageTests(TestCase):
         self.assertContains(response, "data-connection-layers")
         self.assertContains(response, "data-response-headers")
         # Folded until opened, which is when the response is read back.
-        (protocol,) = re.findall(r"<details[^>]*data-connection-protocol[^>]*>", response.content.decode())
-        self.assertNotIn(" open", protocol)
+        (protocol,) = select(response, "data-connection-protocol")
+        self.assertNotIn("open", protocol.attrs)
 
     def test_identity_dates_use_hqs_normal_date_format(self):
         self.client.force_login(self.user)
@@ -563,7 +563,7 @@ class ConnectionPageTests(TestCase):
 
         response = self.client.get(reverse("connection"))
 
-        self.assertContains(response, f">{when(self.user.last_login)}</time>")
+        self.assertIn(when(self.user.last_login), texts(response, "time"))
 
     def test_the_request_timeline_includes_the_observed_npm_edge(self):
         ProviderInventory.objects.create(

@@ -22,6 +22,7 @@ from ..freshness import (
 )
 from ..report_testing import report_connections
 from ..security import cli_principal
+from .markup import elements, links, select, text
 
 # A kind the controller sweeps, read through a provider's API.
 SWEPT = "adguard.rewrite"
@@ -129,9 +130,9 @@ class OldestReadingTests(TestCase):
     def test_the_oldest_reading_is_named_and_linked(self):
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, 'Oldest reading <a href="#')
-        self.assertContains(response, ">example-old</a> · ")
-        self.assertContains(response, 'data-reading-age="read"')
+        self.assertIn("Oldest reading example-old", text(response))
+        self.assertTrue(any(name == "example-old" and href.startswith("#") for name, href in links(response)))
+        self.assertTrue(select(response, "data-reading-age", "read"))
 
 
 class OneStaleLineTests(TestCase):
@@ -175,8 +176,8 @@ class ReadingAgeTests(TestCase):
     def test_a_current_reading_gives_its_age(self):
         html = self.render(reading=freshness(SWEPT, timezone.now() - timedelta(minutes=5)))
 
-        self.assertIn(f'data-reading-age="{CURRENT}"', html)
-        self.assertIn("<time", html)
+        self.assertTrue(select(html, "data-reading-age", CURRENT))
+        self.assertTrue(elements(html, "time"))
 
     def test_an_out_of_date_reading_says_so_beside_its_age(self):
         reading = freshness(SWEPT, timezone.now() - stale_after(SWEPT) - timedelta(hours=1))
@@ -189,8 +190,8 @@ class ReadingAgeTests(TestCase):
     def test_no_reading_says_there_is_none(self):
         html = self.render(reading=freshness(SWEPT, None))
 
-        self.assertIn(f'data-reading-age="{NEVER}"', html)
-        self.assertNotIn("<time", html)
+        self.assertTrue(select(html, "data-reading-age", NEVER))
+        self.assertEqual(elements(html, "time"), [])
 
     def test_a_bare_moment_gives_its_age(self):
-        self.assertIn("<time", self.render(at=timezone.now()))
+        self.assertTrue(elements(self.render(at=timezone.now()), "time"))

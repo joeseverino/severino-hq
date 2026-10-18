@@ -15,6 +15,7 @@ from ..infrastructure import NotFoundError, PolicyError
 from ..inventory_testing import store
 from ..policy_fixes import policy_without_empty_groups, request_empty_groups_removal
 from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal
+from .markup import elements, with_class
 from .test_approvals import POLICY_KEY, an_operator, declare_policy
 from .test_tailnet_posture import policy, raised, tailnet_connection
 
@@ -230,8 +231,8 @@ class FindingsPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:findings"))
 
-        self.assertContains(response, 'class="resolution-workflow"')
-        self.assertContains(response, "turn on Device approval")
+        (steps,) = with_class(response, "resolution-workflow")
+        self.assertIn("turn on Device approval", steps.words)
 
 
 class DriftOffersBothWaysTests(TestCase):
@@ -308,7 +309,9 @@ class KeepTheLiveVersionPageTests(TestCase):
             {"target": POLICY_KEY},
         )
 
-        self.assertContains(response, f'<option value="{POLICY_KEY}" selected>')
+        self.assertIn(
+            POLICY_KEY, [option.attrs["value"] for option in elements(response, "option") if "selected" in option.attrs]
+        )
         self.assertContains(response, "Keep the live version")
         # It takes a key and a reason, no record: nothing it could blank.
         self.assertNotContains(response, "This replaces the whole record")

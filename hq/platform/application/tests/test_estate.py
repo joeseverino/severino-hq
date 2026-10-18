@@ -32,6 +32,7 @@ from ..public_registry import wanted_addresses
 from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
 from .host_only import host_only
+from .markup import elements, hrefs
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
 # 203.0.113.0/24 stands in for a public range here.
@@ -295,7 +296,7 @@ class EstateCardTests(TestCase):
         response = self.client.get(reverse("dashboard"))
 
         for url in (reverse("control_plane:machines"), reverse("control_plane:services"), reverse("zones:index")):
-            self.assertContains(response, f'href="{url}"')
+            self.assertIn(url, hrefs(response))
 
     def test_a_refused_credential_is_said_as_refused(self):
         from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
@@ -405,7 +406,7 @@ class StaleGlanceTests(TestCase):
         self.assertTrue(old["outdated"])
         self.assertFalse(panels[0]["outdated"])
         html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
-        self.assertIn("<time", html)
+        self.assertTrue(elements(html, "time"))
 
     def test_a_current_reading_is_not_outdated(self):
         from ..freshness import DASHBOARD_GLANCE, stale_after

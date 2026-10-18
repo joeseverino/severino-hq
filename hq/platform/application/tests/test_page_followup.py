@@ -19,6 +19,7 @@ from ..security import Capability, Principal
 from ..topology_model import RELATIONS
 from ..zone_insights import services as services_card
 from ..zones import find_zone
+from .markup import elements, hrefs, select, text, texts
 from .test_hq_self import SITE, declare, own
 
 READER = Principal("test", "reader", frozenset({Capability.READ}))
@@ -74,8 +75,9 @@ class PublicEndpointTests(TestCase):
         with mock.patch("hq.platform.application.reach.DOCUMENTATION", (ip_network("192.0.2.0/24"),)):
             response = self.client.get(reverse("control_plane:machine", args=["example-laptop"]))
 
-        self.assertContains(response, "<code>2001:db8:0:1::/64</code>", count=1)
-        self.assertContains(response, "<code>203.0.113.7</code>")
+        shown = texts(response, "code")
+        self.assertEqual(shown.count("2001:db8:0:1::/64"), 1)
+        self.assertIn("203.0.113.7", shown)
         self.assertNotContains(response, "2001:db8:0:1::a1")
 
 
@@ -106,14 +108,14 @@ class SelfLinkTests(TestCase):
 
         html = self.render(link.url, link)
 
-        self.assertNotIn("<a ", html)
-        self.assertIn("example-host", html)
+        self.assertEqual(elements(html, "a"), [])
+        self.assertIn("example-host", text(html))
 
     def test_a_link_elsewhere_or_to_a_fragment_stays_a_link(self):
         link = entity_link("machine", "example-host")
-        self.assertIn("<a ", self.render("/elsewhere/", link))
+        self.assertEqual(hrefs(self.render("/elsewhere/", link)), [link.url])
         connection = entity_link("connection", "example-ssh")
-        self.assertIn("<a ", self.render(reverse("control_plane:connections"), connection))
+        self.assertEqual(hrefs(self.render(reverse("control_plane:connections"), connection)), [connection.url])
 
     def test_the_machine_page_does_not_link_to_itself_or_repeat_its_declaration(self):
         store("tailscale.device", {"name": "example-host", "online": True, "addresses": ["100.64.0.5"]})
@@ -125,7 +127,7 @@ class SelfLinkTests(TestCase):
 
         response = self.client.get(url)
 
-        self.assertNotContains(response, f'<a href="{url}" data-entity')
+        self.assertNotIn(url, [named.attrs.get("href") for named in select(response, "data-entity")])
         self.assertContains(response, "example-host-device")
         relationships = response.context["relationships"]
         self.assertNotIn(RELATIONS["on_tailnet"].phrase, relationships.phrases())

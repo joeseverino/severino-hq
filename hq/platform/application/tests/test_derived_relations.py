@@ -18,6 +18,7 @@ from ..resource_context import RecordStatus, record_list
 from ..security import cli_principal
 from ..services import certificate_use
 from .host_only import host_only
+from .markup import hrefs, with_class
 from .test_relationships import connected, estate
 
 
@@ -90,8 +91,8 @@ class ConnectionRowsTests(TestCase):
             {item["subject"]["url"] for group in queue.context["action_groups"] for item in group["items"]},
             {about},
         )
-        self.assertContains(page, f'href="{row.problems_url.replace("&", "&amp;")}"')
-        self.assertContains(page, 'class="row-group"')
+        self.assertIn(row.problems_url, hrefs(page))
+        self.assertTrue(with_class(page, "row-group"))
 
 
 def _row(key, kind, label, tone="healthy", **extra):
@@ -143,6 +144,6 @@ class RecordListTests(TestCase):
         page = self.client.get(reverse("control_plane:list"))
         one = self.client.get(reverse("control_plane:list"), {"q": "s0.example.com"})
 
-        self.assertContains(page, 'class="row-group"')
+        self.assertTrue(with_class(page, "row-group"))
         self.assertGreater(page.context["records"].total, one.context["records"].shown)
         self.assertEqual(one.context["records"].shown, 1)

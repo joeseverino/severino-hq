@@ -7,7 +7,6 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import escape
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
@@ -41,6 +40,7 @@ from ..topology_model import (
     TopologyNode,
 )
 from .host_only import host_only
+from .markup import hrefs, select, texts, within
 from .sentinel import RESOURCE as SENTINEL_RESOURCE, SentinelMixin, plant_credentials
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
@@ -350,7 +350,7 @@ class TopologyPageTests(TestCase):
         self.assertContains(response, "data-topology")
         # Without script, a node's details are one link away: focusing it
         # draws them.
-        self.assertContains(response, f'href="{TopologyView._focus_link("resource:internal-name")}"')
+        self.assertIn(TopologyView._focus_link("resource:internal-name"), hrefs(response))
         self.assertNotContains(response, "<script>")
 
         focused = self.page(focus="resource:internal-name")
@@ -366,21 +366,22 @@ class TopologyPageTests(TestCase):
         response = self.page()
 
         reconcile = reverse("control_plane:reconcile", kwargs={"key": "internal-name"})
-        self.assertNotContains(response, f'formaction="{reconcile}"')
+        self.assertFalse(select(response, "formaction", reconcile))
         body_url = next(
             item["body_url"]
             for group in response.context["topology_groups"]
             for item in group["items"]
             if item["node"].id == "resource:internal-name"
         )
-        self.assertContains(response, f'data-topology-body="{escape(body_url)}"')
+        self.assertTrue(select(response, "data-topology-body", body_url))
 
         body = self.body("resource:internal-name")
         self.assertEqual(body.status_code, 200)
         # The body's post action names the page's one post form, which carries
         # the CSRF token, so a fetched body posts exactly like a drawn one.
-        self.assertContains(body, f'form="hq-post" formaction="{reconcile}"')
-        self.assertContains(response, 'id="hq-post"')
+        (button,) = select(body, "formaction", reconcile)
+        self.assertEqual(button.attrs["form"], "hq-post")
+        self.assertTrue(select(response, "id", "hq-post"))
         self.assertContains(response, "csrfmiddlewaretoken")
 
     def test_only_a_node_the_projection_holds_is_opened_or_focused(self):
@@ -422,7 +423,7 @@ class TopologyPageTests(TestCase):
         response = self.page()
 
         detail = reverse("control_plane:detail", kwargs={"key": "internal-name"})
-        self.assertContains(response, f'href="{detail}"')
+        self.assertIn(detail, hrefs(response))
         # A multi-line {# … #} is not a comment in Django, it is text. One
         # holding the word <strong> renders an element, and the explorer reads
         # the first <strong> in a node as its title, so the leak is silent
@@ -452,8 +453,8 @@ class TopologyPageTests(TestCase):
 
         # The same edge renders at both ends, and each row walks to the other.
         resource, ability = self.body("resource:internal-name"), self.body(ability_id)
-        self.assertContains(resource, f'href="{TopologyView._focus_link(ability_id)}"')
-        self.assertContains(ability, f'href="{TopologyView._focus_link("resource:internal-name")}"')
+        self.assertIn(TopologyView._focus_link(ability_id), hrefs(resource))
+        self.assertIn(TopologyView._focus_link("resource:internal-name"), hrefs(ability))
         # The kind by its label, never its identifier.
         self.assertContains(ability, "Internal DNS record")
         self.assertNotContains(ability, ">adguard.rewrite<")
@@ -491,7 +492,7 @@ class TopologyPageTests(TestCase):
         # A comparison, not two raw revision numbers.
         self.assertNotContains(response, "evision")
         # The field the reading declined to echo back.
-        self.assertContains(response, "<code>answer</code>")
+        self.assertIn("answer", texts(response, "code"))
         # Age, not an ISO timestamp.
         self.assertContains(response, "3\xa0hours ago")
         # A kind a sweep reads is not observed yet; one no sweep reads never is.
@@ -513,7 +514,7 @@ class TopologyPageTests(TestCase):
         self.assertEqual(len(cards(everything)), len(cards(shown)) + left_out)
         # "N of M shown" is out of every card, the ones left out included.
         self.assertEqual(shown.context["topology_total"], len(cards(everything)))
-        self.assertContains(shown, f'data-topology-total="{len(cards(everything))}"')
+        self.assertTrue(select(shown, "data-topology-total", str(len(cards(everything)))))
 
     def test_a_view_shows_everything_it_holds(self):
         from ..topology_lenses import topology_lenses
@@ -550,11 +551,11 @@ class FocusedPageTests(TestCase):
         response = self.page("zone:example.com")
         body = response.content.decode()
 
-        self.assertEqual(body.count('data-topology-body-of="zone:example.com"'), 1)
-        panel = body[body.index('id="topology-detail"') :]
-        self.assertIn('data-topology-body-of="zone:example.com"', panel)
+        self.assertEqual(len(select(response, "data-topology-body-of", "zone:example.com")), 1)
+        panel = within(response, "id", "topology-detail")
+        self.assertTrue(any(element.attrs.get("data-topology-body-of") == "zone:example.com" for element in panel))
         # Each value says when it was read, and no list of links is comma-joined.
-        self.assertIn("<time datetime=", panel)
+        self.assertTrue(any(element.tag == "time" and element.attrs.get("datetime") for element in panel))
         self.assertNotRegex(body, r"</a>,\s*<a")
         detail = response.context["topology_detail"]
         for direction in ("in", "out"):
@@ -563,7 +564,7 @@ class FocusedPageTests(TestCase):
 
     def test_the_trace_ledger_is_drawn_only_with_relationships_in_it(self):
         related = self.page("zone:example.com")
-        self.assertContains(related, "data-topology-edge=")
+        self.assertTrue(select(related, "data-topology-edge"))
 
         with host_only():
             unfocused = self.client.get(reverse("control_plane:topology"), {"all": 1})
@@ -575,8 +576,8 @@ class FocusedPageTests(TestCase):
         )
         alone = self.page(lonely)
         self.assertEqual(alone.context["focus_node"], lonely)
-        self.assertNotContains(alone, "data-topology-edge=")
-        self.assertNotContains(alone, 'id="topology-relations"')
+        self.assertFalse(select(alone, "data-topology-edge"))
+        self.assertFalse(select(alone, "id", "topology-relations"))
 
     def test_a_domain_is_observed_when_its_zone_reading_is(self):
         from hq.domains.control_plane.models import ProviderInventory
@@ -604,7 +605,7 @@ class FocusedPageTests(TestCase):
         )
 
         noun = "link" if degree == 1 else "links"
-        self.assertContains(response, f'aria-label="Details for example.com, {degree} {noun}"')
+        self.assertTrue(select(response, "aria-label", f"Details for example.com, {degree} {noun}"))
 
     def project(self):
         with host_only():

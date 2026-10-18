@@ -27,6 +27,7 @@ from ..derivations import counting
 from ..provider_choices import container_stack, zone
 from ..report_testing import report_connections
 from ..security import cli_principal
+from .markup import hrefs
 from .sentinel import CONNECTION, SentinelMixin, plant_credentials
 
 A_PORTAINER = {
@@ -271,7 +272,7 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"):
             response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, 'href="https://github.com/example/hq/blob/main/docs/Secrets.md#connections"')
+        self.assertIn("https://github.com/example/hq/blob/main/docs/Secrets.md#connections", hrefs(response))
 
     def test_with_no_source_named_there_is_no_guide_to_link(self):
         with override_settings(SEVERINO_HQ_SOURCE=""):

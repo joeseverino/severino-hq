@@ -16,6 +16,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest, P
 
 from ..controller_page import controller_page
 from .commands import commands_on
+from .markup import select, texts
 
 DIRECTORY = Path(tempfile.mkdtemp())
 MARKERS = override_settings(
@@ -124,8 +125,9 @@ class ControllerPageTests(TestCase):
 
         self.assertContains(response, "Not heard from for")
         self.assertContains(response, "Nothing has been read or changed since.")
-        self.assertContains(response, 'title="adguard.rewrite">Internal DNS record')
-        self.assertNotContains(response, "<code>adguard.rewrite</code>")
+        (named,) = select(response, "title", "adguard.rewrite")
+        self.assertEqual(named.words, "Internal DNS record")
+        self.assertNotIn("adguard.rewrite", texts(response, "code"))
         # A reading 26 hours old against a five-minute cadence is not "due": it is late, and says which.
         self.assertContains(response, "Overdue")
         self.assertContains(response, "Internal DNS record · ")

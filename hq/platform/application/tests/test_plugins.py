@@ -32,6 +32,7 @@ from ..plugins import (
     plugin_token_authenticated_prefixes,
 )
 from ..ui import Insight, Kpi, PageNavigation, PageSection
+from .markup import hrefs, text, with_class
 
 # What the coupling scan walks past. Generated trees, virtualenvs and vendored
 # assets are not host source, and the runtime image has neither `.git` nor git
@@ -444,9 +445,9 @@ class PluginContractTests(TestCase):
         )
 
         self.assertIn("Shared host interface", page_head)
-        self.assertIn('class="kpi is-zero"', kpis)
-        self.assertIn("No notes have been created", empty)
-        self.assertIn('href="#notes"', page_navigation)
+        self.assertTrue(with_class(kpis, "is-zero"))
+        self.assertIn("No notes have been created", text(empty))
+        self.assertIn("#notes", hrefs(page_navigation))
 
     def test_production_plugin_without_admission_lock_fails_closed(self):
         clear_plugin_composition_cache()

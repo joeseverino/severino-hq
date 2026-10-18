@@ -81,7 +81,8 @@ class ServiceFavoriteTests(TestCase):
         self.assertEqual(ordered(AnonymousUser(), SERVICE), ())
 
     def test_membership_is_derived_from_the_ordered_read(self):
-        from hq.platform.application.pins import SERVICE, pinned
+        from hq.platform.application.pins import SERVICE, ordered, pinned
+        from hq.platform.application.projection import projection_scope
         from hq.platform.core.models import Pin
 
         Pin.objects.create(
@@ -91,7 +92,9 @@ class ServiceFavoriteTests(TestCase):
             position=0,
         )
 
-        with self.assertNumQueries(1):
-            result = pinned(self.user, SERVICE)
+        with projection_scope():
+            ordered(self.user, SERVICE)
+            with self.assertNumQueries(0):
+                result = pinned(self.user, SERVICE)
 
         self.assertEqual(result, frozenset({"mixed.example.test"}))

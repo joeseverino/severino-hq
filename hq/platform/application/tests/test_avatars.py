@@ -14,6 +14,7 @@ from hq.platform.core.oidc import SIGNED_IN_SESSION_KEY, HQOIDCAuthenticationBac
 
 from .. import avatars
 from ..avatars import MAX_BYTES, SESSION_KEY, fetch_picture, picture_allowed, remember_avatar
+from .markup import Element, within
 
 ISSUER = "https://sso.example.test"
 PICTURE = f"{ISSUER}/api/users/1/profile-picture.png"
@@ -212,31 +213,31 @@ class MenuTests(TestCase):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(self.user)
 
-    def _menu(self) -> str:
-        body = self.client.get(reverse("connection")).content.decode()
-        start = body.index('class="user-menu"')
-        return body[start : body.index("</details>", start)]
+    def _menu(self) -> list[Element]:
+        return within(self.client.get(reverse("connection")), "class", "user-menu")
 
     def test_no_picture_draws_the_mark_and_a_plain_account_has_no_role(self):
         menu = self._menu()
 
-        self.assertIn('class="user-icon"', menu)
-        self.assertNotIn("<img", menu)
-        self.assertNotIn("role-mark", menu)
+        drawn = set().union(*(element.classes for element in menu))
+        self.assertIn("user-icon", drawn)
+        self.assertNotIn("role-mark", drawn)
+        self.assertNotIn("img", [element.tag for element in menu])
 
     def test_the_sessions_picture_is_drawn_from_hq_itself(self):
         session = self.client.session
         session[SESSION_KEY] = "a" * 64
         session.save()
 
-        self.assertEqual(self._menu().count(f'src="{reverse("avatar", args=["a" * 64])}"'), 2)
+        sources = [element.attrs.get("src") for element in self._menu()]
+        self.assertEqual(sources.count(reverse("avatar", args=["a" * 64])), 2)
 
     def test_a_superuser_is_marked_and_led_nowhere_else(self):
         get_user_model().objects.filter(pk=self.user.pk).update(is_staff=True, is_superuser=True)
         menu = self._menu()
 
-        self.assertIn('<span class="role-mark">Admin</span>', menu)
-        self.assertNotIn("/admin/", menu)
+        self.assertEqual([element.words for element in menu if "role-mark" in element.classes], ["Admin"])
+        self.assertFalse(any(element.attrs.get("href", "").startswith("/admin/") for element in menu))
 
     def test_the_sign_in_is_aged_in_hours_or_days_never_minutes(self):
         for age, said in (
@@ -250,6 +251,6 @@ class MenuTests(TestCase):
                 session[SIGNED_IN_SESSION_KEY] = (timezone.now() - age).isoformat()
                 session.save()
 
-                menu = self._menu()
+                menu = " ".join(element.words for element in self._menu())
                 self.assertIn(said, menu)
                 self.assertNotIn("minute", menu)

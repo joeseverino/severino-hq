@@ -23,6 +23,7 @@ from ..resource_context import record_status
 from ..security import cli_principal
 from ..sweep import record_sweep
 from .host_only import host_only
+from .markup import select, text, with_class
 
 REWRITE = "adguard.rewrite"
 
@@ -72,13 +73,14 @@ class ProblemsAboutTests(TestCase):
             page = self.client.get(self.url)
             queue = self.client.get(reverse("action_items"))
 
-        self.assertContains(page, 'class="card problems-here tone-serious" id="problems-here"')
-        self.assertContains(page, "1 urgent problem")
-        self.assertContains(page, "The service refused the change.")
-        # One card: the page draws the queue's own markup, with no second link to itself.
-        self.assertContains(page, 'class="attention-row"', count=1)
-        self.assertContains(queue, 'class="attention-row"')
-        self.assertNotContains(page, f'class="attention-title" href="{self.url}"')
+        (here,) = select(page, "id", "problems-here")
+        self.assertIn("tone-serious", here.classes)
+        self.assertIn("1 urgent problem", text(page))
+        self.assertIn("The service refused the change.", text(page))
+        # One card: the page draws the queue's own card, with no second link to itself.
+        self.assertEqual(len(select(page, "data-attention-item")), 1)
+        self.assertTrue(select(queue, "data-attention-item"))
+        self.assertNotIn(self.url, [title.attrs.get("href") for title in with_class(page, "attention-title")])
 
     def test_a_page_with_nothing_open_draws_nothing(self):
         self.resource.conditions = [{"type": "Ready", "status": True}]
@@ -106,7 +108,7 @@ class ProblemsAboutTests(TestCase):
         with host_only():
             page = self.client.get(reverse("action_items"), {"about": self.url})
 
-        self.assertContains(page, 'class="attention-row"', count=1)
+        self.assertEqual(len(select(page, "data-attention-item")), 1)
 
 
 class FirstSeenTests(TestCase):
@@ -150,8 +152,9 @@ class FirstSeenTests(TestCase):
             self.assertFalse(note_open_problems())
             first_seen._looked.clear()
             # Another process: the stored look still says none is due.
-            with self.assertNumQueries(1):
+            with mock.patch("hq.platform.application.problems._host_entries") as looked:
                 self.assertFalse(note_open_problems())
+            looked.assert_not_called()
 
     def test_a_problem_found_by_a_report_says_since_when_on_its_card(self):
         with host_only():

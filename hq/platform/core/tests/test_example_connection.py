@@ -4,8 +4,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from hq.platform.application.tests.markup import text, with_class
+
 NOTICE = "This is an example connection, not yours."
-MARK = '<span class="example-connection">example connection</span>'
+MARK = "example-connection"
 
 
 class ExampleConnectionTests(TestCase):
@@ -25,10 +27,10 @@ class ExampleConnectionTests(TestCase):
         # The connection panel, as a page and as the dialog's copy.
         self.assertContains(pages["connection"], NOTICE, count=1)
         # The dashboard's connection reading; the menu's line links to the panel.
-        self.assertContains(pages["dashboard"], MARK, count=1)
+        self.assertEqual([mark.words for mark in with_class(pages["dashboard"], MARK)], ["example connection"])
 
     def test_a_live_answer_carries_no_mark(self):
         for name, response in self.pages().items():
             with self.subTest(page=name):
-                self.assertNotContains(response, NOTICE)
-                self.assertNotContains(response, "example-connection")
+                self.assertNotIn(NOTICE, text(response))
+                self.assertEqual(with_class(response, MARK), [])

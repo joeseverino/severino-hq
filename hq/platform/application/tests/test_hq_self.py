@@ -12,6 +12,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest, P
 from ..hq_self import LABEL, hq_hostnames, hq_service, served_at
 from ..machines import machine
 from .host_only import host_only
+from .markup import all_elements, select, texts, with_class
 
 SITE = override_settings(
     SEVERINO_SITE_HOST="hq.example.com",
@@ -113,13 +114,14 @@ class PageTests(TestCase):
 
         self.assertEqual(service.machine, "example-host")
         # A row of the services table, marked, not a table of its own.
-        self.assertNotContains(response, "<th>Hostname</th><th>Runs on</th><th>State</th>", html=False)
-        self.assertNotContains(response, '<span class="pill">HQ</span>', html=False)
+        headings = texts(response, "th")
+        self.assertNotIn(("Hostname", "Runs on", "State"), set(zip(headings, headings[1:], headings[2:], strict=False)))
+        self.assertNotIn("HQ", [pill.words for pill in with_class(response, "pill")])
         # Its state is HQ's health, never its mode.
-        self.assertContains(
-            response, '<span class="pill pill-good" title="Answering this request.">Up</span>', html=False
-        )
-        self.assertNotContains(response, ">Read-only<")
+        (state,) = select(response, "title", "Answering this request.")
+        self.assertEqual(state.words, "Up")
+        self.assertIn("pill-good", state.classes)
+        self.assertNotIn("Read-only", [element.words for element in all_elements(response)])
         self.assertContains(response, "hq.example.com")
         self.assertContains(response, reverse("control_plane:machine", kwargs={"name": "example-host"}))
         self.assertEqual(list(ManagedResource.objects.values_list("kind", flat=True)), ["machine"])
