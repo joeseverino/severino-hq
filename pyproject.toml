@@ -106,6 +106,15 @@ extend-immutable-calls = ["hq.platform.application.plugins.PluginIntegration"]
 # A function past this many paths is split into named steps.
 max-complexity = 15
 
+[tool.pyright]
+# The editor's language server, for navigation and for an import that is
+# actually broken. Types are mypy's (checks:mypy): a second checker with its
+# own opinions only contradicts the one the gates enforce. Each checkout,
+# worktrees included, resolves against its own environment.
+typeCheckingMode = "off"
+venvPath = "."
+venv = ".venv"
+
 [tool.mypy]
 python_version = "3.15"
 files = ["hq/platform/application/security.py", "hq/platform/application/integration_specs.py", "hq/platform/application/plugins.py", "hq/platform/application/outbound_work.py", "hq/platform/application/capabilities.py", "hq/platform/application/resources.py", "hq/platform/application/sensitivity.py", "hq/platform/application/domains.py", "hq/platform/application/records.py", "hq/domains/control_plane/bridge_actions.py", "hq/domains/control_plane/bridge_application.py", "hq/domains/control_plane/bridge_contract.py", "hq/domains/control_plane/bridge_registry.py", "hq/domains/control_plane/connection_shapes.py", "hq/platform/core/unix_server.py", "hq/domains/control_plane/connection_kinds.py", "hq/domains/control_plane/credential_reads.py", "hq/domains/control_plane/names.py", "hq/domains/control_plane/provider_adapters/cloudflare.py", "hq/domains/control_plane/provider_adapters/declarations.py", "hq/domains/control_plane/provider_adapters/portainer.py", "hq/domains/control_plane/provider_adapters/tailscale.py", "hq/domains/control_plane/provider_adapters/tls.py", "hq/domains/control_plane/provider_spec.py", "hq/domains/control_plane/providers.py", "hq_sdk", "hq/platform/api", "hq/platform/mcp", "tests/sdk_consumer"]
