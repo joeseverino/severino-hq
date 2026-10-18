@@ -208,9 +208,7 @@ export const ContentCreateRequestSchema = z.object({
         status: z.string().optional(),
         tags: z.string().optional(),
         title: z.string(),
-        topic: z.string().optional(),
-        wordpress_post_id: z.union([z.number().int(), z.null()]).optional(),
-        wordpress_slug: z.string().optional()
+        topic: z.string().optional()
     }).optional()
 });
 
@@ -239,9 +237,7 @@ export const ContentUpdateRequestSchema = z.object({
         status: z.string().optional(),
         tags: z.string().optional(),
         title: z.string(),
-        topic: z.string().optional(),
-        wordpress_post_id: z.union([z.number().int(), z.null()]).optional(),
-        wordpress_slug: z.string().optional()
+        topic: z.string().optional()
     }).optional(),
     target: z.string().min(1)
 });

@@ -137,6 +137,48 @@ boundary and catches a missing host pin before composition. In CI it runs
 against host `main`, or the host branch named like the extension's branch when
 one exists ([Coordinated changes](#coordinated-changes)).
 
+### Several extensions in one repository
+
+One repository may hold several extensions, each still its own package (its
+own `pyproject.toml`, `uv.lock` and `src/<package>/`), plugin and signed wheel.
+One repository is one trust domain: its extensions share one signer, that
+repository and its admission workflow, so whoever can sign for one can sign for
+all of them, and the composition set names the same `workflow` for every entry
+of one `repository`, with each entry's `path` (its package directory, `.` when
+omitted).
+
+`plugin-checks.yml` takes the package's `package-dir`, called once per package
+with `secret-scan: false` on all but one call. One run admits them all: the
+admission job is a matrix over the package directories, each leg passing
+`dispatch: "false"`, and a final job that needs every leg starts the
+composition once, so it reads a run in which every package was admitted. That
+job dispatches **Compose** as the action does, with `admission-run` set to
+`$GITHUB_RUN_ID`: the run is still finishing, and Compose takes that
+repository's extensions from it once it has checked that the run is that
+repository's admission workflow on `main` and has not failed.
+
+```yaml
+  admit:
+    # as above, plus:
+    strategy:
+      matrix:
+        package: [packages/example-alpha, packages/example-beta]
+    steps:
+      - uses: joeseverino/severino-hq/.github/actions/admit-plugin@main
+        with:
+          package-dir: ${{ matrix.package }}
+          dispatch: "false"
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
+```
+
+Each leg retains its own artifact, `admission-<plugin id>`. Compose resolves
+each repository's admission run once and reads every listed extension's
+artifact from it by id (`scripts/admissions.sh`); a listed id with no artifact
+in that run fails the composition. A coordinated branch builds each listed
+extension from its `path`, which must declare that id, and nothing else in the
+repository.
+
 ## Cordon admission
 
 Production loading fails closed. With plugins enabled and `DJANGO_DEBUG` off,

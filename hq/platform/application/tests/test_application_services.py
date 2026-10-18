@@ -888,8 +888,6 @@ class ContentApplicationServiceTests(TestCase):
                 "topic": "",
                 "tags": "django, mcp",
                 "published_url": "",
-                "wordpress_post_id": "",
-                "wordpress_slug": "",
                 "published_at": "",
                 "notes": "",
                 "related_projects": [self.project.pk],

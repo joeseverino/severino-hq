@@ -117,8 +117,6 @@ CONTENT_COLUMNS: tuple[Column, ...] = (
     "tags",
     "published_url",
     "published_at",
-    ("wordpress_post_id", lambda c: c.wordpress_post_id or ""),
-    "wordpress_slug",
 )
 PROJECT_COLUMNS: tuple[Column, ...] = (
     "id",
@@ -230,7 +228,6 @@ def year_summary(year: int) -> dict:
             "tags": c.tag_list,
             "published_url": c.published_url,
             "published_at": c.published_at.isoformat() if c.published_at else None,
-            "wordpress_post_id": c.wordpress_post_id,
             "related_projects": [related.slug for related in c.related_projects.all()],
             "related_assets": [related.slug for related in c.related_assets.all()],
             "related_documentation": [related.doc_id for related in c.related_documentation.all()],

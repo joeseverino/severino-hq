@@ -20,8 +20,6 @@ class ContentItemForm(forms.ModelForm):
             "topic",
             "tags",
             "published_url",
-            "wordpress_post_id",
-            "wordpress_slug",
             "published_at",
             "notes",
             "related_projects",

@@ -341,8 +341,6 @@ export type ContentCreateRequest = {
         tags?: string;
         title: string;
         topic?: string;
-        wordpress_post_id?: number | null;
-        wordpress_slug?: string;
     };
 };
 
@@ -393,8 +391,6 @@ export type ContentUpdateRequest = {
         tags?: string;
         title: string;
         topic?: string;
-        wordpress_post_id?: number | null;
-        wordpress_slug?: string;
     };
     /**
      * @minLength 1

@@ -1308,23 +1308,6 @@
                 "default": "",
                 "title": "Topic",
                 "type": "string"
-              },
-              "wordpress_post_id": {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Wordpress Post Id"
-              },
-              "wordpress_slug": {
-                "default": "",
-                "title": "Wordpress Slug",
-                "type": "string"
               }
             },
             "required": [
@@ -1476,23 +1459,6 @@
               "topic": {
                 "default": "",
                 "title": "Topic",
-                "type": "string"
-              },
-              "wordpress_post_id": {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Wordpress Post Id"
-              },
-              "wordpress_slug": {
-                "default": "",
-                "title": "Wordpress Slug",
                 "type": "string"
               }
             },

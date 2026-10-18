@@ -69,6 +69,12 @@ description = "The development server"
 raw = true
 run = "scripts/dev.sh"
 
+[tasks.manage]
+description = "manage.py with the development settings the gates use: mise run manage -- <command>"
+raw = true
+env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_SECRET_KEY = "development-not-a-real-secret", DJANGO_DEBUG = "1", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver" }
+run = "mkdir -p var/db && uv run --locked python manage.py"
+
 [tasks.preflight]
 description = "Ready to release: every gate, the composed suite and the deploy host"
 raw = true

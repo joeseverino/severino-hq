@@ -28,9 +28,15 @@
     },
     {
       "id": "no-admission",
-      "match": "an extension (has no finished admission|'s newest admission) on main",
+      "match": "an extension repository has no successful admission on main",
       "title": "An extension has not been admitted",
-      "fix": "One extension has no successful admission on its main branch. Open its repository's Verify and admit plugin runs and fix or re-run the latest."
+      "fix": "One extension repository has no successful admission on its main branch. Open its repository's Verify and admit plugin runs and fix or re-run the latest."
+    },
+    {
+      "id": "admission-artifact",
+      "match": "has no artifact of its own in its repository's newest successful admission run",
+      "title": "A listed extension was not admitted in its repository's run",
+      "fix": "The composition set lists an extension whose repository's newest successful admission run retained no admission-<id> artifact for it: its package is not among the run's admission legs, or its id differs from the listed one. Which id is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID). Add the package to that repository's admission matrix and re-run it, or correct the composition set."
     },
     {
       "id": "host-unsigned",

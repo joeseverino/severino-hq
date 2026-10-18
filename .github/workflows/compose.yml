@@ -49,6 +49,13 @@ on:
         type: boolean
         required: false
         default: true
+      admission-run:
+        description: >-
+          The admission run that started this composition. It is still
+          finishing when it dispatches, so its repository is composed from it
+          rather than from an older finished run. Blank for any other trigger.
+        required: false
+        default: ""
 
 # Read-only by default; each job declares what it needs beyond this.
 permissions:
@@ -143,6 +150,15 @@ jobs:
               ' composition-set.json >/dev/null 2>&1; then
             echo "::error::COMPOSITION_EXTENSIONS must list retired extensions as ids it no longer composes"; exit 1
           fi
+          # Where in its repository an extension's package is, for a branch
+          # built here: a relative path inside it, "." when omitted.
+          if ! jq -e '
+                all(.extensions[]; (.path // ".")
+                    | type == "string" and test("^[A-Za-z0-9._/-]+$")
+                      and (startswith("/") | not) and (("/" + . + "/") | contains("/../") | not))
+              ' composition-set.json >/dev/null 2>&1; then
+            echo "::error::COMPOSITION_EXTENSIONS must give each extension's path as a relative path inside its repository"; exit 1
+          fi
 
       - name: Mask the extension names for the rest of the job
         # Later steps shell out to gh, uv, and Django, and those echo
@@ -161,7 +177,8 @@ jobs:
             (.extensions[]
              | .id, .repository,
                (.repository | split("/") | last),
-               (.id | split(".") | last)),
+               (.id | split(".") | last),
+               ((.path // ".") | split("/") | last | select(. != "."))),
             ((.retired // [])[] | ., (split(".") | last))
           ' composition-set.json \
             | tr -d '\r' | sed '/^$/d' | sort -u \
@@ -335,39 +352,19 @@ jobs:
         env:
           # Only the extensions' signed admission bundles and wheels are read.
           GH_TOKEN: ${{ steps.reader.outputs.token }}
-        # One list call per extension and nothing downloaded. This is the whole
-        # input to "has anything changed?", and it is deliberately the cheapest
-        # question that can answer it: a new wheel cannot exist without a new
-        # admission run, so an unchanged set of run ids means an unchanged set
-        # of wheels. It can be conservative in one direction only (a re-run
-        # that produced an identical wheel looks like a change and rebuilds)
-        # which is the safe direction to be wrong in.
+          ADMISSION_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.admission-run || '' }}
+        # One list call per extension repository and nothing downloaded: the
+        # newest successful admission run, shared by every extension that
+        # repository holds. This is the whole input to "has anything
+        # changed?", and it is deliberately the cheapest question that can
+        # answer it (scripts/admissions.sh). It can be conservative in one
+        # direction only (a re-run that produced an identical wheel looks like
+        # a change and rebuilds) which is the safe direction to be wrong in.
         #
         # Written to a file rather than a step output. An output is read back by
         # interpolation, which puts its contents into the text of the step that
         # reads it, and these lines name the private repositories.
-        run: |
-          set -euo pipefail
-          : > admissions.txt
-          while read -r repo; do
-            # The newest successful admission. One that failed since does not
-            # hold back the host or the other extensions: the composed suite
-            # runs every extension's tests against this host, so an older
-            # wheel is proven here before it ships. One still running starts
-            # its own composition when it ends.
-            run=$(gh run list --repo "$repo" --workflow admit-plugin.yml \
-                    --branch main --status success --limit 1 --json databaseId -q '.[0].databaseId')
-            if [ -z "$run" ]; then
-              echo "::error::an extension has no successful admission on main"; exit 1
-            fi
-            newest=$(gh run list --repo "$repo" --workflow admit-plugin.yml \
-                    --branch main --status completed --limit 1 --json databaseId -q '.[0].databaseId')
-            if [ "$newest" != "$run" ]; then
-              echo "::warning::an extension's newest admission on main failed; composing its last successful one"
-            fi
-            printf '%s=%s\n' "$repo" "$run" >> admissions.txt
-          done < <(jq -r '.extensions[].repository' composition-set.json | sort)
-          wc -l < admissions.txt | xargs printf 'resolved %s admission(s)\n'
+        run: scripts/admissions.sh find composition-set.json admissions.txt
 
       - name: Find coordinated extension branches
         # A pull request whose branch name an extension also carries is a
@@ -396,7 +393,7 @@ jobs:
               echo "::error::Could not ask an extension repository for branch $BRANCH."
               exit 1
             fi
-          done < <(jq -r '.extensions[].repository' composition-set.json | sort)
+          done < <(jq -r '.extensions[].repository' composition-set.json | sort -u)
           rm -f api-error.txt
           count=$(grep -c . coordinated.txt || true)
           echo "found=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
@@ -490,16 +487,11 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
         # The run ids were resolved above to answer "anything changed?", so
-        # they are reused rather than looked up a second time.
+        # they are reused rather than looked up a second time. Each extension's
+        # own artifact, by its id: several may come from one run.
         if: >-
           steps.fingerprint.outputs.build == 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          while IFS='=' read -r repo run; do
-            [ -n "$repo" ] || continue
-            gh run download "$run" --repo "$repo" -D "artifacts/$(basename "$repo")"
-          done < admissions.txt
+        run: scripts/admissions.sh fetch admissions.txt artifacts
 
       - name: Check out exact Cordon verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -550,7 +542,7 @@ jobs:
                && awk -F= -v r="$repo" '$1 == r { found = 1 } END { exit !found }' coordinated.txt; then
               continue
             fi
-            dir="artifacts/$(basename "$repo")"
+            dir="artifacts/$plugin_id"
             statement=$(find "$dir" -name admission.json -print -quit)
             bundle=$(find "$dir" -name admission.sigstore.json -print -quit)
             wheel=$(find "$dir" -name '*.whl' -print -quit)
@@ -655,16 +647,28 @@ jobs:
             git -C "$dir" checkout --quiet --detach "$sha"
             rm -rf "$dir/.git"
             chmod -R a+rwX "$dir"
-            # The build lists every module and template it copies: withheld.
-            if ! docker run --rm --network bridge --user 10001:10001 \
-              --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never \
-              --volume "$PWD/$dir:/src" --volume "$PWD/candidate-wheels:/out" \
-              --entrypoint uv "severino-hq-installer:$GITHUB_SHA" \
-              build --python /usr/local/bin/python --no-cache --wheel --out-dir /out /src \
-              > "$WITHHELD_DIR/candidate-build-$(basename "$repo").log" 2>&1; then
-              echo "::error title=Coordinated branch did not build::A coordinated branch did not build; its output is in this run's sealed failure logs."
-              exit 1
-            fi
+            # A repository may hold several extensions: each one the set lists
+            # is built from its path, which must declare that id, and nothing
+            # else in the repository is. Read without running the branch's code.
+            while IFS=$'\t' read -r id package; do
+              if ! declared=$(python3 scripts/plugin-identity.py "$dir/$package" \
+                   2> "$WITHHELD_DIR/candidate-identity-$id.log" | sed -n 's/^plugin-id=//p') \
+                 || [ "$declared" != "$id" ]; then
+                echo "::error title=Coordinated branch did not build::A coordinated branch does not carry an extension the composition lists at its path."
+                exit 1
+              fi
+              # The build lists every module and template it copies: withheld.
+              if ! docker run --rm --network bridge --user 10001:10001 \
+                --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never \
+                --volume "$PWD/$dir:/src" --volume "$PWD/candidate-wheels:/out" \
+                --entrypoint uv "severino-hq-installer:$GITHUB_SHA" \
+                build --python /usr/local/bin/python --no-cache --wheel --out-dir /out "/src/$package" \
+                > "$WITHHELD_DIR/candidate-build-$id.log" 2>&1; then
+                echo "::error title=Coordinated branch did not build::A coordinated branch did not build; its output is in this run's sealed failure logs."
+                exit 1
+              fi
+            done < <(jq -r --arg repo "$repo" \
+                       '.extensions[] | select(.repository == $repo) | [.id, (.path // ".")] | @tsv' composition-set.json)
           done < coordinated.txt
 
       - name: Stage the candidate

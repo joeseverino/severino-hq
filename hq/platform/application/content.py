@@ -62,8 +62,6 @@ class ContentCommand:
     topic: str = ""
     tags: str = ""
     published_url: str = ""
-    wordpress_post_id: int | None = None
-    wordpress_slug: str = ""
     published_at: date | None = None
     notes: str = ""
     related_projects: tuple[str, ...] = ()
@@ -81,8 +79,6 @@ def serialize_content(item: ContentItem) -> dict[str, Any]:
         "topic": item.topic,
         "tags": item.tag_list,
         "published_url": item.published_url,
-        "wordpress_post_id": item.wordpress_post_id,
-        "wordpress_slug": item.wordpress_slug,
         "published_at": iso(item.published_at),
         "notes": item.notes,
         "updated_at": iso(item.updated_at),

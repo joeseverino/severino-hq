@@ -10,11 +10,13 @@ authoritative for human and agentic development in this public repository.
    and the mechanism you need may already exist there.
 2. Read the nearest code and tests before changing an interface.
 3. While editing, run `mise run fast` (see below). Run `mise run check` before
-   handing work back.
-4. Run `mise run ci` before pushing.
-5. Run `mise run preflight` before calling a change ready. On a small machine,
-   push first and run `mise run preflight --remote`: it reads every check
-   GitHub ran on that commit instead of running `mise run ci`.
+   handing work back when the machine can hold it.
+4. Push. CI runs every gate; `mise run ci` runs the same set locally when you
+   want an answer before pushing.
+5. Run `mise run preflight --remote` before calling a change ready: it reads
+   every check GitHub ran on the pushed commit and adds the local composed
+   suite and the deploy host checks. `mise run preflight` runs `mise run ci`
+   itself instead.
 
 Setup is [mise](https://mise.jdx.dev), `mise install` and uv on the PATH: the
 pinned tools, at the versions in `mise.toml` and the checksums in `mise.lock`.
@@ -23,9 +25,8 @@ virtualenv is made by hand. uv's own pin is in `pyproject.toml` with its hashes
 in `uv.lock`, which is the uv the pipeline installs. The images take uv from its
 own image, pinned by digest in `Dockerfile` and `composition/Dockerfile`. Every
 gate is a task in `mise.toml` named `<job>:<gate>`;
-`mise tasks` lists them and `mise run checks:ruff` runs one. Outside a task,
-run a command with the same dependencies as `uv run --locked python
-manage.py ...`.
+`mise tasks` lists them and `mise run checks:ruff` runs one. `mise run manage --
+<command>` runs `manage.py` with the development settings the gates use.
 
 `mise run fast [BASE]` is the inner loop: the changed files against the merge
 base (`BASE`, `$CHECK_BASE`, then `origin/main`, `main`) are mapped through the
@@ -302,8 +303,9 @@ this repository's graph will report as safe. Grep the extension checkouts.
 
 ## Definition of done
 
-"Ready" means `mise run preflight` exits 0. It runs `mise run ci`, where a
-gate that cannot run fails, the composed suite with the extension set required,
+"Ready" means `mise run preflight` exits 0, or `mise run preflight --remote`
+for a pushed commit. It runs `mise run ci` (or reads every check GitHub ran),
+where a gate that cannot run fails, the composed suite with the extension set required,
 and read-only checks of the deploy host over SSH (`SEVERINO_HQ_DEPLOY_HOST`): the checkout's
 ownership, the runner's sudo rule, the root-owned programs against this commit,
 the installed units and free disk. `--skip-host` runs the local gates only and
@@ -318,7 +320,7 @@ exits 2, never 0.
   `mise run browser` (it installs the WebKit the locked Playwright pins: HQ is read in Safari).
   A UI change is also walked in a real browser
   through the workflow it serves, not checked page by page.
-- `mise run ci` passes before a push, including its code scanning gates (no
+- Every CI gate passes on the pushed commit, including its code scanning gates (no
   CodeQL alert and every file-based Scorecard check at 10) and the browser
   layout gate, which it always runs.
 - A browser check selects markup only through `SELECTORS` in

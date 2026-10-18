@@ -36,8 +36,6 @@ class ContentItem(TimestampedModel):
         help_text="Comma-separated tags.",
     )
     published_url = models.URLField(blank=True)
-    wordpress_post_id = models.PositiveIntegerField(null=True, blank=True)
-    wordpress_slug = models.SlugField(max_length=200, blank=True)
     published_at = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
 

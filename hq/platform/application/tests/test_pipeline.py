@@ -517,7 +517,7 @@ class ScriptInputTests(SimpleTestCase):
     """What a script is handed arrives as data, never as its text."""
 
     def run_blocks(self):
-        for path in workflows():
+        for path in (*workflows(), *composite_actions()):
             lines = path.read_text().splitlines()
             index = 0
             while index < len(lines):
@@ -532,7 +532,7 @@ class ScriptInputTests(SimpleTestCase):
                 ):
                     script.append(lines[index])
                     index += 1
-                yield path.name, "\n".join(script)
+                yield path.relative_to(ROOT).as_posix(), "\n".join(script)
 
     def test_no_script_interpolates_a_step_output_or_the_event(self):
         """A step output can carry a file name an extension chose, and the event
@@ -629,5 +629,47 @@ class ExtensionCallerTests(SimpleTestCase):
             with self.subTest(name=name):
                 self.assertNotIn(f"\n  {name}", admit.split("\nruns:")[0])
                 self.assertNotIn(f"\n      {name}", checks.split("\npermissions:")[0])
-        self.assertIn("check-plugin.sh --plugin-root .", checks)
+        self.assertIn('check-plugin.sh --plugin-root "$PACKAGE_DIR"', checks)
         self.assertIn("scripts/plugin-identity.py", admit)
+
+
+def action_steps(text: str) -> list[str]:
+    """A composite action's steps, split at each ``- name:`` or ``- uses:``."""
+    return ["- " + part for part in re.split(r"(?m)^    - ", text.split("\n  steps:\n", 1)[1])[1:]]
+
+
+@tag("source")
+class OneRepositoryManyExtensionsTests(SimpleTestCase):
+    """Several extensions in one repository are admitted by one run and composed one by one."""
+
+    def setUp(self):
+        self.admit = (ROOT / ".github" / "actions" / "admit-plugin" / "action.yml").read_text()
+
+    def test_each_package_retains_the_artifact_compose_reads_by_its_id(self):
+        uploaded = re.search(r"(?m)^\s+name: (\S+)\$\{\{ steps\.identity\.outputs\.plugin-id \}\}$", self.admit)
+        self.assertIsNotNone(uploaded, "the admission artifact is not named by plugin id")
+        fetched = (ROOT / "scripts" / "admissions.sh").read_text()
+        self.assertIn(f'--name "{uploaded.group(1)}$id"', fetched)
+        self.assertIn("scripts/admissions.sh fetch", workflow("compose.yml"))
+
+    def test_a_run_starts_the_composition_and_reports_on_its_commit_only_where_it_dispatches(self):
+        reaching = [
+            step
+            for step in action_steps(self.admit)
+            if re.search(r"gh workflow run|check-runs|create-github-app-token", code(step))
+        ]
+        self.assertGreaterEqual(len(reaching), 4)
+        for step in reaching:
+            with self.subTest(step=step.splitlines()[0]):
+                self.assertIn("\n      if: inputs.dispatch == 'true'\n", step)
+
+    def test_every_input_an_admission_dispatches_is_one_compose_declares(self):
+        compose = workflow("compose.yml")
+        dispatch = compose[compose.index("\n  workflow_dispatch:\n") : compose.index("\npermissions:")]
+        declared = set(re.findall(r"(?m)^      ([a-z][a-z-]*):$", dispatch))
+        (start,) = [step for step in action_steps(self.admit) if "gh workflow run compose.yml" in step]
+        dispatched = re.findall(r"-f ([a-z][a-z-]*)=", start)
+        self.assertIn("admission-run", dispatched)
+        for name in dispatched:
+            with self.subTest(name=name):
+                self.assertIn(name, declared)
