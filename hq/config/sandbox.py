@@ -33,7 +33,7 @@ def _alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        pass
+        return True  # it exists, under another user
     return True
 
 
