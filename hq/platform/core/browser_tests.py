@@ -1072,6 +1072,29 @@ _RAGGED_QUEUES = (
 }"""
 )
 
+# A snug table cuts its identifiers only as far as its room needs: given two
+# more characters, it would no longer fit its box.
+_OVERCUT_TABLES = (
+    "() => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  const root = getComputedStyle(document.documentElement);
+  const widest = parseFloat(root.getPropertyValue('--identifier-max'));
+  for (const table of document.querySelectorAll('main .table-scroll > table[data-snug]')) {
+    const wrapper = table.parentElement;
+    const room = parseFloat(getComputedStyle(table).getPropertyValue('--identifier-max'));
+    if (!table.checkVisibility() || room >= widest) continue;
+    const before = table.style.getPropertyValue('--identifier-max');
+    table.style.setProperty('--identifier-max', (room + 2) + 'ch');
+    const fits = table.getBoundingClientRect().width <= wrapper.clientWidth + 1;
+    if (before) table.style.setProperty('--identifier-max', before); else table.style.removeProperty('--identifier-max');
+    if (fits) found.push(`${describe(table)}: identifiers cut to ${room}ch with room for more`);
+  }
+  return found;
+}"""
+)
+
 # The map scrolls with the page, and draws no lane with nothing in it.
 _MAP = """([map, lane, node]) => {
   const box = document.querySelector(map);
@@ -1356,6 +1379,7 @@ class LayoutBrowserTests(BrowserGate):
             self.a_band_cell_keeps_its_padding,
             self.a_band_lays_out_as_whole_rows,
             self.a_queue_ends_its_cards_at_one_edge,
+            self.a_snug_table_cuts_identifiers_only_as_far_as_it_must,
         ]
         if name in DENSE_PAGES:
             rules.append(self.dense_pages_keep_to_their_boxes)
@@ -1535,6 +1559,9 @@ class LayoutBrowserTests(BrowserGate):
 
     def a_route_is_one_row_or_one_column(self, _name):
         self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
+
+    def a_snug_table_cuts_identifiers_only_as_far_as_it_must(self, _name):
+        self.assertEqual(self.page.evaluate(_OVERCUT_TABLES), [])
 
     def a_queue_ends_its_cards_at_one_edge(self, _name):
         self.assertEqual(self.page.evaluate(_RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]), [])

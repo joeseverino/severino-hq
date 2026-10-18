@@ -253,6 +253,7 @@
   /* How much of an identifier a table cell shows before cutting it; the row
      expander shows the rest. */
   --identifier-max: 32ch;
+  --identifier-snug: 22ch;
   /* Track floors for a band of a fixed number of cells, so it lays out as a
      whole number of even rows at any width: 4, 2 or 1 columns (never 3+1),
      or 3 or 1. Read where they are used, so 100% is that grid's width.
@@ -1740,7 +1741,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    stays, what is marked `narrow-more` waits in the line beneath the row. */
 .data-table[data-narrow] > tbody { --row-pad: var(--space-6); }
 .data-table[data-narrow] > tbody > tr:not(.row-detail) .narrow-more { display: none; }
-.table-scroll > .data-table:is([data-narrow], [data-snug]) { --identifier-max: 22ch; }
+.table-scroll > .data-table:is([data-narrow], [data-snug]) { --identifier-max: var(--identifier-snug); }
 /* A column held to a width that suits a wide table gives it back here, so
    the room goes to the column that names the row. */
 .data-table[data-narrow] .tight-col > * { min-width: 0; }
@@ -4342,10 +4343,11 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-kind-elsewhere, .conn-kind-public { background: var(--tone-tint); color: var(--danger); }
 
 /* The chain HQ walked to decide which address it is judging you by. */
-.conn-hops { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+/* One grid for the whole chain, each step a row of it, so a value, its kind
+   and its note each start at one edge down the list. */
+.conn-hops { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, max-content) max-content minmax(0, 1fr); gap: var(--space-2) var(--space-6); }
 .conn-hop {
-  display: grid; grid-template-columns: minmax(0, auto) max-content 1fr;
-  gap: var(--space-6); align-items: center;
+  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center;
   padding: var(--space-4) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius);
 }
 .conn-hop-judged { border-color: var(--accent); background: var(--accent-tint); }
@@ -4399,7 +4401,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
   border-radius: var(--radius); background: var(--bg-tint);
 }
 .conn-path .conn-tick { position: relative; }
-.conn-path .conn-hop { border: 0; padding-inline: 0; background: none; }
+.conn-path .conn-hop { border: 0; padding: var(--space-1) 0; background: none; }
 .conn-layer-body {
   display: grid; gap: var(--space-3);
   margin: 0 var(--space-6) var(--space-4) calc(var(--space-6) + 17px + var(--space-5));
@@ -4447,7 +4449,8 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
   .conn-decision-head > strong { max-width: 130px; white-space: normal; text-align: right; }
   /* Value and kind on one line, the note beneath, rather than three columns
      that cannot each hold an IPv6 address. */
-  .conn-row, .conn-hop { grid-template-columns: minmax(0, 1fr) max-content; }
+  .conn-row { grid-template-columns: minmax(0, 1fr) max-content; }
+  .conn-hops { grid-template-columns: minmax(0, 1fr) max-content; }
   .conn-row-note, .conn-hop .conn-row-note { grid-column: 1 / -1; }
 }
 

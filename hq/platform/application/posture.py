@@ -90,10 +90,15 @@ class Posture:
 
     @property
     def count_line(self) -> str:
-        """ "5 of 7 met · 2 not read yet": an unread check is not counted as unmet."""
+        """ "5 of 7 met · not met: Tailnet lock is on · 1 not read yet": a count
+        names what it is short of, and an unread check is not counted as unmet."""
 
-        line = f"{self.met_count} of {len(self.standings)} met"
-        return f"{line} · {self.unread_count} not read yet" if self.unread_count else line
+        parts = [f"{self.met_count} of {len(self.standings)} met"]
+        if failing := [standing.check.label for standing in self.unmet if standing.reading.met is False]:
+            parts.append(f"not met: {', '.join(failing)}")
+        if self.unread_count:
+            parts.append(f"{self.unread_count} not read yet")
+        return " · ".join(parts)
 
     @property
     def unmet(self) -> tuple[Standing, ...]:

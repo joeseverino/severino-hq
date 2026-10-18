@@ -184,6 +184,7 @@
     table.dataset.fit = "";
     delete table.dataset.drop;
     delete table.dataset.snug;
+    table.style.removeProperty("--identifier-max");
     delete table.dataset.wrap;
     table.querySelectorAll(":scope > tbody > tr > [data-span]").forEach((cell) => {
       cell.colSpan = Number(cell.dataset.span);
@@ -213,8 +214,20 @@
         heading.style.setProperty("--column-floor", `${Math.max(0, Math.ceil(floor - inset))}px`);
       });
       // Before any column leaves, identifiers are cut sooner: a long name in a
-      // chip is whole again when its row is opened, and a column is not.
-      if (overflows()) table.dataset.snug = "";
+      // chip is whole again when its row is opened, and a column is not. They
+      // are cut only as far as the room needs: the longest that still fits.
+      if (overflows()) {
+        table.dataset.snug = "";
+        // Between the sheet's two widths, in ch, the longest that fits.
+        const root = getComputedStyle(document.documentElement);
+        const widest = parseFloat(root.getPropertyValue("--identifier-max"));
+        const snug = parseFloat(root.getPropertyValue("--identifier-snug"));
+        for (let room = widest; room > snug; room -= 2) {
+          table.style.setProperty("--identifier-max", `${room}ch`);
+          if (!overflows()) break;
+          table.style.removeProperty("--identifier-max");
+        }
+      }
       if (overflows() && headings.length >= 3 && !table.querySelector(":scope > colgroup")) {
         const last = headings.length - 1;
         const marked = headings.some((heading) => heading.classList.contains("key-col"));

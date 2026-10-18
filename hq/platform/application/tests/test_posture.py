@@ -127,6 +127,16 @@ class ReadingTests(TestCase):
         self.assertIn(f"{found.unread_count} not read yet", found.count_line)
         self.assertTrue(found.count_line.startswith(f"{found.met_count} of {len(STANDARD)} met"))
 
+    def test_the_count_names_each_check_that_is_not_met(self):
+        policy(grants=[{"src": ["*"], "dst": ["*"], "ip": ["*"]}], lock={"enabled": False, "trusted_keys": 0})
+
+        found = estate_posture(connection_catalog(principal=cli_principal()))
+
+        for standing in found.unmet:
+            if standing.reading.met is False:
+                self.assertIn(standing.check.label, found.count_line)
+        self.assertTrue(any(standing.reading.met is False for standing in found.unmet))
+
 
 @override_settings(AUTHENTICATION_BACKENDS=PASSWORDS)
 class FindingTests(TestCase):
