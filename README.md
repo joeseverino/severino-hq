@@ -31,11 +31,6 @@ touches. How is in [Derived Facts](docs/Derived-Facts.md) and
 <sup>Diagram source: [`docs/diagrams/derived-estate.mmd`](docs/diagrams/derived-estate.mmd),
 pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
 
-## Install
-
-[Install](docs/Install.md) takes a Linux host with Docker to HQ running and
-the controller reading its first connection, step by step.
-
 ## Stack
 
 | | |
