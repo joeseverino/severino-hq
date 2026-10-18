@@ -661,6 +661,11 @@ out=var/demo
 HQ_DEMO_SEED="$usage_seed" HQ_DEMO_OUT="$PWD/$out" uv run --locked python manage.py test demo.build --noinput --parallel 1
 '''
 
+[tasks."docs:screenshot"]
+description = "Retake the README's pictures from the showcase demo"
+depends = ["setup:webkit", "demo:build"]
+run = "uv run --locked --group browser python scripts/readme_screenshot.py"
+
 [tasks."browser:demo"]
 description = "Build the demo and check it in WebKit"
 depends = ["setup:webkit", "demo:build"]

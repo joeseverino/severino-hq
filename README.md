@@ -15,7 +15,10 @@ to each other.
 HQ is a host. Extensions add whole domains to it from their own repositories,
 and this repository names none of them: it holds the contracts they meet at.
 
-![Severino HQ dashboard: priority work, KPI snapshot, machine telemetry, and live external links](docs/images/dashboard.png)
+The [demo](https://demo.jseverino.com/) is HQ's own pages filled with an
+example homelab, saved as a static site.
+
+![The Severino HQ dashboard, showing the example homelab the demo is built from](docs/images/dashboard.png)
 
 ![Derived estate: the controller reads what each credential sees, readings are joined into one relation graph that every surface reads, and every write passes the manages gate](docs/diagrams/derived-estate.png)
 
@@ -27,6 +30,8 @@ credentials and reads what each can see; HQ stores the readings, derives the
 rest, and acts only through a connection that declares it `manages` what it
 touches. How is in [Derived Facts](docs/Derived-Facts.md) and
 [Architecture](docs/Architecture.md).
+
+![A service's page: its path from the device to the app, each step's state, what breaks if it fails, and where each was read](docs/images/service.png)
 
 ## Install
 
@@ -45,6 +50,7 @@ the controller reading its first connection, step by step.
 | Secrets | one 1Password vault, read through Connect on loopback, rendered to a `noswap` tmpfs |
 | Sign-in | OIDC against a self-hosted identity provider (Pocket ID), passkey-first |
 | Host | one Linux machine: systemd runs the container, the controller and the scheduled work |
+| Toolchain | [mise](https://mise.jdx.dev) pins every tool by checksum and runs every gate as a task, the same on a laptop, in an agent's worktree and in CI; uv locks Python; Renovate moves the pins |
 | Delivery | GitHub Actions: CI, Compose (host plus extensions, signed with Sigstore), Deploy on a self-hosted runner after approval |
 | Tests | Django's runner in parallel, Playwright on WebKit for layout, Go tests, shell suites, CodeQL, Scorecard, Trivy |
 
@@ -119,7 +125,8 @@ mise run check            # every Checks and Tests gate, and the suite composed
 mise run preflight        # ready: every CI gate, the composed suite, the host
 ```
 
-[`AGENTS.md`](AGENTS.md) is the engineering contract: placement rules, the
+Agents work in their own worktrees on `mise run dev:scratch` and pass the same
+gates. [`AGENTS.md`](AGENTS.md) is the engineering contract: placement rules, the
 boundary, frontend standards and the definition of done.
 [Development](docs/Development.md) has setup and the gates in full.
 
