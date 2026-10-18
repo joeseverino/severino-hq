@@ -1185,7 +1185,7 @@ const hqShowResponseHeaders = (root) => {
   slot.dataset.loaded = "true";
   const hqEvidenceRow = (label, present, purpose, chipText) => {
     const row = document.createElement("div");
-    row.className = "conn-row conn-row-wide";
+    row.className = "conn-row";
     const shown = document.createElement("code");
     shown.textContent = label;
     const chip = document.createElement("span");

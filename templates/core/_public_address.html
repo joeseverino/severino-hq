@@ -1,27 +1,27 @@
 <div class="conn-rows" data-public-address data-fragment="{% url 'tool_public_address' %}" data-fragment-failure="The lookup could not be reached.">
 {% if reading %}
-  <div class="conn-row conn-row-wide">
-    <code>{{ reading.address }}</code>
+  <div class="conn-row">
+    <code>{{ reading.address|breakable }}</code>
     <span class="conn-kind">IPv{{ reading.version }}</span>
     <span class="conn-row-note">
       {% if reading.note %}{{ reading.note }}{% endif %}
     </span>
   </div>
   {% for hostname in reading.hostnames %}
-    <div class="conn-row conn-row-wide">
+    <div class="conn-row">
       <code>{{ hostname }}</code>
       <span class="conn-kind conn-kind-read">reverse DNS</span>
       <span class="conn-row-note"></span>
     </div>
   {% endfor %}
   {% if reading.allocation.organisation or reading.allocation.name %}
-    <div class="conn-row conn-row-wide">
+    <div class="conn-row">
       <code>{{ reading.allocation.organisation|default:reading.allocation.name }}</code>
       <span class="conn-kind conn-kind-read">allocation</span>
       <span class="conn-row-note"></span>
     </div>
     {% if reading.allocation.prefixes %}
-      <div class="conn-row conn-row-wide">
+      <div class="conn-row">
         <code>{% for prefix in reading.allocation.prefixes %}{{ prefix }} {% endfor %}</code>
         <span class="conn-kind">block</span>
         <span class="conn-row-note">{% if reading.allocation.country %}{{ reading.allocation.country }}{% endif %}</span>

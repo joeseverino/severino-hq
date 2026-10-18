@@ -144,6 +144,15 @@ class AddressLookupTests(TestCase):
         self.assertIn("private address", reading["note"])
         self.assertEqual(reading["hostnames"], [])
 
+    def test_a_documentation_or_tailnet_address_is_not_called_private(self):
+        """Each is answered locally, and named for the range it is in."""
+
+        for address, said in (("198.51.100.7", "documentation"), ("100.64.0.20", "tailnet")):
+            with self.subTest(address):
+                note = self._look(address, resolver=_fails, allocations=_fails)["note"]
+                self.assertIn(said, note)
+                self.assertNotIn("private", note)
+
     def test_one_registry_failing_does_not_take_the_other_down(self):
         reading = self._look(GLOBAL, allocations=_fails)
 

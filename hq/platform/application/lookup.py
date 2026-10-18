@@ -25,7 +25,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.outbound import allowed
 
 from .projection import iso
-from .reach import is_public
+from .reach import is_documentation, is_public, network_of
 from .security import Capability, Principal
 
 # A hostname, conservatively. The value becomes a query parameter on a URL the
@@ -186,6 +186,21 @@ def look_up_name(
     }
 
 
+# What an address nobody on the internet can describe is, said as precisely
+# as HQ's own ranges allow.
+_UNROUTED = {
+    "tailnet": "This is a tailnet address. Only devices on the tailnet can reach it.",
+    "network": "This is a private address. Nothing on the public internet knows it.",
+    "loopback": "This is a loopback address. It names the machine it is used on.",
+}
+
+
+def _unrouted(address: str) -> str:
+    if is_documentation(address):
+        return "This address is reserved for documentation. Nothing on the public internet answers at it."
+    return _UNROUTED.get(network_of(address), "This address is not on the public internet, so nothing there knows it.")
+
+
 def _address_answer(command: AddressCommand, *, principal: Principal) -> tuple[Any, dict[str, Any] | None]:
     """The parsed address and what HQ can say about it without asking anyone.
 
@@ -206,7 +221,7 @@ def _address_answer(command: AddressCommand, *, principal: Principal) -> tuple[A
             "address": str(parsed),
             "version": parsed.version,
             "hostnames": [],
-            "note": "This is a private address. Nothing on the public internet knows it.",
+            "note": _unrouted(str(parsed)),
         }
     stored = AddressReading.objects.filter(address=str(parsed)).first()
     if stored is not None:

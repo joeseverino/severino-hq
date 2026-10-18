@@ -128,6 +128,15 @@ SELECTORS = {
     "queue_card": ".attention-row",
     "queue_card_end": ".attention-end",
     "route_icon": ".hop-icon",
+    # Every route that draws a line through its stops, and the mark on the
+    # line at each stop: the route strip and the connection panel's path.
+    "route_line": ":is(.request-path, .conn-path > .conn-layers)",
+    "route_mark": ":is(.hop-icon, .conn-tick)",
+    # A check in the connection panel: what it says, then what it was read from.
+    "check_statement": ".conn-layer-label",
+    "check_evidence": ".conn-layer-evidence",
+    # A value a disclosure's handle names.
+    "summary_value": "main summary code",
     "map": ".topology-map",
     "map_lane": ".topology-lane",
     "map_node": ".topology-node",
@@ -1062,6 +1071,74 @@ _UNEVEN_ROUTES = (
 # The dashboard's queue cards end their buttons at one edge: no card's end
 # stops more than a pixel short of another's. The full queue is a table, whose
 # columns hold its rows to one edge.
+# A route's line runs from the centre of its first stop's mark to the centre
+# of its last, opened or closed: each stop draws its stretch as `::before`,
+# read back from its computed box.
+_ROUTE_LINE_ENDS = (
+    "([route, mark]) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + route)) {
+    const stops = [...el.children].filter((stop) => stop.checkVisibility());
+    if (stops.length < 2) continue;
+    const stretches = stops.flatMap((stop) => {
+      const line = getComputedStyle(stop, '::before');
+      if (line.display === 'none' || ['none', 'normal'].includes(line.content)) return [];
+      const at = box(stop);
+      return [{top: at.top + parseFloat(line.top), left: at.left + parseFloat(line.left),
+               width: parseFloat(line.width), height: parseFloat(line.height)}];
+    });
+    if (!stretches.length) { found.push(`${describe(el)}: no line`); continue; }
+    const down = stretches[0].height > stretches[0].width;
+    const centre = (stop) => { const at = box(stop.querySelector(mark));
+      return down ? at.top + at.height / 2 : at.left + at.width / 2; };
+    const start = Math.min(...stretches.map((s) => down ? s.top : s.left));
+    const end = Math.max(...stretches.map((s) => down ? s.top + s.height : s.left + s.width));
+    const first = centre(stops[0]);
+    const last = centre(stops.at(-1));
+    if (Math.abs(start - first) > 2 || Math.abs(end - last) > 2) {
+      found.push(`${describe(el)}: line ${Math.round(start)} to ${Math.round(end)}, marks ${Math.round(first)} to ${Math.round(last)}`);
+    }
+  }
+  return found;
+}"""
+)
+
+# A check's evidence follows its statement: on the same line within a short
+# gap, or on the next line starting where the statement starts.
+_STRANDED_EVIDENCE = (
+    "([statement, evidence]) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + evidence)) {
+    const said = el.previousElementSibling;
+    if (!el.checkVisibility() || !said || !said.matches(statement)) continue;
+    const e = box(el);
+    const s = box(said);
+    const besideIt = e.top < s.bottom - 1;
+    if (besideIt ? e.left - s.right > 48 : Math.abs(e.left - s.left) > 2) {
+      found.push(`${describe(el)}: ${Math.round(e.left - (besideIt ? s.right : s.left))}px from its statement`);
+    }
+  }
+  return found;
+}"""
+)
+
+# What a disclosure's handle names is shown wherever the handle is.
+_HIDDEN_IN_SUMMARIES = (
+    "(value) => {"
+    + _DESCRIBE
+    + """
+  return [...document.querySelectorAll(value)]
+    .filter((el) => el.closest('summary').checkVisibility() && !el.checkVisibility())
+    .map(describe);
+}"""
+)
+
+# A section of queue cards ends every card's buttons at one edge: no card's
+# end stops more than a pixel short of another's in the same section.
 _RAGGED_QUEUES = (
     "([card, end]) => {"
     + _DESCRIBE
@@ -1384,6 +1461,9 @@ class LayoutBrowserTests(BrowserGate):
             self.a_band_lays_out_as_whole_rows,
             self.a_queue_ends_its_cards_at_one_edge,
             self.a_snug_table_cuts_identifiers_only_as_far_as_it_must,
+            self.a_route_line_runs_from_its_first_stop_to_its_last,
+            self.a_checks_evidence_follows_its_statement,
+            self.nothing_a_summary_names_is_hidden,
         ]
         if name in DENSE_PAGES:
             rules.append(self.dense_pages_keep_to_their_boxes)
@@ -1401,7 +1481,12 @@ class LayoutBrowserTests(BrowserGate):
         if name in PAGES and width in WIDTHS:
             rules.append(self.nothing_escapes_the_page_sideways_with_every_disclosure_open)
         if width in OVERFLOW_WIDTHS:
-            rules.append(self.only_a_table_scrolls_sideways_with_every_disclosure_open)
+            rules += [
+                self.only_a_table_scrolls_sideways_with_every_disclosure_open,
+                self.a_route_line_runs_from_its_first_stop_to_its_last,
+                self.a_checks_evidence_follows_its_statement,
+                self.nothing_a_summary_names_is_hidden,
+            ]
         return rules
 
     def test_every_page_keeps_the_layout_rules_without_script(self):
@@ -1572,6 +1657,16 @@ class LayoutBrowserTests(BrowserGate):
 
     def a_route_across_spaces_its_hops_evenly(self, _name):
         self.assertEqual(self.page.evaluate(_UNEVEN_ROUTES, [SELECTORS["route"], SELECTORS["route_icon"]]), [])
+
+    def a_route_line_runs_from_its_first_stop_to_its_last(self, _name):
+        self.assertEqual(self.page.evaluate(_ROUTE_LINE_ENDS, [SELECTORS["route_line"], SELECTORS["route_mark"]]), [])
+
+    def a_checks_evidence_follows_its_statement(self, _name):
+        found = self.page.evaluate(_STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
+        self.assertEqual(found, [])
+
+    def nothing_a_summary_names_is_hidden(self, _name):
+        self.assertEqual(self.page.evaluate(_HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"]), [])
 
     # With script: the page a person reads is the one its script has fitted.
 

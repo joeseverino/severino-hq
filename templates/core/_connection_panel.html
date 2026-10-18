@@ -23,7 +23,7 @@ page it falls back to. Nothing here knows which one it is in.
       {% else %}
         <strong>{{ connection.peer_label }}</strong>
       {% endif %}
-      <code>{{ connection.peer_address }}</code>
+      <code>{{ connection.peer_address|breakable }}</code>
       {% if connection.reported_device %}
         <span class="conn-row-note">reported by the proxy that forwarded it</span>
       {% elif connection.identity.tailnet_user %}
@@ -48,166 +48,161 @@ page it falls back to. Nothing here knows which one it is in.
     </div>
   </section>
 
-  <div class="conn-cols">
-    <section class="card">
-      <h3>You</h3>
-      <dl class="conn-pairs">
-        <dt>Signed in</dt>
-        <dd>
-          <strong>{{ connection.identity.full_name|default:connection.identity.username }}</strong>
-          {% if connection.identity.email %}<code>{{ connection.identity.email }}</code>{% endif %}
-        </dd>
-        {% comment %}A row is drawn only when it has a value: the strip above already says why there is no device.{% endcomment %}
-        {% if connection.identity.tailnet_user %}
-          <dt>Tailnet account</dt>
-          <dd><code>{{ connection.identity.tailnet_user }}</code></dd>
-        {% endif %}
-        {% if connection.caller_device %}
-          <dt>Device</dt>
-          <dd>
-            <strong>{{ connection.caller_device.label }}</strong>
-            {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os }}</span>{% endif %}
-            {% if connection.untrusted_forwarding and connection.reported_device %}<span class="conn-row-note">matched from what the proxy forwarded; not used to let you in</span>{% endif %}
-          </dd>
-        {% endif %}
-        {% if connection.caller_device.dns_name %}
-          <dt>MagicDNS</dt><dd><code>{{ connection.caller_device.dns_name }}</code></dd>
-        {% endif %}
-        {% if connection.caller_device.tags %}
-          <dt>Tags</dt>
-          <dd>{% for tag in connection.caller_device.tags %}<code>{{ tag }}</code> {% endfor %}</dd>
-        {% endif %}
-        <dt>Signed in via</dt>
-        <dd>
-          {{ connection.identity.route }}
-          {% if connection.identity.provider %}<code>{{ connection.identity.provider }}</code>{% endif %}
-        </dd>
-        {% if connection.identity.groups %}
-          <dt>Groups</dt>
-          <dd>{% for group in connection.identity.groups %}<code>{{ group }}</code> {% endfor %}</dd>
-        {% endif %}
-        <dt>Rights</dt>
-        <dd>
-          {% if connection.identity.superuser %}superuser
-          {% elif connection.identity.staff %}staff
-          {% else %}standard{% endif %}
-        </dd>
-        {% if connection.identity.last_sign_in %}
-          <dt>Last sign-in</dt><dd>{{ connection.identity.last_sign_in|when }}</dd>
-        {% endif %}
-        {% if connection.identity.session_expires %}
-          <dt>Session until</dt><dd>{{ connection.identity.session_expires|when }}</dd>
-        {% endif %}
-      </dl>
-      {% if connection.identity.corroborated %}
-        <p class="conn-agree conn-agree-yes">
-          Your tailnet account and your sign-in name the same person.
-        </p>
-      {% elif connection.identity.conflicted %}
-        <p class="conn-agree conn-agree-no">
-          Your tailnet account and your sign-in name different people.
-        </p>
-      {% elif connection.identity.tailnet_user %}
-        <p class="conn-agree conn-agree-no">
-          Your tailnet account and your sign-in are not linked, so HQ cannot tell they are the same person.
-        </p>
-      {% else %}
-        <p class="conn-agree conn-agree-no">
-          Only your sign-in says who you are. No tailnet account is known for this request.
-        </p>
+  <section class="card">
+    <h3>You</h3>
+    <dl class="kv">
+      <dt>Signed in</dt>
+      <dd>
+        <strong>{{ connection.identity.full_name|default:connection.identity.username }}</strong>
+        {% if connection.identity.email %}<code>{{ connection.identity.email }}</code>{% endif %}
+      </dd>
+      {% comment %}A row is drawn only when it has a value: the strip above already says why there is no device.{% endcomment %}
+      {% if connection.identity.tailnet_user %}
+        <dt>Tailnet account</dt>
+        <dd><code>{{ connection.identity.tailnet_user }}</code></dd>
       {% endif %}
-    </section>
+      {% if connection.caller_device %}
+        <dt>Device</dt>
+        <dd>
+          <strong>{{ connection.caller_device.label }}</strong>
+          {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os }}</span>{% endif %}
+          {% if connection.untrusted_forwarding and connection.reported_device %}<span class="conn-row-note">matched from what the proxy forwarded; not used to let you in</span>{% endif %}
+        </dd>
+      {% endif %}
+      {% if connection.caller_device.dns_name %}
+        <dt>MagicDNS</dt><dd><code>{{ connection.caller_device.dns_name|breakable }}</code></dd>
+      {% endif %}
+      {% if connection.caller_device.tags %}
+        <dt>Tags</dt>
+        <dd>{% for tag in connection.caller_device.tags %}<code>{{ tag }}</code> {% endfor %}</dd>
+      {% endif %}
+      <dt>Signed in via</dt>
+      <dd>
+        {{ connection.identity.route }}
+        {% if connection.identity.provider %}<code>{{ connection.identity.provider }}</code>{% endif %}
+      </dd>
+      {% if connection.identity.groups %}
+        <dt>Groups</dt>
+        <dd>{% for group in connection.identity.groups %}<code>{{ group }}</code> {% endfor %}</dd>
+      {% endif %}
+      <dt>Rights</dt>
+      <dd>
+        {% if connection.identity.superuser %}superuser
+        {% elif connection.identity.staff %}staff
+        {% else %}standard{% endif %}
+      </dd>
+      {% if connection.identity.last_sign_in %}
+        <dt>Last sign-in</dt><dd>{{ connection.identity.last_sign_in|when }}</dd>
+      {% endif %}
+      {% if connection.identity.session_expires %}
+        <dt>Session until</dt><dd>{{ connection.identity.session_expires|when }}</dd>
+      {% endif %}
+    </dl>
+    {% if connection.identity.corroborated %}
+      <p class="conn-agree conn-agree-yes">
+        Your tailnet account and your sign-in name the same person.
+      </p>
+    {% elif connection.identity.conflicted %}
+      <p class="conn-agree conn-agree-no">
+        Your tailnet account and your sign-in name different people.
+      </p>
+    {% elif connection.identity.tailnet_user %}
+      <p class="conn-agree conn-agree-no">
+        Your tailnet account and your sign-in are not linked, so HQ cannot tell they are the same person.
+      </p>
+    {% else %}
+      <p class="conn-agree conn-agree-no">
+        Only your sign-in says who you are. No tailnet account is known for this request.
+      </p>
+    {% endif %}
+  </section>
 
-    <section class="card">
-      <h3>The link</h3>
-      <dl class="conn-pairs">
-        <dt>Path</dt>
+  <section class="card">
+    <h3>The link</h3>
+    <dl class="kv">
+      <dt>Path</dt>
+      <dd>
+        <strong>{{ connection.path_label }}</strong>
+      </dd>
+      {% if connection.observer %}
+        <dt>Measured by</dt>
         <dd>
-          <strong>{{ connection.path_label }}</strong>
+          <strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label }}</strong>
         </dd>
-        {% if connection.observer %}
-          <dt>Measured by</dt>
-          <dd>
-            <strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label }}</strong>
-          </dd>
-        {% endif %}
-        <dt>Carried over</dt>
-        <dd class="conn-carriage conn-carriage-{{ connection.peering.id }}">
-          <strong>{{ connection.peering.label }}</strong>
-          <details class="conn-more conn-why">
-            <summary aria-label="Why this says that">Why</summary>
-            <p class="conn-row-note">{{ connection.peering.detail }}</p>
-          </details>
-          {% if connection.peering.public %}
-            <details class="conn-more" data-peering-detail>
-              <summary>
-                About <code>{{ connection.peering.address }}</code>
-              </summary>
-              <div class="conn-rows"
-                   data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
-                   data-fragment-load
-                   data-fragment-failure="The lookup could not be reached.">
-                <div class="conn-row">
-                  <span class="conn-row-note">Looked up when you open this.</span>
-                </div>
+      {% endif %}
+      <dt>Carried over</dt>
+      <dd class="conn-carriage conn-carriage-{{ connection.peering.id }}">
+        <strong>{{ connection.peering.label }}</strong>
+        <details class="conn-more conn-why">
+          <summary aria-label="Why this says that">Why</summary>
+          <p class="conn-row-note">{{ connection.peering.detail }}</p>
+        </details>
+        {% if connection.peering.public %}
+          <details class="conn-more" data-peering-detail>
+            <summary>
+              About <code>{{ connection.peering.address }}</code>
+            </summary>
+            <div class="conn-rows"
+                 data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
+                 data-fragment-load
+                 data-fragment-failure="The lookup could not be reached.">
+              <div class="conn-row">
+                <span class="conn-row-note">Looked up when you open this.</span>
               </div>
-            </details>
-          {% endif %}
-        </dd>
-        {% if connection.presence.direct_endpoint %}
-          <dt>WireGuard endpoint</dt>
-          <dd>
-            <code>{{ connection.presence.direct_endpoint }}</code>
-          </dd>
+            </div>
+          </details>
         {% endif %}
-        {% if connection.presence %}
-          <dt>Last handshake</dt>
-          <dd>{{ connection.handshake }}</dd>
-        {% endif %}
-        {% if connection.carried %}
-          <dt>Node traffic</dt><dd>{{ connection.carried }}</dd>
-        {% endif %}
-        <dt>Browser round trip</dt>
+      </dd>
+      {% if connection.presence.direct_endpoint %}
+        <dt>WireGuard endpoint</dt>
         <dd>
-          <span data-rtt>{% empty_value %}</span>
-          <span hidden data-rtt-measure="{% url 'health_live' %}"></span>
+          <code>{{ connection.presence.direct_endpoint|breakable }}</code>
         </dd>
-        <dt>Encryption</dt><dd>{{ connection.transport_path }}</dd>
-        {% if connection.peer_keys %}
-          {% comment %}
-          The evidence the rest of this section is describing. An endpoint, a
-          handshake age and a byte count are all consequences of these two keys
-          having agreed: naming them is what turns "HQ says you are a peer"
-          into something checkable against `tailscale status` on either machine.
-          Folded away because it is proof rather than a reading: wanted when the
-          claim is doubted, noise on every other visit.
-          {% endcomment %}
-          <dt>Peered as</dt>
-          <dd>
-            <details class="conn-more">
-              <summary>Both node keys</summary>
-              {% comment %}
-              Stacked rather than the shared row grid: that grid sizes its value
-              column to `max-content`, which for a seventy-character key is the
-              key's full width: it pushes past the panel and crushes the label
-              beside it into one letter per line.
-              {% endcomment %}
-              <dl class="conn-keys">
-                {% for label, key in connection.peer_keys %}
-                  <dt>{{ label }}</dt>
-                  <dd><code>{{ key }}</code></dd>
-                {% endfor %}
-              </dl>
-              <p class="conn-row-note">
-                Your device's key and the key of the machine that measured this link.
-                {% if connection.link_observed_by_hq %}That machine is the one HQ runs on.{% else %}HQ cannot confirm that machine is the one it runs on.{% endif %}
-                Compare either with <code>tailscale status</code> on that machine.
-              </p>
-            </details>
-          </dd>
-        {% endif %}
-      </dl>
-    </section>
+      {% endif %}
+      {% if connection.presence %}
+        <dt>Last handshake</dt>
+        <dd>{{ connection.handshake }}</dd>
+      {% endif %}
+      {% if connection.carried %}
+        <dt>Node traffic</dt><dd>{{ connection.carried }}</dd>
+      {% endif %}
+      <dt>Browser round trip</dt>
+      <dd>
+        <span data-rtt>{% empty_value %}</span>
+        <span hidden data-rtt-measure="{% url 'health_live' %}"></span>
+      </dd>
+      <dt>Encryption</dt><dd>{{ connection.transport_path }}</dd>
+      {% if connection.peer_keys %}
+        {% comment %}
+        The evidence the rest of this section is describing. An endpoint, a
+        handshake age and a byte count are all consequences of these two keys
+        having agreed: naming them is what turns "HQ says you are a peer"
+        into something checkable against `tailscale status` on either machine.
+        Folded away because it is proof rather than a reading: wanted when the
+        claim is doubted, noise on every other visit.
+        {% endcomment %}
+        <dt>Peered as</dt>
+        <dd>
+          <details class="conn-more">
+            <summary>Both node keys</summary>
+            {% comment %}Stacked: a key is longer than any value column beside a label.{% endcomment %}
+            <dl class="conn-keys">
+              {% for label, key in connection.peer_keys %}
+                <dt>{{ label }}</dt>
+                <dd><code>{{ key }}</code></dd>
+              {% endfor %}
+            </dl>
+            <p class="conn-row-note">
+              Your device's key and the key of the machine that measured this link.
+              {% if connection.link_observed_by_hq %}That machine is the one HQ runs on.{% else %}HQ cannot confirm that machine is the one it runs on.{% endif %}
+              Compare either with <code>tailscale status</code> on that machine.
+            </p>
+          </details>
+        </dd>
+      {% endif %}
+    </dl>
+  </section>
+
   <section class="card conn-path" aria-label="Path to HQ" data-connection-layers>
     <div class="conn-path-head">
       <h3>Path to HQ</h3>
@@ -230,10 +225,10 @@ page it falls back to. Nothing here knows which one it is in.
               {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst }}</p>{% endif %}
               {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation }} {% entity link %}</p>{% endfor %}
               {% if hop.evidence %}
-                <ol class="conn-hops">
+                <ol class="conn-rows">
                   {% for item in hop.evidence %}
-                    <li class="conn-hop{% if item.role %} conn-hop-{{ item.role }}{% endif %}">
-                      <code>{{ item.value }}</code>
+                    <li class="conn-row{% if item.role %} conn-row-{{ item.role }}{% endif %}">
+                      <code>{{ item.value|breakable }}</code>
                       <span class="conn-kind{% if item.role %} conn-kind-hop-{{ item.role }}{% endif %}">{{ item.role|default:item.label }}</span>
                       <span class="conn-row-note">{{ item.detail }}</span>
                     </li>
@@ -247,8 +242,7 @@ page it falls back to. Nothing here knows which one it is in.
                       <details data-connection-layer="{{ layer.id }}">
                         <summary>
                           <span class="conn-tick" aria-hidden="true">{% if layer.state == 'unknown' %}?{% elif layer.holds %}&check;{% else %}&times;{% endif %}</span>
-                          <span class="conn-layer-label">{{ layer.label }}</span>
-                          {% if layer.evidence %}<code class="conn-layer-evidence">{{ layer.evidence }}</code>{% endif %}
+                          <span class="conn-check"><span class="conn-layer-label">{{ layer.label }}</span>{% if layer.evidence %} <code class="conn-layer-evidence">{{ layer.evidence|breakable }}</code>{% endif %}</span>
                         </summary>
                         <div class="conn-layer-body">
                           <p class="muted">{{ layer.detail }}</p>
@@ -270,8 +264,6 @@ page it falls back to. Nothing here knows which one it is in.
     </ol>
   </section>
 
-  </div>
-
   <div class="conn-aside">
   <details class="conn-protocol conn-addresses" open>
     <summary>
@@ -287,7 +279,7 @@ page it falls back to. Nothing here knows which one it is in.
         <div class="conn-rows">
           {% for address in request_path.addresses %}
             <div class="conn-row{% if address.current %} conn-current{% endif %}">
-              <code>{{ address.value }}</code>
+              <code>{{ address.value|breakable }}</code>
               <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
               <span class="conn-row-note">{{ address.source }}</span>
             </div>
@@ -304,7 +296,7 @@ page it falls back to. Nothing here knows which one it is in.
           <div class="conn-rows">
             {% for address in request_path.hq_addresses %}
               <div class="conn-row">
-                <code>{{ address.value }}</code>
+                <code>{{ address.value|breakable }}</code>
                 <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
                 <span class="conn-row-note">{{ address.source }}</span>
               </div>
@@ -322,7 +314,7 @@ page it falls back to. Nothing here knows which one it is in.
         <strong>Headers</strong>
         <small>Sent by your browser and by HQ</small>
       </span>
-      <span class="count">{{ request_path.headers|length|counted:"header,headers" }}</span>
+      <span class="count">Yours {{ request_path.headers|length }}</span>
     </summary>
     <div class="conn-protocol-body">
       <section>
@@ -330,25 +322,27 @@ page it falls back to. Nothing here knows which one it is in.
         <p class="conn-note">Every header this request carried, and what HQ reads it for.</p>
         <div class="conn-rows">
           {% for header in request_path.headers %}{% if header.used %}
-            <div class="conn-row conn-row-wide conn-row-used">
-              <code>{{ header.name }}: {{ header.value }}</code>
+            <div class="conn-row conn-row-used">
+              <code>{{ header.name }}: {{ header.value|breakable }}</code>
               <span class="conn-kind conn-kind-read">read</span>
               <span class="conn-row-note">{{ header.purpose }}</span>
             </div>
           {% endif %}{% endfor %}
         </div>
-        <details class="conn-more">
-          <summary>Received but not read</summary>
-          <div class="conn-rows">
-            {% for header in request_path.headers %}{% if header.state == "ignored" %}
-              <div class="conn-row conn-row-wide">
-                <code>{{ header.name }}: {{ header.value }}</code>
-                <span class="conn-kind">ignored</span>
-                <span class="conn-row-note"></span>
-              </div>
-            {% endif %}{% endfor %}
-          </div>
-        </details>
+        {% if request_path.unread_headers %}
+          <details class="conn-more">
+            <summary>{{ request_path.unread_headers|length }} received but not read</summary>
+            <div class="conn-rows">
+              {% for header in request_path.unread_headers %}
+                <div class="conn-row">
+                  <code>{{ header.name }}: {{ header.value|breakable }}</code>
+                  <span class="conn-kind conn-kind-{{ header.state }}">{{ header.state }}</span>
+                  <span class="conn-row-note">{{ header.declined }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          </details>
+        {% endif %}
       </section>
 
       <section>

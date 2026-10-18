@@ -117,7 +117,12 @@ dashboard's readings are one row when each has room and a list when not.
 line with its icon on the line. It runs across its box when every hop has
 room for its kind and an address with its port, and down it otherwise, as
 the connection panel draws its route; it never wraps onto a second row.
-*Gate:* `a_route_is_one_row_or_one_column`.
+Its line runs from the first stop's mark to the last one's, with any stop
+opened. A check names what it was read from right after its statement, or
+under it where the line is full, and that evidence is shown at every width.
+*Gates:* `a_route_is_one_row_or_one_column`,
+`a_route_line_runs_from_its_first_stop_to_its_last`,
+`a_checks_evidence_follows_its_statement`, `nothing_a_summary_names_is_hidden`.
 
 **One main-and-aside.** Content with a narrower companion (`.split`) shares a
 row while both keep a readable width and wraps to a column when they cannot.

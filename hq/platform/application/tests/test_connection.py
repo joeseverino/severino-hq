@@ -27,7 +27,7 @@ from ..request_headers import headers_of
 from ..request_path import address_chain
 from ..ui import MISSING
 from .host_only import host_only
-from .markup import select, texts
+from .markup import select, texts, within
 
 A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
@@ -61,7 +61,10 @@ def a_device(name, address, *, user="", tags=(), observer=False, reach=(), **ext
         "user": user,
         "tags": list(tags),
         "self": observer,
-        "reach": [{"port": port, "who": list(who), "rules": [{"who": list(who), "line": 1}]} for port, who in reach],
+        "reach": [
+            {"port": port, "who": list(who), "rules": [{"who": list(who), "to": [f"{name}:{port}"], "line": 1}]}
+            for port, who in reach
+        ],
         "public_key": f"test-key-{name}",
         "last_handshake": timezone.now().isoformat(),
         **extra,
@@ -532,6 +535,19 @@ class ConnectionPageTests(TestCase):
 
     def test_the_page_needs_a_session(self):
         self.assertEqual(self.client.get(reverse("connection")).status_code, 302)
+
+    def test_every_header_the_request_carried_is_shown(self):
+        """Read, declined or ignored: the panel drops none, and a declined one says why."""
+
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("connection"), HTTP_X_REAL_IP="100.64.0.5", HTTP_X_EXAMPLE="example")
+
+        shown = [element.text.strip() for element in within(response, "data-connection-protocol")]
+        for header in response.context["request_path"].headers:
+            with self.subTest(header=header.name):
+                self.assertTrue(any(text.startswith(f"{header.name}:") for text in shown))
+        self.assertTrue(any(text.startswith("One address from the proxy.") for text in shown))
 
     def test_the_panel_the_dialog_lifts_out_is_on_the_page(self):
         """The dialog finds the panel by this hook, so its absence is a break."""

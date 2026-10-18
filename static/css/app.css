@@ -352,12 +352,13 @@ pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7
 pre ::selection { color: var(--code-ink); }
 
 /* A node key is one long unbroken token. Stacked so the machine's name sits
-   above it rather than competing for width, and allowed to break anywhere so
-   it wraps inside its panel instead of widening the page. */
+   above it rather than competing for width, and broken only where a line
+   cannot hold it. */
 .conn-keys { display: grid; gap: var(--space-1); margin: var(--space-3) 0 var(--space-4); }
 .conn-keys dt { color: var(--muted); font-size: var(--text-xs); }
 .conn-keys dd { margin: 0 0 var(--space-3); }
-.conn-keys dd code, .node-key { font-size: var(--text-xs); overflow-wrap: anywhere; word-break: break-all; }
+.conn-keys dd code { font-size: var(--text-xs); overflow-wrap: break-word; }
+.node-key { font-size: var(--text-xs); overflow-wrap: anywhere; word-break: break-all; }
 
 /* A mark, not an alarm. It has to be visible while the mode is on (an
    operator who forgets can screenshot fiction and file it as fact) and it
@@ -4268,10 +4269,15 @@ textarea.code {
 .conn-sub { margin: 0; color: var(--muted); font-size: var(--text-xs); text-align: center; }
 .conn-path { display: grid; gap: var(--space-4); align-content: start; container: path / inline-size; }
 .conn-path .conn-layer-label { overflow-wrap: normal; }
-/* A wide route keeps each hop's evidence beside its value. */
 /* A hop: its kind, what it is with what HQ read about it, and what opening it
-   shows. */
-.conn-path > .conn-layers > .conn-layer > details > summary { grid-template-columns: auto 7rem minmax(0, 1fr) max-content; padding: var(--space-3) 0; }
+   shows. Every part starts on one line of a set height, so the tick's centre
+   sits a known distance down its hop whatever wraps or opens below it, and the
+   route's line is drawn from there. */
+.conn-path > .conn-layers > .conn-layer > details > summary {
+  grid-template-columns: auto 7rem minmax(0, 1fr) max-content; align-items: start;
+  padding: var(--hop-pad) 0; line-height: var(--hop-line);
+}
+.conn-path > .conn-layers > .conn-layer > details > summary > .conn-tick { margin-block: calc((var(--hop-line) - 17px) / 2); }
 .conn-hop-detail { margin-left: var(--space-4); color: var(--muted); font-size: var(--text-xs); font-weight: 400; }
 .conn-hop-detail::before { content: "· "; }
 .conn-hop-more { color: var(--muted); font-size: var(--text-2xs); white-space: nowrap; }
@@ -4281,8 +4287,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 @container path (max-width: 24rem) {
   .conn-path > .conn-layers > .conn-layer > details > summary { grid-template-columns: auto minmax(0, 1fr); row-gap: 0; }
   .conn-path > .conn-layers > .conn-layer > details > summary > :not(.conn-tick) { grid-column: 2; }
-  .conn-path > .conn-layers > .conn-layer > details > summary > .conn-tick { grid-row: span 3; align-self: start; }
-  .conn-path > .conn-layers > .conn-layer > details > summary .conn-layer-evidence { justify-self: start; text-align: left; }
+  .conn-path > .conn-layers > .conn-layer > details > summary > .conn-tick { grid-row: span 3; }
 }
 /* The heading as every card here has it, its count on the same line. */
 .conn-path-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
@@ -4311,53 +4316,37 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-protocol > summary strong { font-size: var(--text-sm); }
 .conn-protocol > summary small { color: var(--muted); font-size: var(--text-2xs); }
 .conn-protocol > summary .count { margin-left: auto; white-space: nowrap; }
-.conn-protocol-body {
-  display: grid; gap: var(--space-8); padding: var(--space-7); border-top: 1px solid var(--line);
-  container: fold / inline-size;
-}
-.conn-addresses .conn-row { grid-template-columns: minmax(0, 11rem) 5rem minmax(0, 1fr); }
-.conn-addresses .conn-row > .conn-kind { justify-self: start; }
-/* With room, a header is one row: its value, what it is for, then whether it
-   was read or sent, each in its own column. */
-@container fold (min-width: 46rem) {
-  .conn-protocol-body .conn-row-wide { grid-template-columns: minmax(0, 26rem) minmax(0, 1fr) 5.5rem; }
-  .conn-protocol-body .conn-row-wide > code { grid-column: 1; grid-row: 1; justify-self: start; }
-  .conn-protocol-body .conn-row-wide > .conn-row-note { grid-column: 2; grid-row: 1; }
-  .conn-protocol-body .conn-row-wide > .conn-kind { grid-column: 3; grid-row: 1; justify-self: end; }
-}
-
-/* Two columns of label/value pairs. A grid rather than a table so the labels
-   share one width across both columns and the values line up with each other. */
-/* You, the link and the route, side by side. */
-.conn-cols { display: grid; gap: var(--stack-gap); grid-template-columns: minmax(0, 1fr); }
-/* Sized by the panel, not the window, so the dialog and the page agree: you
-   and the link side by side, the route across both beneath them. */
+.conn-protocol-body { display: grid; gap: var(--space-8); padding: var(--space-7); border-top: 1px solid var(--line); }
+/* Sized by the panel, not the window, so the dialog and the page agree. */
 @container conn (min-width: 54rem) {
-  .conn-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .conn-cols > .conn-path { grid-column: 1 / -1; }
   /* Your addresses beside HQ's. */
   .conn-addresses .conn-protocol-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }
-.conn-pairs { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3) var(--space-7); align-items: baseline; }
-.conn-pairs dt { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
-.conn-pairs dd { margin: 0; font-size: var(--text-sm); min-width: 0; overflow-wrap: anywhere; }
-.conn-pairs dd code { font-size: var(--text-xs); }
-.conn-pairs strong { font-weight: 600; }
 .conn-agree { font-size: var(--text-xs); margin: var(--space-6) 0 0; }
 .conn-agree-yes { color: var(--ok); }
 .conn-agree-no { color: var(--warn); }
 
-/* Address rows: value and kind hold their width, the note takes the rest and
-   is the only thing allowed to wrap. */
-.conn-rows { display: grid; gap: var(--space-1); }
+/* Rows of like things (addresses, headers, the chain HQ walked to judge your
+   address): a value, what kind it is, and a note. One grid for the whole list,
+   each row a row of it, so values, kinds and notes each start at one edge down
+   the list and a kind sits just after the longest value rather than at a fixed
+   distance. A value breaks only where `|breakable` lets it. */
+.conn-rows {
+  display: grid; grid-template-columns: fit-content(60%) max-content minmax(0, 1fr);
+  margin: 0; padding: 0; list-style: none;
+}
 .conn-row {
-  display: grid; grid-template-columns: minmax(0, auto) max-content 1fr;
-  gap: var(--space-6); align-items: center; padding: var(--space-3) 0;
+  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
+  column-gap: var(--space-6); row-gap: var(--space-1); align-items: baseline; padding: var(--space-3) 0;
   border-bottom: 1px solid var(--line-2);
 }
 .conn-row:last-child { border-bottom: 0; }
-.conn-row code { font-size: var(--text-xs); overflow-wrap: anywhere; }
+.conn-row code { font-size: var(--text-xs); overflow-wrap: break-word; }
+.conn-row > code, .conn-row > .conn-kind { justify-self: start; }
 .conn-row-note { color: var(--muted); font-size: var(--text-xs); }
+.conn-row > .conn-row-note { grid-column: 3; }
+.conn-row > :only-child { grid-column: 1 / -1; }
+.conn-row-ignored { opacity: .6; }
 .conn-current code { font-weight: 650; }
 .conn-kind {
   font-size: var(--text-3xs); letter-spacing: .04em; padding: var(--space-1) var(--space-4); border-radius: 20px;
@@ -4365,24 +4354,13 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 }
 .conn-kind-tailnet { background: var(--tone-tint); color: var(--ok); }
 .conn-kind-elsewhere, .conn-kind-public { background: var(--tone-tint); color: var(--danger); }
-
-/* The chain HQ walked to decide which address it is judging you by. */
-/* One grid for the whole chain, each step a row of it, so a value, its kind
-   and its note each start at one edge down the list. */
-.conn-hops { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, max-content) max-content minmax(0, 1fr); gap: var(--space-2) var(--space-6); }
-.conn-hop {
-  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center;
-  padding: var(--space-4) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius);
-}
-.conn-hop-judged { border-color: var(--accent); background: var(--accent-tint); }
-.conn-hop-ignored { opacity: .6; }
 .conn-kind-hop-judged { background: var(--accent); color: var(--accent-ink); }
 .conn-kind-hop-ignored { background: var(--tone-tint); color: var(--danger); }
 
 .conn-layers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
 .conn-layer { border: 1px solid var(--line); border-radius: var(--radius); }
 .conn-layer summary {
-  display: grid; grid-template-columns: auto 6.5rem minmax(5rem, 1fr) fit-content(45%);
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
   align-items: center; gap: var(--space-5);
   padding: var(--space-4) var(--space-6); cursor: pointer; list-style: none;
 }
@@ -4399,33 +4377,40 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
   color: var(--muted); font-size: var(--text-3xs); font-weight: 700;
   letter-spacing: .06em; text-transform: uppercase;
 }
-.conn-layer-label { font-weight: 550; font-size: var(--text-sm); min-width: 0; overflow-wrap: anywhere; }
+.conn-layer-label { font-weight: 550; font-size: var(--text-sm); min-width: 0; overflow-wrap: break-word; }
+/* A check's statement, then what it was read from: on the same line while
+   both fit, under the statement when they do not. */
+.conn-check { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-6); min-width: 0; }
 .conn-layer-evidence {
-  justify-self: end; font-size: var(--text-2xs); color: var(--muted);
-  max-width: 100%; overflow-wrap: anywhere; text-align: right;
-  background: none; padding: 0;
+  min-width: 0; font-size: var(--text-2xs); color: var(--muted);
+  overflow-wrap: break-word; background: none; padding: 0;
 }
 /* The path is a route: each hop a stop on one line from your device down to
    HQ, the tick on the line. A hop that does not hold colours its stretch. */
 .conn-path > .conn-layers { gap: 0; }
-.conn-path > .conn-layers > .conn-layer { position: relative; border: 0; border-radius: 0; }
-.conn-path > .conn-layers > .conn-layer::before {
-  content: ""; position: absolute; left: 7.5px; top: 0; bottom: 0; width: 2px;
-  background: var(--tone-positive-tint);
+.conn-path > .conn-layers > .conn-layer {
+  --hop-line: 1.25rem;
+  --hop-pad: var(--space-3);
+  --tick-y: calc(var(--hop-pad) + var(--hop-line) / 2);
+  position: relative; border: 0; border-radius: 0;
 }
-.conn-path > .conn-layers > .conn-layer:first-child::before { top: 50%; }
-.conn-path > .conn-layers > .conn-layer:last-child::before { bottom: auto; height: 50%; }
-.conn-path > .conn-layers > .conn-layer:only-child::before { display: none; }
-.conn-path > .conn-layers > .conn-layer-does-not::before { background: var(--tone-critical-tint); }
-.conn-path > .conn-layers > .conn-layer-unknown::before { background: var(--tone-caution-tint); }
+/* Each hop draws the stretch from its tick to the next hop's, which sits the
+   same distance down that hop, so an opened hop lengthens its stretch and the
+   line still ends on the last tick. */
+.conn-path > .conn-layers > .conn-layer::before {
+  content: ""; position: absolute; left: 7.5px; top: var(--tick-y); bottom: calc(-1 * var(--tick-y)); width: 2px;
+  background: color-mix(in srgb, var(--ok) 40%, transparent);
+}
+.conn-path > .conn-layers > .conn-layer:last-child::before { display: none; }
+.conn-path > .conn-layers > .conn-layer-does-not::before { background: color-mix(in srgb, var(--danger) 45%, transparent); }
+.conn-path > .conn-layers > .conn-layer-unknown::before { background: color-mix(in srgb, var(--warn) 45%, transparent); }
 /* An opened hop's evidence sits on a panel of its own under the hop's name, so
    it reads as that hop's and the route plainly continues after it. */
 .conn-path > .conn-layers > .conn-layer > details > .conn-layer-body {
   margin: 0 0 var(--space-4) calc(17px + var(--space-5)); padding: var(--space-5) var(--space-6);
-  border-radius: var(--radius); background: var(--bg-tint);
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-tint);
 }
 .conn-path .conn-tick { position: relative; }
-.conn-path .conn-hop { border: 0; padding: var(--space-1) 0; background: none; }
 .conn-layer-body {
   display: grid; gap: var(--space-3);
   margin: 0 var(--space-6) var(--space-4) calc(var(--space-6) + 17px + var(--space-5));
@@ -4435,9 +4420,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
    statement and its evidence on one line, the sentence when opened. */
 .conn-layer-body .conn-layers { gap: 0; border-top: 1px solid var(--line-2); }
 .conn-layer-body .conn-layer { border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0; }
-.conn-layer-body .conn-layer summary {
-  grid-template-columns: auto minmax(7rem, 1fr) fit-content(45%); gap: var(--space-4); padding: var(--space-3) 0;
-}
+.conn-layer-body .conn-layer summary { align-items: baseline; gap: var(--space-4); padding: var(--space-3) 0; }
 .conn-layer-body .conn-layer .conn-layer-label { font-size: var(--text-xs); }
 .conn-layer-body .conn-layer .conn-layer-body { margin: 0 0 var(--space-3) calc(17px + var(--space-4)); }
 .conn-scope-note {
@@ -4466,16 +4449,20 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 @container conn (max-width: 36rem) {
   .conn-verdict { flex-wrap: wrap; }
   .conn-address { width: 100%; }
-  .conn-layer-evidence { display: none; }
-  .conn-layer summary { grid-template-columns: auto minmax(0, .7fr) minmax(0, 1fr); }
   .conn-layer-body { margin-left: var(--space-6); }
   .conn-decision-head { align-items: start; }
   .conn-decision-head > strong { max-width: 130px; white-space: normal; text-align: right; }
-  /* Value and kind on one line, the note beneath, rather than three columns
-     that cannot each hold an IPv6 address. */
-  .conn-row { grid-template-columns: minmax(0, 1fr) max-content; }
-  .conn-hops { grid-template-columns: minmax(0, 1fr) max-content; }
-  .conn-row-note, .conn-hop .conn-row-note { grid-column: 1 / -1; }
+  .conn > * { --conn-rows: stacked; }
+}
+/* In a narrow panel or a fact's value, a row's value takes a line of its own
+   and its kind and note go beneath, rather than three columns that cannot
+   each hold an IPv6 address. */
+.conn .kv > dd { --conn-rows: stacked; }
+@container style(--conn-rows: stacked) {
+  .conn-rows { grid-template-columns: max-content minmax(0, 1fr); }
+  .conn-row > code { grid-column: 1 / -1; }
+  .conn-row > .conn-row-note { grid-column: 2; }
+  .conn-row > code + .conn-row-note { grid-column: 1 / -1; }
 }
 
 /* The two ends and the link between them. */
@@ -4541,31 +4528,14 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-rules { display: grid; gap: var(--space-2); margin: 0; justify-items: start; }
 .conn-rules code { font-size: var(--text-2xs); }
 
-/* An address is as wide as the address. Stretching each one to the column
-   turns a list of six values into six grey slabs. */
-.conn-row > code, .conn-hop > code { justify-self: start; }
 .conn-peer-name { font-size: var(--text-md); font-weight: 600; }
 .conn-kind-declined { background: var(--tone-tint); color: var(--warn); }
-
-/* A header value is long by nature, and beside it a three-column row squeezes
-   the note into one word per line the moment the panel is a dialog rather than
-   a page. The value keeps the width it needs and the note takes its own line. */
-.conn-row-wide { grid-template-columns: minmax(0, 1fr) max-content; }
-.conn-row-wide > code { overflow-wrap: anywhere; }
-.conn-row-wide .conn-row-note { grid-column: 1 / -1; }
-
-/* A row whose value is long and variable (a header, a policy) puts its
-   note on its own line. Squeezed into a third column beside a value that can
-   be three hundred characters, the note collapses to one word per line. */
-.conn-row-stacked { grid-template-columns: minmax(0, 1fr) max-content; row-gap: var(--space-1); }
-.conn-row-stacked > code { justify-self: stretch; }
-.conn-row-stacked .conn-row-note { grid-column: 1 / -1; }
 
 /* Which network the link rides over, with Why and About on the same line; an
    opened one takes the line below. Words wrap whole: the cell would otherwise
    inherit `overflow-wrap: anywhere` and fit-content would shrink to a letter. */
 .conn-carriage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4); overflow-wrap: normal; }
-.conn-pairs .conn-more > summary { padding: 0; }
+.conn .kv .conn-more > summary { padding: 0; }
 .conn-carriage > details[open] { flex-basis: 100%; }
 .conn-carriage > strong { font-weight: 600; }
 /* Riding over the internet is not a fault, so it is not red. It is the one

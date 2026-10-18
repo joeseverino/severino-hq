@@ -214,7 +214,7 @@ def tailnet():
             **extra,
         }
 
-    reach = [{"port": 443, "who": [OWNER], "rules": [{"who": [OWNER], "line": 1}]}]
+    reach = [{"port": 443, "who": [OWNER], "rules": [{"who": [OWNER], "to": ["tag:server:443"], "line": 1}]}]
     store(
         "tailscale.device",
         device(MACHINE, TAILNET, "linux", self=True, tags=["tag:server"], reach=reach, endpoints=[f"{LAN}:41641"]),

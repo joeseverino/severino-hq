@@ -676,6 +676,12 @@ class RequestPath:
         return self.route.line_hops
 
     @property
+    def unread_headers(self) -> tuple[Header, ...]:
+        """The headers HQ declined or ignored, declined first."""
+
+        return tuple(header for header in self.headers if not header.used)
+
+    @property
     def chain(self) -> tuple[Evidence, ...]:
         """Every address in the forwarded chain, in the order it happened."""
 

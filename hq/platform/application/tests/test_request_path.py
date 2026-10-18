@@ -16,6 +16,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from ..path_model import Hop
 from ..paths import hq_path
 from ..projection import projection_scope
+from .markup import elements
 from ..request_path import (
     CONTRADICTED,
     LAYER_STEPS,
@@ -358,7 +359,7 @@ class ReadParityTests(TestCase):
         self.assertContains(response, "Path to HQ")
         self.assertContains(response, found.proof)
         # The link's facts come from the caller's presence, and still show.
-        self.assertContains(response, "198.51.100.7:41641")
+        self.assertIn("198.51.100.7:41641", [value.text.strip() for value in elements(response, "code")])
         self.assertContains(response, "Last handshake")
 
 
