@@ -2278,6 +2278,8 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
 .section-head h2 { margin: 0; flex: 1; }
 .section-head .count { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; }
+/* A count said in its heading, after the words it counts, in a quieter voice. */
+:is(h2, h3) > .count { color: var(--muted); font-size: .8em; font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* Rich plugins emit data; HQ owns how a domain workspace is composed. Keeping
    this layout in the host means every present and future private domain gets

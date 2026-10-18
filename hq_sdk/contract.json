@@ -1000,7 +1000,8 @@
         "bases": [],
         "constructor": [
           "heading",
-          "items"
+          "items",
+          "folded="
         ],
         "fields": [],
         "kind": "dataclass",

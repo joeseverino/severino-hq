@@ -544,7 +544,7 @@ class PageTests(TestCase):
         request.user = self.user
         drawn = Template('{% referenced_by "machine" "lab-1" cards=True %}').render(Context({"request": request}))
 
-        self.assertIn("Assets", texts(drawn, "h2"))
+        self.assertIn("Assets 1", texts(drawn, "h2"))
         self.assertIn(self.asset.get_absolute_url(), hrefs(drawn))
 
     def test_pages_keep_their_query_budgets(self):

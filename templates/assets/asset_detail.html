@@ -19,21 +19,5 @@
 
 {% if asset.notes %}<h2>Notes</h2><p>{{ asset.notes|linebreaksbr }}</p>{% endif %}
 
-{% with projects=asset.related_projects.all content=asset.content_items.all expenses=asset.expenses.all receipts=asset.receipts.all %}
-<section>
-  <h2>Related</h2>
-  {% if projects or content or documents or expenses or receipts or mentions %}
-    <div class="two-col">
-      {% if projects or documents.projects %}<div><h3>Projects</h3><ul>{% for p in projects %}<li>{% entity "project"|entity_of:p.slug label=p.name %}</li>{% endfor %}{% for link in documents.projects %}<li>{% entity link %}</li>{% endfor %}</ul></div>{% endif %}
-      {% if content %}<div><h3>Writeups and pages</h3><ul>{% for c in content %}<li>{% entity "writeup"|entity_of:c.slug label=c.title %}</li>{% endfor %}</ul></div>{% endif %}
-      {% if expenses %}<div><h3>Expenses</h3><ul>{% for e in expenses %}<li>{% entity "expense"|entity_of:e.pk label=e.label %} <span class="muted">{{ e.date|when:"day" }} · {{ e.total_cost|money }}</span></li>{% endfor %}</ul></div>{% endif %}
-      {% if receipts %}<div><h3>Receipts</h3><ul>{% for r in receipts %}<li>{% entity "receipt"|entity_of:r.pk label=r.label %} <span class="muted">{{ r.amount|money }}</span></li>{% endfor %}</ul></div>{% endif %}
-      {% include "docs_index/_related_documents.html" %}
-      {% include "partials/_referenced_by.html" %}
-    </div>
-  {% else %}
-    <p class="muted">Nothing is linked to this asset yet.</p>
-  {% endif %}
-</section>
-{% endwith %}
+<div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
 {% endblock %}

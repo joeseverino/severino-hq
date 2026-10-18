@@ -140,7 +140,6 @@ class AssetPageTests(_Signed):
         self.assertIn("Cost Not recorded", text(response))
         self.assertNotContains(response, "$0.00")
         self.assertNotIn("Slug", [term.text for term in elements(response, "dt")])
-        self.assertContains(response, "Nothing is linked to this asset yet.")
 
     def test_a_domain_asset_links_the_domain_hq_manages(self):
         from unittest import mock

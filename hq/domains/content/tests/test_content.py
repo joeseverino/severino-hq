@@ -299,7 +299,7 @@ class ContentPageTests(TestCase):
 
         response = self.client.get(item.get_absolute_url())
 
-        self.assertIn("Source document", [heading.text for heading in elements(response, "h3")])
+        self.assertIn("Source document 1", [" ".join(heading.text.split()) for heading in elements(response, "h2")])
         (source,) = select(response, "title", "writeup-example")
         (runbook_link,) = select(response, "title", "rb-example-publish")
         self.assertEqual(source.text.strip(), "example/example-writeup/index.md")

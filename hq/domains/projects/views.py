@@ -15,6 +15,7 @@ from django.views.generic import (
 )
 
 from hq.domains.projects.github import github_repository
+from hq.platform.application import related
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.pages import PageAction, PageMixin, record_trail
@@ -198,7 +199,15 @@ class ProjectDetailView(PageMixin, DetailView):
         # from either side, and only one side led anywhere.
         context["service_url"] = service_url_for(self.object.public_url)
         context["github"] = self.repository
-        context["documents"] = related_documents(self.object.documentation_records.all(), about=self.object)
+        project = self.object
+        documents = related_documents(project.documentation_records.all(), about=project)
+        context["related"] = related.related(
+            related.writeups(project.content_items.all(), status=True),
+            related.assets(project.assets.all()),
+            related.expenses(project.expenses.all()),
+            *documents.groups,
+            related.links("Related projects", documents.projects),
+        )
         if context["github"] is not None:
             from hq.platform.application.github_posture import posture_of
 

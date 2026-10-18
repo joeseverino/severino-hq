@@ -11,6 +11,7 @@ from django.views.generic import (
     UpdateView,
 )
 
+from hq.platform.application import related
 from hq.platform.application.assets import managed_domain
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.expenses import cost_totals
@@ -107,12 +108,19 @@ class AssetDetailView(PageMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         asset = self.object
-        context["documents"] = related_documents(asset.documentation_records.all(), listed=asset.related_projects.all())
+        documents = related_documents(asset.documentation_records.all(), listed=asset.related_projects.all())
         principal = web_principal(self.request.user)
         context["thing"] = reference_of(asset, "infrastructure", principal=principal)
         # A domain asset with no link is matched to the domain of its name.
         context["domain"] = None if asset.infrastructure else managed_domain(asset)
-        context["mentions"] = referenced_by_row(asset, principal=principal)
+        context["related"] = related.related(
+            related.projects(asset.related_projects.all(), documents.projects),
+            related.writeups(asset.content_items.all()),
+            related.expenses(asset.expenses.all()),
+            related.receipts(asset.receipts.all()),
+            *documents.groups,
+            *referenced_by_row(asset, principal=principal),
+        )
         return context
 
     @override

@@ -333,14 +333,15 @@ def reference(context, row, field):
     return reference_of(row, field, principal=_viewer(context))
 
 
-@register.inclusion_tag("partials/_referenced_by.html", takes_context=True)
-def referenced_by(context, thing, identity="", cards=False):
-    """Everything that names a thing, for that thing's page.
+@register.inclusion_tag("partials/_related.html", takes_context=True)
+def referenced_by(context, thing, identity="", cards=True):
+    """Everything that names a thing, for that thing's page: a card per kind
+    of reference, as every related list is drawn (``partials/_related.html``).
 
     ``{% referenced_by vehicle %}`` for a row of a model that can be referred
     to; ``{% referenced_by "machine" machine.name %}`` for a kind and what its
-    page is addressed by. ``cards=True`` draws each list as a card. One
-    statement, whatever names it.
+    page is addressed by. ``cards`` has one value left, the one extensions
+    still pass. One statement, whatever names it.
     """
 
     from hq.platform.application import references
@@ -350,7 +351,7 @@ def referenced_by(context, thing, identity="", cards=False):
         found = references.referenced_by(thing, str(identity), principal=principal)
     else:
         found = references.referenced_by_row(thing, principal=principal)
-    return {"mentions": found, "cards": cards, "request": context.get("request")}
+    return {"groups": found, "request": context.get("request")}
 
 
 @register.filter

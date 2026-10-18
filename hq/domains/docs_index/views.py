@@ -14,6 +14,7 @@ from django.views.generic import (
     View,
 )
 
+from hq.platform.application import related
 from hq.platform.application.documentation import (
     sync_documentation,
 )
@@ -134,6 +135,18 @@ class DocsDetailView(PageMixin, DetailView):
         "related_expenses",
         "content_items",
     )
+
+    @override
+    def get_context_data(self, **kwargs):
+        record = self.object
+        return super().get_context_data(**kwargs) | {
+            "related": related.related(
+                related.projects(record.related_projects.all()),
+                related.assets(record.related_assets.all()),
+                related.expenses(record.related_expenses.all()),
+                related.writeups(record.content_items.all()),
+            )
+        }
 
     @override
     def get_page_title(self):

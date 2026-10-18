@@ -1696,6 +1696,18 @@ class OnePrimitiveTests(SimpleTestCase):
         ]
         self.assertEqual(found, [])
 
+    def test_a_related_list_is_drawn_by_its_partial(self):
+        """A record page lists what it is related to through
+        `partials/_related.html` (groups from `application.related`), never
+        under a "Related" heading over a list of its own shape."""
+
+        found = [
+            path.relative_to(self.ROOT).as_posix()
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            if re.search(r"<h[1-6][^>]*>\s*Related\b", path.read_text(encoding="utf-8"))
+        ]
+        self.assertEqual(found, [])
+
     def test_python_writes_amounts_through_money(self):
         """``application.money.money`` is the one place a dollar sign meets a
         number: no other f-string puts one in front of a value."""

@@ -12,6 +12,7 @@ from django.views.generic import (
     UpdateView,
 )
 
+from hq.platform.application import related
 from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traffic, item_traffic
 from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
@@ -198,10 +199,17 @@ class ContentDetailView(PageMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         item = context["item"]
+        documents = related_documents(
+            item.related_documentation.all(), listed=item.related_projects.all(), sources=True
+        )
         return context | {
             "traffic": item_traffic(item),
-            "documents": related_documents(
-                item.related_documentation.all(), listed=item.related_projects.all(), sources=True
+            "related": related.related(
+                related.links("Source document", documents.sources),
+                related.projects(item.related_projects.all(), documents.projects),
+                related.assets(item.related_assets.all()),
+                related.expenses(item.related_expenses.all()),
+                *documents.groups,
             ),
         }
 

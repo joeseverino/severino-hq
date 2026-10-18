@@ -16,13 +16,6 @@
 
 {% if expense.notes %}<h2>Notes</h2><p>{{ expense.notes|linebreaksbr }}</p>{% endif %}
 
-<section>
-  <h2>Receipts</h2>
-  {% if expense.receipts.all %}
-    <ul>{% for r in expense.receipts.all %}<li>{% entity "receipt"|entity_of:r.pk label=r.label %} <span class="muted">{{ r.amount|money }}</span></li>{% endfor %}</ul>
-  {% else %}
-    <p class="muted">No receipts. <a href="{% url 'receipts:create' %}?related_expense={{ expense.pk }}">Upload one</a></p>
-  {% endif %}
-</section>
-{% if mentions %}<section><h2>Related</h2><div class="two-col">{% include "partials/_referenced_by.html" %}</div></section>{% endif %}
+{% if not expense.receipts.all %}<p class="muted">No receipts. <a href="{% url 'receipts:create' %}?related_expense={{ expense.pk }}">Upload one</a></p>{% endif %}
+<div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
 {% endblock %}

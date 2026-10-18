@@ -1,0 +1,25 @@
+{% comment %}
+What a thing is related to, one card per group, for a page's `.section-flow`:
+the one shape every page draws its related records in.
+
+  {% include "partials/_related.html" with groups=related %}
+  {% referenced_by "machine" machine.name cards=True %}
+
+`groups` are application.references.Mentions (`related(...)` drops the empty
+ones): a heading, its items (a link and a few words beside it) and whether it
+folds behind its count. Nothing related: nothing drawn.
+{% endcomment %}
+{% partialdef items %}<ul class="list-rows">{% for item in group.items %}<li><span class="row-main">{% entity item.link %}</span>{% if item.note %}<span class="row-meta">{{ item.note }}</span>{% endif %}</li>{% endfor %}</ul>{% endpartialdef %}
+{% for group in groups %}
+  <section class="card">
+    {% if group.folded %}
+      <details class="section-fold">
+        <summary><h2>{{ group.heading }} <span class="count">{{ group.items|length }}</span></h2></summary>
+        {% partial items %}
+      </details>
+    {% else %}
+      <h2>{{ group.heading }} <span class="count">{{ group.items|length }}</span></h2>
+      {% partial items %}
+    {% endif %}
+  </section>
+{% endfor %}

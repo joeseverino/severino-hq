@@ -34,20 +34,5 @@
 
 {% if item.notes %}<h2>Notes</h2><p>{{ item.notes|linebreaksbr }}</p>{% endif %}
 
-{% with projects=item.related_projects.all assets=item.related_assets.all expenses=item.related_expenses.all %}
-<section>
-  <h2>Related</h2>
-  {% if projects or assets or documents or expenses %}
-    <div class="two-col">
-      {% if documents.sources %}<div><h3>Source document</h3><ul>{% for link in documents.sources %}<li>{% entity link %}</li>{% endfor %}</ul></div>{% endif %}
-      {% if projects or documents.projects %}<div><h3>Projects</h3><ul>{% for p in projects %}<li>{% entity "project"|entity_of:p.slug label=p.name %}</li>{% endfor %}{% for link in documents.projects %}<li>{% entity link %}</li>{% endfor %}</ul></div>{% endif %}
-      {% if assets %}<div><h3>Assets</h3><ul>{% for a in assets %}<li>{% entity "asset"|entity_of:a.slug label=a.item_name %}</li>{% endfor %}</ul></div>{% endif %}
-      {% if expenses %}<div><h3>Expenses</h3><ul>{% for e in expenses %}<li>{% entity "expense"|entity_of:e.pk label=e.label %} <span class="muted">{{ e.date|when:"day" }} · {{ e.total_cost|money }}</span></li>{% endfor %}</ul></div>{% endif %}
-      {% include "docs_index/_related_documents.html" %}
-    </div>
-  {% else %}
-    <p class="muted">Nothing is linked to this yet.</p>
-  {% endif %}
-</section>
-{% endwith %}
+<div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
 {% endblock %}

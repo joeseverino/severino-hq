@@ -22,6 +22,7 @@ from hq.platform.core.models import AuditLog
 from .domains import records_of
 from .entity_links import EntityLink, entity_link
 from .labels import plural
+from .references import Mention, Mentions
 from .security import Capability, Principal
 from .ui import counted
 
@@ -40,27 +41,15 @@ def document_link(record: DocumentationRecord, *, label: str = "") -> EntityLink
 
 
 @dataclass(frozen=True, slots=True)
-class DocumentGroup:
-    """Documents of one type, under the heading a page gives them."""
-
-    label: str
-    links: tuple[EntityLink, ...]
-    # Closed tasks: counted in the heading, listed when it is opened.
-    folded: bool = False
-
-
-@dataclass(frozen=True, slots=True)
 class RelatedDocuments:
     """A record's documents as its page lists them."""
 
-    groups: tuple[DocumentGroup, ...] = ()
+    # One group per type; closed tasks fold.
+    groups: tuple[Mentions, ...] = ()
     # Projects whose own note is among the documents.
     projects: tuple[EntityLink, ...] = ()
     # A writeup's or page's own vault note, apart from what it is related to.
     sources: tuple[EntityLink, ...] = ()
-
-    def __bool__(self) -> bool:
-        return bool(self.groups or self.projects or self.sources)
 
 
 def _noted_projects(records: list[DocumentationRecord]) -> dict[int, Project]:
@@ -76,12 +65,14 @@ def _noted_projects(records: list[DocumentationRecord]) -> dict[int, Project]:
     return {noted[project.slug].pk: project for project in Project.objects.filter(slug__in=noted)}
 
 
-def _task_groups(tasks: list[DocumentationRecord]) -> list[DocumentGroup]:
+def _task_groups(tasks: list[DocumentationRecord]) -> list[Mentions]:
     groups = []
     for label, closed in (("Open tasks", False), ("Done tasks", True)):
-        found = tuple(document_link(record) for record in tasks if (record.status in CLOSED_TASK_STATUSES) == closed)
+        found = tuple(
+            Mention(document_link(record)) for record in tasks if (record.status in CLOSED_TASK_STATUSES) == closed
+        )
         if found:
-            groups.append(DocumentGroup(label, found, folded=closed))
+            groups.append(Mentions(label, found, folded=closed))
     return groups
 
 
@@ -109,9 +100,10 @@ def related_documents(
     own = [record for record in records if sources and record.doc_type == draft]
     rest = [record for record in records if record.pk not in projects and record not in own]
     groups = [
-        DocumentGroup(plural(str(label)), found)
+        Mentions(plural(str(label)), found)
         for value, label in DocumentationRecord.DocType.choices
-        if value != task and (found := tuple(document_link(record) for record in rest if record.doc_type == value))
+        if value != task
+        and (found := tuple(Mention(document_link(record)) for record in rest if record.doc_type == value))
     ]
     groups += _task_groups([record for record in rest if record.doc_type == task])
     return RelatedDocuments(

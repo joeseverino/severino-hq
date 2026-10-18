@@ -10,6 +10,7 @@ from django.views.generic import (
     UpdateView,
 )
 
+from hq.platform.application import related
 from hq.platform.application.documentation import document_link
 from hq.platform.application.expenses import costs_by_category
 from hq.platform.application.moments import when_day
@@ -109,7 +110,9 @@ class ExpenseDetailView(PageMixin, DetailView):
             [(expense.paid_from, expense.paid_from_name), (expense.about, expense.about_name)],
             principal=principal,
         )
-        context["mentions"] = referenced_by_row(expense, principal=principal)
+        context["related"] = related.related(
+            related.receipts(expense.receipts.all()), *referenced_by_row(expense, principal=principal)
+        )
         return context
 
     @override

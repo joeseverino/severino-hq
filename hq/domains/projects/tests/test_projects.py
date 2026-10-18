@@ -40,7 +40,7 @@ class ProjectPageTests(TestCase):
 
         response = self.page()
 
-        headings = [" ".join(heading.text.split()) for heading in elements(response, "h3")]
+        headings = [" ".join(heading.text.split()) for heading in elements(response, "h2")]
         self.assertIn("Runbooks 1", headings)
         self.assertIn("Open tasks 1", headings)
         # Closed tasks wait behind their count.
@@ -61,7 +61,7 @@ class ProjectPageTests(TestCase):
 
         response = self.page()
 
-        self.assertIn("Related projects", [heading.text for heading in elements(response, "h3")])
+        self.assertIn("Related projects 1", [" ".join(heading.text.split()) for heading in elements(response, "h2")])
         self.assertIn(("Example Site", self.other.get_absolute_url()), links(response))
         self.assertNotContains(response, "Example Site notes")
         self.assertNotContains(response, 'title="project-example-tool"')
@@ -81,13 +81,13 @@ class ProjectPageTests(TestCase):
 
         response = self.page()
 
-        self.assertIn("Writeups and pages", [heading.text for heading in elements(response, "h3")])
+        self.assertIn("Writeups and pages 1", [" ".join(heading.text.split()) for heading in elements(response, "h2")])
         self.assertNotContains(response, "Content items")
         self.assertContains(response, f'href="{item.get_absolute_url()}"')
         self.assertIn(("Example Host · Hosting", expense.get_absolute_url()), links(response))
 
-    def test_a_project_with_nothing_linked_says_so_plainly(self):
-        self.assertContains(self.page(), "Nothing is linked to this project yet.")
+    def test_a_project_with_nothing_linked_draws_no_related_card(self):
+        self.assertEqual(self.page().context["related"], ())
 
     def test_a_repository_github_is_not_read_for_is_still_a_link(self):
         self.project.repository_url = "https://github.com/example/tool"

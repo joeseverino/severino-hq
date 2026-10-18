@@ -631,10 +631,13 @@ class Mention:
 
 @dataclass(frozen=True, slots=True)
 class Mentions:
-    """The rows that name a thing through one kind of reference."""
+    """A group of things related to a thing, under one heading: the rows that
+    name it through one kind of reference, or what its own record links."""
 
     heading: str
     items: tuple[Mention, ...]
+    # Counted in the heading and listed when opened: what is done with.
+    folded: bool = False
 
 
 def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Mentions, ...]:

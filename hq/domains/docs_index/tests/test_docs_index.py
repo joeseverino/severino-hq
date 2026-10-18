@@ -116,7 +116,7 @@ class RelatedDocumentsTests(TestCase):
         found = related_documents(records)
 
         self.assertEqual(
-            [(group.label, [link.label for link in group.links], group.folded) for group in found.groups],
+            [(group.heading, [item.link.label for item in group.items], group.folded) for group in found.groups],
             [
                 ("Runbooks", ["Add an example", "Back up the example"], False),
                 ("Architecture notes", ["Example design"], False),
@@ -124,12 +124,7 @@ class RelatedDocumentsTests(TestCase):
                 ("Done tasks", ["Ship it"], True),
             ],
         )
-        self.assertEqual(found.groups[0].links[0].title, "rb-example-a")
-
-    def test_nothing_related_is_falsy(self):
-        from hq.platform.application.documentation import related_documents
-
-        self.assertFalse(related_documents([]))
+        self.assertEqual(found.groups[0].items[0].link.title, "rb-example-a")
 
     def test_a_project_already_listed_is_not_listed_again(self):
         from hq.domains.projects.models import Project
@@ -139,5 +134,5 @@ class RelatedDocumentsTests(TestCase):
         note = self._document("project-example-tool", "Example Tool", "architecture_note")
 
         self.assertEqual([link.label for link in related_documents([note]).projects], ["Example Tool"])
-        self.assertFalse(related_documents([note], listed=[project]))
-        self.assertFalse(related_documents([note], about=project))
+        self.assertEqual(related_documents([note], listed=[project]).projects, ())
+        self.assertEqual(related_documents([note], about=project).projects, ())
