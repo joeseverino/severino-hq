@@ -97,11 +97,19 @@ class TableListMixin:
     # fill it is derived: the page's lead action, or the connection that reads
     # what it lists (``Page.remedy``).
     table_empty = "Nothing here yet."
+    # A sentence that qualifies it, in the same line ("Add one in the vault.").
+    table_empty_why = ""
     # False where the lead action is a view of this same list, not a way to fill it.
     table_empty_remedy = True
 
     def get_table_empty(self) -> str:
         return self.table_empty
+
+    def get_table_empty_remedy(self) -> Remedy | None:
+        """What fills this list when it is empty, where the page's derived remedy
+        is not it. None takes the derived one."""
+
+        return None
 
     def get_table_filters(self) -> tuple[TableFilter, ...]:
         return self.table_filters
@@ -220,7 +228,9 @@ class TableListMixin:
             "active_count": active_count,
             "querystring": query_params.urlencode(),
             "empty": self.get_table_empty(),
+            "empty_why": self.table_empty_why,
             "empty_remedy": self.table_empty_remedy,
+            "empty_link": self.get_table_empty_remedy(),
             "clear": Remedy("Clear the search and filters", "?"),
         }
 

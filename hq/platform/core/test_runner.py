@@ -226,6 +226,35 @@ NEUTRAL_IDENTITY = {
 }
 
 
+def plugin_test_modules() -> list[str]:
+    """The module of each installed plugin's Django app, where its tests live."""
+
+    from django.apps import apps
+
+    from hq.platform.application.plugins import installed_plugin_apps
+
+    configs = {config.name: config.name for config in apps.get_app_configs()}
+    configs |= {f"{type(c).__module__}.{type(c).__qualname__}": c.name for c in apps.get_app_configs()}
+    return [configs.get(entry, entry) for entry in installed_plugin_apps()]
+
+
+def tests_in(suite: unittest.TestSuite):
+    for test in suite:
+        if isinstance(test, unittest.TestSuite):
+            yield from tests_in(test)
+        else:
+            yield test
+
+
+def require_tests_from(suite: unittest.TestSuite, modules: list[str]) -> None:
+    """Refuse a run in which an installed plugin contributed no test."""
+
+    ids = [test.id() for test in tests_in(suite)]
+    silent = [module for module in modules if not any(i.startswith(module + ".") for i in ids)]
+    if silent:
+        raise RuntimeError(f"{len(silent)} installed plugin(s) contributed no test to this run.")
+
+
 class SeverinoTestRunner(DiscoverRunner):
     """Django's runner, with parallel workers on checkpointed database files."""
 
@@ -239,6 +268,17 @@ class SeverinoTestRunner(DiscoverRunner):
         settings.SEVERINO_SITE_HOST = ""
         settings.SEVERINO_REQUEST_PATH_SECONDS = 0
         super().setup_test_environment(**kwargs)
+
+    def build_suite(self, test_labels=None, **kwargs):
+        # A run with no labels is the whole suite: the host's and every
+        # installed plugin's, so a composed run tests what it composes. Named
+        # labels run what they name.
+        if test_labels:
+            return super().build_suite(test_labels, **kwargs)
+        modules = plugin_test_modules()
+        suite = super().build_suite([".", *modules], **kwargs)
+        require_tests_from(suite, modules)
+        return suite
 
     def get_resultclass(self):
         return super().get_resultclass() or CompositionTextResult

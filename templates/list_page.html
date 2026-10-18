@@ -4,7 +4,9 @@ A list: the toolbar, the table and its empty state, drawn from the view's
 TableListMixin. The header comes from `table.columns`; a page writes only the
 cells of one row in `{% block row %}`, which renders once per row with `row`
 set. `{% block summary %}` sits between the toolbar and the table.
-The view's `table_empty` says what an empty list means ("No assets yet."),
+The view's `table_empty` says what an empty list means ("No assets yet."), with
+`table_empty_why` beside it and `get_table_empty_remedy()` where the derived remedy
+is not the one,
 drawn by the one empty state with what would fill it; a list emptied by its
 own search or filters says so here instead, with the way out, so a page never
 has to tell the two apart. An empty list draws no table: headings over no rows
@@ -14,7 +16,7 @@ say nothing.
 {% include "partials/_table_toolbar.html" %}
 {% block summary %}{% endblock %}
 {% if not object_list %}
-{% if table.active_count %}{% include "partials/_empty_state.html" with message="Nothing matches." remedy=table.clear %}{% elif table.empty_remedy %}{% include "partials/_empty_state.html" with message=table.empty remedy=page.remedy %}{% else %}{% include "partials/_empty_state.html" with message=table.empty %}{% endif %}
+{% if table.active_count %}{% include "partials/_empty_state.html" with message="Nothing matches." remedy=table.clear %}{% elif table.empty_link %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=table.empty_link %}{% elif table.empty_remedy %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=page.remedy %}{% else %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why %}{% endif %}
 {% else %}
 <div class="table-scroll">
   <table class="data-table"{% if table.selectable %} data-selectable-table{% endif %}>

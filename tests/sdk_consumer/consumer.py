@@ -119,3 +119,5 @@ def a_page_lead(page: pages.Page) -> None:
 
 def an_empty_table(view: tables.TableListMixin) -> None:
     assert_type(view.get_table_empty(), str)
+    assert_type(view.get_table_empty_remedy(), tables.Remedy | None)
+    assert_type(tables.Remedy("Connect a bank", "/connections/").url, str)

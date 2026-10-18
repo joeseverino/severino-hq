@@ -1208,6 +1208,16 @@
       }
     },
     "tables": {
+      "Remedy": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "url="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "TableColumn": {
         "bases": [],
         "constructor": [
@@ -1260,6 +1270,12 @@
             ]
           },
           "get_table_empty": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
+          "get_table_empty_remedy": {
             "kind": "method",
             "parameters": [
               "self"
