@@ -348,7 +348,7 @@ STANDARD: tuple[Check, ...] = (
         "Password sign-in is installed",
         "a guessed or reused password",
         "Every session starts with single sign-on.",
-        "Set SEVERINO_PASSWORD_LOGIN_ENABLED=0 once single sign-on works.",
+        "Turn password sign-in off in HQ's settings once single sign-on works.",
         _sign_in,
     ),
     Check(

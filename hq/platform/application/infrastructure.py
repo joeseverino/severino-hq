@@ -409,9 +409,8 @@ def save_managed_resource(
         and not getattr(settings, "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False)
     ):
         raise PolicyError(
-            "Public DNS changes are off. Set "
-            "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS to allow them, or save "
-            "this record switched off."
+            "Public DNS changes are off in HQ's settings. Turn them on there "
+            "to allow them, or save this record switched off."
         )
     # An authored or edited declaration is one HQ would act on; its connection
     # must manage. An adopted spec restates what the provider holds.

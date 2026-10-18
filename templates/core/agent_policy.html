@@ -5,7 +5,7 @@
     <span class="agent-state-dot" aria-hidden="true"></span>
     <div class="agent-state-copy">
       <h2>{% if agents_paused %}Agents are blocked{% else %}Agents are allowed{% endif %}</h2>
-      <p>{% if agents_paused %}No agent can do anything through HQ until you allow them again.{% else %}They can do what the table below allows.{% endif %}</p>
+      <p>{% if agents_paused %}No agent can do anything through HQ until you allow them again.{% else %}They can do what the rules below allow.{% endif %}</p>
     </div>
     {% url 'agent_access' as agent_access_url %}
     {% if agents_paused %}
@@ -18,7 +18,7 @@
     <span>{{ rule_count|counted:"rule changed from the default,rules changed from the default" }}</span>
     {% if awaiting_count %}<a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count }}</strong> waiting for your approval</a>{% endif %}
     <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count }}</strong> refused in the last day</a>
-    {% if any_dormant %}<span class="policy-dormant-note">A greyed-out rule does nothing until the <code>SEVERINO_MCP_ENABLE</code> settings let agents do that action.</span>{% endif %}
+    {% if any_dormant %}<span class="policy-dormant-note">A greyed-out rule does nothing until HQ's settings let agents do that action.</span>{% endif %}
   </p>
   {% if agents %}
     <ul class="policy-agents">
@@ -35,46 +35,21 @@
 </section>
 
 {% comment %}
-The rules that differ from the default, and every rule when asked: a column
-per surface and per agent, so a rule is read and changed where it sits.
+The rules that differ from the default, then every other action folded under
+its own heading. Each row is in one table only, so the form posts each rule once.
 {% endcomment %}
-<div class="section-head">
-  <h2>{% if show_all %}Every action{% else %}Changed from the default{% endif %}</h2>
-  {% if show_all %}<a class="btn compact ghost" href="{% url 'agent_policy' %}">Show only changed</a>{% else %}<a class="btn compact ghost" href="{% url 'agent_policy' %}?all=1">Show all {{ action_count }} actions</a>{% endif %}
-</div>
-{% if not shown_groups %}
-  {% include "partials/_empty_state.html" with message="Every action is at its default." only %}
-{% else %}
 <form method="post" class="policy">
   {% csrf_token %}
-  {% comment %}
-  One table, a group per resource: the columns are the same for every resource,
-  so they are headed once rather than once per resource.
-  {% endcomment %}
-  <div class="table-scroll">
-    <table class="data-table policy-table">
-      <thead>
-        <tr>
-          <th scope="col">Action</th>
-          <th scope="col">Default</th>
-          {% for head in column_heads %}<th scope="col" title="{{ head.column.detail }}">{{ head.column.label }}{% if head.dormant %} <span class="policy-off">off in HQ's settings</span>{% endif %}</th>{% endfor %}
-        </tr>
-      </thead>
-      {% for group in shown_groups %}
-        <tbody>
-          <tr class="row-group"><th colspan="{{ column_heads|length|add:2 }}" scope="rowgroup">{{ group.label }}</th></tr>
-          {% for row in group.rows %}
-            <tr>
-              <th scope="row">{{ row.label }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span>{% endif %}</th>
-              <td class="policy-default">{{ row.default }}</td>
-              {% for cell in row.cells %}<td>{% include "core/_policy_setting.html" %}</td>{% endfor %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      {% endfor %}
-    </table>
-  </div>
+  {% if changed_groups %}
+    <h2>Changed from the default</h2>
+    {% include "core/_policy_table.html" with groups=changed_groups %}
+  {% endif %}
+  {% if default_groups %}
+    <details class="section-fold">
+      <summary><h2>{% if changed_groups %}Every other action{% else %}Every action{% endif %} <span class="heading-aside">{{ default_count }}</span></h2></summary>
+      {% include "core/_policy_table.html" with groups=default_groups %}
+    </details>
+  {% endif %}
   <div class="save-bar"><button type="submit" class="btn primary">Save changes</button></div>
 </form>
-{% endif %}
 {% endblock %}

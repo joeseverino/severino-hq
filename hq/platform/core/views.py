@@ -205,12 +205,9 @@ class AgentPolicyView(PageMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["columns"], context["groups"] = capability_policy.matrix()
         # Nearly every rule is at its default, so the page opens on the ones
-        # that are not. The rest are one press away, and are what "all" shows.
-        context["show_all"] = bool(self.request.GET.get("all"))
-        context["action_count"] = sum(len(group.rows) for group in context["groups"])
-        context["shown_groups"] = (
-            context["groups"] if context["show_all"] else capability_policy.changed_only(context["groups"])
-        )
+        # that are not, and the rest fold under their own heading.
+        context["changed_groups"], context["default_groups"] = capability_policy.split_by_default(context["groups"])
+        context["default_count"] = sum(len(group.rows) for group in context["default_groups"])
         context["agents"] = [column for column in context["columns"] if column.identity]
         # A column whose every settable rule is dormant is off as a whole, and
         # says so once in its header rather than greying each cell unexplained.

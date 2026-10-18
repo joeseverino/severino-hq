@@ -255,12 +255,18 @@ class Group:
     rows: tuple[Row, ...]
 
 
-def changed_only(groups: tuple[Group, ...]) -> tuple[Group, ...]:
-    """The groups with only the rows where some rule differs from the default,
-    and only the groups that have one."""
+def split_by_default(groups: tuple[Group, ...]) -> tuple[tuple[Group, ...], tuple[Group, ...]]:
+    """``(changed, at_default)``: the groups with only the rows where some rule
+    differs from the default, then with only the rest. A group with no row on
+    a side is left out of it, and every row is on exactly one side."""
 
-    kept = (Group(group.label, tuple(row for row in group.rows if row.overrides)) for group in groups)
-    return tuple(group for group in kept if group.rows)
+    def kept(changed: bool) -> tuple[Group, ...]:
+        rows = (
+            Group(group.label, tuple(row for row in group.rows if bool(row.overrides) is changed)) for group in groups
+        )
+        return tuple(group for group in rows if group.rows)
+
+    return kept(True), kept(False)
 
 
 def columns() -> tuple[Column, ...]:

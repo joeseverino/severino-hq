@@ -223,7 +223,7 @@ RULES: tuple[FindingRule, ...] = (
         "neutral",
         _trusted_wider_than_tailnet,
         operator_action=(
-            "Set SEVERINO_TRUSTED_NETWORKS to the addresses and routes the tailnet uses, then restart HQ."
+            "Narrow the trusted networks in HQ's settings to the addresses and routes the tailnet uses, then restart HQ."
         ),
         no_help_reason=("HQ cannot change its own deploy settings."),
     ),

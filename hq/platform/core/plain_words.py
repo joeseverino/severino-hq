@@ -54,11 +54,19 @@ RETIRED_NAMES: tuple[tuple[str, str], ...] = (
     ("Refresh controller readings", "Read now"),
     ("Read now and check again", "Check again"),
 )
+# How HQ is configured, which a page never asks its owner to type: a setting's
+# name, or the value to put in a credential's field. Matched as written, and
+# in code too, where an identifier is otherwise allowed.
+NEVER_ASKED: tuple[tuple[str, str], ...] = (
+    (r"SEVERINO_[A-Z0-9_]+", "what the setting does: 'off in HQ's settings'"),
+    (r"manages to 1", "what it lets HQ do, and where the connection's guide says how"),
+)
 # "Findings" is the name of a page, and stays one.
 _PAGE_NAMES = re.compile(r"\bFindings\b")
 _NEVER = tuple(
     (re.compile(rf"(?<![\w-])(?:{forms})(?![\w-])", re.IGNORECASE), instead) for forms, instead in NEVER_SHOWN
 )
+_ASKED = tuple((re.compile(rf"(?<![\w-])(?:{forms})(?![\w-])"), instead) for forms, instead in NEVER_ASKED)
 _TEMPLATE_TAG = re.compile(r"\{%.*?%\}|\{\{.*?\}\}", re.DOTALL)
 _TAG_LITERAL = re.compile(r"""(["'])((?:(?!\1).)*)\1""", re.DOTALL)
 # What a browser shows or reads out from an element, besides its text.
@@ -79,7 +87,9 @@ _SHOWN_ATTRIBUTES = frozenset(
 _IDENTIFIER = re.compile(r"[a-z0-9_.:/#?&=%\- ]*\Z")
 # A type written as a string, "Name | None": not a sentence.
 _ANNOTATION = re.compile(r"[A-Z]\w*(?: \| [A-Za-z]\w*)+")
-_UNSEEN_ELEMENTS = frozenset({"script", "style", "code", "pre", "kbd"})
+_UNSEEN_ELEMENTS = frozenset({"script", "style"})
+# Shown, but as an identifier, which may keep HQ's own names.
+_IDENTIFIER_ELEMENTS = frozenset({"code", "pre", "kbd"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +115,16 @@ def words_in(text: str) -> Iterator[tuple[str, str]]:
         match = pattern.search(plain)
         if match:
             yield match.group(), instead
+    yield from asked_in(text)
+
+
+def asked_in(text: str) -> Iterator[tuple[str, str]]:
+    """Each piece of HQ's configuration ``text`` asks its owner to type."""
+
+    for pattern, instead in _ASKED:
+        match = pattern.search(text)
+        if match:
+            yield match.group(), instead
 
 
 def _is_prose(text: str) -> bool:
@@ -119,17 +139,22 @@ def _is_prose(text: str) -> bool:
 
 
 class _Shown(HTMLParser):
-    """The text and the shown attributes of a template, with their lines."""
+    """The text and the shown attributes of a template, with their lines, and
+    apart from them the identifiers it shows."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.found: list[tuple[int, str]] = []
+        self.identifiers: list[tuple[int, str]] = []
         self._unseen = 0
+        self._identifier = 0
 
     @override
     def handle_starttag(self, tag, attrs):
         if tag in _UNSEEN_ELEMENTS:
             self._unseen += 1
+        if tag in _IDENTIFIER_ELEMENTS:
+            self._identifier += 1
         for name, value in attrs:
             if name in _SHOWN_ATTRIBUTES and value:
                 self.found.append((self.getpos()[0], value))
@@ -138,11 +163,14 @@ class _Shown(HTMLParser):
     def handle_endtag(self, tag):
         if tag in _UNSEEN_ELEMENTS and self._unseen:
             self._unseen -= 1
+        if tag in _IDENTIFIER_ELEMENTS and self._identifier:
+            self._identifier -= 1
 
     @override
     def handle_data(self, data):
-        if not self._unseen and data.strip():
-            self.found.append((self.getpos()[0], data))
+        if self._unseen or not data.strip():
+            return
+        (self.identifiers if self._identifier else self.found).append((self.getpos()[0], data))
 
 
 def _blank(match: re.Match) -> str:
@@ -151,9 +179,7 @@ def _blank(match: re.Match) -> str:
     return "\n" * match.group().count("\n")
 
 
-def template_text(source: str) -> list[tuple[int, str]]:
-    """``(line, text)`` for everything in a template a person sees."""
-
+def _shown(source: str) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
     uncommented = TEMPLATE_COMMENT.sub(_blank, source)
     shown: list[tuple[int, str]] = []
     for tag in _TEMPLATE_TAG.finditer(uncommented):
@@ -165,7 +191,19 @@ def template_text(source: str) -> list[tuple[int, str]]:
     parser.feed(_TEMPLATE_TAG.sub(_blank, uncommented))
     parser.close()
     shown.extend(parser.found)
-    return sorted(shown)
+    return sorted(shown), parser.identifiers
+
+
+def template_text(source: str) -> list[tuple[int, str]]:
+    """``(line, text)`` for everything in a template a person sees as words."""
+
+    return _shown(source)[0]
+
+
+def template_identifiers(source: str) -> list[tuple[int, str]]:
+    """``(line, text)`` for what a template shows as an identifier (code, pre, kbd)."""
+
+    return _shown(source)[1]
 
 
 # Calls whose words go to a log or to whoever is writing the code, never to a page.
@@ -263,8 +301,12 @@ def read(paths: Iterable[Path], *, root: Path) -> tuple[list[Found], int]:
     for path in _files(paths):
         source = path.read_text(encoding="utf-8", errors="replace")
         files += 1
-        shown = template_text(source) if path.suffix == ".html" else python_text(source)
-        for line, text in shown:
-            for word, instead in words_in(text):
-                found.append(Found(path.relative_to(root), line, word, instead, " ".join(text.split())[:90]))
+        if path.suffix == ".html":
+            words, identifiers = _shown(source)
+        else:
+            words, identifiers = python_text(source), []
+        for reading, shown in ((words_in, words), (asked_in, identifiers)):
+            for line, text in shown:
+                for word, instead in reading(text):
+                    found.append(Found(path.relative_to(root), line, word, instead, " ".join(text.split())[:90]))
     return found, files

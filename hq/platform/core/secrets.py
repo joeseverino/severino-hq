@@ -42,7 +42,7 @@ def _cipher() -> Fernet:
     key = _configured_key()
     if len(key) < 32:
         raise SecretsUnavailable(
-            "SEVERINO_SECRET_STORE_KEY must be set to at least 32 characters "
+            "HQ's settings need a secret store key of at least 32 characters "
             "before HQ can hold a secret. Nothing was stored."
         )
     # Derived rather than required to be a Fernet key, so the value in 1Password

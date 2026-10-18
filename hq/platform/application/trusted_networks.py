@@ -49,8 +49,8 @@ def wider_than_tailnet(estate: Any) -> tuple[dict[str, Any], ...]:
                 "severity": "neutral",
                 "explanation": (
                     "HQ accepts requests from every address in the range. "
-                    "You can narrow SEVERINO_TRUSTED_NETWORKS to the addresses "
-                    "the tailnet uses."
+                    "You can narrow the trusted networks in HQ's settings to "
+                    "the addresses the tailnet uses."
                 ),
                 "evidence": (
                     *(("Trusted", str(network)) for network in wide),

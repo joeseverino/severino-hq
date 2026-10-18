@@ -364,8 +364,8 @@ def _device_check(found: Connection) -> Check:
             CONTRADICTED,
             f"{found.address} forwarded this request but is not on HQ's list "
             "of trusted proxies, so HQ ignores the address it gave.",
-            "If that address is your proxy, add it to SEVERINO_TRUSTED_PROXIES; "
-            "otherwise find what is forwarding to HQ.",
+            "If that address is your proxy, add it to the trusted proxies in "
+            "HQ's settings; otherwise find what is forwarding to HQ.",
         )
     if channel == "opaque":
         return Check(
@@ -388,7 +388,7 @@ def _device_check(found: Connection) -> Check:
     return Check(
         CONTRADICTED,
         f"{found.address} is in none of the ranges HQ accepts.",
-        "Set SEVERINO_ENFORCE_TRUSTED_NETWORK so HQ refuses other networks.",
+        "Turn on the trusted-network check in HQ's settings so HQ refuses other networks.",
     )
 
 
@@ -495,7 +495,7 @@ def _ingress(hop: Hop, context: _Context):
         return evidence, Check(
             CONTRADICTED,
             f"{peer} forwarded this request but is not on HQ's list of trusted proxies.",
-            f"If {peer} is {proxy}, add it to SEVERINO_TRUSTED_PROXIES.",
+            f"If {peer} is {proxy}, add it to the trusted proxies in HQ's settings.",
         )
     return evidence, _forwarder_check(hop, context, peer, proxy)
 

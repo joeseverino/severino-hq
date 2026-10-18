@@ -1423,6 +1423,8 @@ PLAIN_WORDS_NOT_FOR_THE_OWNER = (
     ("hq/domains/control_plane/observations/contract.py", "Declaration errors raised while HQ starts."),
     ("hq/domains/control_plane/models.py", "Model validation messages no page shows."),
     ("hq/platform/application/integrations.py", "Errors an extension's author reads when it loads."),
+    ("hq/platform/application/plugin_admission.py", "Admission errors raised while HQ starts."),
+    ("hq/platform/core/outbound.py", "Why a request may wait on the outside, read by whoever adds one."),
     ("hq/platform/application/controller.py", "Refusals answered to the controller over the bridge."),
     ("hq/config/", "Settings and start-up errors."),
 )
@@ -1466,6 +1468,11 @@ PLAIN_WORDS_EXEMPT = (
         "hq/platform/application/render_status_findings.py",
         "render",
         "Part of a literal log token the owner is told to search the journal for.",
+    ),
+    (
+        "templates/control_plane/zone_detail.html",
+        "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS",
+        "The domain page's notice, owned by the pass reworking that page; it goes with the rewording there.",
     ),
     (
         "hq/domains/control_plane/apps.py",
@@ -1566,6 +1573,23 @@ class PlainWordsTests(SimpleTestCase):
             ["Action items", "Command Center"],
         )
         self.assertEqual(list(self.words.words_in("3 things need you. Read now.")), [])
+
+    def test_a_setting_name_or_a_field_value_is_found_even_in_code(self):
+        template = (
+            "<p>Set <code>SEVERINO_EXAMPLE_SWITCH</code> to allow it.</p>"
+            "<p>Set manages to 1 on its item.</p><code>example.rewrite</code>"
+        )
+        found = [
+            word
+            for _line, text in (*self.words.template_text(template), *self.words.template_identifiers(template))
+            for word, _instead in self.words.asked_in(text)
+        ]
+
+        self.assertEqual(sorted(found), ["SEVERINO_EXAMPLE_SWITCH", "manages to 1"])
+        self.assertEqual(
+            [word for word, _instead in self.words.words_in("Public DNS changes are off. Set SEVERINO_EXAMPLE_DNS.")],
+            ["SEVERINO_EXAMPLE_DNS"],
+        )
 
     def test_a_path_that_is_gone_fails_rather_than_passing(self):
         from pathlib import Path

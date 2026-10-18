@@ -173,7 +173,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             verified_email = email if claims.get("email_verified") is True else ""
             return bool(groups & allowed_groups) or (bool(verified_email) and verified_email in allowed_emails)
 
-        raise PermissionDenied("SEVERINO_OIDC_ALLOWED_EMAILS or SEVERINO_OIDC_ALLOWED_GROUPS must be set.")
+        raise PermissionDenied("Nobody can sign in until HQ's settings name the people or groups allowed in.")
 
     @staticmethod
     def _subject_key(claims) -> str:

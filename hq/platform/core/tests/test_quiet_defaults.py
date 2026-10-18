@@ -7,7 +7,8 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application import history
-from hq.platform.application.capability_policy import Cell, Column, Group, Row, Scope, changed_only
+from hq.platform.application.capability_policy import Cell, Column, Group, Row, Scope, split_by_default
+from hq.platform.application.tests.markup import elements, with_class
 from hq.platform.core.models import AuditLog
 
 
@@ -38,31 +39,34 @@ class AgentRulesTests(TestCase):
         with patch("hq.platform.application.capability_policy.matrix", return_value=(COLUMNS, groups)):
             return self.client.get(reverse("agent_policy"), params)
 
-    def test_only_rows_with_a_rule_that_differs_are_kept(self):
-        (kept,) = changed_only(GROUPS)
+    def test_every_row_is_on_exactly_one_side(self):
+        changed, at_default = split_by_default(GROUPS)
 
-        self.assertEqual((kept.label, [row.name for row in kept.rows]), ("Example records", ["example.delete"]))
+        self.assertEqual(
+            [(group.label, [row.name for row in group.rows]) for group in changed],
+            [("Example records", ["example.delete"])],
+        )
+        self.assertEqual(
+            [(group.label, [row.name for row in group.rows]) for group in at_default],
+            [("Example records", ["example.create"]), ("Example notes", ["example.note"])],
+        )
 
-    def test_the_page_opens_on_what_differs_and_offers_the_rest(self):
+    def test_the_page_opens_on_what_differs_and_folds_the_rest(self):
         page = self.page()
+        (rules,) = with_class(page, "policy")
+        (folded,) = with_class(page, "section-fold")
 
-        self.assertContains(page, "Do example.delete")
-        self.assertNotContains(page, "Do example.create")
-        self.assertNotContains(page, "Example notes")
-        self.assertContains(page, "Show all 3 actions")
+        self.assertIn("Do example.delete", rules.words)
+        self.assertNotIn("Do example.delete", folded.words)
+        self.assertIn("Do example.create", folded.words)
+        self.assertIn("Example notes", folded.words)
 
-    def test_all_shows_every_action(self):
-        page = self.page(all=1)
-
-        self.assertContains(page, "Do example.create")
-        self.assertContains(page, "Example notes")
-        self.assertContains(page, "Show only changed")
-
-    def test_with_nothing_changed_it_says_so_and_still_offers_the_rest(self):
+    def test_with_nothing_changed_every_action_is_folded_and_none_is_lost(self):
         page = self.page(groups=(Group("Example notes", (_row("example.note", None),)),))
+        (folded,) = with_class(page, "section-fold")
 
-        self.assertContains(page, "Every action is at its default.")
-        self.assertContains(page, "Show all 1 actions")
+        self.assertIn("Do example.note", folded.words)
+        self.assertEqual(len(elements(page, "table")), 1)
 
 
 class AuditLogReadRequestTests(TestCase):

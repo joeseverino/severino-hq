@@ -26,7 +26,7 @@ from .conditions import stamped
 from .inventory import record_identity, record_token, service_hostnames
 from .security import Principal
 
-OBSERVES_ONLY = "This connection is read-only. Set manages to 1 on its 1Password item to change things."
+OBSERVES_ONLY = "This connection only reads. Its setup guide says how to let HQ make changes through it."
 
 
 def manages_through(
@@ -419,8 +419,8 @@ def adopt(
         raise PolicyError(PROVIDERS[found.kind].adoption_gap)
     if found.observed_only:
         raise PolicyError(
-            f"This {found.label.lower()} is read through a read-only connection. "
-            "Set manages to 1 on its 1Password item to adopt it."
+            f"This {found.label.lower()} is read through a connection that only reads. "
+            "Its setup guide says how to let HQ make changes through it, which adopting needs."
         )
     result = save_managed_resource(
         ManagedResourceCommand(
