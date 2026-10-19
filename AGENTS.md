@@ -32,10 +32,13 @@ gate is a task in `mise.toml` named `<job>:<gate>`;
 base (`BASE`, `$CHECK_BASE`, then `origin/main`, `main`) are mapped through the
 tree's import graph to the test modules that import them directly or through
 one module between, plus every test of the changed Django apps and every test
-that names one (its URL namespace or app label), the architecture tests, ruff on the changed files, `manage.py
-check`, migration drift, every `drift:*` gate (each derived file against its
-source, also what `mise run regen --check` runs), and mypy on changed typed modules. Its tests run with `DEBUG` on, the
-one pass that does. A change to what extensions render
+that names one (its URL namespace or app label), and the architecture tests;
+beside them, as the mise tasks that define them, `checks:ruff` (lint and
+format), `checks:mypy`, `manage.py check` and migration drift
+(`tests:django`, `tests:migrations`), and every `drift:*` gate (each derived
+file against its source, also what `mise run regen --check` runs). Each Django
+gate opens a database of its own. Its tests run with `DEBUG` on, the one pass
+that does. A change to what extensions render
 through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
 moment modules, template tags) also runs the extensions' own suites, composed,
 when `mise.local.toml` names a set. `--list` prints the selection. Tens of
