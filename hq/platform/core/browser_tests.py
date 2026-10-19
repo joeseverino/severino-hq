@@ -1910,7 +1910,12 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
 
     def nothing_is_held_back_while_its_table_has_room(self, _name):
-        self.assertEqual(self.page.evaluate(_CUT_WITH_ROOM, [SELECTORS["table_scroll"], SELECTORS["row_less"], SELECTORS["row_more"]]), [])
+        self.assertEqual(
+            self.page.evaluate(
+                _CUT_WITH_ROOM, [SELECTORS["table_scroll"], SELECTORS["row_less"], SELECTORS["row_more"]]
+            ),
+            [],
+        )
 
     def a_token_breaks_only_where_it_may(self, _name):
         self.assertEqual(self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]), [])
