@@ -1874,7 +1874,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table .row-detail > td { padding-left: calc(var(--space-6) + 1.5rem); }
 .row-detail > td > .row-columns {
   grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6);
-  padding: var(--space-5) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
+  padding: var(--space-5) var(--space-6); border-radius: var(--radius); background: var(--bg-tint);
 }
 .row-detail > td > .row-columns > dt { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .data-table .row-detail:hover { background: none; }
@@ -3200,7 +3200,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-sight-list > li > ul { flex-basis: 100%; }
 .connection-credential-steps { font-size: var(--text-xs); }
 /* Opened beneath the row, the things it reads fill the line, row by row. */
-.row-detail .connection-sight-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); column-gap: var(--space-8); margin: 0; }
+.row-detail .connection-sight-list { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
 /* Each reading carries its state's colour, so what needs reading again shows. */
 .row-detail .connection-sight-list > li::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .row-detail .connection-sight-list > li:is(.connection-sight-partial)::before { background: var(--warn); }
@@ -3213,6 +3213,12 @@ a.discovery-link:hover strong { color: var(--accent); }
   background: var(--tone-caution-tint);
 }
 .row-detail .connection-credential-steps .operator-step:first-child { margin-top: 0; }
+/* Its notes are steps, numbered, at a reading width. */
+.row-detail .connection-credential-steps { max-width: 72ch; counter-reset: fix-step; }
+.row-detail .connection-credential-steps .operator-step p {
+  display: grid; grid-template-columns: 1.5em minmax(0, 1fr); margin-top: var(--space-2); color: var(--ink-2);
+}
+.row-detail .connection-credential-steps .operator-step p::before { counter-increment: fix-step; content: counter(fix-step) "."; color: var(--warn); font-weight: 650; }
 /* The rest of what it reads, as chips. */
 .row-detail .connection-ability-all > li { grid-template-columns: minmax(0, 1fr); padding: 1px var(--space-4); border-radius: 999px; background: var(--accent-tint); color: var(--accent); }
 .row-detail .connection-ability-all > li::before { content: none; }
