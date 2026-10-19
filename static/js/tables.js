@@ -171,6 +171,32 @@
       .filter((index) => index > named && rows.every((row) => blankCell(row.children[index])));
     if (blank.length) table.dataset.blank = blank.map((index) => index + 1).join(" ");
   };
+  // A table with an identifier cut gives it the room its rows have: the cap
+  // rises to the longest at which every row still fits on one line. Room
+  // taken by wrapping a sentence instead would trade one cut for a taller row.
+  const uncut = (table, wider) => {
+    const overflows = () => {
+      table.dataset.measure = "";
+      const over = wider();
+      delete table.dataset.measure;
+      return over;
+    };
+    const cut = [...table.querySelectorAll(":scope > tbody > tr:not(.row-detail) > td code")]
+      .filter((code) => code.clientWidth > 0 && code.scrollWidth > code.clientWidth + 1);
+    if (!cut.length || overflows()) return;
+    let fits = parseFloat(getComputedStyle(table).getPropertyValue("--identifier-max"));
+    let over = Math.ceil(Math.max(...cut.map((code) => (fits * code.scrollWidth) / code.clientWidth))) + 2;
+    const cap = (room) => table.style.setProperty("--identifier-max", `${room}ch`);
+    cap(over);
+    if (!overflows()) return;
+    while (over - fits > 1) {
+      const room = Math.floor((fits + over) / 2);
+      cap(room);
+      if (overflows()) over = room;
+      else fits = room;
+    }
+    cap(fits);
+  };
   const fitTable = (table) => {
     const wrapper = table.parentElement;
     if (!wrapper?.classList.contains("table-scroll")) return;
@@ -227,6 +253,8 @@
           if (!overflows()) break;
           table.style.removeProperty("--identifier-max");
         }
+      } else {
+        uncut(table, overflows);
       }
       if (overflows() && headings.length >= 3 && !table.querySelector(":scope > colgroup")) {
         const last = headings.length - 1;

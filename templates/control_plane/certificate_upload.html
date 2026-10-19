@@ -6,7 +6,7 @@
     <dl class="kv compact">
       <dt>Covers</dt><dd>{% for domain in material.domains %}<span class="tag">{{ domain }}</span>{% endfor %}</dd>
       <dt>Expires</dt><dd>{{ material.not_after|expiry }}</dd>
-      <dt>Fingerprint</dt><dd><code>{{ material.fingerprint_sha256|slice:":16" }}…</code></dd>
+      <dt>Fingerprint</dt><dd><code>{{ material.fingerprint_sha256|slice:":16"|breakable }}…</code></dd>
     </dl>
     <p class="muted">Uploading again replaces it. The key is never shown.</p>
   </section>

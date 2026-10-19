@@ -30,7 +30,7 @@ moment another source dated (a deploy, a container start).
     <td>{{ event.actor_label }}</td>
     <td><span class="pill pill-{{ event.action }}">{{ event.get_action_display }}</span></td>
     <td>{{ event.object_repr|default:event.type_label }}{% if event.object_type and event.object_repr %}<br><span class="muted">{{ event.type_label }}</span>{% endif %}</td>
-    <td class="muted">{{ event.message }}{% if event.operation_id %}<br><code>{{ event.operation_id }}</code>{% endif %}</td>
+    <td class="muted">{{ event.message }}{% if event.operation_id %}<br><code>{{ event.operation_id|breakable }}</code>{% endif %}</td>
     {% endwith %}
   {% endif %}
 {% endblock %}

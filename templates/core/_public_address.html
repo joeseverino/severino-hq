@@ -9,14 +9,14 @@
   </div>
   {% for hostname in reading.hostnames %}
     <div class="conn-row">
-      <code>{{ hostname }}</code>
+      <code>{{ hostname|breakable }}</code>
       <span class="conn-kind conn-kind-read">reverse DNS</span>
       <span class="conn-row-note"></span>
     </div>
   {% endfor %}
   {% if reading.allocation.organisation or reading.allocation.name %}
     <div class="conn-row">
-      <code>{{ reading.allocation.organisation|default:reading.allocation.name }}</code>
+      <code>{{ reading.allocation.organisation|default:reading.allocation.name|breakable }}</code>
       <span class="conn-kind conn-kind-read">allocation</span>
       <span class="conn-row-note"></span>
     </div>

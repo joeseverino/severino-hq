@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import AddressReading
+from hq.platform.application.tests.markup import text
 from hq.platform.application.tests.test_lookup import GLOBAL as ADDRESS
 
 STORED = {
@@ -35,7 +36,7 @@ class PublicAddressViewTests(TestCase):
         with patch("hq.platform.application.lookup.look_up_address", side_effect=AssertionError("a GET looked up")):
             response = self.client.get(self.url, {"address": ADDRESS})
 
-        self.assertContains(response, "host.example.net")
+        self.assertIn("host.example.net", text(response))
         self.assertContains(response, "Look up again")
         self.assertContains(response, "csrfmiddlewaretoken")
 

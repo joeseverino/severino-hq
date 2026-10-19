@@ -344,6 +344,10 @@ a { color: var(--accent-2); text-decoration: none; }
 a:hover { color: var(--accent); text-decoration: underline; }
 code { font-family: var(--font-mono); font-size: .88em; background: var(--bg-tint); padding: 1px var(--space-2); border-radius: 4px; color: var(--ink-2); }
 pre code { background: transparent; padding: 0; color: inherit; }
+/* A token (`|breakable`): an address, a path, a key, an image. It wraps at
+   the seams the filter marks, and inside a part only when that part alone is
+   longer than its line, however freely the box around it breaks prose. */
+code, .token { overflow-wrap: break-word; }
 /* A chip that is a link reads as one: the link colour, underlined on hover. */
 a code { color: var(--accent-2); }
 a:hover code { color: var(--accent); text-decoration: underline; }
@@ -1653,6 +1657,8 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    percentage, because a percentage counts for nothing while the columns are
    sized, and one long URL would then take the width every other column needs. */
 .data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: var(--identifier-max); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+/* On one line a hyphenated part is just text, so the cut ends in an ellipsis. */
+.data-table td code .whole { display: inline; }
 /* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {
   display: inline-flex;
@@ -3069,7 +3075,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   flex-wrap: wrap;
   flex: 1 1 16rem;
 }
-.discovery-meta code { font-size: var(--text-3xs); overflow-wrap: anywhere; }
+.discovery-meta code { font-size: var(--text-3xs); }
 .command-hint { margin: var(--space-2) 0 0; }
 /* A key to press is said only where there are keys: not on a touch screen. */
 @media (hover: none) { .keyboard-only { display: none; } }
@@ -4185,11 +4191,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 .input-suffix input { flex: 1 1 auto; min-width: 0; }
 .input-suffix span { color: var(--muted); font-weight: 600; }
 
-/* A record shown inside help text is one long unbreakable token, and the
-   content column clips rather than scrolls, so it breaks anywhere rather than
-   losing its end on a phone. */
-.help code, .mail-record-value { overflow-wrap: anywhere; }
-
 /* ── Reachability answer ───────────────────────────────────────── */
 
 .verdict { display: flex; align-items: baseline; gap: var(--space-4); margin: var(--space-7) 0 var(--space-2); }
@@ -5176,7 +5177,6 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
      what each line can break and what HQ could not write. */
   .hardening-patch { display: grid; gap: var(--space-4); min-width: 0; }
   .hardening-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
-  .hardening-head code { overflow-wrap: anywhere; }
   /* Wrapped rather than scrolled: a long path stays on screen, and the copy
      takes the text, not the wrapping. */
   .hardening-patch pre { margin: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -5235,7 +5235,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .nowrap { white-space: nowrap; }
   /* A hyphenated part of an address or a path (`|breakable`): moved to the
      next line whole, and broken inside only when it is longer than a line. */
-  .whole { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
+  .whole { display: inline-block; max-width: 100%; }
   /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
   .one-line { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; }
   /* The same mark as a verified certificate: a check in a circle, one colour. */

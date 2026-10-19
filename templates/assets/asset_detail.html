@@ -13,7 +13,7 @@
     <dt>Cost</dt><dd class="muted">Not recorded</dd>
   {% endif %}
   {% if asset.payment_method %}<dt>Payment method</dt><dd>{{ asset.get_payment_method_display }}</dd>{% endif %}
-  {% if asset.serial_number %}<dt>Serial</dt><dd><code>{{ asset.serial_number }}</code></dd>{% endif %}
+  {% if asset.serial_number %}<dt>Serial</dt><dd><code>{{ asset.serial_number|breakable }}</code></dd>{% endif %}
   {% if asset.warranty_date %}<dt>Warranty until</dt><dd>{{ asset.warranty_date|when }}</dd>{% endif %}
 </dl>
 

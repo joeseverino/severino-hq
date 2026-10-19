@@ -48,7 +48,7 @@
             {% else %}
             <a href="{% url 'core:audit_list' %}?q={{ q|urlencode }}"><strong>{{ item.title }}</strong></a>
             {% endif %}
-            {% if item.badge %}<code class="search-badge">{{ item.badge }}</code>{% endif %}
+            {% if item.badge %}<code class="search-badge">{{ item.badge|breakable }}</code>{% endif %}
           </p>
           {% if item.snippet %}
           <p class="search-snippet">{% for text, hit in item.snippet %}{% if hit %}<mark>{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}</p>

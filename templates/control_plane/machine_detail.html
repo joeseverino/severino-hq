@@ -140,7 +140,7 @@
             </dd>
           <dt>Routes</dt>
           <dd>
-              {% for route in machine.presence.advertised_routes %}<code>{{ route }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}None advertised{% endfor %}
+              {% for route in machine.presence.advertised_routes %}<code>{{ route|breakable }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}None advertised{% endfor %}
               {% comment %}
               The verb where the fact is. Approval takes the whole advertised
               set, so there is one control rather than one per route, and it
@@ -154,7 +154,7 @@
         {% endif %}
         {% if machine.presence.tags %}
           <dt>Tags</dt>
-          <dd>{% for tag in machine.presence.tags %}<code>{{ tag }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</dd>
+          <dd>{% for tag in machine.presence.tags %}<code>{{ tag|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</dd>
         {% endif %}
         {% comment %}
         Every address, here and nowhere else. A machine on a tailnet has a LAN
@@ -166,14 +166,14 @@
           {% comment %}
           One per line: three addresses are three answers, not a phrase.
           {% endcomment %}
-          <dd>{% for label, address in labelled_addresses %}{% if label %}<span class="muted">{{ label }}</span> {% endif %}<code>{{ address }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}</dd>
+          <dd>{% for label, address in labelled_addresses %}{% if label %}<span class="muted">{{ label }}</span> {% endif %}<code>{{ address|breakable }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}</dd>
               {% comment %}
         Who the policy lets in, per port: the answer the policy test gives,
         shown without having to ask. A policy alias names a machine's address
         and links to it; tags and users stay as the policy writes them.
         {% endcomment %}
         {% for port, who in opening_links %}
-          <dt>Allowed on port <code>{{ port }}</code></dt>
+          <dt>Allowed on port <code>{{ port|breakable }}</code></dt>
           <dd>{% include "control_plane/_policy_names.html" with names=who %}</dd>
         {% endfor %}
   </dl>
@@ -200,9 +200,9 @@
           <dt>Path</dt>
           <dd>
               {% if machine.presence.peer_path == "direct" %}
-                Direct: <code>{{ machine.presence.direct_endpoint }}</code>{% if machine.presence.relay %}, fallback relay <code>{{ machine.presence.relay }}</code>{% endif %}
+                Direct: <code>{{ machine.presence.direct_endpoint|breakable }}</code>{% if machine.presence.relay %}, fallback relay <code>{{ machine.presence.relay|breakable }}</code>{% endif %}
               {% elif machine.presence.peer_path == "relayed" %}
-                Relayed through <code>{{ machine.presence.relay }}</code> because no direct path was found. It is still encrypted end to end.
+                Relayed through <code>{{ machine.presence.relay|breakable }}</code> because no direct path was found. It is still encrypted end to end.
               {% else %}
                 No path yet. One is set up when traffic starts.
               {% endif %}
@@ -210,7 +210,7 @@
           <dt>Traffic</dt>
           <dd>{{ machine.presence.rx_bytes|bytes }} in · {{ machine.presence.tx_bytes|bytes }} out</dd>
           <dt>Node key</dt>
-          <dd><code class="node-key">{{ machine.presence.public_key }}</code></dd>
+          <dd><code class="node-key">{{ machine.presence.public_key|breakable }}</code></dd>
         </dl>
   {% endif %}
 

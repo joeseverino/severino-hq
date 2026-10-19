@@ -88,6 +88,9 @@ SELECTORS = {
     "cell_content": "main td *, main th *",
     # What a control says about the work it asked for, drawn under it.
     "spoken": ".ask-said",
+    # An identifier, written through `|breakable` or in code; a code block is
+    # text laid out by its own rules.
+    "token": ":is(code, .token):not(pre code)",
     # The one box allowed to scroll sideways.
     "table_scroll": ".table-scroll",
     # What a parser leaves where a <p> was closed early by a block inside it.
@@ -1153,26 +1156,79 @@ _RAGGED_QUEUES = (
 }"""
 )
 
-# A snug table cuts its identifiers only as far as its room needs: given two
-# more characters, it would no longer fit its box.
-_OVERCUT_TABLES = (
-    "(box) => {"
+# An identifier in a table is cut only while its row has no room for more:
+# given two more characters, its rows overflow their box on one line, and a
+# table that had to be made snug overflows it at all.
+_CUT_WITH_ROOM = (
+    "(scroll) => {"
     + _DESCRIBE
     + """
   const found = [];
-  const root = getComputedStyle(document.documentElement);
-  const widest = parseFloat(root.getPropertyValue('--identifier-max'));
-  for (const table of document.querySelectorAll('main ' + box + ' > table[data-snug]')) {
+  for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
+    if (!table.checkVisibility() || !('fit' in table.dataset)) continue;
     const wrapper = table.parentElement;
+    const cut = [...table.querySelectorAll('td code')]
+      .filter((code) => code.clientWidth > 0 && code.scrollWidth > code.clientWidth + 1);
+    if (!cut.length) continue;
+    const fits = () => table.getBoundingClientRect().width <= wrapper.clientWidth + 1;
     const room = parseFloat(getComputedStyle(table).getPropertyValue('--identifier-max'));
-    if (!table.checkVisibility() || room >= widest) continue;
     const before = table.style.getPropertyValue('--identifier-max');
     table.style.setProperty('--identifier-max', (room + 2) + 'ch');
-    const fits = table.getBoundingClientRect().width <= wrapper.clientWidth + 1;
+    const snug = 'snug' in table.dataset && fits();
+    table.dataset.measure = '';
+    const oneLine = fits();
+    delete table.dataset.measure;
     if (before) table.style.setProperty('--identifier-max', before); else table.style.removeProperty('--identifier-max');
-    if (fits) found.push(`${describe(table)}: identifiers cut to ${room}ch with room for more`);
+    if (snug || oneLine) found.push(`${describe(table)}: "${cut[0].textContent.trim()}" cut to ${room}ch with room for more`);
   }
   return found;
+}"""
+)
+
+# A token wraps at a seam (after a space, a dot, a slash or a hyphen, before a
+# colon) and inside a part only when that part alone is longer than its line.
+_TOKEN_BREAKS = (
+    "(token) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  const range = document.createRange();
+  const lines = (rects) => new Set([...rects].filter((r) => r.width).map((r) => Math.round(r.top)));
+  const after = /[\\s./-]/;
+  const isSeam = (prev, next) => after.test(prev) || /\\s/.test(next) || (next === ':' && prev !== ':');
+  for (const el of document.querySelectorAll('main ' + token)) {
+    if (!el.checkVisibility() || el.parentElement.closest(token)) continue;
+    range.selectNodeContents(el);
+    if (lines(range.getClientRects()).size < 2) continue;
+    let line = el;
+    while (getComputedStyle(line).display.startsWith('inline')) line = line.parentElement;
+    const room = line.clientWidth;
+    const chars = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (let i = 0; i < node.length; i++) {
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const rect = [...range.getClientRects()].find((r) => r.width);
+        chars.push({ch: node.data[i], top: rect ? Math.round(rect.top) : null, width: rect ? rect.width : 0});
+      }
+    }
+    const text = chars.map((c) => c.ch).join('');
+    let top = null;
+    chars.forEach((c, i) => {
+      if (c.top === null) return;
+      const broke = top !== null && c.top > top + 1;
+      top = c.top;
+      if (!broke || isSeam(chars[i - 1].ch, c.ch)) return;
+      let start = i;
+      while (start > 0 && !isSeam(chars[start - 1].ch, chars[start].ch)) start -= 1;
+      let end = i;
+      while (end < chars.length - 1 && !isSeam(chars[end].ch, chars[end + 1].ch)) end += 1;
+      const part = chars.slice(start, end + 1).reduce((sum, ch) => sum + ch.width, 0);
+      if (part + 16 < room) found.push(`${describe(el)} breaks "${text.slice(start, i)}|${text.slice(i, end + 1)}"`);
+    });
+  }
+  return [...new Set(found)].slice(0, 10);
 }"""
 )
 
@@ -1460,10 +1516,10 @@ class LayoutBrowserTests(BrowserGate):
             self.a_band_cell_keeps_its_padding,
             self.a_band_lays_out_as_whole_rows,
             self.a_queue_ends_its_cards_at_one_edge,
-            self.a_snug_table_cuts_identifiers_only_as_far_as_it_must,
             self.a_route_line_runs_from_its_first_stop_to_its_last,
             self.a_checks_evidence_follows_its_statement,
             self.nothing_a_summary_names_is_hidden,
+            self.a_token_breaks_only_where_it_may,
         ]
         if name in DENSE_PAGES:
             rules.append(self.dense_pages_keep_to_their_boxes)
@@ -1649,8 +1705,11 @@ class LayoutBrowserTests(BrowserGate):
     def a_route_is_one_row_or_one_column(self, _name):
         self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
 
-    def a_snug_table_cuts_identifiers_only_as_far_as_it_must(self, _name):
-        self.assertEqual(self.page.evaluate(_OVERCUT_TABLES, SELECTORS["table_scroll"]), [])
+    def nothing_is_cut_while_its_row_has_room(self, _name):
+        self.assertEqual(self.page.evaluate(_CUT_WITH_ROOM, SELECTORS["table_scroll"]), [])
+
+    def a_token_breaks_only_where_it_may(self, _name):
+        self.assertEqual(self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]), [])
 
     def a_queue_ends_its_cards_at_one_edge(self, _name):
         self.assertEqual(self.page.evaluate(_RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]), [])
@@ -1699,6 +1758,8 @@ class LayoutBrowserTests(BrowserGate):
             self.a_table_shares_its_width_only_with_columns_that_show,
             self.words_stay_inside_the_box_that_holds_them,
             self.a_tables_names_share_one_edge_whether_or_not_a_row_opens,
+            self.nothing_is_cut_while_its_row_has_room,
+            self.a_token_breaks_only_where_it_may,
         ]
 
     def a_table_shares_its_width_only_with_columns_that_show(self, _name):

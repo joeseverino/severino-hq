@@ -17,7 +17,7 @@ of its repository instead: the production deploy, and the repository's alerts.
     <span class="band-icon">{% include "partials/_icon.html" with name="layers" %}</span>
     <div>
       <span class="band-label">Version</span>
-      <strong>{% if standing.tag %}<code>{{ standing.tag }}</code>{% else %}No version tag{% endif %}</strong>
+      <strong>{% if standing.tag %}<code>{{ standing.tag|breakable }}</code>{% else %}No version tag{% endif %}</strong>
       <small>{{ standing.image.short }}</small>
       <small>{% if standing.pinned %}<span tabindex="0" data-tip="{{ standing.image.digest }}">Locked to an exact build</span>{% else %}Tag only{% endif %}</small>
       {% if standing.built %}<small>Built {{ standing.built|ago_short }}</small>{% endif %}
@@ -30,7 +30,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       <div>
         <span class="band-label">Production deploy</span>
         <strong>{% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}</strong>
-        {% if deploy %}<small><a class="external-link" href="{{ standing.repository.url|web_url }}/commit/{{ deploy.sha }}" rel="noopener"><code>{{ deploy.sha|slice:":7" }}</code></a>{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
+        {% if deploy %}<small><a class="external-link" href="{{ standing.repository.url|web_url }}/commit/{{ deploy.sha }}" rel="noopener"><code>{{ deploy.sha|slice:":7"|breakable }}</code></a>{% if deploy.created_at %} · {{ deploy.created_at|ago_short }}{% endif %}</small>{% endif %}
         <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name }}.{% endif %}</small>
       </div>
     </div>
@@ -48,7 +48,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       <div>
         <span class="band-label">Update</span>
         {% if standing.newer %}
-          <strong>{% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest }}</code> available</a>{% else %}<code>{{ standing.latest }}</code> available{% endif %}</strong>
+          <strong>{% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest|breakable }}</code> available</a>{% else %}<code>{{ standing.latest|breakable }}</code> available{% endif %}</strong>
           <small>{{ standing.newer|length|counted:"newer release,newer releases" }}{% if standing.release.published %}, the newest {{ standing.release.published|ago_short }}{% endif %}</small>
         {% elif standing.update_state == "current" %}
           <strong>Up to date</strong>

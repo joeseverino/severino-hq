@@ -23,7 +23,7 @@ from ..resources import (
 )
 from ..security import AuthorizationError, Capability, Principal, cli_principal
 from ..tailnet_context import TailnetContext
-from .markup import select
+from .markup import select, text
 
 NOW = timezone.now()
 
@@ -138,7 +138,7 @@ class TailnetProjectionTests(TestCase):
         response = self.client.get(reverse("control_plane:tailnet"))
 
         self.assertContains(response, "Join without approval")
-        self.assertContains(response, "group:empty")
+        self.assertIn("group:empty", text(response))
         self.assertContains(response, "example-connector")
 
     def test_nothing_read_is_said_as_not_read(self):

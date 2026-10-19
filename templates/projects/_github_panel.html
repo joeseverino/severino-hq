@@ -10,7 +10,7 @@ The page reads a stored reading; nothing here calls GitHub.
       <span class="band-icon">{% include "partials/_icon.html" with name="commit" %}</span>
       <div>
         <span class="band-label">Latest commit on {{ repo.default_branch }}</span>
-        <strong><a class="external-link" href="{{ repo.head.url }}" rel="noopener"><code>{{ repo.head.sha|slice:":7" }}</code></a></strong>
+        <strong><a class="external-link" href="{{ repo.head.url }}" rel="noopener"><code>{{ repo.head.sha|slice:":7"|breakable }}</code></a></strong>
         <small class="one-line" title="{{ repo.head.message }}">{{ repo.head.message }}</small>
         <small>{% if repo.head.author %}{{ repo.head.author }}{% endif %}{% if repo.head.date %} · {{ repo.head.date|ago_short }}{% endif %}</small>
       </div>
@@ -32,7 +32,7 @@ The page reads a stored reading; nothing here calls GitHub.
           {% comment %}GitHub's deployment states, as what happened.{% endcomment %}
           <strong>{% if repo.production.url %}<a class="external-link" href="{{ repo.production.url }}" rel="noopener">{% endif %}{% if state == "failure" or state == "error" %}Deploy failed{% elif state == "in_progress" or state == "queued" or state == "pending" %}Deploying{% elif state == "inactive" %}Replaced{% else %}Deployed{% endif %}{% if repo.production.url %}</a>{% endif %}</strong>
           {% endwith %}
-          <small><code>{{ repo.production.sha|slice:":7" }}</code> · {{ repo.production.created_at|ago_short }}{% if repo.production.sha != repo.head.sha %} · {{ repo.default_branch }} has newer commits{% endif %}</small>
+          <small><code>{{ repo.production.sha|slice:":7"|breakable }}</code> · {{ repo.production.created_at|ago_short }}{% if repo.production.sha != repo.head.sha %} · {{ repo.default_branch }} has newer commits{% endif %}</small>
           {% if repo.production.verified %}<small class="github-verified{% if repo.production_verified %} is-verified{% endif %}" tabindex="0" data-tip="{% for step in repo.production.verified %}{{ step.name }}: {{ step.conclusion|default:'not run' }}{% if not forloop.last %}&#10;{% endif %}{% endfor %}">{% include "partials/_icon.html" with name="check-circle" %}{% if repo.production_verified %}Verified before deploying{% else %}Verification failed{% endif %}</small>{% endif %}
         {% else %}
           <strong>None</strong><small>No deployments on GitHub.</small>

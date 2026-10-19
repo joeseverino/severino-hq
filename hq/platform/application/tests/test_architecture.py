@@ -1679,6 +1679,24 @@ class OnePrimitiveTests(SimpleTestCase):
         ]
         self.assertEqual(templates, [])
 
+    # Identifiers still written in bare code. Lower it as they move to
+    # `|breakable`; never raise it.
+    BARE_CODE_CEILING = 35
+
+    def test_an_identifier_is_written_as_a_breakable_token(self):
+        """A value in code wraps at its seams (`|breakable`), never inside
+        "compose.y|aml" because its box lets prose break anywhere."""
+
+        # A code block keeps its own lines, so code inside <pre> is not a token.
+        bare = re.compile(r"(<pre[^>]*>\s*)?(<code[^>]*>\{\{(?:(?!\}\}).)*\}\})")
+        found = [
+            f"{path.relative_to(self.ROOT).as_posix()}: {code}"
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            for block, code in bare.findall(path.read_text(encoding="utf-8"))
+            if not block and "|breakable" not in code
+        ]
+        self.assertLessEqual(len(found), self.BARE_CODE_CEILING, "\n".join(found))
+
     def test_zone_membership_is_asked_of_in_zone(self):
 
         inline = re.compile(r'endswith\(f"\.\{')

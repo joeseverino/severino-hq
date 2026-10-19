@@ -17,13 +17,13 @@
       {% endif %}
       {% if machine.role %} · {{ machine.role }}{% endif %}
       {% if not reached_links %} · no connection reads it{% if not machine.declaration %}; another record names it{% endif %}{% endif %}
-      {% if machine.address and not header_addresses %} · <code>{{ machine.address }}</code>{% endif %}
-      {% for label, address, holder in header_addresses %} · <span class="muted">{{ label }}</span> <code>{{ address }}</code>{% if holder %} <span class="muted">{{ holder }}</span>{% endif %}{% endfor %}
+      {% if machine.address and not header_addresses %} · <code>{{ machine.address|breakable }}</code>{% endif %}
+      {% for label, address, holder in header_addresses %} · <span class="muted">{{ label }}</span> <code>{{ address|breakable }}</code>{% if holder %} <span class="muted">{{ holder }}</span>{% endif %}{% endfor %}
       {% comment %}
       The other names this same machine answers to. Two credentials name one
       machine differently and neither is wrong (a Portainer environment and an
       SSH item for the same VPS) so the names fold together and the ones not
       chosen are said here rather than dropped.
       {% endcomment %}
-      {% if machine.aliases %} · also known as {% for alias in machine.aliases %}<code>{{ alias }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
+      {% if machine.aliases %} · also known as {% for alias in machine.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
 </p>

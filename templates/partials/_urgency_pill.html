@@ -16,13 +16,13 @@ tone, and its tooltip says the word the dot stands for.
     </div>
     <dl class="kv compact">
       {% if item.origin.rule %}
-        <dt>Rule</dt><dd>{{ item.origin.title }} <code>{{ item.origin.rule }}</code></dd>
+        <dt>Rule</dt><dd>{{ item.origin.title }} <code>{{ item.origin.rule|breakable }}</code></dd>
         <dt>Severity</dt><dd>{{ item.origin.severity }}</dd>
-        {% if item.origin.where %}<dt>Defined at</dt><dd><code>{{ item.origin.where }}</code></dd>{% endif %}
-        {% if item.origin.subsumes %}<dt>Stands in for</dt><dd>{% for name in item.origin.subsumes %}<code>{{ name }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</dd>{% endif %}
+        {% if item.origin.where %}<dt>Defined at</dt><dd><code>{{ item.origin.where|breakable }}</code></dd>{% endif %}
+        {% if item.origin.subsumes %}<dt>Stands in for</dt><dd>{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</dd>{% endif %}
       {% endif %}
       <dt>From</dt><dd>{{ item.origin.source }}</dd>
-      <dt>Key</dt><dd><code>{{ item.origin.key }}</code></dd>
+      <dt>Key</dt><dd><code>{{ item.origin.key|breakable }}</code></dd>
     </dl>
   </div>
 </div>

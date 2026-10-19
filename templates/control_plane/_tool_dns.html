@@ -28,9 +28,9 @@
               <tbody>
                 {% for answer in reading.answers %}
                   <tr>
-                    <td><code>{{ answer.type }}</code></td>
+                    <td><code>{{ answer.type|breakable }}</code></td>
                     <td>{{ answer.name }}</td>
-                    <td><code>{{ answer.value }}</code></td>
+                    <td><code>{{ answer.value|breakable }}</code></td>
                   </tr>
                 {% empty %}
                   <tr><td colspan="3" class="muted">No public records.</td></tr>
@@ -73,10 +73,10 @@
         {% if reading.ok %}
           <dl class="kv">
             <dt>Address</dt>
-            <dd><code>{{ reading.address }}</code> IPv{{ reading.version }}</dd>
+            <dd><code>{{ reading.address|breakable }}</code> IPv{{ reading.version }}</dd>
             {% if reading.hostnames %}
               <dt>Reverse DNS</dt>
-              <dd>{% for hostname in reading.hostnames %}<code>{{ hostname }}</code> {% endfor %}</dd>
+              <dd>{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}</dd>
             {% endif %}
             {% if reading.allocation.organisation %}
               <dt>Allocated to</dt>
@@ -84,13 +84,13 @@
             {% endif %}
             {% if reading.allocation.prefixes %}
               <dt>Block</dt>
-              <dd>{% for prefix in reading.allocation.prefixes %}<code>{{ prefix }}</code> {% endfor %}</dd>
+              <dd>{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}</dd>
             {% endif %}
             {% if reading.allocation.range %}
               <dt>Range</dt><dd>{{ reading.allocation.range }}</dd>
             {% endif %}
             {% if reading.allocation.handle %}
-              <dt>Registry handle</dt><dd><code>{{ reading.allocation.handle }}</code></dd>
+              <dt>Registry handle</dt><dd><code>{{ reading.allocation.handle|breakable }}</code></dd>
             {% endif %}
             {% if reading.note %}
               <dt>Note</dt><dd class="muted">{{ reading.note }}</dd>

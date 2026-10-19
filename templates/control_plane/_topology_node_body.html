@@ -46,7 +46,7 @@
         <dt>HQ could not check</dt>
         <dd>
           <ul class="topology-field-list">
-            {% for field in item.node.unconfirmed_fields %}<li><code>{{ field }}</code></li>{% endfor %}
+            {% for field in item.node.unconfirmed_fields %}<li><code>{{ field|breakable }}</code></li>{% endfor %}
           </ul>
         </dd>
       </div>

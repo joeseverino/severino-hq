@@ -32,6 +32,7 @@ class _Page(HTMLParser):
         self.elements: list[Element] = []
         self.words: list[str] = []
         self._open: list[Element] = []
+        self._token: Element | None = None
 
     @override
     def handle_starttag(self, tag, attrs):
@@ -49,10 +50,21 @@ class _Page(HTMLParser):
 
     @override
     def handle_data(self, data):
-        self.words.append(data)
+        # A token (`|breakable`) marks where it may wrap with markup; read, it
+        # is one word.
+        token = next((element for element in self._open if "token" in element.classes), None)
+        joined = token is not None and token is self._token
+        self._token = token
+        if joined:
+            self.words[-1] += data
+        else:
+            self.words.append(data)
         for element in self._open:
             element.text += data
-            element.chunks.append(data)
+            if joined and element.chunks:
+                element.chunks[-1] += data
+            else:
+                element.chunks.append(data)
 
 
 def _page(html) -> _Page:

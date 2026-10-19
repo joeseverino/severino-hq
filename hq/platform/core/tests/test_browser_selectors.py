@@ -22,6 +22,8 @@ AUDIT = ROOT / "scripts" / "layout-audit.js"
 # Host templates and the public example extension: the markup this repository
 # can see. Installed extensions ship their own templates.
 TEMPLATE_ROOTS = (ROOT / "templates", ROOT / "tests/fixtures/example_hq_plugin" / "templates")
+# The tag libraries write markup into those templates.
+TAG_LIBRARIES = ROOT / "hq/platform/core/templatetags"
 
 _CLASS = re.compile(r"\.(-?[A-Za-z_][\w-]*)")
 _ID = re.compile(r"#(-?[A-Za-z_][\w-]*)")
@@ -56,6 +58,10 @@ def markup() -> tuple[set[str], set[str], str]:
             for value in re.findall(r'\bclass="([^"]*)"', source):
                 classes.update(value.split())
             ids.update(re.findall(r'\bid="([^"{}]+)"', source))
+    for library in TAG_LIBRARIES.glob("*.py"):
+        source = library.read_text(encoding="utf-8")
+        for value in re.findall(r'\bclass="([\w\s-]*)"', source):
+            classes.update(value.split())
     return classes, ids, "\n".join(text)
 
 

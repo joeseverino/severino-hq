@@ -127,7 +127,7 @@ four would turn a typo in a DKIM selector into a mail outage.
       string, and an operator checking HQ against an external tool needs to see
       what will actually be published.
       {% endcomment %}
-      <p class="help">Publishes as <code>{{ mail.dmarc_record.content }}</code></p>
+      <p class="help">Publishes as <code>{{ mail.dmarc_record.content|breakable }}</code></p>
       <p class="help field-effect">Saving rewrites the DMARC record. HQ applies it within a minute.</p>
       <div class="form-actions"><button type="submit" class="primary">Save policy</button></div>
     </form>
@@ -147,7 +147,7 @@ not designed. Adding or removing one is a record, through the domain's own
       <ul class="mail-records">
         {% for record in section.records %}
           <li>
-            <code>{{ record.name }}</code>
+            <code>{{ record.name|breakable }}</code>
             {% if record.priority is not None %}<span class="pill">priority {{ record.priority }}</span>{% endif %}
             <span class="mail-record-value">{{ record.content }}</span>
             {% if record.resource_key %}

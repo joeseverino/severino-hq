@@ -36,6 +36,7 @@ from ..security import (
     mcp_principal,
     web_principal,
 )
+from .markup import text
 
 POLICY_KEY = "access-policy"
 GATED_KIND = "tailscale.policy"
@@ -697,7 +698,7 @@ class SurfaceTests(TestCase):
         amendment = self._entry(self.held)
         self.assertContains(amendment, "mcp-service-account")
         # An amendment's command has no reason field; the diff is the reason.
-        self.assertContains(amendment, "document.grants[0].src[0]")
+        self.assertIn("document.grants[0].src[0]", text(amendment))
         self.assertContains(self._entry(reconcile), "Stated reason for the change.")
 
     def test_a_held_record_change_shows_what_would_be_written(self):

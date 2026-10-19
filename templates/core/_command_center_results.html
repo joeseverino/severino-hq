@@ -12,7 +12,7 @@
               <span class="command-center-copy">
                 <span class="command-center-title">
                   <strong>{{ item.title }}</strong>
-                  {% if item.badge %}<code>{{ item.badge }}</code>{% endif %}
+                  {% if item.badge %}<code>{{ item.badge|breakable }}</code>{% endif %}
                 </span>
                 {% if item.snippet %}<span class="muted">{% for text, hit in item.snippet %}{{ text }}{% endfor %}</span>{% endif %}
               </span>

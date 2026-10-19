@@ -20,8 +20,8 @@ The answer to the policy test. The tailnet page answers it alone as its
         {% for rule in verdict.rules %}
           <tr>
             <td>{% if rule.line %}line {{ rule.line }}{% else %}{% empty_value %}{% endif %}</td>
-            <td>{% for who in rule.who %}<code>{{ who }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-            <td>{% for to in rule.to %}<code>{{ to }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            <td>{% for who in rule.who %}<code>{{ who|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+            <td>{% for to in rule.to %}<code>{{ to|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -40,9 +40,9 @@ The answer to the policy test. The tailnet page answers it alone as its
       <thead><tr><th>From</th><th>To</th><th>Ports</th></tr></thead>
       <tbody>
         <tr>
-          <td>{% for src in proposal.src %}<code>{{ src }}</code>{% endfor %}</td>
-          <td>{% for dst in proposal.dst %}<code>{{ dst }}</code>{% endfor %}</td>
-          <td>{% for ip in proposal.ip %}<code>{{ ip }}</code>{% endfor %}</td>
+          <td>{% for src in proposal.src %}<code>{{ src|breakable }}</code>{% endfor %}</td>
+          <td>{% for dst in proposal.dst %}<code>{{ dst|breakable }}</code>{% endfor %}</td>
+          <td>{% for ip in proposal.ip %}<code>{{ ip|breakable }}</code>{% endfor %}</td>
         </tr>
       </tbody>
     </table>

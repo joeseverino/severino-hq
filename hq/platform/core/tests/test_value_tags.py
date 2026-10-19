@@ -1,26 +1,46 @@
+import re
+
 from django.test import SimpleTestCase
 
-from hq.platform.core.templatetags.value_tags import breakable
+from hq.platform.core.templatetags.value_tags import breakable, readout
+
+
+def pieces(html):
+    """What a token may wrap between: its text split at each break opportunity."""
+
+    return re.sub(r"</?span[^>]*>", "", str(html)).split("<wbr>")
 
 
 class BreakableTests(SimpleTestCase):
     def test_an_address_wraps_between_its_parts_and_before_its_port(self):
-        self.assertEqual(breakable("10.0.0.10:8000"), "10.<wbr>0.<wbr>0.<wbr>10<wbr>:8000")
+        self.assertEqual(pieces(breakable("10.0.0.10:8000")), ["10.", "0.", "0.", "10", ":8000"])
+
+    def test_an_ipv6_address_wraps_before_a_colon_run_never_inside_it(self):
+        self.assertEqual(pieces(breakable("2001:db8::1")), ["2001", ":db8", "::1"])
 
     def test_a_hostname_and_a_path_wrap_after_their_dots_and_slashes(self):
-        self.assertEqual(breakable("app.example.com/a"), "app.<wbr>example.<wbr>com/<wbr>a")
+        self.assertEqual(pieces(breakable("app.example.com/a")), ["app.", "example.", "com/", "a"])
+
+    def test_a_url_wraps_after_its_scheme_never_inside_it(self):
+        self.assertEqual(pieces(breakable("https://example.com/a")), ["https://", "example.", "com/", "a"])
 
     def test_markup_in_the_value_stays_text(self):
-        self.assertEqual(breakable("<b>x</b>.y"), "&lt;b&gt;x&lt;/<wbr>b&gt;.<wbr>y")
+        self.assertNotIn("<b>", str(breakable("<b>x</b>.y")))
+        self.assertEqual("".join(pieces(breakable("<b>x</b>.y"))), "&lt;b&gt;x&lt;/b&gt;.y")
 
     def test_nothing_is_added_at_either_end(self):
-        self.assertEqual(breakable(".hidden:"), ".<wbr>hidden:")
+        self.assertEqual(pieces(breakable(".hidden:")), [".", "hidden:"])
 
     def test_a_hyphenated_part_is_kept_whole(self):
-        self.assertEqual(
-            breakable("sudo /usr/severino-hq/bin"),
-            'sudo /<wbr>usr/<wbr><span class="whole">severino-hq/</span><wbr>bin',
-        )
+        self.assertIn('<span class="whole">severino-hq/</span>', breakable("sudo /usr/severino-hq/bin"))
+
+    def test_it_is_marked_a_token_and_nothing_is_one(self):
+        self.assertIn('class="token"', breakable("example.com"))
+        self.assertEqual(breakable(""), "")
+
+    def test_a_readout_identifier_is_a_breakable_token(self):
+        self.assertEqual(pieces(readout("app.example.com:443")), ["<code>app.", "example.", "com", ":443</code>"])
+        self.assertEqual(readout("11"), "11")
 
 
 class LeadActionTests(SimpleTestCase):

@@ -13,7 +13,7 @@ standard. Each said once; the band above has its version and standing.
       <span class="band-icon">{% include "partials/_icon.html" with name="deploy" %}</span>
       <div>
         <span class="band-label">To</span>
-        <strong>{% if plan.release %}<a class="external-link" href="{{ plan.release.url }}" rel="noopener"><code>{{ plan.target_tag }}</code></a>{% else %}<code>{{ plan.target_tag }}</code>{% endif %}</strong>
+        <strong>{% if plan.release %}<a class="external-link" href="{{ plan.release.url }}" rel="noopener"><code>{{ plan.target_tag|breakable }}</code></a>{% else %}<code>{{ plan.target_tag|breakable }}</code>{% endif %}</strong>
         <small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19" }}…</span>{% else %}Exact build not read yet{% endif %}{% if plan.release.published %} · released {{ plan.release.published|ago_short }}{% endif %}</small>
       </div>
     </div>
@@ -30,7 +30,7 @@ standard. Each said once; the band above has its version and standing.
       <div>
         <span class="band-label">Its data</span>
         <strong>{% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
-        <small>{% for mount in plan.data %}<code>{{ mount.source }}</code>{% if not forloop.last %}, {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
+        <small>{% for mount in plan.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %}, {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
       </div>
     </div>
     <div class="band-fact{% if not plan.verified_by %} tone-attention{% endif %}">
@@ -99,7 +99,7 @@ standard. Each said once; the band above has its version and standing.
       <div>
         <span class="band-label">Its data</span>
         <strong>{% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
-        <small>{% for mount in readiness.data %}<code>{{ mount.source }}</code>{% if not forloop.last %}, {% endif %}{% empty %}Nothing to restore on a rollback.{% endfor %}</small>
+        <small>{% for mount in readiness.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %}, {% endif %}{% empty %}Nothing to restore on a rollback.{% endfor %}</small>
       </div>
     </div>
     <div class="band-fact{% if readiness.automatic %} tone-good{% endif %}">
@@ -121,7 +121,7 @@ standard. Each said once; the band above has its version and standing.
   {% include "partials/_standard_gaps.html" with posture=chain %}
   <dl class="github-facts container-facts boxed-facts">
     <div><dt>Built from</dt><dd>{% if standing.source|web_url %}<a class="external-link" href="{{ standing.source|web_url }}" rel="noopener">{{ standing.upstream }}</a> <span class="muted">{{ standing.source_known_by }}</span>{% elif edit_url %}<a href="{{ edit_url }}">Name its source repository</a> <span class="muted">· the image does not say</span>{% else %}<span class="muted">The image does not say.</span>{% endif %}</dd></div>
-    {% if standing.commit_url or standing.provenance.builder or standing.built_on %}<div><dt>Built</dt><dd>{% if standing.commit_url|web_url %}<span class="muted">at</span> <a class="external-link" href="{{ standing.commit_url|web_url }}" rel="noopener"><code>{{ standing.provenance.revision|slice:":7" }}</code></a> {% endif %}{% if standing.provenance.builder|web_url %}<span class="muted">by</span> <a class="external-link" href="{{ standing.provenance.builder|web_url }}" rel="noopener">a workflow run</a> {% endif %}{% if standing.built_on %}<span class="muted">on</span> {% for base in standing.built_on %}<code>{{ base }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</dd></div>{% endif %}
+    {% if standing.commit_url or standing.provenance.builder or standing.built_on %}<div><dt>Built</dt><dd>{% if standing.commit_url|web_url %}<span class="muted">at</span> <a class="external-link" href="{{ standing.commit_url|web_url }}" rel="noopener"><code>{{ standing.provenance.revision|slice:":7"|breakable }}</code></a> {% endif %}{% if standing.provenance.builder|web_url %}<span class="muted">by</span> <a class="external-link" href="{{ standing.provenance.builder|web_url }}" rel="noopener">a workflow run</a> {% endif %}{% if standing.built_on %}<span class="muted">on</span> {% for base in standing.built_on %}<code>{{ base|breakable }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</dd></div>{% endif %}
     {% if standing.packages %}<div><dt>Packages</dt><dd>{{ standing.packages }} <span class="muted">listed by its publisher{% if standing.checked %}, checked against <a class="external-link" href="https://osv.dev" rel="noopener">OSV</a>{% if standing.checked_at %} {{ standing.checked_at|ago_short }}{% endif %}{% endif %}</span></dd></div>{% endif %}
     {% if standing.findings %}<div><dt>Known in them</dt><dd>{% for finding in standing.findings|slice:":6" %}{% if finding.url|web_url %}<a class="external-link" href="{{ finding.url|web_url }}" rel="noopener">{{ finding.id }}</a>{% else %}{{ finding.id }}{% endif %} <span class="muted">{{ finding.package }} {{ finding.installed }}{% if finding.fixed %} → {{ finding.fixed|join:", " }}{% endif %}{% if finding.severity %} · {{ finding.severity }}{% endif %}</span>{% if not forloop.last %}<br>{% endif %}{% endfor %}{% if standing.findings|length > 6 %}<br><span class="muted">and {{ standing.findings|length|add:"-6" }} more</span>{% endif %}</dd></div>{% endif %}
   </dl>
@@ -137,24 +137,24 @@ standard. Each said once; the band above has its version and standing.
   <div id="hardening" class="hardening-patch boxed-facts">
     {% if patch.yaml %}
       <div class="hardening-head">
-        <strong>Add to {% if patch.compose_file %}<code>{{ patch.compose_file }}</code>{% else %}its compose file{% endif %}</strong>
+        <strong>Add to {% if patch.compose_file %}<code>{{ patch.compose_file|breakable }}</code>{% else %}its compose file{% endif %}</strong>
         <button class="btn compact ghost" type="button" data-copy-target="hardening-yaml">Copy</button>
       </div>
       <pre id="hardening-yaml"><code>{{ patch.yaml }}</code></pre>
       <p class="muted">Where its service already has one of these keys, replace it. Then run <code>docker compose up -d {{ patch.service }}</code> in that directory.</p>
     {% endif %}
     <ul class="hardening-notes">
-      {% for removal in patch.removals %}<li><strong>Remove</strong> {% for line in removal.lines %}<code>{{ line }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% if removal.caution %} <span class="muted">{{ removal.caution }}</span>{% endif %}</li>{% endfor %}
-      {% for change in patch.cautions %}<li><code>{{ change.key }}</code> <span class="muted">{{ change.caution }}</span></li>{% endfor %}
+      {% for removal in patch.removals %}<li><strong>Remove</strong> {% for line in removal.lines %}<code>{{ line|breakable }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% if removal.caution %} <span class="muted">{{ removal.caution }}</span>{% endif %}</li>{% endfor %}
+      {% for change in patch.cautions %}<li><code>{{ change.key|breakable }}</code> <span class="muted">{{ change.caution }}</span></li>{% endfor %}
       {% for gap in patch.unwritten %}<li><strong>Not included</strong> <span class="muted">{{ gap.reason }}</span>{% if gap.check == "no-docker-socket" and patch.socket_link %} <a href="{{ patch.socket_link.url }}">{{ patch.socket_link.label }}</a>{% endif %}</li>{% endfor %}
     </ul>
   </div>
   {% endif %}{% endwith %}
   <dl class="github-facts container-facts boxed-facts">
-    {% if item.compose_files or item.running.stack %}<div><dt>Defined in</dt><dd>{% if item.running.stack %}{{ item.running.stack }}{% if item.compose_files %} <span class="muted">·</span> {% endif %}{% endif %}{% for path in item.compose_files %}<code>{{ path }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
+    {% if item.compose_files or item.running.stack %}<div><dt>Defined in</dt><dd>{% if item.running.stack %}{{ item.running.stack }}{% if item.compose_files %} <span class="muted">·</span> {% endif %}{% endif %}{% for path in item.compose_files %}<code>{{ path|breakable }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
     {% if item.running.published %}<div><dt>Ports</dt><dd>{{ item.running.published }}</dd></div>{% endif %}
     {% if item.serves %}<div><dt>Serves</dt><dd>{% for hostname in item.serves %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>{% endif %}
-    {% if item.mounts %}{% with shared=item.shared_mounts %}<div><dt>Mounts</dt><dd>{% for mount in item.mounts %}<code>{{ mount.source }}</code> → <code>{{ mount.destination }}</code>{% if mount.read_only %} <span class="muted">read-only</span>{% endif %}{% with others=shared|dictkey:mount.source %}{% if others %} <span class="muted">· also</span> {% for other in others %}<a href="{{ other.url }}">{{ other.running.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% endwith %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd></div>{% endwith %}{% endif %}
+    {% if item.mounts %}{% with shared=item.shared_mounts %}<div><dt>Mounts</dt><dd>{% for mount in item.mounts %}<code>{{ mount.source|breakable }}</code> → <code>{{ mount.destination|breakable }}</code>{% if mount.read_only %} <span class="muted">read-only</span>{% endif %}{% with others=shared|dictkey:mount.source %}{% if others %} <span class="muted">· also</span> {% for other in others %}<a href="{{ other.url }}">{{ other.running.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% endwith %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd></div>{% endwith %}{% endif %}
     {% if posture.measured < posture.results|length %}<div><dt>Not read yet</dt><dd class="muted"><span tabindex="0" data-tip="{% for result in posture.results %}{% if result.state == 'unavailable' %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">{{ posture.unread|counted:"check,checks" }}</span>, waiting for the controller to read this container's settings from Docker</dd></div>{% endif %}
     <div><dt>Last read</dt><dd>{{ item.running.observed_at|when:"ago" }}</dd></div>
   </dl>

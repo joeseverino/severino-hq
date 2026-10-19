@@ -19,7 +19,7 @@ model validates the submission. Nothing here knows what kind of resource this is
     <dl class="kv compact form-facts">
       {% for label, desired, observed in facts %}
         <dt>{{ label }}</dt>
-        <dd><code>{{ observed|default:desired|or_empty }}</code></dd>
+        <dd><code>{{ observed|default:desired|or_empty|breakable }}</code></dd>
       {% endfor %}
     </dl>
   {% endif %}

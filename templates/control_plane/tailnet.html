@@ -48,7 +48,7 @@
           <tr>
             <td>{% include "control_plane/_policy_names.html" with names=grant.sources %}</td>
             <td>{% include "control_plane/_policy_names.html" with names=grant.destinations %}</td>
-            <td><span class="code-list">{% for ip, name in grant.rule.ports %}<code>{{ ip }}{% if name %} · {{ name }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
+            <td><span class="code-list">{% for ip, name in grant.rule.ports %}<code>{{ ip|breakable }}{% if name %} · {{ name }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
           </tr>
         {% endfor %}
       </tbody>
@@ -62,14 +62,14 @@
       <tbody>
         {% for group in tailnet.policy.groups %}
           <tr>
-            <td><code>{{ group.name }}</code></td>
+            <td><code>{{ group.name|breakable }}</code></td>
             <td>{{ group.members|join:", " }}</td>
             <td></td>
           </tr>
         {% endfor %}
         {% for row in tailnet.tags %}
           <tr>
-            <td><code>{{ row.tag.name }}</code></td>
+            <td><code>{{ row.tag.name|breakable }}</code></td>
             <td><span class="muted">owned by</span> {{ row.tag.owners|join:", " }}</td>
             <td>{% for link in row.devices %}{% entity link %}{% if not forloop.last %}, {% endif %}{% empty %}{% if row.unworn %}<span class="muted">no device has this tag</span>{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
           </tr>
@@ -96,8 +96,8 @@
         <tbody>
           {% for service in tailnet.policy.services %}
             <tr>
-              <td><code>{{ service.name }}</code></td>
-              <td>{% for address in service.addresses %}<code>{{ address }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
+              <td><code>{{ service.name|breakable }}</code></td>
+              <td>{% for address in service.addresses %}<code>{{ address|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
               <td>{{ service.ports|join:" "|or_empty }}</td>
               <td class="muted">{{ service.comment|or_empty }}</td>
             </tr>
@@ -123,7 +123,7 @@
             <tr>
               <td>{% include "control_plane/_policy_names.html" with names=row.sources %}</td>
               <td>{% include "control_plane/_policy_names.html" with names=row.destinations %}</td>
-              <td>{% for user in row.rule.users %}<code>{{ user }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
+              <td>{% for user in row.rule.users %}<code>{{ user|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
               <td>{% if row.rule.action == "check" %}Yes{% elif row.rule.action == "accept" %}<strong>No</strong>{% else %}{{ row.rule.action }}{% endif %}</td>
             </tr>
           {% endfor %}
@@ -140,8 +140,8 @@
         <tbody>
           {% for connector in tailnet.policy.app_connectors %}
             <tr>
-              <td><code>{{ connector.name }}</code></td>
-              <td>{% for node in connector.connectors %}<code>{{ node }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
+              <td><code>{{ connector.name|breakable }}</code></td>
+              <td>{% for node in connector.connectors %}<code>{{ node|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
               <td>{% for domain in connector.domains %}{% entity "service"|entity_of:domain code=True %}{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
             </tr>
           {% endfor %}

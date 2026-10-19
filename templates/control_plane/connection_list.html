@@ -35,7 +35,7 @@ part's heading shows only when there is more than one.
           <tr id="{{ connection.instance.label|connection_anchor }}">
             <td>
               <strong>{% entity connection.name_link %}</strong>
-              {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
+              {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint|breakable }}</code>{% endif %}
               {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
               {% ifchanged group.spec.label group.spec.secret_store %}<span class="connection-row-meta narrow-more">
                 {% if group.spec.label != connection.instance.label %}{{ group.spec.label }} · {% endif %}{% if group.spec.secret_store %}Secrets in {{ group.spec.secret_store }}{% elif connection.instance.credential_model == "none" %}No key needed{% else %}Does not say where its secret is kept{% endif %}

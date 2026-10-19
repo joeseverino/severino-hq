@@ -32,7 +32,7 @@ connected is in one place.
               <p>{{ setup.create }}{% if setup.create_url|web_url %} <a class="external-link" href="{{ setup.create_url|web_url }}" rel="noopener">Where to make it</a>{% endif %}</p>
               {% if setup.permissions %}
                 <p>Give it these permissions, and no others:</p>
-                <ul class="setup-permissions">{% for permission in setup.permissions %}<li><code>{{ permission }}</code></li>{% endfor %}</ul>
+                <ul class="setup-permissions">{% for permission in setup.permissions %}<li><code>{{ permission|breakable }}</code></li>{% endfor %}</ul>
               {% elif setup.credential == "coarse" %}
                 <p class="muted">This is the whole account: {{ setup.label }} offers nothing narrower, so make it for HQ alone.</p>
               {% endif %}
@@ -50,8 +50,8 @@ connected is in one place.
                   <tbody>
                     {% for field in setup.fields %}
                       <tr>
-                        <td><code>{{ field.name }}</code></td>
-                        <td>{% if field.value %}<code>{{ field.value }}</code>{% elif field.secret %}<span class="muted">the secret</span>{% else %}<span class="muted">yours</span>{% endif %}</td>
+                        <td><code>{{ field.name|breakable }}</code></td>
+                        <td>{% if field.value %}<code>{{ field.value|breakable }}</code>{% elif field.secret %}<span class="muted">the secret</span>{% else %}<span class="muted">yours</span>{% endif %}</td>
                         <td class="optional-col muted">{{ field.note }}</td>
                       </tr>
                     {% endfor %}
