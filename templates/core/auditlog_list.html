@@ -18,7 +18,7 @@ moment another source dated (a deploy, a container start).
     <td><span class="pill pill-{{ first.action }}">{{ first.get_action_display }}</span></td>
     <td>
       {{ row.title }}
-      <ul class="history-run-list row-more">
+      <ul class="history-run-list row-below">
         {% for event in row.events %}<li><a href="{% url 'core:audit_detail' event.pk %}">{{ event.object_repr|default:event.type_label }}</a></li>{% endfor %}
       </ul>
     </td>

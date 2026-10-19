@@ -372,6 +372,23 @@ class StyleContractTests(SimpleTestCase):
 
         self.assertEqual(sorted(set(offences)), [])
 
+    def test_a_rows_block_detail_opens_beneath_the_row(self):
+        """`row-more` shows a part in its own cell once the row is open, which
+        suits a word or a list item. A block (a list, a paragraph, a panel)
+        shown there stacks the whole detail into one column beside empty ones,
+        so it is `row-below`, the line beneath the row at the table's width."""
+
+        root = Path(__file__).resolve().parents[4]
+        offences = [
+            f"{template.relative_to(root)}: <{tag}>"
+            for template in (root / "templates").rglob("*.html")
+            for tag in re.findall(
+                r'<(div|ul|ol|p|section|form|table|dl)\b[^>]*class="[^"]*\brow-more\b',
+                template.read_text(encoding="utf-8"),
+            )
+        ]
+        self.assertEqual(offences, [])
+
     # Viewport breakpoints left, each for something the viewport genuinely
     # decides: the header and nav, a modal that takes the whole screen, table
     # sizing, the head's overflow menu, the dashboard strip, a few dense

@@ -4350,9 +4350,11 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 /* A check's statement, then what it was read from: on the same line while
    both fit, under the statement when they do not. */
 .conn-check { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-6); min-width: 0; }
+/* A check's reading is a value HQ read, in the chip every value has; one that
+   wraps keeps the chip on each line. */
 .conn-layer-evidence {
-  min-width: 0; font-size: var(--text-2xs); color: var(--muted);
-  overflow-wrap: break-word; background: none; padding: 0;
+  min-width: 0; font-size: var(--text-2xs); color: var(--ink-2);
+  overflow-wrap: break-word; -webkit-box-decoration-break: clone; box-decoration-break: clone;
 }
 /* The path is a route: each hop a stop on one line from your device down to
    HQ, the tick on the line. A hop that does not hold colours its stretch. */
