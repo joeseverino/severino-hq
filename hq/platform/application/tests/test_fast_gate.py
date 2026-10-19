@@ -1,15 +1,19 @@
 """The inner-loop gate maps a change to the tests that reach it."""
 
 import importlib.util
-import io
+import json
 import os
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
-from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, tag
+
+from hq.config.sandbox import PREFIX, sweep_abandoned
 
 ROOT = Path(__file__).resolve().parents[4]
 spec = importlib.util.spec_from_file_location("fast_gate", ROOT / "scripts" / "fast_gate.py")
@@ -40,12 +44,6 @@ class FastGateMappingTests(SimpleTestCase):
         modules = {fast_gate.module_name(p) for p in self.files}
         reached = fast_gate.imports(Path("hq/platform/application/domains.py"), modules)
         self.assertNotIn("hq.domains.expenses.urls", reached)
-
-    def test_mypy_is_given_only_the_typed_python_it_checks(self):
-        targets = fast_gate.mypy_targets(
-            ["hq/platform/mcp/tests/test_mcp.py", "hq_sdk/contract.json", "hq/platform/application/domains.py"]
-        )
-        self.assertEqual(targets, ["hq/platform/application/domains.py"])
 
     def test_an_app_change_selects_the_tests_that_use_the_app(self):
         labels = self.labels("hq/domains/expenses/views.py")
@@ -88,29 +86,6 @@ class FastGateMappingTests(SimpleTestCase):
 
     def test_apps_are_derived_from_the_tree(self):
         self.assertLessEqual({"expenses", "core", "projects"}, set(fast_gate.django_apps().values()))
-
-
-@tag("source")
-class FastGateConfigTests(SimpleTestCase):
-    def test_toml_configuration_bounds_typed_seams_and_excludes_tests(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "pyproject.toml").write_text(
-                '[tool.mypy]\nfiles = ["hq_sdk", "hq/platform/application/security.py"]\n'
-                'exclude = "(^|/)(test_[^/]*|tests)/"\n'
-            )
-            with patch.object(fast_gate, "ROOT", root):
-                self.assertEqual(
-                    fast_gate.mypy_targets(
-                        [
-                            "hq_sdk/capabilities.py",
-                            "hq_sdk/tests/test_contract.py",
-                            "hq/platform/application/security.py",
-                            "application/untyped.py",
-                        ]
-                    ),
-                    ["hq_sdk/capabilities.py", "hq/platform/application/security.py"],
-                )
 
 
 @tag("source")
@@ -161,22 +136,45 @@ class FastGateNestedLayoutTests(SimpleTestCase):
                 self.assertTrue(fast_gate.is_test(Path("tests/fuzz/properties.py")))
 
 
-class FastGateConcurrencyTests(SimpleTestCase):
-    def test_checks_run_side_by_side_never_share_a_database(self):
+WRITE = """
+import os, sqlite3
+path = os.environ["SEVERINO_DATABASE_PATH"]
+connection = sqlite3.connect(path, timeout=0)
+connection.execute("PRAGMA journal_mode=WAL")
+connection.execute("CREATE TABLE gate (x)")
+connection.commit()
+print("database=" + path)
+"""
+
+
+@tag("source")
+class GateDatabaseTests(SimpleTestCase):
+    def test_gates_run_side_by_side_each_write_a_database_the_next_test_run_sweeps(self):
         # Two processes making one new SQLite file WAL at once: one is refused.
-        report = "import os; print('database=' + os.environ['SEVERINO_DATABASE_PATH'])"
-        shared = {**os.environ, "SEVERINO_DATABASE_PATH": "/nonexistent/shared.sqlite3"}
-        output = io.StringIO()
-        with redirect_stdout(output):
-            ok = fast_gate.side_by_side(
-                [
-                    ("inherits", [sys.executable, "-c", report], None),
-                    ("given one", [sys.executable, "-c", report], shared),
-                    ("given the same", [sys.executable, "-c", report], shared),
-                ]
+        (ROOT / "var").mkdir(exist_ok=True)
+        with (
+            tempfile.TemporaryDirectory(dir=ROOT / "var") as config,
+            tempfile.TemporaryDirectory() as scratch,
+        ):
+            (Path(config) / "write.py").write_text(WRITE)
+            run = json.dumps(f"{sys.executable} write.py")
+            (Path(config) / "mise.toml").write_text(
+                "".join(
+                    f'[tasks."gate:{n}"]\nextends = "{template}"\nrun = {run}\n'
+                    for n, template in enumerate(("django", "django", "composed", "composed"))
+                )
             )
-        self.assertTrue(ok)
-        paths = [line.removeprefix("database=") for line in output.getvalue().splitlines() if "database=" in line]
-        self.assertEqual(len(paths), 3)
-        self.assertEqual(len(set(paths)), 3)
-        self.assertFalse([path for path in paths if Path(path).parent.exists()])
+            result = subprocess.run(
+                [shutil.which("mise") or "mise", "run", "-c", "--jobs", "4", "gate:*"],
+                cwd=config,
+                env={**os.environ, "MISE_TRUSTED_CONFIG_PATHS": config, "TMPDIR": scratch},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            paths = re.findall(r"database=(\S+)", result.stdout)
+            self.assertEqual(len(set(paths)), 4)
+            self.assertTrue(all(Path(path).is_relative_to(scratch) for path in paths))
+            sweep_abandoned(Path(scratch), os.getpid())
+            self.assertFalse([path for path in Path(scratch).iterdir() if path.name.startswith(PREFIX)])

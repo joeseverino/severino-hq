@@ -68,18 +68,21 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 
 # ------------------------------------------------------------- templates
 # A gate never opens the developer's database: each Django gate extends one of
-# these, which name a scratch path, so a checkout's own data cannot change what
-# a gate reports; HQ_GATE_DATABASE moves it, so gates run side by side can each
-# open their own. A gate sees no extension set it did not ask for. A task
-# extends one template, so the composed one restates what it shares with django.
+# these, which make it a new empty file for every task run, so a checkout's own
+# data cannot change what a gate reports and gates run side by side never share
+# one (two processes making one new file WAL at once: one is refused as
+# "database is locked"). It is named as a test run's scratch is, for the mise
+# that ran it, so the next test run sweeps it (hq/config/sandbox.py). A gate
+# sees no extension set it did not ask for. A task extends one template, so
+# the composed one restates what it shares with django.
 
 [task_templates.django]
-env = { SEVERINO_DATABASE_PATH = "{{ env.HQ_GATE_DATABASE | default(value=config_root ~ '/var/db/gates.sqlite3') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # The extension set mise.local.toml names, loaded as the image loads it: DEBUG
 # off, and admission off, since a checkout has no admitted wheels.
 [task_templates.composed]
-env = { SEVERINO_DATABASE_PATH = "{{ env.HQ_GATE_DATABASE | default(value=config_root ~ '/var/db/gates.sqlite3') }}", DJANGO_DEBUG = false, DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0", SEVERINO_HQ_PLUGINS = "{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}" }
+env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = false, DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0", SEVERINO_HQ_PLUGINS = "{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}" }
 
 # --------------------------------------------------------------- operator
 
@@ -262,8 +265,7 @@ ssh -t "$host" sudo sh "$remote" "$usage_image"
 # ------------------------------------------------------------- aggregates
 
 [tasks.fast]
-description = "Inner loop: lint, types and tests for what the change touches"
-depends = ["setup:openapi"]
+description = "Inner loop: the quick gates, and the tests the change reaches"
 extends = "django"
 usage = '''
 arg "[base]" help="The ref to diff against; default $CHECK_BASE, then origin/main, then main"
@@ -491,7 +493,8 @@ description = "Production settings raise no security warning"
 # DEBUG off, a real host. The values mirror a production configuration so the
 # check judges how settings.py reads one. The key is a throwaway long enough
 # for the strength check.
-env = { SEVERINO_DATABASE_PATH = "{{config_root}}/var/db/gates.sqlite3", DJANGO_DEBUG = "0", DJANGO_SECRET_KEY = "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef", DJANGO_ALLOWED_HOSTS = "hq.example.com", SEVERINO_OIDC_ISSUER = "https://sso.example.com", DJANGO_BEHIND_TLS_PROXY = "1", DJANGO_SESSION_COOKIE_SECURE = "1", DJANGO_CSRF_COOKIE_SECURE = "1", DJANGO_HSTS_SECONDS = "31536000", DJANGO_HSTS_INCLUDE_SUBDOMAINS = "1", DJANGO_HSTS_PRELOAD = "1" }
+extends = "django"
+env = { DJANGO_DEBUG = "0", DJANGO_SECRET_KEY = "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef", DJANGO_ALLOWED_HOSTS = "hq.example.com", SEVERINO_OIDC_ISSUER = "https://sso.example.com", DJANGO_BEHIND_TLS_PROXY = "1", DJANGO_SESSION_COOKIE_SECURE = "1", DJANGO_CSRF_COOKIE_SECURE = "1", DJANGO_HSTS_SECONDS = "31536000", DJANGO_HSTS_INCLUDE_SUBDOMAINS = "1", DJANGO_HSTS_PRELOAD = "1" }
 run = "uv run --locked python manage.py check --deploy --fail-level WARNING"
 
 [tasks."checks:audit"]

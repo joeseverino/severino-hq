@@ -2,7 +2,8 @@
 
 Changed files against the merge base are mapped to the test modules that reach
 them, by the import graph of the tree itself (nothing here lists an app). The
-architecture tests always run. A change to what extensions render through
+architecture tests always run. Every other check is a mise task, run here by
+name, so each exists once. A change to what extensions render through
 (templates, static, hq_sdk, the shared page and table layer) also runs the
 extensions' own suites, composed, when HQ_LOCAL_PLUGINS names a set.
 ```mise run check``` stays the gate before a push.
@@ -17,12 +18,13 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
-import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# The gates that run whatever changed, side by side: each is quick, and each
+# Django gate opens a database of its own (the django task template).
+TASKS = ("checks:ruff", "checks:mypy", "tests:django", "tests:migrations", "drift:*")
 # Never part of the Django suite: other languages, vendored trees, the browser
 # pass that `mise run check` also leaves to `mise run browser`.
 SKIP_PARTS = {"node_modules", "controller", "browser_tests", ".venv", "staticfiles"}
@@ -51,11 +53,16 @@ def touches_shared_ui(paths: list[str]) -> bool:
     return any(path.startswith(SHARED_UI) or "/templatetags/" in path for path in paths)
 
 
-def drift_tasks() -> list[str]:
-    """The drift:* gates mise.toml declares, each a derived file against its source."""
+def tasks_command(tasks: tuple[str, ...], parallel: str) -> list[str]:
+    """One mise run of every task, side by side unless parallelism is ruled out.
 
-    tasks = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))["tasks"]
-    return sorted(name for name in tasks if name.startswith("drift:"))
+    `-c` names every task that failed, and the configured keep-order output
+    prints each one whole under its own name.
+    """
+
+    jobs = ["--jobs", "1"] if parallel == "1" else []
+    separated = [word for task in tasks for word in (":::", task)][1:]
+    return ["mise", "run", "-c", *jobs, *separated]
 
 
 def git(*args: str) -> list[str]:
@@ -273,74 +280,17 @@ def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tupl
     return sorted(chosen), len(tests)
 
 
-def mypy_targets(changed: list[str]) -> list[str]:
-    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["mypy"]
-    listed = config["files"]
-    roots = [entry.rstrip("/") + "/" for entry in listed]
-    # Files named on the command line skip mypy's own exclude, so apply it here.
-    exclude = re.compile(config.get("exclude", "(?!)"))
-    return [
-        c
-        for c in changed
-        if c.endswith(".py") and not exclude.search(c) and (c in listed or c.startswith(tuple(roots)))
-    ]
-
-
-def step(label: str, cmd: list[str], env: dict[str, str] | None = None) -> bool:
+def step(label: str, cmd: list[str]) -> bool:
     print(f"[fast] {label}", flush=True)
     started = time.monotonic()
-    code = subprocess.run(cmd, cwd=ROOT, env=env).returncode
+    code = subprocess.run(cmd, cwd=ROOT).returncode
     print(f"[fast] {label}: {time.monotonic() - started:.1f}s", flush=True)
     return code == 0
 
 
-def side_by_side(steps: list[tuple[str, list[str], dict[str, str] | None]]) -> bool:
-    """Run independent read-only checks in parallel, then print each one's
-    output in order, so a failure reads as that check's own.
-
-    Each check opens a database of its own. Django connects for its system
-    checks, and the first connection to a new file switches it to WAL, which
-    SQLite refuses with "database is locked" when another process is doing
-    the same, without waiting out the timeout.
-    """
-
-    started = time.monotonic()
-    # Named as a test run's scratch is, so a killed run's is swept by the next.
-    with tempfile.TemporaryDirectory(prefix=f"severino-test-fast-{os.getpid()}-") as scratch:
-        running = [
-            (
-                label,
-                subprocess.Popen(
-                    cmd,
-                    cwd=ROOT,
-                    env={
-                        **(os.environ if env is None else env),
-                        # Read by a check run here, and by the gate template when mise runs it.
-                        "SEVERINO_DATABASE_PATH": f"{scratch}/{n}.sqlite3",
-                        "HQ_GATE_DATABASE": f"{scratch}/{n}.sqlite3",
-                    },
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                ),
-            )
-            for n, (label, cmd, env) in enumerate(steps)
-        ]
-        ok = True
-        for label, process in running:
-            output, _ = process.communicate()
-            print(f"[fast] {label}", flush=True)
-            if output:
-                print(output, end="" if output.endswith("\n") else "\n", flush=True)
-            ok &= process.returncode == 0
-    print(f"[fast] {len(running)} checks side by side: {time.monotonic() - started:.1f}s", flush=True)
-    return ok
-
-
 def main(argv: list[str]) -> int:
     started = time.monotonic()
-    python = os.environ.get("FAST_PYTHON") or sys.executable
-    ruff = os.environ.get("FAST_RUFF") or "ruff"
+    parallel = os.environ.get("CHECK_PARALLEL", "auto")
     list_only = "--list" in argv
     args = [a for a in argv if a != "--list"]
     base = merge_base(args[0] if args else None)
@@ -356,24 +306,9 @@ def main(argv: list[str]) -> int:
         print("\n".join(labels))
         return 0
 
-    env = dict(os.environ)
-    py = [c for c in changed if c.endswith(".py") or c.endswith(".pyi")]
-    typed = mypy_targets(changed)
-    checks: list[tuple[str, list[str], dict[str, str] | None]] = [
-        *([("ruff (changed files)", [ruff, "check", *py], None)] if py else []),
-        ("manage.py check", [python, "manage.py", "check"], env),
-        ("migration drift", [python, "manage.py", "makemigrations", "--check", "--dry-run"], env),
-        *((task, ["mise", "run", task], env) for task in drift_tasks()),
-        *([("mypy (changed typed modules)", [python, "-m", "mypy", *typed], env)] if typed else []),
-    ]
-    ok = side_by_side(checks)
-    ok &= step(
-        "tests",
-        [python, "manage.py", "test", "--noinput", "--parallel", os.environ.get("CHECK_PARALLEL", "auto"), *labels],
-        env,
-    )
+    ok = step(" ".join(TASKS), tasks_command(TASKS, parallel))
+    ok &= step("tests", [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels])
     if os.environ.get("HQ_LOCAL_PLUGINS") and touches_shared_ui([*changed, *deleted]):
-        parallel = os.environ.get("CHECK_PARALLEL", "auto")
         # suite:composed hands what follows to manage.py test.
         ok &= step(
             "extension suites, composed (shared UI changed)",
