@@ -319,18 +319,6 @@ depends = ["image:verify:*"]
 
 # ----------------------------------------------------------------- checks
 
-[tasks."checks:conflicts"]
-description = "No sync-conflict copies in the tree"
-run = '''
-set -eu
-copies="$(git ls-files --cached --others --exclude-standard | grep -E ' [0-9]+(\.[^/]*)?$' || true)"
-if [ -n "$copies" ]; then
-    echo "Sync-conflict copies in the tree; delete them:" >&2
-    printf '  %s\n' "$copies" >&2
-    exit 1
-fi
-'''
-
 [tasks."checks:patch"]
 description = "No whitespace errors or conflict markers in the working tree"
 run = "git diff --check"

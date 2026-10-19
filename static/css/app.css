@@ -1868,10 +1868,9 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 @media (scripting: none) { .row-fold { display: none; } }
 .data-table tr.is-expanded:has(+ .row-detail) > * { border-bottom: 0; }
-.data-table .row-detail > td { padding-top: 0; }
 /* What an opened row adds is one panel under the row's name: its left edge on
    the name's, each part's name in one column and its value beside it. */
-.data-table .row-detail > td { padding-left: calc(var(--space-6) + 1.5rem); }
+.data-table .row-detail > td { padding-top: 0; padding-left: calc(var(--space-6) + 1.5rem); }
 .row-detail > td > .row-columns {
   grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6);
   padding: var(--space-5) var(--space-6); border-radius: var(--radius); background: var(--bg-tint);
@@ -3207,14 +3206,13 @@ a.discovery-link:hover strong { color: var(--accent); }
 .row-detail .connection-sight-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
 .row-detail .connection-sight-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
 .row-detail .connection-sight-list > li.muted::before { content: none; }
-/* The fix is the one thing to do, so it reads as a callout. */
+/* The fix is the one thing to do, so it reads as a callout, its notes
+   numbered steps at a reading width. */
 .row-detail .connection-credential-steps {
-  padding: var(--space-3) var(--space-5); border-left: 3px solid var(--warn); border-radius: var(--radius-sm);
-  background: var(--tone-caution-tint);
+  max-width: 72ch; padding: var(--space-3) var(--space-5); border-left: 3px solid var(--warn); border-radius: var(--radius-sm);
+  background: var(--tone-caution-tint); counter-reset: fix-step;
 }
 .row-detail .connection-credential-steps .operator-step:first-child { margin-top: 0; }
-/* Its notes are steps, numbered, at a reading width. */
-.row-detail .connection-credential-steps { max-width: 72ch; counter-reset: fix-step; }
 .row-detail .connection-credential-steps .operator-step p {
   display: grid; grid-template-columns: 1.5em minmax(0, 1fr); margin-top: var(--space-2); color: var(--ink-2);
 }

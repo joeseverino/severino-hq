@@ -18,15 +18,23 @@ from hq.platform.core.browser_tests import ALL_PAGES, PHONE_SCREEN, LayoutBrowse
 OUT = Path(settings.BASE_DIR) / "var" / "look"
 
 
+def _usage(name: str) -> str:
+    """What the task was given for ``name``: mise exports each argument and
+    flag of a task's usage as ``usage_<name>``, lower case, and an unset flag
+    as nothing at all."""
+
+    return os.environ.get(f"usage_{name}", "")
+
+
 def _listed(name: str) -> list[str]:
-    return [part.strip() for part in os.environ.get(name, "").split(",") if part.strip()]
+    return [part.strip() for part in _usage(name).split(",") if part.strip()]
 
 
 class Look(LayoutBrowserTests):
     def test_look(self):
         pages, widths, rule = self.asked()
-        self.start(java_script_enabled=not os.environ.get("usage_no_script"))
-        if os.environ.get("usage_dark"):
+        self.start(java_script_enabled=not _usage("no_script"))
+        if _usage("dark"):
             self.page.emulate_media(color_scheme="dark")
         OUT.mkdir(parents=True, exist_ok=True)
         failed = [found for name in pages for width in widths if (found := self.look(name, width, rule))]
@@ -39,13 +47,13 @@ class Look(LayoutBrowserTests):
     def asked(self):
         """The pages, widths and rule the task was given, each checked."""
 
-        pages = _listed("usage_pages")
+        pages = _listed("pages")
         if pages == ["all"]:
             pages = list(ALL_PAGES)
         unknown = sorted(set(pages) - set(ALL_PAGES))
         self.assertFalse(unknown, f"Not in the gate's estate: {unknown}. Pages: {', '.join(ALL_PAGES)}")
-        widths = [int(width) for width in _listed("usage_widths")] or [PHONE_SCREEN[0], 820, 1360]
-        rule = os.environ.get("usage_rule", "")
+        widths = [int(width) for width in _listed("widths")] or [PHONE_SCREEN[0], 820, 1360]
+        rule = _usage("rule")
         self.assertTrue(not rule or callable(getattr(self, rule, None)), f"No rule named {rule!r}")
         return pages, widths, rule
 
@@ -53,11 +61,11 @@ class Look(LayoutBrowserTests):
         """Screenshot ``name`` at ``width``, and what ``rule`` finds there."""
 
         self.open(name, width)
-        if css := os.environ.get("usage_css"):
+        if css := _usage("css"):
             self.page.add_style_tag(content=css)
-        if os.environ.get("usage_open"):
+        if _usage("open"):
             self.open_every_disclosure(name)
-        if os.environ.get("usage_expand"):
+        if _usage("expand"):
             self.page.evaluate("() => document.querySelectorAll('main button[data-row-toggle]').forEach((toggle) => toggle.click())")
         shot = OUT / f"{name.replace('/', '-')}-{width}.png"
         self.page.screenshot(path=shot, full_page=True)
