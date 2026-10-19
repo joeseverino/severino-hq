@@ -180,7 +180,7 @@ flag "--open" help="With every disclosure open"
 flag "--expand" help="With every table row opened"
 flag "--no-script" help="As the server drew it, before tables.js and the rest run"
 '''
-run = 'LOOK_PAGES="$usage_pages" LOOK_WIDTHS="${usage_widths:-}" LOOK_RULE="${usage_rule:-}" LOOK_CSS="${usage_css:-}" LOOK_DARK="${usage_dark:-}" LOOK_OPEN="${usage_open:-}" LOOK_EXPAND="${usage_expand:-}" LOOK_SCRIPT="${usage_no_script:+off}" uv run --locked --group browser python manage.py test hq.platform.core.browser_look.Look.test_look --noinput --parallel 1'
+run = "uv run --locked --group browser python manage.py test hq.platform.core.browser_look.Look.test_look --noinput --parallel 1"
 
 [tasks."dev:manage"]
 extends = "dev:scratch-env"
@@ -635,14 +635,8 @@ description = "The suite composed with the extensions mise.local.toml names"
 extends = "composed"
 run = '''
 set -eu
-if [ -z "${HQ_LOCAL_PLUGINS:-}" ]; then
-    if [ "${REQUIRE_COMPOSED:-0}" = 1 ]; then
-        echo "The composed suite is required and HQ_LOCAL_PLUGINS is unset (scripts/mise.local.example.toml)." >&2
-        exit 1
-    fi
-    echo "Composed suite not run: no HQ_LOCAL_PLUGINS supplied (scripts/mise.local.example.toml)."
-    exit 0
-fi
+. ./scripts/lib/composed.sh
+composed_set || { echo "Composed suite not run: no HQ_LOCAL_PLUGINS supplied (scripts/mise.local.example.toml)."; exit 0; }
 uv run --locked python manage.py test --noinput --parallel auto
 '''
 

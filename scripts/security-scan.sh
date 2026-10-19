@@ -29,8 +29,8 @@ unset CDPATH
 
 repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
-# shellcheck source=scripts/toolchain.env
-. ./scripts/toolchain.env
+# shellcheck source=scripts/lib/export-tree.sh
+. ./scripts/lib/export-tree.sh
 
 image=""
 build=0
@@ -56,9 +56,7 @@ src="$work/src$(printf '%s' "$gates" | tr ' ' '-')"
 echo "[security] Exporting the tree to scan"
 rm -rf "$src"
 mkdir -p "$src"
-git -c core.quotepath=off ls-files --cached --others --exclude-standard \
-    | while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done \
-    | tar -cf - -T - | tar -xf - -C "$src"
+export_tree "$src"
 
 for gate in $gates; do
     case "$gate" in
