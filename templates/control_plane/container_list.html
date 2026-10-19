@@ -45,35 +45,45 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
 
   {% for heading, listed, running in need_sections %}
     <h2>{{ heading }} <span class="heading-aside">{{ listed|length|counted:"image" }}{% if running != listed|length %}, {{ running|counted:"container" }}{% endif %}</span></h2>
-    <ul class="container-needs">
-      {% for group in listed %}{% with standing=group.standing %}
-        <li class="{% if standing.state == 'vulnerable' %}{% if standing.serious %}is-serious{% else %}is-attention{% endif %}{% else %}is-behind{% endif %}">
-          <span class="container-needs-icon">{% if standing.state == "vulnerable" %}{% include "partials/_icon.html" with name="shield" %}{% else %}{% include "partials/_icon.html" with name="deploy" %}{% endif %}</span>
-          <div class="container-needs-body">
-            <strong><code>{{ standing.label|breakable }}</code>{% if standing.newer %} <span class="container-arrow">→</span> {% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest|breakable }}</code></a>{% else %}<code>{{ standing.latest|breakable }}</code>{% endif %}{% endif %}</strong>
-            <p>
-              {% with plan=group.plan %}{% if plan %}{{ plan.change_label }} · upgrade risk {{ plan.risk }}{% if plan.risk_reason %}, because {{ plan.risk_reason }}{% endif %}{% if plan.stateful %} · {{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% endif %}{% if plan.verified_by %} · checked afterwards by {{ plan.verified_by.0 }}{% endif %}{% if plan.fixes %} · fixes {{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% endif %}{% else %}{{ standing.summary|capfirst }} · no newer release yet{% endif %}{% endwith %}
-              {% if standing.release.published %} · released {{ standing.release.published|ago_short }}{% endif %}
-              {% if standing.moved_to %}<br><span class="github-gap">Its tag <code>{{ standing.tag|breakable }}</code> now names a newer build than the one running.</span>{% endif %}
-            </p>
-            {% if standing.advisories or standing.urgent %}
-              <ul class="container-advisories">
-                {% for advisory in standing.advisories %}
-                  <li><span class="pill pill-{% if advisory.severity == "critical" or advisory.severity == "high" %}serious{% else %}attention{% endif %}">{{ advisory.severity|capfirst }}</span> <a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id }}</a> {{ advisory.summary }}</li>
-                {% endfor %}
-                {% for finding in standing.urgent|slice:":3" %}
-                  <li><span class="pill pill-serious">{{ finding.severity|capfirst }}</span> <a class="external-link" href="{{ finding.url }}" rel="noopener">{{ finding.id }}</a> <code>{{ finding.package|breakable }}</code> {{ finding.installed }} → {{ finding.fixed|join:", " }}</li>
-                {% endfor %}
-                {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3" }} more on <a href="{{ group.containers.0.url }}#supply-chain">its page</a></li>{% endif %}
-              </ul>
-            {% endif %}
-          </div>
-          <div class="container-needs-where">
-            {% for item in group.containers %}<a class="workflow-chip" href="{{ item.url }}">{{ item.running.name }} <span class="muted">on {{ item.machine.name }}</span></a>{% endfor %}
-          </div>
-        </li>
-      {% endwith %}{% endfor %}
-    </ul>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Image</th>
+            <th>Change</th>
+            <th>Known</th>
+            <th class="key-col">Runs as</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for group in listed %}{% with standing=group.standing plan=group.plan %}
+            <tr>
+              <td>
+                <code>{{ standing.label|breakable }}</code>{% if standing.newer %} <span class="container-arrow">→</span> {% if standing.release %}<a class="external-link" href="{{ standing.release.url }}" rel="noopener"><code>{{ standing.latest|breakable }}</code></a>{% else %}<code>{{ standing.latest|breakable }}</code>{% endif %}{% endif %}
+                <div class="row-below">
+                  <p>{% if plan %}Upgrade risk {{ plan.risk }}{% if plan.risk_reason %}, because {{ plan.risk_reason }}{% endif %}.{% if plan.stateful %} Snapshot {{ plan.data|length|counted:"mount,mounts" }} first.{% endif %}{% if plan.verified_by %} Checked afterwards by {{ plan.verified_by.0 }}.{% endif %}{% else %}{{ standing.summary|capfirst }}, and no newer release yet.{% endif %}{% if standing.release.published %} Released {{ standing.release.published|ago_short }}.{% endif %}</p>
+                  {% if standing.moved_to %}<p class="github-gap">Its tag <code>{{ standing.tag|breakable }}</code> now names a newer build than the one running.</p>{% endif %}
+                  {% if standing.advisories or standing.urgent %}
+                    <ul class="container-advisories">
+                      {% for advisory in standing.advisories %}
+                        <li><span class="pill pill-{% if advisory.severity == "critical" or advisory.severity == "high" %}serious{% else %}attention{% endif %}">{{ advisory.severity|capfirst }}</span> <a class="external-link" href="{{ advisory.url }}" rel="noopener">{{ advisory.id }}</a> {{ advisory.summary }}</li>
+                      {% endfor %}
+                      {% for finding in standing.urgent|slice:":3" %}
+                        <li><span class="pill pill-serious">{{ finding.severity|capfirst }}</span> <a class="external-link" href="{{ finding.url }}" rel="noopener">{{ finding.id }}</a> <code>{{ finding.package|breakable }}</code> {{ finding.installed }} → {{ finding.fixed|join:", " }}</li>
+                      {% endfor %}
+                      {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3" }} more on <a href="{{ group.containers.0.url }}#supply-chain">its page</a></li>{% endif %}
+                    </ul>
+                  {% endif %}
+                </div>
+              </td>
+              <td>{% if plan %}{{ plan.change_label }}<br><span class="muted">risk {{ plan.risk }}</span>{% else %}<span class="muted">No newer release</span>{% endif %}</td>
+              <td>{% if plan.fixes %}<span class="pill pill-{% if standing.serious %}serious{% else %}attention{% endif %}">fixes {{ plan.fixes|length }}</span>{% elif standing.state == "vulnerable" %}<span class="pill pill-{% if standing.serious %}serious{% else %}attention{% endif %}">Vulnerable</span>{% else %}{% empty_value %}{% endif %}</td>
+              <td>{% for item in group.containers %}<a href="{{ item.url }}">{{ item.running.name }}</a> <span class="muted">on {{ item.machine.name }}</span>{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+            </tr>
+          {% endwith %}{% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% endfor %}
 
   <h2>Every container <span class="heading-aside">{{ containers|length }}</span></h2>

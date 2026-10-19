@@ -165,6 +165,10 @@ SELECTORS = {
 # WCAG AA: body text, and text large enough to need less (24px, or 18.66px bold).
 TEXT_CONTRAST = 4.5
 LARGE_TEXT_CONTRAST = 3.0
+# The least a dividing line may differ from its surface. The faint line token
+# on a card is 1.15:1, the plain one on a tinted panel 1.08:1; below this a
+# line is the surface's own colour.
+LINE_CONTRAST = 1.07
 
 # Structural rules from scripts/layout-audit.js that hold on every page at
 # every width. A card with a band of empty frame under its last line
@@ -549,15 +553,10 @@ _ROW_HEIGHTS = (
 }"""
 )
 
-_CONTRAST = (
-    "([scope, body, large]) => {"
-    + _DESCRIBE
-    + """
-  // Every visible element that holds text of its own, measured against the
-  // colour actually behind it: the nearest ancestor that paints a background,
-  // with translucent layers composited down to an opaque one. A colour
-  // written for one palette only is what this catches: a light-mode ink left
-  // on a dark card reads as nothing, and no other check looks at colour.
+# What the browser paints, as an opaque colour: any colour syntax read back
+# through a canvas pixel, a translucent one composited over what is behind it,
+# and the WCAG contrast ratio between two.
+_COLOUR = """
   const canvas = document.createElement('canvas').getContext('2d', {willReadFrequently: true});
   canvas.canvas.width = canvas.canvas.height = 1;
   // Whatever syntax the browser serialises a colour in (rgb(), color(srgb),
@@ -600,6 +599,18 @@ _CONTRAST = (
     const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
     return (hi + 0.05) / (lo + 0.05);
   };
+"""
+
+_CONTRAST = (
+    "([scope, body, large]) => {"
+    + _DESCRIBE
+    + _COLOUR
+    + """
+  // Every visible element that holds text of its own, measured against the
+  // colour actually behind it: the nearest ancestor that paints a background,
+  // with translucent layers composited down to an opaque one. A colour
+  // written for one palette only is what this catches: a light-mode ink left
+  // on a dark card reads as nothing, and no other check looks at colour.
   // Inactive controls and deliberately faded content are exempt, as WCAG
   // exempts them: they say they are not in play.
   const inactive = (el) => el.closest(':disabled, [aria-disabled="true"], [hidden]')
@@ -629,6 +640,81 @@ _CONTRAST = (
     }
   }
   return {sampled, found: [...new Set(found)].slice(0, 10)};
+}"""
+)
+
+
+# A line drawn to separate things (a divider, a frame's edge) is seen against
+# the surface it is drawn on. A faint token on a tinted panel is a line in the
+# panel's own colour: the rows it was meant to part run together.
+_FAINT_LINES = (
+    "([scope, least]) => {"
+    + _DESCRIBE
+    + _COLOUR
+    + """
+  const found = [];
+  for (const root of document.querySelectorAll(scope)) {
+    for (const el of root.querySelectorAll('*')) {
+      if (!el.checkVisibility()) continue;
+      const style = getComputedStyle(el);
+      for (const side of ['Top', 'Right', 'Bottom', 'Left']) {
+        if (parseFloat(style[`border${side}Width`]) < 1 || ['none', 'hidden'].includes(style[`border${side}Style`])) continue;
+        const colour = rgba(style[`border${side}Color`]);
+        if (colour[3] === 0) continue;
+        // A box that paints its own fill is edged against what is outside it,
+        // by its border or by the fill itself.
+        const fill = rgba(style.backgroundColor);
+        const filled = fill[3] > 0 && el.parentElement;
+        const behind = filled ? background(el.parentElement) : background(el);
+        const measured = Math.max(ratio(over(colour, behind), behind), filled ? ratio(over(fill, behind), behind) : 0);
+        if (measured < least) found.push(`${describe(el)} ${side.toLowerCase()} ${measured.toFixed(2)}:1 on ${behind.slice(0, 3).map(Math.round)}`);
+      }
+    }
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+)
+
+
+# A route's mark (a hop's icon, a check's tick) holds its glyph in its middle.
+# A glyph keeps the line height of the row around it unless its mark sets its
+# own, and a line taller than the mark pushes the glyph off its centre.
+_OFF_CENTRE_MARKS = (
+    "(mark) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  const range = document.createRange();
+  for (const el of document.querySelectorAll('main ' + mark)) {
+    if (!el.checkVisibility() || !el.textContent.trim() && !el.firstElementChild) continue;
+    range.selectNodeContents(el);
+    const glyph = range.getBoundingClientRect();
+    const at = box(el);
+    const dy = glyph.top + glyph.height / 2 - (at.top + at.height / 2);
+    const dx = glyph.left + glyph.width / 2 - (at.left + at.width / 2);
+    if (Math.abs(dy) > 1 || Math.abs(dx) > 1) found.push(`${describe(el)}: glyph ${dx.toFixed(1)}, ${dy.toFixed(1)} off its centre`);
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+)
+
+
+# A table's frame spans the box it sits in, as its heading does: a frame cut to
+# its columns leaves the heading's count and the page's edge beyond its end.
+_NARROW_FRAMES = (
+    "(scroll) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + scroll)) {
+    if (!el.checkVisibility()) continue;
+    const parent = el.parentElement;
+    const style = getComputedStyle(parent);
+    const room = parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const width = box(el).width;
+    if (width < room - 2) found.push(`${describe(el)} in ${describe(parent)}: ${Math.round(width)}px of ${Math.round(room)}px`);
+  }
+  return found.slice(0, 10);
 }"""
 )
 
@@ -1573,6 +1659,7 @@ class LayoutBrowserTests(BrowserGate):
             self.words_stay_inside_the_box_that_holds_them,
             self.only_a_table_scrolls_sideways,
             self.nothing_runs_out_of_its_table_cell,
+            self.a_table_frame_spans_its_box,
             self.a_table_row_stays_within_its_height_budget,
             self.no_column_is_narrower_than_its_words,
             self.a_link_sits_on_the_line_it_continues,
@@ -1581,6 +1668,7 @@ class LayoutBrowserTests(BrowserGate):
             self.a_band_lays_out_as_whole_rows,
             self.a_queue_ends_its_cards_at_one_edge,
             self.a_route_line_runs_from_its_first_stop_to_its_last,
+            self.a_mark_holds_its_glyph_in_its_middle,
             self.a_checks_evidence_follows_its_statement,
             self.nothing_a_summary_names_is_hidden,
             self.a_token_breaks_only_where_it_may,
@@ -1608,6 +1696,7 @@ class LayoutBrowserTests(BrowserGate):
                 self.a_route_line_runs_from_its_first_stop_to_its_last,
                 self.a_checks_evidence_follows_its_statement,
                 self.nothing_a_summary_names_is_hidden,
+                self.a_line_shows_on_its_surface,
             ]
         return rules
 
@@ -1619,7 +1708,7 @@ class LayoutBrowserTests(BrowserGate):
                 self.hold(name, width, self.unscripted_reads(name, width))
                 if width in OVERFLOW_WIDTHS:
                     self.in_scheme("dark")
-                    self.hold(name, width, [self.text_reads_in_the_dark_theme])
+                    self.hold(name, width, [self.text_reads_in_the_dark_theme, self.a_line_shows_on_its_surface])
                     self.in_scheme("light")
                 self.hold(name, width, self.unscripted_openings(name, width))
 
@@ -1718,6 +1807,15 @@ class LayoutBrowserTests(BrowserGate):
     def layout_audit_structural_rules(self, _name):
         report = self.page.evaluate(_AUDIT)
         self.assertEqual([v for v in report["violations"] if v["rule"] in AUDIT_RULES], [])
+
+    def a_table_frame_spans_its_box(self, _name):
+        self.assertEqual(self.page.evaluate(_NARROW_FRAMES, SELECTORS["table_scroll"]), [])
+
+    def a_mark_holds_its_glyph_in_its_middle(self, _name):
+        self.assertEqual(self.page.evaluate(_OFF_CENTRE_MARKS, SELECTORS["route_mark"]), [])
+
+    def a_line_shows_on_its_surface(self, _name):
+        self.assertEqual(self.page.evaluate(_FAINT_LINES, [SELECTORS["contrast_scope"], LINE_CONTRAST]), [])
 
     def text_reads_in_the_dark_theme(self, _name):
         """Text clears WCAG AA on whatever it sits on, in the dark palette.

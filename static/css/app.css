@@ -1517,13 +1517,6 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    anything that ends a card: a trailing margin inside a padded box is a band
    of empty card. */
 .table-scroll:last-child { margin-bottom: 0; }
-/* A table's frame is as wide as its table needs, up to its box: three short
-   columns stretched across a page are a row of gulfs. It is never narrower
-   than a line of reading, so short tables stacked on a page keep one edge
-   near enough to read as a column. The table inside still fills the frame
-   (`width: 100%` below), and one too wide for its box takes the box, as
-   before, which is all tables.js measures against. */
-.table-scroll:has(> .data-table) { inline-size: fit-content; min-inline-size: min(100%, var(--measure)); }
 /* Refreshes pin column widths (fixed layout); long unbroken tokens must
    wrap inside their cell instead of bleeding across the pinned columns. */
 /* Before tables.js has fitted it, and where there is no script at all, a
@@ -4394,7 +4387,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-layer summary::-webkit-details-marker { display: none; }
 .conn-tick {
   width: 17px; height: 17px; border-radius: 50%; flex: none;
-  display: grid; place-items: center; font-size: var(--text-2xs);
+  display: grid; place-items: center; font-size: var(--text-2xs); line-height: 1;
   background: var(--tone-positive-tint); color: var(--ok);
 }
 .conn-layer-does-not .conn-tick { background: var(--tone-critical-tint); color: var(--danger); }
@@ -4431,11 +4424,12 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-path > .conn-layers > .conn-layer:last-child::before { display: none; }
 .conn-path > .conn-layers > .conn-layer-does-not::before { background: color-mix(in srgb, var(--danger) 45%, transparent); }
 .conn-path > .conn-layers > .conn-layer-unknown::before { background: color-mix(in srgb, var(--warn) 45%, transparent); }
-/* An opened hop's evidence sits on a panel of its own under the hop's name, so
-   it reads as that hop's and the route plainly continues after it. */
+/* An opened hop's evidence sits in a frame of its own under the hop's name, so
+   it reads as that hop's and the route plainly continues after it. It is on
+   the card's own surface, where the rows inside keep their dividers. */
 .conn-path > .conn-layers > .conn-layer > details > .conn-layer-body {
   margin: 0 0 var(--space-4) calc(17px + var(--space-5)); padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-tint);
+  border: 1px solid var(--line); border-radius: var(--radius);
 }
 .conn-path .conn-tick { position: relative; }
 .conn-layer-body {
@@ -4451,7 +4445,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-layer-body .conn-layer .conn-layer-label { font-size: var(--text-xs); }
 .conn-layer-body .conn-layer .conn-layer-body { margin: 0 0 var(--space-3) calc(17px + var(--space-4)); }
 .conn-scope-note {
-  margin: 0; padding-top: var(--space-6); border-top: 1px solid var(--line-2);
+  margin: 0; padding-top: var(--space-6); border-top: 1px solid var(--line);
   color: var(--muted); font-size: var(--text-2xs);
 }
 
@@ -5123,7 +5117,9 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   /* Four to a row, then two, then one: never three over one. */
   .fact-band { --band-cell: var(--tracks-4-2-1); }
   /* The band's lower half: the same repository's settings, under a hairline. */
-  .github-facts { flex-basis: 100%; display: grid; gap: var(--space-4); margin: 0; padding: var(--space-7) var(--space-9); border-top: 1px solid var(--line-2); font-size: var(--text-sm); }
+  .github-facts { flex-basis: 100%; display: grid; gap: var(--space-4); margin: 0; padding: var(--space-7) var(--space-9); font-size: var(--text-sm); }
+  /* A divider under the row it continues; framed on its own, its frame is its edge. */
+  .github-facts:not(.boxed-facts) { border-top: 1px solid var(--line-2); }
   .github-facts > div { display: grid; grid-template-columns: minmax(0, clamp(7rem, 30%, 160px)) minmax(0, 1fr); gap: var(--space-6); }
   .github-facts dt { color: var(--muted); }
   .github-facts dd { margin: 0; }
@@ -5151,20 +5147,8 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   /* The same rows on their own surface, where no band carries them. */
   .account-facts { }
   /* Containers: what needs you, one row per image and version, then the table. */
-  .container-needs { list-style: none; margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: hidden; }
-  .container-needs > li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); border-left: 3px solid var(--line); }
-  .container-needs > li + li { border-top: 1px solid var(--line-2); }
-  .container-needs > li.is-serious { border-left-color: var(--danger); }
-  .container-needs > li.is-attention, .container-needs > li.is-behind { border-left-color: var(--tone-caution-line); }
-  .container-needs-icon { color: var(--tone-caution-ink); font-size: var(--text-lg); line-height: 1; }
-  .container-needs > li.is-serious .container-needs-icon { color: var(--danger); }
-  /* Never wider than the row beside its icon, so the icon keeps its line. */
-  .container-needs-body { flex: 1 1 min(22rem, 100% - 3rem); min-width: 0; }
-  .container-needs-body p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
   .container-arrow { color: var(--muted-2); font-weight: 400; }
-  .container-advisories { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); font-size: var(--text-sm); }
-  .container-needs-where { display: flex; flex-wrap: wrap; gap: var(--space-2); max-width: 100%; }
-  .container-needs-where .workflow-chip { padding: var(--space-1) var(--space-5); font-size: var(--text-xs); box-shadow: none; }
+  .container-advisories { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); font-size: var(--text-sm); }
   .container-standing { white-space: nowrap; }
   /* Words rather than a pill: a narrow column wraps them instead of widening. */
   .container-reach { color: var(--danger); font-size: var(--text-xs); font-weight: 500; }
@@ -5304,7 +5288,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .filter-bar, .table-toolbar, .kpi-grid, .insight-grid,
   .kv, .form,
   .auth-card, .mail-stage, .mail-editor,
-  .topology-workspace, .github-list, .account-facts, .container-needs,
+  .topology-workspace, .github-list, .account-facts,
   .boxed-facts, .policy-agents li, .relation-list,
   .posture-gaps, .posture-repos, .machine-telemetry, .machine-telemetry-metrics, .route,
   .dashboard-counts, .dash-links) {
