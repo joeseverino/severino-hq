@@ -66,7 +66,7 @@ part's heading shows only when there is more than one.
               {% comment %}
               Three, then "+N more": a controller credential governs a dozen
               kinds, and a dozen stacked would make the row a dozen lines tall.
-              Opened, the whole list runs beneath the row across its width.
+              Opened, the rest run beneath the row across its width.
               {% endcomment %}
               {% if connection.abilities %}
                 {% with folded=connection.abilities|length|add:"-4" %}
@@ -75,8 +75,8 @@ part's heading shows only when there is more than one.
                 </ul>
                 {% if folded > 0 %}
                   <span class="connection-ability-more row-less">+{{ connection.abilities|length|add:"-3" }} more</span>
-                  <ul class="connection-ability-list connection-ability-all row-below" data-label="Reads">
-                    {% for state in connection.abilities %}{% include "control_plane/_connection_ability.html" %}{% endfor %}
+                  <ul class="connection-ability-list connection-ability-all row-below" data-label="Also reads">
+                    {% for state in connection.abilities|slice:"3:" %}{% include "control_plane/_connection_ability.html" %}{% endfor %}
                   </ul>
                 {% endif %}
                 {% endwith %}

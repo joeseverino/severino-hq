@@ -3439,11 +3439,11 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-authority-missing { color: var(--danger); }
 .connection-ability-more { display: block; margin-top: var(--space-2); font-size: var(--text-3xs); color: var(--muted); }
 .connection-ability-list + .connection-ability-list { margin-top: var(--space-2); }
-/* Opened, every one of them, flowing across the line beneath the row. */
+/* Opened, the rest of them, flowing across the line beneath the row. */
 .connection-ability-all { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
 .connection-ability-all > li { flex: none; }
-/* Where the whole list is showing, the first three and their count are not. */
-:is(.row-detail, tr.is-expanded) :is(.connection-ability-preview, .connection-ability-more) { display: none; }
+/* Opened, the rest are listed, so their count is not. */
+.row-detail .connection-ability-more { display: none; }
 .connection-state {
   display: inline-flex;
   align-items: center;
