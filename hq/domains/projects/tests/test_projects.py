@@ -158,8 +158,8 @@ class ProjectListTests(TestCase):
         page = text(response)
         self.assertIn("Example Tool tool", page)
         self.assertNotIn("Example example", page)
-        # Every technology, none folded behind a count.
-        self.assertIn("Go SQLite Django htmx CSS", page)
+        # The first three technologies, the rest behind the row's toggle.
+        self.assertIn("Go SQLite Django +2", page)
         self.assertContains(response, "Edited ")
 
     def test_filters_and_sorts_say_what_they_do(self):

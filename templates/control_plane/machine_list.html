@@ -24,7 +24,7 @@ anyway, and would go on meaning nothing after it stopped being.
         <tr>
           <td>
             <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} <span class="tag" title="{{ role.detail }}">{{ role.label }}</span>{% endfor %}
-            {% if machine.role %}<br><span class="muted">{{ machine.role }}</span>{% endif %}
+            {% if machine.role %}<br><span class="muted table-clamp" title="{{ machine.role }}">{{ machine.role }}</span>{% endif %}
           </td>
           <td>
             {% for ref in machine.reached_by %}{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} <span class="muted">not answering</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}

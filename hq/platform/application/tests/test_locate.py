@@ -19,7 +19,6 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from ..infrastructure import declared_machines
 from ..locate import index_of, machines_index, split_endpoint
 from ..whereabouts import Origin, locate
-from .markup import text
 
 
 def a_machine(key, name, *addresses, role=""):
@@ -225,7 +224,7 @@ class ConnectionPageTests(TestCase):
         a_connection("example-far", "ssh", endpoint="198.51.100.9:22")
 
         response = self.page()
-        self.assertIn("198.51.100.9:22", text(response))
+        self.assertContains(response, "198.51.100.9:22")
         self.assertNotContains(response, "example-alpha")
 
 

@@ -91,19 +91,20 @@ dates and lengths of time sort as what they are; a cell may say its own value
 with `data-sort`. Sections keep their own rows. Nothing per table.
 *Gate:* `test_any_table_sorts_by_a_heading`.
 
-**Nothing in a table is cut.** An identifier wraps where `|breakable` lets it,
-a run of links wraps like text, and the browser sizes the columns to what they
-hold. There is no length cap and no line clamp: each is a guess at the room a
-row has, and a guess is wrong for some row. A stacked list longer than four
-shows three and "+N more", the rest in the row's opening. A table too wide for
-its box gives up a whole column at a time, into the row's opening.
-*Gate:* `nothing_in_a_table_is_cut`.
+**A table cuts only what has no room.** A long identifier is one line, cut
+with an ellipsis, and a run of links can fold behind "+3". `tables.js` then
+shows each whole wherever that leaves the table no taller and inside its box,
+so a cut is never a guess: it is there only when showing more would cost a
+line. A stacked list longer than four shows three and "+N more", since
+showing more always costs lines. A row that holds anything back gets one
+toggle that lifts every cut and opens every fold in it.
+*Gate:* `nothing_is_held_back_while_its_table_has_room`.
 
 A row's opening is its only disclosure: what is shown only once a row is open
-is marked `.row-more`, and the face that stands in for it while closed (a
-link that opens as its form) `.row-less`, never a `<details>` inside a cell.
-`tables.js` gives a row a toggle when it holds something back. The gate fails
-a row with both.
+is marked `.row-more` (a word, a list item), or `.row-below` for a block,
+which opens on the line beneath the row at the table's width; the face that
+stands in for it while closed is `.row-less`. Never a `<details>` inside a
+cell. The gate fails a row with both.
 
 **One band.** A row of facts, readings or choices is a band: one surface,
 cells divided by hairlines each cell draws itself, so a wrapped row keeps its

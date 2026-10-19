@@ -35,7 +35,7 @@ part's heading shows only when there is more than one.
           <tr id="{{ connection.instance.label|connection_anchor }}">
             <td>
               <strong>{% entity connection.name_link %}</strong>
-              {% if connection.instance.endpoint %}<br><code>{{ connection.instance.endpoint|breakable }}</code>{% endif %}
+              {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
               {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
               {% ifchanged group.spec.label group.spec.secret_store %}<span class="connection-row-meta narrow-more">
                 {% if group.spec.label != connection.instance.label %}{{ group.spec.label }} · {% endif %}{% if group.spec.secret_store %}Secrets in {{ group.spec.secret_store }}{% elif connection.instance.credential_model == "none" %}No key needed{% else %}Does not say where its secret is kept{% endif %}
@@ -101,9 +101,10 @@ part's heading shows only when there is more than one.
               {% endcomment %}
               <span class="connection-depends">
               {% with targets=connection.instance.targets dependencies=connection.instance.dependencies %}
-              {% for link in targets %}<span>{% if not forloop.first %} · {% endif %}{% entity link|declared_link %}</span>{% endfor %}
+              {% for link in targets %}{% if forloop.counter == 4 and targets|length > 4 %}<span class="muted row-less">+{{ targets|length|add:"-3" }}</span>{% endif %}<span{% if forloop.counter > 3 and targets|length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %} · {% endif %}{% entity link|declared_link %}</span>{% endfor %}
               {% if targets and dependencies %}<br>{% endif %}
-              {% for link in dependencies %}<span>{% if not forloop.first %} · {% endif %}{% entity link|declared_link code=True %}</span>{% endfor %}
+              {% if dependencies|length > 4 %}<span class="muted row-less">{{ dependencies|length|counted:"record" }}</span>{% endif %}
+              {% for link in dependencies %}<span{% if dependencies|length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %} · {% endif %}{% entity link|declared_link code=True %}</span>{% endfor %}
               {% if not targets and not dependencies %}{% empty_value %}{% endif %}
               {% endwith %}
               </span>
