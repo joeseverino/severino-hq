@@ -1657,8 +1657,8 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    percentage, because a percentage counts for nothing while the columns are
    sized, and one long URL would then take the width every other column needs. */
 .data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: var(--identifier-max); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
-/* On one line a hyphenated part is just text, so the cut ends in an ellipsis. */
-.data-table td code .whole { display: inline; }
+/* Cut to one line, a token is plain text: the ellipsis lands in it, and no part of it draws a box past the cut. */
+.data-table td code :is(.token, .whole) { display: contents; }
 /* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {
   display: inline-flex;

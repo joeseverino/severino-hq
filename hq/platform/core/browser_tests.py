@@ -1157,8 +1157,7 @@ _RAGGED_QUEUES = (
 )
 
 # An identifier in a table is cut only while its row has no room for more:
-# given two more characters, its rows overflow their box on one line, and a
-# table that had to be made snug overflows it at all.
+# given two more characters, its rows overflow their box on one line.
 _CUT_WITH_ROOM = (
     "(scroll) => {"
     + _DESCRIBE
@@ -1173,13 +1172,15 @@ _CUT_WITH_ROOM = (
     const fits = () => table.getBoundingClientRect().width <= wrapper.clientWidth + 1;
     const room = parseFloat(getComputedStyle(table).getPropertyValue('--identifier-max'));
     const before = table.style.getPropertyValue('--identifier-max');
+    const widths = cut.map((code) => code.clientWidth);
     table.style.setProperty('--identifier-max', (room + 2) + 'ch');
-    const snug = 'snug' in table.dataset && fits();
+    // A cut held by something other than the cap (its cell) is not this rule's.
+    const grows = cut.some((code, i) => code.clientWidth > widths[i] + 1);
     table.dataset.measure = '';
-    const oneLine = fits();
+    const oneLine = grows && fits();
     delete table.dataset.measure;
     if (before) table.style.setProperty('--identifier-max', before); else table.style.removeProperty('--identifier-max');
-    if (snug || oneLine) found.push(`${describe(table)}: "${cut[0].textContent.trim()}" cut to ${room}ch with room for more`);
+    if (oneLine) found.push(`${describe(table)}: "${cut[0].textContent.trim()}" cut to ${room}ch with room for more`);
   }
   return found;
 }"""
