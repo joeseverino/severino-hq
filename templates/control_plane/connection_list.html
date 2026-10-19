@@ -51,7 +51,7 @@ part's heading shows only when there is more than one.
               {% endif %}
               {% endwith %}
               {% if row.more_scope %}
-                <div class="connection-more-scope row-below">
+                <div class="connection-more-scope row-below" data-label="Also sees">
                   <ul class="connection-sight-list">{% for line in row.more_scope %}<li>{{ line }}</li>{% endfor %}</ul>
                 </div>
               {% endif %}
@@ -70,12 +70,12 @@ part's heading shows only when there is more than one.
               {% endcomment %}
               {% if connection.abilities %}
                 {% with folded=connection.abilities|length|add:"-4" %}
-                <ul class="connection-ability-list">
+                <ul class="connection-ability-list{% if folded > 0 %} connection-ability-preview row-less{% endif %}">
                   {% for state in connection.abilities %}{% if forloop.counter <= 3 or folded <= 0 %}{% include "control_plane/_connection_ability.html" %}{% endif %}{% endfor %}
                 </ul>
                 {% if folded > 0 %}
                   <span class="connection-ability-more row-less">+{{ connection.abilities|length|add:"-3" }} more</span>
-                  <ul class="connection-ability-list connection-ability-all row-below">
+                  <ul class="connection-ability-list connection-ability-all row-below" data-label="Reads">
                     {% for state in connection.abilities %}{% include "control_plane/_connection_ability.html" %}{% endfor %}
                   </ul>
                 {% endif %}

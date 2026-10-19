@@ -400,9 +400,17 @@
         });
       }
     });
-    // What the row keeps for this line at any width, each part set in under
-    // the cell it came from, where its words started.
+    // What the row keeps for this line at any width. A part that names itself
+    // (`data-label`) joins the named list, so the line reads as one set of
+    // facts on one edge; any other is set in under the cell it came from,
+    // where its words started.
     const rowLeft = row.getBoundingClientRect().left;
+    row.querySelectorAll(":is(td, th) .row-below[data-label]").forEach((el) => {
+      const place = document.createComment("");
+      el.replaceWith(place);
+      undo.push(() => place.replaceWith(el));
+      parts.push([el.dataset.label, [el]]);
+    });
     const below = [...row.querySelectorAll(":is(td, th) .row-below")].map((el) => {
       const from = el.closest("td, th");
       const indent = from.getBoundingClientRect().left + parseFloat(getComputedStyle(from).paddingLeft) - rowLeft;
@@ -438,6 +446,13 @@
     detail.append(cell);
     restore.set(detail, undo);
     row.after(detail);
+    // A name over nothing that shows (a column whose words moved to a part of
+    // their own, a preview the open row does without) is not drawn.
+    detail.querySelectorAll(".row-columns > dd").forEach((value) => {
+      if (value.getBoundingClientRect().height) return;
+      value.previousElementSibling?.remove();
+      value.hidden = true;
+    });
     const start = cell.getBoundingClientRect().left + parseFloat(getComputedStyle(cell).paddingLeft) - rowLeft;
     below.forEach(([el, indent]) => el.style.setProperty("margin-inline-start", `${Math.max(0, indent - start)}px`));
   };
