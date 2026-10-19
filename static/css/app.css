@@ -3468,6 +3468,14 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-authority-missing { color: var(--danger); }
 .connection-ability-more { display: block; margin-top: var(--space-2); font-size: var(--text-3xs); color: var(--muted); }
 .connection-ability-list + .connection-ability-list { margin-top: var(--space-2); }
+/* In the row, what a connection reads is a run of names like the links beside
+   it, each kept whole, at the row's own size. */
+.connection-table td > .connection-ability-list { display: inline; }
+.connection-table td > .connection-ability-list > li { display: inline; white-space: nowrap; font-size: inherit; line-height: inherit; }
+.connection-table td > .connection-ability-list > li::before { content: none; }
+.connection-table td > .connection-ability-list > li + li::before { content: " · "; width: auto; height: auto; border-radius: 0; background: none; color: var(--muted-2); }
+.connection-table td > .connection-ability-list > li > small { margin-left: var(--space-2); }
+.connection-table td > .connection-ability-more { display: inline; margin: 0 0 0 var(--space-3); font-size: var(--text-2xs); }
 /* Opened, the rest of them, flowing across the line beneath the row. */
 .connection-ability-all { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
 .connection-ability-all > li { flex: none; }
