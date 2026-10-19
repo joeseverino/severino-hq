@@ -403,6 +403,19 @@ class GateReferenceTests(SimpleTestCase):
             run = task.get("run", "")
             run = " ".join(run) if isinstance(run, list) else run
             scripts = [ROOT / path for path in re.findall(r"[\w/.-]+\.(?:sh|py)\b", run) if (ROOT / path).is_file()]
+            # A test module named the dotted way (`manage.py test a.b.c.Case`).
+            for dotted in re.findall(r"\b[a-z_]+(?:\.\w+)+", run):
+                parts = dotted.split(".")
+                found = next(
+                    (
+                        ROOT.joinpath(*parts[:end]).with_suffix(".py")
+                        for end in range(len(parts), 0, -1)
+                        if ROOT.joinpath(*parts[:end]).with_suffix(".py").is_file()
+                    ),
+                    None,
+                )
+                if found and found not in scripts:
+                    scripts.append(found)
             declared = re.findall(r'(?:arg|flag)\s+"[<\[]?(?:--)?([\w-]+)', task.get("usage", ""))
             with self.subTest(task=name):
                 if declared:
