@@ -1869,6 +1869,14 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 @media (scripting: none) { .row-fold { display: none; } }
 .data-table tr.is-expanded:has(+ .row-detail) > * { border-bottom: 0; }
 .data-table .row-detail > td { padding-top: 0; }
+/* What an opened row adds is one panel under the row's name: its left edge on
+   the name's, each part's name in one column and its value beside it. */
+.data-table .row-detail > td { padding-left: calc(var(--space-6) + 1.5rem); }
+.row-detail > td > .row-columns {
+  grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6);
+  padding: var(--space-5) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
+}
+.row-detail > td > .row-columns > dt { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .data-table .row-detail:hover { background: none; }
 /* With its columns held, a value the open row no longer cuts short has to
    break inside its column rather than run under the next. */
@@ -3192,7 +3200,22 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-sight-list > li > ul { flex-basis: 100%; }
 .connection-credential-steps { font-size: var(--text-xs); }
 /* Opened beneath the row, the things it reads fill the line, row by row. */
-.row-detail .connection-sight-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); column-gap: var(--space-8); }
+.row-detail .connection-sight-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); column-gap: var(--space-8); margin: 0; }
+/* Each reading carries its state's colour, so what needs reading again shows. */
+.row-detail .connection-sight-list > li::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.row-detail .connection-sight-list > li:is(.connection-sight-partial)::before { background: var(--warn); }
+.row-detail .connection-sight-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
+.row-detail .connection-sight-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
+.row-detail .connection-sight-list > li.muted::before { content: none; }
+/* The fix is the one thing to do, so it reads as a callout. */
+.row-detail .connection-credential-steps {
+  padding: var(--space-3) var(--space-5); border-left: 3px solid var(--warn); border-radius: var(--radius-sm);
+  background: var(--tone-caution-tint);
+}
+.row-detail .connection-credential-steps .operator-step:first-child { margin-top: 0; }
+/* The rest of what it reads, as chips. */
+.row-detail .connection-ability-all > li { grid-template-columns: minmax(0, 1fr); padding: 1px var(--space-4); border-radius: 999px; background: var(--accent-tint); color: var(--accent); }
+.row-detail .connection-ability-all > li::before { content: none; }
 .connection-sight-state { font-weight: 600; }
 .connection-sight-refused .connection-sight-state,
 .connection-sight-unreadable .connection-sight-state,
