@@ -3342,12 +3342,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* An ability line's text track is minmax(0, 1fr), which reports no width of
    its own to the table: without a length here the column is squeezed until
    its words break, and the spare width goes to the columns with sentences. */
-/* The abilities flow and wrap like the links beside them, so a credential
-   that reads a dozen kinds is a few lines, every one of them shown. Their
-   column is a third of the table: left to the browser, one line of all of
-   them is the widest thing in the table, and it sizes every column by it. */
-.connection-ability-list { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); min-width: 20ch; margin: 0; padding: 0; list-style: none; }
-.connection-table .reads-col { width: 33%; }
+.connection-ability-list { display: grid; gap: var(--space-2); min-width: 20ch; margin: 0; padding: 0; list-style: none; }
 .connection-ability-list li {
   display: grid;
   grid-template-columns: 5px minmax(0, 1fr);
@@ -3386,6 +3381,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .linked-text { white-space: pre-line; overflow-wrap: anywhere; }
 .connection-authority-proven { color: var(--muted); }
 .connection-authority-missing { color: var(--danger); }
+.connection-ability-more { display: block; margin-top: var(--space-2); font-size: var(--text-3xs); color: var(--muted); }
 .connection-ability-list + .connection-ability-list { margin-top: var(--space-2); }
 .connection-state {
   display: inline-flex;

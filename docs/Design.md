@@ -91,12 +91,12 @@ dates and lengths of time sort as what they are; a cell may say its own value
 with `data-sort`. Sections keep their own rows. Nothing per table.
 *Gate:* `test_any_table_sorts_by_a_heading`.
 
-**Nothing in a table is cut.** A cell shows all it holds: an identifier wraps
-where `|breakable` lets it, a list wraps like text, and the browser sizes the
-columns to what they hold. There is no length cap, no line clamp and no list
-folded at a count, because each is a guess at the room a row has, and a guess
-is wrong for some row. Only a table too wide for its box gives anything up, a
-whole column at a time, into the row's opening.
+**Nothing in a table is cut.** An identifier wraps where `|breakable` lets it,
+a run of links wraps like text, and the browser sizes the columns to what they
+hold. There is no length cap and no line clamp: each is a guess at the room a
+row has, and a guess is wrong for some row. A stacked list longer than four
+shows three and "+N more", the rest in the row's opening. A table too wide for
+its box gives up a whole column at a time, into the row's opening.
 *Gate:* `nothing_in_a_table_is_cut`.
 
 A row's opening is its only disclosure: what is shown only once a row is open
