@@ -718,6 +718,29 @@ _NARROW_FRAMES = (
 )
 
 
+# Opening a disclosure adds what it holds after its summary and moves nothing
+# before it: the summary pressed stays under the pointer that pressed it.
+_MOVING_SUMMARIES = (
+    "() => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const details of document.querySelectorAll('main details:not([open])')) {
+    const summary = details.querySelector(':scope > summary');
+    if (!summary || !summary.checkVisibility()) continue;
+    const before = box(summary);
+    details.open = true;
+    const after = box(summary);
+    details.open = false;
+    if (Math.abs(after.top - before.top) > 1 || Math.abs(after.left - before.left) > 1) {
+      found.push(`${describe(details)}: "${summary.textContent.trim().slice(0, 30)}" moved ${Math.round(after.left - before.left)}, ${Math.round(after.top - before.top)} when opened`);
+    }
+  }
+  return found.slice(0, 10);
+}"""
+)
+
+
 # A band cell with no padding: its content touches the hairlines around it.
 # The frame rule zeroes the inset of anything nested in a surface, and a band
 # is one, so a component placed in a band loses its padding without a trace.
@@ -1810,6 +1833,9 @@ class LayoutBrowserTests(BrowserGate):
     def a_mark_holds_its_glyph_in_its_middle(self, _name):
         self.assertEqual(self.page.evaluate(_OFF_CENTRE_MARKS, SELECTORS["route_mark"]), [])
 
+    def opening_a_disclosure_moves_nothing_before_it(self, _name):
+        self.assertEqual(self.page.evaluate(_MOVING_SUMMARIES), [])
+
     def a_line_shows_on_its_surface(self, _name):
         self.assertEqual(self.page.evaluate(_FAINT_LINES, [SELECTORS["contrast_scope"], LINE_CONTRAST]), [])
 
@@ -1919,6 +1945,7 @@ class LayoutBrowserTests(BrowserGate):
         return [
             self.only_a_table_scrolls_sideways,
             self.nothing_runs_out_of_its_table_cell,
+            self.opening_a_disclosure_moves_nothing_before_it,
             self.no_column_is_narrower_than_its_words,
             self.a_pill_never_wraps,
             self.a_table_shares_its_width_only_with_columns_that_show,

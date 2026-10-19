@@ -40,6 +40,8 @@ class Look(LayoutBrowserTests):
         """The pages, widths and rule the task was given, each checked."""
 
         pages = _listed("LOOK_PAGES")
+        if pages == ["all"]:
+            pages = list(ALL_PAGES)
         unknown = sorted(set(pages) - set(ALL_PAGES))
         self.assertFalse(unknown, f"Not in the gate's estate: {unknown}. Pages: {', '.join(ALL_PAGES)}")
         widths = [int(width) for width in _listed("LOOK_WIDTHS")] or [PHONE_SCREEN[0], 820, 1360]
@@ -53,6 +55,8 @@ class Look(LayoutBrowserTests):
         self.open(name, width)
         if css := os.environ.get("LOOK_CSS"):
             self.page.add_style_tag(content=css)
+        if os.environ.get("LOOK_OPEN"):
+            self.open_every_disclosure(name)
         shot = OUT / f"{name.replace('/', '-')}-{width}.png"
         self.page.screenshot(path=shot, full_page=True)
         print(shot)

@@ -4503,12 +4503,15 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-peer-name { font-size: var(--text-md); font-weight: 600; }
 .conn-kind-declined { background: var(--tone-tint); color: var(--warn); }
 
-/* Which network the link rides over, with Why and About on the same line; an
-   opened one takes the line below. Words wrap whole: the cell would otherwise
-   inherit `overflow-wrap: anywhere` and fit-content would shrink to a letter. */
+/* Which network the link rides over, with Why and About on the same line.
+   Each disclosure lends its parts to the line, so opening one leaves its
+   summary where it was pressed and what it holds takes the line below. Words
+   wrap whole: the cell would otherwise inherit `overflow-wrap: anywhere` and
+   fit-content would shrink to a letter. */
 .conn-carriage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4); overflow-wrap: normal; }
 .conn .kv .conn-more > summary { padding: 0; }
-.conn-carriage > details[open] { flex-basis: 100%; }
+.conn-carriage > details { display: contents; }
+.conn-carriage > details > :not(summary) { flex-basis: 100%; }
 .conn-carriage > strong { font-weight: 600; }
 /* Riding over the internet is not a fault, so it is not red. It is the one
    state where the path is public and the operator may want to look further,
