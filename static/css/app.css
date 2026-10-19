@@ -3344,8 +3344,8 @@ a.discovery-link:hover strong { color: var(--accent); }
   .request-path li::before { left: 50%; right: calc(-50% - var(--space-6)); top: 12px; bottom: auto; width: auto; height: 2px; }
   .request-path li:first-child::before { top: 12px; }
   .request-path li:last-child::before { display: none; }
-  .request-path .hop-label { grid-row: 2; }
-  .request-path .hop-body { grid-row: 3; justify-items: center; }
+  .request-path .hop-label { grid-column: 1; grid-row: 2; }
+  .request-path .hop-body { grid-column: 1; grid-row: 3; justify-items: center; }
   .request-path .hop-body > strong { justify-content: center; }
   .request-path .hop-icon { grid-row: 1; }
 }

@@ -276,6 +276,8 @@
           dropped.push(spare.pop().cellIndex + 1);
           table.dataset.drop = dropped.join(" ");
         }
+        // The room a column gave up goes back to the identifiers it cut.
+        if (dropped.length) uncut(table, overflows);
       }
     }
     // Still wider than its box with nothing left to give up: the columns are
