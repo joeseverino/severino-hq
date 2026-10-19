@@ -254,8 +254,6 @@
   --layout-gap: var(--space-8);
   /* How much of an identifier a table cell shows before cutting it; the row
      expander shows the rest. */
-  --identifier-max: 32ch;
-  --identifier-snug: 22ch;
   /* Track floors for a band of a fixed number of cells, so it lays out as a
      whole number of even rows at any width: 4, 2 or 1 columns (never 3+1),
      or 3 or 1. Read where they are used, so 100% is that grid's width.
@@ -1138,32 +1136,10 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* A status pill is a label, not a paragraph: wrapped, it grows the row it sits
    in. The table already scrolls horizontally, so the label stays whole. */
 .data-table .pill { white-space: nowrap; }
-/* A name in a table cell takes two lines at most, and so does a `.cell-line`:
-   one fact written as a line. Clamped, it still breaks where it must, so its
-   column can narrow to fit the page, and the row stays within the height
-   core/browser_tests.py holds it to. The whole name is the record's own page. */
-.data-table td [data-entity],
-.data-table td .cell-line {
-  display: -webkit-inline-box;
-  max-width: 100%;
-  overflow: hidden;
-  vertical-align: top;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-/* The row's own name is what tells it from the next row, and names share
-   their prefixes ("example-worker-01", "example-worker-02"), so it is never
-   cut: it wraps at its hyphens, and the names beside it give way instead. */
-.data-table td strong > [data-entity],
-.data-table td strong > .cell-line { display: inline; overflow: visible; -webkit-line-clamp: none; line-clamp: none; }
 /* A cell that leads with the row's name keeps room to show it, rather than
    letting the table's arithmetic narrow the column until each name stands
    several lines tall. */
 .data-table td:has(> strong:first-child) { min-width: 11rem; }
-/* A name in the muted line under it is context the row already shares with
-   its neighbours ("on example-host"): one line, cut at the cell's edge. */
-.data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
 /* Two links in one cell need to read as two, not as one control with a strange
    name. The class sits on a span in one place and on a td in two others, and a
    cell given a flex display leaves table layout, so only the span gets the box
@@ -1669,15 +1645,12 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* A time is one phrase; broken over two lines it doubles its row. */
 .data-table td time { white-space: nowrap; }
 
-/* Columns size to what they hold, and a table too wide for its box scrolls in
-   it. An identifier in a cell never breaks across lines ("hq-proxy" is never
-   "hq-" over "proxy") and never takes more than --identifier-max: past it, it
-   is cut, and the row expander shows it whole. The cap is a length, not a
-   percentage, because a percentage counts for nothing while the columns are
-   sized, and one long URL would then take the width every other column needs. */
-.data-table td code { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: var(--identifier-max); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
-/* Cut to one line, a token is plain text: the ellipsis lands in it, and no part of it draws a box past the cut. */
-.data-table td code :is(.token, .whole) { display: contents; }
+/* Columns size to what they hold. Nothing in a cell is cut or capped: an
+   identifier wraps where `|breakable` lets it (after a dot or a slash), so a
+   long one makes its row a line taller and the browser shares out the rest.
+   It is a box of its own on the line's foot, so its chip's padding does not
+   open the line it sits on. */
+.data-table td code { display: inline-block; max-width: 100%; vertical-align: bottom; }
 /* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {
   display: inline-flex;
@@ -1769,12 +1742,11 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 
 /* A table in a narrow box (a phone, or half a page beside a chart: tables.js
    marks it by its box's width, not the screen's). Its rows are something to
-   put a thumb on, so they get the room a control in them needs; an identifier
-   is cut sooner, whole again when the row is opened; and within a column that
-   stays, what is marked `narrow-more` waits in the line beneath the row. */
+   put a thumb on, so they get the room a control in them needs; and within a
+   column that stays, what is marked `narrow-more` waits in the line beneath
+   the row. */
 .data-table[data-narrow] > tbody { --row-pad: var(--space-6); }
 .data-table[data-narrow] > tbody > tr:not(.row-detail) .narrow-more { display: none; }
-.table-scroll > .data-table:is([data-narrow], [data-snug]) { --identifier-max: var(--identifier-snug); }
 /* A column held to a width that suits a wide table gives it back here, so
    the room goes to the column that names the row. */
 .data-table[data-narrow] .tight-col > * { min-width: 0; }
@@ -2083,13 +2055,12 @@ a.kpi:hover { background: var(--surface-2); }
 
 /* The queue's table. The dot and the title share one line height, so the dot
    sits on the title's first line; the buttons end every row at the table's
-   edge. The meaning under a title is one line until the row is opened. */
+   edge. */
 .queue-table > tbody > tr > :is(.queue-mark, .queue-what) { font-size: var(--text-md); line-height: 1.5; }
 .queue-table .queue-mark { width: 1%; padding-inline-end: 0; }
 .queue-table .queue-mark > .pill.is-mark { vertical-align: middle; }
 .queue-table .attention-detail {
   margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted);
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden;
 }
 /* A table with no headings has no floors from tables.js, so the column that
    names the row keeps a readable width itself. */
@@ -2098,8 +2069,6 @@ a.kpi:hover { background: var(--surface-2); }
 .queue-table .queue-act > * { display: inline-flex; flex-wrap: nowrap; gap: var(--space-3); margin: 0; vertical-align: top; }
 .queue-table .queue-act > * + * { margin-inline-start: var(--space-3); }
 .queue-table .queue-act form { margin: 0; }
-/* A long label is cut to one line, whole again when the row is opened. */
-.queue-table .queue-act .btn { max-width: 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* What the row holds back, in the line beneath once opened. */
 .queue-more > :first-child { margin-top: 0; }
 /* A family: how bad, what kind and how many, opening to its rows, which are
@@ -2742,10 +2711,6 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
   .glance-caption { overflow: hidden; text-overflow: ellipsis; }
 }
 
-/* A description under a row's name: two lines at most, and never wider than
-   a name column should be, so the columns beside it stay on screen. */
-.table-clamp { display: -webkit-box; max-width: 28ch; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-
 /* ── Forms ──────────────────────────────────────────────────────── */
 
 /* A form is two columns where there is room and one where there is not, in
@@ -3374,23 +3339,15 @@ a.discovery-link:hover strong { color: var(--accent); }
    a td drops it out of table layout and stacks the row into one column. */
 .connection-table .muted,
 .connection-table code { font-size: var(--text-2xs); }
-/* An endpoint may be arbitrarily long and never owns the table's width: it
-   caps itself, and the row's expander shows the rest. */
-.connection-endpoint {
-  display: inline-block;
-  overflow: hidden;
-  max-width: min(100%, var(--identifier-max));
-  text-overflow: ellipsis;
-  vertical-align: bottom;
-  white-space: nowrap;
-}
-/* Here the name is one line, like the endpoint under it: the name leads five
-   more facts in the same cell. */
-.connection-table td > strong > [data-entity] { display: -webkit-inline-box; overflow: hidden; -webkit-line-clamp: 1; line-clamp: 1; }
 /* An ability line's text track is minmax(0, 1fr), which reports no width of
    its own to the table: without a length here the column is squeezed until
    its words break, and the spare width goes to the columns with sentences. */
-.connection-ability-list { display: grid; gap: var(--space-2); min-width: 20ch; margin: 0; padding: 0; list-style: none; }
+/* The abilities flow and wrap like the links beside them, so a credential
+   that reads a dozen kinds is a few lines, every one of them shown. Their
+   column is a third of the table: left to the browser, one line of all of
+   them is the widest thing in the table, and it sizes every column by it. */
+.connection-ability-list { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); min-width: 20ch; margin: 0; padding: 0; list-style: none; }
+.connection-table .reads-col { width: 33%; }
 .connection-ability-list li {
   display: grid;
   grid-template-columns: 5px minmax(0, 1fr);
@@ -3420,11 +3377,8 @@ a.discovery-link:hover strong { color: var(--accent); }
    sizing columns; each fact wraps inside it rather than being cut. */
 .connection-standing { display: grid; gap: var(--space-1); justify-items: start; min-width: 18ch; }
 .connection-standing .muted { font-size: var(--text-2xs); }
-/* What was done names a resource, which can be any length: it holds one
-   line within the standing's width and its age keeps a line of its own, so a
-   long container name never sets the column. The title carries it whole. */
-.connection-last-activity { display: grid; max-width: 26ch; font-size: var(--text-2xs); }
-.connection-last-activity > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+/* What was done, then its age on a line of its own. */
+.connection-last-activity { display: grid; font-size: var(--text-2xs); }
 .connection-authority { color: var(--muted); font-size: var(--text-2xs); }
 .connection-problems { color: var(--attn); font-size: var(--text-2xs); font-weight: 650; }
 /* Where a published thing runs, and a note with the names in it as links. */
@@ -3432,7 +3386,6 @@ a.discovery-link:hover strong { color: var(--accent); }
 .linked-text { white-space: pre-line; overflow-wrap: anywhere; }
 .connection-authority-proven { color: var(--muted); }
 .connection-authority-missing { color: var(--danger); }
-.connection-ability-more { display: block; margin-top: var(--space-2); font-size: var(--text-3xs); color: var(--muted); }
 .connection-ability-list + .connection-ability-list { margin-top: var(--space-2); }
 .connection-state {
   display: inline-flex;
@@ -4576,10 +4529,8 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 /* The star keeps a full touch target but hangs into the cell's padding, so
    the name starts on the line every other cell in the row starts on. */
 .service-name > .pin-toggle { margin-block: -7px; }
-/* A hostname is one token: it is never broken, and past --identifier-max it is
-   cut on the link itself, so nothing runs under the next column. */
-.service-name strong { display: flex; min-width: 0; max-width: var(--identifier-max); }
-.data-table td .service-name strong > [data-entity] { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A hostname wraps only at its dots, as `|breakable` marks them. */
+.service-name strong { display: flex; min-width: 0; }
 .service-name > form { display: inline-flex; }
 .pin-toggle {
   background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
@@ -5447,25 +5398,13 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
     vertical-align: middle;
   }
   :is(.row-expand, .row-fold):hover { border: 0; background: var(--line-2); color: var(--ink); }
-  /* What a row holds back until it is expanded, and the hint it replaces. */
+  /* Detail a row shows once it is opened, and the face it shows instead while
+     closed (a link that opens as its form). */
   .data-table tr:not(.is-expanded) .row-more,
   .data-table tr.is-expanded .row-less { display: none; }
   :is(.row-expand, .row-fold) > svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s ease; }
   :is(.row-expand, .row-fold)[aria-expanded="true"] > svg { transform: rotate(90deg); }
   @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > svg { transition: none; } }
-  /* Every clamp in the row lifted at once. The rules it lifts are scattered and
-     each is specific to its column, so this one outranks them on purpose: an
-     expanded row shows everything, whatever clamped it. */
-  .data-table tr.is-expanded :is(td, th),
-  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden) {
-    white-space: normal !important;
-    overflow: visible !important;
-    text-overflow: clip !important;
-    -webkit-line-clamp: unset !important;
-    line-clamp: none !important;
-    max-height: none !important;
-    max-width: none !important;
-  }
 
   /* A band too narrow for two cells is a list, like every other summary:
      each fact one row, its label and its value at the right edge, the detail

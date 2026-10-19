@@ -171,32 +171,6 @@
       .filter((index) => index > named && rows.every((row) => blankCell(row.children[index])));
     if (blank.length) table.dataset.blank = blank.map((index) => index + 1).join(" ");
   };
-  // A table with an identifier cut gives it the room its rows have: the cap
-  // rises to the longest at which every row still fits on one line. Room
-  // taken by wrapping a sentence instead would trade one cut for a taller row.
-  const uncut = (table, wider) => {
-    const overflows = () => {
-      table.dataset.measure = "";
-      const over = wider();
-      delete table.dataset.measure;
-      return over;
-    };
-    const cut = [...table.querySelectorAll(":scope > tbody > tr:not(.row-detail) > td code")]
-      .filter((code) => code.clientWidth > 0 && code.scrollWidth > code.clientWidth + 1);
-    if (!cut.length || overflows()) return;
-    let fits = parseFloat(getComputedStyle(table).getPropertyValue("--identifier-max"));
-    let over = Math.ceil(Math.max(...cut.map((code) => (fits * code.scrollWidth) / code.clientWidth))) + 2;
-    const cap = (room) => table.style.setProperty("--identifier-max", `${room}ch`);
-    cap(over);
-    if (!overflows()) return;
-    while (over - fits > 1) {
-      const room = Math.floor((fits + over) / 2);
-      cap(room);
-      if (overflows()) over = room;
-      else fits = room;
-    }
-    cap(fits);
-  };
   const fitTable = (table) => {
     const wrapper = table.parentElement;
     if (!wrapper?.classList.contains("table-scroll")) return;
@@ -209,8 +183,6 @@
     if (table.style.tableLayout === "fixed") return;
     table.dataset.fit = "";
     delete table.dataset.drop;
-    delete table.dataset.snug;
-    table.style.removeProperty("--identifier-max");
     delete table.dataset.wrap;
     table.querySelectorAll(":scope > tbody > tr > [data-span]").forEach((cell) => {
       cell.colSpan = Number(cell.dataset.span);
@@ -239,23 +211,6 @@
         const floor = Math.min(wanted[index], index === named ? READABLE_NAME : READABLE);
         heading.style.setProperty("--column-floor", `${Math.max(0, Math.ceil(floor - inset))}px`);
       });
-      // Before any column leaves, identifiers are cut sooner: a long name in a
-      // chip is whole again when its row is opened, and a column is not. They
-      // are cut only as far as the room needs: the longest that still fits.
-      if (overflows()) {
-        table.dataset.snug = "";
-        // Between the sheet's two widths, in ch, the longest that fits.
-        const root = getComputedStyle(document.documentElement);
-        const widest = parseFloat(root.getPropertyValue("--identifier-max"));
-        const snug = parseFloat(root.getPropertyValue("--identifier-snug"));
-        for (let room = widest; room > snug; room -= 2) {
-          table.style.setProperty("--identifier-max", `${room}ch`);
-          if (!overflows()) break;
-          table.style.removeProperty("--identifier-max");
-        }
-      } else {
-        uncut(table, overflows);
-      }
       if (overflows() && headings.length >= 3 && !table.querySelector(":scope > colgroup")) {
         const last = headings.length - 1;
         const marked = headings.some((heading) => heading.classList.contains("key-col"));
@@ -276,8 +231,6 @@
           dropped.push(spare.pop().cellIndex + 1);
           table.dataset.drop = dropped.join(" ");
         }
-        // The room a column gave up goes back to the identifiers it cut.
-        if (dropped.length) uncut(table, overflows);
       }
     }
     // Still wider than its box with nothing left to give up: the columns are
@@ -775,7 +728,7 @@
       const nextHeads = nextTable.querySelectorAll("thead th");
       if (!currentHeads.length || currentHeads.length !== nextHeads.length) return;
       // The incoming table gives up the same columns the current one has.
-      ["fit", "drop", "wrap", "narrow", "snug"].forEach((key) => {
+      ["fit", "drop", "wrap", "narrow"].forEach((key) => {
         if (key in table.dataset) nextTable.dataset[key] = table.dataset[key];
       });
       currentHeads.forEach((th, index) => {

@@ -2,7 +2,7 @@
 {% block row %}
   <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.name }}</strong></a>{% if row.slug != row.name|lower %}<br><span class="muted">{{ row.slug }}</span>{% endif %}</td>
   <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
-  <td>{% for t in row.tech_list|slice:":3" %}<span class="tag">{{ t }}</span>{% endfor %}{% if row.tech_list|length > 3 %}<span class="muted row-less">+{{ row.tech_list|length|add:"-3" }}</span><span class="row-more">{% for t in row.tech_list|slice:"3:" %}<span class="tag">{{ t }}</span>{% endfor %}</span>{% endif %}</td>
+  <td>{% for t in row.tech_list %}<span class="tag">{{ t }}</span>{% endfor %}</td>
   <td class="muted">{% if row.pushed_at %}{{ row.pushed_at|when:"ago" }}{% else %}Edited {{ row.updated_at|when:"ago" }}{% endif %}{% if row.repository.failing %}<br><span class="pill pill-serious">Checks failing</span>{% endif %}{% if row.repository.open_alerts %}<br><span class="pill pill-attention">{{ row.repository.open_alerts|counted:"open alert,open alerts" }}</span>{% endif %}</td>
   <td class="row-actions"><a href="{% url 'projects:edit' row.slug %}">Edit</a></td>
 {% endblock %}

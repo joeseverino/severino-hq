@@ -91,13 +91,19 @@ dates and lengths of time sort as what they are; a cell may say its own value
 with `data-sort`. Sections keep their own rows. Nothing per table.
 *Gate:* `test_any_table_sorts_by_a_heading`.
 
-**A row that says more than it shows expands whole.** Truncation (a clamp, an
-ellipsis, a list folded behind "+5 more") is fine; a dead end is not.
-`tables.js` measures each row and gives any row with cut-off content one toggle
-that lifts every clamp and opens every fold in it. Nothing per table.
-That toggle is the row's only disclosure: what a row holds back is marked
-`.row-more` (hidden until the row is expanded) and its collapsed hint
-`.row-less`, never a `<details>` inside a cell. The gate fails a row with both.
+**Nothing in a table is cut.** A cell shows all it holds: an identifier wraps
+where `|breakable` lets it, a list wraps like text, and the browser sizes the
+columns to what they hold. There is no length cap, no line clamp and no list
+folded at a count, because each is a guess at the room a row has, and a guess
+is wrong for some row. Only a table too wide for its box gives anything up, a
+whole column at a time, into the row's opening.
+*Gate:* `nothing_in_a_table_is_cut`.
+
+A row's opening is its only disclosure: what is shown only once a row is open
+is marked `.row-more`, and the face that stands in for it while closed (a
+link that opens as its form) `.row-less`, never a `<details>` inside a cell.
+`tables.js` gives a row a toggle when it holds something back. The gate fails
+a row with both.
 
 **One band.** A row of facts, readings or choices is a band: one surface,
 cells divided by hairlines each cell draws itself, so a wrapped row keeps its

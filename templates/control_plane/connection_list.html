@@ -21,7 +21,7 @@ part's heading shows only when there is more than one.
       <thead>
         <tr>
           <th>Connection</th>
-          <th>Reads</th>
+          <th class="reads-col">Reads</th>
           <th class="optional-col">Reaches</th>
           <th class="tight-col key-col">State</th>
           <th class="actions-col"></th>
@@ -35,7 +35,7 @@ part's heading shows only when there is more than one.
           <tr id="{{ connection.instance.label|connection_anchor }}">
             <td>
               <strong>{% entity connection.name_link %}</strong>
-              {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
+              {% if connection.instance.endpoint %}<br><code>{{ connection.instance.endpoint|breakable }}</code>{% endif %}
               {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
               {% ifchanged group.spec.label group.spec.secret_store %}<span class="connection-row-meta narrow-more">
                 {% if group.spec.label != connection.instance.label %}{{ group.spec.label }} · {% endif %}{% if group.spec.secret_store %}Secrets in {{ group.spec.secret_store }}{% elif connection.instance.credential_model == "none" %}No key needed{% else %}Does not say where its secret is kept{% endif %}
@@ -63,29 +63,20 @@ part's heading shows only when there is more than one.
             Weather Service" beside "National Weather Service" says nothing.
             {% endcomment %}
             <td>
-              {% comment %}
-              Capped, because a controller credential governs a dozen kinds and
-              a dozen would make one row hundreds of pixels tall. The rest show
-              when the row is expanded, the one disclosure a row has.
-              {% endcomment %}
               {% if connection.abilities %}
                 {% comment %}
                 A permission note stands beside a line only when that line
                 differs from its neighbours or cannot be used: the state
-                column says it once for the connection. A fold hides two or
-                more, never one.
+                column says it once for the connection.
                 {% endcomment %}
                 <ul class="connection-ability-list">
                   {% for state in connection.abilities %}
-                    <li{% if not state.available or forloop.counter > 3 and connection.abilities|length > 4 %} class="{% if not state.available %}is-unavailable{% endif %}{% if forloop.counter > 3 and connection.abilities|length > 4 %} row-more{% endif %}"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
+                    <li{% if not state.available %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
                       <span>{{ state.ability.label }}</span>
                       {% if not state.proven and connection.mixed_evidence or state.available is False %}<small class="connection-evidence connection-evidence-{{ state.evidence }}" title="{{ state.evidence_detail }}">{{ state.evidence_label }}</small>{% endif %}
                     </li>
                   {% endfor %}
                 </ul>
-                {% if connection.abilities|length > 4 %}
-                  <span class="connection-ability-more row-less">+{{ connection.abilities|length|add:"-3" }} more</span>
-                {% endif %}
               {% else %}{% empty_value %}{% endif %}
             </td>
             {% comment %}
@@ -101,10 +92,9 @@ part's heading shows only when there is more than one.
               {% endcomment %}
               <span class="connection-depends">
               {% with targets=connection.instance.targets dependencies=connection.instance.dependencies %}
-              {% for link in targets %}{% if forloop.counter == 4 and targets|length > 4 %}<span class="muted row-less">+{{ targets|length|add:"-3" }}</span>{% endif %}<span{% if forloop.counter > 3 and targets|length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %} · {% endif %}{% entity link|declared_link %}</span>{% endfor %}
+              {% for link in targets %}<span>{% if not forloop.first %} · {% endif %}{% entity link|declared_link %}</span>{% endfor %}
               {% if targets and dependencies %}<br>{% endif %}
-              {% if dependencies|length > 4 %}<span class="muted row-less">{{ dependencies|length|counted:"record" }}</span>{% endif %}
-              {% for link in dependencies %}<span{% if dependencies|length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %} · {% endif %}{% entity link|declared_link code=True %}</span>{% endfor %}
+              {% for link in dependencies %}<span>{% if not forloop.first %} · {% endif %}{% entity link|declared_link code=True %}</span>{% endfor %}
               {% if not targets and not dependencies %}{% empty_value %}{% endif %}
               {% endwith %}
               </span>

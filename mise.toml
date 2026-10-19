@@ -166,6 +166,20 @@ extends = "dev:scratch-env"
 description = "A signed-in session cookie for this checkout's scratch server"
 run = "uv run --locked python manage.py dev_session operator"
 
+[tasks."dev:look"]
+extends = "django"
+depends = ["setup:webkit"]
+description = "Screenshot pages of the browser gate's estate at a few widths, and run one of its rules there"
+usage = '''
+arg "<pages>" help="Comma-separated pages of the gate's estate: connections,dense/services"
+flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
+flag "--rule <rule>" help="A rule method of LayoutBrowserTests to run on each page"
+flag "--css <css>" help="A stylesheet added first: the defect a new rule must catch"
+flag "--dark" help="In the dark palette"
+flag "--no-script" help="As the server drew it, before tables.js and the rest run"
+'''
+run = 'LOOK_PAGES="$usage_pages" LOOK_WIDTHS="${usage_widths:-}" LOOK_RULE="${usage_rule:-}" LOOK_CSS="${usage_css:-}" LOOK_DARK="${usage_dark:-}" LOOK_SCRIPT="${usage_no_script:+off}" uv run --locked --group browser python manage.py test hq.platform.core.browser_look.Look.test_look --noinput --parallel 1'
+
 [tasks."dev:manage"]
 extends = "dev:scratch-env"
 raw = true

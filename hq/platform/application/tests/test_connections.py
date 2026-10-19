@@ -27,7 +27,7 @@ from ..derivations import counting
 from ..provider_choices import container_stack, zone
 from ..report_testing import report_connections
 from ..security import cli_principal
-from .markup import hrefs
+from .markup import hrefs, text
 from .sentinel import CONNECTION, SentinelMixin, plant_credentials
 
 A_PORTAINER = {
@@ -257,7 +257,7 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         ]
         # Reached and proven: the lifecycle rather than the raw probe result.
         self.assertEqual(row.lifecycle, "ready")
-        self.assertContains(response, A_PORTAINER["endpoint"])
+        self.assertIn(A_PORTAINER["endpoint"], text(response))
         self.assertContains(response, AUTHORITY_LABELS["whole_account"])
 
     def test_the_page_never_carries_a_secret(self):

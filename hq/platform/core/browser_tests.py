@@ -48,7 +48,6 @@ ROUTE_PAGES = ("service", "connections", "dense/service", "dense/connections")
 # the tables are designed for is a connection's: its name, endpoint, who holds
 # its secret, where it reaches from, and a closed "Can see" disclosure, one
 # line each, with room for the owner line to wrap once at a tablet: six. A
-# name is clamped to two lines (.table-clamp, `[data-entity]` in a cell), so a
 # row past six is a list put in a cell (a machine's every hostname, a
 # container's every port) that belongs on the record's own page, with a count
 # or the first few in the row. Half a line of slack absorbs the smaller type
@@ -1305,33 +1304,29 @@ _RAGGED_QUEUES = (
 }"""
 )
 
-# An identifier in a table is cut only while its row has no room for more:
-# given two more characters, its rows overflow their box on one line.
-_CUT_WITH_ROOM = (
+# Nothing in a table is cut: no length cap, no line clamp, no ellipsis. Each
+# is a guess at the room a row has, and a guess is wrong for some row; a cell
+# wraps instead, and only a table too wide for its box gives up a column.
+_CUT_IN_TABLES = (
     "(scroll) => {"
     + _DESCRIBE
     + """
+  // Text for a screen reader is clipped to a pixel on purpose, and a
+  // decoration hidden from one says nothing a reader could miss.
+  const unseen = (el) => el.closest('[aria-hidden=true]') !== null || box(el).width <= 1 || box(el).height <= 1;
   const found = [];
   for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
-    if (!table.checkVisibility() || !('fit' in table.dataset)) continue;
-    const wrapper = table.parentElement;
-    const cut = [...table.querySelectorAll('td code')]
-      .filter((code) => code.clientWidth > 0 && code.scrollWidth > code.clientWidth + 1);
-    if (!cut.length) continue;
-    const fits = () => table.getBoundingClientRect().width <= wrapper.clientWidth + 1;
-    const room = parseFloat(getComputedStyle(table).getPropertyValue('--identifier-max'));
-    const before = table.style.getPropertyValue('--identifier-max');
-    const widths = cut.map((code) => code.clientWidth);
-    table.style.setProperty('--identifier-max', (room + 2) + 'ch');
-    // A cut held by something other than the cap (its cell) is not this rule's.
-    const grows = cut.some((code, i) => code.clientWidth > widths[i] + 1);
-    table.dataset.measure = '';
-    const oneLine = grows && fits();
-    delete table.dataset.measure;
-    if (before) table.style.setProperty('--identifier-max', before); else table.style.removeProperty('--identifier-max');
-    if (oneLine) found.push(`${describe(table)}: "${cut[0].textContent.trim()}" cut to ${room}ch with room for more`);
+    if (!table.checkVisibility()) continue;
+    for (const el of table.querySelectorAll(':scope > tbody > tr:not([data-row-detail]) > td *')) {
+      if (!el.checkVisibility() || unseen(el)) continue;
+      const style = getComputedStyle(el);
+      if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+      if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
+        found.push(`${describe(el)} in ${describe(table)}: "${el.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)}" is cut`);
+      }
+    }
   }
-  return found;
+  return [...new Set(found)].slice(0, 10);
 }"""
 )
 
@@ -1659,6 +1654,7 @@ class LayoutBrowserTests(BrowserGate):
             self.words_stay_inside_the_box_that_holds_them,
             self.only_a_table_scrolls_sideways,
             self.nothing_runs_out_of_its_table_cell,
+            self.nothing_in_a_table_is_cut,
             self.a_table_frame_spans_its_box,
             self.a_table_row_stays_within_its_height_budget,
             self.no_column_is_narrower_than_its_words,
@@ -1869,8 +1865,8 @@ class LayoutBrowserTests(BrowserGate):
     def a_route_is_one_row_or_one_column(self, _name):
         self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
 
-    def nothing_is_cut_while_its_row_has_room(self, _name):
-        self.assertEqual(self.page.evaluate(_CUT_WITH_ROOM, SELECTORS["table_scroll"]), [])
+    def nothing_in_a_table_is_cut(self, _name):
+        self.assertEqual(self.page.evaluate(_CUT_IN_TABLES, SELECTORS["table_scroll"]), [])
 
     def a_token_breaks_only_where_it_may(self, _name):
         self.assertEqual(self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]), [])
@@ -1928,7 +1924,7 @@ class LayoutBrowserTests(BrowserGate):
             self.a_table_shares_its_width_only_with_columns_that_show,
             self.words_stay_inside_the_box_that_holds_them,
             self.a_tables_names_share_one_edge_whether_or_not_a_row_opens,
-            self.nothing_is_cut_while_its_row_has_room,
+            self.nothing_in_a_table_is_cut,
             self.a_token_breaks_only_where_it_may,
         ]
 

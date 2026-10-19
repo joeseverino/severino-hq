@@ -372,20 +372,6 @@ class StyleContractTests(SimpleTestCase):
 
         self.assertEqual(sorted(set(offences)), [])
 
-    def test_connection_content_cannot_choose_the_table_geometry(self):
-        """A provider endpoint may be arbitrarily long but never owns layout."""
-
-        css = self._stylesheet()
-        # The table sizes to its content; the endpoint caps itself instead.
-        self.assertNotIn(".connection-table { table-layout: fixed; }", css)
-        endpoint_rule = css.split(".connection-endpoint {", 1)[1].split("}", 1)[0]
-        # The cap every identifier in a table shares, so a narrow table can
-        # cut it sooner in one place, and never more than the cell.
-        self.assertIn("max-width: min(100%, var(--identifier-max));", endpoint_rule)
-        self.assertIn("--identifier-max: 32ch;", css)
-        self.assertIn("text-overflow: ellipsis;", endpoint_rule)
-        self.assertIn("white-space: nowrap;", endpoint_rule)
-
     # Viewport breakpoints left, each for something the viewport genuinely
     # decides: the header and nav, a modal that takes the whole screen, table
     # sizing, the head's overflow menu, the dashboard strip, a few dense
