@@ -201,7 +201,7 @@
   // A cell that folds what it holds behind "+3" shows all of it wherever that
   // costs no line.
   const unfold = (table, overflows) => {
-    table.querySelectorAll(":scope > tbody > tr:not(.row-detail):not(.is-expanded) > td:has(.row-less)").forEach((cell) => {
+    table.querySelectorAll(":scope > tbody > tr:not(.row-detail):not(.is-expanded) > td:has(.row-less):has(.row-more)").forEach((cell) => {
       const fitting = roomFor(table, overflows);
       cell.dataset.whole = "";
       if (!fitting()) delete cell.dataset.whole;
@@ -449,7 +449,10 @@
     // A name over nothing that shows (a column whose words moved to a part of
     // their own, a preview the open row does without) is not drawn.
     detail.querySelectorAll(".row-columns > dd").forEach((value) => {
-      if (value.getBoundingClientRect().height) return;
+      const shows = [...value.childNodes].some((node) => (node.nodeType === Node.TEXT_NODE
+        ? node.textContent.trim() !== ""
+        : node.nodeType === Node.ELEMENT_NODE && node.getBoundingClientRect().height > 0));
+      if (shows) return;
       value.previousElementSibling?.remove();
       value.hidden = true;
     });

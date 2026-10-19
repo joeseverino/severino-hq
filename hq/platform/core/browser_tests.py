@@ -106,6 +106,7 @@ SELECTORS = {
     "table_scroll": ".table-scroll",
     # What a row folds behind "+3" until it is opened, or until there is room.
     "row_less": ".row-less",
+    "row_more": ".row-more",
     # What a parser leaves where a <p> was closed early by a block inside it.
     "broken_paragraph": "main p:empty:not([hidden])",
     # A box that holds content: a card, a table's frame.
@@ -1333,7 +1334,7 @@ _RAGGED_QUEUES = (
 # An identifier in a table is cut only while its row has no room for more:
 # given two more characters, its rows overflow their box on one line.
 _CUT_WITH_ROOM = (
-    "([scroll, folded]) => {"
+    "([scroll, folded, held]) => {"
     + _DESCRIBE
     + """
   // Room is what a table has to spare: shown whole, a cut identifier or a
@@ -1360,7 +1361,7 @@ _CUT_WITH_ROOM = (
     }
     for (const cell of table.querySelectorAll(':scope > tbody > tr:not([data-row-detail]) > td:not([data-whole])')) {
       const hint = cell.querySelector(folded);
-      if (!hint || !hint.checkVisibility()) continue;
+      if (!hint || !hint.checkVisibility() || !cell.querySelector(held)) continue;
       cell.dataset.whole = '';
       const roomy = fits();
       delete cell.dataset.whole;
@@ -1909,7 +1910,7 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
 
     def nothing_is_held_back_while_its_table_has_room(self, _name):
-        self.assertEqual(self.page.evaluate(_CUT_WITH_ROOM, [SELECTORS["table_scroll"], SELECTORS["row_less"]]), [])
+        self.assertEqual(self.page.evaluate(_CUT_WITH_ROOM, [SELECTORS["table_scroll"], SELECTORS["row_less"], SELECTORS["row_more"]]), [])
 
     def a_token_breaks_only_where_it_may(self, _name):
         self.assertEqual(self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]), [])

@@ -3443,7 +3443,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-ability-all { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
 .connection-ability-all > li { flex: none; }
 /* Where the whole list is showing, the first three and their count are not. */
-.row-detail :is(.connection-ability-preview, .connection-ability-more) { display: none; }
+:is(.row-detail, tr.is-expanded) :is(.connection-ability-preview, .connection-ability-more) { display: none; }
 .connection-state {
   display: inline-flex;
   align-items: center;

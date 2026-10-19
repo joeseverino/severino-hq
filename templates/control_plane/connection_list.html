@@ -70,7 +70,7 @@ part's heading shows only when there is more than one.
               {% endcomment %}
               {% if connection.abilities %}
                 {% with folded=connection.abilities|length|add:"-4" %}
-                <ul class="connection-ability-list{% if folded > 0 %} connection-ability-preview row-less{% endif %}">
+                <ul class="connection-ability-list{% if folded > 0 %} connection-ability-preview{% endif %}">
                   {% for state in connection.abilities %}{% if forloop.counter <= 3 or folded <= 0 %}{% include "control_plane/_connection_ability.html" %}{% endif %}{% endfor %}
                 </ul>
                 {% if folded > 0 %}
