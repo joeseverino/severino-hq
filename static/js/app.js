@@ -941,6 +941,21 @@ const hqBindWhen = (root) => {
 hqBindWhen(document);
 document.addEventListener("hq:fragment", (event) => hqBindWhen(event.target));
 
+// An empty date, time or moment is marked, so the stylesheet can stop WebKit
+// drawing today's date in it as though it were a value.
+(() => {
+  const moment = "input:is([type=date], [type=time], [type=datetime-local])";
+  const mark = (input) => input.toggleAttribute("data-empty", !input.value);
+  const markWithin = (root) => root.querySelectorAll(moment).forEach(mark);
+  markWithin(document);
+  document.addEventListener("hq:fragment", (event) => markWithin(event.target));
+  for (const type of ["input", "change"]) {
+    document.addEventListener(type, (event) => {
+      if (event.target.matches?.(moment)) mark(event.target);
+    });
+  }
+})();
+
 // A key that works a control: any link or button carrying data-hotkey, while
 // nothing is being typed. The control stays the source of truth, so a key
 // does exactly what clicking it would.

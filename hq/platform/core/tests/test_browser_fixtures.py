@@ -473,6 +473,9 @@ PAGES = {
         lambda: reverse("command", kwargs={"name": "infrastructure.controller.refresh"}),
         ExitStack,
     ),
+    # A command that writes a record: selects, dates and fields side by side,
+    # and a textarea taking its row.
+    "command-form": (lambda: reverse("command", kwargs={"name": "asset.create"}), ExitStack),
     "connection": (lambda: reverse("connection"), _asked_through_the_proxy, _THROUGH_THE_PROXY),
     # A band whose cells are cards: the frame rule must not zero their padding.
     "resource-kinds": (lambda: reverse("control_plane:create"), ExitStack),

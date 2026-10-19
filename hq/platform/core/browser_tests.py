@@ -79,8 +79,19 @@ SELECTORS = {
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".dash-readings .glance-panel-head",
     "patterns": ".dashboard-patterns > .card",
-    # What reads as one unit and so never breaks across lines: a state, a time.
+    # What reads as one unit and so never breaks across lines: a state, a
+    # time.
     "one_line": ".pill, td time",
+    # A control one line tall, drawn on its own rather than inside a label
+    # that is the control a reader sees.
+    "line_control": (
+        "input:not([type=checkbox], [type=radio], [type=hidden], [type=file], [type=range], [type=color],"
+        " [type=submit], [type=button]):not(label *), select:not(label *)"
+    ),
+    # A form's field: one label, its control and its help.
+    "field": ".field",
+    # A row of controls that wraps when its screen is narrow.
+    "wrapping_bar": ".filter-bar, .table-toolbar, .table-filters",
     # Everything pressed: a button, a link drawn as one, a disclosure's handle.
     "control": "button, .btn, .icon-link, summary",
     # Anything in a table cell: its words stay inside its own box, or they are
@@ -1035,6 +1046,58 @@ _UNEVEN_BANDS = (
 }"""
 )
 
+# One-line controls side by side are one height: a select beside a field
+# beside a date, in one row of a form or of a bar. A control in a field is in
+# the row its field is; any other is in the row its own top is.
+_UNEVEN_CONTROL_ROWS = (
+    "([control, field]) => {"
+    + _DESCRIBE
+    + """
+  const rows = new Map();
+  for (const el of document.querySelectorAll('main ' + control)) {
+    if (!el.checkVisibility()) continue;
+    const top = Math.round(box(el.closest(field) || el).top);
+    const at = el.closest(field)?.parentElement || el.parentElement;
+    const key = describe(at) + '@' + top;
+    rows.set(key, [...(rows.get(key) || []), el]);
+  }
+  const found = [];
+  for (const [key, controls] of rows) {
+    const heights = controls.map((el) => Math.round(box(el).height));
+    if (Math.max(...heights) - Math.min(...heights) > 1) {
+      found.push(`${key}: ${controls.map((el, i) => describe(el) + ' ' + heights[i] + 'px').join(', ')}`);
+    }
+  }
+  return found;
+}"""
+)
+
+# A bar of controls that wraps is whole rows: each row it wraps to reaches
+# its far edge, rather than a ragged run of controls of their own widths.
+_RAGGED_BARS = (
+    "(bar) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + bar)) {
+    if (!el.checkVisibility()) continue;
+    // Controls only: a count at the end of a bar is words, which keep their own width.
+    const items = [...el.children].filter((child) => child.tagName !== 'P' && child.checkVisibility() && getComputedStyle(child).position !== 'absolute');
+    const rows = new Map();
+    for (const item of items) {
+      const top = Math.round(box(item).top);
+      rows.set(top, Math.max(rows.get(top) || 0, box(item).right));
+    }
+    if (rows.size < 2) continue;
+    const style = getComputedStyle(el);
+    const edge = box(el).right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
+    const short = [...rows.values()].filter((end) => edge - end > 1);
+    if (short.length) found.push(`${describe(el)}: ${short.length} of ${rows.size} rows stop short, by ${short.map((end) => Math.round(edge - end)).join(', ')}px`);
+  }
+  return found;
+}"""
+)
+
 # A route is one row across its box or one column down it, never a row that
 # wrapped with its line running off the edge.
 _WRAPPED_ROUTES = (
@@ -1521,6 +1584,8 @@ class LayoutBrowserTests(BrowserGate):
             self.a_checks_evidence_follows_its_statement,
             self.nothing_a_summary_names_is_hidden,
             self.a_token_breaks_only_where_it_may,
+            self.controls_in_a_row_share_one_height,
+            self.a_wrapped_bar_fills_its_rows,
         ]
         if name in DENSE_PAGES:
             rules.append(self.dense_pages_keep_to_their_boxes)
@@ -1711,6 +1776,12 @@ class LayoutBrowserTests(BrowserGate):
 
     def a_token_breaks_only_where_it_may(self, _name):
         self.assertEqual(self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]), [])
+
+    def controls_in_a_row_share_one_height(self, _name):
+        self.assertEqual(self.page.evaluate(_UNEVEN_CONTROL_ROWS, [SELECTORS["line_control"], SELECTORS["field"]]), [])
+
+    def a_wrapped_bar_fills_its_rows(self, _name):
+        self.assertEqual(self.page.evaluate(_RAGGED_BARS, SELECTORS["wrapping_bar"]), [])
 
     def a_queue_ends_its_cards_at_one_edge(self, _name):
         self.assertEqual(self.page.evaluate(_RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]), [])
