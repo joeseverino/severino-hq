@@ -126,10 +126,11 @@ class DecisionTests(SimpleTestCase):
 
         self.assertFalse(workflow_parts(commands("k", (("Here", "example"),)))["fold"])
         for plan in (long, many):
+            self.assertTrue(workflow_parts(asdict(plan))["fold"])
+            # The queue holds every step in the row's opened line, long or short.
             html = card({**self.item(), "workflow": asdict(plan)})
-            (fold,) = elements(html, "details")
-            self.assertTrue(texts(html, "summary")[0].startswith("Steps"))
-            self.assertIn("example", fold.words)
+            (below,) = with_class(html, "row-below")
+            self.assertIn("example", below.words)
 
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
         subject = asdict(ActionLink("subject", "example-host", "read", "/machines/example-host/"))
