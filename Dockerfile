@@ -3,7 +3,7 @@
 # as a non-root user.
 
 # Every stage pins its base by digest; Renovate bumps it on these lines.
-# uv comes from its own image, as in composition/Dockerfile.
+# uv comes from its own image, at the version mise.toml pins (checks:toolchain).
 FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
 FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS build
 COPY --from=uv /uv /usr/local/bin/uv

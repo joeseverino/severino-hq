@@ -18,12 +18,12 @@ authoritative for human and agentic development in this public repository.
    suite and the deploy host checks. `mise run preflight` runs `mise run ci`
    itself instead.
 
-Setup is [mise](https://mise.jdx.dev), `mise install` and uv on the PATH: the
-pinned tools, at the versions in `mise.toml` and the checksums in `mise.lock`.
+Setup is [mise](https://mise.jdx.dev) and `mise install`: the pinned tools, uv
+among them, at the versions in `mise.toml` and the checksums in `mise.lock`.
 Python dependencies come from `uv.lock` through `uv run --locked`, so no
-virtualenv is made by hand. uv's own pin is in `pyproject.toml` with its hashes
-in `uv.lock`, which is the uv the pipeline installs. The images take uv from its
-own image, pinned by digest in `Dockerfile` and `composition/Dockerfile`. Every
+virtualenv is made by hand. The images take uv from its own image, pinned by
+digest in `Dockerfile` and `composition/Dockerfile` at the version `mise.toml`
+pins, which `checks:toolchain` holds. Every
 gate is a task in `mise.toml` named `<job>:<gate>`;
 `mise tasks` lists them and `mise run checks:ruff` runs one. `mise run manage --
 <command>` runs `manage.py` with the development settings the gates use.

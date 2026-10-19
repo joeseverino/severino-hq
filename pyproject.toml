@@ -48,7 +48,6 @@ tools = [
     "ruff==0.17.1",
     "schemathesis==4.31.1",
     "types-jsonschema==4.26.0.20261006",
-    "uv==0.13.1",
 ]
 browser = [
     "playwright==1.64.0",

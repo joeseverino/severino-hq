@@ -15,10 +15,7 @@
 # no list would name.
 #
 # Python dependencies come from uv.lock through `uv run --locked`; nothing here
-# needs a virtualenv made by hand. uv itself is not one of the tools below: its
-# pin and hashes are in pyproject.toml and uv.lock with every other Python
-# dependency, where one update moves them together. The pipeline installs that
-# exact uv; any uv on a developer's PATH works, since uv.lock decides what runs.
+# needs a virtualenv made by hand. uv itself is one of the tools below.
 
 min_version = "2026.10.11"
 
@@ -40,6 +37,8 @@ shellcheck = "0.11.0"
 actionlint = "1.7.12"
 yq = "4.54.1"
 jq = "1.8.2"
+# The images copy uv from its own image at this version (checks:toolchain).
+uv = "0.13.1"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
 scorecard = "5.6.0"
 # Seals a failed Compose run's output (scripts/seal-failure-logs.sh).

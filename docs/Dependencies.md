@@ -6,9 +6,9 @@ Where every pin lives, and how to move one.
 
 | What | Pinned in | Held by |
 | :--- | :--- | :--- |
-| Tools: ruff, mypy, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock) | `checks:toolchain`; CodeQL also `checks:codeql-bundle`, the bundle the pinned action runs |
+| Tools: uv, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock) | `checks:toolchain`; CodeQL also `checks:codeql-bundle`, the bundle the pinned action runs |
 | Python packages | `pyproject.toml`, resolved with hashes in `uv.lock` | `checks:lockfile`, `checks:audit` |
-| uv | `pyproject.toml` (`tools` group), hashes in `uv.lock`; the images take uv's own image by digest | `checks:lockfile` |
+| uv in the images | `Dockerfile` and `composition/Dockerfile`, uv's own image by digest at the version `mise.toml` pins | `checks:toolchain` |
 | Go and its modules | `controller/go.mod` and `go.sum` | `controller:check` |
 | Base images | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build` |
 | GitHub Actions | each workflow, by commit with its version beside it | `checks:pins` |

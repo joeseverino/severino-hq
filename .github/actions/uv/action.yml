@@ -1,0 +1,31 @@
+name: Host uv
+description: >-
+  Put the uv a host checkout pins (mise.toml, verified against mise.lock) on
+  the PATH, for a job whose own checkout is not the host's: an extension's.
+
+inputs:
+  host:
+    description: The host checkout, relative to the workspace.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: read
+      shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+      run: echo "mise=$(sed -n 's/^min_version = "\(.*\)"$/\1/p' "$HOST/mise.toml")" >> "$GITHUB_OUTPUT"
+    # Only uv: the host's other tools and its [env] are not this job's.
+    - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+      env:
+        MISE_LOCKED: "1"
+      with:
+        version: ${{ steps.read.outputs.mise }}
+        working_directory: ${{ inputs.host }}
+        install_args: uv
+        env: false
+        add_shims_to_path: false
+    - shell: bash
+      working-directory: ${{ inputs.host }}
+      run: dirname "$(mise which uv)" >> "$GITHUB_PATH"

@@ -6,9 +6,9 @@ rules, the host/extension boundary and the definition of done.
 
 ## Setup
 
-Install [mise](https://mise.jdx.dev), uv and a `python3`. uv is not a mise
-tool: any uv works, since `uv.lock` decides what runs. The toolchain gate and
-the structural bar run `python3` directly.
+Install [mise](https://mise.jdx.dev) and a `python3`; `mise install` brings uv
+with the other tools. The toolchain gate and the structural bar run `python3`
+directly.
 
 ```sh
 git clone https://github.com/joeseverino/severino-hq.git

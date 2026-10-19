@@ -45,6 +45,13 @@
       "rangeStrategy": "auto"
     },
     {
+      "description": "uv's mise pin and the images' uv move in one pull request; checks:toolchain fails while they differ.",
+      "matchDepNames": ["uv", "ghcr.io/astral-sh/uv"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "uv {{newMajor}}",
+      "groupSlug": "uv-{{newMajor}}"
+    },
+    {
       "description": "mise records a github: tool's version without the tag's leading v.",
       "matchManagers": ["mise"],
       "matchDepNames": ["/^github:/"],
