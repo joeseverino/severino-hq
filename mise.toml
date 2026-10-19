@@ -373,7 +373,7 @@ description = "uv.lock matches pyproject.toml"
 run = "uv lock --check"
 
 [tasks."checks:toolchain"]
-description = "mise.lock has a checksum for every pinned tool on every platform a gate runs on"
+description = "mise.lock has a checksum for every pinned tool on every platform a gate runs on, and the images take the uv mise pins"
 run = "python3 scripts/toolchain_lock.py"
 
 [tasks."checks:workflows"]
