@@ -57,6 +57,8 @@ class Look(LayoutBrowserTests):
             self.page.add_style_tag(content=css)
         if os.environ.get("LOOK_OPEN"):
             self.open_every_disclosure(name)
+        if os.environ.get("LOOK_EXPAND"):
+            self.page.evaluate("() => document.querySelectorAll('main button[data-row-toggle]').forEach((toggle) => toggle.click())")
         shot = OUT / f"{name.replace('/', '-')}-{width}.png"
         self.page.screenshot(path=shot, full_page=True)
         print(shot)

@@ -6,7 +6,7 @@ with nothing in it is counted, not listed.
 {% endcomment %}
 <div class="connection-sight">
   <span class="connection-sight-tally">{{ sight.summary }}{% if sight.read_at %} · {% include "partials/_reading_age.html" with at=sight.read_at only %}{% endif %}</span>
-  <ul class="row-below">
+  <ul class="connection-sight-list row-below">
     {% for item in sight.listed %}
       <li class="connection-sight-{{ item.state }}"{% if item.observed_at %} title="{% if item.state == "readable" or item.state == "partial" %}Last read{% else %}Tried{% endif %} {{ item.observed_at|ago }}"{% endif %}>
         <strong>{{ item.label }}</strong>

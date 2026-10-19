@@ -52,7 +52,7 @@ part's heading shows only when there is more than one.
               {% endwith %}
               {% if row.more_scope %}
                 <div class="connection-more-scope row-below">
-                  <ul>{% for line in row.more_scope %}<li>{{ line }}</li>{% endfor %}</ul>
+                  <ul class="connection-sight-list">{% for line in row.more_scope %}<li>{{ line }}</li>{% endfor %}</ul>
                 </div>
               {% endif %}
               {% if row.fix %}{% include "control_plane/_credential_fix.html" with fix=row.fix %}{% endif %}
@@ -64,28 +64,22 @@ part's heading shows only when there is more than one.
             {% endcomment %}
             <td>
               {% comment %}
-              Capped, because a controller credential governs a dozen kinds and
-              a dozen would make one row hundreds of pixels tall. The rest show
-              when the row is expanded, the one disclosure a row has.
+              Three, then "+N more": a controller credential governs a dozen
+              kinds, and a dozen stacked would make the row a dozen lines tall.
+              Opened, the whole list runs beneath the row across its width.
               {% endcomment %}
               {% if connection.abilities %}
-                {% comment %}
-                A permission note stands beside a line only when that line
-                differs from its neighbours or cannot be used: the state
-                column says it once for the connection. A fold hides two or
-                more, never one.
-                {% endcomment %}
+                {% with folded=connection.abilities|length|add:"-4" %}
                 <ul class="connection-ability-list">
-                  {% for state in connection.abilities %}
-                    <li{% if not state.available or forloop.counter > 3 and connection.abilities|length > 4 %} class="{% if not state.available %}is-unavailable{% endif %}{% if forloop.counter > 3 and connection.abilities|length > 4 %} row-more{% endif %}"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
-                      <span>{{ state.ability.label }}</span>
-                      {% if not state.proven and connection.mixed_evidence or state.available is False %}<small class="connection-evidence connection-evidence-{{ state.evidence }}" title="{{ state.evidence_detail }}">{{ state.evidence_label }}</small>{% endif %}
-                    </li>
-                  {% endfor %}
+                  {% for state in connection.abilities %}{% if forloop.counter <= 3 or folded <= 0 %}{% include "control_plane/_connection_ability.html" %}{% endif %}{% endfor %}
                 </ul>
-                {% if connection.abilities|length > 4 %}
+                {% if folded > 0 %}
                   <span class="connection-ability-more row-less">+{{ connection.abilities|length|add:"-3" }} more</span>
+                  <ul class="connection-ability-list connection-ability-all row-below">
+                    {% for state in connection.abilities %}{% include "control_plane/_connection_ability.html" %}{% endfor %}
+                  </ul>
                 {% endif %}
+                {% endwith %}
               {% else %}{% empty_value %}{% endif %}
             </td>
             {% comment %}
