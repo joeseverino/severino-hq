@@ -16,7 +16,6 @@ from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from ..path_model import Hop
 from ..paths import hq_path
 from ..projection import projection_scope
-from .markup import elements
 from ..request_path import (
     CONTRADICTED,
     LAYER_STEPS,
@@ -27,6 +26,7 @@ from ..request_path import (
     request_path,
     serialize_request_path,
 )
+from .markup import elements
 
 HQ = "hq.example.test"
 LAPTOP = "100.64.0.20"
