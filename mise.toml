@@ -13,7 +13,8 @@
 # pipeline with no second list to edit. `-c` keeps going past a failure and
 # names every gate that failed. No gate declares `sources`: mise judges them by
 # file times alone, and a verdict also turns on the environment and on files
-# no list would name.
+# no list would name. A task whose body is more than one line is a file under
+# mise-tasks/, declared in its own #MISE header, so checks:shell lints it.
 #
 # Python dependencies come from uv.lock, which UV_LOCKED below holds every uv
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
@@ -97,8 +98,9 @@ env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/seve
 # A task that loads the machine (a suite, a browser, a demo build, an aggregate
 # of them) runs under tools/lib/heavy.sh: its shell is mise's default behind the
 # wrapper. Heavy tasks take turns through one lock every checkout shares; one
-# started while another holds the turn exits 75 and names the holder, and a
-# heavy task inside a turn runs in it. CI takes no lock. The timeout stops a
+# started while another holds the turn names the holder and waits for it, up to
+# SEVERINO_HEAVY_WAIT seconds (two hours by default), then exits 75. A heavy
+# task inside a turn runs in it. CI takes no lock. The timeout stops a
 # hung holder: well above the slowest gate (the suite, a browser gate), and an
 # aggregate's above the gates it runs in turn. A task that extends django
 # restates these two lines, since a task extends one template; a file task
@@ -217,21 +219,6 @@ raw = true
 description = "manage.py against this checkout's scratch database, extensions loaded: mise run dev:manage -- <command>"
 run = "uv run python manage.py"
 
-[tasks."dev:demo"]
-description = "Build a demo seed and serve it on loopback, on a port the system picks"
-raw = true
-usage = '''
-arg "[seed]" default="showcase" {
-    choices "showcase" "standard" "empty"
-}
-'''
-depends = [{ task = "demo:build", args = ["{{ usage.seed }}"] }]
-run = '''
-site=var/demo
-[ "$usage_seed" = showcase ] || site="var/demo-$usage_seed"
-exec uv run python -u -m http.server --bind 127.0.0.1 --directory "$site" 0
-'''
-
 [tasks.manage]
 description = "manage.py with the development settings the gates use: mise run manage -- <command>"
 raw = true
@@ -239,17 +226,31 @@ extends = "django"
 run = "uv run --group browser python manage.py"
 
 [tasks.regen]
-description = "Rewrite every derived file from its source; --check fails on drift instead"
-depends = ["setup:openapi"]
-raw = true
+description = "Rewrite every derived file from its source; `mise run drift` checks them instead"
+# In the order each reads the last: the API document feeds the clients, the
+# bridge contract feeds the Go types. Each step takes the heavy turn, the
+# contract tools' install among them, so none shares scripts/openapi's
+# node_modules with a drift gate's install.
 extends = "django"
-usage = 'flag "--check" help="Fail on drift, writing nothing: every drift:* gate"'
-run = '''
-if [ -n "${usage_check:-}" ]; then
-    exec mise run -c 'drift:*'
-fi
-exec scripts/regen.sh
-'''
+shell = "tools/lib/heavy.sh sh -o errexit -c"
+timeout = "30m"
+run = [
+  "mise run setup:openapi",
+  "uv run python manage.py sdk_contract",
+  "uv run python manage.py api_openapi",
+  "scripts/generate-clients.sh --write",
+  "uv run python manage.py bridge_contract",
+  "cd controller && go generate ./...",
+  "uv run python manage.py connections_reference",
+]
+
+[tasks.drift]
+description = "Every derived file is what its source generates: each drift:* gate, naming every one behind"
+# Run-form, so the gates and the installs they depend on run inside one turn.
+# The Go types are held by `mise run controller`, which regenerates them
+# against a snapshot.
+extends = "heavy"
+run = "mise run -c 'drift:*'"
 
 [tasks.failure-logs]
 description = "Open a failed Compose run's sealed logs"
@@ -259,47 +260,6 @@ arg "<run>" help="The Compose run whose logs were sealed"
 arg "[dir]" help="Where to unpack them; a private temporary directory by default"
 '''
 run = 'scripts/failure-logs.sh "$usage_run" ${usage_dir:+"$usage_dir"}'
-
-[tasks.annotations]
-description = "The annotations of each failed job in a CI run: level, path:line and message, one per line"
-# Annotations appear when a step fails, before the logs are readable.
-usage = '''
-arg "<run>" help="The run's id"
-'''
-run = '''
-set -eu
-case "$usage_run" in
-    '' | *[!0-9]*) echo "Not a run id: $usage_run" >&2; exit 2 ;;
-esac
-failed="$(gh run view "$usage_run" --json jobs \
-    --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | "\(.databaseId) \(.name)"')"
-[ -n "$failed" ] || { echo "No job of run $usage_run failed."; exit 0; }
-printf '%s\n' "$failed" | while read -r job name; do
-        echo "$name"
-        gh api --paginate "repos/{owner}/{repo}/check-runs/$job/annotations" \
-            --jq '.[] | "  \(.annotation_level) \(.path):\(.start_line) \(.message | gsub("\\s*\\n\\s*"; " "))"'
-    done
-'''
-
-[tasks.shadow-run]
-description = "Rehearse a release on the deploy host's real data, touching nothing live"
-raw = true
-usage = '''
-arg "<image>" help="The image the release waits to deploy, by digest"
-'''
-run = '''
-set -eu
-host="${SEVERINO_HQ_DEPLOY_HOST:?Set SEVERINO_HQ_DEPLOY_HOST (scripts/mise.local.example.toml).}"
-# The reference reaches a remote shell, so it may hold only what one can.
-case "$usage_image" in
-    *[!A-Za-z0-9./:@_-]*) echo "Not an image reference: $usage_image" >&2; exit 1 ;;
-esac
-remote="$(ssh -o BatchMode=yes "$host" mktemp)"
-trap 'ssh -o BatchMode=yes "$host" rm -f "$remote"' EXIT
-scp -q scripts/shadow-run.sh "$host:$remote"
-# A terminal, so sudo can ask for a password.
-ssh -t "$host" sudo sh "$remote" "$usage_image"
-'''
 
 # ------------------------------------------------------------- aggregates
 
@@ -336,22 +296,6 @@ run = "mise run -c checks ::: tests ::: browser ::: controller ::: scan ::: imag
 description = "CI job Checks"
 depends = ["checks:*", "drift:*"]
 
-[tasks.tests]
-description = "CI job Tests, on every Python the matrix declares"
-extends = "heavy"
-timeout = "2h"
-run = '''
-set -eu
-failed=0
-# A pipeline leg names its one interpreter in TEST_PYTHONS.
-for version in ${TEST_PYTHONS:-$PYTHON_VERSIONS}; do
-    echo "[tests] Python $version"
-    UV_PYTHON="$version" UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-.venv}-$version" \
-        mise run -c 'tests:*' || failed=1
-done
-exit "$failed"
-'''
-
 [tasks.browser]
 description = "CI job Browser"
 # Run-form, so one turn covers every browser gate.
@@ -387,46 +331,6 @@ description = "mypy: the typed seams pyproject.toml names"
 extends = "django"
 run = "uv run python -m mypy"
 
-[tasks."checks:badges"]
-description = "The README, the workflow matrices, pyproject.toml and the images state the toolchain's Python"
-run = '''
-set -eu
-# What cannot read scripts/toolchain.env is held to it. The first, oldest, of
-# PYTHON_VERSIONS is the one the images run and the floor pyproject.toml admits;
-# ruff and mypy take their target from requires-python.
-oldest="${PYTHON_VERSIONS%% *}"
-expected="$(printf '%s\n' $PYTHON_VERSIONS | paste -sd'|' -)"
-claimed="$(sed -nE 's/.*badge\/python-(.*)-blue.*/\1/p' README.md | head -1 | sed 's/%20%7C%20/|/g')"
-if [ "$expected" != "$claimed" ]; then
-    echo "README python badge says '$claimed'; the toolchain declares '$expected'." >&2
-    exit 1
-fi
-# A workflow matrix cannot read the toolchain, so it is held to it.
-declared="$(printf '%s\n' $PYTHON_VERSIONS | jq -Rc '[.]' | jq -sc 'add')"
-matrix="$(yq -o=json -I=0 '.jobs.tests.strategy.matrix.python' .github/workflows/ci.yml)"
-if [ "$matrix" != "$declared" ]; then
-    echo "Tests runs $matrix; scripts/toolchain.env declares $declared." >&2
-    exit 1
-fi
-plugins="$(yq '.on.workflow_call.inputs.python-versions.default' .github/workflows/plugin-checks.yml | jq -c .)"
-if [ "$plugins" != "$declared" ]; then
-    echo "plugin-checks.yml defaults to $plugins; scripts/toolchain.env declares $declared." >&2
-    exit 1
-fi
-requires="$(yq -p toml -oy '.project.requires-python' pyproject.toml)"
-case "$requires" in
-    ">=$oldest,"* | ">=$oldest") ;;
-    *) echo "pyproject.toml requires Python $requires; the oldest scripts/toolchain.env declares is $oldest." >&2; exit 1 ;;
-esac
-stray="$(grep -nE '^FROM python:' Dockerfile composition/Dockerfile | grep -v "FROM python:${oldest}-" || true)"
-stray="$stray$(grep -noE 'on Python [0-9]+\.[0-9]+' README.md | grep -v "on Python ${oldest}\$" || true)"
-if [ -n "$stray" ]; then
-    printf '%s\n' "$stray" >&2
-    echo "Each names a Python other than $oldest, the oldest scripts/toolchain.env declares." >&2
-    exit 1
-fi
-'''
-
 [tasks."setup:openapi"]
 description = "Install the locked contract tools"
 hide = true
@@ -437,7 +341,12 @@ run = "npm --prefix scripts/openapi ci"
 [tasks."checks:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
 depends = ["setup:openapi"]
-run = "scripts/check-openapi.sh"
+# Specification rules cover wire contracts. HTTP style recommendations do not
+# apply to Django's canonical trailing slashes or the stdin/stdout bridge.
+run = [
+  "node scripts/openapi/node_modules/@redocly/cli/bin/cli.js lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json",
+  "node --test scripts/openapi/test-client.mjs",
+]
 
 [tasks."checks:lockfile"]
 description = "uv.lock matches pyproject.toml"
@@ -460,113 +369,15 @@ run = "mise fmt --stdin <mise.toml | diff -u mise.toml -"
 description = "The workflows are valid, run: blocks included"
 run = "actionlint -color"
 
-[tasks."checks:pins"]
-description = "Every action is pinned to a commit, with its version beside it"
-run = '''
-set -eu
-# A tag can be moved after review; a commit cannot. The version comment is what
-# Renovate rewrites with the commit and what a reader checks.
-bad="$(grep -rnE '^[[:space:]-]*uses:[[:space:]]' .github/workflows .github/actions \
-    | grep -vE 'uses:[[:space:]]+\./' \
-    | grep -vE '@[0-9a-f]{40} # v[0-9]+(\.[0-9]+){0,2}$' || true)"
-if [ -n "$bad" ]; then
-    printf '%s\n' "$bad" >&2
-    echo "Pin every action to a full commit SHA followed by '# vX.Y.Z'." >&2
-    exit 1
-fi
-'''
-
-[tasks."checks:codeql-bundle"]
-description = "The local CodeQL is the one the pinned action runs"
-run = '''
-set -eu
-# scan:codeql and CI must run the same queries: the bundle pinned above is the
-# one the action's commit defaults to (its src/defaults.json).
-sha="$(sed -nE 's#^.*github/codeql-action/init@([0-9a-f]{40}) .*$#\1#p' .github/workflows/ci.yml)"
-[ -n "$sha" ] || { echo "No pinned codeql-action/init in ci.yml." >&2; exit 1; }
-want="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/github/codeql-action/${sha}/src/defaults.json" | jq -r .cliVersion)"
-have="$(yq -p toml -oy '.tools."github:github/codeql-action".version' mise.toml)"
-if [ "$want" != "$have" ]; then
-    echo "mise.toml pins CodeQL ${have}; the action at ${sha} runs ${want}." >&2
-    exit 1
-fi
-'''
-
-[tasks."checks:timeouts"]
-description = "Every job has a timeout"
-run = '''
-set -eu
-# Without one a hung job holds its runner for GitHub's six-hour default. A job
-# that calls a reusable workflow cannot take one; the workflow it calls is checked.
-missing="$(for f in .github/workflows/*.yml; do
-    yq '.jobs | to_entries | .[] | select(.value.uses == null and .value."timeout-minutes" == null) | .key' "$f" \
-        | sed "s|^|$f: |"
-done)"
-if [ -n "$missing" ]; then
-    printf '%s\n' "$missing" >&2
-    echo "Every job needs timeout-minutes." >&2
-    exit 1
-fi
-'''
-
-[tasks."checks:runners"]
-description = "Every hosted job runs on the declared runner image"
-run = '''
-set -eu
-# A job left on ubuntu-latest would move to a new OS on GitHub's schedule.
-stray="$(grep -HnE '^[[:space:]]*runs-on:' .github/workflows/*.yml \
-    | grep -v 'self-hosted' \
-    | grep -v "runs-on: ${RUNNER_IMAGE}\$" || true)"
-if [ -n "$stray" ]; then
-    printf '%s\n' "$stray" >&2
-    echo "Hosted jobs must run on ${RUNNER_IMAGE} (scripts/toolchain.env)." >&2
-    exit 1
-fi
-'''
-
-[tasks."checks:shell"]
-description = "Every shell file parses and passes shellcheck; the shell suites pass"
-run = '''
-set -eu
-sources="$(scripts/shell-sources.sh)"
-# Each parsed by the shell its first line names.
-for f in $sources; do
-    case "$(head -n 1 "$f")" in
-        *bash*) bash -n "$f" ;;
-        *) sh -n "$f" ;;
-    esac
-done
-# shellcheck disable=SC2086
-shellcheck -x $sources
-# Suites run in parallel (each uses its own temporary directory); a failed
-# suite's output is printed whole, not interleaved.
-logs="$(mktemp -d)"
-trap 'rm -rf "$logs"' EXIT
-for suite in scripts/test-*.sh; do
-    name="${suite##*/}"
-    { status=0; "$suite" >"$logs/$name.log" 2>&1 || status=$?; echo "$status" >"$logs/$name.status"; } &
-done
-wait
-failed=0
-for suite in scripts/test-*.sh; do
-    name="${suite##*/}"
-    if [ "$(cat "$logs/$name.status")" != 0 ]; then
-        cat "$logs/$name.log"
-        echo "$name failed" >&2
-        failed=1
-    fi
-done
-exit "$failed"
-'''
-
 [tasks."checks:source"]
 description = "The tests that read the repository, run once on the checkout"
 # Tagged "source"; a whole-suite run leaves them out (hq/platform/core/test_runner.py),
 # so no image or composed pass runs them.
 extends = "django"
+usage = 'arg "[labels]..." var=#true help="Test labels, dotted; only their tagged tests run. Every one by default"'
 shell = "tools/lib/heavy.sh sh -o errexit -c"
 timeout = "30m"
-run = "uv run python manage.py test --tag source --noinput --parallel auto"
+run = "uv run python manage.py test --tag source --noinput --parallel auto ${usage_labels:-}"
 
 [tasks."checks:deploycheck"]
 description = "Production settings raise no security warning"
@@ -576,17 +387,6 @@ description = "Production settings raise no security warning"
 extends = "django"
 env = { DJANGO_DEBUG = "0", DJANGO_SECRET_KEY = "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef", DJANGO_ALLOWED_HOSTS = "hq.example.com", SEVERINO_OIDC_ISSUER = "https://sso.example.com", DJANGO_BEHIND_TLS_PROXY = "1", DJANGO_SESSION_COOKIE_SECURE = "1", DJANGO_CSRF_COOKIE_SECURE = "1", DJANGO_HSTS_SECONDS = "31536000", DJANGO_HSTS_INCLUDE_SUBDOMAINS = "1", DJANGO_HSTS_PRELOAD = "1" }
 run = "uv run python manage.py check --deploy --fail-level WARNING"
-
-[tasks."checks:audit"]
-description = "No known vulnerability in any locked dependency"
-run = '''
-set -eu
-export="$(mktemp)"
-trap 'rm -f "$export"' EXIT
-uv export --all-groups --no-emit-project --output-file "$export" >/dev/null
-# The export is exact and hashed, so nothing is resolved or installed to audit it.
-uv run --only-group audit pip-audit --disable-pip --require-hashes -r "$export"
-'''
 
 [tasks."checks:structural"]
 description = "No new near-duplicate pair outside tests"
@@ -599,8 +399,8 @@ run = "scripts/security-scan.sh scorecard"
 
 # ------------------------------------------------------------------ drift
 # Each derived file against its source, run by the Checks job, by `mise run
-# fast` side by side, and by `mise run regen --check`. `mise run regen`
-# rewrites them all.
+# fast` side by side, and by `mise run drift`. `mise run regen` rewrites them
+# all.
 
 [tasks."drift:sdk-contract"]
 description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
@@ -653,100 +453,7 @@ shell = "tools/lib/heavy.sh sh -o errexit -c"
 timeout = "30m"
 run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
 
-[tasks."tests:suite"]
-description = "The suite as production configures it, with the coverage floor"
-# DJANGO_DEBUG unset: the settings take the defaults production takes (secure
-# cookies, cached templates, no live static). The development defaults are
-# held by tests that load the settings with it on.
-extends = "django"
-env = { DJANGO_DEBUG = false }
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
-# Parallel across the cores; hq/platform/core/test_runner.py makes workers safe
-# on the WAL database. Coverage follows the workers (pyproject.toml) and is
-# combined before it is judged.
-run = '''
-set -eu
-log="$(mktemp)"
-trap 'rm -f "$log"' EXIT
-status=0
-# A run judges only its own data: a worker's file left by a run that was
-# stopped would otherwise be combined into this one's total.
-mkdir -p var/coverage
-uv run coverage erase
-uv run coverage run manage.py test --noinput --parallel auto --durations 10 >"$log" 2>&1 || status=$?
-cat "$log"
-[ "$status" -eq 0 ]
-uv run coverage combine --quiet
-uv run coverage report --fail-under="$COVERAGE_FLOOR" >/dev/null
-if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    percent="$(uv run coverage report --format=total --precision=2)"
-    ran="$(sed -nE 's/^Ran ([0-9]+) tests? in ([0-9.]+)s$/\1 tests in \2s/p' "$log")"
-    {
-        echo "### Python ${UV_PYTHON:-default}: ${ran}, coverage ${percent}% (floor ${COVERAGE_FLOOR}%)"
-        echo
-        echo "<details><summary>Slowest tests</summary>"
-        echo
-        echo "| Seconds | Test |"
-        echo "| ---: | --- |"
-        sed -n '/^Slowest test durations/,/^$/p' "$log" | grep -E '^[0-9.]+s ' \
-            | sed -E 's/^([0-9.]+)s +[^ ]+ \(([^)]+)\).*/| \1 | <code>\2<\/code> |/'
-        echo
-        echo "</details>"
-    } >>"$GITHUB_STEP_SUMMARY"
-fi
-'''
-
-# ------------------------------------------------------------------ suite
-# The suite composed with the extensions mise.local.toml names. CI composes
-# the real set in the image (compose.yml). suite:as-image is a file task, its
-# declaration in its own header: mise-tasks/suite/as-image.
-
-[tasks."suite:composed"]
-description = "The suite composed with the extensions mise.local.toml names"
-extends = "composed"
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
-run = '''
-set -eu
-. ./scripts/lib/composed.sh
-composed_set || { echo "Composed suite not run: no HQ_LOCAL_PLUGINS supplied (scripts/mise.local.example.toml)."; exit 0; }
-uv run python manage.py test --noinput --parallel auto
-'''
-
 # ---------------------------------------------------------------- browser
-
-[tasks."setup:webkit"]
-description = "Install the WebKit the locked Playwright pins: HQ is read in Safari"
-hide = true
-# The lock pins Playwright, which pins the browser. A browser removed by hand
-# comes back with `mise run --force setup:webkit`.
-sources = ["uv.lock"]
-run = '''
-set -eu
-# On a runner the system libraries come with it.
-if [ -n "${CI:-}" ]; then
-    uv run --group browser python -m playwright install --with-deps webkit
-else
-    uv run --group browser python -m playwright install webkit
-fi
-'''
-
-[tasks."demo:build"]
-description = "Build the public demo into var/demo; another seed into var/demo-<seed>"
-extends = "django"
-usage = '''
-arg "[seed]" default="showcase" {
-    choices "showcase" "standard" "empty"
-}
-'''
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
-run = '''
-out=var/demo
-[ "$usage_seed" = showcase ] || out="var/demo-$usage_seed"
-HQ_DEMO_SEED="$usage_seed" HQ_DEMO_OUT="$PWD/$out" uv run python manage.py test demo.build --noinput --parallel 1
-'''
 
 [tasks."docs:screenshot"]
 description = "Retake the README's pictures from the showcase demo"
@@ -794,101 +501,12 @@ run = "scripts/security-scan.sh codeql"
 # ------------------------------------------------------------------ image
 # IMAGE names the image under test; the pipeline passes the one it built.
 
-[tasks."image:build"]
-description = "Build the production image as CI builds it; nothing when IMAGE hands one over"
-# IMAGE_BUILD_CACHE carries the pipeline's layer cache flags; a checkout has none.
-usage = '''
-flag "--tag <tag>" default="severino-hq:ci-local" help="The name to build it as"
-flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"
-'''
-run = '''
-set -eu
-[ -z "${IMAGE:-}" ] || exit 0
-. ./scripts/lib/source-url.sh
-source="$(source_url)"
-revision="${usage_revision:-$(git rev-parse HEAD)}"
-# The security archive's release date keys the layer that applies Debian's
-# fixes, so a cached layer is reused until Debian publishes. Unreachable, the
-# day keys it instead: rebuilt at most daily. The Debian release is the one
-# the runtime stage is built on.
-codename="$(sed -nE 's/^FROM python:[^@]*-slim-([a-z]+)@.* AS runtime$/\1/p' Dockerfile)"
-security_release="$(curl -fsSL --retry 3 "https://deb.debian.org/debian-security/dists/${codename}-security/InRelease" 2>/dev/null \
-    | sed -n 's/^Date: //p' || true)"
-if [ -z "$security_release" ]; then
-    security_release="$(date -u +%F)"
-    echo "::warning title=Debian security date unknown::deb.debian.org did not answer; the upgrade layer is keyed on ${security_release} instead."
-fi
-# The source label is the standard OCI one: GHCR links the package to this
-# repository by it, and the controller reads which repository delivers it from
-# the image it runs. The tree label is what a push to main compares to promote
-# an image proven on its pull request (scripts/proven-on-pr.sh).
-# shellcheck disable=SC2086  # the cache flags are meant to split
-docker buildx build --load ${IMAGE_BUILD_CACHE:-} \
-    --label "org.opencontainers.image.source=$source" \
-    --label "org.opencontainers.image.revision=$revision" \
-    --label "dev.severino.hq.tree=$(git rev-parse 'HEAD^{tree}')" \
-    --build-arg "HQ_SOURCE=$source" \
-    --build-arg "HQ_REVISION=$revision" \
-    --build-arg "DEBIAN_SECURITY_RELEASE=$security_release" \
-    -t "$usage_tag" .
-'''
-
-[tasks."image:verify:python"]
-description = "It runs the oldest Python the toolchain declares, without package managers"
-depends = ["image:build"]
-run = '''
-docker run --rm --entrypoint python "${IMAGE:-severino-hq:ci-local}" -c \
-    "import importlib.util, shutil, sys; sys.exit(0 if '%d.%d' % sys.version_info[:2] == sys.argv[1] and importlib.util.find_spec('pip') is None and shutil.which('pip') is None and shutil.which('uv') is None else 1)" \
-    "${PYTHON_VERSIONS%% *}"
-'''
-
 [tasks."image:verify:healthy"]
 description = "It comes up healthy"
 depends = ["image:build"]
 run = 'scripts/image-health.sh "${IMAGE:-severino-hq:ci-local}"'
 
-[tasks."image:verify:no-dev"]
-description = "It cannot import development layers"
-depends = ["image:build"]
-run = '''
-docker run --rm --entrypoint python "${IMAGE:-severino-hq:ci-local}" -c \
-    "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"
-'''
-
-[tasks."image:verify:controller"]
-description = "It carries the controller"
-depends = ["image:build"]
-run = '''
-set -eu
-usage="$(docker run --rm --entrypoint /usr/local/bin/hq-controller "${IMAGE:-severino-hq:ci-local}" -help 2>&1 || true)"
-case "$usage" in
-    *-apply*) ;;
-    *) echo "$usage" >&2; exit 1 ;;
-esac
-'''
-
 [tasks."image:verify:host-boot"]
 description = "It boots under its unit: waits for its environment, survives a crash and a reboot"
 depends = ["image:build"]
 run = 'scripts/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'
-
-[tasks."image:verify:secrets"]
-description = "It carries the host programs, which refuse to run unprivileged"
-depends = ["image:build"]
-run = '''
-set -eu
-image="${IMAGE:-severino-hq:ci-local}"
-# The image's user is not root, so each must refuse and say why.
-for command in hq-secrets "hq-host verify"; do
-    program="${command%% *}"
-    # shellcheck disable=SC2086  # the command's argument is meant to split off
-    if said="$(docker run --rm --entrypoint "/app/deploy/bin/$program" "$image" ${command#"$program"} 2>&1)"; then
-        echo "$program ran as an unprivileged user." >&2
-        exit 1
-    fi
-    case "$said" in
-        *"$program must run as root."*) ;;
-        *) echo "$program: $said" >&2; exit 1 ;;
-    esac
-done
-'''

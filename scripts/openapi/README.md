@@ -4,8 +4,7 @@
 or newer runs the generated TypeScript directly with built-in type stripping.
 `scripts/generate-clients.sh --write` refreshes all three generated files;
 `--check` regenerates in a temporary directory and rejects any difference.
-`scripts/check-openapi.sh` lints both contracts, checks client drift and runs
-mocked runtime tests. This does not contact a deployed HQ.
+`mise run checks:openapi` lints the contracts and runs mocked runtime tests. This does not contact a deployed HQ.
 
 Redocly labels client generation experimental. Its pinned output and
 runtime tests reduce upgrade risk; they do not make the upstream API stable.

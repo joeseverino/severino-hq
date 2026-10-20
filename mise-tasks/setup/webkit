@@ -1,0 +1,15 @@
+#!/bin/sh
+#MISE description="Install the WebKit the locked Playwright pins: HQ is read in Safari"
+#MISE hide=true
+#MISE sources=["uv.lock"]
+
+# The lock pins Playwright, which pins the browser. A browser removed by hand
+# comes back with `mise run --force setup:webkit`.
+set -eu
+
+# On a runner the system libraries come with it.
+if [ -n "${CI:-}" ]; then
+    uv run --group browser python -m playwright install --with-deps webkit
+else
+    uv run --group browser python -m playwright install webkit
+fi

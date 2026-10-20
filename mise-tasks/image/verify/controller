@@ -1,0 +1,10 @@
+#!/bin/sh
+#MISE description="It carries the controller"
+#MISE depends=["image:build"]
+set -eu
+
+usage="$(docker run --rm --entrypoint /usr/local/bin/hq-controller "${IMAGE:-severino-hq:ci-local}" -help 2>&1 || true)"
+case "$usage" in
+    *-apply*) ;;
+    *) echo "$usage" >&2; exit 1 ;;
+esac

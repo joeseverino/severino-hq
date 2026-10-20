@@ -1,0 +1,17 @@
+#!/bin/sh
+#MISE description="Rehearse a release on the deploy host's real data, touching nothing live"
+#MISE raw=true
+#USAGE arg "<image>" help="The image the release waits to deploy, by digest"
+set -eu
+
+host="${SEVERINO_HQ_DEPLOY_HOST:?Set SEVERINO_HQ_DEPLOY_HOST (scripts/mise.local.example.toml).}"
+# The reference reaches a remote shell, so it may hold only what one can.
+image="${usage_image:?}"
+case "$image" in
+    *[!A-Za-z0-9./:@_-]*) echo "Not an image reference: $image" >&2; exit 1 ;;
+esac
+remote="$(ssh -o BatchMode=yes "$host" mktemp)"
+trap 'ssh -o BatchMode=yes "$host" rm -f "$remote"' EXIT
+scp -q scripts/shadow-run.sh "$host:$remote"
+# A terminal, so sudo can ask for a password.
+ssh -t "$host" sudo sh "$remote" "$image"

@@ -99,15 +99,15 @@ elif [ ! -f "$state/secret.env" ]; then
     export DJANGO_SECRET_KEY
 fi
 
-uv run --locked python manage.py migrate --noinput
+uv run python manage.py migrate --noinput
 if [ "$profile" = scratch ]; then
     if [ ! -f "$state/login" ]; then
         password=$(openssl rand -hex 12)
-        DJANGO_SUPERUSER_PASSWORD=$password uv run --locked python manage.py createsuperuser \
+        DJANGO_SUPERUSER_PASSWORD=$password uv run python manage.py createsuperuser \
             --noinput --username operator --email operator@example.invalid
         (umask 077 && echo "operator $password" > "$state/login")
         if [ -n "${usage_seed:-}" ]; then
-            uv run --locked python manage.py seed_demo
+            uv run python manage.py seed_demo
         fi
     fi
     if [ "${usage_seed:-}" = showcase ]; then
@@ -116,10 +116,10 @@ if [ "$profile" = scratch ]; then
     echo "Sign in as: $(cat "$state/login")" >&2
 fi
 
-uv run --locked python manage.py collectstatic --noinput --verbosity 0
+uv run python manage.py collectstatic --noinput --verbosity 0
 
 set -- --reload
 for dir in $reload_dirs; do
     set -- "$@" --reload-dir "$dir"
 done
-exec uv run --locked python -m uvicorn hq.config.asgi:application --host "$host" --port "$port" "$@"
+exec uv run python -m uvicorn hq.config.asgi:application --host "$host" --port "$port" "$@"

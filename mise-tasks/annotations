@@ -1,0 +1,19 @@
+#!/bin/sh
+#MISE description="The annotations of each failed job in a CI run: level, path:line and message, one per line"
+#USAGE arg "<run>" help="The run's id"
+
+# Annotations appear when a step fails, before the logs are readable.
+set -eu
+
+run="${usage_run:?}"
+case "$run" in
+    *[!0-9]*) echo "Not a run id: $run" >&2; exit 2 ;;
+esac
+failed="$(gh run view "$run" --json jobs \
+    --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | "\(.databaseId) \(.name)"')"
+[ -n "$failed" ] || { echo "No job of run $run failed."; exit 0; }
+printf '%s\n' "$failed" | while read -r job name; do
+    echo "$name"
+    gh api --paginate "repos/{owner}/{repo}/check-runs/$job/annotations" \
+        --jq '.[] | "  \(.annotation_level) \(.path):\(.start_line) \(.message | gsub("\\s*\\n\\s*"; " "))"'
+done

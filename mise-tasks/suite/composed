@@ -1,0 +1,18 @@
+#!/bin/sh
+#MISE description="The suite composed with the extensions mise.local.toml names"
+#MISE extends="composed"
+#MISE timeout="30m"
+
+# CI composes the real set in the image (compose.yml); this is the checkout's
+# own pass. Without an extension set it says so and passes.
+set -eu
+
+repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
+# shellcheck source=tools/lib/heavy-turn.sh
+. "${repo}/tools/lib/heavy-turn.sh"
+cd "${repo}"
+
+# shellcheck source=scripts/lib/composed.sh
+. ./scripts/lib/composed.sh
+composed_set || { echo "Composed suite not run: no HQ_LOCAL_PLUGINS supplied (scripts/mise.local.example.toml)."; exit 0; }
+exec uv run python manage.py test --noinput --parallel auto

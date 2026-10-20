@@ -1,0 +1,47 @@
+#!/bin/sh
+#MISE description="The suite as production configures it, with the coverage floor"
+#MISE extends="django"
+#MISE env={DJANGO_DEBUG=false}
+#MISE timeout="30m"
+
+# DJANGO_DEBUG unset: the settings take the defaults production takes (secure
+# cookies, cached templates, no live static). The development defaults are
+# held by tests that load the settings with it on. Parallel across the cores;
+# hq/platform/core/test_runner.py makes workers safe on the WAL database.
+# Coverage follows the workers (pyproject.toml) and is combined before it is
+# judged.
+set -eu
+
+repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
+# shellcheck source=tools/lib/heavy-turn.sh
+. "${repo}/tools/lib/heavy-turn.sh"
+cd "${repo}"
+
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+status=0
+# A run judges only its own data: a worker's file left by a run that was
+# stopped would otherwise be combined into this one's total.
+mkdir -p var/coverage
+uv run coverage erase
+uv run coverage run manage.py test --noinput --parallel auto --durations 10 >"$log" 2>&1 || status=$?
+cat "$log"
+[ "$status" -eq 0 ]
+uv run coverage combine --quiet
+uv run coverage report --fail-under="$COVERAGE_FLOOR" >/dev/null
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    percent="$(uv run coverage report --format=total --precision=2)"
+    ran="$(sed -nE 's/^Ran ([0-9]+) tests? in ([0-9.]+)s$/\1 tests in \2s/p' "$log")"
+    {
+        echo "### Python ${UV_PYTHON:-default}: ${ran}, coverage ${percent}% (floor ${COVERAGE_FLOOR}%)"
+        echo
+        echo "<details><summary>Slowest tests</summary>"
+        echo
+        echo "| Seconds | Test |"
+        echo "| ---: | --- |"
+        sed -n '/^Slowest test durations/,/^$/p' "$log" | grep -E '^[0-9.]+s ' \
+            | sed -E 's/^([0-9.]+)s +[^ ]+ \(([^)]+)\).*/| \1 | <code>\2<\/code> |/'
+        echo
+        echo "</details>"
+    } >>"$GITHUB_STEP_SUMMARY"
+fi

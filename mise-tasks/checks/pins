@@ -1,0 +1,15 @@
+#!/bin/sh
+#MISE description="Every action is pinned to a commit, with its version beside it"
+
+# A tag can be moved after review; a commit cannot. The version comment is what
+# Renovate rewrites with the commit and what a reader checks.
+set -eu
+
+bad="$(grep -rnE '^[[:space:]-]*uses:[[:space:]]' .github/workflows .github/actions \
+    | grep -vE 'uses:[[:space:]]+\./' \
+    | grep -vE '@[0-9a-f]{40} # v[0-9]+(\.[0-9]+){0,2}$' || true)"
+if [ -n "$bad" ]; then
+    printf '%s\n' "$bad" >&2
+    echo "Pin every action to a full commit SHA followed by '# vX.Y.Z'." >&2
+    exit 1
+fi

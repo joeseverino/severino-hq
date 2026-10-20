@@ -1,0 +1,16 @@
+#!/bin/sh
+#MISE description="Every job has a timeout"
+
+# Without one a hung job holds its runner for GitHub's six-hour default. A job
+# that calls a reusable workflow cannot take one; the workflow it calls is checked.
+set -eu
+
+missing="$(for f in .github/workflows/*.yml; do
+    yq '.jobs | to_entries | .[] | select(.value.uses == null and .value."timeout-minutes" == null) | .key' "$f" \
+        | sed "s|^|$f: |"
+done)"
+if [ -n "$missing" ]; then
+    printf '%s\n' "$missing" >&2
+    echo "Every job needs timeout-minutes." >&2
+    exit 1
+fi

@@ -1,0 +1,33 @@
+#!/bin/sh
+#MISE description="Every shell file parses and passes shellcheck; the shell suites pass"
+set -eu
+
+sources="$(scripts/shell-sources.sh)"
+# Each parsed by the shell its first line names.
+for f in $sources; do
+    case "$(head -n 1 "$f")" in
+        *bash*) bash -n "$f" ;;
+        *) sh -n "$f" ;;
+    esac
+done
+# shellcheck disable=SC2086  # one path per word
+shellcheck -x $sources
+# Suites run in parallel (each uses its own temporary directory); a failed
+# suite's output is printed whole, not interleaved.
+logs="$(mktemp -d)"
+trap 'rm -rf "$logs"' EXIT
+for suite in scripts/test-*.sh; do
+    name="${suite##*/}"
+    { status=0; "$suite" >"$logs/$name.log" 2>&1 || status=$?; echo "$status" >"$logs/$name.status"; } &
+done
+wait
+failed=0
+for suite in scripts/test-*.sh; do
+    name="${suite##*/}"
+    if [ "$(cat "$logs/$name.status")" != 0 ]; then
+        cat "$logs/$name.log"
+        echo "$name failed" >&2
+        failed=1
+    fi
+done
+exit "$failed"

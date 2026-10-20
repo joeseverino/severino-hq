@@ -1,0 +1,18 @@
+#!/bin/sh
+#MISE description="Build the public demo into var/demo; another seed into var/demo-<seed>"
+#MISE extends="django"
+#MISE timeout="30m"
+#USAGE arg "[seed]" default="showcase" {
+#USAGE     choices "showcase" "standard" "empty"
+#USAGE }
+set -eu
+
+repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
+# shellcheck source=tools/lib/heavy-turn.sh
+. "${repo}/tools/lib/heavy-turn.sh"
+cd "${repo}"
+
+seed="${usage_seed:?}"
+out=var/demo
+[ "$seed" = showcase ] || out="var/demo-$seed"
+HQ_DEMO_SEED="$seed" HQ_DEMO_OUT="$PWD/$out" uv run python manage.py test demo.build --noinput --parallel 1

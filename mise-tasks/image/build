@@ -1,0 +1,38 @@
+#!/bin/sh
+#MISE description="Build the production image as CI builds it; nothing when IMAGE hands one over"
+#MISE skip_if='test -n "${IMAGE:-}"'
+#USAGE flag "--tag <tag>" default="severino-hq:ci-local" help="The name to build it as"
+#USAGE flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"
+
+# IMAGE names the image under test; the pipeline passes the one it built.
+# IMAGE_BUILD_CACHE carries the pipeline's layer cache flags; a checkout has none.
+set -eu
+
+# shellcheck source=scripts/lib/source-url.sh
+. ./scripts/lib/source-url.sh
+source="$(source_url)"
+revision="${usage_revision:-$(git rev-parse HEAD)}"
+# The security archive's release date keys the layer that applies Debian's
+# fixes, so a cached layer is reused until Debian publishes. Unreachable, the
+# day keys it instead: rebuilt at most daily. The Debian release is the one
+# the runtime stage is built on.
+codename="$(sed -nE 's/^FROM python:[^@]*-slim-([a-z]+)@.* AS runtime$/\1/p' Dockerfile)"
+security_release="$(curl -fsSL --retry 3 "https://deb.debian.org/debian-security/dists/${codename}-security/InRelease" 2>/dev/null \
+    | sed -n 's/^Date: //p' || true)"
+if [ -z "$security_release" ]; then
+    security_release="$(date -u +%F)"
+    echo "::warning title=Debian security date unknown::deb.debian.org did not answer; the upgrade layer is keyed on ${security_release} instead."
+fi
+# The source label is the standard OCI one: GHCR links the package to this
+# repository by it, and the controller reads which repository delivers it from
+# the image it runs. The tree label is what a push to main compares to promote
+# an image proven on its pull request (scripts/proven-on-pr.sh).
+# shellcheck disable=SC2086  # the cache flags are meant to split
+docker buildx build --load ${IMAGE_BUILD_CACHE:-} \
+    --label "org.opencontainers.image.source=$source" \
+    --label "org.opencontainers.image.revision=$revision" \
+    --label "dev.severino.hq.tree=$(git rev-parse 'HEAD^{tree}')" \
+    --build-arg "HQ_SOURCE=$source" \
+    --build-arg "HQ_REVISION=$revision" \
+    --build-arg "DEBIAN_SECURITY_RELEASE=$security_release" \
+    -t "${usage_tag:?}" .

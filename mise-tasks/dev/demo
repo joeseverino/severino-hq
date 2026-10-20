@@ -1,0 +1,13 @@
+#!/bin/sh
+#MISE description="Build a demo seed and serve it on loopback, on a port the system picks"
+#MISE raw=true
+#MISE depends=[{ task = "demo:build", args = ["{{ usage.seed }}"] }]
+#USAGE arg "[seed]" default="showcase" {
+#USAGE     choices "showcase" "standard" "empty"
+#USAGE }
+set -eu
+
+seed="${usage_seed:?}"
+site=var/demo
+[ "$seed" = showcase ] || site="var/demo-$seed"
+exec uv run python -u -m http.server --bind 127.0.0.1 --directory "$site" 0

@@ -433,13 +433,16 @@ class GateReferenceTests(SimpleTestCase):
         declared mise stops appending arguments to ``run``, so each name it
         declares must reach the task or its script; and a script that reads its
         own arguments needs a usage, or --help describes nothing."""
-        reads_arguments = re.compile(r'"\$@"|\$\{?[1-9#]|sys\.argv')
+        shell_reads = r'"\$@"|\$\{?[1-9]|\$\{?#(?=[\s"\')}]|$)'
+        reads_arguments = re.compile(rf"{shell_reads}|sys\.argv", re.MULTILINE)
         checked = 0
         for name, task in mise_tasks().items():
             if task["file"]:
                 # A file task declares its usage in its own header, which the list does not carry.
+                # A shell task's sys.argv is a Python program's it runs, not its own.
+                reads = re.compile(shell_reads, re.MULTILINE) if body(task).startswith("#!/bin/sh") else reads_arguments
                 with self.subTest(task=name):
-                    if reads_arguments.search(body(task)):
+                    if reads.search(body(task)):
                         self.assertRegex(body(task), r"(?m)^#USAGE ", "takes arguments; declare usage")
                 continue
             run = " ".join(task["run"])

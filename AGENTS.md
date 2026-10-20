@@ -40,7 +40,7 @@ that names one (its URL namespace or app label), and the architecture tests;
 beside them, as the mise tasks that define them, `checks:ruff` (lint and
 format), `checks:mypy`, `manage.py check` and migration drift
 (`tests:django`, `tests:migrations`), and every `drift:*` gate (each derived
-file against its source, also what `mise run regen --check` runs). Each Django
+file against its source, also what `mise run drift` runs). Each Django
 gate opens a database of its own. Its tests run with `DEBUG` on, the one pass
 that does. A change to what extensions render
 through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
@@ -79,7 +79,8 @@ the settings both ways.
 
 A test that reads the repository rather than running the product (the docs,
 the workflows, the Dockerfile, the source itself) carries `@tag("source")`. It
-runs once, on the checkout, in `checks:source`. A whole-suite run leaves the
+runs once, on the checkout, in `checks:source`; `mise run checks:source
+<label>...` runs only the tagged tests those labels name. A whole-suite run leaves the
 tag out, so no image or composed pass runs a test against files the image does
 not ship; a run that names a label runs what it names. A run that asks for a
 tag no test carries fails.

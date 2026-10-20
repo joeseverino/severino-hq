@@ -1,0 +1,7 @@
+#!/bin/sh
+#MISE description="It cannot import development layers"
+#MISE depends=["image:build"]
+set -eu
+
+docker run --rm --entrypoint python "${IMAGE:-severino-hq:ci-local}" -c \
+    "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"
