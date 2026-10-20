@@ -83,7 +83,7 @@ TAGS = (
     "table_heading",
     "table_region",
 )
-FILTERS = ("ago", "counted", "money", "or_empty", "span", "when", "web_url")
+FILTERS = ("ago", "counted", "money", "or_empty", "sortable", "span", "when", "web_url")
 
 # Django's own libraries an extension may ``{% load %}`` beside its own.
 LIBRARIES = ("humanize", "static")
@@ -97,6 +97,7 @@ CLASSES = (
     "btn",
     "card",
     "card-columns",
+    "cell-data",
     "chart-axis",
     "chart-card",
     "chart-data",

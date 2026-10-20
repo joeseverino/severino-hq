@@ -132,8 +132,8 @@ class DemoSiteTests(unittest.TestCase):
             page.reload(wait_until="load")
             kept = page.locator(f'[data-attention-item]:has(button[value="{key}"])').first
             self.assertIsNotNone(kept.get_attribute("data-dismissed"))
-            page.evaluate("document.querySelector('.demo-reset').click()")
-            page.wait_for_load_state("load")
+            with page.expect_navigation(wait_until="load"):
+                page.evaluate("document.querySelector('.demo-reset').click()")
             page.goto(self.origin + "/action-items/", wait_until="load")
             again = page.locator(f'[data-attention-item]:has(button[value="{key}"])').first
             self.assertIsNone(again.get_attribute("data-dismissed"))

@@ -1437,8 +1437,7 @@ _RAGGED_QUEUES = (
 )
 
 # Each character of an element's text with the line it is drawn on, for the
-# rules that judge where text breaks. `chars(el)` and `room(el)`: the width of
-# the box whose lines it is set in.
+# rules that judge where text breaks.
 _LINES = r"""
 const range = document.createRange();
 const chars = (root) => {
@@ -1450,18 +1449,10 @@ const chars = (root) => {
       range.setStart(node, i);
       range.setEnd(node, i + 1);
       const rect = [...range.getClientRects()].find((r) => r.width);
-      out.push({ch: node.data[i], top: rect ? Math.round(rect.top) : null, bottom: rect ? rect.bottom : 0, node});
+      out.push({ch: node.data[i], top: rect ? Math.round(rect.top) : null, bottom: rect ? rect.bottom : 0, node, at: i});
     }
   }
   return out;
-};
-// An element laid out as a block of its own (a flex item, say, beside a mark
-// that shares its row) is that box; an inline one is set in its ancestor's.
-const room = (el) => {
-  let line = el;
-  while (getComputedStyle(line).display.startsWith('inline') || getComputedStyle(line).display === 'contents') line = line.parentElement;
-  const style = getComputedStyle(line);
-  return line.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
 };
 const broke = (list, i) => list[i].top !== null && list[i - 1].top !== null && list[i].top > list[i - 1].top + 1;
 """
@@ -1483,31 +1474,76 @@ _TOKEN_BREAKS = (
     const prev = list[i - 1].ch, next = list[i].ch, before = i > 1 ? list[i - 2].ch : '';
     return prev === '/' || (prev === ':' && next !== ':') || (prev === '.' && !(digit.test(before) && digit.test(next)));
   };
-  // The width the browser asks for the run unbroken, in the font it is set
-  // in: its max-content, which is what it weighs against the line. A sum of
-  // each character's own box is not that width: the boxes overlap, and miss
-  // the kerning between characters.
-  const widthOf = (list) => {
-    const run = document.createElement('span');
-    run.style.cssText = 'position: absolute; visibility: hidden; inline-size: max-content; white-space: pre';
-    run.textContent = list.map((c) => c.ch).join('');
-    list[0].node.parentElement.append(run);
-    const width = run.getBoundingClientRect().width;
-    run.remove();
+  const px = (value) => parseFloat(value) || 0;
+  const across = (style, edge) => px(style[edge + 'Left' + (edge === 'border' ? 'Width' : '')])
+    + px(style[edge + 'Right' + (edge === 'border' ? 'Width' : '')]);
+  // The run laid out unbroken where it stands: every box of the token held
+  // to one line for the measure and let go, so the width is the browser's own
+  // for these characters in these boxes (their font, kerning, and the seams
+  // between inline blocks), not a copy's.
+  const widthOf = (el, list) => {
+    const held = [el, ...el.querySelectorAll('*')].map((box) => {
+      const was = [box.style.getPropertyValue('white-space'), box.style.getPropertyPriority('white-space')];
+      box.style.setProperty('white-space', 'nowrap', 'important');
+      return () => (was[0] ? box.style.setProperty('white-space', ...was) : box.style.removeProperty('white-space'));
+    });
+    const first = list[0], last = list[list.length - 1];
+    range.setStart(first.node, first.at);
+    range.setEnd(last.node, last.at + 1);
+    const width = range.getBoundingClientRect().width;
+    held.forEach((release) => release());
     return width;
   };
+  // The line the run is set on when it starts one: the content box of the
+  // nearest block container around it, less what each inline box between
+  // takes from that line (an inline block's padding, border and margin: a
+  // code chip's own padding, say). An inline flex or grid box lays its
+  // contents out in items of its own, so its content box is the line.
+  const lineOf = (list) => {
+    let box = list[0].node.parentElement;
+    while (!box.contains(list[list.length - 1].node)) box = box.parentElement;
+    const through = [];
+    let inset = 0;
+    for (;; box = box.parentElement) {
+      const style = getComputedStyle(box);
+      if (style.display === 'contents') continue;
+      if (!/^inline(-block)?$/.test(style.display)) break;
+      const taken = across(style, 'padding') + across(style, 'border') + across(style, 'margin');
+      inset += taken;
+      through.push(`${describe(box)} (${style.display}) takes ${taken.toFixed(2)}`);
+    }
+    const style = getComputedStyle(box);
+    // The fractional border box, less its borders, padding and any scrollbar
+    // (the gap between the rounded offset and client widths).
+    const scrollbar = Math.max(0, box.offsetWidth - box.clientWidth - Math.round(across(style, 'border')));
+    const content = box.getBoundingClientRect().width - across(style, 'border') - across(style, 'padding') - scrollbar;
+    return {width: content - inset, said: `line ${content.toFixed(2)} in ${describe(box)} (${style.display})`
+      + (through.length ? `, ${through.join(', ')}` : '')};
+  };
+  const font = (list) => {
+    const s = getComputedStyle(list[0].node.parentElement);
+    return `font ${s.fontWeight} ${s.fontSize} ${s.fontFamily.split(',')[0]}, letter-spacing ${s.letterSpacing}, `
+      + `word-spacing ${s.wordSpacing}, features ${s.fontFeatureSettings}, kerning ${s.fontKerning}`;
+  };
+  // Both widths come from the same layout, on its grid of 1/64 px; a run
+  // that fits its line by less than that grid's step is one the browser may
+  // have rounded past it.
+  const fits = (width, line) => width <= line - 1 / 64;
+  const numbers = (el, list, width, line) => `run ${width.toFixed(2)}px, ${line.said}, `
+    + `so ${line.width.toFixed(2)}px for the run; token box ${el.getBoundingClientRect().width.toFixed(2)}px; ${font(list)}`;
   for (const el of document.querySelectorAll('main ' + token)) {
     if (!el.checkVisibility() || el.parentElement.closest(token)) continue;
     const all = chars(el);
-    const space = room(el);
     const text = all.map((c) => c.ch).join('');
     for (const word of text.matchAll(/\S+/g)) {
       const list = all.slice(word.index, word.index + word[0].length);
       const at = list.findIndex((c, i) => i > 0 && broke(list, i));
       if (at < 0) continue;
       const shown = (i) => `"${word[0].slice(0, i)}|${word[0].slice(i)}"`.slice(0, 90);
-      if (widthOf(list) <= space - 1) {
-        found.push(`${describe(el)} breaks ${shown(at)} though its ${Math.round(widthOf(list))}px fit its ${Math.round(space)}px line`);
+      const line = lineOf(list);
+      const whole = widthOf(el, list);
+      if (fits(whole, line.width)) {
+        found.push(`${describe(el)} breaks ${shown(at)} though it fits its line: ${numbers(el, list, whole, line)}`);
         continue;
       }
       for (let i = 1; i < list.length; i++) {
@@ -1516,8 +1552,11 @@ _TOKEN_BREAKS = (
         while (start > 0 && !seamAfter(list, start)) start -= 1;
         let end = i;
         while (end < list.length - 1 && !seamAfter(list, end + 1)) end += 1;
-        if (widthOf(list.slice(start, end + 1)) <= space - 1) {
-          found.push(`${describe(el)} breaks ${shown(i)} inside a part that fits its ${Math.round(space)}px line`);
+        const part = list.slice(start, end + 1);
+        const width = widthOf(el, part);
+        const its = lineOf(part);
+        if (fits(width, its.width)) {
+          found.push(`${describe(el)} breaks ${shown(i)} inside a part that fits its line: ${numbers(el, part, width, its)}`);
           break;
         }
       }

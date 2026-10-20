@@ -2376,6 +2376,7 @@
       "btn",
       "card",
       "card-columns",
+      "cell-data",
       "chart-axis",
       "chart-card",
       "chart-data",
@@ -2582,6 +2583,9 @@
         "argument": "optional"
       },
       "or_empty": {
+        "argument": "none"
+      },
+      "sortable": {
         "argument": "none"
       },
       "span": {
