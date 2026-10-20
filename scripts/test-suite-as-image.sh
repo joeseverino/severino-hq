@@ -10,8 +10,9 @@ trap 'rm -rf "${work}"' EXIT
 
 # A checkout with what the task reads: the image admits manage.py, not notes/.
 fixture="${work}/checkout"
-mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/scripts/lib" "${fixture}/notes" "${work}/bin" "${work}/tmp"
+mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/scripts/lib" "${fixture}/tools/lib" "${fixture}/notes" "${work}/bin" "${work}/tmp"
 cp "${repo}/${task}" "${fixture}/${task}"
+cp "${repo}/tools/lib/heavy.sh" "${repo}/tools/lib/heavy-turn.sh" "${fixture}/tools/lib/"
 cp "${repo}/scripts/lib/composed.sh" "${repo}/scripts/lib/export-tree.sh" "${repo}/scripts/lib/source-url.sh" "${fixture}/scripts/lib/"
 printf '*\n!manage.py\n' >"${fixture}/Dockerfile.dockerignore"
 : >"${fixture}/manage.py"
@@ -39,7 +40,8 @@ mkdir "${other}"
 
 run() { # run <uv behaviour>; prints the task's exit status
     status=0
-    PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" TEST_UV="$1" TEST_SEEN="${work}/seen" \
+    # Its own heavy turn, so a heavy command elsewhere on the machine cannot refuse it.
+    PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" XDG_CACHE_HOME="${work}/cache" TEST_UV="$1" TEST_SEEN="${work}/seen" \
         "${fixture}/${task}" >/dev/null 2>&1 || status=$?
     echo "${status}"
 }

@@ -1,10 +1,12 @@
-"""What DJANGO_DEBUG alone decides: production's defaults with it off, development's with it on.
+"""What DJANGO_DEBUG alone decides: production's defaults with it off, development's with it on,
+and what it never decides: either way, settings refuse to improvise a signing key or a database.
 
 Each mode is loaded in a fresh process, because settings are read once at
 import and the suite's own process is configured for tests.
 """
 
 import json
+import os
 import subprocess
 import sys
 
@@ -24,7 +26,13 @@ OVERRIDES = (
     "DJANGO_TEMPLATE_CACHE",
     "DJANGO_WHITENOISE_AUTOREFRESH",
     "SEVERINO_APP_ENV_PATH",
+    "SEVERINO_DATABASE_PATH",
 )
+# What every process is started with; the probe opens no database.
+REQUIRED = {
+    "DJANGO_SECRET_KEY": "defaults-probe-key-not-a-real-secret-only-for-this-test",
+    "SEVERINO_DATABASE_PATH": os.devnull,
+}
 NAMES = (
     "DEBUG",
     "SESSION_COOKIE_SECURE",
@@ -52,7 +60,7 @@ def load(**env: str) -> subprocess.CompletedProcess:
 
 
 def settings_of(**env: str) -> dict:
-    result = load(**env)
+    result = load(**REQUIRED, **env)
     if result.returncode != 0:
         raise AssertionError(result.stderr)
     return json.loads(result.stdout.strip().splitlines()[-1])
@@ -60,7 +68,7 @@ def settings_of(**env: str) -> dict:
 
 class DebugDefaultsTests(SimpleTestCase):
     def test_debug_decides_each_default(self):
-        production = settings_of(DJANGO_SECRET_KEY="defaults-probe-key-not-a-real-secret-only-for-this-test")
+        production = settings_of()
         development = settings_of(DJANGO_DEBUG="1")
         expected = {
             "DEBUG": (False, True),
@@ -77,8 +85,13 @@ class DebugDefaultsTests(SimpleTestCase):
             self.assertTrue(development["ALLOWED_HOSTS"])
             self.assertTrue(all(host in {"localhost", "127.0.0.1"} for host in development["ALLOWED_HOSTS"]))
 
-    def test_production_refuses_to_start_without_a_signing_key(self):
-        result = load()
+    def test_neither_mode_starts_without_its_signing_key_or_database(self):
+        for debug in ("0", "1"):
+            for missing in REQUIRED:
+                with self.subTest(DJANGO_DEBUG=debug, missing=missing):
+                    given = {name: value for name, value in REQUIRED.items() if name != missing}
+                    result = load(DJANGO_DEBUG=debug, **given)
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("DJANGO_SECRET_KEY", result.stderr)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(missing, result.stderr)
+                    self.assertIn("mise run manage", result.stderr)

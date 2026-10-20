@@ -176,9 +176,9 @@ median and p95 time, the query count, how many queries repeat one already made
 in the request, and the response size.
 
 ```bash
-DJANGO_STATIC_ROOT=/tmp/hq-static python manage.py bench_pages
-python manage.py bench_pages --only dashboard --sql
-python manage.py bench_pages --scale 0.25 --rounds 10
+DJANGO_STATIC_ROOT=/tmp/hq-static mise run manage -- bench_pages
+mise run manage -- bench_pages --only dashboard --sql
+mise run manage -- bench_pages --scale 0.25 --rounds 10
 ```
 
 `--only` with `--sql` prints one page's queries; `--scale` and `--rounds` make
@@ -200,8 +200,8 @@ statement, so it reports the lock waits behind each page, report and batch
 against the busy timeout, what each writes, derivations, and the slowest pages.
 
 ```bash
-DJANGO_STATIC_ROOT=/tmp/hq-static python manage.py bench_contention
-python manage.py bench_contention --no-ahead --seconds 10
+DJANGO_STATIC_ROOT=/tmp/hq-static mise run manage -- bench_contention
+mise run manage -- bench_contention --no-ahead --seconds 10
 ```
 
 Three rules keep a page from waiting on a writer:
@@ -443,8 +443,8 @@ record, so a rollback removes all three changes. The backend is replaceable
 without changing table views, query parameters, CLI output or models.
 
 ```bash
-python manage.py search_hq projects "certificate automation"
-python manage.py rebuild_search_index
+mise run dev:manage -- search_hq projects "certificate automation"
+mise run dev:manage -- rebuild_search_index
 ```
 
 `hq.platform.application.tables.TableListMixin` composes indexed search with

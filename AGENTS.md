@@ -21,7 +21,8 @@ authoritative for human and agentic development in this public repository.
 Setup is [mise](https://mise.jdx.dev) and `mise install`: the pinned tools, uv
 among them, at the versions in `mise.toml` and the checksums in `mise.lock`.
 A tool no everyday gate runs is `lazy` there and installs on its first use.
-Python dependencies come from `uv.lock` through `uv run --locked`, so no
+Python dependencies come from `uv.lock` through `uv run`, held to the lock by
+`UV_LOCKED=1` in `mise.toml`'s env, so no
 virtualenv is made by hand. The images take uv from its own image, pinned by
 digest in `Dockerfile` and `composition/Dockerfile` at the version `mise.toml`
 pins, which `checks:toolchain` holds. Every
@@ -63,7 +64,7 @@ up healthy and under its unit, carries the host programs and the controller,
 runs Python without package managers and cannot import development layers).
 The suite inside an image runs once, in Compose, on the composed image that production runs. Each CI job runs the aggregate of its name, so the
 gate list exists once: a gate is added in `mise.toml`, never in a workflow. A
-gate that cannot run fails. `mise run -c ci` keeps going past a failure and
+gate that cannot run fails. `mise run ci` keeps going past a failure and
 names every gate that failed.
 
 `mise run check` runs every gate of the Checks job (`checks:*`), the Tests
@@ -99,8 +100,8 @@ An agent's server is `mise run dev:scratch` in its own worktree, never `mise run
 
 The gates run the suite in parallel, which roughly halves their time.
 `hq/platform/core/test_runner.py` is what makes that safe on WAL SQLite: read
-it before changing anything about the test database. `CHECK_PARALLEL=1 mise run
-fast` rules parallelism out when a failure looks order- or isolation-dependent.
+it before changing anything about the test database. `mise run fast
+--parallel 1` (or `CHECK_PARALLEL=1`) rules parallelism out when a failure looks order- or isolation-dependent.
 
 Diagnosing a parallel failure needs `tblib` installed, or the real error is
 replaced by `cannot pickle 'traceback' object`. `--parallel=1` also works.
@@ -298,8 +299,8 @@ connection plumbing, `hq_sdk`, `hq_api` and `hq_mcp`, with every function in
 them fully annotated. It loads `hq/config/settings_typecheck.py`, the
 host's settings without extensions. Fix what it reports rather than silencing
 it; a `# type: ignore[code]` is for a stub that is wrong, with the reason beside
-it. To widen it, add a module to `files` and to the strict section in
-`pyproject.toml` and fix what it finds.
+it. To widen it, add a module to `files` in `pyproject.toml` and fix what it
+finds.
 
 Tests answer "does this behave?". They do not answer "is this still one
 system?": duplication and tangling are green all the way down. Those are graph

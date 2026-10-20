@@ -47,6 +47,10 @@ export DJANGO_DEBUG=true
 export DJANGO_SETTINGS_MODULE=hq.config.settings
 # A check never opens the host checkout's own database.
 export SEVERINO_DATABASE_PATH="$scratch/check.sqlite3"
+# The settings refuse to load without a signing key. A check signs nothing, and
+# this one exists for its processes alone.
+DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+export DJANGO_SECRET_KEY
 export PYTHONPATH="$hq_root"
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
 "$hq_root/scripts/plugin-typecheck.sh" "$virtualenv/bin/python"

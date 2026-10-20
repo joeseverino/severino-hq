@@ -1,6 +1,7 @@
 #!/bin/sh
 #MISE description="The composed suite as the image runs it: only the files the image ships"
 #MISE extends="composed"
+#MISE timeout="30m"
 #USAGE arg "[arguments]..." var=#true help="Passed on to manage.py test: test labels, --tag, --parallel"
 
 # The suite runs in a copy of only what the image is built from (the paths
@@ -13,6 +14,8 @@
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
+# shellcheck source=tools/lib/heavy-turn.sh
+. "${repo}/tools/lib/heavy-turn.sh"
 cd "${repo}"
 
 # shellcheck source=scripts/lib/composed.sh
@@ -51,5 +54,5 @@ env \
     UV_PROJECT_ENVIRONMENT="${environment}" \
     SEVERINO_HQ_SOURCE="${source_url}" \
     SEVERINO_HQ_REVISION="${revision}" \
-    uv run --locked python manage.py test --noinput --parallel auto "$@" || status=$?
+    uv run python manage.py test --noinput --parallel auto "$@" || status=$?
 exit "${status}"

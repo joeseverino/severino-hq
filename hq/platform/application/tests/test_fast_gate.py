@@ -15,6 +15,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, tag
 
 from hq.config.sandbox import PREFIX, sweep_abandoned
+from tests.mise_tasks import mise_tasks
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -104,24 +105,28 @@ class FastGateMappingTests(SimpleTestCase):
 class FastGateBaseTests(SimpleTestCase):
     REFS = {"main": "aaa", "topic": "bbb"}
 
-    def resolve(self, base, check_base=""):
+    def resolve(self, base):
         def git(*args):
             if args[-1] not in self.REFS:
                 raise subprocess.CalledProcessError(128, args)
             return [self.REFS[args[-1]]]
 
-        with patch.object(fast_gate, "git", git), patch.dict(os.environ, {"CHECK_BASE": check_base}):
+        with patch.object(fast_gate, "git", git):
             return fast_gate.merge_base(base)
 
     def test_a_base_asked_for_is_the_one_used(self):
         self.assertEqual(self.resolve("topic"), "bbb")
-        self.assertEqual(self.resolve(None, check_base="topic"), "bbb")
 
     def test_a_base_asked_for_that_does_not_resolve_fails(self):
-        for base, check_base in (("typo", ""), (None, "typo"), ("typo", "topic")):
-            with self.subTest(base=base, check_base=check_base), self.assertRaises(SystemExit) as raised:
-                self.resolve(base, check_base)
-            self.assertIn("typo", str(raised.exception.code))
+        with self.assertRaises(SystemExit) as raised:
+            self.resolve("typo")
+        self.assertIn("typo", str(raised.exception.code))
+
+    def test_the_environment_names_a_base_behind_the_argument(self):
+        """CHECK_BASE and CHECK_PARALLEL reach the gate through the task's usage spec, never read by hand."""
+        usage = mise_tasks()["fast"]["usage"]
+        self.assertRegex(usage, r'arg "\[base\]" env="CHECK_BASE"')
+        self.assertRegex(usage, r'flag "--parallel <\w+>" env="CHECK_PARALLEL"')
 
     def test_with_none_asked_for_a_missing_origin_falls_back_to_main(self):
         self.assertEqual(self.resolve(None), "aaa")

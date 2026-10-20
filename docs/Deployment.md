@@ -77,6 +77,10 @@ A new failure is added there once, and named with its fix every time after.
 
 ### When a run fails
 
+`mise run annotations RUN_ID` prints the annotations of each failed job, one
+per line (level, `path:line`, message): they appear as soon as a step fails,
+before its log can be read.
+
 Every log is public, so each failure is reported at two levels:
 
 | Where | Says | Holds |

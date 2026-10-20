@@ -5,12 +5,13 @@ import io
 import json
 import re
 import tempfile
-import tomllib
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, tag
+
+from tests.mise_tasks import body, mise_tasks
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -375,7 +376,7 @@ class PublicLogTests(SimpleTestCase):
 @tag("source")
 class GateReferenceTests(SimpleTestCase):
     def test_every_task_a_workflow_runs_exists(self):
-        tasks = set(tomllib.loads((ROOT / "mise.toml").read_text())["tasks"])
+        tasks = set(mise_tasks())
         named = [
             (path.name, task.strip("'\""))
             for path in [*workflows(), *composite_actions()]
@@ -396,12 +397,16 @@ class GateReferenceTests(SimpleTestCase):
         declared mise stops appending arguments to ``run``, so each name it
         declares must reach the task or its script; and a script that reads its
         own arguments needs a usage, or --help describes nothing."""
-        tasks = tomllib.loads((ROOT / "mise.toml").read_text())["tasks"]
         reads_arguments = re.compile(r'"\$@"|\$\{?[1-9#]|sys\.argv')
         checked = 0
-        for name, task in tasks.items():
-            run = task.get("run", "")
-            run = " ".join(run) if isinstance(run, list) else run
+        for name, task in mise_tasks().items():
+            if task["file"]:
+                # A file task declares its usage in its own header, which the list does not carry.
+                with self.subTest(task=name):
+                    if reads_arguments.search(body(task)):
+                        self.assertRegex(body(task), r"(?m)^#USAGE ", "takes arguments; declare usage")
+                continue
+            run = " ".join(task["run"])
             scripts = [ROOT / path for path in re.findall(r"[\w/.-]+\.(?:sh|py)\b", run) if (ROOT / path).is_file()]
             # A test module named the dotted way (`manage.py test a.b.c.Case`).
             for dotted in re.findall(r"\b[a-z_]+(?:\.\w+)+", run):
@@ -416,7 +421,7 @@ class GateReferenceTests(SimpleTestCase):
                 )
                 if found and found not in scripts:
                     scripts.append(found)
-            declared = re.findall(r'(?:arg|flag)\s+"[<\[]?(?:--)?([\w-]+)', task.get("usage", ""))
+            declared = re.findall(r'(?:arg|flag)\s+"[<\[]?(?:--)?([\w-]+)', task["usage"] or "")
             with self.subTest(task=name):
                 if declared:
                     checked += 1
@@ -428,15 +433,20 @@ class GateReferenceTests(SimpleTestCase):
                         self.assertFalse(
                             reads_arguments.search(path.read_text()), f"{name} takes arguments; declare usage"
                         )
-        # A file task declares its usage in its own header.
-        file_tasks = [path for path in (ROOT / "mise-tasks").rglob("*") if path.is_file()]
-        self.assertTrue(file_tasks)
-        for path in file_tasks:
-            source = path.read_text()
-            with self.subTest(task=str(path.relative_to(ROOT))):
-                if reads_arguments.search(source):
-                    self.assertRegex(source, r"(?m)^#USAGE ", "takes arguments; declare usage")
         self.assertGreater(checked, 3)
+
+    def test_a_task_that_runs_the_suite_takes_the_heavy_turn(self):
+        """Two suites at once exhaust a small machine's memory; tools/lib/heavy.sh makes them take turns.
+        A TOML task takes it as its shell, a file task by sourcing tools/lib/heavy-turn.sh."""
+        suites = {name: task for name, task in mise_tasks().items() if "manage.py test" in body(task)}
+        self.assertGreater(len(suites), 3)
+        for name, task in suites.items():
+            with self.subTest(task=name):
+                if task["file"]:
+                    self.assertRegex(body(task), r"(?m)^\. .*tools/lib/heavy-turn\.sh\"?$")
+                else:
+                    self.assertTrue((task["shell"] or "").startswith("tools/lib/heavy.sh "))
+                self.assertTrue(task["timeout"], "a hung suite would hold the turn forever")
 
 
 def compose_plugins():

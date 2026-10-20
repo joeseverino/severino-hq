@@ -13,6 +13,7 @@ Run as `mise run fast`; `mise run fast --help` says what it takes.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import os
 import re
@@ -79,13 +80,12 @@ def merge_base(base: str | None) -> str:
     quietly test a different change.
     """
 
-    asked = base or os.environ.get("CHECK_BASE")
-    for candidate in (asked,) if asked else ("origin/main", "main"):
+    for candidate in (base,) if base else ("origin/main", "main"):
         try:
             return git("merge-base", "HEAD", candidate)[0]
         except (subprocess.CalledProcessError, IndexError):
-            if asked:
-                sys.exit(f"fast: {asked} has no merge base with HEAD; pass a ref that exists")
+            if base:
+                sys.exit(f"fast: {base} has no merge base with HEAD; pass a ref that exists")
     sys.exit("fast: no base found; pass one (mise run fast <ref>)")
 
 
@@ -298,10 +298,15 @@ def step(label: str, cmd: list[str]) -> Step:
 
 def main(argv: list[str]) -> int:
     started = time.monotonic()
-    parallel = os.environ.get("CHECK_PARALLEL", "auto")
-    list_only = "--list" in argv
-    args = [a for a in argv if a != "--list"]
-    base = merge_base(args[0] if args else None)
+    # The task's usage spec reads CHECK_BASE and CHECK_PARALLEL behind its own arguments.
+    parser = argparse.ArgumentParser(prog="fast")
+    parser.add_argument("base", nargs="?")
+    parser.add_argument("--list", action="store_true")
+    parser.add_argument("--parallel", default="auto")
+    args = parser.parse_args(argv)
+    parallel = args.parallel
+    list_only = args.list
+    base = merge_base(args.base)
     changed, deleted = changed_files(base)
     files = python_files()
     reached, touched = affected(changed, deleted, files)

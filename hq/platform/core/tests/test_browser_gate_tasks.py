@@ -1,10 +1,11 @@
 """Every real-browser test is run by a browser gate: a class no task names never runs."""
 
 import ast
-import tomllib
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
+
+from tests.mise_tasks import body, mise_tasks
 
 ROOT = Path(__file__).resolve().parents[4]
 MODULES = ("hq.platform.core.browser_tests", "hq.platform.core.estate_browser_tests")
@@ -31,23 +32,17 @@ def gate_classes(root: Path) -> dict[str, str]:
     return found
 
 
-def browser_labels(root: Path) -> set[str]:
+def browser_labels() -> set[str]:
     """Every word the ``browser:*`` tasks run."""
 
-    tasks = tomllib.loads((root / "mise.toml").read_text())["tasks"]
-    return {
-        word
-        for name, task in tasks.items()
-        if name.startswith("browser:")
-        for word in " ".join(task["run"] if isinstance(task.get("run"), list) else [task.get("run", "")]).split()
-    }
+    return {word for name, task in mise_tasks().items() if name.startswith("browser:") for word in body(task).split()}
 
 
 @tag("source")
 class BrowserGateTaskTests(SimpleTestCase):
     def test_every_browser_test_class_is_named_by_a_browser_task(self):
         classes = gate_classes(ROOT)
-        labels = browser_labels(ROOT)
+        labels = browser_labels()
 
         self.assertTrue(classes)
         unnamed = sorted(name for name, module in classes.items() if name not in labels and module not in labels)

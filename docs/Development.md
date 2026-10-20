@@ -50,8 +50,10 @@ Every loopback server shares the browser's cookies for `127.0.0.1` whatever the
 port, so signing in to a second one signs the first out: open the second as
 `http://localhost:<port>`.
 
-Python dependencies come from `uv.lock` through `uv run --locked`, which every
-task uses; no virtualenv is made by hand. The default groups are `dev` and
+Python dependencies come from `uv.lock`: `mise.toml` sets `UV_LOCKED`, so every
+task's `uv run` refuses a lock that `pyproject.toml` has moved past, and no
+virtualenv is made by hand. `uv lock` and `uv add` honour it too: change the
+lock outside a mise task, or with `UV_LOCKED=0`. The default groups are `dev` and
 `tools`; the browser gate adds `browser`. The image installs a hashed export
 with every default group omitted.
 
@@ -61,6 +63,32 @@ The gates, what each answers, how to name the extension set and how to run one
 gate alone are in [AGENTS.md](../AGENTS.md#start-here). The suite runs one
 worker per core (per performance core on Apple silicon);
 `DJANGO_TEST_PROCESSES` overrides it.
+
+### Heavy gates take turns
+
+Two suites at once exhaust a small machine's memory, so the heavy tasks (`fast`,
+`check`, `ci`, `tests`, `preflight`, the suites, the browser gates,
+`demo:build`, `dev:look`, `docs:screenshot`) run under `tools/lib/heavy.sh`,
+which holds an exclusive lock on `~/.cache/severino/heavy.lock` (under
+`XDG_CACHE_HOME` when it is set) for as long as the task runs. Every checkout
+and worktree shares that file. A heavy task started while another holds it
+does not wait: it exits 75 with one line naming the holder's pid, how long it
+has run and its command. A heavy task run by one that holds the lock (`ci`
+running `browser`, `check` running `suite:composed`) runs inside its turn. The
+lock goes with the process, so a killed gate frees it. CI runs one job per
+machine and takes no lock.
+
+A TOML task takes the turn by extending the `heavy` template in `mise.toml`,
+or, when it extends `django`, by its own `shell` and `timeout` lines; a file
+task sources `tools/lib/heavy-turn.sh` and sets `#MISE timeout`. Each heavy
+task has a timeout (30 minutes for a gate, two hours for an aggregate), so a
+hung gate stops and frees the turn.
+
+To see who holds it without starting anything:
+
+```sh
+lsof ~/.cache/severino/heavy.lock
+```
 
 ### What the gates need
 
@@ -154,11 +182,16 @@ namespaces and capability names are independent of package paths:
 
 ### Runtime state
 
-Local defaults are `var/db`, `var/media`, `var/exports` and `var/static`;
-`SEVERINO_DATABASE_PATH`, `SEVERINO_MEDIA_ROOT` and `SEVERINO_EXPORTS_ROOT`
-override them. To use a database elsewhere, set `SEVERINO_DATABASE_PATH` to
-it. To move one, stop the application, back it up with its WAL contents, and
-check the copy before pointing HQ at it.
+Django never guesses a database or a signing key: with DEBUG or without, it
+refuses to start without `SEVERINO_DATABASE_PATH` and `DJANGO_SECRET_KEY`.
+Every mise task that runs Django sets both (each gate a new empty database,
+the scratch tasks this checkout's `var/dev/scratch/`), and the image names its
+own, so `manage.py` runs as `mise run manage -- <command>` or
+`mise run dev:manage -- <command>`. Media, exports and static files default to
+`var/media`, `var/exports` and `var/static`; `SEVERINO_MEDIA_ROOT`,
+`SEVERINO_EXPORTS_ROOT` and `DJANGO_STATIC_ROOT` override them. To move a
+database, stop the application, back it up with its WAL contents, and check
+the copy before pointing HQ at it.
 
 ### Extension environments
 

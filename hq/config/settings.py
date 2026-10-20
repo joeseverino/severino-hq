@@ -11,12 +11,12 @@ Production guidance:
 
 import contextlib
 import os
-import secrets
 import shlex
 import sys
 from importlib import import_module
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
 
 from hq.config.devtools import (
@@ -26,7 +26,6 @@ from hq.config.devtools import (
     without_trusted_types,
 )
 
-from .paths import database_path
 from .sandbox import database_path as test_database_path
 
 # The plugin registry is loaded by name: settings is imported by everything, and
@@ -110,17 +109,20 @@ REQUIRED_APP_VARIABLES = ("DJANGO_ALLOWED_HOSTS", "DJANGO_SECRET_KEY")
 
 DEBUG = env_bool("DJANGO_DEBUG", default=False)
 
+# Neither the signing key nor the database is ever improvised, with DEBUG or
+# without: a process that would need one is started the wrong way. The image
+# names the database, the rendered app environment supplies the key, and every
+# mise task that runs Django sets both.
+_STARTED_WRONG = (
+    "Locally, run Django through a mise task, which sets it: `mise run manage -- <command>`, "
+    "or `mise run dev:scratch` and `mise run dev:manage -- <command>` for the scratch server."
+)
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
-    if DEBUG:
-        # Generated per process rather than written down: a constant here
-        # would be a signing key in source, and development servers hold real
-        # sessions. Sessions do not survive a restart, which is the honest
-        # behaviour for a key nobody chose; `scripts/dev.sh` supplies a real
-        # one, so this is the floor rather than the usual path.
-        SECRET_KEY = secrets.token_urlsafe(64)
-    else:
-        raise RuntimeError("DJANGO_SECRET_KEY must be set in the environment for production.")
+    raise ImproperlyConfigured(
+        f"DJANGO_SECRET_KEY is not set; in production the rendered app environment supplies it. {_STARTED_WRONG}"
+    )
 
 ALLOWED_HOSTS = env_list(
     "DJANGO_ALLOWED_HOSTS",
@@ -455,12 +457,16 @@ CACHES = {
 
 # ----- Database ----------------------------------------------------------------
 
+_DATABASE_PATH = os.environ.get("SEVERINO_DATABASE_PATH", "").strip()
+if not _DATABASE_PATH:
+    raise ImproperlyConfigured(f"SEVERINO_DATABASE_PATH is not set; the image sets it. {_STARTED_WRONG}")
+
 DATABASES = {
     "default": {
         # Django's SQLite backend, switching each connection to WAL so that
         # processes opening a new file together wait for each other.
         "ENGINE": "hq.platform.core.sqlite",
-        "NAME": str(database_path(BASE_DIR, os.environ.get("SEVERINO_DATABASE_PATH"))),
+        "NAME": _DATABASE_PATH,
         "OPTIONS": {
             # No foreign_keys pragma: Django turns it on for every connection,
             # and no journal_mode: the engine sets it. synchronous=FULL so a
