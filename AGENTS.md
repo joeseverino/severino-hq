@@ -318,7 +318,10 @@ where a gate that cannot run fails, the composed suite with the extension set re
 and read-only checks of the deploy host over SSH (`SEVERINO_HQ_DEPLOY_HOST`): the checkout's
 ownership, the runner's sudo rule, the root-owned programs against this commit,
 the installed units and free disk. `--skip-host` runs the local gates only and
-exits 2, never 0.
+exits 2, never 0. So does a host whose release nothing verified: `hq-host
+verify` runs there only where sudo needs no password, and otherwise the
+evidence is `severino-hq-script-drift.service` having passed since the release
+was installed (`sudo systemctl start` it there to supply it).
 
 - The requested behavior is implemented at the correct layer.
 - Tests cover success, denial, invalid input, and the regression class where

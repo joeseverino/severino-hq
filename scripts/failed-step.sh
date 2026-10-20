@@ -10,5 +10,5 @@
 set -euo pipefail
 job="${1:?usage: failed-step.sh JOB_NAME}"
 job="${job//\"/}"
-gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT:-1}/jobs?per_page=100" \
+gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT:-1}/jobs?per_page=100" \
   --jq ".jobs[] | select(.name == \"${job}\" or (.name | endswith(\" / ${job}\"))) | .steps[] | select(.conclusion == \"failure\") | .name"

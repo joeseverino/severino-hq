@@ -41,7 +41,7 @@ case "${RESULT:?}" in
       summary="The deploy did not run. Production still runs the previous image. Run Deploy again to deploy this commit."
     else
       # A finished job's log can take a few seconds to be served.
-      job="$(gh api "repos/${repo}/actions/runs/${THIS_RUN}/jobs?per_page=100" \
+      job="$(gh api --paginate "repos/${repo}/actions/runs/${THIS_RUN}/jobs?per_page=100" \
         --jq '[.jobs[] | select(.name == "Deploy")] | first | .id // empty')"
       logs=""
       for _ in 1 2 3 4 5 6; do
@@ -62,7 +62,7 @@ server="${GITHUB_SERVER_URL:-https://github.com}"
 headline="$(gh api "repos/${repo}/commits/${COMMIT}" --jq '.commit.message | split("\n") | first' 2>/dev/null || true)"
 approval="$(gh api "repos/${repo}/actions/runs/${THIS_RUN}/approvals" \
   --jq 'first | select(. != null) | "@\(.user.login)"' 2>/dev/null || true)"
-took="$(gh api "repos/${repo}/actions/runs/${THIS_RUN}/jobs?per_page=100" \
+took="$(gh api --paginate "repos/${repo}/actions/runs/${THIS_RUN}/jobs?per_page=100" \
   --jq '[.jobs[] | select(.name == "Deploy" and .started_at and .completed_at)] | first
         | select(. != null) | ((.completed_at | fromdate) - (.started_at | fromdate))
         | "\(. / 60 | floor)m \(. % 60)s"' 2>/dev/null || true)"

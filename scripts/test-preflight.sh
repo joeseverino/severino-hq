@@ -5,7 +5,8 @@
 set -eu
 # Hermetic: none of what the gates are asked for comes from the caller.
 unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST \
-    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_FREE_KB TEST_DRIFT TEST_SUDO_PASSWORD
+    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_FREE_KB TEST_DRIFT TEST_SUDO_PASSWORD \
+    TEST_UNIT_STATE TEST_INSTALLED_AT
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 work="$(mktemp -d)"
@@ -19,7 +20,8 @@ repo="${work}/repo"
 mkdir -p "${repo}/scripts/lib"
 cd "${repo_dir}"
 cp -R deploy "${repo}/"
-mkdir -p "${repo}/controller/cmd/hq-host"
+mkdir -p "${repo}/controller/cmd/hq-host" "${repo}/.github/workflows"
+cp .github/workflows/ci.yml "${repo}/.github/workflows/"
 cp controller/cmd/hq-host/main.go "${repo}/controller/cmd/hq-host/"
 for f in preflight.sh preflight-host.sh deploy-image.sh lib/systemd-units.sh upgrade-container.sh; do
     cp "scripts/${f}" "${repo}/scripts/${f}"
@@ -51,11 +53,19 @@ done
 
 bin="${work}/bin"
 mkdir -p "${bin}"
+: >"${lib}/.source"
 cat >"${bin}/ssh" <<EOF
 #!/bin/sh
 echo "ssh \$*" >>"\${TEST_LOG}"
 PATH="${host}/bin:\${PATH}" PREFLIGHT_LIB="${lib}" \\
     PREFLIGHT_SYSTEMD="${host}/etc" PREFLIGHT_ROOT_UID="$(id -u)" exec sh -s
+EOF
+# GNU stat's modification time, which the host has: the release was installed
+# at TEST_INSTALLED_AT, in Unix seconds.
+cat >"${host}/bin/stat" <<'EOF'
+#!/bin/sh
+[ "$1 $2" = "-c %Y" ] && [ -e "$3" ] || exit 1
+echo "${TEST_INSTALLED_AT:-1000}"
 EOF
 # sudo refuses to run unless its stdin is empty: stdin is the host script.
 cat >"${host}/bin/sudo" <<'EOF'
@@ -86,7 +96,7 @@ case "$*" in
     *) exit "${TEST_FAIL_CI:-0}" ;;
 esac
 STUB
-chmod 0755 "${bin}/ssh" "${bin}/mise" "${host}/bin/sudo" "${host}/bin/df"
+chmod 0755 "${bin}/ssh" "${bin}/mise" "${host}/bin/sudo" "${host}/bin/df" "${host}/bin/stat"
 
 readonly good_rules="Matching Defaults entries:
     env_reset, secret-marker-example
@@ -132,7 +142,7 @@ fi
 # 2. Skipping the host is loud and never a pass.
 expect 2 "a skipped host" usage_skip_host=true
 says "SKIPPED  deploy host (--skip-host)"
-says "HOST NOT CHECKED"
+says "HOST NOT VERIFIED"
 if grep -q '^ssh' "${TEST_LOG}"; then fail "--skip-host still reached the host"; fi
 # Assigned and reset around each call: an assignment prefixed to a shell
 # function persists after it returns.
@@ -153,37 +163,160 @@ expect 1 "an uncommitted change"
 says "FAILED   committed tree"
 rm "${repo}/uncommitted"
 
-# 4. --remote reads GitHub's checks on HEAD instead of running `mise run ci`.
+# 4. --remote reads what GitHub ran on HEAD instead of running `mise run ci`.
+#    The fake gh answers from JSON pages, <API path with / as _>.<page>.json in
+#    TEST_GH, through the real jq; past the first page only with --paginate.
+#    Watching a run replaces the pages with those in TEST_GH/finished.
 cat >"${bin}/gh" <<'EOF'
 #!/bin/sh
 echo "gh $*" >>"${TEST_LOG}"
 case "$1" in
     repo) echo example/host ;;
-    api) printf '%s\n' "${TEST_CHECKS}" ;;
+    run) if [ -d "${TEST_GH}/finished" ]; then cp "${TEST_GH}/finished/"* "${TEST_GH}/"; fi ;;
+    api)
+        shift
+        pages=1
+        if [ "$1" = --paginate ]; then pages=99; shift; fi
+        [ "$2" = --jq ] || exit 64
+        key="$(printf '%s' "${1%%\?*}" | tr / _)"
+        page=1
+        while [ "${page}" -le "${pages}" ] && [ -f "${TEST_GH}/${key}.${page}.json" ]; do
+            jq -r "$3" "${TEST_GH}/${key}.${page}.json" || exit 1
+            page=$((page + 1))
+        done ;;
+    *) exit 64 ;;
 esac
 EOF
 chmod 0755 "${bin}/gh"
 git_ update-ref refs/remotes/origin/feature HEAD
-export PREFLIGHT_REMOTE_POLL=0 PREFLIGHT_REMOTE_TIMEOUT=0
-export TEST_CHECKS="completed success test
-completed success code scanning"
-expect 0 "every GitHub check passed" usage_remote=true
-says "code scanning"
+sha="$(git_ rev-parse HEAD)"
+TEST_GH="${work}/gh"
+export TEST_GH PREFLIGHT_REMOTE_POLL=0 PREFLIGHT_REMOTE_TIMEOUT=0
+
+list() { printf '%s,' "$@" | sed 's/,$//'; } # JSON values, comma-joined
+page() { # page <API path> <page> <key> <JSON values>
+    printf '{"%s":[%s]}\n' "$3" "$4" >"${TEST_GH}/$(printf '%s' "repos/example/host/$1" | tr / _).$2.json"
+}
+run() { # run <id> <workflow file> <event> <status> <conclusion|null> <created>
+    printf '{"id":%s,"path":".github/workflows/%s","event":"%s","status":"%s","conclusion":%s,"created_at":"%s"}' \
+        "$1" "$2" "$3" "$4" "$5" "$6"
+}
+runs() { page actions/runs 1 workflow_runs "$(list "$@")"; }
+job() { # job <conclusion> <name> [the promotion step's conclusion]
+    printf '{"name":"%s","status":"completed","conclusion":"%s","steps":[{"name":"Promote the image its pull request proved","conclusion":"%s"}]}' \
+        "$2" "$1" "${3:-skipped}"
+}
+jobs() { # jobs <run id> <job...>
+    id="$1"
+    shift
+    page "actions/runs/${id}/jobs" 1 jobs "$(list "$@")"
+}
+check() { printf '{"name":"%s","status":"%s","conclusion":%s}' "$3" "$1" "$2"; }
+checks() { # checks <page> <check...>
+    n="$1"
+    shift
+    page "commits/${sha}/check-runs" "${n}" check_runs "$(list "$@")"
+}
+# The gate jobs a push skips when its pull request proved the tree.
+gates() { list "$(job "$1" Checks)" "$(gates_but_checks "$1")"; } # gates <conclusion>
+gates_but_checks() {
+    list "$(job "$1" "Tests (3.15)")" "$(job "$1" "Browser (layout)")" \
+        "$(job "$1" "Browser (navigation)")" "$(job "$1" "Browser (demo)")" "$(job "$1" Controller)"
+}
+passed='"success"'
+fresh() { rm -rf "${TEST_GH}" && mkdir -p "${TEST_GH}"; }
+# A pull request whose run of CI passed whole, beside an earlier release that
+# waits for approval and the Production check that reports it.
+pull_request() {
+    fresh
+    runs "$(run 11 ci.yml pull_request completed "${passed}" 2026-10-19T10:00:00Z)" \
+        "$(run 12 deploy.yml workflow_dispatch waiting null 2026-10-19T10:30:00Z)"
+    pr_jobs "$(gates success)"
+    checks 1 "$(check completed "${passed}" Checks)" "$(check completed "${passed}" "Severino HQ · Review")" \
+        "$(check in_progress null "Severino HQ · Production")"
+}
+pr_jobs() { # pr_jobs <the gate jobs>
+    jobs 11 "$(job skipped "Proven on its pull request")" "$1" "$(job success CodeQL)" "$(job success Image)" \
+        "$(job success "Image checks")" "$(job success "Composition / Build HQ")" "$(job success Ready)" \
+        "$(job skipped Release)"
+}
+# A push to main: CI, the Compose its Release started, and the Demo build.
+main_push() { # main_push <the gate jobs> <the promotion step's conclusion>
+    fresh
+    runs "$(run 21 ci.yml push completed "${passed}" 2026-10-19T11:00:00Z)" \
+        "$(run 22 compose.yml workflow_dispatch completed "${passed}" 2026-10-19T11:20:00Z)" \
+        "$(run 23 demo.yml push completed "${passed}" 2026-10-19T11:00:01Z)"
+    jobs 21 "$(job success "Proven on its pull request")" "$1" "$(job success CodeQL)" \
+        "$(job success Image "$2")" "$(job skipped Ready)" "$(job success Release)"
+    checks 1 "$(check completed "${passed}" Image)"
+}
+
+pull_request
+expect 0 "a pull request whose CI passed" usage_remote=true
+says "success  .github/workflows/ci.yml (pull_request, run 11)"
 if grep -q '^mise run -c ci ' "${TEST_LOG}"; then fail "--remote still ran the local gates"; fi
-TEST_CHECKS="completed success test
-completed failure structural bar"
-expect 1 "a failed GitHub check" usage_remote=true
-TEST_CHECKS="in_progress - test"
-expect 1 "a GitHub check still running when time runs out" usage_remote=true
-TEST_CHECKS=""
-expect 1 "no GitHub check at all" usage_remote=true
+remote_refuses() { # remote_refuses <why> [expected output]
+    expect 1 "$1" usage_remote=true
+    [ -z "${2:-}" ] || says "$2"
+}
+
+pr_jobs "$(list "$(job skipped Checks)" "$(gates_but_checks success)")"
+remote_refuses "a required job that was skipped" "required job Checks: skipped"
+pr_jobs "$(gates_but_checks success)"
+remote_refuses "a required job that never ran" "required job Checks: did not run"
+
+pull_request
+checks 2 "$(check completed '"failure"' "Structural bar")"
+remote_refuses "a failed check past the first page" "a check did not pass"
+
+fresh
+runs "$(run 31 demo.yml push completed "${passed}" 2026-10-19T10:00:00Z)"
+checks 1 "$(check completed "${passed}" "Unrelated check")"
+remote_refuses "an unrelated workflow and check, and no CI" "no CI run on this commit"
+fresh
+checks 1 "$(check completed "${passed}" "Unrelated check")"
+remote_refuses "an unrelated check alone" "no CI run on this commit"
+
+pull_request
+runs "$(run 11 ci.yml pull_request completed '"failure"' 2026-10-19T10:00:00Z)"
+remote_refuses "a CI run whose latest attempt failed" "a workflow run did not pass"
+runs "$(run 11 ci.yml pull_request completed '"cancelled"' 2026-10-19T10:00:00Z)"
+remote_refuses "a cancelled CI run"
+runs "$(run 13 ci.yml pull_request completed '"failure"' 2026-10-19T12:00:00Z)" \
+    "$(run 11 ci.yml pull_request completed "${passed}" 2026-10-19T10:00:00Z)"
+remote_refuses "an earlier run that passed, after a newer one failed" "run 13"
+runs "$(run 11 ci.yml pull_request in_progress null 2026-10-19T10:00:00Z)"
+remote_refuses "a rerun still going when time runs out" "ci.yml is in_progress"
+
+# A run still going is watched until it finishes.
+pull_request
+mkdir -p "${TEST_GH}/finished"
+cp "${TEST_GH}/repos_example_host_actions_runs.1.json" "${TEST_GH}/finished/"
+runs "$(run 11 ci.yml pull_request in_progress null 2026-10-19T10:00:00Z)"
+PREFLIGHT_REMOTE_TIMEOUT=600
+expect 0 "a run that finishes while watched" usage_remote=true
+PREFLIGHT_REMOTE_TIMEOUT=0
+grep -q '^gh run watch 11 ' "${TEST_LOG}" || fail "the running CI was not watched"
+
+main_push "$(gates success)" skipped
+expect 0 "a push to main whose gates and Compose passed" usage_remote=true
+main_push "$(gates skipped)" success
+expect 0 "a push that promoted the image its pull request proved" usage_remote=true
+main_push "$(gates skipped)" skipped
+remote_refuses "a push that skipped its gates and promoted nothing" "required job Checks: skipped"
+main_push "$(gates success)" skipped
+runs "$(run 21 ci.yml push completed "${passed}" 2026-10-19T11:00:00Z)" \
+    "$(run 22 compose.yml workflow_dispatch in_progress null 2026-10-19T11:20:00Z)"
+remote_refuses "a Compose run still going" "compose.yml is in_progress"
+runs "$(run 21 ci.yml push completed "${passed}" 2026-10-19T11:00:00Z)"
+remote_refuses "a push whose Release has not started Compose" "has not started Compose"
 git_ update-ref -d refs/remotes/origin/feature
 git_ update-ref -d refs/remotes/origin/main
-TEST_CHECKS="completed success test"
 expect 1 "an unpushed HEAD" usage_remote=true
 says "HEAD is not pushed"
 git_ update-ref refs/remotes/origin/main HEAD~1
-unset TEST_CHECKS PREFLIGHT_REMOTE_POLL PREFLIGHT_REMOTE_TIMEOUT
+git_ update-ref refs/remotes/origin/feature HEAD
+unset TEST_GH PREFLIGHT_REMOTE_POLL PREFLIGHT_REMOTE_TIMEOUT
 
 # 5. Each host fault fails the preflight and says what it is.
 host_fault() { # host_fault <why> <expected output>
@@ -207,10 +340,31 @@ export TEST_DRIFT="scripts/backup.sh differs from the image's"
 host_fault "a host that is not its release" "FAIL    scripts/backup.sh differs from the image's"
 unset TEST_DRIFT
 
+# Where sudo needs a password, the drift unit's run since the release was
+# installed is the evidence; without one there is no verdict on the host.
 export TEST_SUDO_PASSWORD=1
-expect 0 "a verify that needs a password is a warning, not a pass of it"
-says "warn    could not run hq-host verify without a password"
-unset TEST_SUDO_PASSWORD
+expect 2 "a verify that cannot run, and no run of the drift unit"
+says "UNKNOWN hq-host verify needs a password here"
+says "HOST NOT VERIFIED"
+drift_unit() { # drift_unit <started> <result> <status>
+    printf 'ActiveState=inactive\nResult=%s\nExecMainStatus=%s\nExecMainStartTimestamp=@%s\nExecMainExitTimestamp=@%s\n' \
+        "$2" "$3" "$1" "$(($1 + 60))" >"${TEST_UNIT_STATE}/severino-hq-script-drift.service"
+}
+TEST_UNIT_STATE="${work}/units"
+mkdir -p "${TEST_UNIT_STATE}"
+export TEST_UNIT_STATE TEST_INSTALLED_AT=1000
+drift_unit 2000 success 0
+expect 0 "a drift unit that verified the installed release"
+says "ok      the host is the release it runs (severino-hq-script-drift.service"
+drift_unit 500 success 0
+expect 2 "a drift unit that last verified an earlier release"
+drift_unit 2000 exit-code 1
+host_fault "a drift unit that failed on the installed release" "severino-hq-script-drift.service failed since this release was installed"
+drift_unit 2000 success 0
+mv "${lib}/.source" "${lib}/.source.held"
+expect 2 "a release whose install time cannot be read"
+mv "${lib}/.source.held" "${lib}/.source"
+unset TEST_SUDO_PASSWORD TEST_UNIT_STATE TEST_INSTALLED_AT
 
 chmod g+w "${lib}/scripts/upgrade-container.sh"
 host_fault "a helper sudo runs as root that others can write" "upgrade-container.sh is writable by its group or others"

@@ -43,7 +43,7 @@ fi
 readonly repo="${GITHUB_REPOSITORY:?}"
 # One line per job of this run: id, name, result, seconds, page. The gate's
 # own job and the push-only proof are not gates of a pull request.
-rows="$(gh api "repos/${repo}/actions/runs/${THIS_RUN:?}/jobs?per_page=100" \
+rows="$(gh api --paginate "repos/${repo}/actions/runs/${THIS_RUN:?}/jobs?per_page=100" \
   --jq '.jobs[] | select(.name != "Ready" and .name != "Release" and .name != "Proven on its pull request")
     | "\(.id)\t\(.name)\t\(.conclusion // "pending")\t\(if .started_at and .completed_at then ((.completed_at | fromdate) - (.started_at | fromdate)) else "" end)\t\(.html_url)"')"
 

@@ -8,16 +8,18 @@
 #   PREFLIGHT_UNITS          units that branch and main both ship
 #   PREFLIGHT_MIN_FREE_KB    hq-host deploy's free-space floor
 #
-# Prints one "ok", "warn" or "FAIL" line per check and exits 1 on any FAIL.
+# Prints one "ok", "UNKNOWN" or "FAIL" line per check. Exits 1 on any FAIL,
+# 3 when nothing failed but a check found no evidence either way, 0 otherwise.
 
 set -eu
 
 lib="${PREFLIGHT_LIB:-/usr/local/lib/severino-hq}"
 units_dir="${PREFLIGHT_SYSTEMD:-/etc/systemd/system}"
 failed=0
+unverified=0
 
 ok() { echo "ok      $*"; }
-warn() { echo "warn    $*"; }
+unknown() { echo "UNKNOWN $*"; unverified=1; }
 bad() { echo "FAIL    $*"; failed=1; }
 
 # 1. The runner deploys through one sudo rule, and may do nothing broader.
@@ -46,13 +48,40 @@ if [ -n "${runner}" ]; then
 fi
 
 # 2. The host is the release it runs: the tree, the units, nothing else.
+#    hq-host verify runs as root. Where sudo asks for a password, the evidence
+#    is the drift unit's last run, which systemd reports to anyone, provided
+#    it started after this release was installed: every deploy rewrites the
+#    tree's .source from the image it runs, and verify compares the two.
+verify_unit=severino-hq-script-drift.service
+installed_at() { # in Unix seconds (GNU stat)
+    stat -c %Y "${lib}/.source" 2>/dev/null
+}
+last_verify() { # last_verify <since>: success, failure, or nothing if it has not finished a run since
+    systemctl show --timestamp=unix \
+        --property=Id,ActiveState,Result,ExecMainStatus,ExecMainStartTimestamp,ExecMainExitTimestamp \
+        -- "${verify_unit}" 2>/dev/null | awk -F= -v since="$1" '
+        { value[$1] = $2 }
+        END {
+            started = value["ExecMainStartTimestamp"]; sub(/^@/, "", started)
+            exited = value["ExecMainExitTimestamp"]; sub(/^@/, "", exited)
+            if (started == "" || exited == "" || started + 0 <= since + 0 ||
+                exited + 0 < started + 0 || value["ActiveState"] == "activating") exit
+            print (value["Result"] == "success" && value["ExecMainStatus"] == "0") ? "success" : "failure"
+        }'
+}
 if drift="$(sudo -n "${lib}/deploy/bin/hq-host" verify </dev/null 2>&1)"; then
     ok "the host is the release it runs"
 elif printf '%s\n' "${drift}" | grep -q '^drift: '; then
     printf '%s\n' "${drift}" | sed -n 's/^drift: //p' | while IFS= read -r line; do echo "FAIL    ${line}"; done
     failed=1
+elif ! since="$(installed_at)"; then
+    unknown "hq-host verify needs a password here, and when this release was installed cannot be read"
 else
-    warn "could not run hq-host verify without a password; run 'sudo ${lib}/deploy/bin/hq-host verify' there"
+    case "$(last_verify "${since}")" in
+        success) ok "the host is the release it runs (${verify_unit}, since this release was installed)" ;;
+        failure) bad "${verify_unit} failed since this release was installed; 'journalctl -u ${verify_unit}' there says why" ;;
+        *) unknown "hq-host verify needs a password here, and ${verify_unit} has not run since this release was installed; run 'sudo systemctl start ${verify_unit}' there" ;;
+    esac
 fi
 
 # 3. The upgrade helper, which a sudo rule lets another account run as root:
@@ -93,4 +122,5 @@ else
     bad "$((available_kb / 1024)) MiB free on /; the deploy needs $((PREFLIGHT_MIN_FREE_KB / 1024)) MiB"
 fi
 
-exit "${failed}"
+if [ "${failed}" -ne 0 ]; then exit 1; fi
+if [ "${unverified}" -ne 0 ]; then exit 3; fi

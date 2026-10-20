@@ -251,15 +251,15 @@ jobs:
                 --jq '[.workflow_runs[] | select(.name == "CI") | .id] | first' 2>/dev/null || true)
               host_ci=""
               if [ -n "$ci_run" ]; then
-                host_ci=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run/jobs?per_page=100" \
-                  --jq '[.jobs[] | select(.name == "Image") | .conclusion] | map(select(. != null)) | first' \
+                host_ci=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run/jobs?per_page=100" \
+                  --jq '.jobs[] | select(.name == "Image") | .conclusion // empty' \
                   2>/dev/null || true)
               fi
               case "$host_ci" in
                 failure|cancelled|timed_out|skipped)
-                  step=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run/jobs?per_page=100" \
-                    --jq '[.jobs[] | select(.name == "Image") | .steps[] | select(.conclusion == "failure") | .name] | first // ""' \
-                    2>/dev/null || true)
+                  step=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run/jobs?per_page=100" \
+                    --jq '.jobs[] | select(.name == "Image") | .steps[] | select(.conclusion == "failure") | .name' \
+                    2>/dev/null | head -n 1 || true)
                   echo "::error title=Host image $host_ci${step:+ at $step}::CI's Image job for \
           ${ref:0:12} concluded '$host_ci'${step:+ in step \"$step\"}, so there is no host image \
           to compose onto. Fix that, and this composition runs with it."
