@@ -91,6 +91,12 @@ see. Regenerate it with `mise run regen`, read the diff as the review, and
 decide there whether `PLUGIN_API_VERSION` moves; `mise run drift` fails on
 drift.
 
+What the annotations promise is held from an extension's side by
+`tests/sdk_consumer/consumer.py`, which mypy checks: a valid call pins its
+return with `assert_type`, and a call an extension must not make carries the
+`# type: ignore[code]` mypy must report for it. A new export gets a case
+there; an annotation that slides to `Any` fails it.
+
 Capability input models inherit `StrictCommand`, so unknown JSON keys fail at
 the boundary instead of being dropped. Class-based views inherit
 `CapabilityRequiredMixin` and declare `required_capability`; function views use

@@ -83,7 +83,7 @@ the connections can see.
 | :--- | :--- |
 | `/etc/severino-hq/backup.env`: `SEVERINO_BACKUP_AGE_RECIPIENTS` | the host ([Backup](Backup.md)) |
 | `SEVERINO_HQ_DEPLOY_HOST`, an SSH destination | the shell running `mise run preflight` |
-| `HQ_LOCAL_PYTHONPATH`, `HQ_LOCAL_PLUGINS` | `mise.local.toml` ([AGENTS.md](../AGENTS.md#start-here)) |
+| `HQ_LOCAL_PYTHONPATH`, `HQ_LOCAL_PLUGINS` | `mise.local.toml` ([Development](Development.md#the-extension-set)) |
 | `SEVERINO_FAILURE_LOG_IDENTITY` | the operator's shell, for `mise run failure-logs` |
 | Internal CA roots | `/usr/local/share/ca-certificates` on the host |
 

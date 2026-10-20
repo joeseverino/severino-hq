@@ -1,7 +1,7 @@
 # HQ engineering contract
 
-This file is the shortest path from a fresh checkout to a safe change. It is
-authoritative for human and agentic development in this public repository.
+The shortest path from a fresh checkout to a safe change, for people and
+agents alike. Setup, tasks and layout: [Development](docs/Development.md).
 
 ## Start here
 
@@ -9,144 +9,68 @@ authoritative for human and agentic development in this public repository.
    with `origin/main` before designing: work lands from more than one place,
    and the mechanism you need may already exist there.
 2. Read the nearest code and tests before changing an interface.
-3. While editing, run `mise run fast` (see below). Run `mise run check` before
+3. While editing, run `mise run fast [BASE]`. Run `mise run check` before
    handing work back when the machine can hold it.
-4. Push. CI runs every gate; `mise run ci` runs the same set locally when you
-   want an answer before pushing.
-5. Run `mise run preflight --remote` before calling a change ready: it reads
-   every check GitHub ran on the pushed commit and adds the local composed
-   suite and the deploy host checks. `mise run preflight` runs `mise run ci`
-   itself instead.
+4. Push. CI runs every gate; `mise run ci` runs the same set locally. Ready is
+   the [definition of done](#definition-of-done).
 
-Setup is [mise](https://mise.jdx.dev) and `mise install`: the pinned tools, uv
-among them, at the versions in `mise.toml` and the checksums in `mise.lock`.
-A tool no everyday gate runs is `lazy` there and installs on its first use.
-Python dependencies come from `uv.lock` through `uv run`, held to the lock by
-`UV_LOCKED=1` in `mise.toml`'s env, so no
-virtualenv is made by hand. The images take uv from its own image, pinned by
-digest in `Dockerfile` and `composition/Dockerfile` at the version `mise.toml`
-pins, which `checks:toolchain` holds. Every
-gate is a task in `mise.toml` named `<job>:<gate>`;
-`mise tasks` lists them and `mise run checks:ruff` runs one. `mise run manage --
-<command>` runs `manage.py` with the development settings the gates use and the
-browser group installed, so one browser test runs as `mise run manage -- test
-<label>` (after `mise run setup:webkit` once).
+`mise tasks` lists every task, `mise run <task> --help` says what it takes.
+A CI job runs the aggregate of its name, so a gate is added in `mise.toml`,
+never in a workflow. Django runs as `mise run manage -- <command>`.
 
-`mise run fast [BASE]` is the inner loop: the changed files against the merge
-base (`BASE`, `$CHECK_BASE`, then `origin/main`, `main`) are mapped through the
-tree's import graph to the test modules that import them directly or through
-one module between, plus every test of the changed Django apps and every test
-that names one (its URL namespace or app label), and the architecture tests;
-beside them, as the mise tasks that define them, `checks:ruff` (lint and
-format), `checks:mypy`, `manage.py check` and migration drift
-(`tests:django`, `tests:migrations`), and every `drift:*` gate (each derived
-file against its source, also what `mise run drift` runs). Each Django
-gate opens a database of its own. Its tests run with `DEBUG` on, the one pass
-that does. A change to what extensions render
-through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
-moment modules, template tags) also runs the extensions' own suites, composed,
-when `mise.local.toml` names a set. `--list` prints the selection. Tens of
-seconds for a one-domain change; a change to a shared layer reaches most of the
-suite and says so. It reads Python imports and app names, so a rule tested
-only through a string or a template it cannot see needs `mise run check`. It
-never replaces `mise run check`. A new host domain: `docs/New-Domain.md`.
-`fast` and `check` close on a verdict line naming each failed task and test
-(`tools/gate/verdict.py`), so run them plain and read that line; a pipe
-reports the filter's exit status, not the gate's.
+`fast` and `check` close on a verdict line naming each failed task and test:
+run them plain, since a pipe reports the filter's exit status. `fast` selects
+through Python imports and app names, so a rule held only by a string or a
+template needs `check` ([The gates](docs/Development.md#the-gates)).
 
-`mise run check` answers "do my changes work?". `mise run ci` answers "will the
-pipeline accept them?": the aggregates `checks` (ruff and mypy at the locked
-versions, the lockfile, the workflows, the shell gates, the source tests, the
-Django deployment check, `pip-audit`, the structural bar, Scorecard), `tests` on every Python in
-`PYTHON_VERSIONS` (`tools/pipeline/toolchain.env`), `browser`, `controller`, `scan`
-(CodeQL) and `image`: the image build and what an image must pass (it comes
-up healthy and under its unit, carries the host programs and the controller,
-runs Python without package managers and cannot import development layers).
-The suite inside an image runs once, in Compose, on the composed image that production runs. Each CI job runs the aggregate of its name, so the
-gate list exists once: a gate is added in `mise.toml`, never in a workflow. A
-gate that cannot run fails. `mise run ci` keeps going past a failure and
-names every gate that failed.
+The composed suite is where the host and its extensions first meet, which CI
+cannot reach. Name the extension set once in a gitignored `mise.local.toml`
+(copy `scripts/mise.local.example.toml`); without it the composed pass says it
+did not run and passes, covering less.
 
-`mise run check` runs every gate of the Checks job (`checks:*`), the Tests
-job's gates on the default Python (`tests:*`, the suite among them as
-production configures it, with `DJANGO_DEBUG` unset and the coverage floor),
-and, when an extension set is supplied, the suite composed with the extensions
-(`suite:composed`), one task at a time so no two suites share the machine's
-memory. The composed pass is the one that catches what CI cannot, because the
-host and its extensions first meet during compose, long after the merge
-button. A setting whose default follows `DEBUG` is held by a test that loads
-the settings both ways.
-
-A test that reads the repository rather than running the product (the docs,
-the workflows, the Dockerfile, the source itself) carries `@tag("source")`. It
-runs once, on the checkout, in `checks:source`; `mise run checks:source
-<label>...` runs only the tagged tests those labels name. A whole-suite run leaves the
-tag out, so no image or composed pass runs a test against files the image does
-not ship; a run that names a label runs what it names. A run that asks for a
-tag no test carries fails.
-
-Name the extension set once in a gitignored `mise.local.toml` (copy
-`scripts/mise.local.example.toml`): `HQ_LOCAL_PYTHONPATH` says where the
-extensions' sources are and `HQ_LOCAL_PLUGINS` which to enable. Only the
-composed suite and the dev server load the set, so no other gate can see it
-by accident. Without it the
-composed pass says it did not run and passes, so public CI and a fresh checkout
-are unaffected, but locally that means the gate covers less, which is the
-reason the file exists. `REQUIRE_COMPOSED=1 mise run suite:composed` fails
-instead. `mise run suite:as-image` runs the composed suite as the image does:
-in a copy of only the files `Dockerfile.dockerignore` admits, with `DEBUG` off
-and `SEVERINO_HQ_SOURCE` stamped. `mise run preflight` runs it, required.
-
-An agent's server is `mise run dev:scratch` in its own worktree, never `mise run dev` (docs/Development.md, "Development servers").
-
-The gates run the suite in parallel, which roughly halves their time.
-`hq/platform/core/test_runner.py` is what makes that safe on WAL SQLite: read
-it before changing anything about the test database. `mise run fast
---parallel 1` (or `CHECK_PARALLEL=1`) rules parallelism out when a failure looks order- or isolation-dependent.
-
-Diagnosing a parallel failure needs `tblib` installed, or the real error is
-replaced by `cannot pickle 'traceback' object`. `--parallel=1` also works.
+A test that reads the repository rather than running the product carries
+`@tag("source")` and runs only in `checks:source`, since no image ships those
+files. The suite runs in parallel on WAL SQLite through
+`hq/platform/core/test_runner.py`: read it before changing the test database.
+An agent's server is `mise run dev:scratch` in its own worktree, never
+`mise run dev`. A new host domain: [New Domain](docs/New-Domain.md).
 
 ## Architecture in one minute
 
-- `hq/platform/application/` owns use cases, authorization, transactions, projections,
-  capability execution, and plugin internals.
+- `hq/platform/application/` owns use cases, authorization, transactions,
+  projections, capability execution, and plugin internals.
 - Django apps own persistence and domain-specific models. Adapters may query
   for rendering; they do not mutate models directly.
 - Web, CLI, MCP, and HTTP API are delivery adapters over the same application
   behavior. Never reimplement a business rule in an adapter.
 - `hq_sdk/` is the only supported Python import surface for plugins.
-- `templates/partials/`, `hq/platform/application/ui.py`, `hq/platform/application/tables.py`, and the
-  matching `hq_sdk.*` modules are the shared frontend contract.
+- `templates/partials/`, `hq/platform/application/ui.py`,
+  `hq/platform/application/tables.py`, and the matching `hq_sdk.*` modules are
+  the shared frontend contract.
 - The machine API's current contract is `/api/v2/`. Writes are capability
   authorized, schema validated, transactionally audited, and idempotent.
 
-The detailed boundaries live in `docs/Architecture.md`,
-`docs/Plugins.md`, and `docs/API.md`.
+Detail: [Architecture](docs/Architecture.md), [Plugins](docs/Plugins.md),
+[API](docs/API.md).
 
 ## The host does not know its extensions
 
-HQ is a host. The extensions it runs are separate packages with their own
-repositories, tests and release cycles, and they are installed at composition
-time rather than vendored here: the same separation any platform keeps from the
-things built on it.
+HQ is a host. Its extensions are separate packages with their own
+repositories, tests and release cycles, installed at composition time. This
+repository names none of them: not their inventory, repository
+identifiers, routes, models, fixtures or vocabulary. A host that names an
+extension has taken a dependency on it, and the properties this design exists
+for (add an extension without touching the host, run the host with none
+installed, develop the two on independent schedules) quietly stop being true.
+Examples and tests use the synthetic `example.*` namespace.
 
-So this repository names none of them: not their inventory, repository
-identifiers, routes, models, fixtures or vocabulary. That is an architectural
-constraint before it is anything else. A host that names an extension has taken
-a dependency on it, and the properties this design exists for (add an extension
-without touching the host, run the host with none installed, develop the two on
-independent schedules) all quietly stop being true. Examples and tests use the
-synthetic `example.*` namespace so the host can demonstrate a contract without
-acquiring a consumer.
+Runtime-supplied composition metadata is the only place the real installed
+set meets the host; two tests in `hq/platform/application/tests/test_plugins.py`
+keep it that way, and one that fails has found a coupling.
 
-Runtime-supplied composition metadata is the only place the real installed set
-meets the host, and two tests keep it that way (`hq/platform/application/tests/test_plugins.py`).
-When one of them fails it has found a coupling, not a secret.
-
-Generic integration policy belongs here. Domain meaning belongs in its own
-package. If an abstraction has only one domain-specific caller, leave it in the
-domain until a genuine shared contract appears.
+Generic integration policy belongs here; domain meaning belongs in its own
+package. An abstraction with one domain-specific caller stays in that domain
+until a genuine shared contract appears.
 
 ## Where changes belong
 
@@ -159,100 +83,61 @@ domain until a genuine shared contract appears.
 | Plugin identity or domain semantics | private plugin repository |
 | Cross-plugin compatibility | generic composition check in HQ |
 
-### Adding a provider
-
-A provider emits itself: nothing outside its own modules names it except one
-entry in `ADMITTED` (`hq/domains/control_plane/provider_adapters/__init__.py`). Its adapter
-module declares its kinds (`DEFINITIONS`) and its `CONNECTIONS`; its readings
-are a module in `hq/domains/control_plane/observations/`, found by discovery. Registries,
-connection labels, credential policy, the controller's registry and the
-topology edges its readings declare are all derived from those, and admission
-fails at import on a duplicate or undeclared name. So is the bridge contract:
-`manage.py bridge_contract` writes the kinds, the connection providers, each
-reading's record and the values both sides check from the same declarations,
-then `go generate ./...` in `controller/` regenerates the Go types
-(`mise run regen` runs both). The
-controller half (its readers, actions and probe) is Go, in
-`controller/providers/`, registered in `providers.New`; a provider is handed
-its own connection as a typed value (`r.Supplied.For`), never a setting by name.
-`hq/domains/control_plane/provider_adapters/tests/test_admission.py` shows the contract;
-`docs/Architecture.md` has the detail.
-
-### Moving code
+A provider is named once, in `ADMITTED`
+(`hq/domains/control_plane/provider_adapters/__init__.py`); everything else
+derives from its adapter's `DEFINITIONS` and `CONNECTIONS` and its readings
+module, and `test_admission.py` there holds that to be enough. Its Go half in
+`controller/providers/` is handed its connection as a typed value
+(`r.Supplied.For`), never a setting by name ([Providers](docs/Architecture.md#providers)).
 
 Tests live in each package's `tests/` directory. When a definition moves,
 retarget every `mock.patch("module.name")` that named its old home: a patch of
-a name that is no longer looked up there passes silently and patches nothing.
-A check that walks a path (an architecture test, a script's glob) needs the
-same review, and should fail when its path matches nothing rather than pass.
+a name no longer looked up there passes and patches nothing. A check that walks
+a path (an architecture test, a glob) fails when its path matches nothing.
 
 ## Rules that eliminate bug classes
 
 - A new mechanism states its security properties in its design. What a
   resource can do is derived from topology facts, never from a per-kind flag.
-- Never interpolate a newline-separated file list into `eval` or `bash -c`:
-  each line runs as a command. Split it with `set --` or an array and pass
-  `"$@"`.
+- Never interpolate a newline-separated file list into `eval` or `bash -c`,
+  where each line runs as a command: split it with `set --` and pass `"$@"`.
 - Reject unknown input; Pydantic plugin commands inherit `StrictCommand`.
 - Enforce authorization in the shared capability/view layer, not ad hoc in a
   template or handler.
 - A rule one row must keep on its own is a `Rule` in the model's
-  `Meta.constraints` (`hq/platform/core/rules.py`): the database refuses the
-  row from every writer, and `full_clean` reports it beside its field, from
-  that one declaration. Never restate it in `clean()` or a service. Adding one
-  to a table that holds rows fails the migration if a row breaks it, and the
-  container migrates on boot: run `manage.py constraint_preflight --path
-  <database>` against the production data first (it reads only), and give
-  each constraint its own migration operation.
+  `Meta.constraints` (`hq/platform/core/rules.py`), declared once and never
+  restated in `clean()` or a service. The container migrates on boot, so a new
+  one on a table that holds rows first passes `manage.py constraint_preflight
+  --path <database>` against production data, in a migration operation of its
+  own.
 - Every mutation is atomic and audit-attributed. Machine writes are safely
   retryable with durable idempotency.
 - Plugin IDs, routes, Django apps, distributions, providers, grants, and
-  capability names must fail at startup when invalid or conflicting.
+  capability names fail at startup when invalid or conflicting.
 - Plugin code imports `hq_sdk`, never `application`, `core`, or another host
-  app. `python -m hq_sdk.validation src` enforces this.
-- The shape of `hq_sdk` is committed in `hq_sdk/contract.json` and a test holds
-  the exports to it. A change there is a fleet change: regenerate with
-  `mise run regen`, review the diff, and decide whether
-  `PLUGIN_API_VERSION` moves. What the annotations promise is held from an
-  extension's side by `tests/sdk_consumer/consumer.py`, which mypy checks: a
-  valid call pins its return with `assert_type`, and a call an extension must
-  not make carries the `# type: ignore[code]` mypy must report for it. Give a
-  new export a case there; an annotation that slides to `Any` fails it.
-- The machine API's OpenAPI 3.2 document is derived (`hq/platform/api/openapi.py`) and
-  served at `/api/v2/openapi.json`; `hq/platform/api/hq-api.openapi.json` is the host's
-  copy for clients. Regenerate it with `mise run regen` after changing a
-  route, capability, resource or domain; `--check` fails the gate on drift.
-  The signed-in operator reads it rendered at `/api/docs/` (System > API), a
-  vendored Scalar bundle: to move it, change `version:` in
-  `static/vendor/scalar/UPSTREAM` and run `node scripts/vendor-scalar.mjs`,
-  which Renovate also does.
-- The controller's contracts are derived too. `manage.py bridge_contract`
-  writes `controller/api/hq-controller.openapi.json` (the bridge's own
-  messages in `hq/domains/control_plane/bridge_base.json`, joined to what the
-  registry declares), `controller/api/hq-connections.openapi.json` and
-  `hq/config/controller-connections.json`; `--check` fails the gate when one
-  is behind. Never edit those three files: `mise run regen` rewrites them and
-  then the Go types.
+  app (`python -m hq_sdk.validation src`).
+- A change to `hq_sdk`'s shape (`hq_sdk/contract.json`) is a fleet change:
+  decide whether `PLUGIN_API_VERSION` moves, and give a new export a case in
+  `tests/sdk_consumer/consumer.py` ([Plugins](docs/Plugins.md)).
+- Derived files are never edited by hand: `mise run regen` writes them (the
+  API's and the controller's OpenAPI documents, the connection registry,
+  `hq_sdk/contract.json`, `docs/Connections.md`, the clients, the Go types) and
+  `mise run drift` names any that is behind.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.
-- A link to a command's form is built by `hq.platform.application.action_links.command_url`
-  and nothing else, so its target is encoded the way the form reads it back.
-  `hq/platform/application/tests/test_remedy_links.py` follows every remedy the findings, the
-  action queue and the pages emit, and fails on one that opens with no target
-  chosen or on the "replaces the whole record" form.
+- A link to a command's form is built by
+  `hq.platform.application.action_links.command_url` and nothing else
+  (`test_remedy_links.py` follows every remedy HQ emits).
 - An href built from data HQ did not write (a reading, an attestation, a
   manifest, the public contact form) passes through `web_url`, in Python or as
   the template filter, so it is an http(s) address or no link at all.
-- Public tests compose synthetic siblings. The assembled private image runs
-  all real plugin suites together.
 - A dependency used by a plugin must survive a clean wheel install with
   `--no-deps`; the host-owned plugin check reproduces that production boundary.
 
 ## Frontend quality bar
 
-`docs/Design.md` is the design language: the primitives a page is built from
-and the rules they keep. Read it before adding UI; grow a primitive rather
-than styling a page.
+Read [Design](docs/Design.md), the primitives a page is built from, before
+adding UI; grow a primitive rather than styling a page.
 
 - Server-render useful HTML first; JavaScript progressively enhances working
   links and forms.
@@ -261,92 +146,52 @@ than styling a page.
 - Keep interactions immediate, keyboard accessible, responsive, and stable
   under partial replacement. Preserve focus and browser history intentionally.
 - A part of a page that is fetched, refreshed or polled is a `data-fragment`
-  region answered from a `{% partialdef %}` (`docs/Design.md`, "A read is a
-  fragment"). No script parses a response or keeps a timer of its own.
-- A GET has no effect. Pages are prefetched on press, and a speculative
-  request is refused wherever HQ records or reaches out
+  region answered from a `{% partialdef %}`. No script parses a response or
+  keeps a timer of its own.
+- A GET has no effect: pages are prefetched on press, and a speculative request
+  is refused wherever HQ records or reaches out
   (`hq/platform/core/speculation.py`).
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
-- Scripts are deferred; shared assets are content-versioned, compressed, and
-  cached. Respect `prefers-reduced-motion`.
-- No inline scripts or event handlers; the CSP and architecture tests enforce
-  the shared delivery model. Styles are the one exception: `style-src` allows
-  `'unsafe-inline'` so a chart can position a mark with a per-datum custom
-  property (`style="--at: 62%"`), which no class expresses and no nonce covers.
-  Use it for that and nothing else: a test pins `style-src` as the only
-  relaxed directive, so a second one fails the suite rather than the review.
+- Scripts are deferred and respect `prefers-reduced-motion`. No inline
+  scripts or event handlers; `style-src 'unsafe-inline'` exists only
+  for a per-datum custom property on a chart mark (`style="--at: 62%"`).
 
 ## Structural checks
 
-Function complexity is part of the gate. Ruff's C901 fails any function whose
-cyclomatic complexity exceeds 15, and `CognitiveComplexityTests` in
-`hq/platform/application/tests/test_architecture.py` fails any non-test function whose cognitive
-complexity exceeds 20. There is no allowance list: a function over either
-limit is split into named steps.
-
-Ruff also holds import order, pyupgrade, bugbear, simplify, pathlib, comprehension,
-performance, Ruff-specific, refurb, Django and blind-except rules. A rule is
-switched off only in `pyproject.toml`, with the reason beside it; a line-level
-`# noqa` names its code and says why. A method that overrides a base-class method
-carries `@override`, and mypy's `explicit-override` holds the typed modules to it.
-
-The architectural seams are type checked. `mise run checks:mypy` (a gate of
-`mise run ci` and CI's Checks job) runs mypy with django-stubs over the modules
-`pyproject.toml` names: the security, capability, plugin, resource and
-integration-spec contracts, the provider vocabulary and registry with the
-provider modules split out of it, the controller's handler registry and
-connection plumbing, `hq_sdk`, `hq_api` and `hq_mcp`, with every function in
-them fully annotated. It loads `hq/config/settings_typecheck.py`, the
-host's settings without extensions. Fix what it reports rather than silencing
-it; a `# type: ignore[code]` is for a stub that is wrong, with the reason beside
-it. To widen it, add a module to `files` in `pyproject.toml` and fix what it
-finds.
-
-Tests answer "does this behave?". They do not answer "is this still one
-system?": duplication and tangling are green all the way down. Those are graph
-questions. `tools/structural/bar.py` asks one as a gate (`checks:structural`,
-part of `mise run ci`): no new near-duplicate pair outside tests, against
-`tools/structural/baseline.txt`. The other questions, the exact queries and
-the traps in the graph engine are in [Structural Gate](docs/Structural-Gate.md);
-index the checkout you work in before asking it anything. File size is a test,
-not a graph question: `FileSizeTests` holds every source file under 1,000
-lines, and a file past that is split by responsibility.
-
-One thing the graph cannot see: an extension's use of `hq_sdk` is an in-process
-import from another repository, so no edge exists for it. Changing
-`hq_sdk.capabilities`, `hq_sdk.ui` or `hq_sdk.audit` is a fleet-wide change that
-this repository's graph will report as safe. Grep the extension checkouts.
+- Ruff's C901 (cyclomatic 15) and `CognitiveComplexityTests` (cognitive 20)
+  have no allowance list: a function over either is split into named steps.
+  `FileSizeTests` holds every source file under 1,000 lines; one past that is
+  split by responsibility.
+- A Ruff rule is switched off only in `pyproject.toml`, with the reason beside
+  it; a line-level `# noqa` names its code and says why. A method that
+  overrides a base-class method carries `@override`.
+- `checks:mypy` holds the seams `pyproject.toml` names (`files`), fully
+  annotated. A `# type: ignore[code]` is for a wrong stub, with the reason.
+- Duplication and tangling are green in every test; they are graph questions.
+  The structural bar (`checks:structural`) fails a new near-duplicate pair
+  outside tests, and its baseline never grows to pass. The other questions
+  and the graph engine's traps: [Structural Gate](docs/Structural-Gate.md).
+  Index the checkout you work in before asking it anything.
+- An extension's use of `hq_sdk` is an import from another repository, so the
+  graph has no edge for it: a change to `hq_sdk.capabilities`, `hq_sdk.ui` or
+  `hq_sdk.audit` reads as safe here. Grep the extension checkouts.
 
 ## Definition of done
 
 "Ready" means `mise run preflight` exits 0, or `mise run preflight --remote`
-for a pushed commit. It runs `mise run ci` (or reads every check GitHub ran),
-where a gate that cannot run fails, the composed suite with the extension set required,
-and read-only checks of the deploy host over SSH (`SEVERINO_HQ_DEPLOY_HOST`): the checkout's
-ownership, the runner's sudo rule, the root-owned programs against this commit,
-the installed units and free disk. `--skip-host` runs the local gates only and
-exits 2, never 0. So does a host whose release nothing verified: `hq-host
-verify` runs there only where sudo needs no password, and otherwise the
-evidence is `severino-hq-script-drift.service` having passed since the release
-was installed (`sudo systemctl start` it there to supply it).
+for a pushed commit: every CI gate, the composed suite with the extension set
+required, and read-only checks of the deploy host (`hq-host check`,
+[Deployment](docs/Deployment.md)). `--skip-host` exits 2, never 0, and so does
+a host whose release nothing verified; the check says how to verify it.
 
 - The requested behavior is implemented at the correct layer.
 - Tests cover success, denial, invalid input, and the regression class where
   applicable, not only the happy path.
-- `mise run check` passes, including the composed pass when a change
-  touches `hq_sdk`, because the host and its extensions first meet there.
-- A change to templates or CSS passes the browser layout gate:
-  `mise run browser` (it installs the WebKit the locked Playwright pins: HQ is read in Safari).
-  A UI change is also walked in a real browser
-  through the workflow it serves, not checked page by page.
-- Every CI gate passes on the pushed commit, including its code scanning gates (no
-  CodeQL alert and every file-based Scorecard check at 10) and the browser
-  layout gate, which it always runs.
-- A browser check selects markup only through `SELECTORS` in
-  `hq/platform/core/browser_tests.py`; `hq/platform/core/tests/test_browser_selectors.py` holds every one
-  to a template that renders it.
-- The structural bar above did not move the wrong way.
+- `mise run check` passes, including the composed pass when a change touches
+  `hq_sdk`.
+- A change to templates or CSS passes `mise run browser` and is walked in a
+  real browser through the workflow it serves.
 - Docs change when a supported contract changes.
 - No private identifiers, generated artifacts, secrets, or unrelated edits
   enter the diff.

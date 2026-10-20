@@ -43,7 +43,7 @@ Each server is a mise task, and its env says where it listens and which
 database it opens; `scripts/dev.sh` refuses what env cannot express. Every one
 collects versioned assets and runs Uvicorn with reload on the production ASGI
 path, watching this checkout and each extension's sources. The extension set
-is the one `mise.local.toml` names ([AGENTS.md](../AGENTS.md#start-here)).
+is the one `mise.local.toml` names ([The extension set](#the-extension-set)).
 `dev:scratch` is the throwaway one; `dev` is the long-lived server behind a TLS
 proxy, configured by the gitignored `dev.local.toml` (copy
 `scripts/dev.local.example.toml`).
@@ -67,10 +67,57 @@ with every default group omitted.
 
 ## The gates
 
-The gates, what each answers, how to name the extension set and how to run one
-gate alone are in [AGENTS.md](../AGENTS.md#start-here). The suite runs one
-worker per core (per performance core on Apple silicon);
-`DJANGO_TEST_PROCESSES` overrides it.
+Every gate is a task named `<job>:<gate>` (`mise run checks:ruff` runs one),
+and each CI job runs the aggregate of its name. `mise run check` answers "does
+my change work?"; `mise run ci` answers "will the pipeline accept it?" and
+keeps going past a failure to name every gate that failed. `fast` and `check`
+end on a verdict line (`tools/gate/verdict.py`) naming each failed task and
+test. The suite runs one worker per core (per performance core on Apple
+silicon); `DJANGO_TEST_PROCESSES` overrides it, and `mise run fast --parallel 1`
+rules parallelism out when a failure looks order- or isolation-dependent.
+
+### What `fast` runs
+
+`mise run fast [BASE]` maps the changed files against the merge base (`BASE`,
+`$CHECK_BASE`, then `origin/main`, `main`) through the import graph to the
+test modules that import them directly or through one module between, plus
+every test of the changed Django apps, every test that names one (its URL
+namespace or app label), and the architecture tests. Beside them it runs
+`checks:ruff`, `checks:mypy`, `tests:django`, `tests:migrations` and every
+`drift:*` gate. Each Django gate opens a database of its own, and its tests run
+with `DEBUG` on, the one pass that does. A change to what extensions render
+through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and
+moment modules, template tags) also runs the extensions' suites, composed, when
+`mise.local.toml` names a set. `--list` prints the selection.
+
+### What `check` and `ci` run
+
+`mise run check` runs every `checks:*` gate, the `tests:*` gates on the default
+Python (the suite as production configures it, with `DJANGO_DEBUG` unset and
+the coverage floor) and the composed suite, one task at a time so no two suites
+share the machine's memory. A setting whose default follows `DEBUG` is held by
+a test that loads the settings both ways.
+
+`mise run ci` adds `tests` on every Python in `PYTHON_VERSIONS`, `browser`,
+`controller`, `scan` (CodeQL) and `image`: the image build and what an image
+must pass. The suite inside an image runs once, in Compose, on the composed
+image production runs.
+
+A test tagged `source` runs once, on the checkout, in `checks:source`
+(`mise run checks:source <label>...` runs only the tagged tests those labels
+name). A whole-suite run leaves the tag out; a run that asks for a tag no test
+carries fails.
+
+### The extension set
+
+Name it once in a gitignored `mise.local.toml` (copy
+`scripts/mise.local.example.toml`): `HQ_LOCAL_PYTHONPATH` says where the
+extensions' sources are and `HQ_LOCAL_PLUGINS` which to enable. Only the
+composed suite and the dev servers load the set. Without it the composed pass
+says it did not run and passes; `REQUIRE_COMPOSED=1 mise run suite:composed`
+fails instead. `mise run suite:as-image` runs the composed suite as the image
+does, in a copy of only the files `Dockerfile.dockerignore` admits, with
+`DEBUG` off and `SEVERINO_HQ_SOURCE` stamped; `mise run preflight` requires it.
 
 ### Heavy gates take turns
 
@@ -143,7 +190,9 @@ and `seed_demo` show) is read by `hq.platform.core.estate_browser_tests` on
 every page the navigation declares, with script on and deferred parts loaded,
 at 402, 820, 1360 and 1680 pixels, in the light palette and the dark. A
 finding names its check, page, width and theme.
-`HQ_BROWSER_ENGINE=chromium` or `firefox` runs both in another engine.
+`HQ_BROWSER_ENGINE=chromium` or `firefox` runs both in another engine. One
+browser test runs as `mise run manage -- test <label>` once
+`mise run setup:webkit` has installed the engine.
 
 ### Debug toolbar
 
@@ -181,9 +230,10 @@ deploy/                   systemd units, tmpfiles rule, remote targets, host.jso
 composition/              the composed image
 policy/                   the extension admission policy
 demo/                     the static demo site built from HQ's own pages
-scripts/                  development, verification and deployment programs
+tools/                    the programs behind the gates and the pipeline, with their tests
+scripts/                  development servers, extension checks and deployment programs
 mise-tasks/               tasks whose body is a script, declared in its own #MISE header
-tests/                    synthetic extension fixtures and property tests
+tests/                    synthetic extension fixtures, the SDK consumer, property and shell suites
 var/                      ignored local runtime state
 ```
 
