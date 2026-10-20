@@ -235,18 +235,19 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 	for _, want := range []string{
 		"SEVERINO_RENDER_STATUS=hq=/run/severino-hq/render-status/hq.json",
 		"SEVERINO_HOST_UNITS=/run/severino-hq/units",
+		"SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json",
 	} {
 		if !slices.Contains(envs, want) {
 			t.Errorf("%s is not named: %v", want, envs)
 		}
 	}
 	for target := range l.mounted {
-		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || target == "/run/severino-hq/units" {
+		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || target == "/run/severino-hq/units" || target == "/run/severino-hq/tailnet-lock.json" {
 			t.Errorf("%s was mounted with nothing to mount", target)
 		}
 	}
 	for _, env := range envs {
-		if strings.HasPrefix(env, "SEVERINO_TAILNET") || strings.HasPrefix(env, "SEVERINO_HOST_FIREWALL") || strings.HasPrefix(env, "HQ_CONTROLLER_CA_FILE") {
+		if strings.HasPrefix(env, "SEVERINO_TAILNET_STATUS") || strings.HasPrefix(env, "SEVERINO_HOST_FIREWALL") || strings.HasPrefix(env, "HQ_CONTROLLER_CA_FILE") {
 			t.Errorf("%s named with nothing read", env)
 		}
 	}

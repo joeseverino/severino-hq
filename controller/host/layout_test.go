@@ -33,6 +33,9 @@ func unitSetting(t *testing.T, unit, key string) time.Duration {
 		}
 		return span
 	}
+	if err := lines.Err(); err != nil {
+		t.Fatal(err)
+	}
 	t.Fatalf("%s sets no %s", unit, key)
 	return 0
 }

@@ -498,9 +498,9 @@ class StyleContractTests(SimpleTestCase):
         offenders = sorted(
             {
                 f"{value}px"
-                for match in declaration.finditer(self._stylesheet())
                 # calc() and max() carry their own arithmetic; the scale is
                 # still the input, and rewriting inside them buys nothing.
+                for match in declaration.finditer(self._stylesheet())
                 if not re.search(r"\b(?:calc|max|min|clamp)\(", match.group(1))
                 for value in re.findall(r"(?<![-\w.])([0-9]+)px", match.group(1))
                 if int(value) in on_scale

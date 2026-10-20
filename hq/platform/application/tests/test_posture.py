@@ -13,8 +13,10 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 
 from ..connection_catalog import connection_catalog
+from ..inventory_testing import store
 from ..posture import STANDARD, estate_posture
 from ..security import cli_principal
+from ..sweep import record_sweep
 from .test_tailnet_posture import raised
 
 RULE = "posture-unmet"
@@ -27,10 +29,22 @@ def standing(check_id: str):
     return next(standing for standing in found.standings if standing.check.id == check_id)
 
 
-def policy(**record) -> None:
+TAILNET_LOCK = "host.tailnet_lock"
+# The record the controller sends for `tailscale lock status --json`.
+A_LOCK = {"record": "lock", "enabled": True, "node_key_signed": True, "trusted_keys": 2, "locked_out": []}
+LAUNCHER_REFUSED = "the launcher could not ask the tailnet daemon for its lock status"
+
+
+def sweep(payload) -> None:
+    record_sweep(payload, principal=cli_principal(), controller_id="example-controller")
+
+
+def policy(*, lock=None, **record) -> None:
     ProviderInventory.objects.create(
         kind="tailscale.policy", observed_at=timezone.now(), records=[{"record": "policy", **record}]
     )
+    if lock is not None:
+        store("host.tailnet_lock", {"record": "lock", **lock})
 
 
 class DeclarationTests(TestCase):
@@ -76,7 +90,7 @@ class ReadingTests(TestCase):
         self.assertEqual(found.reading.evidence, "Not read yet")
 
     def test_an_unread_check_names_the_connection_that_would_read_it(self):
-        found = standing("tailnet-lock")
+        found = standing("tailnet-policy")
 
         self.assertEqual(found.reading.remedy, "connect Tailscale")
         self.assertEqual(found.reading.remedy_url, reverse("control_plane:connections") + "#connection-setup-heading")
@@ -95,7 +109,7 @@ class ReadingTests(TestCase):
             observed_at=timezone.now(),
         )
 
-        found = standing("tailnet-lock")
+        found = standing("tailnet-policy")
 
         self.assertNotIn("connect", found.reading.remedy)
 
@@ -114,10 +128,31 @@ class ReadingTests(TestCase):
 
         self.assertTrue(standing("tailnet-policy").met)
 
-    def test_tailnet_lock_is_read_from_the_policy_reading(self):
-        policy(grants=[{"src": ["group:admins"]}], lock={"enabled": True, "trusted_keys": 2})
+    def test_a_swept_lock_reading_meets_the_check(self):
+        sweep({TAILNET_LOCK: {"ok": True, "records": [A_LOCK]}})
+
+        found = standing("tailnet-lock")
+        self.assertTrue(found.met)
+        self.assertEqual(found.reading.evidence, "2 signing keys")
+
+    def test_a_policy_read_after_the_lock_leaves_it_read(self):
+        sweep({TAILNET_LOCK: {"ok": True, "records": [A_LOCK]}})
+        sweep({"tailscale.policy": {"ok": True, "records": [{"record": "policy", "document": "{}"}]}})
 
         self.assertTrue(standing("tailnet-lock").met)
+
+    def test_a_lock_read_that_failed_keeps_the_last_one(self):
+        sweep({TAILNET_LOCK: {"ok": True, "records": [A_LOCK]}})
+        sweep({TAILNET_LOCK: {"ok": False, "records": [], "error": LAUNCHER_REFUSED}})
+
+        self.assertTrue(standing("tailnet-lock").met)
+
+    def test_a_lock_never_read_says_why(self):
+        sweep({TAILNET_LOCK: {"ok": False, "records": [], "error": LAUNCHER_REFUSED}})
+
+        found = standing("tailnet-lock")
+        self.assertIsNone(found.reading.met)
+        self.assertEqual(found.reading.evidence, LAUNCHER_REFUSED)
 
     def test_an_unread_check_is_not_counted_as_unmet(self):
         policy(grants=[{"src": ["group:admins"]}], lock={"enabled": True, "trusted_keys": 2})

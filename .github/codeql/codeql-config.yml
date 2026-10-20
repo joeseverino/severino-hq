@@ -1,6 +1,6 @@
 name: "Severino HQ"
 
-# The full quality suite, minus one rule this codebase cannot satisfy.
+# The full quality suite, minus the import-cycle rules that misread this codebase.
 queries:
   - uses: security-and-quality
 
@@ -18,6 +18,16 @@ query-filters:
   # stops recurring, rather than being triaged forever.
   - exclude:
       id: py/cyclic-import
+  # py/unsafe-cyclic-import counts a `lazy` import (PEP 810) as one that runs
+  # with its module. The extractor records the keyword (`isLazy()` in
+  # python-all's AstGenerated.qll) and nothing reads it: Imports/Cyclic.qll
+  # takes any import outside a function as import-time (`is_import_time`), so
+  # every cycle closed only by a lazy import, which waits for first use, is
+  # reported as one that can fail. The promise the rule makes, no module
+  # imports itself back while it runs, is held lazy-aware by
+  # hq/platform/application/tests/test_import_cycles.py.
+  - exclude:
+      id: py/unsafe-cyclic-import
 
 # The type checker's settings shim, for the host's mypy and each extension's.
 # django-stubs reads a settings module's names statically, so it re-exports

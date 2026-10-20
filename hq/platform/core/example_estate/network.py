@@ -291,9 +291,9 @@ def tailnet():
             "tests": POLICY["tests"],
             "settings": SETTINGS,
             "dns": {"dns": [TAILNET], "magicDNS": True},
-            "lock": {"enabled": True, "trusted_keys": 2},
         },
     )
+    store("host.tailnet_lock", {"record": "lock", "enabled": True, "node_key_signed": True, "trusted_keys": 2})
     store(
         "tailscale.settings",
         {

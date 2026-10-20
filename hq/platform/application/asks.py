@@ -191,8 +191,8 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
     found = ProviderInventory.objects.defer("records")
     snapshots = {
         snapshot.kind: snapshot
-        for snapshot in (found.filter(kind__in=wanted) if wanted else found)
         # No kinds named is every kind a sweep reads.
+        for snapshot in (found.filter(kind__in=wanted) if wanted else found)
         if wanted or every_sweep(snapshot.kind)
     }
     tried = bool(snapshots) and all(

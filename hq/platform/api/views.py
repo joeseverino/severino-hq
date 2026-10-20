@@ -584,8 +584,7 @@ def _resource_failure(exc: Exception) -> HttpResponse:
     if isinstance(exc, UnknownResource):
         return _fail(exc.reason, code="unknown_resource", status=404)
     if isinstance(exc, RecordNotFound):
-        # Host-written and fixed (record_errors.py), like every reason here.
-        return _fail(str(exc), code="not_found", status=404)
+        return _fail(exc.reason, code="not_found", status=404)
     if isinstance(exc, UnsupportedResourceOperation):
         return _fail(exc.reason, code="unsupported_operation", status=405)
     if isinstance(exc, InvalidResourceInput):

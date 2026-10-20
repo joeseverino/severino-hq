@@ -18,6 +18,18 @@ class HostFirewallRecord(ObservationRecord):
     read_at: str = ""
 
 
+class HostTailnetLockRecord(ObservationRecord):
+    """Tailnet lock as the controller's own machine sees it: `tailscale lock
+    status`, counted. It names no key, only how many sign."""
+
+    record: str
+    enabled: bool = False
+    node_key_signed: bool = False
+    trusted_keys: int = Field(default=0, ge=0)
+    # The machines lock filters out of the tailnet, by name.
+    locked_out: tuple[str, ...] = ()
+
+
 class HostPerimeterRecord(ObservationRecord):
     record: str
     connection_ref: str
@@ -202,6 +214,7 @@ FIREWALL_KIND = "host.firewall"
 PERIMETER_KIND = "host.perimeter"
 RENDER_STATUS_KIND = "host.render_status"
 UNIT_KIND = "host.unit"
+TAILNET_LOCK_KIND = "host.tailnet_lock"
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
@@ -236,5 +249,13 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         HostUnitRecord,
         title=lambda record: str(record.get("unit", "")),
         relation="Background jobs on",
+    ),
+    ObservationSpec(
+        TAILNET_LOCK_KIND,
+        "host",
+        "Tailnet lock",
+        HostTailnetLockRecord,
+        title=lambda record: "On" if record.get("enabled") else "Off",
+        relation="Tailnet lock seen from",
     ),
 )

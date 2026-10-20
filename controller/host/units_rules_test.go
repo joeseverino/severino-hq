@@ -31,6 +31,9 @@ func unitValue(t *testing.T, file, key string) string {
 			value = v
 		}
 	}
+	if err := lines.Err(); err != nil {
+		t.Fatal(err)
+	}
 	return value
 }
 

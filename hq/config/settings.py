@@ -278,15 +278,6 @@ SECURE_CSP = {
     "report-uri": [SEVERINO_CSP_REPORT_PATH],
 }
 
-# The API reference at /api/docs/ is the one page served without the Trusted
-# Types directives: the vendored Scalar bundle (static/vendor/scalar) writes
-# strings into innerHTML through Vue and its markdown renderer, and no
-# configuration of it creates only the `hq-fragment` policy. Spelled as a
-# derivation rather than a second literal policy, so tightening the real one
-# cannot leave a stale copy behind. Every source stays 'self'; it needs no
-# inline script and, configured jitless, no eval.
-SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
-
 # ----- Who may reach HQ at all ------------------------------------------------
 
 # HQ answers the networks below and refuses anything else before
@@ -615,6 +606,23 @@ OIDC_OP_AUTHORIZATION_ENDPOINT = f"{OIDC_ISSUER}/authorize"
 OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/token"
 OIDC_OP_USER_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/userinfo"
 OIDC_OP_JWKS_ENDPOINT = f"{OIDC_ISSUER}/.well-known/jwks.json"
+
+# A form submitted after its session has expired is redirected on to sign in at
+# the provider, and form-action governs every redirect a submission follows.
+# The one origin added is the configured identity provider's, read from its
+# authorization endpoint; with no provider, forms reach HQ alone.
+_sign_in = urlsplit(OIDC_OP_AUTHORIZATION_ENDPOINT)
+if _sign_in.scheme in {"http", "https"} and _sign_in.netloc:
+    SECURE_CSP["form-action"] = [CSP.SELF, f"{_sign_in.scheme}://{_sign_in.netloc}"]
+
+# The API reference at /api/docs/ is the one page served without the Trusted
+# Types directives: the vendored Scalar bundle (static/vendor/scalar) writes
+# strings into innerHTML through Vue and its markdown renderer, and no
+# configuration of it creates only the `hq-fragment` policy. Spelled as a
+# derivation rather than a second literal policy, so tightening the real one
+# cannot leave a stale copy behind. Its sources are the real policy's; it needs no
+# inline script and, configured jitless, no eval.
+SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
 OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
 # Where a sign-in that did not finish lands: the login page, told to stop and
 # say why rather than going straight back to the provider in a loop.

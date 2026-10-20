@@ -432,6 +432,7 @@ const (
 	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
 	ResourceKindHostPerimeter                ResourceKind = "host.perimeter"
 	ResourceKindHostRenderStatus             ResourceKind = "host.render_status"
+	ResourceKindHostTailnetLock              ResourceKind = "host.tailnet_lock"
 	ResourceKindHostUnit                     ResourceKind = "host.unit"
 	ResourceKindMachine                      ResourceKind = "machine"
 	ResourceKindNPMAccessList                ResourceKind = "npm.access_list"
@@ -514,6 +515,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindHostPerimeter:
 		return true
 	case ResourceKindHostRenderStatus:
+		return true
+	case ResourceKindHostTailnetLock:
 		return true
 	case ResourceKindHostUnit:
 		return true
@@ -607,6 +610,7 @@ const (
 	SweptHostFirewall                 SweptKind = "host.firewall"
 	SweptHostPerimeter                SweptKind = "host.perimeter"
 	SweptHostRenderStatus             SweptKind = "host.render_status"
+	SweptHostTailnetLock              SweptKind = "host.tailnet_lock"
 	SweptHostUnit                     SweptKind = "host.unit"
 	SweptNPMAccessList                SweptKind = "npm.access_list"
 	SweptNPMCertificate               SweptKind = "npm.certificate"
@@ -672,6 +676,8 @@ func (e SweptKind) Valid() bool {
 	case SweptHostPerimeter:
 		return true
 	case SweptHostRenderStatus:
+		return true
+	case SweptHostTailnetLock:
 		return true
 	case SweptHostUnit:
 		return true
@@ -1343,6 +1349,15 @@ type HostRenderStatusSecretRenderSuccess struct {
 	ContentVersion   int                                `json:"content_version,omitempty"`
 	Counts           HostRenderStatusSecretRenderCounts `json:"counts,omitempty"`
 	RenderedAt       string                             `json:"rendered_at,omitempty"`
+}
+
+// HostTailnetLockRecord Tailnet lock as the controller's own machine sees it: `tailscale lock status`, counted. It names no key, only how many sign.
+type HostTailnetLockRecord struct {
+	Enabled       bool     `json:"enabled,omitempty"`
+	LockedOut     []string `json:"locked_out,omitempty"`
+	NodeKeySigned bool     `json:"node_key_signed,omitempty"`
+	Record        string   `json:"record"`
+	TrustedKeys   int      `json:"trusted_keys,omitempty"`
 }
 
 // HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words or an instant in UTC; none is a path, a command line or an environment.

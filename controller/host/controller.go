@@ -291,13 +291,15 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 			return nil, err
 		}
 		args = append(args, "--env", "SEVERINO_TAILNET_STATUS=/run/severino-hq/tailnet.json")
-		if lock, err := Tailnet(ctx, c.Tailscaled, "/localapi/v0/tka/status"); err == nil {
-			if err := give("tailnet-lock.json", lock, "/run/severino-hq/tailnet-lock.json"); err != nil {
-				return nil, err
-			}
-			args = append(args, "--env", "SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json")
+	}
+	// Named whether or not the daemon answered, so a status it refused is a
+	// failed read in HQ that keeps the last one, rather than no reading at all.
+	if lock, err := Tailnet(ctx, c.Tailscaled, "/localapi/v0/tka/status"); err == nil {
+		if err := give("tailnet-lock.json", lock, "/run/severino-hq/tailnet-lock.json"); err != nil {
+			return nil, err
 		}
 	}
+	args = append(args, "--env", "SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json")
 
 	if chain, err := c.Command(ctx, "nft", "list", "chain", "inet", "host_filter", "input").Output(); err == nil {
 		reading, err := ReadFirewall(chain, c.Now())

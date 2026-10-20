@@ -22,7 +22,8 @@ import (
 )
 
 // Readings of the host the controller runs on: its firewall, its perimeter,
-// what its secret renderers say about their own runs and, in host_units.go,
+// what its secret renderers say about their own runs, in host_tailnet_lock.go
+// its daemon's tailnet lock status and, in host_units.go,
 // the state of its systemd units.
 
 // PublishedContainer is a container the sweep found and the ports it publishes.
@@ -59,6 +60,8 @@ func (r *Registry) admitHostReadings() {
 	r.readsHeld(runtime.ResourceKindHostRenderStatus, func() bool { return r.Env.RenderStatus != "" })
 	r.reader(runtime.ResourceKindHostUnit, r.hostUnits)
 	r.readsHeld(runtime.ResourceKindHostUnit, func() bool { return r.Env.HostUnits != "" })
+	r.reader(runtime.ResourceKindHostTailnetLock, r.hostTailnetLock)
+	r.readsHeld(runtime.ResourceKindHostTailnetLock, func() bool { return r.Env.TailnetLock != "" })
 }
 
 // What a status document's record says of the read itself.

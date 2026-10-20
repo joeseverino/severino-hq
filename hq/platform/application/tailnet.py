@@ -21,6 +21,7 @@ from ipaddress import ip_address
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.domains.control_plane.observations.host import TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
 from .projection import projection_scope, read_once
@@ -327,6 +328,8 @@ class Policy:
     # Alias -> address, as the policy defines them.
     hosts: dict = field(default_factory=dict)
     dns: dict = field(default_factory=dict)
+    # The controller's machine's own reading of tailnet lock, which the API
+    # the rest is read from does not hold.
     lock: dict = field(default_factory=dict)
     services: tuple[dict, ...] = ()
     app_connectors: tuple[dict, ...] = ()
@@ -439,15 +442,16 @@ def snapshots() -> dict[str, list]:
     """The tailnet readings, and HQ's record of which devices reached it, in
     one query, once per projection.
 
-    They live in the same table under three kinds, and the dashboard wants
-    them together: what each machine reports, what lock is filtering out, and
-    when each device last reached HQ. Read together they are one query, and
-    every caller inside the projection shares it.
+    They live in the same table under four kinds, and the dashboard wants
+    them together: what each machine reports, the policy, what lock is
+    filtering out, and when each device last reached HQ. Read together they
+    are one query, and every caller inside the projection shares it.
     """
 
     def load() -> dict[str, list]:
-        found: dict[str, list] = {TAILNET_KIND: [], POLICY_KIND: [], ARRIVAL_KIND: []}
-        for snapshot in ProviderInventory.objects.filter(kind__in=(TAILNET_KIND, POLICY_KIND, ARRIVAL_KIND)):
+        kinds = (TAILNET_KIND, POLICY_KIND, TAILNET_LOCK_KIND, ARRIVAL_KIND)
+        found: dict[str, list] = {kind: [] for kind in kinds}
+        for snapshot in ProviderInventory.objects.filter(kind__in=kinds):
             found.setdefault(snapshot.kind, []).append(snapshot)
         return found
 
@@ -455,9 +459,12 @@ def snapshots() -> dict[str, list]:
 
 
 def policy() -> Policy:
-    """What the tailnet's policy says, or an empty one if nothing swept it."""
+    """What the tailnet's policy says, or an empty one if nothing swept it,
+    with the last lock reading either way."""
 
-    for snapshot in snapshots()[POLICY_KIND]:
+    found = snapshots()
+    lock = next((dict(record) for snapshot in found[TAILNET_LOCK_KIND] for record in snapshot.records), {})
+    for snapshot in found[POLICY_KIND]:
         for record in snapshot.records:
             document = _document(record)
             return Policy(
@@ -469,13 +476,13 @@ def policy() -> Policy:
                 settings=record.get("settings") or {},
                 hosts=record.get("hosts") or {},
                 dns=record.get("dns") or {},
-                lock=record.get("lock") or {},
+                lock=lock,
                 services=tuple(record.get("services") or ()),
                 app_connectors=tuple(record.get("app_connectors") or ()),
                 ssh_rules=tuple(record.get("ssh_rules") or ()),
                 observed_at=snapshot.observed_at,
             )
-    return Policy()
+    return Policy(lock=lock)
 
 
 def _document(record) -> dict:

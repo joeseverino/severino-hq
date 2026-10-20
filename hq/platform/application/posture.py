@@ -13,7 +13,7 @@ from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_
 from hq.platform.core.oidc import sso_only
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
-lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND
+lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .ui import counted
@@ -234,7 +234,9 @@ def _tailnet_policy(_inputs) -> Reading:
 def _tailnet_lock(_inputs) -> Reading:
     lock = tailnet.policy().lock
     if not lock:
-        return _not_read((TAILNET_POLICY_KIND,))
+        # A read that failed keeps the last reading, so with none it says why.
+        snapshot = next(iter(stored_snapshots().get(TAILNET_LOCK_KIND, ())), None)
+        return _not_read((TAILNET_LOCK_KIND,), (snapshot.error if snapshot is not None else "") or NOT_READ)
     keys = lock.get("trusted_keys") or 0
     return Reading(True, counted(keys, "signing key", "signing keys")) if lock.get("enabled") else Reading(False, "Off")
 

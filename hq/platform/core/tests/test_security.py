@@ -6,7 +6,10 @@ from a declared proxy, an upload cannot choose its response type, are ones
 whose loss is invisible in review of the change that causes it.
 """
 
+import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
@@ -21,6 +24,7 @@ from django.utils import timezone
 from hq.platform.application.routes import routed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.network import client_ip, parse_ip
+from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 PROXY = "10.0.0.5"
 
@@ -895,6 +899,52 @@ class BrowserBoundaryTests(TestCase):
         response = self.client.get("/accounts/login/")
 
         self.assertEqual(response["Cross-Origin-Resource-Policy"], "same-origin")
+
+
+FORM_ACTION_PROBE = "; ".join(
+    [
+        "import json",
+        "from hq.config import settings as s",
+        "print(json.dumps([s.SECURE_CSP['form-action'], s.SEVERINO_API_REFERENCE_CSP['form-action']]))",
+    ]
+)
+
+
+def form_action(issuer: str | None) -> list[list[str]]:
+    """form-action as settings derive it for ``issuer``, in a fresh process
+    because settings read the issuer once, at import."""
+
+    overrides = {"DJANGO_SECRET_KEY": "csp-probe-key-not-a-real-secret-only-for-this-test"}
+    if issuer is not None:
+        overrides["SEVERINO_OIDC_ISSUER"] = issuer
+    result = subprocess.run(
+        [sys.executable, "-c", FORM_ACTION_PROBE],
+        cwd=REPO_ROOT,
+        env=subprocess_env(drop=("SEVERINO_OIDC_ISSUER",), **overrides),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stderr)
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+class FormActionTests(SimpleTestCase):
+    """Where a form may be sent. A submission follows its redirects under
+    form-action, so one whose session has expired must be able to reach
+    sign-in at the identity provider, and nowhere else."""
+
+    def test_a_form_may_reach_the_configured_provider_and_only_its_origin(self):
+        for policy in form_action("https://sso.example.com/application/o/hq/"):
+            self.assertEqual(policy, ["'self'", "https://sso.example.com"])
+
+    def test_without_a_provider_a_form_reaches_hq_alone(self):
+        for issuer in (None, "", "sso.example.com"):
+            with self.subTest(issuer=issuer):
+                for policy in form_action(issuer):
+                    self.assertEqual(policy, ["'self'"])
 
 
 @tag("source")

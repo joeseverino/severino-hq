@@ -35,7 +35,7 @@ start on any other value.
 | The proxy lets in tailnet addresses only | the proxy exposing HQ beyond the tailnet | the proxy's access list for HQ's name |
 | The firewall requires the tailnet interface | a forged tailnet address arriving another way | the host firewall reading |
 | The tailnet policy has no allow-all rule | any device on the tailnet opening HQ | the tailnet policy |
-| Tailnet lock is on | a device added to your tailnet without your key | the tailnet policy reading |
+| Tailnet lock is on | a device added to your tailnet without your key | the host's tailnet lock reading, from its own daemon |
 | Sign-in is single sign-on only | a guessed or reused password | the sign-in backends |
 | Each token is scoped where its service allows it | a stolen token reaching the whole account | each connection's credential type |
 | Deploys wait for your approval | a merge reaching production before you see it | the production environment's reviewers, read by the GitHub App |

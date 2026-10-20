@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -341,59 +339,6 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolic
 	}, nil
 }
 
-// tailnetLockStatus is `tailscale lock status --json`.
-type tailnetLockStatus struct {
-	Enabled       bool              `json:"Enabled"`
-	NodeKeySigned bool              `json:"NodeKeySigned"`
-	TrustedKeys   []json.RawMessage `json:"TrustedKeys"`
-	FilteredPeers []struct {
-		Name     string `json:"Name"`
-		StableID string `json:"StableID"`
-	} `json:"FilteredPeers"`
-}
-
-type TailnetLock struct {
-	Enabled       bool     `json:"enabled"`
-	NodeKeySigned bool     `json:"node_key_signed"`
-	TrustedKeys   int      `json:"trusted_keys"`
-	LockedOut     []string `json:"locked_out"`
-}
-
-// tailnetLockRef is the lock reading, or {} when this controller has none.
-type tailnetLockRef struct{ *TailnetLock }
-
-func (l tailnetLockRef) MarshalJSON() ([]byte, error) {
-	if l.TailnetLock == nil {
-		return []byte("{}"), nil
-	}
-	return json.Marshal(l.TailnetLock)
-}
-
-func (r *Registry) tailnetLock() tailnetLockRef {
-	lockFile := r.Env.TailnetLock
-	if lockFile == "" {
-		return tailnetLockRef{}
-	}
-	data, err := os.ReadFile(filepath.Clean(lockFile))
-	if err != nil {
-		return tailnetLockRef{}
-	}
-	var status tailnetLockStatus
-	if err := json.Unmarshal(data, &status); err != nil {
-		return tailnetLockRef{}
-	}
-	lockedOut := []string{}
-	for _, peer := range status.FilteredPeers {
-		name := peer.Name
-		if name == "" {
-			name = peer.StableID
-		}
-		lockedOut = append(lockedOut, name)
-	}
-	slices.Sort(lockedOut)
-	return tailnetLockRef{&TailnetLock{Enabled: status.Enabled, NodeKeySigned: status.NodeKeySigned, TrustedKeys: len(status.TrustedKeys), LockedOut: lockedOut}}
-}
-
 type TailnetGroup struct {
 	Name    string   `json:"name"`
 	Members []string `json:"members"`
@@ -437,7 +382,6 @@ type TailscalePolicyRecord struct {
 	Tags          []TailnetTag          `json:"tags"`
 	Grants        []TailnetGrant        `json:"grants"`
 	Tests         json.RawMessage       `json:"tests"`
-	Lock          tailnetLockRef        `json:"lock"`
 	Services      []TailnetService      `json:"services"`
 	AppConnectors []TailnetAppConnector `json:"app_connectors"`
 	SSHRules      []TailnetSSHRule      `json:"ssh_rules"`
@@ -558,7 +502,6 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 		Tags:          tags,
 		Grants:        grants,
 		Tests:         document.tests(),
-		Lock:          r.tailnetLock(),
 		Services:      serviceRecords,
 		AppConnectors: appConnectors(policy),
 		SSHRules:      sshRules,

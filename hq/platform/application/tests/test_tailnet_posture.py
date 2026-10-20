@@ -30,8 +30,10 @@ def tailnet_connection(ref="example-tailnet", provider="tailscale"):
     )
 
 
-def policy(**record):
+def policy(*, lock=None, **record):
     store("tailscale.policy", {"record": "policy", **record})
+    if lock is not None:
+        store("host.tailnet_lock", {"record": "lock", **lock})
 
 
 def raised(rule):

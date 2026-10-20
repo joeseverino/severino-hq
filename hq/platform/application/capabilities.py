@@ -203,9 +203,9 @@ def _domain_refusal(name: str, exc: Exception) -> dict[str, Any]:
     if isinstance(exc, RecordNotFound):
         # Host-written text naming no request value (record_errors.py), and
         # what tells a caller which record it has to fix.
-        return _error("not_found", str(exc))
+        return _error("not_found", exc.reason)
     if isinstance(exc, RecordConflict):
-        return _error("conflict", str(exc))
+        return _error("conflict", exc.reason)
     # Neither handler nor dependency exception text crosses an adapter.
     # It can contain argument names, provider responses, paths, or values
     # from the request. The capability name is registry-owned and safe.

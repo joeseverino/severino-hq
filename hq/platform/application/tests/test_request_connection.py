@@ -33,13 +33,13 @@ A_TAILNET_ADDRESS = "100.64.0.5"
 A_LAN_ADDRESS = "10.0.0.50"
 
 
-def a_tailnet_policy(**lock):
-    """A swept policy carrying one tailnet-lock reading."""
+def a_tailnet_lock(**lock):
+    """A swept tailnet-lock reading."""
 
     ProviderInventory.objects.update_or_create(
-        kind="tailscale.policy",
+        kind="host.tailnet_lock",
         defaults={
-            "records": [{"lock": lock}],
+            "records": [{"record": "lock", **lock}],
             "observed_at": timezone.now(),
         },
     )
@@ -1224,13 +1224,13 @@ class TailnetLockTests(TestCase):
         self.assertIsNone(self.layer(connection(a_request())))
 
     def test_lock_off_is_shown_and_never_counts_as_proof(self):
-        a_tailnet_policy(enabled=False, trusted_keys=0)
+        a_tailnet_lock(enabled=False, trusted_keys=0)
         found = self.layer(connection(a_request()))
         self.assertFalse(found.holds)
         self.assertFalse(found.conclusive)
 
     def test_an_unsigned_node_fails_the_layer(self):
-        a_tailnet_policy(enabled=True, trusted_keys=2)
+        a_tailnet_lock(enabled=True, trusted_keys=2)
         a_tailnet(
             a_device(
                 "a-laptop",
@@ -1246,20 +1246,20 @@ class TailnetLockTests(TestCase):
         self.assertIn("No signature chains", found.detail)
 
     def test_a_signed_node_under_lock_holds_and_counts_its_signers(self):
-        a_tailnet_policy(enabled=True, trusted_keys=2)
+        a_tailnet_lock(enabled=True, trusted_keys=2)
         found = self.layer(connection(a_request()))
         self.assertTrue(found.holds)
         self.assertTrue(found.conclusive)
         self.assertIn("2 signing keys", found.evidence)
 
     def test_one_signing_key_is_not_pluralized(self):
-        a_tailnet_policy(enabled=True, trusted_keys=1)
+        a_tailnet_lock(enabled=True, trusted_keys=1)
         self.assertTrue(self.layer(connection(a_request())).evidence.endswith("1 signing key"))
 
     def test_no_device_means_no_signature_line(self):
         # The device layer above has already said no node answers here. A line
         # about that node's signature would be describing nothing.
-        a_tailnet_policy(enabled=True, trusted_keys=2)
+        a_tailnet_lock(enabled=True, trusted_keys=2)
         self.assertIsNone(self.layer(connection(a_request(A_LAN_ADDRESS))))
 
 

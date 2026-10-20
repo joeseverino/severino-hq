@@ -66,9 +66,9 @@ class DashboardLinkChoiceView(View):
         offered = {item["href"].lower() for item in link_choices(None)}
         keep = {
             href.lower()
-            for href in request.POST.getlist("href")
             # Only what was offered. A key arriving in a form post is a request,
             # and an unchecked one would let anything be stored as a shortcut.
+            for href in request.POST.getlist("href")
             if href.lower() in offered
         }
         replace(request.user, DASHBOARD_LINK, keep)

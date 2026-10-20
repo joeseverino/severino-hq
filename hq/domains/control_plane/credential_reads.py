@@ -45,9 +45,9 @@ def observer_permissions(provider: str) -> tuple[str, ...]:
     found = {name for spec in OBSERVATIONS.values() if spec.provider == provider for name in spec.requires}
     found.update(
         name
+        # A part names its credential when it is not the kind's own.
         for spec in PROVIDERS.values()
         for part in spec.parts
-        # A part names its credential when it is not the kind's own.
         if part.provider == provider or (not part.provider and provider in spec.connection_providers)
         for name in part.requires
     )

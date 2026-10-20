@@ -133,8 +133,8 @@ def _due(kinds: tuple[str, ...], now: datetime) -> list[str]:
     }
     return [
         kind
-        for kind in kinds
         # One no sweep has stored cannot be answered, so it is not asked for.
+        for kind in kinds
         if kind in attempted and kind not in asked and askable(kind) and freshness(PAGE_VISIT, attempted[kind], now).due
     ]
 

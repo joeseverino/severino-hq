@@ -32,7 +32,9 @@ _NOT_CODE = re.compile(
     r"|/\*.*?\*/"
     r"|\"(?:\\.|[^\"\\\n])*\""
     r"|'(?:\\.|[^'\\\n])*'"
-    r"|`(?:\\.|\$\{[^{}`]*\}|[^`\\])*`"
+    # A `$` is an interpolation's or a character, never either, so a long
+    # template cannot be read more than one way.
+    r"|`(?:\\.|\$\{[^{}`]*\}|\$(?!\{[^{}`]*\})|[^`\\$])*`"
     r"|(?:[(,=:\[!&|?{};]|\breturn)\s*(?P<regex>/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n\[])+/[a-z]*)",
     re.DOTALL,
 )

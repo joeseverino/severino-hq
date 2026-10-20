@@ -598,10 +598,10 @@ def _container(hop: Hop, context: _Context):
 
     known = {
         running.id
-        for machine in connections.machines_once()
-        for running in machine.containers
         # The container's name, not the hop's label ("Container"), which
         # matches nothing.
+        for machine in connections.machines_once()
+        for running in machine.containers
         if running.name == hop.name and running.id
     }
     if not known:

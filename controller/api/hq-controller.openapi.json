@@ -3438,6 +3438,38 @@
         },
         "type": "object"
       },
+      "HostTailnetLockRecord": {
+        "description": "Tailnet lock as the controller's own machine sees it: `tailscale lock status`, counted. It names no key, only how many sign.",
+        "properties": {
+          "record": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "type": "boolean"
+          },
+          "node_key_signed": {
+            "default": false,
+            "type": "boolean"
+          },
+          "trusted_keys": {
+            "default": 0,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "locked_out": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "record"
+        ],
+        "type": "object"
+      },
       "HostUnitRecord": {
         "additionalProperties": false,
         "description": "One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words or an instant in UTC; none is a path, a command line or an environment.",
@@ -4432,6 +4464,7 @@
           "host.firewall",
           "host.perimeter",
           "host.render_status",
+          "host.tailnet_lock",
           "host.unit",
           "hq.request_path",
           "machine",
@@ -4489,6 +4522,7 @@
           "ResourceKindHostFirewall",
           "ResourceKindHostPerimeter",
           "ResourceKindHostRenderStatus",
+          "ResourceKindHostTailnetLock",
           "ResourceKindHostUnit",
           "ResourceKindHQRequestPath",
           "ResourceKindMachine",
@@ -4549,6 +4583,7 @@
           "host.firewall",
           "host.perimeter",
           "host.render_status",
+          "host.tailnet_lock",
           "host.unit",
           "npm.access_list",
           "npm.certificate",
@@ -4591,6 +4626,7 @@
           "SweptHostFirewall",
           "SweptHostPerimeter",
           "SweptHostRenderStatus",
+          "SweptHostTailnetLock",
           "SweptHostUnit",
           "SweptNPMAccessList",
           "SweptNPMCertificate",

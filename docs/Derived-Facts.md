@@ -165,15 +165,23 @@ credential and a 403 a missing permission (`runtime.StatusFailure`).
 
 ### The controller's own machine
 
-Three readings are of the machine a controller runs on and need no credential:
+Four readings are of the machine a controller runs on and need no credential:
 root reads a fact on the host and `hq-host controller` mounts the answer into
 the controller read-only, naming it in an environment variable. The controller
 never holds the ruleset or directory the fact came from. A fact the launcher
 does not name is a kind that reads `Not connected` (`hasSource` in
-`controller/providers/controller.go`).
+`controller/providers/controller.go`). Each is a kind of its own, never a field
+of another kind's record, so a run not handed it cannot store an empty value
+over the last reading (`TestEveryHostReadingIsAHeldSource`).
 
 `host.firewall` is whether HQ's port must arrive on the tailnet interface, one
 distilled record (`SEVERINO_HOST_FIREWALL`).
+
+`host.tailnet_lock` is tailnet lock as the machine's own daemon states it,
+counted: whether it is on, whether this node is signed, how many keys sign and
+which machines it filters out (`SEVERINO_TAILNET_LOCK`). The launcher names the
+file whether or not the daemon answered, so a status it could not take is a
+failed read that keeps the last one and says why.
 
 `host.render_status` is what each secret renderer says about its own runs
 (`SEVERINO_RENDER_STATUS`). Its record, its findings and why the mount is safe

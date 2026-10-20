@@ -7,10 +7,6 @@ import (
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-const (
-	npmCertificateIDsKey = "npm_certificate_ids"
-)
-
 // TLSConsumer is one place a certificate is served from.
 type TLSConsumer struct {
 	Kind                 runtime.TLSConsumerKind `json:"kind"`

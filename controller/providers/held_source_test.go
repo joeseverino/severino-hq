@@ -68,6 +68,59 @@ func TestAHeldSourceIsDeclaredOncePerKind(t *testing.T) {
 	r.readsHeld(runtime.ResourceKindHostFirewall, func() bool { return true })
 }
 
+// Every reading the launcher hands a run is the source of a kind of its own.
+// A run that was not handed it then reads that kind as unconnected or failed,
+// which leaves the last reading standing, instead of folding "not handed" into
+// another kind's record as an empty value that replaces the last good one.
+func TestEveryHostReadingIsAHeldSource(t *testing.T) {
+	handed := launcherReadings(t)
+	if len(handed) < 4 {
+		t.Fatalf("found only %v in the launcher's readings", handed)
+	}
+	for _, name := range handed {
+		env, err := runtime.ReadEnvironment([]string{name + "=/run/severino-hq/reading"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := New(env, supplied(), &fakeHTTP{})
+		held := false
+		for _, source := range r.held {
+			held = held || source.has()
+		}
+		if !held {
+			t.Errorf("the launcher hands %s, and no kind is read from what it names", name)
+		}
+	}
+}
+
+// launcherReadings is each SEVERINO_ variable the launcher's readings set, as
+// its source spells them.
+func launcherReadings(t *testing.T) []string {
+	t.Helper()
+	path := filepath.Join("..", "host", "controller.go")
+	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	variable := regexp.MustCompile(`^"(SEVERINO_[A-Z_]+)=`)
+	var found []string
+	for _, declaration := range parsed.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Name.Name != "readings" {
+			continue
+		}
+		ast.Inspect(function, func(node ast.Node) bool {
+			if literal, ok := node.(*ast.BasicLit); ok && literal.Kind == token.STRING {
+				if match := variable.FindStringSubmatch(literal.Value); match != nil {
+					found = append(found, match[1])
+				}
+			}
+			return true
+		})
+	}
+	return found
+}
+
 // The dispatcher asks what each provider declared beside its reader; it names
 // no kind of its own.
 func TestTheDispatcherNamesNoKind(t *testing.T) {
@@ -123,8 +176,8 @@ func TestNoProviderReadsASettingByName(t *testing.T) {
 	}
 	// What a provider is handed has no member a setting could be looked up in.
 	for _, held := range []reflect.Type{reflect.TypeFor[runtime.Environment](), reflect.TypeFor[connections.Connection]()} {
-		for index := range held.NumField() {
-			if field := held.Field(index); field.IsExported() && (field.Type.Kind() == reflect.Map || field.Type.Kind() == reflect.Interface) {
+		for field := range held.Fields() {
+			if field.IsExported() && (field.Type.Kind() == reflect.Map || field.Type.Kind() == reflect.Interface) {
 				t.Errorf("%s.%s is a %s", held.Name(), field.Name, field.Type.Kind())
 			}
 		}
