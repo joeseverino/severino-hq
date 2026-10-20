@@ -1,5 +1,6 @@
 """A credential's missing permissions, expiry and mint command, derived."""
 
+import re
 import shlex
 from datetime import timedelta
 from pathlib import Path
@@ -14,6 +15,7 @@ from hq.domains.control_plane.credential_reads import MINTERS, observer_permissi
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL, PERMISSION_REFUSAL
+from tests.mise_tasks import body, mise_tasks
 
 from ..credential_mint import (
     credential_fixes,
@@ -37,7 +39,7 @@ STORE = {
 SECRET = "sekret-value-that-must-not-appear"
 COMMAND = (
     "CLOUDFLARE_BOOTSTRAP_TOKEN='op://Operator Vault/Cloudflare bootstrap/credential' "
-    f"op run -- ./scripts/mint-cloudflare-token.sh --account {ACCOUNT} "
+    f"op run -- mise run mint:cloudflare --account {ACCOUNT} "
     "--store 'op://Example Vault/exampleitem01/credential'"
 )
 PAGES = "cloudflare.pages_project"
@@ -143,21 +145,23 @@ class MinterContractTests(TestCase):
 
 
 @tag("source")
-class MinterScriptTests(SimpleTestCase):
-    """Each minter against the script that mints it."""
+class MinterTaskTests(SimpleTestCase):
+    """Each minter against the task that mints it: the command HQ prints runs as printed."""
 
-    def test_every_minter_matches_its_script(self):
+    def test_every_minter_matches_its_task(self):
+        tasks = mise_tasks()
+        source = (Path(settings.BASE_DIR) / "tools" / "credentials.py").read_text()
         for provider, minter in MINTERS.items():
             with self.subTest(provider=provider):
-                script = (Path(settings.BASE_DIR) / minter.script).read_text()
+                flags = set(re.findall(r'^#USAGE flag "(--[a-z-]+)', body(tasks[minter.task]), flags=re.MULTILINE))
                 for flag, variable in minter.stores:
-                    self.assertIn(flag, script)
+                    self.assertIn(flag, flags)
                     projection_field(variable)
                 for name, variable in minter.bootstrap:
-                    self.assertIn(name, script)
+                    self.assertIn(f'"{name}"', source)
                     projection_field(variable)
                 if minter.account_flag:
-                    self.assertIn(minter.account_flag, script)
+                    self.assertIn(minter.account_flag, flags)
                 self.assertTrue(observer_permissions(provider))
 
 
@@ -206,7 +210,7 @@ class MintCommandTests(TestCase):
         for word in words:
             self.assertRegex(
                 word,
-                r"^(--[a-z-]+|\./scripts/mint-[a-z-]+\.sh|op|run|--|"
+                r"^(--[a-z-]+|mise|mint:[a-z]+|op|run|--|"
                 rf"{ACCOUNT}|op://[^\n]+|[A-Z_]+=op://[^\n]+)$",
             )
 
@@ -235,7 +239,7 @@ class MintCommandTests(TestCase):
 
         fix = credential_fixes()["example-api"]
 
-        self.assertTrue(fix.command.startswith("./scripts/mint-cloudflare-token.sh "))
+        self.assertTrue(fix.command.startswith("mise run mint:cloudflare "))
         self.assertTrue(any("CLOUDFLARE_BOOTSTRAP_TOKEN" in gap for gap in fix.gaps))
 
     def test_a_healthy_credential_offers_nothing(self):
@@ -270,7 +274,7 @@ class MintCommandTests(TestCase):
             fix.command,
             "TAILSCALE_BOOTSTRAP_CLIENT_ID='op://Operator Vault/Tailscale bootstrap/username' "
             "TAILSCALE_BOOTSTRAP_CLIENT_SECRET='op://Operator Vault/Tailscale bootstrap/credential' "
-            "op run -- ./scripts/mint-tailscale-client.sh "
+            "op run -- mise run mint:tailscale "
             "--store 'op://Example Vault/exampleitem01/credential' "
             "--store-id 'op://Example Vault/exampleitem01/username'",
         )

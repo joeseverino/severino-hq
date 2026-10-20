@@ -1,0 +1,18 @@
+#!/bin/sh
+#MISE description="Mint a read-only Tailscale OAuth client for the tailscale connection (docs/Secrets.md)"
+#MISE raw=true
+#USAGE flag "--tailnet <name>" default="-" help="Tailnet (default: -, the credential's own)"
+#USAGE flag "--description <text>" default="hq-observer" help="Client description"
+#USAGE flag "--tag <tag>" var=#true help="Tag the client; repeatable"
+#USAGE flag "--scopes <file>" help="Scope list (default: tools/tailscale-observer-scopes.txt)"
+#USAGE flag "--print-secret" help="Create the client and write its secret to stdout"
+#USAGE flag "--store <ref>" help="Create the client and store its secret at op://<vault>/<item>/<field>"
+#USAGE flag "--store-id <ref>" help="With --store, store the client id at op://<vault>/<item>/<field> (same item)"
+
+# The bootstrap credential, with the oauth_keys scope, comes from the
+# environment, never a flag: TAILSCALE_BOOTSTRAP_TOKEN (an API access token),
+# or TAILSCALE_BOOTSTRAP_CLIENT_ID and TAILSCALE_BOOTSTRAP_CLIENT_SECRET (an
+# OAuth client, exchanged for a token). TAILSCALE_API_BASE overrides
+# https://api.tailscale.com/api/v2.
+# raw: stdout is the secret alone, never a line mise prefixes or holds back.
+exec uv run --quiet python -m tools.credentials mint tailscale

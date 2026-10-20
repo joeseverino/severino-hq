@@ -109,7 +109,7 @@ def _setup(provider: str, sight) -> ProviderSetup:
         permissions=tuple(sorted({*observer_permissions(provider), *kind.writes}))
         if kind.credential == "scoped"
         else (),
-        mint=minter.script if minter else "",
+        mint=" ".join(minter.invocation) if minter else "",
         item_type=_item_type(kind.shape),
         fields=_fields(provider, kind.shape),
         sees=tuple(dict.fromkeys(seen.label for seen in sight.sights)) if sight else (),

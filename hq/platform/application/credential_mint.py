@@ -7,7 +7,7 @@ refused while the credential itself is valid), when it expires (the probe's
 reading), and the command an operator runs on their own machine to mint a
 replacement and store it in the connection's 1Password item.
 
-The command is built from references only: the script, the account id the
+The command is built from references only: the task, the account id the
 readings name, and ``op://`` references to the connection item and its
 bootstrap item. No value HQ holds is a secret, so no secret can reach it.
 """
@@ -197,7 +197,7 @@ def mint_command(minter: Minter, provider: str, store: Mapping[str, str]) -> tup
 
     blocking: list[str] = []
     notes: list[str] = []
-    arguments = [f"./{minter.script}"]
+    arguments = list(minter.invocation)
     if minter.account_flag:
         accounts = _accounts(provider)
         if len(accounts) == 1:

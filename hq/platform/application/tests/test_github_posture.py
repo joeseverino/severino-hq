@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -380,12 +380,6 @@ class PostureHelpTests(TestCase):
         )
         self.assertIn("only after its workflows read secrets.HQ_APP_CLIENT_ID", runs(item)[1][0])
 
-    def test_the_wired_secrets_are_the_ones_the_wiring_sets(self):
-        wiring = (Path(__file__).resolve().parents[4] / "scripts" / "wire-github-app.py").read_text()
-
-        for name in WIRED_SECRETS:
-            self.assertIn(f'"secret", "set", "{name}"', wiring)
-
     def test_a_collaborator_and_a_writable_key_are_removed_by_name(self):
         guest = self.item(
             "only-you",
@@ -433,6 +427,15 @@ class PostureHelpTests(TestCase):
 def pin(uses: str) -> dict[str, str]:
     action, _, ref = uses.rpartition("@")
     return {"path": ".github/workflows/ci.yml", "uses": uses, "action": action, "ref": ref, "sha": "a" * 40}
+
+
+@tag("source")
+class WiringTests(SimpleTestCase):
+    def test_the_wired_secrets_are_the_ones_the_wiring_sets(self):
+        # The operator's tools are not in the image, so only a checkout can import them.
+        from tools.credentials import APP_CLIENT_ID, APP_KEY
+
+        self.assertEqual(WIRED_SECRETS, {APP_KEY, APP_CLIENT_ID})
 
 
 @override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/host")

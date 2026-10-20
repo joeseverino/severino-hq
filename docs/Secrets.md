@@ -402,13 +402,13 @@ for the operator's machine, for example:
 
 ```sh
 CLOUDFLARE_BOOTSTRAP_TOKEN='op://Example Bootstrap/cloudflare/credential' \
-  op run -- ./scripts/mint-cloudflare-token.sh --account 0123abcd \
+  op run -- mise run mint:cloudflare --account 0123abcd \
   --store 'op://Example Vault/exampleitem01/credential'
 ```
 
-`op run` resolves the bootstrap reference (Touch ID); the script checks the
+`op run` resolves the bootstrap reference (Touch ID); the task checks the
 connection item carries the field, mints a token with every permission in
-`scripts/cloudflare-observer-permissions.txt`, and pipes the secret into
+`tools/cloudflare-observer-permissions.txt`, and pipes the secret into
 `op item edit` as the item's JSON template. The secret reaches no argument,
 file or output. The controller reads it on its next render.
 
@@ -418,16 +418,16 @@ from the connection item's optional `bootstrap` field, an `op://<vault>/<item>`
 reference shaped like the connection. The renderer refuses a bootstrap in the
 vault it reads, because a reader of that vault could then mint.
 
-Two scripts mint read-only credentials. Both take the bootstrap credential
+Two tasks mint read-only credentials, both over `tools/credentials.py`. Both take the bootstrap credential
 from the environment. Without `--print-secret` (or `--store`) they print what
 they would create and create nothing.
 
-- `scripts/mint-cloudflare-token.sh` needs a bootstrap token with API Tokens
-  Write. It resolves the names in `scripts/cloudflare-observer-permissions.txt`
+- `mise run mint:cloudflare` needs a bootstrap token with API Tokens
+  Write. It resolves the names in `tools/cloudflare-observer-permissions.txt`
   and creates a user-owned token with an expiry and optional client IP ranges.
   `--list-groups` prints the current names.
-- `scripts/mint-tailscale-client.sh` creates an OAuth client with the scopes in
-  `scripts/tailscale-observer-scopes.txt`, all `:read`. The bootstrap needs the
+- `mise run mint:tailscale` creates an OAuth client with the scopes in
+  `tools/tailscale-observer-scopes.txt`, all `:read`. The bootstrap needs the
   `oauth_keys` scope: an API access token, or an OAuth client given as
   `TAILSCALE_BOOTSTRAP_CLIENT_ID` and `TAILSCALE_BOOTSTRAP_CLIENT_SECRET`.
 

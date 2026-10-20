@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.utils.html import escape
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
-from hq.domains.control_plane.credential_reads import MINTERS, observer_permissions
+from hq.domains.control_plane.credential_reads import observer_permissions
 
 from ..connection_setup import setups
 from .host_only import host_only
@@ -48,7 +48,7 @@ class SetupTests(TestCase):
         self.assertIn("DNS Write (zone)", dns.permissions)
         # Its reads, and D1 Write for the contact inbox's changes.
         self.assertEqual(set(api.permissions), {*observer_permissions("cloudflare_api"), "D1 Write (account)"})
-        self.assertEqual(api.mint, MINTERS["cloudflare_api"].script)
+        self.assertEqual(api.mint, "mise run mint:cloudflare")
 
     def test_a_coarse_login_lists_no_permissions(self):
         npm = self.by_provider()["npm"]

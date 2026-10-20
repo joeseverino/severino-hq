@@ -219,7 +219,7 @@ STANDARD: tuple[Check, ...] = (
 )
 
 
-# The secrets the host's own wiring sets (scripts/wire-github-app.py). A
+# The secrets the host's own wiring sets (mise run wire-github-app). A
 # variable by one of these names is one of them kept in the wrong place.
 WIRED_SECRETS = frozenset({"HQ_APP_KEY", "HQ_APP_CLIENT_ID"})
 

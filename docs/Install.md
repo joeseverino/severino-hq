@@ -53,11 +53,11 @@ ruleset before they can publish anything.
    [`deploy/github-apps.json`](../deploy/github-apps.json). Install it on
    this repository and each extension.
 2. Store the app's private key in 1Password, then set the secrets with
-   `scripts/wire-github-app.py`; name each extension with `--extension`, or
+   `mise run wire-github-app`; name each extension with `--extension`, or
    none. It needs `gh` and `op` signed in:
 
    ```sh
-   scripts/wire-github-app.py --vault 'Example Vault' --item 'example github app' --client-id EXAMPLE_CLIENT_ID --extension example-owner/example-extension
+   mise run wire-github-app --vault 'Example Vault' --item 'example github app' --client-id EXAMPLE_CLIENT_ID --extension example-owner/example-extension
    ```
 
 3. Set the `COMPOSITION_EXTENSIONS` repository secret: JSON in the shape of
@@ -271,7 +271,7 @@ shape needs. Every provider's item, field by field, is in
 
 Tailscale is a natural first, because HQ already needs a tailnet. In the
 Tailscale admin console, create an OAuth client with the read scopes in
-[`scripts/tailscale-observer-scopes.txt`](../scripts/tailscale-observer-scopes.txt).
+[`tools/tailscale-observer-scopes.txt`](../tools/tailscale-observer-scopes.txt).
 Then create an **API Credential** item in the vault:
 
 | Field | Value |

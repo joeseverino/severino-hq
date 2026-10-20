@@ -140,7 +140,7 @@ CONNECTIONS = {
         "GitHub App",
         "scoped",
         GITHUB_APP,
-        create="A GitHub App on your account; scripts/wire-github-app.py records its ID and stores its key.",
+        create="A GitHub App on your account; mise run wire-github-app records its ID and stores its key.",
         create_url="https://github.com/settings/apps/new",
         gives="Repo checks on your repositories, and HQ's deploys waiting for your approval.",
     ),

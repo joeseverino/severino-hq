@@ -666,10 +666,10 @@ connection acts, and HQ manages through it only when its item says so
 refused kind is a missing permission.
 
 `requires` on each reading is a tuple of exact permission names, as the minting
-scripts use them: Cloudflare as `<permission group name> (<account|zone>)`,
+tasks use them: Cloudflare as `<permission group name> (<account|zone>)`,
 Tailscale as the bare scope name; a part names its subset in `parts`.
-`scripts/cloudflare-observer-permissions.txt` and
-`scripts/tailscale-observer-scopes.txt` hold every reading's `requires` plus
+`tools/cloudflare-observer-permissions.txt` and
+`tools/tailscale-observer-scopes.txt` hold every reading's `requires` plus
 the reads in `hq.domains.control_plane.credential_reads` that are not readings
 yet; a test keeps them equal. Minting is in
 [Secrets](Secrets.md#minting-observer-credentials).

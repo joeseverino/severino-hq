@@ -60,29 +60,36 @@ def observer_permissions(provider: str) -> tuple[str, ...]:
 class Minter:
     """How an observer credential for one provider is minted and stored.
 
-    ``stores`` pairs each ``--store`` flag with the projection variable whose
-    field it fills, the secret first. ``bootstrap`` pairs each environment
-    variable the script reads with the projection variable whose field on the
-    bootstrap item holds it, so a bootstrap item is shaped like the connection.
+    ``task`` is the mise task that mints it. ``stores`` pairs each ``--store``
+    flag with the projection variable whose field it fills, the secret first.
+    ``bootstrap`` pairs each environment variable the task reads with the
+    projection variable whose field on the bootstrap item holds it, so a
+    bootstrap item is shaped like the connection.
     """
 
-    script: str
+    task: str
     stores: tuple[tuple[str, str], ...]
     bootstrap: tuple[tuple[str, str], ...]
     # The flag naming the account, when the credential is minted for one.
     account_flag: str = ""
 
+    @property
+    def invocation(self) -> tuple[str, str, str]:
+        """The words that run the task, from the checkout."""
+
+        return ("mise", "run", self.task)
+
 
 MINTERS: Mapping[str, Minter] = frozendict(
     {
         "cloudflare_api": Minter(
-            script="scripts/mint-cloudflare-token.sh",
+            task="mint:cloudflare",
             stores=(("--store", "API_TOKEN"),),
             bootstrap=(("CLOUDFLARE_BOOTSTRAP_TOKEN", "API_TOKEN"),),
             account_flag="--account",
         ),
         "tailscale": Minter(
-            script="scripts/mint-tailscale-client.sh",
+            task="mint:tailscale",
             stores=(("--store", "CLIENT_SECRET"), ("--store-id", "CLIENT_ID")),
             bootstrap=(
                 ("TAILSCALE_BOOTSTRAP_CLIENT_ID", "CLIENT_ID"),

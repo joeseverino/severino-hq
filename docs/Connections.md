@@ -66,7 +66,7 @@ Permissions, and no others:
 - `services:read`
 - `users:read`
 
-Or have `scripts/mint-tailscale-client.sh` issue one with exactly these.
+Or have `mise run mint:tailscale` issue one with exactly these.
 
 Store it as an API Credential item:
 
@@ -123,7 +123,7 @@ Permissions, and no others:
 - `Zone Read (zone)`
 - `Zone Settings Read (zone)`
 
-Or have `scripts/mint-cloudflare-token.sh` issue one with exactly these.
+Or have `mise run mint:cloudflare` issue one with exactly these.
 
 Store it as an API Credential item:
 
@@ -160,7 +160,7 @@ Store it as a Login item:
 
 Repo checks on your repositories, and HQ's deploys waiting for your approval.
 
-A GitHub App on your account; scripts/wire-github-app.py records its ID and stores its key. [Where to make it](https://github.com/settings/apps/new)
+A GitHub App on your account; mise run wire-github-app records its ID and stores its key. [Where to make it](https://github.com/settings/apps/new)
 
 Permissions, and no others:
 

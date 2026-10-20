@@ -1,0 +1,11 @@
+#!/bin/sh
+#MISE description="Put HQ's GitHub App key and client ID where the pipeline reads them (docs/Deployment.md)"
+#MISE raw=true
+#USAGE flag "--vault <vault>" required=#true help="The 1Password vault holding the app's private key"
+#USAGE flag "--item <item>" required=#true help="The 1Password item holding the app's private key"
+#USAGE flag "--client-id <id>" required=#true help="The app's client ID, from its settings page"
+#USAGE flag "--extension <repo>" var=#true help="OWNER/REPO, once per extension; none for a host without any"
+
+# Needs gh signed in as the owner of the repositories and op signed in to the
+# vault. Run it again after rotating the key.
+exec uv run --quiet python -m tools.credentials wire-github-app

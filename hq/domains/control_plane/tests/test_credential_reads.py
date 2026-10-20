@@ -1,4 +1,4 @@
-"""The minting scripts' permission lists match what the readers need.
+"""The minting tasks' permission lists match what the readers need.
 
 Derived from ``OBSERVATIONS`` at test time, so a reading registered with a new
 ``requires`` fails here until the checked-in list names it.
@@ -13,11 +13,11 @@ from ..connection_kinds import CONNECTION_CREDENTIALS
 from ..credential_reads import UNREGISTERED_READS, observer_permissions
 from ..observations import OBSERVATIONS
 
-SCRIPTS = Path(settings.BASE_DIR) / "scripts"
+LISTS = Path(settings.BASE_DIR) / "tools"
 
 
 def listed(name: str) -> tuple[str, ...]:
-    lines = (SCRIPTS / name).read_text(encoding="utf-8").splitlines()
+    lines = (LISTS / name).read_text(encoding="utf-8").splitlines()
     return tuple(line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#"))
 
 
@@ -40,7 +40,7 @@ class ObserverPermissionFileTests(SimpleTestCase):
         self.assert_matches("tailscale", "tailscale-observer-scopes.txt")
 
     def test_every_cloudflare_requires_names_its_scope(self):
-        """The minting script resolves "<name> (<account|zone>)" and nothing else."""
+        """The minting task resolves "<name> (<account|zone>)" and nothing else."""
 
         for name in observer_permissions("cloudflare_api"):
             self.assertRegex(name, r"^\S.* \((account|zone)\)$")

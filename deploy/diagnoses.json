@@ -18,7 +18,7 @@
       "id": "app-key",
       "match": "(A JSON web token could not be decoded|Bad credentials|Integration not found|could not create installation access token)",
       "title": "HQ's app key was refused",
-      "fix": "The app's key or client ID in this repository's Actions secrets does not match the app. Run scripts/wire-github-app.py again with the current key."
+      "fix": "The app's key or client ID in this repository's Actions secrets does not match the app. Run mise run wire-github-app again with the current key."
     },
     {
       "id": "composition-set",
