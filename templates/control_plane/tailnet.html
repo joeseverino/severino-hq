@@ -40,9 +40,9 @@
   <div class="section-head">
     <h2>Grants</h2>
   </div>
-  <div class="table-scroll">
+  {% table_region "Grants" %}
     <table class="data-table">
-      <thead><tr><th>From</th><th>To</th><th>Ports</th></tr></thead>
+      <thead><tr>{% table_heading "From" local_sort=tailnet.grants|sortable %}{% table_heading "To" local_sort=tailnet.grants|sortable %}{% table_heading "Ports" "identifier" local_sort=tailnet.grants|sortable %}</tr></thead>
       <tbody>
         {% for grant in tailnet.grants %}
           <tr>
@@ -53,12 +53,12 @@
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 
   <h2>Groups and tags</h2>
-  <div class="table-scroll">
+  {% table_region "Groups and tags" %}
     <table class="data-table">
-      <thead><tr><th>Name</th><th>Members</th><th>Devices</th></tr></thead>
+      <thead><tr>{% table_heading "Name" "identifier" local_sort=tailnet.group_rows|sortable %}{% table_heading "Members" local_sort=tailnet.group_rows|sortable %}{% table_heading "Devices" local_sort=tailnet.group_rows|sortable %}</tr></thead>
       <tbody>
         {% for group in tailnet.policy.groups %}
           <tr>
@@ -76,7 +76,7 @@
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 
   {% comment %}
   Two more ways this tailnet reaches things, neither of which is a device and
@@ -90,13 +90,13 @@
   {% endcomment %}
   {% if tailnet.policy.services %}
     <h2>Services</h2>
-    <div class="table-scroll">
+    {% table_region "Tailnet services" narrow=2 %}
       <table class="data-table">
-        <thead><tr><th>Service</th><th>Answers at</th><th>Ports</th><th>Note</th></tr></thead>
+        <thead><tr>{% table_heading "Service" "identifier" gutter=True local_sort=tailnet.policy.services|sortable %}{% table_heading "Answers at" "identifier" local_sort=tailnet.policy.services|sortable %}{% table_heading "Ports" "identifier" drop=2 local_sort=tailnet.policy.services|sortable %}{% table_heading "Note" drop=1 local_sort=tailnet.policy.services|sortable %}</tr></thead>
         <tbody>
           {% for service in tailnet.policy.services %}
             <tr>
-              <td><code>{{ service.name|breakable }}</code></td>
+              <td class="row-gutter"><code>{{ service.name|breakable }}</code>{% row_toggle %}</td>
               <td>{% for address in service.addresses %}<code>{{ address|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
               <td>{{ service.ports|join:" "|or_empty }}</td>
               <td class="muted">{{ service.comment|or_empty }}</td>
@@ -104,7 +104,7 @@
           {% endfor %}
         </tbody>
       </table>
-    </div>
+    {% endtable_region %}
   {% endif %}
 
   {% if tailnet.ssh_rules %}
@@ -115,13 +115,13 @@
     they are not.
     {% endcomment %}
     <h2>Shell access</h2>
-    <div class="table-scroll">
+    {% table_region "Shell access" narrow=2 %}
       <table class="data-table">
-        <thead><tr><th>From</th><th>To</th><th>As</th><th>Re-authenticate</th></tr></thead>
+        <thead><tr>{% table_heading "From" gutter=True local_sort=tailnet.ssh_rules|sortable %}{% table_heading "To" local_sort=tailnet.ssh_rules|sortable %}{% table_heading "As" "identifier" drop=2 local_sort=tailnet.ssh_rules|sortable %}{% table_heading "Re-authenticate" "status" drop=1 local_sort=tailnet.ssh_rules|sortable %}</tr></thead>
         <tbody>
           {% for row in tailnet.ssh_rules %}
             <tr>
-              <td>{% include "control_plane/_policy_names.html" with names=row.sources %}</td>
+              <td class="row-gutter">{% include "control_plane/_policy_names.html" with names=row.sources %}{% row_toggle %}</td>
               <td>{% include "control_plane/_policy_names.html" with names=row.destinations %}</td>
               <td>{% for user in row.rule.users %}<code>{{ user|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
               <td>{% if row.rule.action == "check" %}Yes{% elif row.rule.action == "accept" %}<strong>No</strong>{% else %}{{ row.rule.action }}{% endif %}</td>
@@ -129,14 +129,14 @@
           {% endfor %}
         </tbody>
       </table>
-    </div>
+    {% endtable_region %}
   {% endif %}
 
   {% if tailnet.policy.app_connectors %}
     <h2>App connectors</h2>
-    <div class="table-scroll">
+    {% table_region "App connectors" %}
       <table class="data-table">
-        <thead><tr><th>Name</th><th>Routed by</th><th>For</th></tr></thead>
+        <thead><tr>{% table_heading "Name" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}{% table_heading "Routed by" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}{% table_heading "For" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}</tr></thead>
         <tbody>
           {% for connector in tailnet.policy.app_connectors %}
             <tr>
@@ -147,7 +147,7 @@
           {% endfor %}
         </tbody>
       </table>
-    </div>
+    {% endtable_region %}
   {% endif %}
 {% else %}
   {% include "partials/_empty_state.html" with message="Tailnet policy not read yet." remedy=page.remedy %}

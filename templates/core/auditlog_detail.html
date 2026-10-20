@@ -6,7 +6,7 @@
 
 <section class="card">
   <div class="section-head"><h2>{{ event.get_action_display }}{% if event.object_type %} · {{ event.type_label }}{% endif %}</h2></div>
-  <div class="table-scroll">
+  {% table_region "Event" %}
     <table class="data-table compact-table">
       <tbody>
         <tr><th>When</th><td>{{ event.created_at|when:"exact" }}</td></tr>
@@ -17,15 +17,15 @@
         {% if event.message %}<tr><th>Message</th><td>{{ event.message }}</td></tr>{% endif %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 </section>
 
 {% if changes %}
 <section class="card">
   <div class="section-head"><h2>What changed</h2><span class="count">{{ changes|length }}</span></div>
-  <div class="table-scroll">
+  {% table_region "What changed" %}
     <table class="data-table compact-table">
-      <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
+      <thead><tr>{% table_heading "Field" "identifier" local_sort=changes|sortable %}{% table_heading "Before" local_sort=changes|sortable %}{% table_heading "After" local_sort=changes|sortable %}</tr></thead>
       <tbody>
         {% for change in changes %}
         <tr>
@@ -36,14 +36,14 @@
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 </section>
 {% endif %}
 
 {% if extra %}
 <section class="card">
   <div class="section-head"><h2>Recorded with it</h2></div>
-  <div class="table-scroll">
+  {% table_region "Recorded with it" %}
     <table class="data-table compact-table">
       <tbody>
         {% for key, value in extra.items %}
@@ -51,7 +51,7 @@
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 </section>
 {% endif %}
 
@@ -60,13 +60,13 @@
 {% if siblings and not approval %}
 <section class="card">
   <div class="section-head"><h2>Rest of this operation</h2><span class="count">{{ siblings|length }}</span></div>
-  <div class="table-scroll">
+  {% table_region "Rest of this operation" narrow=2 %}
     <table class="data-table compact-table">
-      <thead><tr><th>When</th><th>Action</th><th>Object</th><th>Message</th></tr></thead>
+      <thead><tr>{% table_heading "When" "status" local_sort=siblings|sortable gutter=True %}{% table_heading "Action" local_sort=siblings|sortable %}{% table_heading "Object" local_sort=siblings|sortable drop=2 %}{% table_heading "Message" local_sort=siblings|sortable drop=1 %}</tr></thead>
       <tbody>
         {% for row in siblings %}
         <tr>
-          <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a></td>
+          <td class="row-gutter"><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a>{% row_toggle %}</td>
           <td>{{ row.get_action_display }}</td>
           <td>{{ row.object_repr|default:row.type_label|or_empty }}</td>
           <td>{% if row.message %}{{ row.message|truncatewords:12 }}{% else %}{% empty_value %}{% endif %}</td>
@@ -74,20 +74,20 @@
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 </section>
 {% endif %}
 
 {% if history %}
 <section class="card">
   <div class="section-head"><h2>Everything else to this object</h2><span class="count">{{ history|length }}</span></div>
-  <div class="table-scroll">
+  {% table_region "Everything else to this object" narrow=2 %}
     <table class="data-table compact-table">
-      <thead><tr><th>When</th><th>Action</th><th>Who</th><th>Message</th></tr></thead>
+      <thead><tr>{% table_heading "When" "status" local_sort=history|sortable gutter=True %}{% table_heading "Action" local_sort=history|sortable %}{% table_heading "Who" local_sort=history|sortable drop=2 %}{% table_heading "Message" local_sort=history|sortable drop=1 %}</tr></thead>
       <tbody>
         {% for row in history %}
         <tr>
-          <td><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a></td>
+          <td class="row-gutter"><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a>{% row_toggle %}</td>
           <td>{{ row.get_action_display }}</td>
           <td>{{ row.actor_label }}</td>
           <td>{% if row.message %}{{ row.message|truncatewords:12 }}{% else %}{% empty_value %}{% endif %}</td>
@@ -95,7 +95,7 @@
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 </section>
 {% endif %}
 {% endblock %}

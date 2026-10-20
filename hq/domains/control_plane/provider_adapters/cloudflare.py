@@ -498,6 +498,7 @@ DNS_RECORD = ProviderSpec(
     readout=_dns_record_readout,
     from_record=_dns_record_from_record,
     fronts=lambda spec: bool(spec.get("proxied")),
+    slot=lambda spec: str(spec.get("record_type", "")).upper(),
     sample_record={
         "zone": "example.com",
         "name": "www.example.com",

@@ -23,16 +23,16 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
 <div class="two-col">
   <section>
     <h2>Expenses by category, {{ year }}</h2>
-    <div class="table-scroll">
+    {% table_region "Expenses by category" %}
     <table class="data-table">
-      <thead><tr><th>Category</th><th>Total</th><th>Deductible (est.)</th></tr></thead>
+      <thead><tr>{% table_heading "Category" local_sort=expenses_by_category|sortable %}{% table_heading "Total" "numeric" local_sort=expenses_by_category|sortable %}{% table_heading "Deductible (est.)" "numeric" local_sort=expenses_by_category|sortable %}</tr></thead>
       <tbody>
         {% for row in expenses_by_category %}
           <tr><td><a href="{{ row.url }}">{{ row.label }}</a></td><td>{{ row.total|money }}</td><td>{{ row.deductible|money }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
-    </div>
+    {% endtable_region %}
   </section>
 
   <section>

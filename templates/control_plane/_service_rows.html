@@ -1,22 +1,25 @@
 {% comment %}
-One table of services, a tbody per group (`groups`: label, rows, reorderable),
+One table of services, a tbody per group (`groups`: label, rows, reorderable;
+`row_count`: the rows in all of them),
 so the favorites and the rest share one set of columns without fixing their
 widths. A group's heading shows only when there is more than one group.
+Columns leave a narrow table from the far end, so the facets are ranked from
+the last one back.
 
 `reorderable` turns on the up/down controls. They are only meaningful inside the
 favorites, where the order is something the operator chose; among the rest,
 alphabetical is the order and there is nothing to move.
 {% endcomment %}
-<div class="table-scroll">
+{% table_region "Services" room="snug" mid=4 narrow=6 %}
   <table class="data-table service-table">
     <thead>
       <tr>
-        <th>Service</th>
-        <th>Open to</th>
-        {% for id, label in facets %}<th>{{ label }}</th>{% endfor %}
-        <th>Runs on</th>
-        {% if show_service_projects %}<th>Project</th>{% endif %}
-        <th class="key-col">State</th>
+        {% table_heading "Service" "identifier" gutter=True local_sort=row_count|sortable %}
+        {% table_heading "Open to" "status" drop=facets|length|add:3 local_sort=row_count|sortable %}
+        {% for id, label in facets %}{% table_heading label drop=forloop.revcounter|add:2 local_sort=row_count|sortable %}{% endfor %}
+        {% table_heading "Runs on" drop=2 local_sort=row_count|sortable %}
+        {% if show_service_projects %}{% table_heading "Project" drop=1 local_sort=row_count|sortable %}{% endif %}
+        {% table_heading "State" "status" css="key-col" local_sort=row_count|sortable %}
       </tr>
     </thead>
     {% for group_label, rows, reorderable in groups %}
@@ -24,7 +27,7 @@ alphabetical is the order and there is nothing to move.
       {% if groups|length > 1 %}<tr class="row-group"><th colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}" scope="rowgroup">{{ group_label }}</th></tr>{% endif %}
       {% for service in rows %}
         <tr>
-          <td>
+          <td class="row-gutter">
             <div class="service-name">
               {% url 'control_plane:service_pin' service.hostname as pin_url %}
               {% if service.pinned %}
@@ -45,6 +48,7 @@ alphabetical is the order and there is nothing to move.
                 </span>
               {% endif %}
             </div>
+            {% row_toggle %}
           </td>
           {% with exposure=service.exposure %}
             <td><span class="exposure exposure-{{ exposure.level }}" title="{{ exposure.sentence }}">{{ exposure.short }}</span></td>
@@ -109,4 +113,4 @@ alphabetical is the order and there is nothing to move.
     </tbody>
     {% endfor %}
   </table>
-</div>
+{% endtable_region %}

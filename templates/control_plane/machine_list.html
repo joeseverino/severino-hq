@@ -8,23 +8,24 @@ anyway, and would go on meaning nothing after it stopped being.
 {% endcomment %}
 
 {% if machines %}<p class="muted">{{ machines|length|counted:"machine" }}: {% for count, state in state_counts %}{{ count }} {{ state }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
-<div class="table-scroll">
+{% table_region "Machines" room="shared" narrow=3 %}
   <table class="data-table">
     <thead>
       <tr>
-        <th>Machine</th>
-        <th>Read through</th>
-        <th>Containers</th>
-        <th>Serves</th>
-        <th class="key-col">State</th>
+        {% table_heading "Machine" "identifier" gutter=True local_sort=machines|sortable %}
+        {% table_heading "Read through" "identifier" drop=3 local_sort=machines|sortable %}
+        {% table_heading "Containers" drop=2 local_sort=machines|sortable %}
+        {% table_heading "Serves" "identifier" drop=1 local_sort=machines|sortable %}
+        {% table_heading "State" "status" css="key-col" local_sort=machines|sortable %}
       </tr>
     </thead>
     <tbody>
       {% for machine in machines %}
         <tr>
-          <td>
+          <td class="row-gutter">
             <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} <span class="tag" title="{{ role.detail }}">{{ role.label }}</span>{% endfor %}
             {% if machine.role %}<br><span class="muted table-clamp" title="{{ machine.role }}">{{ machine.role }}</span>{% endif %}
+            {% row_toggle %}
           </td>
           <td>
             {% for ref in machine.reached_by %}{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} <span class="muted">not answering</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}
@@ -55,5 +56,5 @@ anyway, and would go on meaning nothing after it stopped being.
       {% endfor %}
     </tbody>
   </table>
-</div>
+{% endtable_region %}
 {% endblock %}

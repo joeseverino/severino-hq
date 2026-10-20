@@ -87,6 +87,8 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     def types_held(self) -> frozenset[str]:
         return frozenset(content_type for content_type, _url in self._held)
 
+    table_drop_narrow = 3
+
     @cached_property
     def table_columns(self) -> tuple[TableColumn, ...]:
         typed = (TableColumn("Type", "content_type"),) if len(self.types_held) > 1 else ()

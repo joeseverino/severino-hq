@@ -64,6 +64,9 @@ class Claim:
     readings: tuple[Reading, ...] = ()
     # Whether the provider answers for the name itself (its ``fronts``).
     fronted: bool = False
+    # What tells this claim from another of its kind that would not replace it
+    # (the provider's ``slot``): a DNS record's type.
+    slot: str = ""
 
     @property
     def url(self) -> str:
@@ -206,6 +209,7 @@ def _read_declarations() -> Declarations:
             resource_health(resource),
             _readings(provider, resource),
             fronted=_fronted(provider, resource),
+            slot=_slot(provider, resource),
         )
         ledger.file(provider, claim, reading)
 
@@ -288,6 +292,15 @@ def runtime_claim(origin: Origin | None, containers: dict[tuple[str, str], Any])
         _readings(provider, resource),
         fronted=_fronted(provider, resource),
     )
+
+
+def _slot(provider: Any, resource: ManagedResource) -> str:
+    if provider.slot is None:
+        return ""
+    try:
+        return provider.slot(resource.spec)
+    except KeyError, TypeError, ValueError:
+        return ""
 
 
 def _fronted(provider: Any, resource: ManagedResource) -> bool:

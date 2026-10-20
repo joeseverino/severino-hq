@@ -33,6 +33,7 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
     page_title = "Expenses"
     table_search_scope = "expenses"
     table_selectable = True
+    table_drop_narrow = 4
     table_columns = (
         TableColumn("Date", "date", "Oldest expense", "Newest expense"),
         TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A", css="key-col"),

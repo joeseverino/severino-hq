@@ -14,7 +14,7 @@ dismissed row is its title and the way back.
 {% endcomment %}
 {% for entry in items %}{% with item=entry|decision %}
 <tr class="queue-row"{% if triage %} id="{{ item.anchor }}"{% endif %} data-attention-item{% if folded %} data-folded="{{ folded }}"{% endif %}>
-  <td class="queue-mark">{% include "partials/_urgency_pill.html" with item=item mark=True only %}</td>
+  <td class="queue-mark row-gutter">{% include "partials/_urgency_pill.html" with item=item mark=True only %}{% row_toggle %}</td>
   <td class="queue-what">
     <div class="attention-head">
       {% if item.href and not here %}<a class="attention-title" href="{{ item.href }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}

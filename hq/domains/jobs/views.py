@@ -35,6 +35,7 @@ class JobListView(PageMixin, TableListMixin, ListView):
     table_search_fields = ("label", "kind", "note")
     table_search_placeholder = "Search jobs and results…"
     page_lede = "Work HQ does on a schedule or that you started, and how each run went."
+    table_drop_narrow = 3
     table_columns = (
         TableColumn("Started", "created_at"),
         TableColumn("Job", css="key-col"),

@@ -59,6 +59,7 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
     page_title = "Receipts"
     table_search_scope = "receipts"
     table_selectable = True
+    table_drop_narrow = 3
     table_columns = (
         TableColumn("Vendor", "vendor"),
         TableColumn("Date", "date", "Oldest receipt date", "Newest receipt date"),

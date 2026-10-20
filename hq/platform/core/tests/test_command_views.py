@@ -342,7 +342,8 @@ class CommandResultProjectionTests(TestCase):
         self.assertEqual(table["label"], "answers")
         self.assertEqual(table["columns"], ("name", "type", "value", "ttl"))
         self.assertEqual(table["rows"][0], ("example.test", "A", "192.0.2.1", MISSING))
-        self.assertIn("type", texts(response, "th"))
+        # Each heading is its column's name, then the sort control's mark.
+        self.assertIn("type", [heading.split()[0] for heading in texts(response, "th")])
         self.assertIn("answers · 2", text(response))
         self.assertEqual(result_title(response), "Done")
         # The JSON is still there for anyone checking HQ against another tool,

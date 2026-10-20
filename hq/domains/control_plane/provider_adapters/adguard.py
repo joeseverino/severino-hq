@@ -17,6 +17,12 @@ def _hostnames(spec: dict[str, Any]) -> tuple[str, ...]:
     return (spec["domain"],)
 
 
+def _family(spec: dict[str, Any]) -> str:
+    """A rewrite answers with an IPv4 or an IPv6 address; the two coexist."""
+
+    return "AAAA" if ":" in str(spec.get("answer", "")) else "A"
+
+
 def _readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
     return (("Answers with", spec.get("answer", ""), status.get("answer", "")),)
 
@@ -64,6 +70,7 @@ DEFINITION = ProviderSpec(
     hostnames=_hostnames,
     seed=_seed,
     answers=_answers,
+    slot=_family,
     origin=_origin,
     from_record=_from_record,
     sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},

@@ -1,15 +1,16 @@
 {% comment %}
 Rules as one table, a group per resource: the columns are the same for every
 resource, so they are headed once rather than once per resource. A column per
-surface and per agent, so a rule is read and changed where it sits.
+surface and per agent, so a rule is read and changed where it sits. On a
+narrow page the surfaces go from the far end, then the default.
 {% endcomment %}
-<div class="table-scroll">
+{% table_region "Rules" mid=2 narrow=column_heads|length|add:1 %}
   <table class="data-table policy-table">
     <thead>
       <tr>
-        <th scope="col">Action</th>
-        <th scope="col">Default</th>
-        {% for head in column_heads %}<th scope="col" title="{{ head.column.detail }}">{{ head.column.label }}{% if head.dormant %} <span class="policy-off">off in HQ's settings</span>{% endif %}</th>{% endfor %}
+        {% table_heading "Action" local_sort=True gutter=True %}
+        {% table_heading "Default" "status" local_sort=True drop=column_heads|length|add:1 %}
+        {% for head in column_heads %}{% table_heading head.column.label "control" local_sort=True drop=forloop.revcounter title=head.column.detail note=head.dormant|yesno:"off in HQ's settings," note_css="policy-off" %}{% endfor %}
       </tr>
     </thead>
     {% for group in groups %}
@@ -17,7 +18,7 @@ surface and per agent, so a rule is read and changed where it sits.
         <tr class="row-group"><th colspan="{{ column_heads|length|add:2 }}" scope="rowgroup">{{ group.label }}</th></tr>
         {% for row in group.rows %}
           <tr>
-            <th scope="row">{{ row.label }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span>{% endif %}</th>
+            <th scope="row" class="row-gutter">{{ row.label }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span>{% endif %}{% row_toggle %}</th>
             <td class="policy-default">{{ row.default }}</td>
             {% for cell in row.cells %}<td>{% include "core/_policy_setting.html" %}</td>{% endfor %}
           </tr>
@@ -25,4 +26,4 @@ surface and per agent, so a rule is read and changed where it sits.
       </tbody>
     {% endfor %}
   </table>
-</div>
+{% endtable_region %}

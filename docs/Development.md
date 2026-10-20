@@ -175,9 +175,10 @@ in Safari) and runs `hq.platform.core.browser_tests` and
 `hq.platform.core.estate_browser_tests`. It renders the
 dashboard, service, connections, machine, topology and project pages over a
 synthetic `example.*` estate at phone through desktop widths, with JavaScript
-off, and checks that nothing escapes the page sideways, tables scroll in their
-own container, grid rows end together, siblings never overlap, and the rules
-of `hq/platform/core/browser_audit.js` hold. A failure saves a screenshot to the OS
+off and on, and checks that nothing escapes the page sideways, a table fits
+its region at every width, nothing moves once the server's page is drawn,
+grid rows end together, siblings never overlap, and the rules of
+`hq/platform/core/browser_audit.js` hold. A failure saves a screenshot to the OS
 temporary directory. A check selects markup only through `SELECTORS`, and
 `hq/platform/core/tests/test_browser_selectors.py` fails on a selector no
 template renders.

@@ -33,12 +33,12 @@
     </div>
     <details class="chart-data">
       <summary>View chart data</summary>
-      <div class="table-scroll">
+      {% table_region chart.title pane=True %}
         <table class="data-table compact-table">
-          <thead><tr><th>Period</th>{% for heading in chart.table_headings %}<th>{{ heading }}</th>{% endfor %}</tr></thead>
+          <thead><tr>{% table_heading "Period" "status" %}{% for heading in chart.table_headings %}{% table_heading heading "numeric" %}{% endfor %}</tr></thead>
           <tbody>{% for row in chart.table_rows %}<tr><th>{{ row.label }}</th>{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
         </table>
-      </div>
+      {% endtable_region %}
     </details>
   {% endif %}
 </figure>

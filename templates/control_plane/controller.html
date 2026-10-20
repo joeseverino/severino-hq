@@ -64,13 +64,13 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 {% if controller.queue %}
 <section class="page-section" aria-labelledby="controller-queue">
   <div class="section-head"><h2 id="controller-queue">Waiting to be applied</h2><span class="count">{{ controller.queue|length }}</span></div>
-  <div class="table-scroll">
+  {% table_region "Waiting to be applied" narrow=2 %}
     <table class="data-table">
-      <thead><tr><th>What</th><th>Change</th><th class="key-col">State</th><th>Asked</th></tr></thead>
+      <thead><tr>{% table_heading "What" "identifier" gutter=True local_sort=controller.queue|sortable %}{% table_heading "Change" drop=2 local_sort=controller.queue|sortable %}{% table_heading "State" "status" css="key-col" local_sort=controller.queue|sortable %}{% table_heading "Asked" "status" drop=1 local_sort=controller.queue|sortable %}</tr></thead>
       <tbody>
         {% for work in controller.queue %}
           <tr>
-            <td><strong>{% entity "resource"|entity_of:work.resource %}</strong></td>
+            <td class="row-gutter"><strong>{% entity "resource"|entity_of:work.resource %}</strong>{% row_toggle %}</td>
             <td>{{ work.action }}</td>
             <td>{{ work.state }}</td>
             <td>{{ work.created_at|when:"ago" }}</td>
@@ -78,7 +78,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 </section>
 {% endif %}
 
@@ -86,13 +86,13 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 <section class="page-section" aria-labelledby="controller-readings">
   <div class="section-head"><h2 id="controller-readings">Readings</h2><span class="count">{{ controller.readings|length }}</span></div>
   {% if controller.readings %}
-  <div class="table-scroll">
+  {% table_region "Readings" narrow=2 %}
     <table class="data-table">
-      <thead><tr><th>Reading</th><th>Last tried</th><th>Last succeeded</th><th class="num-col">Items</th><th class="key-col">Result</th></tr></thead>
+      <thead><tr>{% table_heading "Reading" gutter=True local_sort=controller.readings|sortable %}{% table_heading "Last tried" "status" drop=3 local_sort=controller.readings|sortable %}{% table_heading "Last succeeded" "status" drop=2 local_sort=controller.readings|sortable %}{% table_heading "Items" css="num-col" drop=1 local_sort=controller.readings|sortable %}{% table_heading "Result" "status" css="key-col" local_sort=controller.readings|sortable %}</tr></thead>
       <tbody>
         {% for reading in controller.readings %}
           <tr>
-            <td><strong title="{{ reading.kind }}">{{ reading.label }}</strong></td>
+            <td class="row-gutter"><strong title="{{ reading.kind }}">{{ reading.label }}</strong>{% row_toggle %}</td>
             <td>{{ reading.attempted_at|when:"ago" }}</td>
             <td>{{ reading.observed_at|when:"ago" }}</td>
             <td class="num-col">{{ reading.records }}</td>
@@ -101,7 +101,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
   {% else %}
     {% include "partials/_empty_state.html" with message="The controller has not read anything yet." %}
   {% endif %}

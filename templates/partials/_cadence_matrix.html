@@ -9,13 +9,13 @@ what makes the comparison possible. Use _cadence.html for a single strip.
 
 Pass compact=True where it shares a row with a chart rather than owning a page.
 {% endcomment %}
-<div class="table-scroll" data-chart>
+{% table_region label|default:"Tracked" chart=True %}
   <table class="data-table cadence-matrix{% if compact %} is-compact{% endif %}">
     <thead>
       <tr>
-        <th scope="col">{{ label|default:"Tracked" }}</th>
-        {% for period in matrix.periods %}<th scope="col" class="cadence-period">{{ period }}</th>{% endfor %}
-        <th scope="col" class="cadence-total">Hit</th>
+        {% table_heading label|default:"Tracked" %}
+        {% for period in matrix.periods %}{% table_heading period "status" css="cadence-period" %}{% endfor %}
+        {% table_heading "Hit" "numeric" css="cadence-total" %}
       </tr>
     </thead>
     <tbody>
@@ -36,4 +36,4 @@ Pass compact=True where it shares a row with a chart rather than owning a page.
       {% endfor %}
     </tbody>
   </table>
-</div>
+{% endtable_region %}

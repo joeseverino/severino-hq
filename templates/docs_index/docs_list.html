@@ -1,6 +1,6 @@
 {% extends "list_page.html" %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a></td>
+  <td class="row-gutter"><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a>{% row_toggle %}</td>
   <td><code>{{ row.doc_id|breakable }}</code></td>
   <td>{{ row.get_doc_type_display }}</td>
   <td>{{ row.get_environment_display }}</td>

@@ -37,6 +37,7 @@ class AssetListView(PageMixin, TableListMixin, ListView):
         TableFilter("status", "Status", "status", Asset.Status.choices),
         TableFilter("category", "Category", "category", ASSET_CATEGORY_CHOICES),
     )
+    table_drop_mid, table_drop_narrow = 1, 5
     table_columns = (
         TableColumn("Item", "item_name", "Name A–Z", "Name Z–A"),
         TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),

@@ -471,6 +471,22 @@ which `page.html` draws once with the page's context. A block a frame does not
 list is the host's, and an override of it is refused rather than silently
 ignored the day the frame stops rendering it.
 
+A data table is declared through the table tags, so its shape is in the HTML on
+first paint. `{% table_region "Label" mid=1 narrow=3 %}…{% endtable_region %}`
+wraps it in its labelled scroll region, saying how many columns, by rank,
+leave in a box under 1000px and under 640px; each column heading is
+`{% table_heading "Name" "identifier" %}`, with its kind (`prose`,
+`identifier`, `numeric`, `status` or `control`, following from `num-col`,
+`date-col` or `actions-col` when left out), `drop=` the order a narrow table
+lets it go in (never on the column that names the row or a `key-col`), and
+`sort=` for a list sorted on the server or `local_sort=True` for one sorted on
+the page. A row that holds more than it shows ends its naming cell with
+`{% row_toggle %}`; that cell in every row, and its heading (`gutter=True`),
+carry `row-gutter`; the stylesheet shows the toggle only where the row holds
+something back. A `TableListMixin` list declares the same through
+`TableColumn(kind=)`, its ranks derived from the columns unless one says
+`drop=`, and its counts as `table_drop_mid` and `table_drop_narrow`.
+
 <!-- sdk_contract: shared UI contract -->
 
 | Frame | Blocks a page fills | What it is |
@@ -499,9 +515,9 @@ ignored the day the frame stops rendering it.
 | `partials/_timeline.html` | nothing | `plain`, `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% empty_value %}`, `{% entity %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`. Host filters: `|ago`, `|counted:arg`, `|money[:arg]`, `|or_empty`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `humanize`, `static` or the extension's own libraries.
+Host tags: `{% empty_value %}`, `{% entity %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_toggle %}`, `{% table_heading %}`, `{% table_region %}`. Host filters: `|ago`, `|counted:arg`, `|money[:arg]`, `|or_empty`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `humanize`, `static` or the extension's own libraries.
 
-Classes: `allocation`, `allocation-legend`, `btn`, `card`, `card-columns`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `inline`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `notice`, `notice-attention`, `num-col`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `pill`, `pill-attention`, `pill-good`, `pill-neutral`, `pill-serious`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-empty`, `row-group`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-head`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `worth`, `worth-attention`, `worth-good`, `worth-neutral`.
+Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card`, `card-columns`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `num-col`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `pill`, `pill-attention`, `pill-good`, `pill-neutral`, `pill-serious`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-head`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `worth`, `worth-attention`, `worth-good`, `worth-neutral`.
 
 Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`.
 

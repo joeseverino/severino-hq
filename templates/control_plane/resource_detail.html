@@ -56,22 +56,23 @@ declaration's machinery: the controller's actions are the buttons above, and
     <section class="control-card">
       <h2>Where it is installed</h2>
       {% if display_consumers %}
-      <div class="table-scroll">
+      {% table_region "Where it is installed" %}
       <table class="data-table compact-table">
-        <thead><tr><th>Place</th><th>Names checked</th></tr></thead>
+        <thead><tr>{% table_heading "Place" "identifier" gutter=True local_sort=display_consumers|sortable %}{% table_heading "Names checked" "identifier" local_sort=display_consumers|sortable %}</tr></thead>
         <tbody>
           {% for consumer in display_consumers %}
             <tr>
-              <td>
+              <td class="row-gutter">
                 <strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name }}</a>{% else %}{{ consumer.name }}{% endif %}</strong>
                 <br><span class="muted">through {% entity "connection"|entity_of:consumer.connection_ref %}</span>
+                {% row_toggle %}
               </td>
               <td>{% for domain in consumer.display_domains %}{% entity "service"|entity_of:domain %}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
-      </div>
+      {% endtable_region %}
       {% elif resolution_error %}
         {% comment %}Why it is installed nowhere, where the list would be.{% endcomment %}
         <div class="notice notice-attention"><strong>Not installed</strong><p>{{ resolution_error }}</p></div>
@@ -232,9 +233,9 @@ certificate, so the relation reads from both ends.
   {% if resource.status.published_facts %}
     <section class="control-card">
       <h2>Saved to 1Password</h2>
-      <div class="table-scroll">
+      {% table_region "Saved to 1Password" %}
       <table class="data-table compact-table">
-        <thead><tr><th>Item</th><th>Last saved</th></tr></thead>
+        <thead><tr>{% table_heading "Item" "identifier" local_sort=resource.status.published_facts|sortable %}{% table_heading "Last saved" "status" local_sort=resource.status.published_facts|sortable %}</tr></thead>
         <tbody>
           {% for publication in resource.status.published_facts %}
             <tr>
@@ -256,7 +257,7 @@ certificate, so the relation reads from both ends.
           {% endfor %}
         </tbody>
       </table>
-      </div>
+      {% endtable_region %}
     </section>
   {% endif %}
 {% include "partials/_relationships.html" %}
@@ -293,13 +294,13 @@ above it found is not a row.
 {% endcomment %}
 {% if operations %}
 <h2>History</h2>
-<div class="table-scroll">
+{% table_region "History" narrow=1 %}
   <table class="data-table">
-    <thead><tr><th>What</th><th>Result</th><th>By</th><th>When</th></tr></thead>
+    <thead><tr>{% table_heading "What" gutter=True local_sort=operations|sortable %}{% table_heading "Result" local_sort=operations|sortable %}{% table_heading "By" drop=1 local_sort=operations|sortable %}{% table_heading "When" "status" local_sort=operations|sortable %}</tr></thead>
     <tbody>
       {% for operation in operations %}
         <tr>
-          <td>{{ operation.action_label }}</td>
+          <td class="row-gutter">{{ operation.action_label }}{% row_toggle %}</td>
           <td class="operation-result">
             <span class="pill pill-{{ operation.tone }}">{{ operation.state_label }}</span>
             <strong>{{ operation.headline }}</strong>
@@ -328,6 +329,6 @@ above it found is not a row.
       {% endfor %}
     </tbody>
   </table>
-</div>
+{% endtable_region %}
 {% endif %}
 {% endblock %}

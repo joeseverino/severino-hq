@@ -55,12 +55,12 @@ a zero-based axis would draw every reading as the same height.
     </div>
     <details class="chart-data">
       <summary>View chart data</summary>
-      <div class="table-scroll">
+      {% table_region chart.title pane=True %}
         <table class="data-table compact-table">
-          <thead><tr><th>Date</th>{% for heading in chart.table_headings %}<th class="num-col">{{ heading }}</th>{% endfor %}</tr></thead>
+          <thead><tr>{% table_heading "Date" "status" %}{% for heading in chart.table_headings %}{% table_heading heading css="num-col" %}{% endfor %}</tr></thead>
           <tbody>{% for row in chart.table_rows %}<tr><th>{{ row.label }}</th>{% for cell in row.cells %}<td class="num-col">{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
         </table>
-      </div>
+      {% endtable_region %}
     </details>
   {% endif %}
 </figure>

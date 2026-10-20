@@ -1,7 +1,7 @@
 {% extends "list_page.html" %}
 {% block summary %}{% include "expenses/_cost_totals.html" %}{% endblock %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}">{{ row.date|when }}</a></td>
+  <td class="row-gutter"><a href="{{ row.get_absolute_url }}">{{ row.date|when }}</a>{% row_toggle %}</td>
   <td>{{ row.vendor }}</td>
   <td>{{ row.item }}</td>
   <td>{{ row.get_category_display }}</td>

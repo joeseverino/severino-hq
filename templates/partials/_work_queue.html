@@ -6,11 +6,11 @@ the same rows under their domains. The dashboard's short list is
 `_queue_glance.html`.
 {% endcomment %}
 {% if items %}
-<div class="table-scroll">
+{% table_region "Queue" %}
   <table class="data-table queue-table">
     <tbody>{% include "partials/_queue_rows.html" %}</tbody>
   </table>
-</div>
+{% endtable_region %}
 {% else %}
 <p class="attention-clear">{{ empty|default:"Nothing needs you." }}</p>
 {% endif %}

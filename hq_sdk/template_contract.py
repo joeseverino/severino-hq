@@ -72,7 +72,16 @@ PARTIALS: dict[str, str] = {
 
 # The host's own tags and filters an extension may use. Django's are public
 # too; they are recorded from Django itself.
-TAGS = ("empty_value", "entity", "post_button", "reference", "referenced_by")
+TAGS = (
+    "empty_value",
+    "entity",
+    "post_button",
+    "reference",
+    "referenced_by",
+    "row_toggle",
+    "table_heading",
+    "table_region",
+)
 FILTERS = ("ago", "counted", "money", "or_empty", "span", "when", "web_url")
 
 # Django's own libraries an extension may ``{% load %}`` beside its own.
@@ -81,6 +90,7 @@ LIBRARIES = ("humanize", "static")
 # Classes an extension may write. Layout, tokens and states belong to the host;
 # a class missing here is the host's to add, never the extension's to invent.
 CLASSES = (
+    "actions-col",
     "allocation",
     "allocation-legend",
     "btn",
@@ -114,12 +124,14 @@ CLASSES = (
     "ghost",
     "help",
     "inline",
+    "key-col",
     "kv",
     "list-rows",
     "msg",
     "msg-error",
     "msg-warning",
     "muted",
+    "narrow-more",
     "notice",
     "notice-attention",
     "num-col",
@@ -148,8 +160,10 @@ CLASSES = (
     "route-scale",
     "route-swatch",
     "row-actions",
+    "row-below",
     "row-empty",
     "row-group",
+    "row-gutter",
     "row-less",
     "row-main",
     "row-meta",
@@ -357,7 +371,9 @@ def _tag_parameters(compile_function: Any) -> list[str]:
     if target is None:
         return []
     parameters = _parameters(target) or []
-    return parameters[1:] if parameters[:1] == ["context"] else parameters
+    parameters = parameters[1:] if parameters[:1] == ["context"] else parameters
+    # A block tag is handed what it encloses as ``content``, never by the page.
+    return parameters[1:] if parameters[:1] == ["content"] else parameters
 
 
 def _libraries(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:

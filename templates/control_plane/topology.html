@@ -107,13 +107,13 @@
     <h2 id="topology-relations-heading">Links shown</h2>
     <span class="muted">{{ topology_edges|length|counted:"link" }}</span>
   </header>
-  <div class="table-scroll">
+  {% table_region "Links shown" pane=True narrow=2 %}
     <table class="data-table">
-      <thead><tr><th>From</th><th>Link</th><th>To</th><th>State</th></tr></thead>
+      <thead><tr>{% table_heading "From" "identifier" gutter=True local_sort=topology_edges|sortable %}{% table_heading "Link" drop=3 local_sort=topology_edges|sortable %}{% table_heading "To" "identifier" drop=2 local_sort=topology_edges|sortable %}{% table_heading "State" "status" drop=1 local_sort=topology_edges|sortable %}</tr></thead>
       <tbody>
         {% for item in topology_edges %}
           <tr data-topology-edge="{{ item.edge.source }} {{ item.edge.target }}">
-            <td>{% entity item.source_link %}<br><span class="muted">{{ item.source_link.kind_label }}</span></td>
+            <td class="row-gutter">{% entity item.source_link %}<br><span class="muted">{{ item.source_link.kind_label }}</span>{% row_toggle %}</td>
             <td>{{ item.edge.label }}</td>
             <td>{% entity item.target_link %}<br><span class="muted">{{ item.target_link.kind_label }}</span></td>
             <td><span class="pill pill-{{ item.edge.status }}">{{ item.edge.status|title }}</span></td>
@@ -121,7 +121,7 @@
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 </section>
 {% endif %}
 {% endblock %}

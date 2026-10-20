@@ -20,14 +20,14 @@
   a control belonging to nothing.
   {% endcomment %}
   {% if section.folded %}<details class="section-fold"><summary><h2>{{ section.label }} <span class="heading-aside">{{ section.records|length }}</span></h2></summary>{% else %}<h2>{{ section.label }}</h2>{% endif %}
-  <div class="table-scroll">
+  {% table_region section.label narrow=section.columns|length|add:-2 %}
     <table class="data-table{% if section.compact %} compact-table{% endif %}">
-      <thead><tr>{% for column in section.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+      <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=section.records|sortable gutter=True %}{% elif section.columns|length > 2 %}{% table_heading column local_sort=section.records|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=section.records|sortable %}{% endif %}{% endfor %}</tr></thead>
       <tbody>
         {% for record in section.records %}
           <tr>
             {% for cell in record %}
-              <td>
+              <td{% if forloop.first %} class="row-gutter"{% endif %}>
                 {% if cell.link %}
                   {% entity cell.link %}
                 {% elif cell.url %}
@@ -37,13 +37,14 @@
                 {% else %}
                   {{ cell.text }}
                 {% endif %}
+                {% if forloop.first %}{% row_toggle %}{% endif %}
               </td>
             {% endfor %}
           </tr>
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
   {% if section.folded %}</details>{% endif %}
   {% for label, text in section.readouts %}
     <details class="section-readout">

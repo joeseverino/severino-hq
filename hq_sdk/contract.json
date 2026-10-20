@@ -1298,7 +1298,9 @@
           "sort=",
           "ascending_label=",
           "descending_label=",
-          "css="
+          "css=",
+          "kind=",
+          "drop="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1385,6 +1387,14 @@
           "table_default_sort": {
             "kind": "attribute",
             "type": "str"
+          },
+          "table_drop_mid": {
+            "kind": "attribute",
+            "type": "int"
+          },
+          "table_drop_narrow": {
+            "kind": "attribute",
+            "type": "int"
           },
           "table_empty": {
             "kind": "attribute",
@@ -2356,6 +2366,7 @@
   "sdk_version": 1,
   "templates": {
     "classes": [
+      "actions-col",
       "allocation",
       "allocation-legend",
       "btn",
@@ -2389,12 +2400,14 @@
       "ghost",
       "help",
       "inline",
+      "key-col",
       "kv",
       "list-rows",
       "msg",
       "msg-error",
       "msg-warning",
       "muted",
+      "narrow-more",
       "notice",
       "notice-attention",
       "num-col",
@@ -2423,8 +2436,10 @@
       "route-scale",
       "route-swatch",
       "row-actions",
+      "row-below",
       "row-empty",
       "row-group",
+      "row-gutter",
       "row-less",
       "row-main",
       "row-meta",
@@ -2810,6 +2825,39 @@
           "thing",
           "identity=",
           "cards="
+        ]
+      },
+      "row_toggle": {
+        "parameters": []
+      },
+      "table_heading": {
+        "parameters": [
+          "label",
+          "kind=",
+          "*",
+          "css=",
+          "drop=",
+          "sort=",
+          "descending=",
+          "local_sort=",
+          "hidden=",
+          "title=",
+          "gutter=",
+          "select_all=",
+          "note=",
+          "note_css="
+        ]
+      },
+      "table_region": {
+        "parameters": [
+          "label",
+          "*",
+          "css=",
+          "chart=",
+          "pane=",
+          "room=",
+          "mid=",
+          "narrow="
         ]
       }
     }

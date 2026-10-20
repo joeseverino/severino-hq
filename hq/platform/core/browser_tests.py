@@ -30,6 +30,7 @@ from django.contrib.staticfiles import finders
 from django.db import transaction
 from django.test import Client, SimpleTestCase
 from django.urls import reverse
+lazy from django.template import Context, Template
 lazy from django.template.loader import render_to_string
 
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
@@ -120,14 +121,8 @@ SELECTORS = {
     # The boxes allowed to scroll sideways: a table's, and a block of code,
     # whose lines are as written.
     "sideways": ".table-scroll, pre",
-    # A table the table script measures and fits to its box, which is laid out
-    # again once it has run (the one exception the nothing-moves rule allows).
-    "fitted_table": ".table-scroll:not([data-chart]) > .data-table",
     # A table whose rows can be chosen, which the table script wires up last.
     "selectable_table": "[data-selectable-table]",
-    # What a row folds behind "+3" until it is opened, or until there is room.
-    "row_less": ".row-less",
-    "row_more": ".row-more",
     # What a parser leaves where a <p> was closed early by a block inside it.
     "broken_paragraph": "main p:empty:not([hidden])",
     # A box that holds content: a card, a table's frame.
@@ -941,9 +936,9 @@ _UNPADDED_TILES = (
 
 
 # The first table on a page as a phone lays it out: whether it runs past its
-# box, how wide each showing column is, and how tall each record's row is.
-# The row toggle and the line an open row adds are made by tables.js, so no
-# template renders them and they are found by tag and attribute.
+# box, how wide each showing column is, how tall each record's row is, and how
+# many rows show their toggle. The line an open row adds is made by tables.js,
+# so no template renders it and it is found by attribute.
 _PHONE_TABLE = """(scroll) => {
   const box = document.querySelector('main ' + scroll);
   const table = box && box.querySelector('table');
@@ -956,7 +951,7 @@ _PHONE_TABLE = """(scroll) => {
       .map((heading) => Math.round(heading.getBoundingClientRect().width)),
     rows: [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')]
       .map((row) => Math.round(row.getBoundingClientRect().height)),
-    toggles: table.querySelectorAll('tbody button[aria-expanded]').length,
+    toggles: [...table.querySelectorAll('tbody button[aria-expanded]')].filter((el) => el.checkVisibility()).length,
     details: [...table.querySelectorAll('tr[data-row-detail] dt')].map((term) => term.textContent),
     held: table.hasAttribute('data-rows-held'),
   };
@@ -970,23 +965,14 @@ _TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' +
     && table.getBoundingClientRect().width > box.clientWidth + 1)
   .map(([box, table]) => (table.querySelector('th') || table).textContent.trim().slice(0, 24)
     + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
-# Every disclosure open, and the tables fitted again for it: each fitted table
-# loses its mark and the window says it resized, so the mark's return is the
-# refit having run.
-_OPEN_AND_REFIT = """(scroll) => {
-  document.querySelectorAll('details').forEach((d) => { d.open = true; });
-  window.refitting = [...document.querySelectorAll(scroll + ' > table')].filter((table) => 'fit' in table.dataset);
-  window.refitting.forEach((table) => { delete table.dataset.fit; });
-  window.dispatchEvent(new Event('resize'));
-}"""
 # A frame has been drawn and nothing is moving.
 _PAINTED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
 _STILL = """() => document.getAnimations()
   .every((motion) => motion.playState !== 'running' || motion.effect?.getComputedTiming().iterations === Infinity)"""
 _NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' > table')]
-  .filter((table) => table.checkVisibility() && table.querySelector('tbody button[aria-expanded]'))
-  .map((table) => {
-    const toggle = table.querySelector('tbody button[aria-expanded]');
+  .map((table) => [table, [...table.querySelectorAll('tbody button[aria-expanded]')].find((el) => el.checkVisibility())])
+  .filter(([table, toggle]) => table.checkVisibility() && toggle)
+  .map(([table, toggle]) => {
     const column = toggle.closest('td, th').cellIndex;
     const edges = [...table.querySelectorAll('tbody > tr:not([data-row-detail])')]
       .map((row) => row.children[column])
@@ -1044,13 +1030,8 @@ _DRAWN_BOXES = """() => {
 # Every element that still shows and no longer stands where it was drawn. A
 # child carried by its parent, the same distance and at the same size, is the
 # parent's move and is not named again.
-#
-# One exception, until table fitting moves to CSS in its own pass: a table the
-# script fits (`fitted`) is measured and laid out again by tables.js, so what
-# is inside it is not held, and what is below it or holds it may move down or
-# grow by no more than those tables changed height.
 _MOVED_SINCE_DRAWN = (
-    "(fitted) => {"
+    "() => {"
     + _DESCRIBE
     + """
   const drawn = window.drawnBoxes;
@@ -1058,27 +1039,11 @@ _MOVED_SINCE_DRAWN = (
     return [r.left + scrollX, r.top + scrollY, r.width, r.height]; };
   const change = (el) => now(el).map((value, index) => value - drawn.get(el)[index]);
   const still = (moved) => moved.every((by) => Math.abs(by) < 0.5);
-  const tables = [...document.querySelectorAll(fitted)].filter((table) => drawn.has(table));
-  // How far the fitted tables could have carried an element: by as much as
-  // those above it changed height, and grown it by as much as those in it.
-  const grown = (el, was) => {
-    let above = 0;
-    let within = 0;
-    for (const table of tables) {
-      const by = Math.abs(now(table)[3] - drawn.get(table)[3]);
-      if (el.contains(table)) within += by;
-      else if (drawn.get(table)[1] + drawn.get(table)[3] <= was[1] + 0.5) above += by;
-    }
-    return [above, within];
-  };
   const found = [];
   for (const [el, was] of drawn) {
     if (!el.isConnected || !el.checkVisibility()) continue;
-    if (el.closest(fitted)) continue;
     const moved = change(el);
-    const [above, within] = grown(el, was);
-    const carried = Math.abs(moved[1]) <= above + 0.5 && Math.abs(moved[3]) <= within + 0.5;
-    if (still([moved[0], moved[2]]) && (carried || still(moved))) continue;
+    if (still(moved)) continue;
     const parent = el.parentElement;
     if (drawn.has(parent) && parent.checkVisibility() && still(moved.slice(2))) {
       const by = change(parent);
@@ -1187,9 +1152,15 @@ _SORT_BY = """([scroll, column]) => {
         .map((row) => row.children[column].textContent.trim().replace(/\\s+/g, ' '))),
   };
 }"""
-_PRESS_FIRST_ROW_TOGGLE = (
-    "(scroll) => document.querySelector('main ' + scroll + ' tbody button[aria-expanded]').click()"
-)
+# Press the first toggle that shows in the page's first table, and say which
+# of its records (counted as _PHONE_TABLE counts them) it opened.
+_PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
+  const table = document.querySelector('main ' + scroll).querySelector('table');
+  const records = [...table.querySelectorAll('tbody > tr:not([data-row-detail]):not(:has(> th[scope="rowgroup"]))')];
+  const toggle = [...table.querySelectorAll('tbody button[aria-expanded]')].find((el) => el.checkVisibility());
+  toggle.click();
+  return records.indexOf(toggle.closest('tr'));
+}"""
 
 
 # Each reading's mark and lines, as laid out: where the mark sits, and for each
@@ -1431,47 +1402,6 @@ _RAGGED_QUEUES = (
 }"""
 )
 
-# An identifier in a table is cut only while its row has no room for more:
-# given two more characters, its rows overflow their box on one line.
-_CUT_WITH_ROOM = (
-    "([scroll, folded, held]) => {"
-    + _DESCRIBE
-    + """
-  // Room is what a table has to spare: shown whole, a cut identifier or a
-  // folded run of links leaves the table inside its box and no taller.
-  const found = [];
-  for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
-    if (!table.checkVisibility() || !('fit' in table.dataset)) continue;
-    const wrapper = table.parentElement;
-    const height = table.getBoundingClientRect().height;
-    const fits = () => table.getBoundingClientRect().width <= wrapper.clientWidth + 1
-      && table.getBoundingClientRect().height <= height + 0.5;
-    const cut = [...table.querySelectorAll(':scope > tbody > tr:not([data-row-detail]) > td code')]
-      .filter((code) => code.clientWidth > 0 && code.scrollWidth > code.clientWidth + 1);
-    if (cut.length) {
-      const room = parseFloat(getComputedStyle(table).getPropertyValue('--identifier-max'));
-      const before = table.style.getPropertyValue('--identifier-max');
-      const widths = cut.map((code) => code.clientWidth);
-      table.style.setProperty('--identifier-max', (room + 2) + 'ch');
-      // A cut held by something other than the cap (its cell) is not this rule's.
-      const grows = cut.some((code, i) => code.clientWidth > widths[i] + 1);
-      const roomy = grows && fits();
-      if (before) table.style.setProperty('--identifier-max', before); else table.style.removeProperty('--identifier-max');
-      if (roomy) found.push(`${describe(table)}: "${cut[0].textContent.trim()}" cut to ${room}ch with room for more`);
-    }
-    for (const cell of table.querySelectorAll(':scope > tbody > tr:not([data-row-detail]) > td:not([data-whole])')) {
-      const hint = cell.querySelector(folded);
-      if (!hint || !hint.checkVisibility() || !cell.querySelector(held)) continue;
-      cell.dataset.whole = '';
-      const roomy = fits();
-      delete cell.dataset.whole;
-      if (roomy) found.push(`${describe(table)}: "${cell.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)}" folded behind "${hint.textContent.trim()}" with room for all of it`);
-    }
-  }
-  return found;
-}"""
-)
-
 # Each character of an element's text with the line it is drawn on, for the
 # rules that judge where text breaks. `chars(el)` and `room(el)`: the width of
 # the box whose lines it is set in.
@@ -1669,40 +1599,65 @@ _MAP = """([map, lane, node]) => {
   };
 }"""
 
+# A probe page: a table drawn through the table tags, as a template draws one,
+# with the stylesheet and the table script.
+_PROBE_PAGE = """{% load table_tags %}<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="{{ static }}css/app.css">
+<script defer src="{{ static }}js/tables.js"></script>
+</head><body><main>"""
+
+
+def probe(markup):
+    """``markup``, in the table tags, as a page."""
+
+    return Template(_PROBE_PAGE + markup + "</main></body></html>").render(Context({"static": settings.STATIC_URL}))
+
+
 # A table with a column of dashes, a column of marks with no words, and a
-# column of short words: the dashes are not drawn, the marks are, and no word
-# is split however the column's width rounds.
-_BLANK_PROBE = f"""<!doctype html><html><head><meta charset="utf-8">
-<link rel="stylesheet" href="{settings.STATIC_URL}css/app.css">
-<script defer src="{settings.STATIC_URL}js/tables.js"></script>
-</head><body><main><div class="table-scroll"><table class="data-table">
-<thead><tr><th>Title</th><th>Type</th><th>Nothing</th><th>Runs</th><th>Note</th></tr></thead><tbody>
-<tr><td>Upgrade a container to a new release</td><td>Runbook</td><td><span class="empty-value">\u2013</span></td>
+# column of short words: the server marks the dashes blank and they are not
+# drawn, the marks are, and no word is split however the column's width rounds.
+_BLANK_TABLE = """{% table_region "Runbooks" %}<table class="data-table">
+<thead><tr>{% table_heading "Title" %}{% table_heading "Type" %}{% table_heading "Nothing" %}
+{% table_heading "Runs" %}{% table_heading "Note" %}</tr></thead><tbody>
+<tr><td>Upgrade a container to a new release</td><td>Runbook</td><td><span class="empty-value">–</span></td>
 <td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>A sentence long enough to take the room it is given and wrap.</td></tr>
-<tr><td>Rotate the signing keys</td><td>Runbook</td><td>\u2013</td>
+<tr><td>Rotate the signing keys</td><td>Runbook</td><td>–</td>
 <td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>Another sentence that wraps in its column.</td></tr>
-</tbody></table></div></main></body></html>"""
+</tbody></table>{% endtable_region %}"""
 _COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
   .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""
 
 
-# A table with one row whose only clipped text is for screen readers, beside
-# a decoration hidden from them, and one row whose value really is cut off.
-_ROW_TOGGLE_PROBE = f"""<!doctype html><html><head>
-<link rel="stylesheet" href="{settings.STATIC_URL}css/app.css">
-<script defer src="{settings.STATIC_URL}js/tables.js"></script>
-</head><body><main><div class="table-scroll"><table class="data-table"><tbody>
-<tr data-probe="screen-reader"><th scope="row">Chest</th>
+# Two tables whose every row the server made openable. In the first a narrow
+# box drops a column: one row has something in it, one has a dash there. One
+# row's only clipped text is for screen readers, beside a decoration hidden
+# from them, and one row's value really is cut off. In the second a row folds
+# part of a list, so the gutter is kept at every width, and a row's value is
+# cut off there too.
+_ROW_TOGGLE_TABLES = """
+{% table_region "Dropping" narrow=1 %}<table class="data-table"><thead><tr>
+{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
+<tr data-probe="dropped"><td class="row-gutter">Dropped{% row_toggle %}</td><td>Short</td><td>Something to say</td></tr>
+<tr data-probe="dropped-blank"><td class="row-gutter">Blank{% row_toggle %}</td><td>Short</td><td>–</td></tr>
+<tr data-probe="screen-reader"><td class="row-gutter">Chest{% row_toggle %}</td>
 <td><span class="cadence-mark is-hit" aria-hidden="true"></span>
-<span class="visually-hidden">One session in the week of Aug 10, said in full</span></td></tr>
-<tr data-probe="clamped"><th scope="row">Name</th>
+<span class="visually-hidden">One session in the week of Aug 10, said in full</span></td><td>–</td></tr>
+<tr data-probe="cut"><td class="row-gutter">Name{% row_toggle %}</td>
+<td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td><td>–</td></tr>
+</tbody></table>{% endtable_region %}
+{% table_region "Folding" %}<table class="data-table"><thead><tr>
+{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
+<tr data-probe="folded"><td class="row-gutter">Folded{% row_toggle %}</td>
+<td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
+<tr data-probe="cut-in-a-kept-gutter"><td class="row-gutter">Name{% row_toggle %}</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
-</tbody></table></div></main></body></html>"""
+</tbody></table>{% endtable_region %}"""
 _ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr')].map((row) => ({
   probe: row.dataset.probe,
   toggles: row.querySelectorAll('button[aria-expanded]').length,
-  beside_name: row.querySelector('th button[aria-expanded]') !== null,
-  in_decoration: row.querySelector('[aria-hidden=true] button[aria-expanded]') !== null,
+  shown: [...row.querySelectorAll('button[aria-expanded]')].some((toggle) => toggle.checkVisibility()),
+  beside_name: row.querySelector('button[aria-expanded]')?.parentElement === row.cells[0],
 }))"""
 
 
@@ -1839,11 +1794,17 @@ class BrowserGate(SimpleTestCase):
         for route in held:
             self.answer(route)
         settled()
-        return self.page.evaluate(_MOVED_SINCE_DRAWN, SELECTORS["fitted_table"])
+        return self.page.evaluate(_MOVED_SINCE_DRAWN)
 
 
 def viewport(width):
     return {"width": width, "height": PHONE_SCREEN[1] if width <= PHONE else 900}
+
+
+def others(rows, opened):
+    """Every row's height but the one that opened."""
+
+    return rows[:opened] + rows[opened + 1 :]
 
 
 # Heads whose lead control is one that says what it is doing beside itself,
@@ -2195,14 +2156,6 @@ class LayoutBrowserTests(BrowserGate):
     def a_route_is_one_row_or_one_column(self, _name):
         self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
 
-    def nothing_is_held_back_while_its_table_has_room(self, _name):
-        self.assertEqual(
-            self.page.evaluate(
-                _CUT_WITH_ROOM, [SELECTORS["table_scroll"], SELECTORS["row_less"], SELECTORS["row_more"]]
-            ),
-            [],
-        )
-
     def a_token_breaks_only_where_it_may(self, _name):
         self.assertEqual(self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]), [])
 
@@ -2240,7 +2193,8 @@ class LayoutBrowserTests(BrowserGate):
     def nothing_a_summary_names_is_hidden(self, _name):
         self.assertEqual(self.page.evaluate(_HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"]), [])
 
-    # With script: the page a person reads is the one its script has fitted.
+    # With script: the page a person reads, sorted, selectable and with its
+    # cut values marked.
 
     def test_every_page_keeps_the_layout_rules_once_its_script_has_run(self):
         """The rules that hold without script hold there too; pressing a
@@ -2272,7 +2226,6 @@ class LayoutBrowserTests(BrowserGate):
             self.a_table_shares_its_width_only_with_columns_that_show,
             self.words_stay_inside_the_box_that_holds_them,
             self.a_tables_names_share_one_edge_whether_or_not_a_row_opens,
-            self.nothing_is_held_back_while_its_table_has_room,
             self.a_token_breaks_only_where_it_may,
         ]
 
@@ -2299,15 +2252,15 @@ class LayoutBrowserTests(BrowserGate):
                 self.spoke += 1
                 self.assertEqual(found, [])
 
-    def a_table_fits_its_box_at_every_width(self, _name):
-        """Not only on a phone. A table wider than its box wraps, and where
-        wrapping would cramp it gives up columns from the far end, so nothing
-        a reader came for is off the edge at a tablet or a laptop width
-        either. Every page, with every disclosure open.
+    def a_table_fits_its_box_at_every_width(self, name):
+        """Not only on a phone. A table's columns leave by its region's tier
+        in the order its headings rank them, so nothing a reader came for is
+        off the edge at a tablet or a laptop width either. Every page, with
+        every disclosure open.
         """
 
-        self.page.evaluate(_OPEN_AND_REFIT, SELECTORS["table_scroll"])
-        self.page.wait_for_function("() => window.refitting.every((table) => 'fit' in table.dataset)")
+        self.open_every_disclosure(name)
+        self.page.evaluate(_SETTLED)
         self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
     def test_nothing_moves_once_a_page_is_drawn(self):
@@ -2429,21 +2382,31 @@ class LayoutBrowserTests(BrowserGate):
                 self.assert_rows_filled(key)
 
     def test_a_row_toggle_is_owed_only_to_what_a_reader_cannot_see(self):
-        """The row expander measures what is cut off, so it runs with script on.
-
-        Screen-reader text is clipped to a pixel by design and a decoration is
-        hidden from assistive technology; neither is content a row withholds.
-        A row that really is cut gets one toggle, beside the cell that names it.
+        """Every row the server made openable has its toggle in the HTML, in
+        the cell that names it, and shows it only while the row holds
+        something back: a column a narrow box dropped with something in it, a
+        part of a list it folds, or a value cut short, which opens its row only
+        where the gutter is kept already. A narrow box keeps it for every table
+        whose rows open, since touch has no hover title; a wide one only for a
+        table with something else to open. A dash in a dropped column says
+        nothing, screen-reader text is clipped to a pixel by design and a
+        decoration is hidden from assistive technology: none is content a row
+        withholds. Whether a value is cut is measured, so script is on.
         """
 
         self.start(java_script_enabled=True)
-        self.pages = {**self.pages, "row-toggle-probe": _ROW_TOGGLE_PROBE}
-        self.open("row-toggle-probe", 1280)
-        rows = {row["probe"]: row for row in self.page.evaluate(_ROW_TOGGLES)}
-        self.assertEqual(rows["screen-reader"]["toggles"], 0)
-        self.assertEqual(rows["clamped"]["toggles"], 1)
-        self.assertTrue(rows["clamped"]["beside_name"])
-        self.assertFalse(rows["clamped"]["in_decoration"])
+        self.pages = {**self.pages, "row-toggle-probe": probe(_ROW_TOGGLE_TABLES)}
+        shown_at = {
+            PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter"},
+            1280: {"folded", "cut-in-a-kept-gutter"},
+        }
+        for width, expected in shown_at.items():
+            with self.subTest(width=width):
+                self.open("row-toggle-probe", width)
+                self.page.evaluate(_SETTLED)
+                rows = self.page.evaluate(_ROW_TOGGLES)
+                self.assertEqual({(row["toggles"], row["beside_name"]) for row in rows}, {(1, True)})
+                self.assertEqual({row["probe"] for row in rows if row["shown"]}, expected)
 
     def test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing(self):
         """A table of four columns or more keeps the column that names each row
@@ -2463,11 +2426,11 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertLessEqual(closed["sideways"], 1)
                 self.assertGreater(closed["toggles"], 0)
 
-                self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+                pressed = self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
                 opened = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
                 self.assertTrue(opened["details"])
                 self.assertEqual(opened["columns"], closed["columns"])
-                self.assertEqual(opened["rows"][1:], closed["rows"][1:])
+                self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
                 self.assertLessEqual(opened["sideways"], 1)
 
                 self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
@@ -2499,10 +2462,10 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(len(closed["columns"]), closed["headings"])
 
         if closed["toggles"]:
-            self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
+            pressed = self.page.evaluate(_PRESS_FIRST_ROW_TOGGLE, SELECTORS["table_scroll"])
             opened = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
             self.assertEqual(opened["columns"], closed["columns"])
-            self.assertEqual(opened["rows"][1:], closed["rows"][1:])
+            self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
 
     def test_any_table_sorts_by_a_heading(self):
         """A table whose server does not sort it sorts on the page: ascending,
@@ -2554,7 +2517,7 @@ class LayoutBrowserTests(BrowserGate):
 
     def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
         self.start(java_script_enabled=True)
-        self.pages = {**self.pages, "blank-column-probe": _BLANK_PROBE}
+        self.pages = {**self.pages, "blank-column-probe": probe(_BLANK_TABLE)}
         for width in (PHONE_SCREEN[0], 820, 1360):
             with self.subTest(width=width):
                 self.open("blank-column-probe", width)
@@ -2562,8 +2525,7 @@ class LayoutBrowserTests(BrowserGate):
                 shown = self.page.evaluate(_COLUMNS_SHOWN)
                 self.assertNotIn("Nothing", shown)
                 self.assertIn("Title", shown)
-                if width > PHONE_SCREEN[0]:
-                    self.assertIn("Runs", shown)
+                self.assertIn("Runs", shown)
                 self.assertEqual(self.page.evaluate(_BROKEN_WORDS), [])
 
 

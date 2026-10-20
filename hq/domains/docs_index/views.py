@@ -44,6 +44,7 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     page_title = "Docs"
     table_search_scope = "documentation"
     table_selectable = True
+    table_drop_mid, table_drop_narrow = 1, 6
     table_columns = (
         TableColumn("Title", "title", css="key-col"),
         TableColumn("ID", "doc_id"),

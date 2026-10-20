@@ -3,7 +3,7 @@
 A list: the toolbar, the table and its empty state, drawn from the view's
 TableListMixin. The header comes from `table.columns`; a page writes only the
 cells of one row in `{% block row %}`, which renders once per row with `row`
-set. `{% block summary %}` sits between the toolbar and the table.
+set; its first cell is `row-gutter` and ends with `{% row_toggle %}`. `{% block summary %}` sits between the toolbar and the table.
 The view's `table_empty` says what an empty list means ("No assets yet."), with
 `table_empty_why` beside it and `get_table_empty_remedy()` where the derived remedy
 is not the one,
@@ -18,13 +18,13 @@ say nothing.
 {% if not object_list %}
 {% if table.active_count %}{% include "partials/_empty_state.html" with message="Nothing matches." remedy=table.clear %}{% elif table.empty_link %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=table.empty_link %}{% elif table.empty_remedy %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=page.remedy %}{% else %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why %}{% endif %}
 {% else %}
-<div class="table-scroll">
+{% table_region page.title mid=table.drop.mid narrow=table.drop.narrow %}
   <table class="data-table"{% if table.selectable %} data-selectable-table{% endif %}>
     <thead>
       <tr>
-        {% if table.selectable %}<th class="select-column"><input type="checkbox" data-select-all aria-label="Select all rows"></th>{% endif %}
+        {% if table.selectable %}{% table_heading "Select all rows" select_all=True %}{% endif %}
         {% for column in table.columns %}
-          {% if column.sort %}{% table_sort_header column.label column.sort css=column.css %}{% else %}<th{% if column.css %} class="{{ column.css }}"{% endif %}>{{ column.label }}</th>{% endif %}
+          {% table_heading column.label column.kind css=column.css drop=column.drop sort=column.sort gutter=forloop.first %}
         {% endfor %}
       </tr>
     </thead>
@@ -38,7 +38,7 @@ say nothing.
     </tbody>
     {% block foot %}{% endblock %}
   </table>
-</div>
+{% endtable_region %}
 {% include "partials/_pagination.html" %}
 {% endif %}
 {% endblock %}

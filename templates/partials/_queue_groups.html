@@ -8,7 +8,7 @@ the part can be dismissed, lets a family be dismissed whole. `titled="0"` when
 the card around it is already titled by its one area, so the area is not said
 twice.
 {% endcomment %}
-<div class="table-scroll">
+{% table_region "Queue" %}
   <table class="data-table queue-table">
     {% for group in groups %}
     <tbody>
@@ -17,7 +17,7 @@ twice.
         {% if entry.folded %}
           {% with family_row=prefix|add:"-"|add:entry.id|slugify %}
           <tr class="queue-family" id="{{ family_row }}" data-folds data-queue-family>
-            <td class="queue-mark">
+            <td class="queue-mark row-gutter">
               <span class="pill pill-{{ entry.status }} is-mark" tabindex="0" data-tip="{{ entry.status|urgency }}">{{ entry.status|urgency }}</span>
               <button type="button" class="row-fold" data-row-toggle data-fold-toggle aria-expanded="false" aria-label="{{ entry.family }}"><svg viewBox="0 0 6 10" width="7" height="11" aria-hidden="true"><path d="M1 1l4 4-4 4"/></svg></button>
             </td>
@@ -33,4 +33,4 @@ twice.
     </tbody>
     {% endfor %}
   </table>
-</div>
+{% endtable_region %}

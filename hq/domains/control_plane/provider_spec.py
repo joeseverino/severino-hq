@@ -419,6 +419,11 @@ class ProviderSpec:
     # proxied Cloudflare record. A reading whose ``fronted_by`` names this kind
     # applies to a name only where this says so.
     fronts: Callable[[dict[str, Any]], bool] | None = None
+    # What decides whether two records of this kind on one name replace each
+    # other: they do when this answers the same. A name's A and AAAA records sit
+    # side by side (dual stack), so a DNS kind answers its record type or
+    # address family. Unset: one record of the kind per name.
+    slot: Callable[[dict[str, Any]], str] | None = None
     # From an observed record: the source policy it applies to its names, as a
     # ``provider_adapters.contracts.IngressPolicy``.
     ingress_policy: Callable[[dict[str, Any]], Any] | None = None

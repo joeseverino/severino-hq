@@ -1,7 +1,7 @@
 {% extends "list_page.html" %}
 {% block summary %}{% if site %}<p class="muted">Published on {% entity site %}</p>{% endif %}{% endblock %}
 {% block row %}
-  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a></td>
+  <td class="row-gutter"><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a>{% row_toggle %}</td>
   {% if show_type %}<td>{{ row.get_content_type_display }}</td>{% endif %}
   <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
   <td class="muted">{% if row.topic %}<span class="table-clamp">{{ row.topic }}</span>{% else %}{% empty_value %}{% endif %}</td>

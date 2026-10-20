@@ -27,15 +27,16 @@ would be a page about anybody.
   </section>
 
   <h2>Starred <span class="heading-aside">newest first · {% include "partials/_reading_age.html" with at=profile.observed_at only %}</span></h2>
-  <div class="table-scroll">
+  {% table_region "Starred" narrow=2 %}
     <table class="data-table">
-      <thead><tr><th>Repository</th><th>Latest release</th><th>Advisories</th><th>Starred</th></tr></thead>
+      <thead><tr>{% table_heading "Repository" local_sort=profile.watched|sortable gutter=True %}{% table_heading "Latest release" "identifier" local_sort=profile.watched|sortable drop=2 %}{% table_heading "Advisories" local_sort=profile.watched|sortable drop=1 %}{% table_heading "Starred" "status" local_sort=profile.watched|sortable %}</tr></thead>
       <tbody>
         {% for repo in profile.watched %}
           <tr>
-            <td>
+            <td class="row-gutter">
               <a class="external-link" href="{{ repo.url }}" rel="noopener"><strong>{{ repo.name }}</strong></a>
               {% if repo.description %}<div class="muted">{{ repo.description|truncatechars:110 }}</div>{% endif %}
+              {% row_toggle %}
             </td>
             <td>{% if repo.release %}<a class="external-link" href="{{ repo.release.url }}" rel="noopener">{{ repo.release.tag }}</a>{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|ago_short }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
             <td>
@@ -49,7 +50,7 @@ would be a page about anybody.
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% endtable_region %}
 
   <h2>Your GitHub account</h2>
   <dl class="github-facts account-facts">

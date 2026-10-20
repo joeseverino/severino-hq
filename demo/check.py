@@ -22,7 +22,7 @@ _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
 # What a healthy homelab never says on its dashboard.
 _ALARMS = ("No reading yet", "Not set up yet", "not fully set up", "not answering", " failed", "not confirmed")
-# The showcase leaves one thing to do on purpose (an expense with no receipt);
+# The showcase leaves one thing to do on purpose (an image update);
 # anything more is the seed missing a reading.
 _MOST_ITEMS = 1
 

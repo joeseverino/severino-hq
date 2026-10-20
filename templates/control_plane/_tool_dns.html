@@ -22,9 +22,9 @@
       {% if reading %}
     <div class="tool-result">
         {% if reading.ok %}
-          <div class="table-scroll">
+          {% table_region "Public records" %}
             <table>
-              <thead><tr><th>Type</th><th>Name</th><th>Answer</th></tr></thead>
+              <thead><tr>{% table_heading "Type" "identifier" %}{% table_heading "Name" "identifier" %}{% table_heading "Answer" "identifier" %}</tr></thead>
               <tbody>
                 {% for answer in reading.answers %}
                   <tr>
@@ -37,7 +37,7 @@
                 {% endfor %}
               </tbody>
             </table>
-          </div>
+          {% endtable_region %}
           {% if reading.resolver %}
             <p class="help">Answered by {{ reading.resolver }}.</p>
           {% endif %}

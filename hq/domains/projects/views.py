@@ -72,6 +72,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
     page_title = "Projects"
     table_search_scope = "projects"
     table_selectable = True
+    table_drop_narrow = 2
     table_columns = (
         TableColumn("Name", "name"),
         TableColumn("Status", "status", css="key-col"),

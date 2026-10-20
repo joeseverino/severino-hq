@@ -36,9 +36,7 @@
   <h2>Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status }}{% endif %}{% if docker.connection %} · read through {% entity docker.connection %}{% endif %}</span>{% endif %}</h2>
   {% if unused_images %}<ul class="dot-list section-facts"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size }} can be freed</li></ul>{% endif %}
   {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
-  {% if machine.containers %}<div class="table-scroll">
-    {% include "control_plane/_container_rows.html" with containers=machine.on_show %}
-  </div>{% endif %}
+  {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Containers" %}{% endif %}
   {% if machine.folded %}
     {% comment %}
     Watched exactly like the rest (start, stop and restart all work) just
@@ -47,9 +45,7 @@
     {% endcomment %}
     <details class="fold">
       <summary>{{ machine.folded|length }} hidden</summary>
-      <div class="table-scroll">
-        {% include "control_plane/_container_rows.html" with containers=machine.folded %}
-      </div>
+      {% include "control_plane/_container_rows.html" with containers=machine.folded label="Hidden containers" %}
     </details>
   {% endif %}
 {% endif %}

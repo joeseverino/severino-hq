@@ -5,21 +5,21 @@
 {% else %}
   {% if matches %}
     <p class="page-lede">Expenses without a receipt that match this vendor or amount:</p>
-    <div class="table-scroll">
+    {% table_region "Matching expenses" narrow=2 %}
       <table class="data-table">
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Vendor</th>
-            <th>Item</th>
-            <th>Cost</th>
-            <th><span class="visually-hidden">Link</span></th>
+            {% table_heading "Date" "status" local_sort=matches|sortable gutter=True %}
+            {% table_heading "Vendor" local_sort=matches|sortable %}
+            {% table_heading "Item" local_sort=matches|sortable %}
+            {% table_heading "Cost" "numeric" local_sort=matches|sortable drop=2 %}
+            {% table_heading "Link" "control" hidden=True drop=1 %}
           </tr>
         </thead>
         <tbody>
           {% for exp in matches %}
             <tr>
-              <td>{{ exp.date|when }}</td>
+              <td class="row-gutter">{{ exp.date|when }}{% row_toggle %}</td>
               <td><strong>{{ exp.vendor }}</strong></td>
               <td>{{ exp.item }}</td>
               <td>{{ exp.total_cost|money }}</td>
@@ -28,7 +28,7 @@
           {% endfor %}
         </tbody>
       </table>
-    </div>
+    {% endtable_region %}
   {% else %}
     {% include "partials/_empty_state.html" with message="No expense without a receipt matches this vendor or amount." action_url=new_expense action_label="New expense" only %}
   {% endif %}

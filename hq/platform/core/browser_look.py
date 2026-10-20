@@ -18,7 +18,9 @@ that would act or reach out when fetched is refused there
 (`hq.platform.core.speculation`), and is reported rather than looked at.
 
 `--rule survey` runs every check the example estate's gate holds, and the ones
-below that a person would otherwise have to find by eye.
+below that a person would otherwise have to find by eye. `--rule tables`
+records what each table shows (its columns, the rows that open, the gutter,
+the sort controls) beside each screenshot, for comparing two runs.
 """
 
 import os
@@ -144,6 +146,67 @@ _EMPTY_COLUMNS = (
 
 # What is an identifier, held to its own rule rather than a word's.
 _IDENTIFIER = "code, kbd, samp, time, .token, [data-entity]"
+
+# Each table as a reader finds it: which columns show, which are gone and
+# whether for being blank or for want of room, which rows offer to open and
+# have the gutter for it, the sort controls, and what each open row lists.
+_TABLES = r"""() => {
+  const name = (el) => {
+    if (!el) return '';
+    const copy = el.cloneNode(true);
+    copy.querySelectorAll('[aria-hidden=true]').forEach((mark) => mark.remove());
+    return copy.textContent.trim().replace(/\s+/g, ' ');
+  };
+  const blank = (cell) => !cell || (/^[\s\u2013\u2014-]*$/.test(cell.textContent)
+    && !cell.querySelector(':not(.empty-value, .empty-value *, br)'));
+  const seen = (el) => el.checkVisibility();
+  const pad = (el) => Math.round(parseFloat(getComputedStyle(el).paddingInlineStart));
+  const tally = (values) => {
+    const counts = new Map();
+    values.forEach((value) => counts.set(value, (counts.get(value) || 0) + 1));
+    return [...counts].map(([value, count]) => (count > 1 ? `${value} x${count}` : value)).join('; ');
+  };
+  const out = [];
+  document.querySelectorAll('main table').forEach((table, index) => {
+    if (!seen(table)) return;
+    const region = table.closest('.table-scroll');
+    const label = region?.getAttribute('aria-label') || table.caption?.textContent.trim() || '';
+    const rows = [...table.querySelectorAll(':scope > tbody > tr:not([data-row-detail])')].filter(seen);
+    const records = rows.filter((row) => !row.classList.contains('row-group'));
+    const headings = [...(table.tHead?.rows[table.tHead.rows.length - 1]?.cells || [])];
+    const columns = headings.map((heading, column) => {
+      const said = name(heading) || '(unnamed)';
+      if (seen(heading)) return said;
+      const full = records.filter((row) => row.cells.length === headings.length);
+      return (full.length && full.every((row) => blank(row.cells[column])) ? '~' : '-') + said;
+    });
+    const toggles = records.filter((row) => [...row.querySelectorAll('[data-row-toggle]')].some(seen));
+    // The column a shown toggle stands in, else the one that names the row:
+    // the gutter is its inset.
+    const shown = toggles.map((row) => [...row.querySelectorAll('[data-row-toggle]')].find(seen)?.closest('td, th')).find(Boolean);
+    const column = shown ? shown.cellIndex
+      : Math.max(0, headings.findIndex((heading) => !heading.classList.contains('select-column') && !heading.querySelector('input[type=checkbox]')));
+    const gutter = records.map((row) => row.cells[column]).filter(Boolean).map(pad);
+    const headingPad = headings[column] ? pad(headings[column]) : '-';
+    const at = (rows) => (rows.length === records.length ? 'every row' : rows.length ? rows.map((row) => records.indexOf(row) + 1).join(',') : 'none');
+    const open = [...table.querySelectorAll(':scope > tbody > tr[data-row-detail]')].map(
+      (detail) => [...detail.querySelectorAll('.row-columns > dt')].map((term) => term.textContent.trim()).join(', ') || '(below only)',
+    );
+    const r = region?.getBoundingClientRect();
+    const lines = [
+      `[${index + 1}] ${label}${region ? ` region ${Math.round(r.width)}` : ''} table ${Math.round(table.getBoundingClientRect().width)}`
+        + `${region?.classList.contains('is-pane') ? ' pane' : ''}`
+        + ` cap ${getComputedStyle(table).getPropertyValue('--identifier-max').trim()}`,
+      `  columns: ${columns.join(' | ') || '(no headings)'}`,
+      `  widths: ${headings.filter(seen).map((heading) => Math.round(heading.getBoundingClientRect().width)).join(' ')}`,
+      `  rows ${records.length}; toggles: ${at(toggles)}; sort ${[...table.querySelectorAll(':scope > thead .table-sort-link')].filter(seen).length}`,
+      `  inset of the toggle column: heading ${headingPad}; cells ${tally(gutter) || '-'}`,
+    ];
+    if (open.length) lines.push(`  open: ${tally(open)}`);
+    out.push(lines.join('\n'));
+  });
+  return out.join('\n');
+}"""
 
 
 def _usage(variable: str) -> str:
@@ -342,8 +405,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if _usage("usage_open"):
             self.open_every_disclosure(name)
         if _usage("usage_expand"):
+            # Only the toggles a reader can press: one a row does not offer is
+            # drawn, but not shown.
             self.page.evaluate(
-                "() => document.querySelectorAll('main button[data-row-toggle]').forEach((toggle) => toggle.click())"
+                "() => document.querySelectorAll('main button[data-row-toggle]')"
+                ".forEach((toggle) => toggle.checkVisibility() && toggle.click())"
             )
         shot = _shot(name, width)
         self.page.screenshot(path=shot, full_page=True)
@@ -358,6 +424,18 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         except BrowserError as broke:
             return f"{name} at {width}: {rule} could not run ({str(broke).splitlines()[0]})"
         return None
+
+    def tables(self, name):
+        """What each table shows here, printed and kept beside the screenshot
+        (``.tables.txt``), so two runs can be compared line by line. Not a
+        check: it fails nothing."""
+
+        said = f"{name} at {self.width}{' expanded' if _usage('usage_expand') else ''}\n"
+        said += self.page.evaluate(_TABLES) or "(no tables)"
+        suffix = "-expanded.tables.txt" if _usage("usage_expand") else ".tables.txt"
+        shot = _shot(name, self.width)
+        shot.with_name(shot.stem + suffix).write_text(said + "\n", encoding="utf-8")
+        print(said, flush=True)
 
     def survey(self, name):
         """Every check the example estate's gate holds, and the ones a person

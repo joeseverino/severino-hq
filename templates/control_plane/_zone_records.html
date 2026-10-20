@@ -4,30 +4,31 @@ One table of DNS records, used for both halves of a zone: the records that send
 traffic somewhere, and the policy records folded away beneath them. Shared so
 the two cannot drift into looking like different things.
 
-Expects `rows`, `zone`, and `public_dns_enabled`. A state is said only where
+Expects `rows`, `zone`, `public_dns_enabled`, and the region's `label`. A state is said only where
 it is not healthy, and a TTL only where it is not automatic: seventeen rows
 that each say "Healthy" and "Auto" say nothing.
 {% endcomment %}
-<div class="table-scroll">
+{% table_region label|default:"Records" mid=drop_mid narrow=4 %}
   <table class="data-table zone-record-table">
     <thead>
       <tr>
-        <th>Name</th>
-        <th class="key-col">Type</th>
-        <th>Value</th>
-        <th>TTL</th>
-        {% if zone.managed %}<th>State</th><th class="actions-col"></th>{% endif %}
+        {% table_heading "Name" "identifier" gutter=True local_sort=rows|sortable %}
+        {% table_heading "Type" "identifier" css="key-col" local_sort=rows|sortable %}
+        {% table_heading "Value" "identifier" drop=4 local_sort=rows|sortable %}
+        {% table_heading "TTL" "status" drop=3 local_sort=rows|sortable %}
+        {% if zone.managed %}{% table_heading "State" "status" drop=2 local_sort=rows|sortable %}{% table_heading "Actions" css="actions-col" drop=1 hidden=True %}{% endif %}
       </tr>
     </thead>
     <tbody>
       {% for record in rows %}
         <tr>
-          <td>
+          <td class="row-gutter">
             {% if record.service_url %}
               <strong>{% entity "service"|entity_of:record.name %}</strong>
             {% else %}
               <strong>{{ record.name }}</strong>
             {% endif %}
+            {% row_toggle %}
           </td>
           <td><code>{{ record.record_type }}</code></td>
           <td>
@@ -69,4 +70,4 @@ that each say "Healthy" and "Auto" say nothing.
       {% endfor %}
     </tbody>
   </table>
-</div>
+{% endtable_region %}

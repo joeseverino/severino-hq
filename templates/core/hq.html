@@ -105,13 +105,13 @@ they share a row; either alone takes it.
   {% if work.unread %}
     <p class="muted">{{ work.unread }}</p>
   {% elif work.jobs %}
-    <div class="table-scroll">
+    {% table_region "Jobs" narrow=3 %}
       <table class="data-table">
-        <thead><tr><th>Unit</th><th>Runs</th><th>Last run</th><th class="key-col">Result</th><th class="optional-col">Next run</th></tr></thead>
+        <thead><tr>{% table_heading "Unit" "identifier" local_sort=work.jobs|sortable gutter=True %}{% table_heading "Runs" "numeric" local_sort=work.jobs|sortable drop=3 %}{% table_heading "Last run" "status" local_sort=work.jobs|sortable drop=2 %}{% table_heading "Result" "status" css="key-col" local_sort=work.jobs|sortable %}{% table_heading "Next run" "status" css="optional-col" local_sort=work.jobs|sortable drop=1 %}</tr></thead>
         <tbody>
           {% for job in work.jobs %}
             <tr>
-              <td><code>{{ job.unit }}</code></td>
+              <td class="row-gutter"><code>{{ job.unit }}</code>{% row_toggle %}</td>
               <td>{{ job.runs }}</td>
               <td>{% if job.last_run %}{{ job.last_run|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
               <td><span class="pill pill-{{ job.tone }}">{{ job.result }}</span></td>
@@ -120,16 +120,16 @@ they share a row; either alone takes it.
           {% endfor %}
         </tbody>
       </table>
-    </div>
+    {% endtable_region %}
   {% endif %}
   {% if work.scheduled %}
-    <div class="table-scroll">
+    {% table_region "Scheduled work" narrow=3 %}
       <table class="data-table">
-        <thead><tr><th>Scheduled work</th><th class="optional-col">How often</th><th>Recent runs</th><th class="key-col">Last result</th><th class="optional-col">Next due</th></tr></thead>
+        <thead><tr>{% table_heading "Scheduled work" local_sort=work.scheduled|sortable gutter=True %}{% table_heading "How often" "status" css="optional-col" local_sort=work.scheduled|sortable drop=2 %}{% table_heading "Recent runs" "status" local_sort=work.scheduled|sortable drop=3 %}{% table_heading "Last result" "status" css="key-col" local_sort=work.scheduled|sortable %}{% table_heading "Next due" "status" css="optional-col" local_sort=work.scheduled|sortable drop=1 %}</tr></thead>
         <tbody>
           {% for item in work.scheduled %}
             <tr>
-              <td>{{ item.label }}</td>
+              <td class="row-gutter">{{ item.label }}{% row_toggle %}</td>
               <td class="optional-col">{{ item.every }}</td>
               <td>{% if item.runs %}{% include "partials/_dots.html" with dots=item.runs only %}{% else %}{% empty_value %}{% endif %}</td>
               <td><span class="pill pill-{{ item.tone }}">{{ item.result }}</span></td>
@@ -138,18 +138,18 @@ they share a row; either alone takes it.
           {% endfor %}
         </tbody>
       </table>
-    </div>
+    {% endtable_region %}
   {% endif %}
   {% if work.renderers_unread %}
     <p class="muted">{{ work.renderers_unread }}</p>
   {% elif work.renderers %}
-    <div class="table-scroll">
+    {% table_region "Credentials refresh" narrow=2 %}
       <table class="data-table compact-table">
-        <thead><tr><th>Credentials refresh</th><th class="key-col">Last run</th><th>Tried</th><th>Last confirmed current</th></tr></thead>
+        <thead><tr>{% table_heading "Credentials refresh" "identifier" local_sort=work.renderers|sortable gutter=True %}{% table_heading "Last run" "status" css="key-col" local_sort=work.renderers|sortable %}{% table_heading "Tried" "status" local_sort=work.renderers|sortable drop=2 %}{% table_heading "Last confirmed current" "status" local_sort=work.renderers|sortable drop=1 %}</tr></thead>
         <tbody>
           {% for item in work.renderers %}
             <tr>
-              <td><code>{{ item.name }}</code></td>
+              <td class="row-gutter"><code>{{ item.name }}</code>{% row_toggle %}</td>
               <td><span class="pill pill-{{ item.tone }}">{{ item.result }}</span></td>
               <td>{% if item.attempted %}{{ item.attempted|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
               <td>{% if item.succeeded %}{{ item.succeeded|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
@@ -157,7 +157,7 @@ they share a row; either alone takes it.
           {% endfor %}
         </tbody>
       </table>
-    </div>
+    {% endtable_region %}
   {% endif %}
 </section>
 
@@ -169,17 +169,18 @@ they share a row; either alone takes it.
   {% if sight.never == sight.rows|length %}
   <p class="card">None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>
   {% else %}
-  <div class="table-scroll">
+  {% table_region "Readings" narrow=2 %}
     <table class="data-table">
-      <thead><tr><th>Reading</th><th class="key-col">State</th><th>Records</th><th class="optional-col">Last read</th></tr></thead>
+      <thead><tr>{% table_heading "Reading" local_sort=sight.rows|sortable gutter=True %}{% table_heading "State" "status" css="key-col" local_sort=sight.rows|sortable %}{% table_heading "Records" "numeric" local_sort=sight.rows|sortable drop=2 %}{% table_heading "Last read" "status" css="optional-col" local_sort=sight.rows|sortable drop=1 %}</tr></thead>
       {% for provider, rows in sight.groups %}
       <tbody>
         <tr class="row-group"><th colspan="4" scope="rowgroup">{{ provider }} <span class="count">{{ rows|length }}</span></th></tr>
         {% for row in rows %}
           <tr>
-            <td>
+            <td class="row-gutter">
               {{ row.label }}
               {% if row.reasons %}<ul class="cell-notes">{% for reason in row.reasons %}<li class="muted">{{ reason }}</li>{% endfor %}</ul>{% elif row.remedy %}<br><span class="muted">{{ row.remedy }}</span>{% elif row.error and not row.read %}<br><span class="muted">{{ row.error }}</span>{% endif %}
+              {% row_toggle %}
             </td>
             <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label }}{% else %}<strong>{{ row.state_label }}</strong>{% endif %}</td>
             <td>{% if row.read %}{{ row.records }}{% else %}{% empty_value %}{% endif %}</td>
@@ -189,7 +190,7 @@ they share a row; either alone takes it.
       </tbody>
       {% endfor %}
     </table>
-  </div>
+  {% endtable_region %}
   {% endif %}
   {% if sight.unconnected %}<p class="muted">Not connected: {{ sight.unconnected|join:", " }}. <a href="{% url 'control_plane:connections' %}">Connections</a></p>{% endif %}
 </section>

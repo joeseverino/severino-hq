@@ -6,13 +6,13 @@ changing it would do, and where the reading came from. The certificate is a
 mark after the name that serves it, as in the path strip. A declaration no hop
 reaches closes the table, so nothing the name is made of goes unshown.
 {% endcomment %}
-<div class="table-scroll">
+{% table_region "Parts of this service" narrow=2 %}
   <table class="data-table compact-table service-parts">
-    <thead><tr><th>Step</th><th>Name</th><th class="key-col">State</th><th>If it breaks</th><th>Read from</th></tr></thead>
+    <thead><tr>{% table_heading "Step" gutter=True local_sort=parts|sortable %}{% table_heading "Name" "identifier" drop=3 local_sort=parts|sortable %}{% table_heading "State" "status" css="key-col" local_sort=parts|sortable %}{% table_heading "If it breaks" drop=2 local_sort=parts|sortable %}{% table_heading "Read from" drop=1 local_sort=parts|sortable %}</tr></thead>
     <tbody>
       {% for part in parts %}{% with hop=part.hop %}
         <tr>
-          <td>{{ part.label }}</td>
+          <td class="row-gutter">{{ part.label }}{% row_toggle %}</td>
           <td>
             {% if hop %}{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name }}{% endif %}{% if hop.certificate and not hop.certificate.unread %}{% with certificate=hop.certificate %}{% include "control_plane/_certificate_mark.html" %}{% endwith %}{% endif %}{% if part.detail %}{% if hop.name or hop.link %} <span class="muted">· {{ part.detail }}</span>{% else %}{{ part.detail }}{% endif %}{% elif not hop.name and not hop.link %}{% empty_value %}{% endif %}{% if hop.certificate.unread %}<br><span class="muted">{{ hop.certificate.line }}</span>{% endif %}{% for relation, link in hop.overlays %}<br><span class="muted">{{ relation }}</span> {% entity link %}{% endfor %}{% if hop.unread %}<br><span class="muted">{{ hop.unread|capfirst }}</span>{% endif %}
             {% else %}{% entity part.claim.within_service %}{% for reading in part.claim.readings|slice:":1" %} <span class="muted">· {{ reading.value }}</span>{% endfor %}{% endif %}
@@ -29,4 +29,4 @@ reaches closes the table, so nothing the name is made of goes unshown.
       {% endwith %}{% endfor %}
     </tbody>
   </table>
-</div>
+{% endtable_region %}

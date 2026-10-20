@@ -16,47 +16,12 @@
 
   const selectedIds = new Set(readSelection());
 
-  // A bounded scroll region has to be operable from the keyboard, and a plain
-  // `div` that scrolls is not focusable. That is all this helper does: the
-  // heading itself is `position: sticky` in the stylesheet, so the browser
-  // pins it on the compositor and there is nothing here to measure.
-  //
-  // `is-pane` marks a wrapper that is genuinely its own scroll box: one
-  // holding a table too wide to fit, or one an author capped to a reading
-  // height. Those pin the heading to the box; everything else pins it to the
-  // viewport, and the stylesheet reads this class to tell them apart.
-  function markScrollRegions() {
-    document.querySelectorAll(".table-scroll").forEach((wrapper) => {
-      const table = wrapper.querySelector(".data-table");
-      // Measured off the table, not the wrapper: the wrapper only reports a
-      // scrollable width while it is already a scroll container, and whether it
-      // should be one is exactly the question.
-      const capped = getComputedStyle(wrapper).maxHeight !== "none";
-      const tooWide = !!table && table.scrollWidth > wrapper.clientWidth + 1;
-      const scrolls = capped || tooWide;
-      wrapper.classList.toggle("is-pane", scrolls);
-      wrapper.classList.toggle("is-fitted", !!table && !scrolls);
-      if (scrolls) {
-        if (!wrapper.hasAttribute("tabindex")) wrapper.tabIndex = 0;
-        if (!wrapper.hasAttribute("role")) wrapper.setAttribute("role", "region");
-        if (!wrapper.hasAttribute("aria-label")) {
-          const caption = wrapper.querySelector("caption")?.textContent?.trim();
-          wrapper.setAttribute("aria-label", caption || "Scrollable table");
-        }
-      } else {
-        wrapper.removeAttribute("tabindex");
-        wrapper.removeAttribute("role");
-        wrapper.removeAttribute("aria-label");
-      }
-    });
-  }
-
   // A row can say more than it shows: a clamped name, an ellipsis, a list
-  // folded behind "+5 more". Such a row gets one toggle that shows all of it,
-  // every cut-off value in full and every folded part open, and puts it back.
-  // The parts keep their own toggles too; this is the row's, not a
-  // replacement. Measured, not declared: a row that fits gets no toggle, and a
-  // resize that makes it fit takes the toggle away.
+  // folded behind "+5 more". Such a row's toggle shows all of it, every
+  // cut-off value in full and every folded part open, and puts it back. The
+  // parts keep their own toggles too; this is the row's, not a replacement.
+  // A value cut short is measured (`markCut`); everything else a row holds
+  // back the stylesheet reads from the HTML.
   // Screen-reader text is clipped to a pixel on purpose, and a decoration
   // hidden from assistive technology says nothing a reader could miss, so
   // neither makes a row "say more".
@@ -70,14 +35,15 @@
   };
 
   // Cells of this row that are not shown at all: a column a narrow table
-  // dropped. An empty one says nothing, so it is not something held back.
+  // dropped. One without words says nothing to list, so it is not something
+  // held back.
   const droppedCells = (row) =>
     [...row.children].filter(
       (cell) =>
         cell.tagName === "TD"
         && getComputedStyle(cell).display === "none"
-        && cell.textContent.trim() !== ""
-        && !cell.querySelector(":scope > .empty-value:only-child"),
+        && !cell.hasAttribute("data-blank")
+        && cell.textContent.trim() !== "",
     );
 
   // Within a cell that is showing, what a narrow table holds back.
@@ -86,22 +52,9 @@
       (el) => getComputedStyle(el).display === "none",
     );
 
-  // A cell that runs the width of the table (a section's heading, an open
-  // row) spans the columns that are showing. Left spanning the ones that were
-  // dropped, it keeps them in the table, and a table held to its box shares
-  // its width with columns nobody sees.
-  const spanShown = (table, headings) => {
-    const shown = headings.filter((heading) => getComputedStyle(heading).display !== "none").length;
-    if (!shown) return;
-    table.querySelectorAll(":scope > tbody > tr > [colspan]").forEach((cell) => {
-      if (!("span" in cell.dataset)) cell.dataset.span = cell.colSpan;
-      if (Number(cell.dataset.span) >= headings.length) cell.colSpan = shown;
-    });
-  };
-
-  // Every table sorts. A list whose server sorts it already has links in its
-  // headings and is left to them; any other table with headings gets the same
-  // control here, working on the rows that are on the page. A press sorts
+  // A list whose server sorts it has links in its headings; any other table
+  // whose rows are worth sorting has buttons that sort the rows on the page.
+  // Both are drawn by the server (`table_heading`). A press sorts
   // ascending, the next descending, the third puts the rows back as they came.
   // Rows keep to their own section, a section's heading row stays on top of
   // it, and an open row takes the line beneath it along.
@@ -138,183 +91,22 @@
     if (typeof left === "number" && typeof right === "number") return left - right;
     return String(left).localeCompare(String(right), undefined, { numeric: true });
   };
-  // A table fits its box, at any width, by measurement: no screen width is
-  // asked. It takes the box's width and wraps. Each column is given a floor,
-  // the least it can be and still be read: its own one-line width, or a few
-  // words' worth, whichever is less, and more for the column that names the
-  // row. The browser lays the table out above those floors, taking room from
-  // the columns with room to give. Only when the floors themselves do not fit
-  // does a column leave: first any marked `optional-col`, then from the far
-  // end, never the one that names the row, one marked `key-col`, or the
-  // closing figure of a table that marks none. What leaves is in the row's
-  // own toggle. A window that grows gets its columns back.
-  const READABLE = 120;
-  const READABLE_NAME = 200;
-  // Below this a table's box is narrow, whatever the screen: a phone, or half
-  // a page beside a chart.
-  const NARROW_BOX = 640;
-  // What each heading's column takes with every value on one line.
-  const oneLine = new WeakMap();
-  // Hide a column that is a dash in every row. Never the column that names the
-  // row, nor one holding anything but a dash (a control, a mark, a drawing).
-  const blankCell = (cell) => EMPTY.test(cell.textContent)
-    && !cell.querySelector(":not(.empty-value, .empty-value *, br)");
-  const markBlank = (table) => {
-    delete table.dataset.blank;
-    const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
-    const rows = [...table.querySelectorAll(":scope > tbody > tr:not(.row-group):not(.row-detail)")]
-      .filter((row) => row.children.length === headings.length);
-    if (!rows.length) return;
-    const named = headings[0]?.classList.contains("select-column") ? 1 : 0;
-    const blank = headings
-      .map((heading, index) => index)
-      .filter((index) => index > named && rows.every((row) => blankCell(row.children[index])));
-    if (blank.length) table.dataset.blank = blank.map((index) => index + 1).join(" ");
-  };
-  // Room is what a table has to spare: showing more there leaves the table
-  // inside its box and no taller. A cut identifier and a folded run of links
-  // both take it, so something is cut only where showing it would cost a line.
-  const roomFor = (table, overflows) => {
-    const height = table.getBoundingClientRect().height;
-    return () => !overflows() && table.getBoundingClientRect().height <= height + 0.5;
-  };
-  // A table with an identifier cut gives it the room its rows have: the cap
-  // rises to the longest at which the table keeps its width and its height.
-  const uncut = (table, overflows) => {
-    const cut = [...table.querySelectorAll(":scope > tbody > tr:not(.row-detail) > td code")]
-      .filter((code) => code.clientWidth > 0 && code.scrollWidth > code.clientWidth + 1);
-    if (!cut.length) return;
-    const fitting = roomFor(table, overflows);
-    let fits = parseFloat(getComputedStyle(table).getPropertyValue("--identifier-max"));
-    let over = Math.ceil(Math.max(...cut.map((code) => (fits * code.scrollWidth) / code.clientWidth))) + 2;
-    const cap = (room) => table.style.setProperty("--identifier-max", `${room}ch`);
-    cap(over);
-    if (fitting()) return;
-    while (over - fits > 1) {
-      const room = Math.floor((fits + over) / 2);
-      cap(room);
-      if (fitting()) fits = room;
-      else over = room;
-    }
-    cap(fits);
-  };
-  // A cell that folds what it holds behind "+3" shows all of it wherever that
-  // costs no line.
-  const unfold = (table, overflows) => {
-    table.querySelectorAll(":scope > tbody > tr:not(.row-detail):not(.is-expanded) > td:has(.row-less):has(.row-more)").forEach((cell) => {
-      const fitting = roomFor(table, overflows);
-      cell.dataset.whole = "";
-      if (!fitting()) delete cell.dataset.whole;
+  // How a table is laid out is the stylesheet's and the server's: which
+  // columns show, where an identifier is cut, what a list folds and which
+  // rows offer to open. Only whether a value is cut is a layout's to tell.
+  // A row with a value cut short says more than it shows, which only a layout
+  // can tell, so it is marked for the stylesheet to show its toggle in the
+  // gutter the server's markup already keeps; the mark moves nothing.
+  const markCut = (table) => {
+    table.querySelectorAll(":scope > tbody > tr:not(.row-detail):not(.is-expanded)").forEach((row) => {
+      row.toggleAttribute("data-cut", [...row.querySelectorAll(":is(td, th) *")].some(isCut));
     });
   };
-  const fitTable = (table) => {
-    const wrapper = table.parentElement;
-    if (!wrapper?.classList.contains("table-scroll")) return;
-    // Every table is told when its box is narrow, a drawing's table too: what
-    // it does about it is its own rule's.
-    if (wrapper.clientWidth < NARROW_BOX) table.dataset.narrow = "";
-    else delete table.dataset.narrow;
-    if (wrapper.hasAttribute("data-chart") || wrapper.parentElement?.classList.contains("chart-data")) return;
-    // Held open or pinned across a refresh: its columns are not to move.
-    if (table.style.tableLayout === "fixed") return;
-    table.dataset.fit = "";
-    table.querySelectorAll(":scope > tbody > tr > td[data-whole]").forEach((cell) => delete cell.dataset.whole);
-    delete table.dataset.drop;
-    delete table.dataset.snug;
-    table.style.removeProperty("--identifier-max");
-    delete table.dataset.wrap;
-    table.querySelectorAll(":scope > tbody > tr > [data-span]").forEach((cell) => {
-      cell.colSpan = Number(cell.dataset.span);
+  // A chart's table is read whole and never opens a row.
+  const markCuts = () => {
+    document.querySelectorAll(".table-scroll:not([data-chart]) > .data-table").forEach((table) => {
+      if (!table.parentElement.parentElement?.classList.contains("chart-data")) markCut(table);
     });
-    markBlank(table);
-    const overflows = () => table.getBoundingClientRect().width > wrapper.clientWidth + 1;
-    const all = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
-    all.forEach((heading) => {
-      heading.style.removeProperty("--column-floor");
-      if ("held" in heading.dataset) heading.style.removeProperty("width");
-      delete heading.dataset.held;
-    });
-    const headings = all.filter((heading) => getComputedStyle(heading).display !== "none");
-    // Only the headings showing: a table whose own rule has already dropped
-    // columns in a narrow box (a matrix of periods) is fitted from what is left.
-    if (headings.length) {
-      // What each column would take with every value on one line.
-      table.dataset.measure = "";
-      const wanted = headings.map((heading) => heading.getBoundingClientRect().width);
-      headings.forEach((heading, index) => oneLine.set(heading, wanted[index]));
-      delete table.dataset.measure;
-      const named = headings[0].classList.contains("select-column") ? 1 : 0;
-      headings.forEach((heading, index) => {
-        const style = getComputedStyle(heading);
-        const inset = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-        const floor = Math.min(wanted[index], index === named ? READABLE_NAME : READABLE);
-        heading.style.setProperty("--column-floor", `${Math.max(0, Math.ceil(floor - inset))}px`);
-      });
-      // Before any column leaves, identifiers are cut sooner: a long name in a
-      // chip is whole again when its row is opened, and a column is not. They
-      // are cut only as far as the room needs: the longest that still fits.
-      if (overflows()) {
-        table.dataset.snug = "";
-        // Between the sheet's two widths, in ch, the longest that fits.
-        const root = getComputedStyle(document.documentElement);
-        const widest = parseFloat(root.getPropertyValue("--identifier-max"));
-        const snug = parseFloat(root.getPropertyValue("--identifier-snug"));
-        for (let room = widest; room > snug; room -= 2) {
-          table.style.setProperty("--identifier-max", `${room}ch`);
-          if (!overflows()) break;
-          table.style.removeProperty("--identifier-max");
-        }
-      } else {
-        uncut(table, overflows);
-      }
-      if (overflows() && headings.length >= 3 && !table.querySelector(":scope > colgroup")) {
-        const last = headings.length - 1;
-        const marked = headings.some((heading) => heading.classList.contains("key-col"));
-        const figures = [...table.querySelectorAll(":scope > tbody > tr:not(.row-group):not(.row-detail)")]
-          .map((row) => sortValue(row.children[headings[last].cellIndex]))
-          .filter((value) => value !== null);
-        const endsInFigure = !marked && figures.length > 0
-          && figures.filter((value) => typeof value === "number").length * 2 > figures.length;
-        const spare = headings.filter((heading, index) => index > named
-          && !(endsInFigure && index === last)
-          && !heading.classList.contains("key-col"));
-        // Popped from the end: the far end first, and before any of those,
-        // whatever the page said it can do without.
-        spare.sort((left, right) =>
-          left.classList.contains("optional-col") - right.classList.contains("optional-col"));
-        const dropped = [];
-        while (spare.length && overflows()) {
-          dropped.push(spare.pop().cellIndex + 1);
-          table.dataset.drop = dropped.join(" ");
-        }
-        // The room a column gave up goes back to the identifiers it cut.
-        if (dropped.length) uncut(table, overflows);
-      }
-    }
-    // Still wider than its box with nothing left to give up: the columns are
-    // held to the box. Each takes what its own values need on one line, up to
-    // a readable width, and the column that names the row takes the rest. A
-    // table with no headings has nothing to hold its columns by: fixed, each
-    // would take an even share whatever it holds.
-    if (overflows() && headings.length) {
-      table.dataset.wrap = "tight";
-      const named = headings[0]?.classList.contains("select-column") ? 1 : 0;
-      const beside = headings.filter((heading, index) =>
-        index !== named && getComputedStyle(heading).display !== "none");
-      const whole = beside.reduce((sum, heading) => sum + oneLine.get(heading), 0);
-      // Whole, while the name keeps a readable width beside them.
-      const roomy = wrapper.clientWidth - whole >= READABLE_NAME;
-      beside.forEach((heading) => {
-        const width = roomy ? oneLine.get(heading) : Math.min(oneLine.get(heading), READABLE);
-        heading.style.width = `${Math.ceil(width)}px`;
-        heading.dataset.held = "";
-      });
-    }
-    unfold(table, overflows);
-    spanShown(table, all);
-  };
-  const fitTables = () => {
-    document.querySelectorAll(".table-scroll > .data-table").forEach(fitTable);
   };
 
   // Opening a row must not move the table. Left to itself the browser sizes
@@ -460,67 +252,6 @@
     below.forEach(([el, indent]) => el.style.setProperty("margin-inline-start", `${Math.max(0, indent - start)}px`));
   };
 
-  const rowSaysMore = (row) =>
-    row.querySelector(":is(td:not([data-whole]), th) .row-more, :is(td, th) .row-below") !== null
-    || droppedCells(row).length > 0
-    || [...row.children].some((cell) => heldBack(cell).length > 0)
-    || [...row.querySelectorAll(":is(td, th) *")].some(isCut)
-    || row.querySelectorAll(":is(td, th) details").length >= 2;
-
-  // The row's first cell, header or data: the toggle sits beside what names
-  // the row, not in whichever column happens to be the first <td>.
-  // The same column in every row: the first that is not the tick-box column,
-  // read off the headings, so a row with no tick box does not put its toggle
-  // one column to the left of its neighbours'.
-  const toggleCell = (row) => {
-    const heads = [...row.closest("table").querySelectorAll(":scope > thead > tr:last-child > th")];
-    const column = heads.findIndex((head) => !head.classList.contains("select-column") && !head.querySelector("input[type=checkbox]"));
-    if (column > 0 && row.children[column] && row.children.length === heads.length) return row.children[column];
-    return [...row.children].find((cell) => !cell.querySelector("input[type=checkbox]"));
-  };
-
-  function markExpandableRows() {
-    document.querySelectorAll(".data-table > tbody > tr:not(.row-detail)").forEach((row) => {
-      if (row.classList.contains("is-expanded")) return;
-      // A drawing's table is read as a whole, column against column: a period
-      // it drops in a narrow box is not something one row holds back.
-      const box = row.closest("table").parentElement;
-      if (box?.hasAttribute("data-chart") || box?.parentElement?.classList.contains("chart-data")) return;
-      const toggle = row.querySelector(".row-expand");
-      const expandable = rowSaysMore(row);
-      if (expandable && !toggle) {
-        // A child of the cell itself, never of anything in it: the stylesheet
-        // stands it in the cell's gutter, clear of the cell's own layout and
-        // of any control there.
-        const cell = toggleCell(row);
-        if (!cell) return;
-        const button = document.createElement("button");
-        button.dataset.rowToggle = "";
-        button.type = "button";
-        button.className = "row-expand";
-        button.setAttribute("aria-expanded", "false");
-        button.setAttribute("aria-label", "Show all of this row");
-        // The nav's caret, pointing right until the row is open.
-        const svg = "http://www.w3.org/2000/svg";
-        const mark = document.createElementNS(svg, "svg");
-        mark.setAttribute("viewBox", "0 0 6 10");
-        mark.setAttribute("width", "7");
-        mark.setAttribute("height", "11");
-        mark.setAttribute("aria-hidden", "true");
-        const path = document.createElementNS(svg, "path");
-        path.setAttribute("d", "M1 1l4 4-4 4");
-        mark.append(path);
-        button.append(mark);
-        // Last in the cell, not first: it is placed by the stylesheet either
-        // way, and a rule that asks what a cell starts with should get the
-        // same answer whether or not the row has a toggle.
-        cell.append(button);
-      } else if (!expandable && toggle) {
-        toggle.remove();
-      }
-    });
-  }
-
   document.addEventListener("click", (event) => {
     const button = event.target.closest(".row-expand");
     if (!button) return;
@@ -596,23 +327,6 @@
   };
   window.addEventListener("hashchange", landOnRow);
 
-  // A toggle stands in a gutter of its own at the start of the cell that names
-  // the row, and every row of a table that has one keeps the gutter, the
-  // heading too: names start on one line down the column whether or not a
-  // given row has anything to open.
-  function markGutters() {
-    document.querySelectorAll(".data-table").forEach((table) => {
-      const rows = [...table.querySelectorAll(":scope > tbody > tr:not(.row-detail):not(.row-group)")];
-      const any = rows.some((row) => row.querySelector("[data-row-toggle]"));
-      const cells = rows.map(toggleCell).filter(Boolean);
-      const first = cells[0];
-      const heading = first
-        ? table.querySelector(`:scope > thead > tr:last-child > th:nth-child(${first.cellIndex + 1})`)
-        : null;
-      [...cells, heading].forEach((cell) => cell?.classList.toggle("row-gutter", any));
-    });
-  }
-
   const cameIn = new WeakMap();
   const SORT_MARK = { ascending: "\u2191\ufe0e", descending: "\u2193\ufe0e", none: "\u2195\ufe0e" };
 
@@ -639,8 +353,12 @@
     });
   };
 
+  // A table drawn through the table tags has its sort controls in the HTML
+  // (`table_heading local_sort=…`), and its headings declare a kind. One drawn
+  // by hand, as an extension's template still does, gets them here.
+  const HAND_DRAWN = ".table-scroll > .data-table:not(:has(> thead th[data-kind]))";
   function markSortable() {
-    document.querySelectorAll(".table-scroll > .data-table").forEach((table) => {
+    document.querySelectorAll(HAND_DRAWN).forEach((table) => {
       if (table.parentElement.hasAttribute("data-chart") || table.parentElement.parentElement?.classList.contains("chart-data")) return;
       const headings = [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
       if (!headings.length || table.querySelector(":scope > thead a.table-sort-link")) return;
@@ -686,7 +404,7 @@
   });
 
   let rowsTimer = null;
-  // A window that changes size changes what fits, so widths held for the old
+  // A window that changes size changes what shows, so widths held for the old
   // size are let go and taken again, and each open row lists what is held
   // back now, which may be nothing if its columns came back.
   const settleOpenRows = () => {
@@ -697,7 +415,6 @@
         row.classList.remove("is-expanded");
         closeDetail(row);
       });
-      fitTable(table);
       if (!open.length) return;
       holdColumns(table);
       open.forEach((row) => {
@@ -710,14 +427,7 @@
   const markTables = () => {
     settleOpenRows();
     markSortable();
-    // Twice: a toggle and its gutter take room in the column that names the
-    // row, which can be the room a table that only just fitted did not have.
-    for (let pass = 0; pass < 2; pass++) {
-      fitTables();
-      markScrollRegions();
-      markExpandableRows();
-      markGutters();
-    }
+    markCuts();
   };
   const markTablesSoon = () => {
     window.clearTimeout(rowsTimer);
@@ -739,10 +449,8 @@
   markTables();
   landOnRow();
   window.addEventListener("resize", markTablesSoon);
-  // Everything above is measured in the face the text is drawn in. Measured
-  // before that face has loaded, a column's floor is the fallback's width and
-  // a word the real face draws wider wraps. So it is measured again when the
-  // faces are in.
+  // Whether a value is cut depends on the face it is drawn in, so it is asked
+  // again when the faces are in.
   document.fonts?.ready.then(markTables);
 
   const persistSelection = () => {
@@ -811,10 +519,6 @@
       const currentHeads = table.querySelectorAll("thead th");
       const nextHeads = nextTable.querySelectorAll("thead th");
       if (!currentHeads.length || currentHeads.length !== nextHeads.length) return;
-      // The incoming table gives up the same columns the current one has.
-      ["fit", "drop", "wrap", "narrow", "snug"].forEach((key) => {
-        if (key in table.dataset) nextTable.dataset[key] = table.dataset[key];
-      });
       currentHeads.forEach((th, index) => {
         const width = th.getBoundingClientRect().width;
         if (width) nextHeads[index].style.width = `${width}px`;

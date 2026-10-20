@@ -21,15 +21,15 @@ button named for what it does. How it is built belongs to the API reference.
     </dl>
   {% endif %}
   {% if result_table %}
-    <div class="table-scroll">
+    {% table_region result_table.label narrow=result_table.columns|length|add:-2 %}
       <table class="data-table command-result-table">
         <caption>{{ result_table.label }} · {{ result_table.rows|length }}</caption>
-        <thead><tr>{% for column in result_table.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+        <thead><tr>{% for column in result_table.columns %}{% if forloop.first %}{% table_heading column local_sort=result_table.rows|sortable gutter=True %}{% elif result_table.columns|length > 2 %}{% table_heading column local_sort=result_table.rows|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=result_table.rows|sortable %}{% endif %}{% endfor %}</tr></thead>
         <tbody>
-          {% for row in result_table.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+          {% for row in result_table.rows %}<tr>{% for cell in row %}{% if forloop.first %}<td class="row-gutter">{{ cell }}{% row_toggle %}</td>{% else %}<td>{{ cell }}</td>{% endif %}{% endfor %}</tr>{% endfor %}
         </tbody>
       </table>
-    </div>
+    {% endtable_region %}
   {% endif %}
   <details class="command-result-json"{% if not result_facts and not result_table %} open{% endif %}>
     <summary>Full result, as JSON</summary>

@@ -21,6 +21,7 @@ from ..services import (
     service_catalog,
     service_reading,
 )
+from .markup import within
 
 APP_HOST = {
     "name": "app-host",
@@ -475,6 +476,26 @@ class WiringFaultTests(TestCase):
 
         self.assertEqual(find_service("app.example.com").faults, ())
 
+    def _records(self, *records, kind="cloudflare.dns_record"):
+        for index, (record_type, content) in enumerate(records):
+            spec = {"zone": "example.com", "name": "app.example.com", "record_type": record_type, "content": content}
+            if kind == "adguard.rewrite":
+                spec = {"domain": "app.example.com", "answer": content}
+            healthy(ManagedResource.objects.create(key=f"rec-{index}", kind=kind, spec=spec))
+        return [fault for fault in find_service("app.example.com").faults if "are set up" in fault]
+
+    def test_an_a_and_an_aaaa_record_on_one_name_do_not_compete(self):
+        self.assertEqual(self._records(("A", "198.51.100.7"), ("AAAA", "2001:db8::7")), [])
+
+    def test_an_internal_rewrite_per_address_family_does_not_compete(self):
+        self.assertEqual(
+            self._records(("", "10.0.0.10"), ("", "fd00::10"), kind="adguard.rewrite"),
+            [],
+        )
+
+    def test_two_records_of_one_type_on_one_name_still_compete(self):
+        self.assertEqual(len(self._records(("A", "198.51.100.7"), ("A", "198.51.100.8"))), 1)
+
     def test_a_txt_record_is_policy_and_never_becomes_a_service(self):
         healthy(
             ManagedResource.objects.create(
@@ -630,6 +651,19 @@ class ServiceSurfaceTests(TestCase):
         self.assertEqual(card["value"], "1")
         self.assertEqual(card["detail"], "1 not fully set up")
         self.assertEqual(card["url"], reverse("control_plane:services"))
+
+    def test_the_services_table_sorts_once_it_holds_two_rows(self):
+        self.client.force_login(get_user_model().objects.create_user("op", password="x"))
+
+        def sorted_headings():
+            html = self.client.get(reverse("control_plane:services")).content.decode()
+            return [heading for heading in within(html, "aria-label", "Services") if "aria-sort" in heading.attrs]
+
+        self.assertEqual(sorted_headings(), [])
+        ManagedResource.objects.create(
+            key="docs-dns", kind="adguard.rewrite", spec={"domain": "docs.example.com", "answer": "10.0.0.10"}
+        )
+        self.assertNotEqual(sorted_headings(), [])
 
     def test_no_estate_means_no_card(self):
         ManagedResource.objects.all().delete()

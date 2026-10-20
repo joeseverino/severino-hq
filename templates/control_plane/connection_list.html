@@ -16,15 +16,15 @@ part's heading shows only when there is more than one.
 {% endcomment %}
 {% if connections.groups %}
 <section class="connection-all">
-  <div class="table-scroll">
+  {% table_region "Connections" room="shared" mid=1 narrow=3 %}
     <table class="data-table connection-table">
       <thead>
         <tr>
-          <th>Connection</th>
-          <th>Reads</th>
-          <th class="optional-col">Reaches</th>
-          <th class="tight-col key-col">State</th>
-          <th class="actions-col"></th>
+          {% table_heading "Connection" "identifier" gutter=True local_sort=True %}
+          {% table_heading "Reads" drop=3 local_sort=True %}
+          {% table_heading "Reaches" css="optional-col" drop=1 local_sort=True %}
+          {% table_heading "State" "status" css="tight-col key-col" local_sort=True %}
+          {% table_heading "Actions" css="actions-col" drop=2 hidden=True %}
         </tr>
       </thead>
       {% for purpose, purpose_rows in connections.purposes %}
@@ -33,7 +33,7 @@ part's heading shows only when there is more than one.
         {% for row in purpose_rows %}
           {% with connection=row.connection group=row.group %}
           <tr id="{{ connection.instance.label|connection_anchor }}">
-            <td>
+            <td class="row-gutter">
               <strong>{% entity connection.name_link %}</strong>
               {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
               {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
@@ -56,6 +56,7 @@ part's heading shows only when there is more than one.
                 </div>
               {% endif %}
               {% if row.fix %}{% include "control_plane/_credential_fix.html" with fix=row.fix %}{% endif %}
+              {% row_toggle %}
             </td>
             {% comment %}
             A family earns a name only when it groups more than one connection.
@@ -138,7 +139,7 @@ part's heading shows only when there is more than one.
       </tbody>
       {% endfor %}
     </table>
-  </div>
+  {% endtable_region %}
 
 </section>
 {% comment %}What is not connected yet, here; once everything is, how to connect a second account closes the page, so the page always has a way to add one.{% endcomment %}

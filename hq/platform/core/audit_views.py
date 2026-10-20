@@ -34,6 +34,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     )
     # Off until asked for: an ask for a fresh reading changes nothing.
     table_toggles = (TableToggle(READS, "Read requests"),)
+    table_drop_narrow = 3
     table_columns = (
         TableColumn("When", "created_at", "Oldest event", "Newest event"),
         TableColumn("Who", "user__username", "User A–Z", "User Z–A", css="optional-col"),

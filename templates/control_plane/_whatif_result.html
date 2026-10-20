@@ -14,8 +14,9 @@ The answer to the policy test. The tailnet page answers it alone as its
     to a line of policy is one they have to take on faith, and the next thing
     they want is to go and change it.
     {% endcomment %}
+    {% table_region "Rules that decide it" %}
     <table class="data-table compact-table">
-      <thead><tr><th>Rule</th><th>Admits</th><th>To</th></tr></thead>
+      <thead><tr>{% table_heading "Rule" "status" %}{% table_heading "Admits" "identifier" %}{% table_heading "To" "identifier" %}</tr></thead>
       <tbody>
         {% for rule in verdict.rules %}
           <tr>
@@ -26,6 +27,7 @@ The answer to the policy test. The tailnet page answers it alone as its
         {% endfor %}
       </tbody>
     </table>
+    {% endtable_region %}
   {% endif %}
   {% if proposal and policy_declaration %}
     {% comment %}
@@ -36,8 +38,9 @@ The answer to the policy test. The tailnet page answers it alone as its
     policy is a decision, not a side effect of asking a question.
     {% endcomment %}
     <p class="muted">Grant needed to allow it:</p>
+    {% table_region "Grant needed" %}
     <table class="data-table compact-table">
-      <thead><tr><th>From</th><th>To</th><th>Ports</th></tr></thead>
+      <thead><tr>{% table_heading "From" "identifier" %}{% table_heading "To" "identifier" %}{% table_heading "Ports" "identifier" %}</tr></thead>
       <tbody>
         <tr>
           <td>{% for src in proposal.src %}<code>{{ src|breakable }}</code>{% endfor %}</td>
@@ -46,6 +49,7 @@ The answer to the policy test. The tailnet page answers it alone as its
         </tr>
       </tbody>
     </table>
+    {% endtable_region %}
     <p><a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Open the policy editor &rarr;</a></p>
   {% endif %}
 {% endif %}

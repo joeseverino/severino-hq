@@ -11,7 +11,7 @@ What failed on its last run, said once above the rows that lead the list.
 {% endif %}
 {% endblock %}
 {% block row %}
-  <td>{{ row.created_at|when }}</td>
+  <td class="row-gutter">{{ row.created_at|when }}{% row_toggle %}</td>
   <td>{{ row.title }}{% if row.title != row.kind %} <code class="row-more">{{ row.kind|breakable }}</code>{% endif %}</td>
   <td>{{ row.get_state_display }}</td>
   <td class="num-col">{% if row.duration_seconds %}{{ row.duration_seconds|seconds }}{% else %}{% empty_value %}{% endif %}</td>

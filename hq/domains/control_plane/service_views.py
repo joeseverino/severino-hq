@@ -78,6 +78,8 @@ class ServiceListView(PageMixin, TemplateView):
         context["service_groups"] = tuple(
             group for group in (("Favorites", pinned, True), ("Other services", rest, False)) if group[1]
         )
+        # Both groups are one table, sorted on the page with two rows in all.
+        context["service_count"] = len(found)
         # One answer for both groups, which share the table's columns.
         context["service_projects"] = any(item.project for item in found)
         # Where a service runs is one column, not two. The runtime facet named

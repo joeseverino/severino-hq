@@ -54,11 +54,12 @@ SETTINGS = {
 # website behind the proxy, a status page and docs hosted elsewhere, and the
 # verifications services asked for. Only an A, AAAA or CNAME record names a
 # service, so each of those has something behind it (a proxied site, a host
-# elsewhere) and one name has one such record: two of a kind are a contradiction
-# HQ reports. The rest are policy.
+# elsewhere); the apex is dual stack, and two records of one type on a name are
+# a contradiction HQ reports. The rest are policy.
 # Key, name, type, content, priority, proxied.
 PUBLIC_RECORDS = (
     ("apex", ZONE, "A", "203.0.113.24", None, True),
+    ("apex-v6", ZONE, "AAAA", "2001:db8::24", None, True),
     ("www", f"www.{ZONE}", "CNAME", ZONE, None, True),
     ("status", f"status.{ZONE}", "CNAME", "example-status.statuspage.example.net", None, False),
     ("docs", f"docs.{ZONE}", "CNAME", "example-docs.pages.example.net", None, False),

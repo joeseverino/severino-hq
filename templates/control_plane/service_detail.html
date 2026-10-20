@@ -282,13 +282,13 @@ it is not what anyone opens this page to read.
 {% endcomment %}
   <details class="control-diagnostics">
     <summary>{{ service.alias_summary }}</summary>
-    <div class="table-scroll">
+    {% table_region "Other names" narrow=2 %}
       <table class="data-table">
-        <thead><tr><th>Record</th><th>Type</th><th>For</th><th class="key-col">State</th></tr></thead>
+        <thead><tr>{% table_heading "Record" "identifier" gutter=True local_sort=service.alias_claims|sortable %}{% table_heading "Type" drop=2 local_sort=service.alias_claims|sortable %}{% table_heading "For" "identifier" drop=1 local_sort=service.alias_claims|sortable %}{% table_heading "State" "status" css="key-col" local_sort=service.alias_claims|sortable %}</tr></thead>
         <tbody>
           {% for alias, claim in service.alias_claims %}
             <tr>
-              <td><strong>{% entity claim.link %}</strong></td>
+              <td class="row-gutter"><strong>{% entity claim.link %}</strong>{% row_toggle %}</td>
               <td>{{ claim.kind|kind_label }}</td>
               <td>{{ alias }}</td>
               <td><span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span></td>
@@ -296,7 +296,7 @@ it is not what anyone opens this page to read.
           {% endfor %}
         </tbody>
       </table>
-    </div>
+    {% endtable_region %}
   </details>
 </section>
 {% endif %}

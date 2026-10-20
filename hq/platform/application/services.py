@@ -710,14 +710,15 @@ def _faults(
         faults.append(parked)
 
     for facet in facets:
-        kinds = [claim.kind for claim in facet.claims]
+        slots = [(claim.kind, claim.slot) for claim in facet.claims]
         # Two providers of *different* kinds on one facet is normal: an
         # internal answer and a public one are both DNS and legitimately differ.
-        # Two of the same kind is a contradiction: only one can win, and which
-        # one is decided by whichever reconciled last.
+        # So are an A and an AAAA record (dual stack), which the provider's slot
+        # tells apart. Two of the same kind in the same slot is a contradiction:
+        # only one can win, and which one is decided by whichever reconciled last.
         faults.extend(
             f"Two {plural(lower_first(registry_label(kind)))} are set up for this name. Remove one."
-            for kind in sorted({kind for kind in kinds if kinds.count(kind) > 1})
+            for kind in sorted({kind for kind, slot in slots if slots.count((kind, slot)) > 1})
         )
 
     # These two rules are statements about particular facets, so they name them.

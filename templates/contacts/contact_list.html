@@ -31,15 +31,23 @@
 {% else %}
 <p class="muted">{{ submissions|length|counted:"message" }}{% if selected_status or q %} match{% endif %}.</p>
 
-<div class="table-scroll">
+{% table_region "Messages" mid=1 narrow=4 %}
 <table class="data-table">
   <thead>
-    <tr><th>#</th><th>Received</th><th>From</th><th>Message</th><th>Status</th><th>Country</th><th class="actions-col"><span class="visually-hidden">Actions</span></th></tr>
+    <tr>
+      {% table_heading "#" "identifier" local_sort=submissions|sortable gutter=True %}
+      {% table_heading "Received" "status" local_sort=submissions|sortable %}
+      {% table_heading "From" local_sort=submissions|sortable %}
+      {% table_heading "Message" local_sort=submissions|sortable drop=4 %}
+      {% table_heading "Status" "status" local_sort=submissions|sortable drop=3 %}
+      {% table_heading "Country" local_sort=submissions|sortable drop=2 %}
+      {% table_heading "Actions" css="actions-col" hidden=True drop=1 %}
+    </tr>
   </thead>
   <tbody>
     {% for s in submissions %}
       <tr {% if s.status == "unread" %}class="row-unread"{% endif %}>
-        <td><a href="{% url 'contacts:detail' s.id %}">{{ s.id }}</a></td>
+        <td class="row-gutter"><a href="{% url 'contacts:detail' s.id %}">{{ s.id }}</a>{% row_toggle %}</td>
         <td class="muted">{{ s.created_at|when }}</td>
         <td>
           <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
@@ -60,7 +68,7 @@
     {% endfor %}
   </tbody>
 </table>
-</div>
+{% endtable_region %}
 {% endif %}
 {% endif %}
 {% endblock %}

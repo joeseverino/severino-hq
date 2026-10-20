@@ -1,25 +1,26 @@
 {% load nav_tags %}
 {% comment %}
 One table of containers, used for the ones on show and the ones folded
-away. Included twice rather than written twice, so a column added to one
+away, named by `label`. Included twice rather than written twice, so a column added to one
 cannot go missing from the other.
 {% endcomment %}
+{% table_region label mid=2 narrow=4 %}
 <table class="data-table">
   <thead>
     <tr>
-      <th>Container</th>
-      <th>Image</th>
-      <th>Vulnerabilities</th>
-      <th>Update</th>
-      <th class="optional-col">Ports</th>
-      <th class="key-col">Status</th>
+      {% table_heading "Container" "identifier" gutter=True local_sort=containers|sortable %}
+      {% table_heading "Image" "identifier" drop=4 local_sort=containers|sortable %}
+      {% table_heading "Vulnerabilities" "status" drop=3 local_sort=containers|sortable %}
+      {% table_heading "Update" "status" drop=2 local_sort=containers|sortable %}
+      {% table_heading "Ports" "identifier" css="optional-col" drop=1 local_sort=containers|sortable %}
+      {% table_heading "Status" "status" css="key-col" local_sort=containers|sortable %}
     </tr>
   </thead>
       <tbody>
         {% for container in containers %}
           {% comment %}Addressed by name, so a moment in the history links to its row (application.history).{% endcomment %}
           <tr id="container-{{ container.name|slugify }}">
-            <td>
+            <td class="row-gutter">
               {% comment %}
               The name is the link. A container HQ watches leads to its own
               page. One it only sees has no page, so its name is plain text.
@@ -35,6 +36,7 @@ cannot go missing from the other.
               printing both says one thing twice.
               {% endcomment %}
               {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack }}</span>{% endif %}
+              {% row_toggle %}
             </td>
             {% with standing=standings|dictkey:container.name %}<td>{% if standing %}<code tabindex="0" data-tip="{{ container.image }}">{{ standing.label|breakable }}</code>{% else %}<code>{{ container.image_label|breakable }}</code>{% endif %}</td>{% endwith %}
             {% with standing=standings|dictkey:container.name %}{% if standing %}{% include "control_plane/_container_standing.html" %}{% else %}<td>{% empty_value %}</td><td>{% empty_value %}</td>{% endif %}{% endwith %}
@@ -44,3 +46,4 @@ cannot go missing from the other.
         {% endfor %}
       </tbody>
 </table>
+{% endtable_region %}

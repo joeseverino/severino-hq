@@ -46,22 +46,27 @@ transitions from nothing, so every button fades in on load.
 (`OVERFLOW_WIDTHS`); `test_viewport_breakpoints_only_go_down`, a ceiling that
 only falls.
 
-**A table fits its box, at every width, by one mechanism.** No screen width
-is asked anywhere in the table primitive. A table takes its box's width and
-wraps. `tables.js` gives each column a floor, the least it can be and still be
-read (its own one-line width or a few words' worth, whichever is less; more
-for the column that names the row), and the browser lays the table out above
-those floors, taking room from the columns that have it to give. Only when
-the floors themselves do not fit does a column leave: first any marked
-`optional-col`, then from the far end; never the column that names the row,
-one whose heading is marked `key-col` (`TableColumn(..., css="key-col")` on a
-list view), or the closing figure of a table that marks none. What leaves is
-in the row's toggle. A table in a narrow box, a phone or half a page beside a
-chart, is marked by its box's width and gets roomier rows and holds back what
-is marked `narrow-more`. A column with nothing but dashes in every row is not
-drawn, and a column's minimum width is rounded up so a short word like "Runbook" is not split. A page says only which columns are key or optional;
-the rest is the table primitive's (`app.css`, `tables.js`). A table never
-stacks into cards and is not swiped through. A key/value table (row headers,
+**A table fits its box, at every width, from its HTML.** No screen width is
+asked anywhere in the table primitive: its region (`{% table_region %}`) is a
+size container, and what a table shows is decided by the stylesheet on first
+paint. A table takes its box's width and wraps, the browser sizing each column
+from what it holds. Each column that may leave has a rank, 1 first
+(`{% table_heading ... drop=N %}`; a list's are derived by `ranked`:
+`optional-col` first, then from the far end, never the column that names the
+row, one marked `key-col`, or the closing figure of a table that marks none).
+The region says how many ranks leave in a box under 1000px (`mid=`) and under
+640px (`narrow=`; a list view's `table_drop_mid` and `table_drop_narrow`), so
+each heading carries the widest box it leaves in (`data-drop-tier`) and its
+column goes there. What leaves is in the row's toggle. A table in a narrow
+box, a phone or half a page beside a chart, also gets roomier rows and holds
+back what is marked `narrow-more`. The server marks each body cell that says
+nothing (`data-blank`), and a column blank in every row is not drawn. Since a
+table fits, its region is no scroll box and its heading pins under the page's
+chrome; only a region declared a pane (`pane=True`: a height of its own, as a
+chart's data or the topology ledger, or a table sized to its content) or a
+chart's (`chart=True`) scrolls, pins its heading to its own edge, and takes
+focus. A drop rank in a region that counts no drops is refused at render. A
+table never stacks into cards and is not swiped through. A key/value table (row headers,
 no `thead`) sizes its label column to its longest label. Rows that belong to
 sections share one table as a `tbody` per group with a `.row-group` heading
 row, never two tables kept aligned by hand. Rows that belong under one row
@@ -78,27 +83,45 @@ beneath the row, each part under its column's name. It is the row's own
 content moved there and moved back, never a copy, so a control in it is still
 the one control. The row's own cells stay as they were, and the columns are
 held at their widths for as long as any row is open, so every other row keeps
-its place. The toggle stands in a gutter that every row of the table keeps,
-so names share one edge whether or not a given row opens.
+its place. Every row that can open has its toggle drawn by the server
+(`{% row_toggle %}`), and it shows only where the row holds something back
+now: a column that left with something in it, a `narrow-more` or `row-below`
+part, a fold, or a value `tables.js` found cut (`data-cut`). The toggle
+stands in a gutter that every row of the table keeps while any row opens, so
+names share one edge whether or not a given row opens. The gutter follows from
+the server's markup and the box's width alone; a cut value shows its toggle
+only in a gutter already kept, so nothing the script marks moves a name. In a
+narrow box every table whose rows the server made openable keeps its gutter,
+since touch has no hover title and a value cut there must still open.
+With no script a toggle opens nothing, so nothing is held back for one: every
+column and part stays, and the table is sized to its content inside its region.
 *Gates:* `test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing`,
 `a_tables_names_share_one_edge_whether_or_not_a_row_opens`.
 
-**Every table sorts.** A list its server sorts has links in its headings.
-Any other table with headings gets the same control, looking the same, from
-`tables.js`, sorting
-the rows on the page: ascending, descending, then as they came. Amounts,
-dates and lengths of time sort as what they are; a cell may say its own value
-with `data-sort`. Sections keep their own rows. Nothing per table.
+**Every table sorts.** A list its server sorts has links in its headings
+(`table_heading sort=`). Any other table whose rows are worth sorting has the
+same control, looking the same, drawn as a button (`local_sort=rows|sortable`,
+or a row count where rows come in groups), and `tables.js` sorts the rows on
+the page: ascending, descending, then as they came. Amounts, dates and lengths
+of time sort as what they are; a cell may say its own value with `data-sort`.
+Sections keep their own rows. A table drawn by hand, with no declared
+headings, gets its buttons from `tables.js`.
 *Gate:* `test_any_table_sorts_by_a_heading`.
 
-**A table cuts only what has no room.** A long identifier is one line, cut
-with an ellipsis, and a run of links can fold behind "+3". `tables.js` then
-shows each whole wherever that leaves the table no taller and inside its box,
-so a cut is never a guess: it is there only when showing more would cost a
-line. A stacked list longer than four shows three and "+N more", since
-showing more always costs lines. A row that holds anything back gets one
-toggle that lifts every cut and opens every fold in it.
-*Gate:* `nothing_is_held_back_while_its_table_has_room`.
+**A table is laid out before any script runs.** A long identifier is one
+line, cut with an ellipsis at a share of its region's width
+(`--identifier-max`, in container units between a floor and a ceiling), its
+whole value in its title and in the open row. A region whose rows leave an
+identifier less of the row names it with `room=`: `shared` when the
+identifier sits beside wide columns (it gets little until the region is wide),
+`snug` when it sits beside other identifiers (each is held near one short
+length). A run of links longer than the count its template
+declares folds behind "+N", and a stacked list longer than four shows three
+and "+N more". A row that holds anything back gets one toggle that lifts every
+cut and opens every fold in it. Nothing is measured to lay a table out:
+`tables.js` asks only whether a value is cut (`data-cut`), which shows a
+toggle in a gutter already kept, and holds the columns still while a row is
+open or the rows are refreshed.
 
 A row's opening is its only disclosure: what is shown only once a row is open
 is marked `.row-more` (a word, a list item), or `.row-below` for a block,
