@@ -435,6 +435,16 @@
   };
 
 
+  // A filter's menu that was open when one of its options was ticked is open
+  // in the answer too, so the next option is a press away and the keyboard
+  // stays on the box it ticked.
+  function keepFilterOpen(next) {
+    document.querySelectorAll("[data-table-toolbar] details[data-menu][open] input[name]").forEach((input) => {
+      const menu = next.querySelector(`[data-table-toolbar] input[name="${CSS.escape(input.name)}"]`)?.closest("details[data-menu]");
+      if (menu) menu.open = true;
+    });
+  }
+
   function preserveDisclosureState(next, url) {
     const currentQuery = new URL(window.location.href).searchParams.get("q");
     const nextQuery = new URL(url, window.location.href).searchParams.get("q");
@@ -532,14 +542,14 @@
     return `${window.location.pathname}?${params.toString()}`;
   }
 
-  // The parts of a list page that a search, a sort or a page turn changes.
-  // Every match is replaced pairwise, so a page with more than one table
-  // swaps all of them; one the answer no longer has is removed.
+  // The parts of a list page that a search, a sort or a page turn changes,
+  // each one that every answer has: a list emptied by its filters still has
+  // its results, holding the empty state, so clearing them brings the table
+  // back.
   const TABLE_PARTS = [
     "[data-table-toolbar]",
     "[data-table-selection]",
-    ".table-scroll",
-    ".pagination",
+    "[data-table-results]",
     "[data-search-results]",
   ];
 
@@ -553,6 +563,7 @@
         busy: document.querySelector("main"),
         before: (next) => {
           preserveDisclosureState(next, url);
+          keepFilterOpen(next);
           pinColumnWidths(next);
         },
         title: true,

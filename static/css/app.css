@@ -660,7 +660,8 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
 /* One rhythm for every stacked page section, set in one place. Adjacent sibling
    margins collapse, so a section that already declares its own bottom margin
    keeps whichever is larger rather than adding to this. `dialog` is excluded:
-   an open modal centers itself with `margin: auto`, which a margin-top here would quietly override. */ .content > * + *:not(dialog){ margin-top: var(--stack-gap); }
+   an open modal centers itself with `margin: auto`, which a margin-top here would quietly override.
+   A list's results are one part to swap, and stack as the page does. */ .content > * + *:not(dialog), .content > .table-results > * + * { margin-top: var(--stack-gap); }
 
 h1 { font-size: var(--font-h1); margin: 0 0 var(--space-2); letter-spacing: -.012em; font-weight: 650; }
 /* A section heading reads as a heading: ink, sentence case, a step above body,
@@ -1684,8 +1685,7 @@ details > [data-edge="end"] { left: auto; right: 0; }
 .table-selection { position: sticky; top: 8px; z-index: 15; display: flex; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-4); padding: var(--space-4) var(--space-5); background: var(--ink); color: var(--surface); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
 .table-selection[hidden] { display: none; }
 .table-selection strong { margin-right: auto; font-size: var(--text-sm); }
-main[aria-busy="true"] .table-scroll,
-main[aria-busy="true"] [data-search-results] { opacity: .55; transition: opacity 100ms ease; }
+main[aria-busy="true"] :is([data-table-results], [data-search-results]) { opacity: .55; transition: opacity 100ms ease; }
 
 /* Global search results */
 .search-summary { display: flex; align-items: baseline; gap: var(--space-7); flex-wrap: wrap; margin-bottom: var(--space-7); }
@@ -1978,6 +1978,9 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .row-columns { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-6); margin: 0; }
 .row-columns dt { color: var(--muted); font-size: var(--text-2xs); }
 .row-columns dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+/* A value moved under its column's name is cut at the line's edge, which on a
+   phone comes before its column's cap. */
+.row-columns dd code { max-width: min(100%, var(--identifier-max)); }
 /* What a row keeps for that line at any width (`row-below`): the tall parts
    of a row, set in under the cell they came from. */
 .data-table > tbody > tr:not(.row-detail) .row-below { display: none; }
@@ -2000,9 +2003,6 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 .row-detail > td > .row-columns > dt { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .data-table .row-detail:hover { background: none; }
-/* With its columns held, a value the open row no longer cuts short has to
-   break inside its column rather than run under the next. */
-.data-table tr.is-expanded > :is(td, th) { overflow-wrap: anywhere; }
 
 /* ── Pills / tags ───────────────────────────────────────────────── */
 
@@ -3341,6 +3341,12 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* A line of its own size: inline after a <br>, its links would align to the
    cell's larger line and sit above the words beside them. */
 .connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
+/* Where a connection is reached from is one line, its machine's name cut at
+   the cell's edge. Sized to nothing and stretched to the cell, it never widens
+   its column, and the name, not the line, is what is cut, so its link ends
+   inside the cell. */
+.connection-reach { display: flex; gap: .3em; width: 0; min-width: 100%; white-space: nowrap; }
+.data-table td .connection-reach > [data-entity] { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* Its own section under the table, not a second compartment of a card around it. */
 /* How to connect each provider not yet connected: one row each, opened for its steps. */
 .connection-setup { margin-top: var(--stack-gap); }
@@ -5618,6 +5624,9 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
     line-clamp: none !important;
     max-height: none !important;
     max-width: none !important;
+    /* With its columns held, an uncut value breaks inside its column rather
+       than running under the next, whatever kept it whole. */
+    overflow-wrap: anywhere !important;
   }
 
   /* A band too narrow for two cells is a list, like every other summary:

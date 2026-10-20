@@ -63,6 +63,9 @@ PHONE = 640
 ORIGIN = "http://hq.example.test"
 AUDIT = Path(__file__).with_name("browser_audit.js")
 
+# Every class, id and attribute the gate queries, held by
+# test_browser_selectors to markup a template or tag library writes: CSS
+# selectors only (no `xpath=`), and never an attribute only a script sets.
 SELECTORS = {
     # The fragment primitive: a placeholder's failure line, the disclosure
     # holding one, and the calendar it pages in place.
@@ -79,6 +82,22 @@ SELECTORS = {
     "decision_steps": ".resolution-workflow",
     "decision_detail": ".attention-detail",
     "decision_actions": ".queue-act .attention-actions",
+    # A list page's controls: its search, a filter's menu and a box in one, a
+    # toggle beside them, a heading that sorts on the server, and the results
+    # they change: the rows, or the empty state that says nothing matches.
+    "table_search": "[data-table-toolbar] input[type=search]",
+    "table_filter": "[data-table-toolbar] details[data-menu]",
+    "table_filter_box": "input[type=checkbox][name]",
+    "table_toggle": "[data-table-toolbar] .table-toggle input",
+    "table_rows": "main .data-table > tbody > tr",
+    "table_empty": "main [data-empty-state]",
+    "sort_link": "main a.table-sort-link",
+    # The queue's own filter: a choice of urgency, applied by its button.
+    "queue_urgency": "form.filter-bar select[name=status]",
+    "queue_apply": "form.filter-bar button[type=submit]",
+    # The header's menus, and on a phone the drawer that holds them.
+    "nav_menu": ".primary-nav details[data-menu]",
+    "nav_open": ".nav-toggle-open",
     "highlights": ".dashboard-highlights > .highlight-card",
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".dash-readings .glance-panel-head",
@@ -1154,6 +1173,8 @@ _SORT_BY = """([scroll, column]) => {
         .map((row) => row.children[column].textContent.trim().replace(/\\s+/g, ' '))),
   };
 }"""
+# Press every one of these a reader can see: one drawn but not offered is not.
+_PRESS_EVERY_SHOWN = "(controls) => controls.forEach((control) => control.checkVisibility() && control.click())"
 # Press the first toggle that shows in the page's first table, and say which
 # of its records (counted as _PHONE_TABLE counts them) it opened.
 _PRESS_FIRST_ROW_TOGGLE = """(scroll) => {
@@ -2333,6 +2354,43 @@ class LayoutBrowserTests(BrowserGate):
                     self.assertFalse(steps[0].is_visible())
                     opened += 1
                 self.assertGreater(opened, 0)
+
+    def test_a_family_opens_to_its_rows_and_closes_them(self):
+        """A family's toggle shows the rows folded under it and says so, and a
+        second press folds them away again."""
+
+        self.start(java_script_enabled=True)
+        for width in (PHONE_SCREEN[0], OVERFLOW_WIDTHS[-1]):
+            with self.subTest(width=width):
+                self.open("action-items", width)
+                toggle = self.page.locator(SELECTORS["decision_family"]).first
+                family = toggle.evaluate("(toggle) => toggle.closest('tr').id")
+                rows = self.page.locator(f'tr[data-folded="{family}"]')
+                self.assertGreater(rows.count(), 0)
+
+                def shown(rows=rows):
+                    return [row.is_visible() for row in rows.all()]
+
+                self.assertNotIn(True, shown())
+                toggle.click()
+                self.assertEqual(toggle.get_attribute("aria-expanded"), "true")
+                self.assertNotIn(False, shown())
+                toggle.click()
+                self.assertEqual(toggle.get_attribute("aria-expanded"), "false")
+                self.assertNotIn(True, shown())
+
+    def test_an_opened_row_keeps_its_words_in_their_cells(self):
+        """Opening a row lifts every cut in it, and what was cut breaks inside
+        its column rather than running under the next one."""
+
+        self.start(java_script_enabled=True)
+        for name in ALL_PAGES:
+            for width in (PHONE_SCREEN[0], 820):
+                with self.subTest(page=name, width=width):
+                    self.open(name, width)
+                    self.page.locator(SELECTORS["row_toggle"]).evaluate_all(_PRESS_EVERY_SHOWN)
+                    self.page.evaluate(_SETTLED)
+                    self.assertEqual(self.page.evaluate(_CELLS), [])
 
     def test_every_selector_parses(self):
         authored = authored_selectors(Path(finders.find("css/app.css")).read_text())

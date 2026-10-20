@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 lazy from hq_sdk import contract, template_contract, text_contract
 
-BEGIN = "<!-- sdk_contract: shared UI contract -->"
+BEGIN = "<!-- sdk_contract: shared UI contract, written by `mise run regen` from hq_sdk/template_contract.py -->"
 END = "<!-- /sdk_contract -->"
 
 

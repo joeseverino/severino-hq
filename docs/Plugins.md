@@ -487,12 +487,12 @@ something back. A `TableListMixin` list declares the same through
 `TableColumn(kind=)`, its ranks derived from the columns unless one says
 `drop=`, and its counts as `table_drop_mid` and `table_drop_narrow`.
 
-<!-- sdk_contract: shared UI contract -->
+<!-- sdk_contract: shared UI contract, written by `mise run regen` from hq_sdk/template_contract.py -->
 
 | Frame | Blocks a page fills | What it is |
 | --- | --- | --- |
 | `confirm_page.html` | `consequences` | A destructive action's confirmation: `consequences` says what will happen. |
-| `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table, `foot` is its `<tfoot>`. |
+| `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`. |
 | `page.html` | `page` | Any page: the head, actions, dialogs and section navigation, drawn from `page`. |
 
 | Partial | Required | Optional | What it is |

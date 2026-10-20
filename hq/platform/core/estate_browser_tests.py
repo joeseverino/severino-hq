@@ -17,7 +17,7 @@ import re
 from functools import partial
 from html import unescape
 from typing import override
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
 
 from django.conf import settings
 from django.test import Client, override_settings
@@ -297,3 +297,255 @@ class ExampleEstateBrowserTests(BrowserGate):
                     if moved:
                         self.fail("\n".join(moved))
                     self.unanswered = []
+
+
+# A list's toolbar boxes (a filter's options and its toggles), the sort its
+# server stands at, the links its headings sort by, and the queue's choices.
+_TOOLBAR_BOX = re.compile(r'<input type="checkbox" name="([^"]+)" value="([^"]*)"')
+_DEFAULT_SORT = re.compile(r'<select name="sort">.*?<option value="([^"]*)" selected>', re.DOTALL)
+_SORT_LINK = re.compile(r'class="table-sort-link" href="([^"]+)"')
+_QUEUE_CHOICES = re.compile(r'<select name="(status|source)"[^>]*>(.*?)</select>', re.DOTALL)
+_OPTION = re.compile(r'<option value="([^"]+)"')
+_FIRST_ROW = re.compile(r"<tbody>\s*<tr[^>]*>(.*?)</tr>", re.DOTALL)
+_CELL = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL)
+
+
+def _cell_words(row):
+    return (re.sub(r"<[^>]+>", " ", cell).split() for cell in _CELL.findall(row))
+
+
+# What no record is called, so a search for it empties the list.
+_NOTHING = "nothing-is-called-this"
+# A phone and a laptop: where a control moves into a menu, and where it does not.
+PRESSED_AT = (PHONE_SCREEN[0], WIDE)
+# The address shows what was asked for and the answer is in place.
+_ASKED = """([name, value]) => new URLSearchParams(location.search).getAll(name).includes(value)
+  && !document.querySelector('main[aria-busy]')"""
+_LET_GO = """([name, value]) => !new URLSearchParams(location.search).getAll(name).includes(value)
+  && !document.querySelector('main[aria-busy]')"""
+_FIRST_COLUMN = """(rows) => [...document.querySelectorAll(rows)]
+  .map((row) => row.cells[0].innerText.trim().split('\\n')[0])"""
+
+
+class ExampleEstateControlTests(BrowserGate):
+    """Every kind of control on a list page does what it says when pressed, on
+    the example estate at a phone's width and a laptop's: a filter, a search, a
+    heading that sorts, the queue's own filter and the menus that hold them.
+    The answers are rendered first, every address a press can ask for, keyed by
+    what it asks (a blank field and the sort a list stands at by default ask
+    nothing)."""
+
+    @classmethod
+    @override
+    def render(cls):
+        cls.default_sort, cls.word = {}, {}
+        answers = {}
+        with transaction.atomic(), as_production(), override_settings(SEVERINO_POSTURE="advanced"):
+            client = Client()
+            client.force_login(build_showcase(), backend=SSO)
+
+            def ask(address):
+                response = client.get(address, secure=True, follow=True, **REQUEST)
+                if response.status_code != 200:
+                    raise AssertionError(f"{address} answered {response.status_code}")
+                body = response.content.decode()
+                path = urlsplit(address).path
+                if path not in cls.default_sort:
+                    default = _DEFAULT_SORT.search(body)
+                    cls.default_sort[path] = unescape(default.group(1)) if default else ""
+                answers[cls.key(address)] = body
+                return body
+
+            for path in (reverse("expenses:list"), reverse("projects:list")):
+                cls.ask_of_a_list(ask, path)
+            queue = reverse("action_items")
+            for name, options in _QUEUE_CHOICES.findall(ask(queue)):
+                for value in _OPTION.findall(options):
+                    ask(f"{queue}?{name}={value}")
+            transaction.set_rollback(True)
+        return answers
+
+    @classmethod
+    def ask_of_a_list(cls, ask, path):
+        """Every address a list's controls can ask for: each box ticked alone,
+        each heading's sort both ways, a search for its first row's first word
+        and one for nothing."""
+
+        body = ask(path)
+        for name, value in _TOOLBAR_BOX.findall(body):
+            ask(f"{path}?{name}={value}")
+        for href in _SORT_LINK.findall(body):
+            for deeper in _SORT_LINK.findall(ask(urljoin(path, unescape(href)))):
+                ask(urljoin(path, unescape(deeper)))
+        row = _FIRST_ROW.search(body).group(1)
+        cls.word[path] = next(unescape(words[0]) for words in _cell_words(row) if words)
+        ask(f"{path}?q={cls.word[path]}")
+        ask(f"{path}?q={_NOTHING}")
+
+    @classmethod
+    def key(cls, address):
+        """What an address asks: its path and the fields it fills, less the
+        sorts a list takes when none is named (its default, and relevance,
+        which a search's toolbar names once it has a query)."""
+
+        parts = urlsplit(address)
+        unnamed = {cls.default_sort.get(parts.path), "_relevance"}
+        asked = frozenset(
+            (name, value)
+            for name, value in parse_qsl(parts.query)
+            if value and not (name == "sort" and value in unnamed)
+        )
+        return parts.path, asked
+
+    @override
+    def answer(self, route):
+        request = route.request
+        path = urlsplit(request.url).path
+        if request.method != "GET":
+            route.fulfill(status=405, body="The control gate only reads")
+        elif self.key(request.url) in self.pages:
+            route.fulfill(content_type="text/html", body=self.pages[self.key(request.url)])
+        elif path.startswith(settings.STATIC_URL):
+            super().answer(route)
+        else:
+            # A part the page asks for by itself is not what these hold.
+            route.fulfill(status=404, body="Not pressed here")
+
+    @override
+    def start(self, **options):
+        options.setdefault("java_script_enabled", True)
+        super().start(**options)
+
+    def visit(self, path, width):
+        self.page.set_viewport_size(viewport(width))
+        self.page.goto(f"{ORIGIN}{path}", wait_until="load")
+        self.page.evaluate(_SETTLED)
+
+    def rows(self):
+        return self.page.locator(SELECTORS["table_rows"]).count()
+
+    def test_a_filter_narrows_its_list_keeps_it_in_the_address_and_lets_it_go(self):
+        path = reverse("expenses:list")
+        for width in PRESSED_AT:
+            with self.subTest(width=width):
+                self.visit(path, width)
+                every = self.rows()
+                menu = self.page.locator(SELECTORS["table_filter"]).first
+                menu.locator("summary").click()
+                box = menu.locator(SELECTORS["table_filter_box"]).first
+                asked = [box.get_attribute("name"), box.get_attribute("value")]
+                box.check()
+                self.page.wait_for_function(_ASKED, arg=asked)
+                self.assertLess(self.rows(), every)
+                # The answer's menu is open where the reader left it, the box ticked.
+                self.assertTrue(menu.evaluate("(menu) => menu.open"))
+                self.assertTrue(box.is_checked())
+                box.uncheck()
+                self.page.wait_for_function(_LET_GO, arg=asked)
+                self.assertEqual(self.rows(), every)
+
+                # A list its filters empty says so, and gives every row back.
+                toggle = self.page.locator(SELECTORS["table_toggle"]).first
+                asked = [toggle.get_attribute("name"), toggle.get_attribute("value")]
+                toggle.check()
+                self.page.wait_for_function(_ASKED, arg=asked)
+                self.assertEqual(self.rows(), 0)
+                self.assertTrue(self.page.locator(SELECTORS["table_empty"]).is_visible())
+                toggle.uncheck()
+                self.page.wait_for_function(_LET_GO, arg=asked)
+                self.assertEqual(self.rows(), every)
+                self.assertFalse(self.page.locator(SELECTORS["table_empty"]).count())
+
+                # Back is the list as it was, the address and the box agreeing.
+                self.page.go_back()
+                self.page.wait_for_function(_ASKED, arg=asked)
+                self.assertEqual(self.rows(), 0)
+                self.assertTrue(toggle.is_checked())
+
+    def test_a_search_narrows_its_list_and_clearing_it_brings_every_row_back(self):
+        path = reverse("projects:list")
+        word = self.word[path]
+        for width in PRESSED_AT:
+            with self.subTest(width=width):
+                self.visit(path, width)
+                every = self.rows()
+                search = self.page.locator(SELECTORS["table_search"])
+                search.fill(word)
+                self.page.wait_for_function(_ASKED, arg=["q", word])
+                found = self.page.locator(SELECTORS["table_rows"]).all_inner_texts()
+                self.assertTrue(0 < len(found) < every)
+                self.assertEqual([row for row in found if word.lower() not in row.lower()], [])
+                # Typing carries on in the box: the answer did not take it away.
+                self.assertTrue(search.evaluate("(box) => box === document.activeElement"))
+                search.fill(_NOTHING)
+                self.page.wait_for_function(_ASKED, arg=["q", _NOTHING])
+                self.assertEqual(self.rows(), 0)
+                self.assertTrue(self.page.locator(SELECTORS["table_empty"]).is_visible())
+                search.fill("")
+                self.page.wait_for_function(_LET_GO, arg=["q", _NOTHING])
+                self.assertEqual(self.rows(), every)
+
+    def test_a_sort_heading_orders_its_list_and_says_which_way(self):
+        path = reverse("projects:list")
+        for width in PRESSED_AT:
+            with self.subTest(width=width):
+                self.visit(path, width)
+                link = self.page.locator(SELECTORS["sort_link"]).first
+                sorted_by = "(link) => link.closest('th').getAttribute('aria-sort')"
+                self.assertEqual(link.evaluate(sorted_by), "none")
+                for direction in ("ascending", "descending"):
+                    asked = dict(parse_qsl(urlsplit(link.get_attribute("href")).query))["sort"]
+                    link.click()
+                    self.page.wait_for_function(_ASKED, arg=["sort", asked])
+                    self.assertEqual(link.evaluate(sorted_by), direction)
+                    names = self.page.evaluate(_FIRST_COLUMN, SELECTORS["table_rows"])
+                    self.assertEqual(names, sorted(names, key=str.lower, reverse=direction == "descending"))
+
+    def test_the_queue_keeps_only_the_urgency_it_is_asked_for(self):
+        for width in PRESSED_AT:
+            with self.subTest(width=width):
+                self.visit(reverse("action_items"), width)
+                every = self.page.locator(SELECTORS["decisions"]).count()
+                urgency = self.page.locator(SELECTORS["queue_urgency"])
+                # The urgency the first row is at, so the answer has rows to hold.
+                offered = urgency.locator("option").evaluate_all("(options) => options.map((option) => option.value)")
+                first = self.page.locator(f"{SELECTORS['decisions']} .pill").first.get_attribute("class").split()
+                chosen = next(value for value in offered if value and f"pill-{value}" in first)
+                urgency.select_option(chosen)
+                with self.page.expect_navigation():
+                    self.page.locator(SELECTORS["queue_apply"]).click()
+                self.assertIn(("status", chosen), parse_qsl(urlsplit(self.page.url).query))
+                self.assertEqual(urgency.input_value(), chosen)
+                rows = self.page.locator(SELECTORS["decisions"])
+                self.assertTrue(0 < rows.count() <= every)
+                marks = rows.locator(".pill").evaluate_all("(pills) => pills.map((pill) => [...pill.classList])")
+                self.assertEqual([mark for mark in marks if f"pill-{chosen}" not in mark], [])
+
+    def test_a_menu_opens_and_closes_on_escape_and_a_press_outside(self):
+        def is_open(menu):
+            return menu.evaluate("(menu) => menu.open")
+
+        for width in PRESSED_AT:
+            with self.subTest(width=width):
+                self.visit(reverse("expenses:list"), width)
+                menus = [self.page.locator(SELECTORS["table_filter"]).first]
+                if width >= WIDE:
+                    menus.append(self.page.locator(SELECTORS["nav_menu"]).first)
+                for menu in menus:
+                    menu.locator("summary").click()
+                    self.assertTrue(is_open(menu))
+                    self.page.keyboard.press("Escape")
+                    self.assertFalse(is_open(menu))
+                    menu.locator("summary").click()
+                    self.assertTrue(is_open(menu))
+                    self.page.locator(SELECTORS["page_title"]).click()
+                    self.assertFalse(is_open(menu))
+                if width < WIDE:
+                    # A phone's menus are in a drawer, which Escape closes whole.
+                    self.page.locator(SELECTORS["nav_open"]).click()
+                    menu = self.page.locator(SELECTORS["nav_menu"]).first
+                    menu.locator("summary").click()
+                    self.assertTrue(is_open(menu))
+                    self.assertTrue(menu.locator("a").first.is_visible())
+                    self.page.keyboard.press("Escape")
+                    self.assertFalse(menu.is_visible())

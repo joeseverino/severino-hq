@@ -2603,7 +2603,7 @@
         ]
       },
       "list_page.html": {
-        "about": "A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table, `foot` is its `<tfoot>`.",
+        "about": "A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`.",
         "blocks": {
           "foot": {
             "given": []
