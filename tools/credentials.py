@@ -1,22 +1,21 @@
 """Mint HQ's read-only observer credentials, and wire its GitHub App, on the operator's machine.
 
-    mise run mint:cloudflare --account ID [--print-secret | --store op://VAULT/ITEM/FIELD]
-    mise run mint:tailscale [--print-secret | --store REF --store-id REF]
+    mise run mint:cloudflare --account ID [--store op://VAULT/ITEM/FIELD]
+    mise run mint:tailscale [--store REF --store-id REF]
     mise run wire-github-app --vault VAULT --item ITEM --client-id ID [--extension OWNER/REPO ...]
 
 Each task's usage spec parses its flags and mise hands them over as
 ``usage_<flag>`` variables, which is all this module reads of them.
 
-A mint creates nothing unless asked: a provider shows a secret once, so a
-credential created without being printed or stored could never be used. A
-plain run states what it would create. ``--print-secret`` creates it and writes
-only the secret to stdout. ``--store`` checks the 1Password item carries each
-field first, then creates it and writes it there through ``op``.
+A mint creates nothing unless it can store what it creates: a provider shows a
+secret once, so a credential created without being stored could never be used.
+A plain run states what it would create. ``--store`` checks the 1Password item
+carries each field first, then creates it and writes it there through ``op``.
 
 Secrets travel in memory and on stdin only: a bootstrap credential comes from
-the environment and goes out in a request header, a minted one goes to stdout
-in print-secret mode or into ``op item edit``'s stdin. None reaches an argument
-list, a file or a message.
+the environment and goes out in a request header, a minted one goes into
+``op item edit``'s stdin. None reaches an argument list, a file, stdout or a
+message.
 """
 
 from __future__ import annotations
@@ -264,7 +263,7 @@ class Provider:
 
 
 def stores_of(provider: Provider, usage: Usage) -> tuple[Store, ...]:
-    """The stores asked for, all on one item; none when the run prints or plans."""
+    """The stores asked for, all on one item; none when the run only plans."""
 
     given = [usage.text(flag) for flag in provider.stores]
     if not any(given):
@@ -272,8 +271,6 @@ def stores_of(provider: Provider, usage: Usage) -> tuple[Store, ...]:
     flags = " and ".join(f"--{flag.replace('_', '-')}" for flag in provider.stores)
     if not all(given):
         raise UsageError(f"{flags} go together: each names the field its value goes to.")
-    if usage.switch("print_secret"):
-        raise UsageError("--store and --print-secret are exclusive.")
     stores = tuple(Store.parse(reference) for reference in given)
     if len({(store.vault, store.item) for store in stores}) != 1:
         raise UsageError(f"{flags} name one item.")
@@ -285,16 +282,12 @@ def mint(provider: Provider, session: Session, onepassword: OnePassword) -> None
     plan = provider.plan(session)
     if plan is None:
         return
-    if stores:
-        onepassword.check(stores)
-    elif not session.usage.switch("print_secret"):
+    if not stores:
         session.say(*plan.summary, provider.next_step)
         return
+    onepassword.check(stores)
     minted = provider.create(session, plan)
     session.say(f"{provider.noun} id: {minted.id}", f"Expires: {minted.expires}")
-    if not stores:
-        print(minted.secret, file=session.out)
-        return
     try:
         onepassword.write(stores, provider.values(minted))
     except Refused as refused:
@@ -451,8 +444,7 @@ CLOUDFLARE = Provider(
     stores=("store",),
     noun="Token",
     next_step=(
-        "Nothing created. Rerun with --print-secret and pipe stdout into the\n"
-        "cloudflare_api connection's API_TOKEN field (docs/Secrets.md)."
+        "Nothing created. Rerun with --store naming the cloudflare_api\nconnection's API_TOKEN field (docs/Secrets.md)."
     ),
     unstored="Token {id} was created but not stored. Delete it under API Tokens and run this again.",
     plan=cloudflare_plan,
@@ -524,9 +516,9 @@ TAILSCALE = Provider(
     stores=("store", "store_id"),
     noun="Client",
     next_step=(
-        "Nothing created. Rerun with --print-secret and pipe stdout into the\n"
-        "tailscale connection's CLIENT_SECRET field (docs/Secrets.md), or create\n"
-        "the client under Trust credentials in the admin console with these scopes."
+        "Nothing created. Rerun with --store and --store-id naming the tailscale\n"
+        "connection's CLIENT_SECRET and CLIENT_ID fields (docs/Secrets.md), or\n"
+        "create the client under Trust credentials in the admin console with these scopes."
     ),
     unstored="Client {id} was created but not stored. Revoke it under Trust credentials and run this again.",
     plan=tailscale_plan,

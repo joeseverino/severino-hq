@@ -24,6 +24,7 @@ read only to be matched against the catalog, never repeated.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -370,11 +371,9 @@ def _deploy_log(reader: GitHub, run: str, read: Callable[[int], str], wait: Call
     if job is None:
         return ""
     for _ in range(6):
-        try:
+        with contextlib.suppress(LogUnreadable):
             if log := read(job.id):
                 return log
-        except LogUnreadable:
-            pass
         wait()
     return ""
 

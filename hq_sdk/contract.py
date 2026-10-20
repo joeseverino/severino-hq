@@ -34,7 +34,7 @@ from typing import Any
 from pydantic import BaseModel
 
 import hq_sdk
-from hq_sdk import template_contract
+import hq_sdk.template_contract
 
 CONTRACT_PATH = Path(__file__).with_name("contract.json")
 # Modules that write the record rather than offer anything to an extension.
@@ -172,7 +172,7 @@ def describe() -> dict[str, Any]:
         "api_version": PLUGIN_API_VERSION,
         "sdk_version": hq_sdk.SDK_VERSION,
         "modules": modules,
-        "templates": template_contract.describe(),
+        "templates": hq_sdk.template_contract.describe(),
     }
     plain: dict[str, Any] = json.loads(json.dumps(contract, sort_keys=True))
     return plain
@@ -245,5 +245,5 @@ def drift(committed: dict[str, Any], current: dict[str, Any]) -> list[str]:
             lines.append(f"- hq_sdk.{module}")
         else:
             lines.extend(_module_drift(module, before[module], after[module]))
-    lines.extend(template_contract.drift(committed.get("templates", {}), current.get("templates", {})))
+    lines.extend(hq_sdk.template_contract.drift(committed.get("templates", {}), current.get("templates", {})))
     return lines

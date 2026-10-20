@@ -462,6 +462,21 @@ _STRING: Mapping[str, Any] = {"type": "string"}
 class _UnreadableQuery(ValueError):
     """A declared parameter whose value is not of its declared type."""
 
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _refusal_reason(exc: ValueError) -> str:
+    """The ``reason`` a refusal's author wrote for the caller, never ``str(exc)``.
+
+    A refusal's arguments can carry whatever raised it; one with no curated
+    reason is answered in HQ's words instead.
+    """
+
+    reason = getattr(exc, "reason", None)
+    return reason if isinstance(reason, str) else "The query cannot be read."
+
 
 def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]:
     """The declared query parameters, an integer one read as an integer.
@@ -503,8 +518,8 @@ def _projection(
     transport's: both projections answer it by returning everything and saying
     which filter they applied, so a client can tell "matched nothing" from
     "never applied". A value that cannot narrow at all (an integer that is not
-    one, or an application error in ``refusals``) is a 400. Every refusal's
-    text is HQ's own, written for the caller, never the value sent.
+    one, or an application error in ``refusals``) is a 400, answered with the
+    refusal's ``reason``: HQ's own text, written for the caller, never the value sent.
     """
 
     refused: tuple[type[ValueError], ...] = (_UnreadableQuery, *refusals)
@@ -513,7 +528,7 @@ def _projection(
         try:
             return _ok(serve(principal=request.principal, **_narrowing(request, query_fields)))
         except refused as exc:
-            return _fail(str(exc), code="invalid_input", status=400)
+            return _fail(_refusal_reason(exc), code="invalid_input", status=400)
         except AuthorizationError as exc:
             return _fail(exc.reason, code=exc.code, status=403)
 

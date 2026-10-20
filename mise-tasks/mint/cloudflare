@@ -1,6 +1,5 @@
 #!/bin/sh
 #MISE description="Mint a read-only Cloudflare token for the cloudflare_api connection (docs/Secrets.md)"
-#MISE raw=true
 #USAGE flag "--account <id>" required_unless="--list-groups" help="Cloudflare account the token reads"
 #USAGE flag "--name <name>" default="hq-observer" help="Token name"
 #USAGE flag "--days <n>" default="90" help="Days until expiry"
@@ -8,11 +7,9 @@
 #USAGE flag "--allow-ip <cidr>" var=#true help="Accept the token only from this range; repeatable"
 #USAGE flag "--permissions <file>" help="Permission list (default: tools/cloudflare-observer-permissions.txt)"
 #USAGE flag "--list-groups" help="Print permission group names and scopes, then exit"
-#USAGE flag "--print-secret" help="Create the token and write its secret to stdout"
 #USAGE flag "--store <ref>" help="Create the token and store it at op://<vault>/<item>/<field>"
 
 # The bootstrap token comes from the environment, never a flag:
 # CLOUDFLARE_BOOTSTRAP_TOKEN may create API tokens (API Tokens Write);
 # CLOUDFLARE_API_BASE overrides https://api.cloudflare.com/client/v4.
-# raw: stdout is the secret alone, never a line mise prefixes or holds back.
 exec uv run --quiet python -m tools.credentials mint cloudflare

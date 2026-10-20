@@ -419,8 +419,8 @@ reference shaped like the connection. The renderer refuses a bootstrap in the
 vault it reads, because a reader of that vault could then mint.
 
 Two tasks mint read-only credentials, both over `tools/credentials.py`. Both take the bootstrap credential
-from the environment. Without `--print-secret` (or `--store`) they print what
-they would create and create nothing.
+from the environment. Without `--store` they print what they would create and
+create nothing: a secret goes into 1Password and nowhere else.
 
 - `mise run mint:cloudflare` needs a bootstrap token with API Tokens
   Write. It resolves the names in `tools/cloudflare-observer-permissions.txt`

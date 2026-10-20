@@ -152,7 +152,9 @@ source = ["."]
 parallel = true
 concurrency = ["multiprocessing", "thread"]
 sigterm = true
-omit = ["*/migrations/*", "*/tests/*", "manage.py", "hq/config/*", ".venv/*"]
+# tools/ and demo/ are development tooling, tested by checks:source, which the
+# suite this measures leaves out.
+omit = ["*/migrations/*", "*/tests/*", "manage.py", "hq/config/*", ".venv/*", "tools/*", "demo/*"]
 
 [tool.coverage.report]
 show_missing = false

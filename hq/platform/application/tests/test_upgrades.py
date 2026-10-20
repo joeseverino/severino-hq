@@ -336,8 +336,6 @@ class HelperInstallTests(TestCase):
         self.assertEqual([step.id for step in install_steps("example-box", deployed_here=True)], ["allow", "check"])
 
     def test_the_sudo_rule_admits_an_upgrade_and_nothing_else(self):
-        import re
-
         from ..upgrades import _PROBE, ARGUMENTS, STACKS_ROOT, sudoers_command
 
         rule = re.compile(ARGUMENTS)

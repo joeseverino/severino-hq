@@ -1,7 +1,7 @@
 """The credential tasks against a fake API, op and gh: nothing leaves the machine.
 
-What every case holds: a secret reaches stdout only in print-secret mode, and
-no argument list, URL or message at all.
+What every case holds: a minted secret reaches the 1Password item and nothing
+else: no stdout, argument list, URL or message.
 """
 
 import io
@@ -111,11 +111,12 @@ class Run:
         return self.commands.edited
 
     def assert_secret_kept(self, test: SimpleTestCase, *secrets: str) -> None:
-        """No secret in an op argument, an API address, or stderr."""
+        """No secret in an op argument, an API address, stdout or stderr."""
 
         for secret in secrets:
             test.assertFalse(any(secret in word for argv in self.commands.argv for word in argv))
             test.assertFalse(any(secret in call.url for call in self.api.calls))
+            test.assertNotIn(secret, self.out)
             test.assertNotIn(secret, self.err)
 
 
@@ -143,26 +144,25 @@ class CloudflareMintTests(SimpleTestCase):
         self.assertIn("CLOUDFLARE_BOOTSTRAP_TOKEN", run.err)
         self.assertEqual(run.api.calls, [])
 
-    def test_without_print_secret_nothing_is_created(self):
-        run = cloudflare()
+    def test_without_a_store_nothing_is_created_whatever_else_is_asked(self):
+        for flags in ({}, {"print_secret": "true"}):
+            with self.subTest(flags=flags):
+                run = cloudflare(**flags)
 
-        self.assertIsNone(run.refused)
-        self.assertEqual(run.out, "")
-        self.assertIn("Nothing created", run.err)
-        self.assertEqual(run.api.posted(), [])
+                self.assertIsNone(run.refused)
+                self.assertEqual(run.out, "")
+                self.assertIn("Nothing created", run.err)
+                self.assertEqual(run.api.posted(), [])
 
-    def test_print_secret_writes_only_the_secret_to_stdout(self):
-        run = cloudflare(expires="2030-01-01", allow_ip="'192.0.2.0/24'", print_secret="true")
+    def test_a_stored_token_reports_its_id_and_expiry(self):
+        run = cloudflare(expires="2030-01-01", store="op://Example Vault/item-1/credential")
 
-        self.assertIsNone(run.refused)
-        self.assertEqual(run.out, f"{MINTED}\n")
         self.assertIn("Token id: tok-1", run.err)
         self.assertIn("Expires: 2030-01-01", run.err)
-        run.assert_secret_kept(self, BOOTSTRAP, MINTED)
         self.assertTrue(all(call.token == BOOTSTRAP for call in run.api.calls))
 
     def test_permission_names_resolve_to_ids_under_the_right_resources(self):
-        run = cloudflare(expires="2030-01-01", allow_ip="'192.0.2.0/24'", print_secret="true")
+        run = cloudflare(expires="2030-01-01", allow_ip="'192.0.2.0/24'", store="op://Example Vault/item-1/credential")
 
         (created,) = run.api.posted()
         body = created.json
@@ -186,11 +186,11 @@ class CloudflareMintTests(SimpleTestCase):
 
     def test_an_unknown_permission_group_stops_the_mint_and_is_named(self):
         run = cloudflare(
-            permissions=("Account Settings Read (account)", "Workers Scripts Read (account)"), print_secret="true"
+            permissions=("Account Settings Read (account)", "Workers Scripts Read (account)"),
+            store="op://Example Vault/item-1/credential",
         )
 
         self.assertIsNotNone(run.refused)
-        self.assertEqual(run.out, "")
         self.assertIn("Workers Scripts Read (account)", run.err)
         self.assertEqual(run.api.posted(), [])
 
@@ -218,33 +218,26 @@ class CloudflareMintTests(SimpleTestCase):
                 self.assertIsNotNone(run.refused)
                 self.assertEqual((run.api.calls, run.commands.argv), ([], []))
 
-    def test_store_and_print_secret_are_exclusive(self):
-        run = cloudflare(store="op://Example Vault/item-1/credential", print_secret="true")
-
-        self.assertIsNotNone(run.refused)
-        self.assertEqual(run.api.calls, [])
-
 
 @tag("source")
 class TailscaleMintTests(SimpleTestCase):
-    def test_without_print_secret_it_prints_the_scopes_and_calls_nothing(self):
-        run = tailscale(environ={})
+    def test_without_a_store_it_prints_the_scopes_and_calls_nothing(self):
+        for flags in ({}, {"print_secret": "true"}):
+            with self.subTest(flags=flags):
+                run = tailscale(**flags)
 
-        self.assertIsNone(run.refused)
-        self.assertEqual(run.out, "")
-        self.assertIn("devices:core:read", run.err)
-        self.assertIn("Nothing created", run.err)
-        self.assertEqual(run.api.calls, [])
-
-    def test_print_secret_writes_only_the_secret_to_stdout(self):
-        run = tailscale(print_secret="true")
-
-        self.assertEqual(run.out, f"{MINTED}\n")
-        self.assertIn("Client id: client-1", run.err)
-        run.assert_secret_kept(self, BOOTSTRAP, MINTED)
+                self.assertIsNone(run.refused)
+                self.assertEqual(run.out, "")
+                self.assertIn("devices:core:read", run.err)
+                self.assertIn("Nothing created", run.err)
+                self.assertEqual(run.api.calls, [])
 
     def test_the_client_is_created_with_read_scopes_only(self):
-        run = tailscale(print_secret="true", tag="'tag:example' 'tag:other'")
+        run = tailscale(
+            tag="'tag:example' 'tag:other'",
+            store="op://Example Vault/item-1/credential",
+            store_id="op://Example Vault/item-1/username",
+        )
 
         (created,) = run.api.posted()
         assert created.json is not None
@@ -255,16 +248,20 @@ class TailscaleMintTests(SimpleTestCase):
 
     def test_a_bootstrap_client_is_exchanged_for_a_token(self):
         environ = {"TAILSCALE_BOOTSTRAP_CLIENT_ID": "boot-id", "TAILSCALE_BOOTSTRAP_CLIENT_SECRET": BOOTSTRAP}
-        run = tailscale(environ, print_secret="true")
+        run = tailscale(
+            environ, store="op://Example Vault/item-1/credential", store_id="op://Example Vault/item-1/username"
+        )
 
         exchange, created = run.api.posted()
-        self.assertEqual(run.out, f"{MINTED}\n")
+        self.assertEqual(run.field("credential"), [MINTED])
         self.assertEqual((exchange.form or {}).get("client_secret"), BOOTSTRAP)
         self.assertEqual(created.token, EXCHANGED)
         run.assert_secret_kept(self, BOOTSTRAP, EXCHANGED, MINTED)
 
     def test_no_bootstrap_credential_creates_nothing(self):
-        run = tailscale(environ={}, print_secret="true")
+        run = tailscale(
+            environ={}, store="op://Example Vault/item-1/credential", store_id="op://Example Vault/item-1/username"
+        )
 
         self.assertIsNotNone(run.refused)
         self.assertEqual(run.api.calls, [])
@@ -293,7 +290,11 @@ class TailscaleMintTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as scratch:
             scopes = Path(scratch) / "scopes.txt"
             scopes.write_text("devices:core:read\npolicy_file\n")
-            run = tailscale(scopes=str(scopes), print_secret="true")
+            run = tailscale(
+                scopes=str(scopes),
+                store="op://Example Vault/item-1/credential",
+                store_id="op://Example Vault/item-1/username",
+            )
 
         self.assertIsNotNone(run.refused)
         self.assertIn("policy_file", run.err)

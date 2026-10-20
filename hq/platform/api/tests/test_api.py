@@ -891,6 +891,21 @@ class TransportTests(SentinelMixin, TestCase):
                 self.assertEqual(response.json()["error"]["code"], "invalid_input")
                 self.assertNotIn(value.split("=")[1], response.json()["error"]["message"])
 
+    def test_a_refusal_answers_with_its_curated_reason_never_its_arguments(self):
+        from hq.platform.application.findings import InvalidFindingsQuery
+
+        refusal = InvalidFindingsQuery("findings: limit must be at least 1.")
+        refusal.args = ("internal detail of whatever raised it",)
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with (
+            _serving(),
+            host_only(),
+            patch("hq.platform.application.findings._narrowing", side_effect=refusal),
+        ):
+            response = self.client.get("/api/v2/findings/", **headers)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["message"], refusal.reason)
+
     def test_resource_read_requires_its_declared_grant(self):
         with _serving():
             response = self.client.get(
