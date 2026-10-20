@@ -125,70 +125,12 @@ jobs:
         # environment or not at all.
         env:
           COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
-        run: |
-          set -euo pipefail
-          if [ -z "${COMPOSITION_EXTENSIONS:-}" ]; then
-            echo "::error::COMPOSITION_EXTENSIONS must be set as a repository" \
-                 "secret. A repository variable cannot hold it: this log is" \
-                 "public and only a secret is masked."
-            exit 1
-          fi
-          printf '%s' "$COMPOSITION_EXTENSIONS" > composition-set.json
-          # An empty list is a choice: the host with no extensions. A missing
-          # or misspelled one is not, so the key itself must be there.
-          if ! jq -e '.extensions | type == "array"' composition-set.json >/dev/null 2>&1; then
-            echo "::error::COMPOSITION_EXTENSIONS must be JSON with an extensions list, empty for none"; exit 1
-          fi
-          # What the deploy may drop. Production refuses an image without an
-          # extension it is running unless the image's composition retired it
-          # here (controller/host/extensions.go), so an extension leaves only
-          # by being named, and never by being both kept and retired.
-          if ! jq -e '
-                (.retired // []) as $retired
-                | ($retired | type == "array" and all(type == "string" and length > 0))
-                and ([.extensions[].id] - ([.extensions[].id] - $retired) | length == 0)
-              ' composition-set.json >/dev/null 2>&1; then
-            echo "::error::COMPOSITION_EXTENSIONS must list retired extensions as ids it no longer composes"; exit 1
-          fi
-          # Where in its repository an extension's package is, for a branch
-          # built here: a relative path inside it, "." when omitted.
-          if ! jq -e '
-                all(.extensions[]; (.path // ".")
-                    | type == "string" and test("^[A-Za-z0-9._/-]+$")
-                      and (startswith("/") | not) and (("/" + . + "/") | contains("/../") | not))
-              ' composition-set.json >/dev/null 2>&1; then
-            echo "::error::COMPOSITION_EXTENSIONS must give each extension's path as a relative path inside its repository"; exit 1
-          fi
+        run: python3 -m tools.pipeline.composition_set write composition-set.json
 
       - name: Mask the extension names for the rest of the job
-        # Later steps shell out to gh, uv, and Django, and those echo
-        # repository names, wheel filenames, app labels and (when a test fails)
-        # table and column names. This repository is public and so are its
-        # logs. Masking once here covers every later step, including output
-        # from commands not yet written.
-        #
-        # Every spelling, because the same extension appears as a repository
-        # path, a bare name, a Python package, a table prefix and the path it
-        # mounts at. A URL is none of the other four, so it needs its own. Each
-        # in lower, Title and UPPER case, as a page title or constant spells it.
-        run: |
-          set -euo pipefail
-          jq -r '
-            (.extensions[]
-             | .id, .repository,
-               (.repository | split("/") | last),
-               (.id | split(".") | last),
-               ((.path // ".") | split("/") | last | select(. != "."))),
-            ((.retired // [])[] | ., (split(".") | last))
-          ' composition-set.json \
-            | tr -d '\r' | sed '/^$/d' | sort -u \
-            | while read -r name; do
-                for spelling in "$name" "${name//-/_}" "${name//_/-}"; do
-                  echo "::add-mask::${spelling}"
-                  echo "::add-mask::${spelling^}"
-                  echo "::add-mask::${spelling^^}"
-                done
-              done
+        # Every spelling of every extension, so no later step's output names
+        # one in this public log, including output from commands not yet written.
+        run: python3 -m tools.pipeline.composition_set mask composition-set.json
 
       - name: Authenticate to GHCR
         # Once, for every registry read and the push at the end.
@@ -209,80 +151,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         # Derived from the commit being composed, so there is no pin to bump by
         # hand and no way for the composition to be built on a stale host.
-        run: |
-          set -euo pipefail
-          if ! [[ "$HOST_REF" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error title=Invalid host ref::The host ref is not a full commit SHA."
-            exit 1
-          fi
-          ref="$HOST_REF"
-          # Called by CI: the image its Image job published in this run.
-          if [ -n "$GIVEN" ]; then
-            if [[ ! "$GIVEN" =~ ^ghcr\.io/${REPOSITORY}@sha256:[0-9a-f]{64}$ ]]; then
-              echo "::error title=Invalid host image::The host image is not this repository's, by digest."
-              exit 1
-            fi
-            echo "image=$GIVEN" >> "$GITHUB_OUTPUT"
-            echo "sha=$ref" >> "$GITHUB_OUTPUT"
-            echo "host image: $GIVEN"
-            exit 0
-          fi
-          image="ghcr.io/${REPOSITORY}:sha-${ref:0:12}"
-          # An admission's dispatch composes main as it is now, whose host
-          # build may still be running, so the image may not exist yet. Waited
-          # for rather than assumed: failing instantly here would report "no
-          # such image" for a build that is simply still running. 20 minutes is
-          # well past a host build and well short of the job timeout.
-          digest=""
-          for attempt in $(seq 1 240); do
-            if digest=$(docker buildx imagetools inspect "$image" \
-                          --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"'); then
-              [ -n "$digest" ] && break
-            fi
-            if [ "$attempt" -eq 1 ]; then
-              echo "waiting for the host image $image to be published..."
-            fi
-            # Every 30 seconds, ask whether there is still a build to wait for:
-            # a host build that failed will never publish.
-            if [ $((attempt % 6)) -eq 0 ]; then
-              # The Image job, not the run, which concludes minutes later.
-              ci_run=$(gh api \
-                "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$ref&per_page=30" \
-                --jq '[.workflow_runs[] | select(.name == "CI") | .id] | first' 2>/dev/null || true)
-              host_ci=""
-              if [ -n "$ci_run" ]; then
-                host_ci=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run/jobs?per_page=100" \
-                  --jq '.jobs[] | select(.name == "Image") | .conclusion // empty' \
-                  2>/dev/null || true)
-              fi
-              case "$host_ci" in
-                failure|cancelled|timed_out|skipped)
-                  step=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run/jobs?per_page=100" \
-                    --jq '.jobs[] | select(.name == "Image") | .steps[] | select(.conclusion == "failure") | .name' \
-                    2>/dev/null | head -n 1 || true)
-                  echo "::error title=Host image $host_ci${step:+ at $step}::CI's Image job for \
-          ${ref:0:12} concluded '$host_ci'${step:+ in step \"$step\"}, so there is no host image \
-          to compose onto. Fix that, and this composition runs with it."
-                  {
-                    echo "### No host image to compose onto"
-                    echo
-                    echo "CI's **Image** job for \`${ref:0:12}\` ${host_ci}${step:+ at **${step}**}."
-                  } >> "$GITHUB_STEP_SUMMARY"
-                  exit 1
-                  ;;
-              esac
-            fi
-            sleep 5
-          done
-          if [ -z "$digest" ]; then
-            echo "::error title=Host image never appeared::$image was not published \
-          within 20 minutes. The host build for this commit failed or was skipped; \
-          the composition has nothing to compose onto."
-            exit 1
-          fi
-          echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
-          echo "sha=$ref" >> "$GITHUB_OUTPUT"
-          echo "host image: ${image%:*}@$digest"
+        run: tools/pipeline/host-image.sh "$REPOSITORY" "$HOST_REF" "$GIVEN"
 
       # Installed once for the whole job: the host image is verified with it
       # below, every extension admission is verified with it before install,
@@ -292,46 +161,13 @@ jobs:
 
       - name: Verify the host image was built by this repository
         # Every extension wheel is verified against a declared signer before it
-        # is installed, and so is the image it is installed into: a tag derived
-        # from a commit says who should have built it, not who did.
-        #
-        # The identity is pinned to this repository's own `ci` workflow, so an
-        # image pushed to the same name by anything else fails here rather than
-        # becoming the base of a production composition. An image CI handed
-        # over by digest was built by this same run.
+        # is installed, and so is the image it is installed into. An image CI
+        # handed over by digest was built by this same run.
         if: inputs.host-image == ''
         env:
           HOST_IMAGE: ${{ steps.host.outputs.image }}
           REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # A release composes only onto a host built from main. Anything else
-          # never publishes, so it may also compose onto a pull-request build.
-          if [ "$IS_RELEASE" = true ]; then
-            signer_ref='refs/heads/main$'
-          else
-            signer_ref='refs/(heads/main|pull/[0-9]+/merge)$'
-          fi
-          # Retried, because the host build pushes the image and signs it in
-          # two steps and the wait above ends at the push, so the manifest can
-          # exist for a few seconds before its signature does.
-          for attempt in $(seq 1 12); do
-            if cosign verify \
-                 --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-                 --certificate-identity-regexp \
-                   "^https://github\.com/${REPOSITORY}/\.github/workflows/ci\.yml@${signer_ref}" \
-                 "$HOST_IMAGE" > /dev/null 2>&1; then
-              echo "host image signature verified"
-              exit 0
-            fi
-            [ "$attempt" -eq 1 ] && echo "waiting for the host image signature..."
-            sleep 15
-          done
-          echo "::error title=Host image is not signed::No signature by this \
-          repository's ci workflow appeared for the host image within three \
-          minutes. An image published under this name by anything else must \
-          not become the base of a composition."
-          exit 1
+        run: tools/pipeline/host-signature.sh "$REPOSITORY" "$HOST_IMAGE"
 
       # HQ's app, asked for read access only: a token minted per run
       # for the extensions' admissions and branches, that lapses within the
@@ -377,27 +213,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
           BRANCH: ${{ github.head_ref }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-            echo "::error::The pull request branch name has characters this step does not accept."
-            exit 1
-          fi
-          : > coordinated.txt
-          while read -r repo; do
-            if sha=$(gh api "repos/$repo/branches/$BRANCH" --jq .commit.sha 2>api-error.txt); then
-              printf '%s=%s\n' "$repo" "$sha" >> coordinated.txt
-            elif ! grep -q 'HTTP 404' api-error.txt; then
-              # Not "no such branch": the answer is unknown, and guessing
-              # either way would verify the wrong composition.
-              echo "::error::Could not ask an extension repository for branch $BRANCH."
-              exit 1
-            fi
-          done < <(jq -r '.extensions[].repository' composition-set.json | sort -u)
-          rm -f api-error.txt
-          count=$(grep -c . coordinated.txt || true)
-          echo "found=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "coordinated extension branches named $BRANCH: $count"
+        run: tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" coordinated.txt
 
       - name: Check out each extension as this pull request meets it
         # Its coordinated branch when one was found above, else its default
@@ -406,22 +222,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p extensions "$WITHHELD_DIR"
-          while read -r repo; do
-            dir="extensions/$(basename "$repo")"
-            if ! gh repo clone "$repo" "$dir" -- --quiet 2> "$WITHHELD_DIR/clone-$(basename "$repo").log"; then
-              echo "::error title=Extension not checked out::An extension repository could not be cloned; the reason is in this run's sealed failure logs."
-              exit 1
-            fi
-            sha=$(awk -F= -v r="$repo" '$1 == r { print $2 }' coordinated.txt)
-            if [ -n "$sha" ]; then
-              git -C "$dir" checkout --quiet --detach "$sha"
-            fi
-            rm -rf "$dir/.git"
-            chmod -R a+rwX "$dir"
-          done < <(jq -r '.extensions[].repository' composition-set.json | sort -u)
+        run: tools/pipeline/extension-branches.sh checkout composition-set.json coordinated.txt
 
       - name: Build the extension installer
         # The host's Python ABI and uv, holding none of this job's
@@ -433,85 +234,21 @@ jobs:
 
       - name: Check each extension against this host
         # The checks an extension passes before admission (plugin-checks.yml),
-        # run with this pull request's host and check-plugin.sh. The
-        # composition below reuses wheels admitted against main, so only this
-        # step sees a host change that breaks an extension before it merges.
-        # Every extension is checked before the step fails, so one run names
-        # all that broke.
+        # run with this pull request's host. The composition below reuses
+        # wheels admitted against main, so only this step sees a host change
+        # that breaks an extension before it merges.
         if: github.event_name == 'pull_request'
-        run: |
-          set -euo pipefail
-          host="$RUNNER_TEMP/host"
-          mkdir -p "$host"
-          git archive HEAD | tar -x -C "$host"
-          chmod -R a+rwX "$host"
-          failed=0
-          total=0
-          while IFS=$'\t' read -r id repo package; do
-            total=$((total + 1))
-            # A copy, so the coordinated build below reads the branch as
-            # cloned rather than as a check left it.
-            work="$RUNNER_TEMP/check-$total"
-            cp -a "extensions/$(basename "$repo")" "$work"
-            if docker run --rm --network bridge --user 10001:10001 \
-              --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never --env PLUGIN_REPOSITORY="$repo" \
-              --volume "$host:/host" --volume "$work:/src" \
-              --entrypoint sh "severino-hq-installer:$GITHUB_SHA" \
-              /host/scripts/check-plugin.sh --plugin-root "/src/$package" \
-              > "$WITHHELD_DIR/extension-check-$id.log" 2>&1; then
-              echo "extension $total: passed"
-            else
-              failed=$((failed + 1))
-              echo "extension $total: failed"
-            fi
-          done < <(jq -r '.extensions[] | [.id, .repository, (.path // ".")] | @tsv' composition-set.json)
-          if [ "$failed" -gt 0 ]; then
-            echo "::error title=An extension fails this host::$failed of $total extensions fail their checks against this pull request's host. Which, and why, is in this run's sealed failure logs."
-            exit 1
-          fi
+        run: tools/pipeline/check-extensions.sh composition-set.json "severino-hq-installer:$GITHUB_SHA"
 
       - name: Decide whether anything changed
         id: fingerprint
         env:
           FORCE: ${{ github.event_name != 'workflow_dispatch' || inputs.force }}
           HOST_IMAGE: ${{ steps.host.outputs.image }}
-        run: |
-          set -euo pipefail
-          # What a composition IS: this host image, these admitted wheels, this
-          # policy. Two runs agreeing on all three produce the same image, so
-          # there is nothing to build and nothing to deploy.
-          #
-          # Asked before anything is downloaded or verified: an admission of an
-          # unchanged set builds nothing.
-          fingerprint=$(printf '%s\n%s\n%s\n' \
-            "$HOST_IMAGE" \
-            "$(sha256sum admissions.txt | cut -d' ' -f1)" \
-            "$(openssl dgst -sha256 policy/plugin-admission-v1.json | awk '{print $NF}')" \
-            | sha256sum | cut -c1-32)
-          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
-
-          tag="ghcr.io/${{ github.repository }}/composition:fp-$fingerprint"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-          # Recorded as a tag rather than a file or a variable: the registry
-          # already holds the only copy of the truth that matters, and a tag
-          # that exists is proof the exact same composition was published.
-          if docker buildx imagetools inspect "$tag" >/dev/null 2>&1; then
-            changed=false
-            echo "composition fp-$fingerprint is already published."
-          else
-            changed=true
-            echo "composition fp-$fingerprint has not been built before."
-          fi
-          echo "changed=$changed" >> "$GITHUB_OUTPUT"
-          # Only an admission's dispatch asks not to rebuild what is already
-          # published: a second admission of the same commit is not news. The
-          # host build, a pull request and a hand-run rebuild always build.
-          if [ "$changed" = false ] && [ "$FORCE" = false ]; then
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
+        # Only an admission's dispatch asks not to rebuild what is already
+        # published: a second admission of the same commit is not news. The
+        # host build, a pull request and a hand-run rebuild always build.
+        run: tools/pipeline/composition-fingerprint.sh "$HOST_IMAGE" admissions.txt policy/plugin-admission-v1.json
 
       - name: Nothing to do
         # Only an admission's dispatch stops here. Every other trigger rebuilds
@@ -592,67 +329,7 @@ jobs:
         env:
           CANDIDATE: ${{ steps.coordinated.outputs.found == 'true' }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          policy_sha=$(openssl dgst -sha256 policy/plugin-admission-v1.json | awk '{print $NF}')
-          if [ "$CANDIDATE" = true ]; then
-            git fetch --quiet --depth 1 origin "$BASE_SHA"
-            policy_sha=$(git show FETCH_HEAD:policy/plugin-admission-v1.json \
-                           | openssl dgst -sha256 | awk '{print $NF}')
-            mkdir -p candidate-wheels
-          fi
-          # The policy every admission was checked against, stated once, so a
-          # composition of no extensions still names it.
-          args="--policy-sha256 $policy_sha"
-          count=$(jq '.extensions | length' composition-set.json)
-          for ((index = 0; index < count; index++)); do
-            repo=$(jq -r ".extensions[$index].repository" composition-set.json)
-            workflow=$(jq -r ".extensions[$index].workflow" composition-set.json)
-            plugin_id=$(jq -r ".extensions[$index].id" composition-set.json)
-            if [ "$CANDIDATE" = true ] \
-               && awk -F= -v r="$repo" '$1 == r { found = 1 } END { exit !found }' coordinated.txt; then
-              continue
-            fi
-            dir="artifacts/$plugin_id"
-            statement=$(find "$dir" -name admission.json -print -quit)
-            bundle=$(find "$dir" -name admission.sigstore.json -print -quit)
-            wheel=$(find "$dir" -name '*.whl' -print -quit)
-            if [ -z "$statement" ] || [ -z "$bundle" ] || [ -z "$wheel" ]; then
-              echo "::error::$repo is missing its admission statement, bundle or wheel"; exit 1
-            fi
-            # These paths become words of the next step's command line, so each
-            # is held to a wheel's own name (PEP 427): nothing a shell reads.
-            for path in "$statement" "$bundle" "$wheel"; do
-              if [[ ! "$path" =~ ^[A-Za-z0-9._/+-]+$ ]]; then
-                echo "::error::$repo ships an artifact whose name is not a plain file name"; exit 1
-              fi
-            done
-            if [[ ! "$(basename "$wheel")" =~ ^[A-Za-z0-9_.]+-[A-Za-z0-9_.+]+(-[0-9][A-Za-z0-9_.]*)?-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+\.whl$ ]]; then
-              echo "::error::$repo ships a wheel whose name is not a wheel's"; exit 1
-            fi
-            entry="$dir/verified-entry.json"
-            # cordon names the field that differs but not the values; say both,
-            # so a policy mismatch shows which side moved.
-            signed_policy=$(jq -r '.policy.sha256' "$statement")
-            if [ "$signed_policy" != "$policy_sha" ]; then
-              echo "::error::$repo was admitted under policy $signed_policy; this composition's policy is $policy_sha"; exit 1
-            fi
-            node cordon/admission/verify.mjs \
-              --statement "$statement" \
-              --bundle "$bundle" \
-              --artifact "$wheel" \
-              --identity "https://github.com/$repo/$workflow@refs/heads/main" \
-              --issuer https://token.actions.githubusercontent.com \
-              --repository "$repo" \
-              --workflow "$workflow" \
-              --host severino-hq \
-              --plugin-id "$plugin_id" \
-              --policy-sha "$policy_sha" > "$entry"
-            args="$args --entry $entry --wheel $wheel"
-            if [ "$CANDIDATE" = true ]; then cp "$wheel" candidate-wheels/; fi
-          done
-          mkdir -p build
-          printf '%s\n' "$args" > build/compose-args
+        run: python3 -m tools.pipeline.verify_admissions
 
       - name: Merge locks and stage the build context
         if: >-
@@ -701,36 +378,7 @@ jobs:
         # with no token, credential file or docker socket, from a copy with no
         # .git. This is the same Python ABI as the verified host image.
         if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p candidate-wheels
-          chmod 0777 candidate-wheels
-          while IFS='=' read -r repo _; do
-            [ -n "$repo" ] || continue
-            dir="extensions/$(basename "$repo")"
-            # A repository may hold several extensions: each one the set lists
-            # is built from its path, which must declare that id, and nothing
-            # else in the repository is. Read without running the branch's code.
-            while IFS=$'\t' read -r id package; do
-              if ! declared=$(python3 -m tools.pipeline.plugin_identity "$dir/$package" \
-                   2> "$WITHHELD_DIR/candidate-identity-$id.log" | sed -n 's/^plugin-id=//p') \
-                 || [ "$declared" != "$id" ]; then
-                echo "::error title=Coordinated branch did not build::A coordinated branch does not carry an extension the composition lists at its path."
-                exit 1
-              fi
-              # The build lists every module and template it copies: withheld.
-              if ! docker run --rm --network bridge --user 10001:10001 \
-                --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never \
-                --volume "$PWD/$dir:/src" --volume "$PWD/candidate-wheels:/out" \
-                --entrypoint uv "severino-hq-installer:$GITHUB_SHA" \
-                build --python /usr/local/bin/python --no-cache --wheel --out-dir /out "/src/$package" \
-                > "$WITHHELD_DIR/candidate-build-$id.log" 2>&1; then
-                echo "::error title=Coordinated branch did not build::A coordinated branch did not build; its output is in this run's sealed failure logs."
-                exit 1
-              fi
-            done < <(jq -r --arg repo "$repo" \
-                       '.extensions[] | select(.repository == $repo) | [.id, (.path // ".")] | @tsv' composition-set.json)
-          done < coordinated.txt
+        run: tools/pipeline/extension-branches.sh build composition-set.json coordinated.txt "severino-hq-installer:$GITHUB_SHA"
 
       - name: Stage the candidate
         if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
@@ -890,7 +538,9 @@ jobs:
       - name: Read the pinned mise
         id: mise
         if: failure()
-        run: echo "version=$(sed -n 's/^min_version = "\(.*\)"$/\1/p' mise.toml)" >> "$GITHUB_OUTPUT"
+        run: |
+          version="$(.github/actions/toolchain/mise-version.sh mise.toml)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Install the pinned age
         if: failure()
         uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0

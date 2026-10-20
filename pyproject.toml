@@ -69,7 +69,9 @@ extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 # only: the jobs and the action that run them set up no toolchain first.
 "tools/pipeline/ci_report.py" = "py312"
 "tools/pipeline/compose_plugins.py" = "py312"
+"tools/pipeline/composition_set.py" = "py312"
 "tools/pipeline/plugin_identity.py" = "py312"
+"tools/pipeline/verify_admissions.py" = "py312"
 # Its shell suite runs it, and the verdict and ci_report it imports, on that same python3.
 "tools/gate/preflight.py" = "py312"
 "tools/gate/verdict.py" = "py312"

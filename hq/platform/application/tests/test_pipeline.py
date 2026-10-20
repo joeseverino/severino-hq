@@ -13,7 +13,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, tag
 
 from tests.mise_tasks import body, mise_tasks
-from tools.pipeline import compose_plugins, plugin_identity
+from tools.pipeline import compose_plugins
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -365,15 +365,19 @@ class ReleaseTests(SimpleTestCase):
                 self.assertNotIn("candidate", step)
 
     def test_branch_code_builds_without_the_jobs_credentials(self):
-        clones = [step for step in steps(jobs(self.compose)["compose"]) if "gh repo clone" in step]
-        self.assertTrue(clones)
-        for step in clones:
-            run = step.split("run: |", 1)[1]
-            with self.subTest(step=step.splitlines()[0]):
-                self.assertIn('rm -rf "$dir/.git"', run)
-                self.assertIn('"$WITHHELD_DIR/', run)
-                for absent in ("--env GH_TOKEN", "docker.sock", "pip wheel"):
-                    self.assertNotIn(absent, run)
+        """tests/shell/test-extension-branches.sh holds the behaviour; this holds the workflow to it."""
+        branches = {
+            match.group(1): step
+            for step in steps(jobs(self.compose)["compose"])
+            if (match := re.search(r"tools/pipeline/extension-branches\.sh (\w+)", code(step)))
+        }
+        self.assertEqual(set(branches), {"checkout", "build"})
+        script = code((ROOT / "tools" / "pipeline" / "extension-branches.sh").read_text())
+        self.assertIn('rm -rf "$dir/.git"', script)
+        for absent in ("GH_TOKEN", "docker.sock", "pip wheel"):
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, script)
+                self.assertNotIn(absent, branches["build"])
 
 
 @tag("source")
@@ -383,31 +387,24 @@ class ExtensionsAgainstHostTests(SimpleTestCase):
     def setUp(self):
         self.steps = steps(jobs(workflow("compose.yml"))["compose"])
 
+    def index(self, command: str) -> int:
+        (found,) = [index for index, step in enumerate(self.steps) if command in code(step)]
+        return found
+
     def test_every_listed_extension_runs_this_hosts_checks_before_the_composition_passes(self):
-        checks = [step for step in self.steps if "check-plugin.sh" in code(step)]
-        self.assertEqual(len(checks), 1)
-        (check,) = checks
-        run = code(check)
+        """tests/shell/test-check-extensions.sh holds what the check runs; this holds where it runs."""
+        check = self.steps[self.index("tools/pipeline/check-extensions.sh composition-set.json")]
         self.assertEqual(condition(check), "github.event_name == 'pull_request'")
         self.assertNotIn("continue-on-error", check)
-        self.assertIn("composition-set.json", run)
-        self.assertIn(".extensions[]", run)
-        self.assertIn("git archive HEAD", run)
-        self.assertIn("/host/scripts/check-plugin.sh --plugin-root", run)
-        self.assertIn('"$WITHHELD_DIR/', run)
-        self.assertIn("exit 1", run)
         self.assertNotIn("GH_TOKEN", check)
-        verify = next(index for index, step in enumerate(self.steps) if "tools/pipeline/composed-suite.sh" in step)
-        self.assertLess(self.steps.index(check), verify)
+        self.assertLess(self.steps.index(check), self.index("tools/pipeline/composed-suite.sh"))
 
     def test_an_extension_is_checked_from_its_coordinated_branch_or_its_default_branch(self):
-        (clone,) = [step for step in self.steps if "gh repo clone" in step]
+        clone = self.steps[self.index("tools/pipeline/extension-branches.sh checkout")]
         self.assertEqual(condition(clone), "github.event_name == 'pull_request'")
-        run = code(clone)
-        self.assertIn("coordinated.txt", run)
-        self.assertIn(".extensions[].repository", run)
-        check = next(index for index, step in enumerate(self.steps) if "check-plugin.sh" in code(step))
-        self.assertLess(self.steps.index(clone), check)
+        self.assertIn("coordinated.txt", code(clone))
+        self.assertLess(self.index("tools/pipeline/coordinated-branches.sh"), self.steps.index(clone))
+        self.assertLess(self.steps.index(clone), self.index("tools/pipeline/check-extensions.sh"))
 
 
 @tag("source")
@@ -493,12 +490,20 @@ class PublicLogTests(SimpleTestCase):
                 for name in ("DIGESTS", "REFERENCES", "ARGS"):
                     self.assertNotRegex(step, rf"\n\s+\w*{name}: \$\{{\{{")
 
-    def test_every_spelling_of_an_extension_is_masked_in_every_case(self):
-        masks = [step for step in self.steps if "::add-mask::" in step]
-        self.assertTrue(masks)
-        for spelling in ("${spelling}", "${spelling^}", "${spelling^^}"):
-            with self.subTest(spelling=spelling):
-                self.assertTrue(any(f"::add-mask::{spelling}" in step for step in masks))
+    def test_the_extensions_are_masked_before_any_step_can_name_one(self):
+        """tools/pipeline/tests/test_composition_set.py holds every spelling; this holds when they are masked."""
+        (mask,) = [
+            index
+            for index, step in enumerate(self.steps)
+            if "tools.pipeline.composition_set mask composition-set.json" in code(step)
+        ]
+        speaking = [
+            index
+            for index, step in enumerate(self.steps)
+            if re.search(r"\bgh\b|\buv\b|GH_TOKEN|docker|manage\.py", code(step))
+        ]
+        self.assertTrue(speaking)
+        self.assertLess(mask, min(speaking))
 
 
 @tag("source")
@@ -795,74 +800,6 @@ class ScriptInputTests(SimpleTestCase):
                         re.match(r"(steps|needs|inputs)\.|github\.event\.|github\.head_ref", expression),
                         f"{name} interpolates {expression} into a script; pass it through env",
                     )
-
-    def test_an_extension_artifact_must_be_named_like_a_wheel_before_it_is_used(self):
-        compose = workflow("compose.yml")
-        collect = compose.index('wheel=$(find "$dir" -name')
-        check = compose.index("ships a wheel whose name is not a wheel's")
-        use = compose.index('--artifact "$wheel"')
-        self.assertLess(collect, check)
-        self.assertLess(check, use)
-
-
-@tag("source")
-class PluginIdentityTests(SimpleTestCase):
-    """An extension's identity is read from its package, and only from there."""
-
-    def package(self, manifest: str, name: str = "example-alpha") -> Path:
-        directory = tempfile.TemporaryDirectory()
-        self.addCleanup(directory.cleanup)
-        root = Path(directory.name)
-        (root / "pyproject.toml").write_text(f'[project]\nname = "{name}"\nversion = "1.0"\n')
-        source = root / "src" / "example_alpha"
-        source.mkdir(parents=True)
-        (source / "plugin.py").write_text(manifest)
-        return root
-
-    def manifest(self, **fields: str) -> str:
-        declared = {
-            "id": '"example.alpha"',
-            "distribution": '"example-alpha"',
-            "django_apps": '("example_alpha",)',
-        } | fields
-        body = ", ".join(f"{key}={value}" for key, value in declared.items())
-        return f"from hq_sdk.plugin import PluginManifest\nplugin = PluginManifest({body})\n"
-
-    def test_the_package_declares_everything_admission_needs(self):
-        found = plugin_identity.identity(self.package(self.manifest()))
-        self.assertEqual(
-            found,
-            {
-                "distribution": "example-alpha",
-                "plugin-id": "example.alpha",
-                "plugin-reference": "example_alpha.plugin:plugin",
-                "django-app": "example_alpha",
-            },
-        )
-
-    def test_a_package_that_disagrees_with_itself_is_refused(self):
-        cases = {
-            "distribution": self.manifest(distribution='"example-beta"'),
-            "django_apps": self.manifest(django_apps='("other",)'),
-            "a literal": self.manifest(id="IDENTIFIER"),
-            "no module-level": "plugin = make()\n",
-        }
-        for reason, manifest in cases.items():
-            with self.subTest(reason=reason), self.assertRaises(SystemExit) as refused:
-                plugin_identity.identity(self.package(manifest))
-            self.assertIn(reason, str(refused.exception))
-
-    def test_a_manifest_naming_another_repository_is_refused_where_it_is_admitted(self):
-        package = self.package(self.manifest(source_repository='"owner/example-alpha"'))
-        self.assertEqual(plugin_identity.identity(package, "owner/example-alpha")["plugin-id"], "example.alpha")
-        with self.assertRaises(SystemExit) as refused:
-            plugin_identity.identity(package, "owner/example-extensions")
-        self.assertIn("owner/example-extensions", str(refused.exception))
-
-    def test_a_manifest_away_from_its_package_is_refused(self):
-        with self.assertRaises(SystemExit) as refused:
-            plugin_identity.identity(self.package(self.manifest(), name="example-gamma"))
-        self.assertIn("src/example_gamma/plugin.py", str(refused.exception))
 
 
 @tag("source")

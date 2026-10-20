@@ -5,22 +5,29 @@
 The distribution is ``[project].name`` in ROOT/pyproject.toml; its package is
 that name with underscores, at ``src/<package>``; the manifest is the
 ``plugin = PluginManifest(...)`` in that package's ``plugin.py``. Read without
-importing, so it needs neither Django nor the host. The manifest's ``id``,
+importing, so it imports neither Django nor the host. The manifest's ``id``,
 ``distribution`` and ``django_apps`` must be literals, and its distribution
 must be the project's: any mismatch fails here, before a build or a signature.
 Given the repository it is checked or admitted in, the manifest's
 ``source_repository`` must name it, or the host refuses the admitted wheel
 only once it is composed.
+
+It also prints ``plugin-api-version``: the plugin API of the host checkout this
+module is read from, which an admission records, since the host refuses a
+wheel whose approval names another version than its manifest declares.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import re
 import tomllib
 from pathlib import Path
 
 MANIFEST = "PluginManifest"
+HOST = Path(__file__).resolve().parents[2]
+PLUGINS = Path("hq/platform/application/plugins.py")
 
 
 def literal(call: ast.Call, name: str) -> object:
@@ -68,6 +75,14 @@ def identity(root: Path, repository: str | None = None) -> dict[str, str]:
     }
 
 
+def plugin_api_version(host: Path = HOST) -> str:
+    """The PLUGIN_API_VERSION the host at ``host`` speaks, read without importing it."""
+    match = re.search(r"^PLUGIN_API_VERSION\s*=\s*(\d+)\s*$", (host / PLUGINS).read_text(), re.MULTILINE)
+    if not match:
+        raise SystemExit(f"{PLUGINS} does not define PLUGIN_API_VERSION")
+    return match.group(1)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=".", type=Path)
@@ -75,3 +90,4 @@ if __name__ == "__main__":
     arguments = parser.parse_args()
     for key, value in identity(arguments.root, arguments.repository).items():
         print(f"{key}={value}")
+    print(f"plugin-api-version={plugin_api_version()}")
