@@ -206,7 +206,7 @@ class RequestPathTests(TestCase):
 
         control = SecurityControl("edge", "Ingress policy", "good", "", "")
         firewall = SecurityControl("host-firewall", "Arrival", "good", "", "")
-        from ..connection import connection
+        from ..request_connection import connection
 
         found = connection(a_request(**NPM_HEADERS), edge=control, firewall=firewall)
 
@@ -263,7 +263,7 @@ class AccessTests(TestCase):
 
     def judged(self, **headers):
         request = a_request(**headers)
-        from ..connection import connection
+        from ..request_connection import connection
 
         with projection_scope():
             return _edge(Hop("edge", "Edge"), _Context(request, connection(request), HQ, ()))

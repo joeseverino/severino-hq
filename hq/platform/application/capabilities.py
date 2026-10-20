@@ -28,13 +28,16 @@ from .input_errors import (
 )
 from .integration_specs import (
     IDEMPOTENCY_FIELD,
+    STALE_WRITE_KEYWORD,
     TARGET_KINDS,
     CapabilitySpec,
     capability_schema,
     declares_idempotency_key,
+    takes_stale_write_token,
 )
 from .integrations import integration_graph
 from .labels import human_label
+from .record_errors import RecordConflict, RecordNotFound
 from .security import (
     AuthorizationError,
     Capability,
@@ -186,15 +189,27 @@ def execute_capability(
             reason=exc.code,
         )
         return _error(exc.code, exc.reason)
-    except PydanticValidationError as exc:
+    except (DjangoValidationError, RecordNotFound, RecordConflict, TypeError, ValueError) as exc:
+        return _domain_refusal(name, exc)
+
+
+def _domain_refusal(name: str, exc: Exception) -> dict[str, Any]:
+    """What the command's own layer said no with, answered as a code."""
+
+    if isinstance(exc, PydanticValidationError):
         return _invalid(pydantic_refusal(name, exc.errors()))
-    except DjangoValidationError as exc:
+    if isinstance(exc, DjangoValidationError):
         return _invalid(django_refusal(name, exc))
-    except TypeError, ValueError:
-        # Neither handler nor dependency exception text crosses an adapter.
-        # It can contain argument names, provider responses, paths, or values
-        # from the request. The capability name is registry-owned and safe.
-        return _error("operation_failed", f"{name} could not be executed.")
+    if isinstance(exc, RecordNotFound):
+        # Host-written text naming no request value (record_errors.py), and
+        # what tells a caller which record it has to fix.
+        return _error("not_found", str(exc))
+    if isinstance(exc, RecordConflict):
+        return _error("conflict", str(exc))
+    # Neither handler nor dependency exception text crosses an adapter.
+    # It can contain argument names, provider responses, paths, or values
+    # from the request. The capability name is registry-owned and safe.
+    return _error("operation_failed", f"{name} could not be executed.")
 
 
 def _authorized_run(
@@ -345,18 +360,17 @@ def _run(
     target: str | int | None,
     expected_updated_at: str | None,
 ) -> dict[str, Any]:
-    """Bind the target and run the handler. One line, and one place.
+    """Bind the target and run the handler, in one place.
 
-    A command that names a connection attributes its audit events to it.
+    A command that names a connection attributes its audit events to it. The
+    stale-write token goes only to a handler that declares it.
     """
 
+    arguments = _target_keyword(spec, target)
+    if takes_stale_write_token(spec.handler):
+        arguments[STALE_WRITE_KEYWORD] = expected_updated_at
     with audit_connection(getattr(command, "connection_ref", "") or ""):
-        return spec.handler(
-            command,
-            principal=principal,
-            expected_updated_at=expected_updated_at,
-            **_target_keyword(spec, target),
-        )
+        return spec.handler(command, principal=principal, **arguments)
 
 
 def execute_approved(

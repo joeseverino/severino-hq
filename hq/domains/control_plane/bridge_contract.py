@@ -33,6 +33,9 @@ from jsonschema.exceptions import ValidationError, best_match
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
+lazy from .bridge_registry import connections_document, schemas
+lazy from .connection_shapes import renderer_registry
+
 # What the bridge alone defines, written by hand.
 BASE_PATH = Path(__file__).with_name("bridge_base.json")
 # The joined document, written for the controller's generator.
@@ -87,8 +90,6 @@ def joined(base: dict[str, Any], declared: dict[str, dict[str, Any]]) -> dict[st
 
 @cache
 def contract() -> dict[str, Any]:
-    from .bridge_registry import schemas
-
     with BASE_PATH.open(encoding="utf-8") as source:
         base: dict[str, Any] = json.load(source)
     return joined(base, schemas())
@@ -102,9 +103,6 @@ def render(document: dict[str, Any]) -> str:
 
 def emitted() -> dict[Path, str]:
     """Every file written from the registry, with its content."""
-
-    from .bridge_registry import connections_document
-    from .connection_shapes import renderer_registry
 
     return {
         CONTRACT_PATH: render(contract()),

@@ -31,8 +31,8 @@ from .finding_model import (
     journal_step,
     machine_step,
 )
-from .moments import duration
-from .reading_facts import FactRow, ago, rows_of, state_on_controller, stated
+from .moments import ago, duration
+from .reading_facts import FactRow, rows_of, state_on_controller, stated
 from .timestamps import moment
 from .topology_model import TopologyNode
 from .ui import counted

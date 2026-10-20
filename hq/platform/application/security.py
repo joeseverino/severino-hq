@@ -3,15 +3,15 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.utils.http import url_has_allowed_host_and_scheme
+lazy from django.contrib.auth.base_user import AbstractBaseUser
+lazy from django.contrib.auth.models import AnonymousUser
+lazy from django.http import HttpRequest
 
-if TYPE_CHECKING:
-    from django.contrib.auth.base_user import AbstractBaseUser
-    from django.contrib.auth.models import AnonymousUser
-    from django.http import HttpRequest
+lazy from .domains import host_records
+lazy from .plugins import plugin_capabilities
 
 
 class Capability(StrEnum):
@@ -78,8 +78,6 @@ class PolicyDenied(AuthorizationError):
 def record_permissions(kind: str) -> frozenset[str]:
     """Every record domain's ``write`` or ``delete`` permission, by declaration."""
 
-    from .domains import host_records
-
     return frozenset(getattr(records, kind) for records in host_records())
 
 
@@ -145,8 +143,6 @@ def require_all(principal: Principal, capabilities: Iterable[Capability | str]) 
 
 
 def _operator_capabilities() -> frozenset[Capability | str]:
-    from .plugins import plugin_capabilities
-
     return host_capabilities() | plugin_capabilities("operator")
 
 
@@ -173,8 +169,6 @@ def mcp_principal() -> Principal:
     agent's own grant, so an agent never exceeds either. It is not an identity
     anyone authenticates as.
     """
-
-    from .plugins import plugin_capabilities
 
     capabilities: set[Capability | str] = {Capability.READ}
     capabilities.update(plugin_capabilities("mcp_read"))

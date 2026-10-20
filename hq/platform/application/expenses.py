@@ -16,6 +16,8 @@ from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context
 
 from .domains import records_of
+from .projection import iso
+from .record_errors import RecordConflict, RecordNotFound
 from .security import Principal
 from .sensitivity import SAFE_SENSITIVITIES
 
@@ -57,8 +59,6 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
     they divide the list: two or more, and none already chosen.
     """
 
-    from hq.domains.expenses.models import Expense
-
     sums = list(
         Expense.objects.filter(pk__in=rows.order_by().values("pk"))
         .order_by()
@@ -87,14 +87,6 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
     )
 
 
-class NotFoundError(ValueError):
-    pass
-
-
-class ConflictError(ValueError):
-    pass
-
-
 @dataclass(frozen=True, slots=True)
 class ExpenseCommand:
     date: date
@@ -119,7 +111,7 @@ def serialize_expense(expense: Expense) -> dict[str, Any]:
     doc = expense.related_documentation
     return {
         "id": expense.id,
-        "date": expense.date.isoformat(),
+        "date": iso(expense.date),
         "vendor": expense.vendor,
         "item": expense.item,
         "category": expense.category,
@@ -135,7 +127,7 @@ def serialize_expense(expense: Expense) -> dict[str, Any]:
         "related_documentation": (doc.doc_id if doc and doc.sensitivity in SAFE_SENSITIVITIES else None),
         "paid_from": expense.paid_from,
         "about": expense.about,
-        "updated_at": expense.updated_at.isoformat(),
+        "updated_at": iso(expense.updated_at),
     }
 
 
@@ -145,7 +137,7 @@ def _one(model, field: str, value):
     try:
         return model.objects.get(**{field: value})
     except model.DoesNotExist as exc:
-        raise NotFoundError(f"Related {model._meta.verbose_name} {value!r} was not found.") from exc
+        raise RecordNotFound("A related record was not found.") from exc
 
 
 @transaction.atomic
@@ -165,10 +157,10 @@ def save_expense(
             try:
                 expense = Expense.objects.select_for_update().get(pk=current_id)
             except Expense.DoesNotExist as exc:
-                raise NotFoundError(f"Expense {current_id!r} was not found.") from exc
+                raise RecordNotFound("That expense was not found.") from exc
             created = False
             if expected_updated_at and expense.updated_at.isoformat() != expected_updated_at:
-                raise ConflictError(f"Expense {current_id!r} changed after it was read.")
+                raise RecordConflict("That expense changed after it was read.")
 
         values = asdict(command)
         relations = {

@@ -23,16 +23,17 @@ from hq.platform.mcp.identity import reset_principal, set_principal
 from hq.platform.mcp.server import mcp
 from hq_sdk.capabilities import StrictCommand
 
-from ..assets import AssetCommand, NotFoundError as AssetNotFoundError, save_asset
+from ..assets import AssetCommand, save_asset
 from ..capabilities import (
     CapabilitySpec,
     describe_capabilities,
     execute_capability,
 )
-from ..content import ContentCommand, NotFoundError as ContentNotFoundError, save_content
+from ..content import ContentCommand, save_content
 from ..documentation import sync_documentation
-from ..expenses import ExpenseCommand, NotFoundError as ExpenseNotFoundError, save_expense
-from ..projects import ConflictError, ProjectCommand, refresh_project, save_project
+from ..expenses import ExpenseCommand, save_expense
+from ..projects import ProjectCommand, refresh_project, save_project
+from ..record_errors import RecordConflict, RecordNotFound
 from ..security import (
     OPERATOR_CAPABILITIES,
     AuthorizationError,
@@ -534,7 +535,7 @@ class ProjectApplicationServiceTests(TestCase):
         project.name = "Changed elsewhere"
         project.save()
 
-        with self.assertRaises(ConflictError):
+        with self.assertRaises(RecordConflict):
             save_project(
                 ProjectCommand(name="Stale write", slug="hq"),
                 principal=Principal("agent", "mcp", OPERATOR_CAPABILITIES),
@@ -664,7 +665,7 @@ class AssetApplicationServiceTests(TestCase):
         self.assertEqual(event.metadata["interface"], "mcp")
 
     def test_missing_relationship_rolls_back_the_asset(self):
-        with self.assertRaisesRegex(AssetNotFoundError, "missing-project"):
+        with self.assertRaises(RecordNotFound):
             save_asset(
                 AssetCommand(
                     item_name="Invalid",
@@ -830,7 +831,7 @@ class ContentApplicationServiceTests(TestCase):
         self.project = Project.objects.create(name="Site", slug="site")
 
     def test_relationship_failure_rolls_back(self):
-        with self.assertRaisesRegex(ContentNotFoundError, "missing"):
+        with self.assertRaises(RecordNotFound):
             save_content(
                 ContentCommand(
                     title="Invalid",
@@ -896,7 +897,7 @@ class ExpenseApplicationServiceTests(TestCase):
         self.project = Project.objects.create(name="Ops", slug="ops")
 
     def test_relationship_failure_rolls_back(self):
-        with self.assertRaisesRegex(ExpenseNotFoundError, "missing"):
+        with self.assertRaises(RecordNotFound):
             save_expense(
                 ExpenseCommand(
                     date=date(2026, 7, 25),

@@ -1,6 +1,6 @@
 from typing import override
 
-from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db.models import Case, IntegerField, Value, When
 from django.http import Http404
 from django.urls import reverse, reverse_lazy
 from django.utils.functional import cached_property
@@ -13,14 +13,22 @@ from django.views.generic import (
     UpdateView,
     View,
 )
+lazy from django.template.loader import render_to_string
 
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
-from hq.platform.application.pages import PageAction, PageMixin, record_trail
-from hq.platform.application.projects import NotFoundError, hq_sections
-from hq.platform.application.security import web_principal
+from hq.platform.application.pages import PageAction, PageBadge, PageMixin, record_trail
+from hq.platform.application.projects import (
+    REFRESH_JOB,
+    hq_sections,
+    projects_by_repository,
+    repository_key,
+    request_project_refresh,
+)
+from hq.platform.application.record_errors import RecordNotFound
+from hq.platform.application.security import AuthorizationError, web_principal
 from hq.platform.application.services import service_url_for
 from hq.platform.application.tables import (
     TableColumn,
@@ -31,6 +39,24 @@ from hq.platform.application.tables import (
 )
 from hq.platform.application.timestamps import moment
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+lazy from hq.domains.jobs.models import Job
+lazy from hq.domains.jobs.runner import JobConflict
+lazy from hq.platform.application.asks import (
+    FAILED,
+    Ask,
+    Standing,
+    answer,
+    job_standing,
+    read_standing,
+    read_status_url,
+)
+lazy from hq.platform.application.connection_setup import docs_url
+lazy from hq.platform.application.github_estate import repositories, repository_for
+lazy from hq.platform.application.github_posture import STANDARD, posture_of, postures
+lazy from hq.platform.application.github_profile import KIND, profile, request_read, standing
+lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
+lazy from hq.platform.application.page_reads import Remedy
+lazy from hq.platform.application.standards import MET, UNMET
 
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
@@ -88,20 +114,9 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
     @override
     def get_queryset(self):
         qs = Project.objects.all()
-        needs_output = self.request.GET.get("needs_output", "").strip()
-        no_content = self.request.GET.get("no_content", "").strip()
-        no_docs = self.request.GET.get("no_docs", "").strip()
-        if needs_output or no_content or no_docs:
-            qs = qs.annotate(
-                content_count=Count("content_items", distinct=True),
-                doc_count=Count("documentation_records", distinct=True),
-            )
-        if needs_output:
-            qs = qs.filter(status=Project.Status.ACTIVE).filter(Q(content_count=0) | Q(doc_count=0))
-        if no_content:
-            qs = qs.filter(content_count=0)
-        if no_docs:
-            qs = qs.filter(doc_count=0)
+        for toggle in self.table_toggles:
+            if self.request.GET.get(toggle.name, "").strip():
+                qs = getattr(qs, toggle.name)()
         qs = qs.annotate(
             archive_rank=Case(
                 When(status=Project.Status.ARCHIVED, then=Value(1)),
@@ -113,8 +128,6 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_context_data(self, **kwargs):
-        from hq.platform.application.github_estate import repository_for
-
         context = super().get_context_data(**kwargs)
         # GitHub's reading for the rows on this page: one stored reading,
         # whatever the page size.
@@ -130,14 +143,10 @@ class ProjectRefreshView(View):
     once the job is recorded; the job reads GitHub and the published site."""
 
     def post(self, request, slug: str):
-        from hq.domains.jobs.runner import JobConflict
-        from hq.platform.application.asks import FAILED, Standing, answer, job_standing
-        from hq.platform.application.projects import request_project_refresh
-
         back = reverse("projects:detail", args=[slug])
         try:
             job = request_project_refresh(slug, principal=web_principal(request.user), requested_by=request.user)
-        except NotFoundError as exc:
+        except RecordNotFound as exc:
             raise Http404(str(exc)) from exc
         except JobConflict:
             return answer(request, Standing(FAILED, "GitHub is already being read for a project."), fallback=back)
@@ -152,10 +161,6 @@ class ProjectRefreshView(View):
 
 def refresh_ask(project):
     """The project's Read now control, standing as its last read does."""
-
-    from hq.domains.jobs.models import Job
-    from hq.platform.application.asks import Ask, Standing, job_standing
-    from hq.platform.application.projects import REFRESH_JOB
 
     job = Job.objects.filter(kind=REFRESH_JOB, state__in=("queued", "running")).first()
     mine = job is not None and job.request.get("project") == project.slug
@@ -187,8 +192,6 @@ class ProjectDetailView(PageMixin, DetailView):
     def repository(self):
         """GitHub's stored reading of the project's repository, when there is one."""
 
-        from hq.platform.application.github_estate import repository_for
-
         return repository_for(self.object.repository_url)
 
     @override
@@ -209,10 +212,7 @@ class ProjectDetailView(PageMixin, DetailView):
             related.links("Related projects", documents.projects),
         )
         if context["github"] is not None:
-            from hq.platform.application.github_posture import posture_of
-
             context["posture"] = posture_of(context["github"])
-        from hq.platform.application.pages import PageBadge
 
         # Its state beside its name, as a service shows its reach; the category
         # leads the one line under it.
@@ -226,8 +226,6 @@ class ProjectDetailView(PageMixin, DetailView):
     @override
     def get_page_lede(self):
         """The one line under the name, inside the head beside its actions."""
-
-        from django.template.loader import render_to_string
 
         # The work moves where the code does: a push says when it last
         # changed better than the last edit of this record does.
@@ -291,8 +289,6 @@ class WatchingView(PageMixin, TemplateView):
 
     @property
     def login(self) -> str:
-        from hq.platform.application.linked_accounts import GITHUB, linked_login
-
         return linked_login(self.request.user, GITHUB)
 
     @override
@@ -303,8 +299,6 @@ class WatchingView(PageMixin, TemplateView):
     def get_page_actions(self):
         if not self.login:
             return []
-        from hq.platform.application.asks import Ask
-        from hq.platform.application.github_profile import standing
 
         found = standing()
         return [
@@ -319,14 +313,9 @@ class WatchingView(PageMixin, TemplateView):
 
     @override
     def get_context_data(self, **kwargs):
-        from hq.platform.application.github_profile import profile
-
         context = super().get_context_data(**kwargs)
         context["login"] = self.login
         if not self.login:
-            from hq.platform.application.connection_setup import docs_url
-            from hq.platform.application.page_reads import Remedy
-
             context["github_claim"] = Remedy(
                 "Add your GitHub login to your sign-in", docs_url("Install.md", "your-github-account")
             )
@@ -339,20 +328,11 @@ class WatchingView(PageMixin, TemplateView):
         """The repositories this account owns that HQ's GitHub App reads: a
         second proof the account is yours, from GitHub rather than the sign-in."""
 
-        from hq.platform.application.github_estate import repositories
-
         owner = self.login.lower()
-        from hq.domains.projects.models import Project
-        from hq.platform.application.github_public import github_repository
-
         # The HQ project each repository is, when one names it, so a row links there.
-        projects = {
-            "/".join(parts).lower(): project
-            for project in Project.objects.exclude(repository_url="")
-            if (parts := github_repository(project.repository_url))
-        }
+        projects = projects_by_repository()
         return [
-            {"repo": repo, "project": projects.get(repo.name.lower())}
+            {"repo": repo, "project": projects.get(repository_key(repo.name))}
             for repo in sorted(
                 (repo for name, repo in repositories().items() if name.split("/", 1)[0].lower() == owner),
                 key=lambda repo: repo.name,
@@ -365,9 +345,6 @@ WATCHING_REGION = "[data-watching]"
 
 
 def _profile_status(asked) -> str:
-    from hq.platform.application.asks import read_status_url
-    from hq.platform.application.github_profile import KIND
-
     return read_status_url((KIND,), asked) if asked is not None else ""
 
 
@@ -376,11 +353,6 @@ class WatchingRefreshView(View):
     the request answers once the ask is stored, and the page follows it."""
 
     def post(self, request):
-        from hq.platform.application.asks import FAILED, Standing, answer, read_standing
-        from hq.platform.application.github_profile import KIND, request_read
-        from hq.platform.application.linked_accounts import GITHUB, linked_login
-        from hq.platform.application.security import AuthorizationError
-
         login = linked_login(request.user, GITHUB)
         back = reverse("watching")
         if not login:
@@ -416,17 +388,12 @@ class PostureView(PageMixin, TemplateView):
 
     @override
     def get_context_data(self, **kwargs):
-        from hq.platform.application.github_posture import STANDARD, postures
-        from hq.platform.application.standards import MET, UNMET
-
         context = super().get_context_data(**kwargs)
         found = sorted(postures(), key=lambda item: (not item.unmet, item.subject.private, item.subject.name))
-        projects = {
-            "/".join(parts): project
-            for project in Project.objects.exclude(repository_url="")
-            if (parts := github_repository(project.repository_url))
-        }
-        context["repositories"] = [{"posture": item, "project": projects.get(item.subject.name)} for item in found]
+        projects = projects_by_repository()
+        context["repositories"] = [
+            {"posture": item, "project": projects.get(repository_key(item.subject.name))} for item in found
+        ]
         unmet = []
         everywhere = []
         for check in STANDARD:

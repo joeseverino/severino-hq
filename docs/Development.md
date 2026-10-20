@@ -83,7 +83,7 @@ rules parallelism out when a failure looks order- or isolation-dependent.
 test modules that import them directly or through one module between, plus
 every test of the changed Django apps, every test that names one (its URL
 namespace or app label), and the architecture tests. Beside them it runs
-`checks:ruff`, `checks:mypy`, `tests:django`, `tests:migrations` and every
+`checks:ruff`, `checks:mypy`, `checks:structural`, `tests:django`, `tests:migrations` and every
 `drift:*` gate. Each Django gate opens a database of its own, and its tests run
 with `DEBUG` on, the one pass that does. A change to what extensions render
 through (`templates/`, `static/`, `hq_sdk/`, the shared table, page, UI and

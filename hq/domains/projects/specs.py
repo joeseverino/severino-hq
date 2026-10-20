@@ -25,7 +25,6 @@ def resources() -> tuple[ResourceSpec, ...]:
             ProjectQuery,
             projects.get_project,
             "slug",
-            not_found_errors=(projects.NotFoundError,),
             search=SearchDefinition(
                 "projects",
                 Project,

@@ -21,20 +21,18 @@ from hq.domains.control_plane.models import REFERENCE_COLUMNS
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 
+from .connection_lifecycle import UNREPORTED_NODE
 from .entity_links import node_name
 from .finding_model import Finding, FindingEstate, FindingRule, Remedy, fact_values
 from .topology_model import TopologyNode
 from .ui import counted
+lazy from .facts import snapshots_of
 
 RULE = "names-nothing"
 NO_CONNECTION = "names-no-connection"
 # The kind of thing that is missing, beside its name, as ``kind\x1fname``.
 NO_PARENT = "names-no-parent"
 _SEPARATOR = "\x1f"
-
-# A connection node no controller reports stands in for a name that was read
-# through once; it is not a connection a controller has.
-_UNREPORTED = "connection:unreported:"
 
 
 def containments() -> tuple[tuple[str, str, str, str], ...]:
@@ -45,19 +43,21 @@ def containments() -> tuple[tuple[str, str, str, str], ...]:
 
 
 def _reported_connections(nodes: Mapping[str, TopologyNode]) -> frozenset[str]:
-    """Every connection a controller has, by its ref."""
+    """Every connection a controller has, by its ref.
+
+    A connection node no controller reports stands in for a name that was read
+    through once; it is not a connection a controller has.
+    """
 
     return frozenset(
         node.connection_ref
         for node in nodes.values()
-        if node.kind == "connection" and node.connection_ref and not node.id.startswith(_UNREPORTED)
+        if node.kind == "connection" and node.connection_ref and not node.id.startswith(UNREPORTED_NODE)
     )
 
 
 def _read_parents(kind: str) -> frozenset[str] | None:
     """The names a reachable read of ``kind`` listed; None when none was reachable."""
-
-    from .facts import snapshots_of
 
     provider = PROVIDERS[kind]
     reachable = False

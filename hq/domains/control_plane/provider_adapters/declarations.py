@@ -6,9 +6,14 @@ about the place that no provider reports.
 """
 
 from typing import Any, Literal
+lazy import ipaddress
+lazy from datetime import date
 
 from django.urls.converters import StringConverter
 from pydantic import Field, field_validator, model_validator
+
+lazy from hq.platform.application.expiry import days_until
+lazy from hq.platform.application.timestamps import moment
 
 from ..connection_shapes import SERVICE_ACCOUNT, SSH_TRANSPORT
 from ..provider_spec import (
@@ -64,8 +69,6 @@ class NetworkSpec(ProviderModel):
     @field_validator("cidr")
     @classmethod
     def a_real_range(cls, value: str) -> str:
-        import ipaddress
-
         try:
             ipaddress.ip_network(value, strict=False)
         except ValueError as exc:
@@ -119,7 +122,6 @@ class CertificateAuthoritySpec(ProviderModel):
     def a_real_date(cls, value: str) -> str:
         if not value:
             return value
-        from datetime import date
 
         try:
             date.fromisoformat(value)
@@ -299,9 +301,6 @@ def _authority_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tu
     expires = str(spec.get("expires_on", ""))
     remaining = ""
     if expires:
-        from hq.platform.application.expiry import days_until
-        from hq.platform.application.timestamps import moment
-
         when = moment(expires)
         days = days_until(when) if when is not None else None
         if days is not None:

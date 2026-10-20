@@ -12,7 +12,7 @@ it here, and a declaration is for the printer and the offline CA, which nothing
 will ever sweep and which are still part of the place.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from hq.domains.control_plane.models import ProviderConnection
@@ -23,11 +23,23 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .containers import Running, container_watchers
 from .hq_self import hq_hostnames, hq_machine, scoped_served_at
-from .locate import Machines, index_of, observed_answers, points_at_host
+from .locate import Machines, host_of, index_of, observed_answers, points_at_host
 from .machine_aliases import same_machine
 from .services import CONTAINER_KIND
 from .tailnet import TAILNET_KIND
 from .tailnet_presence import Presence, tailnet_presence
+lazy from . import connections, readings
+lazy from .connections import connection_rows
+lazy from .entity_links import entity_link
+lazy from .facts import snapshots_of
+lazy from .infrastructure import declared_machines, enabled_resources
+lazy from .machine_roles import role_context, roles_of
+lazy from .moments import when_day
+lazy from .projection import read_once
+lazy from .reach import network_of
+lazy from .service_facets import connected_kinds
+lazy from .timestamps import moment
+lazy from .whereabouts import locate, whereabouts
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,15 +128,11 @@ class Machine:
 
     @property
     def link(self):
-        from .entity_links import entity_link
-
         return entity_link("machine", self.name)
 
     @property
     def containers_visible(self) -> bool:
         """Whether any connected credential reads containers, so "none" is a reading."""
-
-        from .service_facets import connected_kinds
 
         return bool(self.containers) or CONTAINER_KIND in connected_kinds()
 
@@ -167,9 +175,6 @@ class Machine:
     def state_since(self) -> str:
         """The day the tailnet last saw a machine that is away or offline, or ""."""
 
-        from .moments import when_day
-        from .timestamps import moment
-
         if self.presence is None or self.presence.online:
             return ""
         seen = moment(str(self.presence.last_seen or ""))
@@ -179,9 +184,6 @@ class Machine:
 def _own(address: str) -> bool:
     """Whether an address says where a machine is. A loopback address is
     every machine's name for itself, so it places none of them."""
-
-    from .locate import host_of
-    from .reach import network_of
 
     host = host_of(address)
     return network_of(host) != "loopback" and host.lower() != "localhost"
@@ -193,8 +195,6 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
     ``served_at`` is the address a request reached HQ on; left out, the
     projection's (see ``hq_self.serving``), else none.
     """
-
-    from .connections import connection_rows
 
     connections = connection_rows()
     containers = _containers()
@@ -314,10 +314,6 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
 
 
 def _with_roles(machines) -> tuple[Machine, ...]:
-    from dataclasses import replace
-
-    from .machine_roles import role_context, roles_of
-
     context = role_context()
     return tuple(replace(item, roles=roles_of(item, context)) for item in machines)
 
@@ -343,11 +339,9 @@ def machine(name: str, *, served_at: tuple[str, ...] | None = None) -> Machine |
     device name that is the same machine as a declared one, or the key it was
     declared under, for instance."""
 
-    from .connections import machines_once
-
     wanted = name.strip().lower()
     # Inside a projection, the catalogue every section and the relation graph share.
-    catalog = machines_once() if served_at is None else machine_catalog(served_at=served_at)
+    catalog = connections.machines_once() if served_at is None else machine_catalog(served_at=served_at)
     return next(
         (item for item in catalog if item.name.lower() == wanted),
         next(
@@ -362,8 +356,6 @@ def machine(name: str, *, served_at: tuple[str, ...] | None = None) -> Machine |
 
 
 def _containers() -> dict[str, list[Running]]:
-    from .facts import snapshots_of
-
     watchers = container_watchers()
     found: dict[str, list[Running]] = {}
     for snapshot in snapshots_of(CONTAINER_KIND):
@@ -478,9 +470,6 @@ class Declared:
 def _declarations() -> dict[str, Declared]:
     """Everything HQ was told, by machine name."""
 
-    from . import readings
-    from .infrastructure import enabled_resources
-
     declared = [
         (resource.key, resource.spec)
         for resource in enabled_resources()
@@ -511,8 +500,6 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
     the machine this board files a name under and the machine that name's own
     page says it is served from cannot disagree.
     """
-
-    from .infrastructure import enabled_resources
 
     # Ranked exactly as the service catalogue ranks them, through the one rule
     # both read. A name whose ingress declares an origin is served where the
@@ -567,8 +554,6 @@ def _resources_by_host() -> tuple[dict[str, set[str]], dict[str, str]]:
     and must not be guessed from it.
     """
 
-    from .infrastructure import enabled_resources
-
     found: dict[str, set[str]] = {}
     devices: dict[str, str] = {}
     for resource in enabled_resources():
@@ -593,17 +578,10 @@ def served_by() -> dict[tuple[str, str], set[str]]:
     per projection, so a page listing every container asks it once.
     """
 
-    from .projection import read_once
-
     return read_once("machines.served_by", _served_by)
 
 
 def _served_by() -> dict[tuple[str, str], set[str]]:
-    from hq.domains.control_plane.names import normalized_hostname
-
-    from .infrastructure import declared_machines, enabled_resources
-    from .whereabouts import locate, whereabouts
-
     machines = declared_machines()
     at = whereabouts(machines)
     found: dict[tuple[str, str], set[str]] = {}

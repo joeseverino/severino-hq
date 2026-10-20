@@ -19,6 +19,7 @@ from hq.platform.application.contact_submissions import (
     execute_contact_review,
     list_contact_submissions,
 )
+from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.source import parsed
 
@@ -267,7 +268,7 @@ class QueuedChangeTests(TestCase):
             execute_contact_review(ContactReviewCommand(status="bogus"), principal=OPERATOR, current_id=2)
         with self.assertRaisesMessage(ValueError, "confirm must exactly match"):
             execute_contact_delete(ContactDeleteCommand(confirm="1"), principal=OPERATOR, current_id=2)
-        with self.assertRaisesMessage(ValueError, "was not found"):
+        with self.assertRaises(RecordNotFound):
             execute_contact_review(ContactReviewCommand(status="read"), principal=OPERATOR, current_id=99)
 
 

@@ -27,6 +27,13 @@ from urllib.parse import urlsplit
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.network import split_host_port
+lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.domains.control_plane.providers import PROVIDERS
+
+lazy from .connections import connection_rows
+lazy from .facts import snapshots_of
+lazy from .infrastructure import declared_machines
 
 
 def split_endpoint(value: Any) -> tuple[str, str]:
@@ -237,10 +244,6 @@ def container_hosts() -> dict[str, str]:
     machine.
     """
 
-    from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-
-    from .facts import snapshots_of
-
     found: dict[str, str] = {}
     for snapshot in snapshots_of(CONTAINER_KIND):
         for record in snapshot.records:
@@ -291,9 +294,6 @@ def observed_answers(snapshots=None) -> dict[str, tuple[str, ...]]:
     in HQ except in the one place that decides who consumes a certificate.
     """
 
-    from hq.domains.control_plane.models import ProviderInventory
-    from hq.domains.control_plane.providers import PROVIDERS
-
     found: dict[str, set[str]] = {}
     # ``snapshots`` is every stored reading, from a caller that already holds
     # them; without it they are read here.
@@ -322,8 +322,6 @@ def names_by_connection() -> dict[str, tuple[str, ...]]:
     one machine. Where the index cannot place an address it stands in for
     itself, which makes the comparison exact rather than absent.
     """
-
-    from hq.domains.control_plane.models import ProviderConnection
 
     index = machines_index()
     answers = observed_answers()
@@ -376,9 +374,6 @@ def machines_index(declared: Iterable[Mapping[str, Any]] | None = None) -> Machi
     service catalogue reads the declarations once for a whole page and would
     otherwise pay for them twice.
     """
-
-    from .connections import connection_rows
-    from .infrastructure import declared_machines
 
     return index_of(
         declared=declared_machines() if declared is None else declared,

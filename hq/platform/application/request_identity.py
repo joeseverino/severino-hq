@@ -2,8 +2,11 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+lazy from urllib.parse import urlsplit
 
 from django.conf import settings
+
+lazy from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, sso_only
 
 from . import tailnet
 
@@ -86,8 +89,6 @@ class Identity:
 
 
 def identity_of(request, device: tailnet.Device | None) -> Identity:
-    from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, sso_only
-
     user = getattr(request, "user", None)
     backends = tuple(getattr(settings, "AUTHENTICATION_BACKENDS", ()))
     session = getattr(request, "session", None)
@@ -127,8 +128,6 @@ def identity_of(request, device: tailnet.Device | None) -> Identity:
 
 def _provider_host() -> str:
     """The identity provider, named by where sign-in is actually sent."""
-
-    from urllib.parse import urlsplit
 
     endpoint = str(getattr(settings, "OIDC_OP_AUTHORIZATION_ENDPOINT", "") or "")
     return urlsplit(endpoint).hostname or ""

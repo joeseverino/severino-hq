@@ -9,11 +9,8 @@ plain records, so a declaration costs the declaring module nothing.
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .security import Capability
-
+lazy from .security import Capability
 
 # How authority for an ability is proven, declared once per ability.
 #

@@ -28,6 +28,9 @@ from hq.domains.control_plane.reading_parts import PartRefusal, parts_of, refuse
 
 from .labels import human_label
 from .projection import read_once
+lazy from .facts import stored_snapshots
+lazy from .freshness import STALE, freshness
+lazy from .ui import counted
 
 READABLE = "readable"
 # Read, with a declared part of it refused.
@@ -159,8 +162,6 @@ class ProviderSight:
     @property
     def summary(self) -> str:
         """The tally as a sentence: "Reads 4 things", "Reads 1 thing, 1 partly read"."""
-
-        from .ui import counted
 
         read = self._count(READABLE)
         parts = [f"Reads {counted(read, 'thing')}" if read else "Reads nothing"]
@@ -297,8 +298,6 @@ def standing(row: ProviderInventory, *, now: datetime | None = None) -> tuple[st
     """``(state, label)`` for one stored reading: a ``STATE_LABELS`` state, or
     freshness's ``STALE`` once a readable reading is out of date."""
 
-    from .freshness import STALE, freshness
-
     found = sight(row.kind, "", "reading", row)
     if found.state in (READABLE, PARTIAL):
         aged = freshness(row.kind, row.observed_at, now)
@@ -329,8 +328,6 @@ def _inventory() -> dict[str, ProviderInventory]:
 
 
 def _stored_inventory() -> dict[str, ProviderInventory]:
-    from .facts import stored_snapshots
-
     return {row.kind: row for rows in stored_snapshots().values() for row in rows}
 
 

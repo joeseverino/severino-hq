@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from django.conf import settings
 from django.utils import timezone
+lazy from django.db.models import Q
 
 from .models import AuditLog
 
@@ -51,8 +52,6 @@ def _recent_failures(username: str, ip: str):
     # enough to stop serving.
     subject = username.strip().lower()
     if subject and ip:
-        from django.db.models import Q
-
         failures = failures.filter(Q(metadata__username__iexact=subject) | Q(metadata__ip=ip))
     elif subject:
         failures = failures.filter(metadata__username__iexact=subject)

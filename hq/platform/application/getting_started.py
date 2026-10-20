@@ -12,6 +12,9 @@ from dataclasses import dataclass
 
 from .projection import read_once
 from .routes import reverse
+lazy from . import cadence
+lazy from .connections import connection_rows
+lazy from .glance import dashboard_machines
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,17 +39,13 @@ def remaining() -> tuple[Step, ...]:
 
 
 def _steps() -> tuple[Step, ...]:
-    from .cadence import controller_standing
-    from .connections import connection_rows
-    from .glance import dashboard_machines
-
     return (
         Step(
             "controller",
             "Run the controller",
             "It reads your machines and services and applies the changes HQ asks for.",
             reverse("control_plane:controller"),
-            controller_standing().known,
+            cadence.controller_standing().known,
             icon="activity",
         ),
         Step(

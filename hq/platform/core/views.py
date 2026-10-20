@@ -2,6 +2,7 @@
 
 from typing import ClassVar, override
 from urllib.parse import quote
+lazy from datetime import timedelta
 
 from django.conf import settings
 from django.contrib import messages
@@ -13,7 +14,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
-from hq.platform.application import fragments
+from hq.platform.application import capability_policy, fragments
 from hq.platform.application.agent_access import set_agents_paused
 from hq.platform.application.appearance import set_theme
 from hq.platform.application.avatars import avatar_of
@@ -23,10 +24,20 @@ from hq.platform.application.projection import projection_scope
 from hq.platform.application.search import global_search
 from hq.platform.application.security import AuthorizationError, safe_next, web_principal
 from hq.platform.application.ui import counted
+lazy from hq.platform.application import lookup
+lazy from hq.platform.application.approvals import awaiting_ids, entry_event
+lazy from hq.platform.application.connection_catalog import connection_catalog
+lazy from hq.platform.application.hq_context import hq_context
+lazy from hq.platform.application.lookup import AddressCommand, stored_address
+lazy from hq.platform.application.posture import estate_posture
+lazy from hq.platform.application.request_path import request_path
 
 from .audit import record_event
 from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
+lazy from .network import client_ip
+lazy from .oidc import SSO_FAILURE_SESSION_KEY, sso_only
+lazy from .throttle import lockout
 
 
 class ThrottledLoginView(LoginView):
@@ -48,8 +59,6 @@ class ThrottledLoginView(LoginView):
 
     @property
     def sso_only(self) -> bool:
-        from .oidc import sso_only
-
         return settings.SEVERINO_OIDC_ENABLED and sso_only()
 
     @override
@@ -78,8 +87,6 @@ class ThrottledLoginView(LoginView):
 
     @override
     def get_context_data(self, **kwargs):
-        from .oidc import SSO_FAILURE_SESSION_KEY
-
         context = super().get_context_data(**kwargs)
         if "sso_failed" in self.request.GET:
             context["sso_failure"] = self.request.session.pop(
@@ -89,9 +96,6 @@ class ThrottledLoginView(LoginView):
 
     @override
     def post(self, request, *args, **kwargs):
-        from .network import client_ip
-        from .throttle import lockout
-
         if self.sso_only:
             # There is no backend to check it against, so this could only ever
             # fail, but failing here means it is never carried further, and
@@ -197,11 +201,6 @@ class AgentPolicyView(PageMixin, TemplateView):
 
     @override
     def get_context_data(self, **kwargs):
-        from datetime import timedelta
-
-        from hq.platform.application import capability_policy
-        from hq.platform.application.approvals import awaiting_ids
-
         context = super().get_context_data(**kwargs)
         context["columns"], context["groups"] = capability_policy.matrix()
         # Nearly every rule is at its default, so the page opens on the ones
@@ -236,8 +235,6 @@ class AgentPolicyView(PageMixin, TemplateView):
         return context
 
     def post(self, request):
-        from hq.platform.application import capability_policy
-
         changed, problems = capability_policy.apply_changes(
             request.POST, principal=web_principal(request.user), user=request.user
         )
@@ -374,8 +371,6 @@ class ApprovalEntryView(View):
     """A stable link to a held request's audit entry."""
 
     def get(self, request, approval_id):
-        from hq.platform.application.approvals import entry_event
-
         event = entry_event(approval_id)
         if event is None:
             return redirect(f"{reverse('core:audit_list')}?awaiting=1")
@@ -397,10 +392,6 @@ class ConnectionView(PageMixin, TemplateView):
 
     @override
     def get_context_data(self, **kwargs):
-        from hq.platform.application.connection_catalog import connection_catalog
-        from hq.platform.application.posture import estate_posture
-        from hq.platform.application.request_path import request_path
-
         context = super().get_context_data(**kwargs)
         # Provider observations are cached facts. The request explanation may
         # derive from them, but opening the panel never probes NPM or handles a
@@ -423,8 +414,6 @@ class HQView(PageMixin, TemplateView):
 
     @override
     def get_context_data(self, **kwargs):
-        from hq.platform.application.hq_context import hq_context
-
         context = super().get_context_data(**kwargs)
         context["hq"] = hq_context(self.request)
         context["page_aside"] = "core/_hq_status.html"
@@ -442,8 +431,6 @@ class PublicAddressView(View):
     template_name = "core/_public_address.html"
 
     def get(self, request):
-        from hq.platform.application.lookup import AddressCommand, stored_address
-
         address = request.GET.get("address", "")
         return self._render(
             request,
@@ -452,15 +439,15 @@ class PublicAddressView(View):
         )
 
     def post(self, request):
-        from hq.platform.application.lookup import AddressCommand, look_up_address
-
         if request.headers.get("X-Requested-With") != "XMLHttpRequest":
             return redirect("connection")
         address = request.POST.get("address", "")
         return self._render(
             request,
             address,
-            lambda principal: look_up_address(AddressCommand(address=address, refresh=True), principal=principal),
+            lambda principal: lookup.look_up_address(
+                AddressCommand(address=address, refresh=True), principal=principal
+            ),
         )
 
     def _render(self, request, address, read):

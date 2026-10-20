@@ -14,21 +14,21 @@ from django.conf import settings
 
 from .provider_spec import ConnectionShape, Setting
 
-ACME = ConnectionShape(
+ACME: ConnectionShape = ConnectionShape(
     "acme",
     (
         Setting("DIRECTORY_URL", label="website"),
         Setting("EMAIL", label="email"),
     ),
 )
-API_TOKEN = ConnectionShape(
+API_TOKEN: ConnectionShape = ConnectionShape(
     "api_token",
     (
         Setting("API_TOKEN", item_field="credential", secret=True),
         Setting("URL", label="website"),
     ),
 )
-GITHUB_APP = ConnectionShape(
+GITHUB_APP: ConnectionShape = ConnectionShape(
     "github_app",
     (
         Setting("APP_ID", label="app_id"),
@@ -37,7 +37,7 @@ GITHUB_APP = ConnectionShape(
     ),
     provider="github_app",
 )
-LOGIN = ConnectionShape(
+LOGIN: ConnectionShape = ConnectionShape(
     "login",
     (
         Setting("PASSWORD", item_field="password", secret=True),
@@ -45,18 +45,18 @@ LOGIN = ConnectionShape(
         Setting("USERNAME", item_field="username"),
     ),
 )
-OAUTH_CLIENT = ConnectionShape(
+OAUTH_CLIENT: ConnectionShape = ConnectionShape(
     "oauth_client",
     (
         Setting("CLIENT_ID", item_field="username"),
         Setting("CLIENT_SECRET", item_field="credential", secret=True),
     ),
 )
-SERVICE_ACCOUNT = ConnectionShape(
+SERVICE_ACCOUNT: ConnectionShape = ConnectionShape(
     "service_account",
     (Setting("API_TOKEN", item_field="credential", secret=True),),
 )
-SSH_TRANSPORT = ConnectionShape(
+SSH_TRANSPORT: ConnectionShape = ConnectionShape(
     "ssh_transport",
     (
         Setting("HOST", label="host"),

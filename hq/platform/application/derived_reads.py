@@ -14,17 +14,30 @@ from typing import Any
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ProviderInventory
-from hq.domains.control_plane.names import normalized_hostname
+from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .labels import human_label
 from .own_addresses import tailnet_sightings
 from .projection import page_size, projection_scope
+from .record_errors import RecordNotFound
 from .security import Principal
-
-
-class NotFoundError(ValueError):
-    """No derived record answers to the identifier."""
+lazy from . import connections, dashboard, estate, machines, request_context
+lazy from .action_items import filter_items
+lazy from .command_center import estate_search
+lazy from .credential_sight import credential_sight, sight
+lazy from .entity_links import entity_link
+lazy from .estate import estate_reading
+lazy from .hq_self import serving
+lazy from .infrastructure import enabled_resources
+lazy from .machine_context import header_addresses
+lazy from .paths import path_to
+lazy from .relationships import readout_records, relationships_for
+lazy from .request_path import request_path, serialize_request_path
+lazy from .search import global_search
+lazy from .service_list import services_by_zone
+lazy from .topology import relation_graph
+lazy from .zones import ZONE_KIND, domain_context
 
 
 def _moment(value: Any) -> str | None:
@@ -55,8 +68,6 @@ def _collection(items: list[dict[str, Any]]) -> dict[str, Any]:
 def list_estate() -> dict[str, Any]:
     """The dashboard's estate figures, each linking to the page that lists it."""
 
-    from .estate import cards
-
     with projection_scope():
         return _collection(
             [
@@ -68,7 +79,7 @@ def list_estate() -> dict[str, Any]:
                     "status": card.get("status", ""),
                     "url": card["url"],
                 }
-                for card in cards()
+                for card in estate.cards()
             ]
         )
 
@@ -76,11 +87,8 @@ def list_estate() -> dict[str, Any]:
 def list_action_items(*, query: str = "", status: str = "", source: str = "", limit: int = 50) -> dict[str, Any]:
     """The composed action queue, filtered the way the action items page filters it."""
 
-    from .action_items import filter_items
-    from .dashboard import work_queue
-
     with projection_scope():
-        items = filter_items(work_queue(), query=query, status=status, source=source)
+        items = filter_items(dashboard.work_queue(), query=query, status=status, source=source)
     return _collection(items[: page_size(limit)])
 
 
@@ -114,8 +122,6 @@ def _presence(presence: Any) -> dict[str, Any] | None:
 
 
 def serialize_machine(machine: Any) -> dict[str, Any]:
-    from .machine_context import header_addresses
-
     label, _tone = machine.state
     return {
         "name": machine.name,
@@ -158,19 +164,15 @@ def serialize_machine(machine: Any) -> dict[str, Any]:
 def list_machines(*, limit: int = 50) -> dict[str, Any]:
     """Every machine anything reported, as the machine list shows them."""
 
-    from .connections import machines_once
-
     with projection_scope():
-        return _collection([serialize_machine(item) for item in machines_once()[: page_size(limit)]])
+        return _collection([serialize_machine(item) for item in connections.machines_once()[: page_size(limit)]])
 
 
 def get_machine(name: str) -> dict[str, Any]:
-    from .machines import machine
-
     with projection_scope():
-        found = machine(name)
+        found = machines.machine(name)
         if found is None:
-            raise NotFoundError(name)
+            raise RecordNotFound("No machine has that name.")
         return serialize_machine(found)
 
 
@@ -178,12 +180,6 @@ def get_machine(name: str) -> dict[str, Any]:
 
 
 def _domains() -> list[dict[str, Any]]:
-    from .entity_links import entity_link
-    from .estate import estate_reading
-    from .infrastructure import enabled_resources
-    from .service_list import services_by_zone
-    from .zones import ZONE_KIND
-
     estate = estate_reading()
     declared = {
         normalized_hostname(resource.spec.get("zone")): resource.key
@@ -228,14 +224,12 @@ def list_domains(*, limit: int = 50) -> dict[str, Any]:
 def get_domain(name: str) -> dict[str, Any]:
     """One domain as the list has it, with its records, connection and insights."""
 
-    from .zones import domain_context
-
     wanted = normalized_hostname(name)
     with projection_scope():
         found = next((item for item in _domains() if item["name"] == wanted), None)
         context = domain_context(wanted) if found is not None else None
         if found is None or context is None:
-            raise NotFoundError(name)
+            raise RecordNotFound("No domain has that name.")
         zone = context.zone
         return {
             **found,
@@ -278,13 +272,10 @@ def get_relationships(node: str, *, principal: Principal) -> dict[str, Any]:
     ``zone:<domain>``, ``resource:<key>``.
     """
 
-    from .relationships import readout_records, relationships_for
-    from .topology import relation_graph
-
     with projection_scope():
         found = relationships_for(node, principal=principal)
         if not found.known:
-            raise NotFoundError(node)
+            raise RecordNotFound("HQ knows no record by that name.")
         subject = relation_graph(principal=principal).subjects.get(node)
         readings = [
             {
@@ -427,12 +418,8 @@ def serialize_path(path: Any) -> dict[str, Any]:
 def get_path(hostname: str) -> dict[str, Any]:
     """The request path to one hostname, hop by hop, as the service page walks it."""
 
-    from hq.domains.control_plane.names import is_hostname
-
-    from .paths import path_to
-
     if not is_hostname(hostname):
-        raise NotFoundError(hostname)
+        raise RecordNotFound("No path is known for that hostname.")
     wanted = normalized_hostname(hostname)
     with projection_scope():
         return serialize_path(path_to(wanted))
@@ -441,16 +428,12 @@ def get_path(hostname: str) -> dict[str, Any]:
 def list_request_path() -> dict[str, Any]:
     """How the calling request reached HQ, as the connection page shows it."""
 
-    from . import request_context
-    from .request_path import request_path, serialize_request_path
-
     request = request_context.current()
     if request is None:
         return {
             **_collection([]),
             "unread": ["not read: request, because this caller made no HTTP request to describe"],
         }
-    from .hq_self import serving
 
     with projection_scope(seed=serving(request)):
         return serialize_request_path(request_path(request))
@@ -460,8 +443,6 @@ def list_request_path() -> dict[str, Any]:
 
 
 def _reading(kind: str, row: ProviderInventory | None) -> dict[str, Any]:
-    from .credential_sight import sight
-
     spec = OBSERVATIONS[kind]
     seen = sight(kind, spec.label, "reading", row, permissions=tuple(spec.requires))
     return {
@@ -501,7 +482,7 @@ def get_reading(kind: str) -> dict[str, Any]:
 
     spec = OBSERVATIONS.get(kind)
     if spec is None:
-        raise NotFoundError(kind)
+        raise RecordNotFound("No reading is of that type.")
     row = _rows((kind,)).get(kind)
     stored = row.records if row is not None and isinstance(row.records, list) and not spec.withheld else []
     return {
@@ -535,17 +516,13 @@ def serialize_provider_sight(found: Any) -> dict[str, Any]:
 def list_credentials() -> dict[str, Any]:
     """Each connection provider and what its credential can see."""
 
-    from .credential_sight import credential_sight
-
     return _collection([serialize_provider_sight(found) for found in credential_sight()])
 
 
 def get_credential(provider: str) -> dict[str, Any]:
-    from .credential_sight import credential_sight
-
     found = next((item for item in credential_sight() if item.provider == provider), None)
     if found is None:
-        raise NotFoundError(provider)
+        raise RecordNotFound("No credential is seen for that service.")
     return serialize_provider_sight(found)
 
 
@@ -554,9 +531,6 @@ def get_credential(provider: str) -> dict[str, Any]:
 
 def search(query: str = "", *, limit: int = 20, principal: Principal) -> dict[str, Any]:
     """Machines, services and domains first, then records, as the search page ranks them."""
-
-    from .command_center import estate_search
-    from .search import global_search
 
     bound = page_size(limit)
     if not query.strip():

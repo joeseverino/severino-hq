@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from .observations import OBSERVATIONS
+lazy from .providers import PROVIDERS
 
 # What the zone sweep's registrar read needs: expiry and auto-renew.
 REGISTRAR_READ = "Registrar: Domains Read (account)"
@@ -40,8 +41,6 @@ def observer_permissions(provider: str) -> tuple[str, ...]:
     What its readings require, what the parts of resource kinds read through it
     require, and the reads neither declares.
     """
-
-    from .providers import PROVIDERS
 
     found = {name for spec in OBSERVATIONS.values() if spec.provider == provider for name in spec.requires}
     found.update(

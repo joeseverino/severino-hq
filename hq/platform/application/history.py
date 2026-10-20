@@ -20,12 +20,16 @@ from django.utils import timezone
 
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
+lazy from hq.domains.control_plane.models import ReadRequest
+lazy from hq.platform.core.audit import audited_labels
+lazy from hq.platform.core.models import AuditLog
 
 from .entity_links import container_link
 from .facts import inventory_records
 from .labels import lower_first
 from .timestamps import moment
 from .ui import counted
+lazy from .inventory import READING_AUDIT_TYPE
 
 # How far either side of a moment counts as near it.
 NEAR = timedelta(hours=6)
@@ -61,9 +65,6 @@ def read_request_type() -> str:
     the log leaves them out until asked.
     """
 
-    from hq.domains.control_plane.models import ReadRequest
-    from hq.platform.core.audit import audited_labels
-
     return audited_labels()[ReadRequest]
 
 
@@ -73,10 +74,6 @@ def source_of_event():
     A reading that found its records changed is the one thing in the log that
     happened outside HQ; everything else was done through it.
     """
-
-    from hq.platform.core.models import AuditLog
-
-    from .inventory import READING_AUDIT_TYPE
 
     return Case(
         When(
@@ -209,8 +206,6 @@ def _joins(run: Entry, line: Entry) -> bool:
 
 def changes(since: datetime, until: datetime):
     """The audit rows that changed something, as the history counts them."""
-
-    from hq.platform.core.models import AuditLog
 
     return (
         AuditLog.objects.filter(created_at__gte=since, created_at__lte=until)

@@ -2,18 +2,16 @@
 
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Concatenate, override
+from typing import Any, Concatenate, override
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.http import HttpRequest, HttpResponseBase
+lazy from django.contrib.auth.base_user import AbstractBaseUser
+lazy from django.contrib.auth.models import AnonymousUser
 
 from hq.platform.application.security import AuthorizationError, safe_next, web_principal
-
-if TYPE_CHECKING:
-    from django.contrib.auth.base_user import AbstractBaseUser
-    from django.contrib.auth.models import AnonymousUser
 
 View = Callable[Concatenate[HttpRequest, ...], HttpResponseBase]
 

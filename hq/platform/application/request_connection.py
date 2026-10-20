@@ -31,6 +31,12 @@ from .request_channel import Channel, channel_for_request, displayed_client_ip, 
 from .request_identity import Identity, identity_of
 from .request_layers import Layer, ServingDeviceResolution, admission_layers
 from .ui import MISSING
+lazy from . import connections
+lazy from .entity_links import entity_link
+lazy from .hq_self import hq_machine, hq_service, own_addresses, served_at
+lazy from .infrastructure import declared_machines
+lazy from .locate import index_of
+lazy from .tailnet_presence import tailnet_presence
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,14 +389,10 @@ def connection(request, *, edge=None, firewall=None) -> Connection:
     reported_address = displayed_client_ip(request) if untrusted_forwarding else ""
     reported_device = tailnet.device_at(reported_address, known)
     identity = identity_of(request, None if untrusted_forwarding else device)
-    from .infrastructure import declared_machines
 
     declared = declared_machines()
-    from .connections import machines_once
-    from .hq_self import hq_service, served_at
-    from .tailnet_presence import tailnet_presence
 
-    own = hq_service(request, catalog=machines_once())
+    own = hq_service(request, catalog=connections.machines_once())
     serving = _serving_device_resolution(known, declared, served_at(request), machine=own.machine if own else "")
     # A fallback observer is useful provenance, but it is not a placement
     # result. Never use it as HQ's policy target or draw it as HQ's endpoint.
@@ -463,9 +465,6 @@ def _serving_device_resolution(
     back to the observer flag when nothing resolves.
     """
 
-    from .hq_self import hq_machine, own_addresses
-    from .locate import index_of
-
     for address in own_addresses(served):
         device = tailnet.device_at(address, known)
         if device is not None:
@@ -509,8 +508,6 @@ def _machine_name(addresses, declared) -> str:
     matches the same address recorded without one.
     """
 
-    from .locate import index_of
-
     index = index_of(declared=declared)
     for address in addresses or ():
         name = index.at(address)
@@ -520,6 +517,4 @@ def _machine_name(addresses, declared) -> str:
 
 
 def _machine_url(name: str) -> str:
-    from .entity_links import entity_link
-
     return entity_link("machine", name).url

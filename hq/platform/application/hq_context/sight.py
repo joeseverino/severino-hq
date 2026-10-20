@@ -5,9 +5,25 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
+
 from ..projection import read_once
 from ..ui import counted
 from .tones import ATTENTION, GOOD, Tile, iso
+lazy from ..connections import connection_rows
+lazy from ..credential_sight import (
+    NEVER_SWEPT,
+    NOT_CONNECTED,
+    PARTIAL,
+    READABLE,
+    REFUSED,
+    UNREADABLE,
+    sight as sight_of,
+)
+lazy from ..facts import stored_snapshots
+lazy from ..freshness import freshness
+lazy from ..routes import reverse
 
 # The group of readings no connection holds a credential for.
 KEYLESS = "Needs no connection"
@@ -32,8 +48,6 @@ class Sees:
 
     @property
     def read(self) -> bool:
-        from ..credential_sight import PARTIAL, READABLE
-
         return self.state in (READABLE, PARTIAL)
 
 
@@ -61,15 +75,11 @@ class Sight:
     def never(self) -> int:
         """Listed kinds no sweep has read yet."""
 
-        from ..credential_sight import NEVER_SWEPT
-
         return sum(row.state == NEVER_SWEPT for row in self.rows)
 
     @property
     def failing(self) -> int:
         """Kinds a connection tried and could not read; not-connected ones are not failures."""
-
-        from ..credential_sight import REFUSED, UNREADABLE
 
         return sum(row.state in (REFUSED, UNREADABLE) for row in self.rows)
 
@@ -81,13 +91,6 @@ def sight() -> Sight:
 
 
 def _sight() -> Sight:
-    from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-    from hq.domains.control_plane.observations import OBSERVATIONS
-
-    from ..connections import connection_rows
-    from ..credential_sight import NEVER_SWEPT, NOT_CONNECTED
-    from ..facts import stored_snapshots
-
     stored = {kind: rows[0] for kind, rows in stored_snapshots().items() if rows}
     reported = {CONNECTION_LABELS.get(row.provider) for row in connection_rows()}
     groups: dict[str, list[Sees]] = {}
@@ -109,9 +112,6 @@ def _sight() -> Sight:
 
 
 def _sees(kind: str, spec: Any, row: Any) -> Sees:
-    from ..credential_sight import PARTIAL, READABLE, sight as sight_of
-    from ..freshness import freshness
-
     seen = sight_of(kind, spec.label, "reading", row, permissions=tuple(spec.requires))
     return Sees(
         kind=kind,
@@ -130,8 +130,6 @@ def _sees(kind: str, spec: Any, row: Any) -> Sees:
 
 
 def sight_tile(seen: Sight) -> Tile:
-    from ..routes import reverse
-
     detail = " · ".join(
         part
         for part in (

@@ -45,6 +45,8 @@ from django.test.utils import setup_databases, teardown_databases
 from hq.platform.application.derivations import counting
 from hq.platform.core.ahead import keeping
 from hq.platform.core.bench import Seeded, seed, unchanged_sweep
+lazy from hq.domains.expenses.models import Expense
+lazy from hq.domains.jobs import runner
 
 from .bench_pages import _held_outside, _machine_client, _pages
 
@@ -161,9 +163,6 @@ def _importer(seeded: Seeded, tally: Tally, batch: int, stop: threading.Event):
     again, until the phase ends: every batch unsettles what reads the table,
     and the estate stays the size it was seeded at.
     """
-
-    from hq.domains.expenses.models import Expense
-    from hq.domains.jobs import runner
 
     template = Expense.objects.get(pk=seeded.expense.pk)
     fields = {f.attname: getattr(template, f.attname) for f in Expense._meta.concrete_fields if not f.primary_key}

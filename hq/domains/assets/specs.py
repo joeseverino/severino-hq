@@ -25,7 +25,6 @@ def resources() -> tuple[ResourceSpec, ...]:
             AssetQuery,
             assets.get_asset,
             "slug",
-            not_found_errors=(assets.NotFoundError,),
             search=SearchDefinition(
                 "assets",
                 Asset,

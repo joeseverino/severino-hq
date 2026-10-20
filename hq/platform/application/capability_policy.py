@@ -20,6 +20,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import CapabilityRule
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentIdentity, AuditLog
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .approvals import (
     AGENT_SURFACES,
@@ -31,6 +32,9 @@ from .approvals import (
 )
 from .labels import effect_label
 from .security import AuthorizationError, Principal, is_interactive, mcp_principal
+lazy from . import capabilities
+lazy from .entity_links import kind_label
+lazy from .integrations import integration_graph
 
 SURFACES = AGENT_SURFACES
 AUDIT_LABEL = "Capability policy"
@@ -290,14 +294,12 @@ def columns() -> tuple[Column, ...]:
 def matrix() -> tuple[tuple[Column, ...], tuple[Group, ...]]:
     """Every capability against every column, grouped by what it acts on."""
 
-    from .capabilities import capability_registry
-
     cols = columns()
     grants = dict(AgentIdentity.objects.values_list("client_id", "granted"))
     ceiling = mcp_principal()
     current = rules()
     grouped: dict[str, list] = {}
-    for spec in capability_registry().values():
+    for spec in capabilities.capability_registry().values():
         if spec.effect in EFFECTS:
             grouped.setdefault(_subject_label(_subject(spec)), []).append(spec)
     groups = []
@@ -327,8 +329,6 @@ def _subject(spec) -> str:
 def _subject_label(subject: str) -> str:
     """What a group of commands acts on, by the name its own page has."""
 
-    from .integrations import integration_graph
-
     resource = integration_graph().resources.get(subject)
     if resource is not None:
         return resource.label
@@ -349,10 +349,6 @@ def _default_label(spec) -> str:
 
 def _approved_types() -> str:
     """The types whose changes wait for a person, by the names their pages use."""
-
-    from hq.domains.control_plane.providers import PROVIDERS
-
-    from .entity_links import kind_label
 
     names = sorted(kind_label(kind).lower() for kind, provider in PROVIDERS.items() if provider.requires_approval)
     if not names:
@@ -382,9 +378,7 @@ def _cell(spec, column: Column, current, grants, ceiling) -> Cell:
 def apply_changes(submitted, *, principal: Principal, user) -> tuple[int, list[str]]:
     """Apply the cells that differ from what holds. Returns (changed, problems)."""
 
-    from .capabilities import capability_registry
-
-    registry = capability_registry()
+    registry = capabilities.capability_registry()
     current = rules()
     changed, problems = 0, []
     for name, value in submitted.items():

@@ -5,6 +5,8 @@ from typing import Any, override
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+lazy from hq.domains.control_plane import bridge_contract
+
 
 class Command(BaseCommand):
     help = (
@@ -23,10 +25,8 @@ class Command(BaseCommand):
 
     @override
     def handle(self, *args: Any, **options: Any) -> None:
-        from hq.domains.control_plane.bridge_contract import emitted
-
         stale = []
-        for path, current in emitted().items():
+        for path, current in bridge_contract.emitted().items():
             name = str(path.relative_to(settings.BASE_DIR))
             committed = path.read_text(encoding="utf-8") if path.exists() else ""
             if committed == current:

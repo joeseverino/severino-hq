@@ -14,11 +14,14 @@ surface.
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from django.conf import settings
 from django.db.models import FETCH_PEERS, FETCH_RAISE, Q, QuerySet
+lazy from django.utils import timezone
+
+from .record_errors import RecordNotFound
 
 # The most rows any single read will return, whatever a caller asks for.
 #
@@ -105,10 +108,6 @@ def day_span(first: date, last: date | None = None) -> tuple[datetime, datetime 
     row: the slow part of a read that returns a few hundred rows of thousands.
     """
 
-    from datetime import time, timedelta
-
-    from django.utils import timezone
-
     def day(value: date) -> date:
         if isinstance(value, datetime):
             return timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
@@ -175,15 +174,26 @@ def guarded(queryset: QuerySet) -> QuerySet:
     return queryset.fetch_mode(FETCH_RAISE if settings.SEVERINO_STRICT_FETCH else FETCH_PEERS)
 
 
-def listing(model, serialize, *, search: tuple[str, ...], status=None, query=None, limit: int = 50) -> dict[str, Any]:
+def listing(
+    rows,
+    serialize,
+    *,
+    search: tuple[str, ...] = (),
+    status=None,
+    query=None,
+    order: tuple[str, ...] = ("slug",),
+    limit: int = 50,
+) -> dict[str, Any]:
     """One list read: an optional status, an optional text match, one page.
 
-    Domains differ only in the model, the serializer and which fields a search
-    looks at: a person searches an asset by vendor and a project by the
-    technologies it uses. Nothing else about the read differs.
+    Domains differ only in the rows (a model, or a queryset a domain has
+    already narrowed or joined), the serializer, the order and which fields a
+    search looks at: a person searches an asset by vendor and a project by the
+    technologies it uses. Each item is the serializer's, so a record's list
+    item is the same shape as the record a save or a fetch answers.
     """
 
-    qs = guarded(model.objects.all())
+    qs = guarded(rows if isinstance(rows, QuerySet) else rows.objects.all())
     if status:
         qs = qs.filter(status=status)
     if query:
@@ -191,24 +201,15 @@ def listing(model, serialize, *, search: tuple[str, ...], status=None, query=Non
         for field in search:
             matches |= Q(**{f"{field}__icontains": query})
         qs = qs.filter(matches)
-    items = list(qs.order_by("slug")[: page_size(limit)])
+    items = list(qs.order_by(*order)[: page_size(limit)])
     return {"items": [serialize(row) for row in items], "count": len(items)}
 
 
-def addressable(model, serialize, slug: str, *, label: str, missing) -> dict[str, Any]:
-    """One record by the slug every registered resource is addressed with.
-
-    ``label`` names the thing in the error, because "Asset 'x' was not found"
-    is the sentence a client shows and the model's own name is not always it.
-
-    ``missing`` is the exception class to raise. Passed in rather than imported
-    because each domain declares its own ``NotFoundError`` and its callers
-    catch that one by name, and because this module stays free of domain
-    imports on purpose, per the note at the top.
-    """
+def addressable(model, serialize, slug: str) -> dict[str, Any]:
+    """One record by the slug every registered resource is addressed with."""
 
     try:
         row = model.objects.get(slug=slug)
     except model.DoesNotExist as exc:
-        raise missing(f"{label} {slug!r} was not found.") from exc
+        raise RecordNotFound("No record has that slug.") from exc
     return serialize(row, relationships=True)

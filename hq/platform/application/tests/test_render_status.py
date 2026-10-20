@@ -297,7 +297,7 @@ class FailingTests(TestCase):
         (finding,) = raised("render-failing")
 
         self.assertEqual(finding["severity"], "serious")
-        self.assertIn({"label": "Last refreshed", "value": "1\xa0week, 1\xa0day ago"}, finding["evidence"])
+        self.assertIn({"label": "Last refreshed", "value": "1\xa0week ago"}, finding["evidence"])
         self.assertEqual(raised("render-stale"), [])
 
     def test_a_renderer_that_never_succeeded_is_serious(self):
@@ -351,7 +351,7 @@ class StaleTests(TestCase):
 
         self.assertEqual(finding["severity"], "serious")
         self.assertIn("example-controller has not refreshed its credentials since ", finding["title"])
-        self.assertIn({"label": "Last refreshed", "value": "3\xa0hours, 2\xa0minutes ago"}, finding["evidence"])
+        self.assertIn({"label": "Last refreshed", "value": "3\xa0hours ago"}, finding["evidence"])
         self.assertEqual(
             [step["command"] for step in finding["operator_steps"]],
             [
@@ -367,7 +367,7 @@ class StaleTests(TestCase):
 
         (finding,) = raised("render-stale")
 
-        self.assertIn({"label": "Last read in full", "value": "1\xa0day, 3\xa0hours ago"}, finding["evidence"])
+        self.assertIn({"label": "Last read in full", "value": "1\xa0day ago"}, finding["evidence"])
 
     def test_a_reading_taken_hours_ago_while_nobody_looked_raises_nothing(self):
         # Idle, the controller reads half a day apart. The renderer was current

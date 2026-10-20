@@ -15,6 +15,7 @@ from typing import Any
 
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
 from .expiry import days_until
 from .facts import Joined, inventory_records
@@ -118,8 +119,6 @@ def _stated(node, name: str, expires: str) -> bool:
 
 def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     """A certificate a connection reads, inside three weeks of expiry or past it."""
-
-    from hq.domains.control_plane.provider_spec import expiry_phrase
 
     found = []
     for node in estate.nodes():

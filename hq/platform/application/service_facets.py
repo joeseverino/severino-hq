@@ -7,6 +7,8 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.names import in_zone
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .containers import Running
 from .entity_links import EntityLink, entity_link, kind_label
@@ -15,6 +17,8 @@ from .labels import lower_first
 from .projection import read_once
 from .service_declarations import Claim
 from .timestamps import moment
+lazy from .connections import connection_rows
+lazy from .naming import public_zones_declared
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,11 +104,6 @@ class Facet:
         or the connected ones whose credential does not read it.
         """
 
-        from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-        from hq.domains.control_plane.observations import OBSERVATIONS
-
-        from .connections import connection_rows
-
         kinds: list[str] = []
         providers: list[str] = []
         for kind, provider in PROVIDERS.items():
@@ -157,8 +156,6 @@ class Facet:
         """Whether the name sits in a public zone HQ holds: one a connected
         credential edits, or one a public zone declaration manages. There a
         public provider is offered first."""
-
-        from .naming import public_zones_declared
 
         name = self.context.hostname
         if not name:

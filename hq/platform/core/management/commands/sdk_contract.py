@@ -4,6 +4,8 @@ from typing import override
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+lazy from hq_sdk import contract, template_contract, text_contract
+
 BEGIN = "<!-- sdk_contract: shared UI contract -->"
 END = "<!-- /sdk_contract -->"
 
@@ -38,8 +40,6 @@ class Command(BaseCommand):
 
     @override
     def handle(self, *args, **options):
-        from hq_sdk import contract, template_contract, text_contract
-
         current = contract.describe()
         examples = text_contract.describe()
         doc = plugins_doc()

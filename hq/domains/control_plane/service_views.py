@@ -35,6 +35,8 @@ from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET,
 from hq.platform.application.service_list import listed_service, listed_services
 from hq.platform.application.services import alias_target
 from hq.platform.application.ui import PageNavigation, PageSection
+lazy from hq.platform.application.page_relations import for_service
+lazy from hq.platform.application.pins import SERVICE, move, ordered, toggle
 
 from .models import ManagedResource
 from .names import normalized_hostname
@@ -63,9 +65,6 @@ class ServiceListView(PageMixin, TemplateView):
 
     @override
     def get_context_data(self, **kwargs):
-        from hq.platform.application.pins import SERVICE, ordered
-        from hq.platform.application.service_facets import RUNTIME_FACET
-
         context = super().get_context_data(**kwargs)
         favorites = ordered(self.request.user, SERVICE)
         # HQ's own name and observed names are rows like any other, marked.
@@ -141,8 +140,6 @@ class ServiceDetailView(PageMixin, TemplateView):
 
     @cached_property
     def relationships(self):
-        from hq.platform.application.page_relations import for_service
-
         return for_service(self.service, self.sections, principal=web_principal(self.request.user))
 
     @cached_property
@@ -278,8 +275,6 @@ class ServicePinView(View):
     """
 
     def post(self, request, hostname: str):
-        from hq.platform.application.pins import SERVICE, toggle
-
         name = normalized_hostname(hostname)
         if not name:
             raise Http404("No such service.")
@@ -295,8 +290,6 @@ class ServiceMoveView(View):
     """
 
     def post(self, request, hostname: str):
-        from hq.platform.application.pins import SERVICE, move
-
         name = normalized_hostname(hostname)
         if not name:
             raise Http404("No such service.")

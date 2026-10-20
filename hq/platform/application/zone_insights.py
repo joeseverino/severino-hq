@@ -32,18 +32,15 @@ from hq.platform.application.routes import reverse
 
 from .entity_links import entity_link
 from .expiry import days_until
-from .facts import (
-    Subject,
-    inventory_about,
-    inventory_records,
-    readings as stored_readings,
-)
+from .facts import Subject, inventory_about, inventory_records, readings as stored_readings, refusals_about
 from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
 from .mail_policy import is_null_mx
 from .timestamps import moment
 from .ui import ListRow, counted, ended
 from .zones import ZONE_KIND, ZoneInsight
+lazy from . import zones
+lazy from .service_list import services_by_zone
 
 # The authority HQ's own certificate provider issues from. Stated here because
 # the insight below compares it against what a zone's CAA record permits, and
@@ -68,10 +65,7 @@ def services(zone) -> ZoneInsight | None:
     them (a Pages project) and how many sit behind an overlay (Access).
     """
 
-    from .service_list import services_by_zone
-    from .zones import zone_names
-
-    members = services_by_zone(zone_names()).get(zone.zone, ())
+    members = services_by_zone(zones.zone_names()).get(zone.zone, ())
     inside = [member.service for member in members if member.service is not None]
     joined = stored_readings().about(Subject.of(zones=(zone.zone,)))
     serving = tuple(
@@ -568,8 +562,6 @@ def registration(zone) -> ZoneInsight | None:
 
 def _zone_part_refused(zone: str, part: str):
     """The zone sweep's refusal of one part on this zone, or None."""
-
-    from .facts import refusals_about
 
     return next(
         (

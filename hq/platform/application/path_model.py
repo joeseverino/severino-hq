@@ -13,6 +13,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .entity_links import EntityLink, entity_link, kind_label
 from .labels import lower_first
+lazy from .moments import ago
 
 NETWORK_LABELS = {
     "tailnet": "Tailnet",
@@ -80,7 +81,6 @@ class Certificate:
 
         if not self.verified_fingerprint:
             return ""
-        from .moments import ago
 
         when = self.source.observed_at if self.source else None
         return f"confirmed on this site {ago(when)}" if when else "confirmed on this site"

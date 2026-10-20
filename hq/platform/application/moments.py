@@ -5,18 +5,20 @@ time the same way. ``hq_sdk.ui`` hands these to extensions, and
 ``core.templatetags.value_tags`` owns the one filter that puts them in a page.
 """
 
-from datetime import UTC, date
+from datetime import UTC, date, datetime, timedelta
 
-from .timestamps import moment
+lazy from django.utils import dateformat, timezone
+lazy from django.utils.timesince import timesince
+
+from .timestamps import moment as _stamp
+lazy from .derivations import reached, since, this_year
+lazy from .ui import MISSING, counted
 
 
 def elapsed(stamp: str) -> str:
     """A provider's timestamp as an age, or as the fact that there is none."""
 
-    from .derivations import reached
-    from .ui import MISSING
-
-    found = moment(stamp)
+    found = _stamp(stamp)
     if found is None:
         return MISSING
     if not reached(found):
@@ -24,24 +26,27 @@ def elapsed(stamp: str) -> str:
     return ago(found)
 
 
-def ago(moment: date) -> str:
+def ago(moment: date | str, now: datetime | None = None) -> str:
     """How long ago something happened, in the one phrasing HQ uses: "5 days ago".
 
     One unit. An age is read at a glance, and "5 days, 15 hours ago" beside
     "5 days ago" is two phrasings of one fact; the exact moment is what
     ``when_exact`` says, and the ``when`` filter puts it behind the age.
+    A provider's stamp is read as it is written; one that is empty or does not
+    parse is "never". ``now`` is the instant a derivation was made at.
     """
 
-    from datetime import datetime
-
-    from django.utils.timesince import timesince
-
-    from .derivations import since
-
-    if isinstance(moment, datetime):
-        since(moment)
-    age = timesince(moment, depth=1)
-    return "just now" if age.startswith("0\xa0minutes") or age.startswith("0 minutes") else f"{age} ago"
+    found = _stamp(moment) if isinstance(moment, str) else moment
+    if found is None:
+        return "never"
+    if isinstance(found, datetime):
+        # The wording changes at the next whole unit of age; ``since`` says so to
+        # the derivation that read it, which is why a datetime goes through it.
+        since(found, now=now)
+        age = timesince(found, now, depth=1)
+    else:
+        age = timesince(found, depth=1)
+    return "just now" if age.startswith(("0\xa0minutes", "0 minutes")) else f"{age} ago"
 
 
 # How HQ writes a day and a time of day, as Django date-format strings. Spelled
@@ -58,15 +63,11 @@ MOMENT_YEAR_FORMAT = f"{DAY_YEAR_FORMAT}, {CLOCK_FORMAT}"
 def _local(value):
     """An aware datetime in the timezone HQ is read in; anything else as given."""
 
-    from django.utils import timezone
-
     return timezone.localtime(value) if timezone.is_aware(value) else value
 
 
 def _written(value, layout: str) -> str:
-    from django.utils.dateformat import format as written
-
-    return written(value, layout)
+    return dateformat.format(value, layout)
 
 
 def when_day(value: date) -> str:
@@ -75,10 +76,6 @@ def when_day(value: date) -> str:
     The year is said only when it is not the one being lived in, the same
     rule ``when`` keeps. A datetime is read as the day it falls on here.
     """
-
-    from datetime import datetime
-
-    from .derivations import this_year
 
     if isinstance(value, datetime):
         value = _local(value)
@@ -92,8 +89,6 @@ def when(value: date) -> str:
     of day and reads as ``when_day`` writes it.
     """
 
-    from datetime import datetime
-
     if not isinstance(value, datetime):
         return when_day(value)
     value = _local(value)
@@ -106,8 +101,6 @@ def when_exact(value: date) -> str:
     Always the year, the seconds and the zone: what a ``title`` says behind an
     age, and what a detail page says of the one event it is about.
     """
-
-    from datetime import datetime
 
     if not isinstance(value, datetime):
         return _written(value, DAY_YEAR_FORMAT)
@@ -125,8 +118,6 @@ def when_range(start: date, end: date) -> str:
     run of one day is that day.
     """
 
-    from datetime import datetime
-
     if isinstance(start, datetime):
         start = _local(start).date()
     if isinstance(end, datetime):
@@ -140,10 +131,6 @@ def when_range(start: date, end: date) -> str:
 def duration(delta) -> str:
     """A length of time in the phrasing ``ago`` uses, without the "ago"."""
 
-    from datetime import datetime, timedelta
-
-    from django.utils.timesince import timesince
-
     start = datetime(2000, 1, 1, tzinfo=UTC)
     return timesince(start, start + max(delta, timedelta(0)))
 
@@ -156,10 +143,6 @@ DAYS_SAID_AS_DAYS = 90
 
 def span(days: int) -> str:
     """A whole number of days as a length of time a person reads: "46 days", "2 years, 11 months", "3 days overdue"."""
-
-    from datetime import timedelta
-
-    from .ui import counted
 
     # Past a few weeks, a no-break space keeps the number with its unit ("2\xa0weeks").
     said = counted(abs(days), "day") if abs(days) <= DAYS_SAID_AS_DAYS else duration(timedelta(days=abs(days)))

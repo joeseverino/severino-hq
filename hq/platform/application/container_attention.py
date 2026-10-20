@@ -24,6 +24,9 @@ from .images import version
 from .item_help import do_step, run_step, steps
 from .ui import Insight, counted
 from .workflow_contracts import ActionLink, WorkflowPlan, WorkflowStep
+lazy from .container_standard import STANDARD
+lazy from .standards import UNMET
+lazy from .upgrades import OVERRIDES, plan_for
 
 # Said once on a card whose update is applied by hand.
 BY_HAND = "HQ cannot apply an update itself yet."
@@ -77,8 +80,6 @@ def needs_you(standing: Standing, running: list[Container]) -> bool:
 
 
 def _plans(running: list[Container]) -> list[Any]:
-    from .upgrades import plan_for
-
     return [plan for plan in (plan_for(item) for item in running) if plan is not None]
 
 
@@ -127,8 +128,6 @@ def _by_hand_step(plan: Any) -> WorkflowStep:
 def _sets_image(files: tuple[str, ...]) -> str:
     """The file whose image line decides: the project's override when it has
     one, since compose reads that last, else its compose file."""
-
-    from .upgrades import OVERRIDES
 
     return next((path for path in files if path.rsplit("/", 1)[-1] in OVERRIDES), files[0])
 
@@ -212,9 +211,6 @@ def _limited(actions) -> tuple[ActionLink, ...]:
 def _reach_attention() -> list[Insight]:
     """One item per serious check a container fails, naming every container
     that fails it. Hardening waits on the page; reach over a machine does not."""
-
-    from .container_standard import STANDARD
-    from .standards import UNMET
 
     found = containers()
     items = []

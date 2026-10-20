@@ -26,11 +26,11 @@ class SyntheticCommand(StrictCommand):
     pass
 
 
-def execute_synthetic(command, *, principal, expected_updated_at):
+def execute_synthetic(command, *, principal):
     return {"ok": True}
 
 
-def execute_targeted(command, *, principal, current_slug, expected_updated_at):
+def execute_targeted(command, *, principal, current_slug):
     return {"ok": True}
 
 

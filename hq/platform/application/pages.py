@@ -17,6 +17,7 @@ from typing import Any
 
 from .fragments import FragmentMixin
 from .ui import PageNavigation
+lazy from .page_reads import remedy
 
 PAGE_DIALOG_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
@@ -118,8 +119,6 @@ class Page:
         """What would fill the page while nothing has been read: the connection
         that reads what it shows, else its own lead action. Asked only by an
         empty state, so a full page never looks."""
-
-        from .page_reads import remedy
 
         return (remedy(self.reads) if self.reads else None) or self.lead
 

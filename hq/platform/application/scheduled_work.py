@@ -21,8 +21,24 @@ from typing import Any
 
 from django.conf import settings
 from django.utils import timezone
+lazy from django.contrib.sessions.models import Session
+lazy from django.core.management import call_command
+
+lazy from hq.domains.content.content_sync import ContentSyncError, sync_content_index
+lazy from hq.domains.control_plane.observations.host import UNIT_KIND
+lazy from hq.domains.jobs import runner
+lazy from hq.domains.jobs.runner import Failed, JobConflict, due
+lazy from hq.platform.core.audit import prune_routine, record_operation
+lazy from hq.platform.core.database import optimize
+lazy from hq.platform.core.models import AuditLog
 
 from .ui import counted
+lazy from . import outbound_work
+lazy from .asks import job_standing
+lazy from .cadence import request_reading
+lazy from .outbound_work import run_now
+lazy from .public_registry import refresh
+lazy from .security import cli_principal, internal_principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,10 +55,6 @@ class ScheduledWork:
 
 def prune_audit(progress: Any = None) -> dict[str, Any]:
     """Delete routine audit events past their window, on the record."""
-
-    from hq.platform.core.audit import prune_routine, record_operation
-    from hq.platform.core.database import optimize
-    from hq.platform.core.models import AuditLog
 
     days = int(settings.SEVERINO_AUDIT_ROUTINE_DAYS)
     deleted = prune_routine(days=days)
@@ -62,18 +74,12 @@ def prune_audit(progress: Any = None) -> dict[str, Any]:
 def _clear_sessions(progress: Any) -> dict[str, Any]:
     """A session row outlives its expiry until something deletes it."""
 
-    from django.contrib.sessions.models import Session
-    from django.core.management import call_command
-
     before = Session.objects.count()
     call_command("clearsessions")
     return {"deleted": before - Session.objects.count()}
 
 
 def _content_index(progress: Any) -> dict[str, Any]:
-    from hq.domains.content.content_sync import ContentSyncError, sync_content_index
-    from hq.domains.jobs.runner import Failed
-
     try:
         return sync_content_index()
     except ContentSyncError as exc:
@@ -81,9 +87,6 @@ def _content_index(progress: Any) -> dict[str, Any]:
 
 
 def _public_registry(progress: Any) -> dict[str, Any]:
-    from .public_registry import refresh
-    from .security import cli_principal
-
     return refresh(principal=cli_principal())
 
 
@@ -93,21 +96,12 @@ def _unit_state(progress: Any) -> dict[str, Any]:
     The failed unit is not named and need not be. The reading says which.
     """
 
-    from hq.domains.control_plane.observations.host import UNIT_KIND
-
-    from .cadence import request_reading
-
     return {"asked": UNIT_KIND, "rung": request_reading(UNIT_KIND)}
 
 
 def _due(progress: Any = None) -> dict[str, Any]:
     """Do the host's and the extensions' work whose cadence has come round,
     each as its own job, so each says how it ended."""
-
-    from hq.domains.jobs.runner import JobConflict, due
-
-    from .outbound_work import due as outbound_due, run_now
-    from .security import internal_principal
 
     now = timezone.now()
     ended: dict[str, str] = {
@@ -116,7 +110,7 @@ def _due(progress: Any = None) -> dict[str, Any]:
         if work.every is not None and due(work.name, work.every, now=now)
     }
     principal = internal_principal(ACTOR)
-    for work in outbound_due(now):
+    for work in outbound_work.due(now):
         try:
             ended[work.name] = run_now(work.name, principal=principal).state
         except JobConflict:
@@ -144,11 +138,9 @@ def job_names() -> dict[str, str]:
     """Each declared job's name in words, by its kind: the host's scheduled
     work and the outbound work the composition declares."""
 
-    from .outbound_work import declared_work
-
     return {
         **{work.name: work.label for work in SCHEDULED},
-        **{name: work.label for name, work in declared_work().items()},
+        **{name: work.label for name, work in outbound_work.declared_work().items()},
     }
 
 
@@ -166,10 +158,6 @@ def run(name: str) -> dict[str, Any]:
     being done.
     """
 
-    from hq.domains.jobs import runner
-
-    from .asks import job_standing
-
     work = named(name)
     try:
         job = runner.run(work.name, work.label, work.run, actor=ACTOR)
@@ -180,8 +168,6 @@ def run(name: str) -> dict[str, Any]:
 
 def start(name: str) -> bool:
     """Start the work on a thread of its own; False when it is already running."""
-
-    from hq.domains.jobs import runner
 
     work = named(name)
     try:

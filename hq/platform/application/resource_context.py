@@ -13,19 +13,21 @@ from typing import Any
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, controller_capability_registry
 
 from .entity_links import entity_link
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
-from .infrastructure import (
-    NotFoundError,
-    controller_contract,
-    resolved_spec,
-    resource_health,
-    serialize_resource,
-)
+from .infrastructure import controller_contract, enabled_resources, resolved_spec, resource_health, serialize_resource
+from .record_errors import RecordNotFound
 from .resource_capabilities import ResourceCapabilities, resource_capabilities
 from .resource_operations import resource_history
+lazy from . import machines
+lazy from .approvals import pending
+lazy from .conditions import held_since
+lazy from .connections import connection_readings
+lazy from .services import certificate_use
+lazy from .topology_lenses import _STALE_AFTER
+lazy from .whereabouts import machine_link
 
 
 def origin_machine(resource, machines=None, at=None, targets=None):
@@ -34,8 +36,6 @@ def origin_machine(resource, machines=None, at=None, targets=None):
     The readings are passed in by a page asking this of every row, where taking
     them here is the same four queries repeated once per resource.
     """
-
-    from .whereabouts import machine_link
 
     provider = PROVIDERS.get(resource.kind)
     if provider is None or provider.origin is None:
@@ -54,9 +54,6 @@ def provider_machine(resource):
     is where the proxy, DNS server, or controller itself runs.
     """
 
-    from .connections import connection_readings
-    from .machines import machine as machine_named
-
     provider = PROVIDERS.get(resource.kind)
     if provider is None:
         return None
@@ -64,7 +61,7 @@ def provider_machine(resource):
         found.name
         for reading in connection_readings()
         if reading.provider in provider.connection_providers
-        if (found := machine_named(reading.controller_id)) is not None
+        if (found := machines.machine(reading.controller_id)) is not None
     }
     if len(matches) != 1:
         return None
@@ -102,8 +99,6 @@ def readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
 # it reads as not seen. The lens and the rule that ask the same question share
 # the line (``topology_lenses._STALE_AFTER``).
 def _left_behind(read_at: datetime | None, newest: datetime | None) -> bool:
-    from .topology_lenses import _STALE_AFTER
-
     return read_at is not None and newest is not None and newest - read_at > _STALE_AFTER
 
 
@@ -127,8 +122,6 @@ class RecordStatus:
 def _reconciles(kind: str) -> tuple[bool, bool]:
     """``(applies, automatically)``: whether the controller applies HQ's settings."""
 
-    from hq.domains.control_plane.providers import controller_capability_registry
-
     capability = controller_capability_registry().capabilities.get(kind)
     policy = capability.actions.get("reconcile") if capability else None
     applies = bool(policy and policy.mode == "apply")
@@ -137,8 +130,6 @@ def _reconciles(kind: str) -> tuple[bool, bool]:
 
 def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
     """A record that is switched off, changed outside HQ, or reporting a problem."""
-
-    from .conditions import held_since
 
     read_at = resource.last_observed_at
     if not resource.enabled:
@@ -220,8 +211,6 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
 def newest_reading(kind: str) -> datetime | None:
     """When any tracked record of this type was last read, from the read a
     page already shares (``infrastructure.enabled_resources``)."""
-
-    from .infrastructure import enabled_resources
 
     return max(
         (
@@ -368,7 +357,7 @@ def get_managed_resource(key: str) -> dict[str, Any]:
     try:
         resource = ManagedResource.objects.get(key=key)
     except ManagedResource.DoesNotExist as exc:
-        raise NotFoundError(f"No record named {key!r}.") from exc
+        raise RecordNotFound("That record was not found.") from exc
     return {
         "resource": serialize_resource(resource),
         "derived": resource_context(resource).as_dict(),
@@ -378,8 +367,6 @@ def get_managed_resource(key: str) -> dict[str, Any]:
 
 def resource_context(resource: ManagedResource) -> ResourceContext:
     """Every fact HQ derives about one resource, derived once."""
-
-    from .approvals import pending
 
     resolved, consumers, error = _consumers(resource)
     return ResourceContext(
@@ -405,7 +392,6 @@ def _certificate_use(resource, resolved: dict[str, Any] | None):
     provider = PROVIDERS.get(resource.kind)
     if provider is None or not provider.covers:
         return None
-    from .services import certificate_use
 
     return certificate_use(resource.key, provider.hostnames(resolved or resource.spec) or ())
 

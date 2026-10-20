@@ -20,6 +20,17 @@ import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
+lazy import inspect
+
+lazy from django.template import engines
+lazy from django.template.backends.django import get_installed_libraries
+lazy from django.template.base import FilterExpression, NodeList, Variable
+lazy from django.template.defaulttags import CommentNode, ForNode, IfNode, WithNode
+lazy from django.template.library import import_library
+lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
+lazy from django.template.smartif import TokenBase
+
+lazy from .contract import _parameters
 
 # The frames a page may extend, and the blocks of each it may fill. Every
 # public block is an empty slot, so an override never needs ``block.super``.
@@ -184,8 +195,6 @@ ROOT = Path(__file__).resolve().parents[1]
 def _filtered_names(value: Any) -> Iterator[tuple[str, bool]]:
     """What ``{{ value|filter:argument }}`` reads: the value, then each variable argument."""
 
-    from django.template.base import Variable
-
     defaulted = any(getattr(function, "__name__", "") in _DEFAULTING for function, _ in value.filters)
     if isinstance(value.var, Variable) and value.var.lookups:
         yield value.var.lookups[0], defaulted
@@ -199,9 +208,6 @@ def _filtered_names(value: Any) -> Iterator[tuple[str, bool]]:
 
 def _expression_names(value: Any) -> Iterator[tuple[str, bool]]:
     """Each variable an expression reads, and whether it falls back to a default."""
-
-    from django.template.base import FilterExpression, Variable
-    from django.template.smartif import TokenBase
 
     if isinstance(value, FilterExpression):
         yield from _filtered_names(value)
@@ -244,9 +250,6 @@ class _Reads:
                     bound.add(name)
 
     def _node(self, node: Any, bound: set[str], guards: frozenset[str]) -> None:
-        from django.template.defaulttags import CommentNode, ForNode, IfNode, WithNode
-        from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
-
         if isinstance(node, CommentNode):
             return
         if isinstance(node, ForNode):
@@ -290,8 +293,6 @@ class _Reads:
                 self.found[read] = self.found.get(read, False) or read not in guards
 
     def _generic(self, node: Any, bound: set[str], guards: frozenset[str]) -> None:
-        from django.template.base import NodeList
-
         children = set(getattr(node, "child_nodelists", ()))
         for attribute, value in vars(node).items():
             if attribute in children or isinstance(value, NodeList):
@@ -304,8 +305,6 @@ class _Reads:
 
 
 def _engine() -> Any:
-    from django.template import engines
-
     return engines["django"].engine  # type: ignore[attr-defined]  # the Django backend's own engine
 
 
@@ -343,14 +342,10 @@ def _partials(engine: Any) -> dict[str, Any]:
 
 
 def _unwrapped(function: Any) -> Any:
-    import inspect
-
     return inspect.unwrap(function)
 
 
 def _filter_argument(function: Any) -> str:
-    import inspect
-
     parameters = list(inspect.signature(_unwrapped(function)).parameters.values())[1:]
     if not parameters:
         return "none"
@@ -358,8 +353,6 @@ def _filter_argument(function: Any) -> str:
 
 
 def _tag_parameters(compile_function: Any) -> list[str]:
-    from .contract import _parameters
-
     target = getattr(compile_function, "__wrapped__", None)
     if target is None:
         return []
@@ -389,9 +382,6 @@ def _host_tags(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:
 
 def _django(engine: Any) -> dict[str, Any]:
     """Django's own tags and filters, and those of the libraries an extension may load."""
-
-    from django.template.backends.django import get_installed_libraries
-    from django.template.library import import_library
 
     tags: set[str] = set()
     filters: set[str] = set()

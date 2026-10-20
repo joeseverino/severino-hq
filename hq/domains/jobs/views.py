@@ -11,6 +11,10 @@ from django.views.generic import DetailView, ListView, View
 
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableSort
+lazy from hq.platform.application import capabilities, outbound_work, security
+lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
+lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
+lazy from hq.platform.application.scheduled_work import job_names
 
 from .models import Job
 from .runner import reap
@@ -58,8 +62,6 @@ class JobListView(PageMixin, TableListMixin, ListView):
     def names(self) -> dict[str, str]:
         """A job's name in words is its declaration's; what a run stored is the
         fallback for work no longer declared."""
-
-        from hq.platform.application.scheduled_work import job_names
 
         return job_names()
 
@@ -141,7 +143,6 @@ class JobStatusView(DetailView):
         if job.is_stale:
             reap(job.kind)
             job.refresh_from_db()
-        from hq.platform.application.asks import job_standing
 
         # The shape every ask's status answers in, with the job's own result.
         return JsonResponse({**job_standing(job).as_json(), "result": job.result})
@@ -156,19 +157,14 @@ class WorkAskView(View):
     """
 
     def post(self, request, name: str):
-        from hq.platform.application.asks import FAILED, Standing, answer, job_standing
-        from hq.platform.application.capabilities import execute_capability
-        from hq.platform.application.outbound_work import SUBJECT_FIELD, declared_work
-        from hq.platform.application.security import web_principal
-
-        work = declared_work().get(name)
+        work = outbound_work.declared_work().get(name)
         if work is None:
             raise Http404("No such work is declared.")
         subject = request.POST.get(SUBJECT_FIELD, "")
-        result = execute_capability(
+        result = capabilities.execute_capability(
             name,
             {},
-            principal=web_principal(request.user),
+            principal=security.web_principal(request.user),
             target=subject if work.takes_subject else None,
         )
         back = reverse("jobs:list")

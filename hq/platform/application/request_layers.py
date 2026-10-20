@@ -6,12 +6,16 @@ from django.conf import settings
 from django.utils.csp import CSP
 
 from hq.platform.core.network import split_host_port
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from . import tailnet
 from .request_channel import Channel
 from .request_identity import Identity
 from .timestamps import moment
 from .ui import counted
+lazy from .expiry import days_until
+lazy from .zones import public_answers_for
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,8 +145,6 @@ def _observed_control_layer(control) -> Layer | None:
 
 def _name_layer(request) -> Layer:
     """Whether the name in the address bar is one the internet can resolve."""
-
-    from .zones import public_answers_for
 
     host, _port = split_host_port(request.get_host())
     answers = public_answers_for(host)
@@ -550,8 +552,6 @@ def _proxy_headers_layer(request, *, trusted: bool, address: str) -> Layer | Non
 
     if not trusted:
         return None
-    from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-    from hq.domains.control_plane.providers import PROVIDERS
 
     declared = next((spec for spec in PROVIDERS.values() if spec.forwarding_headers), None)
     if declared is None:
@@ -653,7 +653,6 @@ def _expiry_phrase(stamp: str) -> str:
     parsed = moment(stamp)
     if parsed is None:
         return "has an expiry HQ could not read"
-    from .expiry import days_until
 
     days = days_until(parsed)
     if days < 0:

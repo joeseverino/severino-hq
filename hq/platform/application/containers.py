@@ -39,6 +39,21 @@ from .images import ImageRef, affected, compare, newer, version
 from .projection import projection_scope, read_once
 from .timestamps import moment
 from .ui import Insight, counted
+lazy from . import connections, container_attention
+lazy from .attestations import github_source
+lazy from .container_hardening import hardening_of
+lazy from .container_standard import posture_of, runtime_path
+lazy from .docker_sections import unused_images
+lazy from .entity_links import entity_link
+lazy from .facts import inventory_records
+lazy from .github_estate import build_of, repositories
+lazy from .infrastructure import enabled_resources
+lazy from .inventory import record_token
+lazy from .labels import human_bytes
+lazy from .machines import machine as machine_named, served_by
+lazy from .moments import ago
+lazy from .projects import projects_by_repository, repository_key
+lazy from .supply_chain import supply_chain_of
 
 VULNERABLE = "vulnerable"
 BEHIND = "behind"
@@ -188,8 +203,6 @@ class Running:
     def token(self) -> str:
         """The handle adoption looks this record up by."""
 
-        from .inventory import record_token
-
         return record_token(CONTAINER_KIND, (self.host, self.name))
 
     @property
@@ -224,8 +237,6 @@ class Running:
 def socket_holders() -> frozenset[tuple[str, str]]:
     """``(machine, container)`` for each container declared to hold the Docker socket."""
 
-    from .infrastructure import enabled_resources
-
     def load() -> frozenset[tuple[str, str]]:
         return frozenset(
             (str(resource.spec.get("host", "")), str(resource.spec.get("name", "")))
@@ -239,8 +250,6 @@ def socket_holders() -> frozenset[tuple[str, str]]:
 def by_design() -> dict[tuple[str, str], dict[str, str]]:
     """``(machine, container)`` to the checks its declaration says its job
     requires it to fail, each with why."""
-
-    from .infrastructure import enabled_resources
 
     def load() -> dict[tuple[str, str], dict[str, str]]:
         return {
@@ -260,8 +269,6 @@ def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
     come back together because a page rendering a table of containers asks both
     of every row, and asking twice is two queries for one join.
     """
-
-    from .infrastructure import enabled_resources
 
     return {
         (resource.spec.get("host", ""), resource.spec.get("name", "")): (
@@ -446,8 +453,6 @@ class Container:
         """How long it has been up, as HQ writes an age, when Docker's inspect
         gave its start time. Docker's own phrase otherwise."""
 
-        from .moments import ago
-
         started = moment(str((self.runtime or {}).get("started_at", "") or ""))
         if started is None or not self.running.healthy:
             return self.running.uptime
@@ -463,20 +468,14 @@ class Container:
 
     @property
     def posture(self):
-        from .container_standard import posture_of
-
         return posture_of(self)
 
     @property
     def hardening(self):
-        from .container_hardening import hardening_of
-
         return hardening_of(self)
 
     @property
     def supply_chain(self):
-        from .supply_chain import supply_chain_of
-
         return supply_chain_of(self)
 
     @property
@@ -516,14 +515,11 @@ class Container:
     def project(self) -> Any:
         """The project that tracks the repository its image is built from."""
 
-        repository = self.standing.source.removeprefix("https://github.com/")
-        return _projects_by_repository().get(repository.lower()) if repository else None
+        return projects_by_repository().get(repository_key(self.standing.source))
 
     @property
     def url(self) -> str:
         """Its own page when a declaration watches it, else its machine's."""
-
-        from .entity_links import entity_link
 
         if self.running.watcher:
             return entity_link("resource", self.running.watcher).url
@@ -542,12 +538,9 @@ def containers() -> list[Container]:
 
 
 def _containers() -> list[Container]:
-    from .connections import machines_once
-    from .machines import served_by
-
     serves = served_by()
     found = []
-    for machine in machines_once():
+    for machine in connections.machines_once():
         found.extend(
             Container(
                 running=running,
@@ -580,9 +573,6 @@ def on_machine(machine: Any) -> dict[str, Any]:
     """One machine's containers as its page counts them: each one's standing,
     how many are behind, vulnerable or stopped, and the images it keeps that
     nothing runs, with the space they take."""
-
-    from .docker_sections import unused_images
-    from .labels import human_bytes
 
     here = [item for item in containers() if item.machine.name == machine.name]
     standings = {item.running.name: item.standing for item in here}
@@ -633,7 +623,6 @@ def _standing(reference: str, host: str, container: str) -> Standing:
     later = tuple(newer(tag, (published or {}).get("tags") or ())) if published else ()
     target = str(((published or {}).get("digests") or {}).get(later[0], "") or "") if later else ""
     matched, unmatched = _advisories(tag, upstream)
-    from .github_estate import build_of, repositories
 
     return Standing(
         image=image,
@@ -686,8 +675,6 @@ def source_of(
     declared: str = "",
 ) -> tuple[str, str]:
     """``(owner/repository, how it is known)`` for what an image is built from."""
-
-    from .attestations import github_source
 
     labelled = github_repository(str((published or {}).get("source", "") or ""))
     for named, how in (
@@ -786,8 +773,6 @@ def _mount_users() -> dict[str, dict[str, set[str]]]:
 
 
 def _compose_files() -> dict[tuple[str, str], tuple[str, ...]]:
-    from .container_standard import runtime_path
-
     def load() -> dict[tuple[str, str], tuple[str, ...]]:
         return {
             # A compose file under a runtime directory was a copy made to start
@@ -805,34 +790,14 @@ def _compose_files() -> dict[tuple[str, str], tuple[str, ...]]:
 def _on_machines(kind: str):
     """A Portainer reading's records, each with the machine it is on named as HQ names it."""
 
-    from .facts import inventory_records
-    from .machines import machine
-
     for _snapshot, record in inventory_records(kind):
         host = str(record.get("host", ""))
-        named = machine(host)
+        named = machine_named(host)
         yield {**record, "host": named.name if named else host}
 
 
 def _by_container(pairs) -> dict[tuple[str, str], Mapping[str, Any]]:
     return {(str(record.get("host", "")), container): record for container, record in pairs if container}
-
-
-def _projects_by_repository() -> dict[str, Any]:
-    """Projects by the ``owner/repository`` their repository URL names, lower-cased."""
-
-    def load() -> dict[str, Any]:
-        from hq.domains.projects.models import Project
-
-        from .github_public import github_repository
-
-        return {
-            "/".join(parts).lower(): project
-            for project in Project.objects.exclude(repository_url="")
-            if (parts := github_repository(project.repository_url))
-        }
-
-    return read_once("containers.projects", load)
 
 
 def _published() -> dict[str, Mapping[str, Any]]:
@@ -856,9 +821,6 @@ def _declared_sources() -> dict[tuple[str, str], str]:
     ``(machine, container)``: the operator's word, for an image that names none."""
 
     def load() -> dict[tuple[str, str], str]:
-        from .infrastructure import enabled_resources
-        from .machines import machine
-
         found = {}
         for resource in enabled_resources():
             named = (
@@ -868,7 +830,7 @@ def _declared_sources() -> dict[tuple[str, str], str]:
             )
             if named:
                 host = str(resource.spec.get("host", ""))
-                on = machine(host)
+                on = machine_named(host)
                 found[(on.name if on else host, str(resource.spec.get("name", "")))] = "/".join(named)
         return found
 
@@ -876,8 +838,6 @@ def _declared_sources() -> dict[tuple[str, str], str]:
 
 
 def _by(kind: str, key: str) -> dict[str, Mapping[str, Any]]:
-    from .facts import inventory_records
-
     return {str(record.get(key, "")): record for _snapshot, record in inventory_records(kind) if record.get(key)}
 
 
@@ -885,6 +845,4 @@ def attention() -> tuple[Insight, ...]:
     """What needs doing about the containers, each item with the help HQ
     derived for it (``application.container_attention``)."""
 
-    from .container_attention import attention as items
-
-    return items()
+    return container_attention.attention()

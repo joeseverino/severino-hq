@@ -14,6 +14,8 @@ from typing import Any
 
 from .entity_links import EntityLink, entity_link
 from .locate import host_of
+lazy from . import connections
+lazy from .tailnet import policy
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,10 +30,7 @@ class PolicyNames:
     """Resolves policy names against one read of the catalogue and the policy."""
 
     def __init__(self, hosts: dict | None = None, machines: Iterable[Any] | None = None):
-        from .connections import machines_once
-        from .tailnet import policy
-
-        catalog = tuple(machines_once() if machines is None else machines)
+        catalog = tuple(connections.machines_once() if machines is None else machines)
         self._owners = {host_of(str(address)): item.name for item in catalog for address in item.addresses}
         self._hosts = dict(policy().hosts if hosts is None else hosts)
 

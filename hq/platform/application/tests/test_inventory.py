@@ -27,8 +27,8 @@ from ..adoption import (
     unmanaged_services,
 )
 from ..adoption_testing import managing_everything
-from ..infrastructure import NotFoundError
 from ..inventory import confirm_observed, inventory_state, record_inventory
+from ..record_errors import RecordNotFound
 from ..report_testing import refused_part
 from ..security import cli_principal
 from ..sweep import record_sweep
@@ -278,14 +278,14 @@ class AdoptionTests(TestCase):
             principal=cli_principal(),
         )
 
-        with self.assertRaises(NotFoundError):
+        with self.assertRaises(RecordNotFound):
             adopt(
                 AdoptCommand(kind="adguard.rewrite", hostname="app.example.com"),
                 principal=cli_principal(),
             )
 
     def test_adopting_something_no_longer_there_says_so(self):
-        with self.assertRaises(NotFoundError):
+        with self.assertRaises(RecordNotFound):
             adopt(
                 AdoptCommand(kind="adguard.rewrite", hostname="ghost.example.com"),
                 principal=cli_principal(),
@@ -430,7 +430,7 @@ class AdoptServiceTests(TestCase):
         self.assertEqual(unmanaged_services(), ())
 
     def test_a_hostname_nobody_saw_is_refused(self):
-        with self.assertRaises(NotFoundError):
+        with self.assertRaises(RecordNotFound):
             adopt_service(
                 AdoptServiceCommand(hostname="ghost.example.com"),
                 principal=cli_principal(),
@@ -1205,7 +1205,7 @@ class AcceptObservedTests(TestCase):
     def test_nothing_seen_is_nothing_to_accept(self):
         ProviderInventory.objects.filter(kind="tailscale.device").delete()
 
-        with self.assertRaises(NotFoundError):
+        with self.assertRaises(RecordNotFound):
             self.accept()
 
 

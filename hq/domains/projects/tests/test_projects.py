@@ -171,6 +171,44 @@ class ProjectListTests(TestCase):
             self.assertNotContains(response, gone)
 
 
+class ProjectToggleTests(TestCase):
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_user("project-toggler"))
+        written = ContentItem.objects.create(title="Example writeup", slug="example-writeup")
+        documented = _document("rb-example", "Example runbook")
+        self.bare = Project.objects.create(name="Bare", slug="bare", status=Project.Status.ACTIVE)
+        self.half = Project.objects.create(name="Half", slug="half", status=Project.Status.ACTIVE)
+        self.whole = Project.objects.create(name="Whole", slug="whole", status=Project.Status.ACTIVE)
+        self.idle = Project.objects.create(name="Idle", slug="idle", status=Project.Status.PAUSED)
+        written.related_projects.add(self.half, self.whole)
+        documented.related_projects.add(self.whole, self.idle)
+
+    def listed(self, **query):
+        response = self.client.get(reverse("projects:list"), query)
+        return {project.slug for project in response.context["object_list"]}
+
+    def test_each_toggle_lists_what_it_says(self):
+        self.assertEqual(self.listed(needs_output="1"), {"bare", "half"})
+        self.assertEqual(self.listed(no_content="1"), {"bare", "idle"})
+        self.assertEqual(self.listed(no_docs="1"), {"bare", "half"})
+        self.assertEqual(self.listed(no_content="1", no_docs="1"), {"bare"})
+        self.assertEqual(self.listed(), {"bare", "half", "whole", "idle"})
+
+
+class PostureProjectTests(TestCase):
+    def test_a_repository_finds_its_project_whatever_the_case_of_its_url(self):
+        from hq.platform.application.tests.markup import hrefs
+        from hq.platform.application.tests.test_github_estate import store
+
+        self.client.force_login(get_user_model().objects.create_user("posture-reader"))
+        project = Project.objects.create(name="Alpha", slug="alpha", repository_url="https://github.com/Example/Alpha")
+        store(private=True)
+
+        response = self.client.get(reverse("posture"))
+
+        self.assertIn(project.get_absolute_url(), hrefs(response))
+
+
 class RefreshNoteTests(TestCase):
     def test_a_finished_read_says_what_it_read(self):
         said = refresh_summary(

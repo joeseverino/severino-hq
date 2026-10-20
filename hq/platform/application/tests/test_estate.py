@@ -23,6 +23,7 @@ from hq.platform.core.models import AuditLog
 
 from ..attention import infrastructure, tailnet
 from ..command_center import command_center
+from ..connection_lifecycle import Lifecycle
 from ..estate import Estate, attention as estate_attention, cards, estate_reading
 from ..glance import dashboard_panels
 from ..inventory_testing import store
@@ -320,7 +321,7 @@ class EstateCardTests(TestCase):
         with projection_scope():
             found = estate_reading().connections
 
-        self.assertEqual([(item.ref, item.state) for item in found], [("example-cf", "refused")])
+        self.assertEqual([(item.ref, item.state) for item in found], [("example-cf", Lifecycle.REVOKED)])
 
 
 class EdgeCertificateExpiryTests(TestCase):

@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.test import Client, override_settings
 from django.urls import reverse
+lazy from django.db import transaction
 
 from hq.platform.core.browser_tests import (
     _AUDIT,
@@ -55,6 +56,8 @@ from hq.platform.core.browser_tests import (
     BrowserGate,
     reading_problems,
 )
+lazy from hq.platform.application.domains import domain_navigation
+lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 
 # A phone, a tablet held upright, a laptop and a wide desktop.
 WIDTHS = (PHONE_SCREEN[0], 820, 1360, 1680)
@@ -66,8 +69,6 @@ THEMES = ("light", "dark")
 _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)
-# What the header reads on every page.
-_HEADER_READS = ("action_item_count",)
 _REGION = re.compile(r'<[^>]*\sdata-fragment="([^"]+)"[^>]*>')
 _NAME = re.compile(r'\sdata-fragment-name="([^"]*)"')
 
@@ -94,8 +95,6 @@ def _fragments(client, page, answers, ask):
 def navigation():
     """Every page the navigation declares, and the header's, by address."""
 
-    from hq.platform.application.domains import domain_navigation
-
     routes = [entry.route for entry in domain_navigation() if entry.route not in _NOT_HQS_MARKUP]
     return list(dict.fromkeys(reverse(route) for route in (*routes, *_HEADER)))
 
@@ -104,10 +103,6 @@ def render_estate():
     """The navigation's pages, and every page and part the browser will ask
     for, rendered for the estate's owner the way production asks:
     ``(paths, {(address, part): body})``."""
-
-    from django.db import transaction
-
-    from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 
     def ask(client, url, **headers):
         return client.get(url, secure=True, follow=True, **REQUEST, **headers)
@@ -123,8 +118,6 @@ def render_estate():
                 raise AssertionError(f"{path} answered {response.status_code}")
             answers[path, ""] = response.content.decode()
             _fragments(client, answers[path, ""], answers, ask)
-        for name in _HEADER_READS:
-            answers[reverse(name), ""] = ask(client, reverse(name)).content.decode()
         transaction.set_rollback(True)
     return paths, answers
 

@@ -109,70 +109,6 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-// The queue spans every installed domain and may include remote reads. Asking
-// for its count in the base context would make every page pay that cost before
-// first paint. The dashboard and queue already know it; everywhere else loads
-// it only when the operator opens the menu that displays it.
-// The unread count on the header's action items button. Fetched after the page
-// so no page pays for it while rendering, and remembered for a minute so
-// moving between pages does not ask again. The action items page renders the
-// count itself and hands it over, which is what makes marking read show at once.
-const actionMenu = document.querySelector("[data-action-count-url]");
-if (actionMenu) {
-  const STORE_KEY = "hq.actionCount";
-  const TTL_MS = 60_000;
-  const paint = (count) => {
-    document.querySelectorAll("[data-action-count]").forEach((badge) => {
-      badge.textContent = String(count);
-      badge.hidden = count === 0;
-    });
-  };
-  const remember = (count, etag = "") => {
-    try {
-      sessionStorage.setItem(STORE_KEY, JSON.stringify({ count, etag, at: Date.now() }));
-    } catch (_error) {
-      // Storage refused: the next page asks again.
-    }
-  };
-  const stored = () => {
-    try {
-      return JSON.parse(sessionStorage.getItem(STORE_KEY) || "null");
-    } catch (_error) {
-      return null;
-    }
-  };
-  const recalled = () => {
-    const last = stored();
-    return last && Date.now() - last.at < TTL_MS ? last.count : null;
-  };
-
-  if (actionMenu.dataset.actionCountFresh !== undefined) {
-    remember(Number(actionMenu.dataset.actionCountFresh));
-  } else if (recalled() !== null) {
-    paint(recalled());
-  } else {
-    // The last answer's validator goes with the question: an unchanged queue
-    // is answered 304 and the count already held is kept.
-    const last = stored();
-    const headers = { Accept: "application/json" };
-    if (last && last.etag) headers["If-None-Match"] = last.etag;
-    hqFetch(actionMenu.dataset.actionCountUrl, { headers, renewSession: false })
-      .then((response) => {
-        if (response.status === 304 && last) return { count: last.count, etag: last.etag };
-        if (!response.ok) return null;
-        const etag = response.headers.get("ETag") || "";
-        return response.json().then((payload) => ({ count: payload.count, etag }));
-      })
-      .then((answer) => {
-        if (answer) {
-          paint(answer.count);
-          remember(answer.count, answer.etag);
-        }
-      })
-      .catch(() => {});
-  }
-}
-
 // Hover-to-open, for pointers only. On touch there is no hover: the first tap
 // would open a menu and the second would be needed to follow a link, so those
 // devices keep plain click behaviour.
@@ -336,7 +272,6 @@ document.addEventListener("click", (event) => {
           badge.textContent = String(next);
           badge.hidden = next === 0;
         });
-        try { sessionStorage.removeItem("hq.actionCount"); } catch (_error) { /* asked again next page */ }
       }
       // The button becomes its opposite, posting to the other route.
       if (dismissing) row.dataset.dismissed = `Dismissed: ${row.querySelector(".attention-title")?.textContent.trim() || ""}`;

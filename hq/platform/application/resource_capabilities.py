@@ -9,14 +9,18 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from hq.domains.control_plane.models import ManagedResource
+lazy from django.conf import settings
+
+from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.providers import (
     PROVIDERS,
     controller_capability_registry,
     resource_home,
 )
 
-from .adoption import OBSERVES_ONLY
+from .adoption import OBSERVES_ONLY, observes_only as observes_through
+lazy from . import resource_operations
+lazy from .machines import container_context
 
 # Actions a person starts from a resource's page, in the order they lead.
 PAGE_VERBS = ("start", "stop", "restart", "reconcile", "renew")
@@ -70,8 +74,6 @@ def kind_converges(kind: str) -> bool:
 
 
 def public_dns_enabled() -> bool:
-    from django.conf import settings
-
     return bool(getattr(settings, "SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False))
 
 
@@ -96,8 +98,6 @@ def resource_capabilities(
         running = _running_verbs(resource) if LIFECYCLE_VERBS & policies.keys() else ()
 
     # A kind that acts through a connection acts only through one that manages.
-    from .adoption import observes_only as observes_through
-
     observes_only = observes_through(resource.kind, resource.spec, manages)
 
     actions = {
@@ -119,8 +119,6 @@ def resource_capabilities(
 
 
 def _allowed(verb, policy, resource, provider, removal_pending, observes_only) -> Allowed:
-    from .resource_operations import certificate_renewal_allowed
-
     if removal_pending:
         return Allowed(False, "A removal is in progress.", policy.automatic)
     if not resource.enabled:
@@ -130,7 +128,7 @@ def _allowed(verb, policy, resource, provider, removal_pending, observes_only) -
     if verb == "reconcile" and provider is not None and provider.public_effect and not public_dns_enabled():
         return Allowed(False, "Public DNS changes are off on this server.")
     if verb == "renew":
-        renewable, why = certificate_renewal_allowed(resource)
+        renewable, why = resource_operations.certificate_renewal_allowed(resource)
         return Allowed(renewable, why, policy.automatic)
     return Allowed(True, automatic=policy.automatic)
 
@@ -155,7 +153,6 @@ def _removal(provider, policies, removal_pending, observes_only) -> tuple[str, s
 
 def removals_pending(resource_ids=None) -> frozenset[str]:
     """Keys of resources with a deletion queued or claimed, in one query."""
-    from hq.domains.control_plane.models import OperationRequest
 
     pending = OperationRequest.objects.filter(
         action=OperationRequest.Action.DELETE,
@@ -167,8 +164,6 @@ def removals_pending(resource_ids=None) -> frozenset[str]:
 
 
 def _running_verbs(resource: ManagedResource) -> tuple[str, ...]:
-    from .machines import container_context
-
     spec = resource.spec or {}
     running = (container_context(spec.get("host", ""), spec.get("name", "")) or {}).get("running")
     return tuple(running.verbs) if running else ()

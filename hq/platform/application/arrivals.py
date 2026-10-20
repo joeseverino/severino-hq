@@ -28,8 +28,18 @@ from django.conf import settings
 from django.utils import timezone
 
 from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
+lazy from hq.domains.control_plane.models import ProviderInventory
+lazy from hq.platform.core.network import client_ip, is_trusted_proxy
 
 from .derivations import passed, present
+lazy from . import tailnet
+lazy from .inventory import record_inventory
+lazy from .moments import ago
+lazy from .reach import network_of
+lazy from .request_channel import channel_for_request, forwarded_chain, socket_peer
+lazy from .security import internal_principal
+lazy from .tailnet_presence import tailnet_presence
+lazy from .timestamps import moment
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +71,6 @@ def note(request) -> None:
     every = _every()
     if every <= 0:
         return
-    from hq.platform.core.network import client_ip
 
     address = client_ip(request)
     if not address:
@@ -128,11 +137,6 @@ def _write(due: list[tuple[dict[str, Any], int]]) -> None:
     if not due:
         return
 
-    from hq.domains.control_plane.models import ProviderInventory
-
-    from .inventory import record_inventory
-    from .security import internal_principal
-
     now = timezone.now()
     stored = ProviderInventory.objects.filter(kind=ARRIVAL_KIND).first()
     kept = {
@@ -161,12 +165,6 @@ def _write(due: list[tuple[dict[str, Any], int]]) -> None:
 def _arrival(request, address: str) -> dict[str, Any]:
     """What identifies the source and how it arrived; nothing else."""
 
-    from hq.platform.core.network import is_trusted_proxy
-
-    from . import tailnet
-    from .request_channel import channel_for_request, forwarded_chain, socket_peer
-    from .tailnet_presence import tailnet_presence
-
     device = tailnet.device_at(address)
     presence = tailnet_presence().get(device.name) if device is not None else None
     peer = socket_peer(request)
@@ -185,8 +183,6 @@ def _key(item: dict[str, Any]) -> str:
 
 
 def _current(item: dict[str, Any], now: datetime) -> bool:
-    from .timestamps import moment
-
     seen = moment(str(item.get("last_seen") or ""))
     return seen is not None and not passed(seen + WINDOW, now=now)
 
@@ -220,7 +216,6 @@ class Arrival:
     @property
     def how(self) -> str:
         way = _CARRIED.get(self.carried) or _CHANNELS.get(self.channel, "from an address HQ cannot place")
-        from .reach import network_of
 
         # A proxy on HQ's own machine is how every request arrives.
         if not self.forwarded_by or network_of(self.forwarded_by) == "loopback":
@@ -231,15 +226,11 @@ class Arrival:
     def phrase(self) -> str:
         """ "3 hours ago, directly over the tailnet"."""
 
-        from .moments import ago
-
         return f"{ago(self.last_seen)}, {self.how}"
 
 
 def arrivals(snapshots=()) -> dict[str, Arrival]:
     """Each current arrival by its device name, else its address."""
-
-    from .timestamps import moment
 
     now = present()
     found: dict[str, Arrival] = {}

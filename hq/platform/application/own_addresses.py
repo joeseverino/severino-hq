@@ -19,6 +19,8 @@ from ipaddress import ip_address, ip_network
 
 from .locate import host_of
 from .reach import network_of, public_label
+lazy from . import connections
+lazy from .projection import read_once
 
 # A private network wide enough to hold one LAN, narrow enough not to join two.
 _LAN_PREFIX = 24
@@ -85,10 +87,7 @@ def sightings(presences) -> Sightings:
 def tailnet_sightings() -> Sightings:
     """The sightings for the machine catalogue, read once per projection."""
 
-    from .connections import machines_once
-    from .projection import read_once
-
     return read_once(
         "machines.sightings",
-        lambda: sightings(machine.presence for machine in machines_once() if machine.presence is not None),
+        lambda: sightings(machine.presence for machine in connections.machines_once() if machine.presence is not None),
     )

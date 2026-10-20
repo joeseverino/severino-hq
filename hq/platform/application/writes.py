@@ -25,23 +25,21 @@ already owns. One query at the boundary is the cheaper trade.
 """
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, override
-
-if TYPE_CHECKING:
-    from django.forms import BaseForm
-    from django.http import HttpResponse
-
-    from .security import Principal
+from typing import Any, override
 
 from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.shortcuts import redirect
+lazy from django.forms import BaseForm
+lazy from django.http import HttpResponse
 
 from hq.platform.application.routes import reverse
 
 from .deletion import DeleteCommand
+from .record_errors import RecordConflict, RecordNotFound
 from .records import delete_instance, display_noun, records_for, save_form
 from .security import web_principal
+lazy from .security import Principal
 
 # What a write says when the view does not say it differently. Constants rather
 # than attributes on the mixins: a default on one base and an override on
@@ -258,7 +256,7 @@ class CommandFormMixin:
     # Which exceptions mean "the domain said no" rather than "HQ broke". Kept
     # narrow and overridable: catching more than this turns a real fault into a
     # form error and hides it.
-    domain_errors: tuple[type[Exception], ...] = (ValueError,)
+    domain_errors: tuple[type[Exception], ...] = (ValueError, RecordNotFound, RecordConflict)
 
     def build_command(self, form: BaseForm) -> Any:
         return self.command(**form.cleaned_data) if self.command else form.cleaned_data

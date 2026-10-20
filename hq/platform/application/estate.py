@@ -16,7 +16,9 @@ from hq.domains.control_plane.provider_adapters.tls import (
 )
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.platform.application.routes import reverse
+lazy from hq.domains.control_plane.names import in_zone
 
+from .connection_lifecycle import Lifecycle, probed, standing
 from .derivations import reached
 from .drawings import Dot, Dots
 from .entity_links import entity_link
@@ -26,8 +28,16 @@ from .item_help import cannot_help, remedy_link
 from .moments import ago, when_day
 from .projection import read_once
 from .timestamps import moment
-from .ui import Insight, Kpi, counted
+from .ui import DomainOverview, Insight, Kpi, counted
 from .workflow_contracts import ActionLink
+lazy from . import connections, services, zones
+lazy from .connection_catalog import connection_total
+lazy from .connections import connection_rows
+lazy from .credential_sight import credential_sight
+lazy from .facts import Subject, inventory_about, readings
+lazy from .infrastructure import enabled_resources
+lazy from .services import service_reading
+lazy from .zones import ZONE_KIND
 
 # A machine that holds something for the estate and has been offline this long
 # is an action item. Shorter gaps are restarts.
@@ -37,9 +47,8 @@ CERTIFICATE_SERIOUS_DAYS = 7
 # An edge certificate renews itself well before this; inside it, renewal is failing.
 EDGE_RENEWAL_OVERDUE_DAYS = 14
 MANAGED_CERTIFICATE_KINDS = (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND)
-REFUSED = "refused"
-NOT_ANSWERING = "not answering"
-UNREPORTED = "no longer reported"
+# The connection states HQ cannot read through.
+_TROUBLED = frozenset({Lifecycle.UNREPORTED, Lifecycle.REVOKED, Lifecycle.UNREACHABLE})
 
 
 def subject_link(kind: str, name: str) -> ActionLink | None:
@@ -99,7 +108,7 @@ class ConnectionState:
     """A connection HQ cannot currently read through."""
 
     ref: str
-    state: str
+    state: Lifecycle
     detail: str = ""
 
 
@@ -145,17 +154,12 @@ def estate_reading() -> Estate:
 
 
 def _estate() -> Estate:
-    from .connection_catalog import connection_total
-    from .connections import machines_once
-    from .services import service_catalog
-    from .zones import zone_names
-
-    services = service_catalog()
-    domains = zone_names()
-    hostnames = {service.hostname for service in services}
+    catalog = services.service_catalog()
+    domains = zones.zone_names()
+    hostnames = {service.hostname for service in catalog}
     return Estate(
-        machines=machines_once(),
-        services=services,
+        machines=connections.machines_once(),
+        services=catalog,
         domains=domains,
         connections=connection_states(),
         connection_total=connection_total(),
@@ -171,32 +175,28 @@ def connection_states() -> tuple[ConnectionState, ...]:
 def refused_connections() -> dict[str, str]:
     """Connection ref to the provider's reason, for each refused credential."""
 
-    return {item.ref: item.detail for item in connection_states() if item.state == REFUSED}
+    return {item.ref: item.detail for item in connection_states() if item.state == Lifecycle.REVOKED}
 
 
 def _connections() -> tuple[ConnectionState, ...]:
     """Connections that did not answer, whose provider refused the credential, or that their controller stopped reporting."""
 
-    from .connections import connection_rows
-    from .credential_sight import credential_sight
-
     refused = {found.provider: found.credential_refusal for found in credential_sight() if found.credential_refusal}
     found = []
     for row in connection_rows():
-        if row.unreported_at is not None:
-            found.append(ConnectionState(row.connection_ref, UNREPORTED, row.detail))
-        elif row.provider in refused:
-            found.append(ConnectionState(row.connection_ref, REFUSED, refused[row.provider]))
-        elif not row.reachable:
-            found.append(ConnectionState(row.connection_ref, NOT_ANSWERING, row.detail))
+        state = standing(
+            probed(reachable=row.reachable, was_probed=row.probed),
+            unreported=row.unreported_at is not None,
+            refused=row.provider in refused,
+        )
+        if state in _TROUBLED:
+            detail = refused[row.provider] if state == Lifecycle.REVOKED else row.detail
+            found.append(ConnectionState(row.connection_ref, state, detail))
     return tuple(sorted(found, key=lambda item: item.ref))
 
 
 def _registrations(domains: tuple[str, ...]) -> tuple[Expiry, ...]:
     """Each domain's registration expiry: the registrar's, else the public registry's."""
-
-    from .facts import Subject, inventory_about, readings
-    from .zones import ZONE_KIND
 
     index = readings()
     found = []
@@ -219,11 +219,6 @@ def _registrations(domains: tuple[str, ...]) -> tuple[Expiry, ...]:
 
 def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry, ...]:
     """Edge certificates read under the domains, and certificates HQ manages."""
-
-    from hq.domains.control_plane.names import in_zone
-
-    from .facts import Subject, readings
-    from .infrastructure import enabled_resources
 
     found = []
     if domains:
@@ -260,8 +255,6 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
 
 def cards() -> tuple[dict[str, Any], ...]:
     """The estate card: every figure links to the page that lists it."""
-
-    from .services import service_reading
 
     estate = estate_reading()
     if estate.empty:
@@ -333,7 +326,7 @@ def _connections_card(estate: Estate) -> dict[str, Any]:
         # One leads to its own row; several to the page that lists them.
         card |= {
             "url": entity_link("connection", troubled[0].ref).url,
-            "detail": f"{troubled[0].ref} {troubled[0].state}",
+            "detail": f"{troubled[0].ref} {troubled[0].state.label.lower()}",
         }
     elif troubled:
         card["detail"] = f"{len(troubled)} with a problem"
@@ -355,8 +348,6 @@ def _answers_at(machine) -> str:
 
 
 def overview():
-    from .ui import DomainOverview
-
     shown = cards()
     estate = estate_reading()
     # A part of a whole is drawn as well as said: one dot a machine or a

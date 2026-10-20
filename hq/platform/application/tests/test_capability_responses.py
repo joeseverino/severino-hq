@@ -89,3 +89,41 @@ class CapabilityCallTests(TestCase):
         self.assertTrue(self.call(spec, {"connection_ref": "example-gateway"})["ok"])
 
         self.assertEqual(AuditLog.objects.get(object_type="Example").connection, "example-gateway")
+
+    def stale_write_call(self, handler, *, target_kind=None, target=None):
+        spec = CapabilitySpec(
+            "example.records.save", "Save.", "read", Capability.READ, ExampleCommand, handler, target_kind=target_kind
+        )
+        with self.registered(spec):
+            return execute_capability(
+                spec.name,
+                {},
+                principal=cli_principal(),
+                target=target,
+                expected_updated_at="2026-01-01T00:00:00+00:00",
+            )
+
+    def test_a_handler_that_declares_the_stale_write_token_is_handed_it(self):
+        def handler(command, *, principal, current_slug, expected_updated_at):
+            return {"ok": True, "token": expected_updated_at, "slug": current_slug}
+
+        result = self.stale_write_call(handler, target_kind="slug", target="example")
+
+        self.assertEqual(result, {"ok": True, "token": "2026-01-01T00:00:00+00:00", "slug": "example"})
+
+    def test_a_default_on_the_stale_write_token_does_not_replace_the_callers_value(self):
+        def handler(command, *, principal, expected_updated_at=None):
+            return {"ok": True, "token": expected_updated_at}
+
+        self.assertEqual(self.stale_write_call(handler)["token"], "2026-01-01T00:00:00+00:00")
+
+    def test_a_handler_that_does_not_declare_the_stale_write_token_is_called_without_it(self):
+        def handler(command, *, principal):
+            return {"ok": True}
+
+        self.assertEqual(self.stale_write_call(handler), {"ok": True})
+
+    def test_a_handler_that_takes_any_keyword_is_not_handed_the_token_it_did_not_name(self):
+        self.assertTrue(self.stale_write_call(self.handler)["ok"])
+
+        self.assertNotIn("expected_updated_at", self.ran[0])

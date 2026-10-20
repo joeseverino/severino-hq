@@ -2,12 +2,10 @@
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
+lazy from datetime import datetime
 
-if TYPE_CHECKING:
-    from datetime import datetime
-
-    from django.db.models import Model
+lazy from django.db.models import Model
 
 
 def search_lines(value: Any) -> Iterator[str]:

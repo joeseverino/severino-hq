@@ -11,6 +11,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
+lazy from django.utils import timezone
 
 
 def receipt_upload_path(instance, filename: str) -> str:
@@ -26,8 +27,6 @@ def receipt_upload_path(instance, filename: str) -> str:
         suffix = suffix[:12]
     date = instance.date or instance.uploaded_at.date() if instance.uploaded_at else None
     if date is None:
-        from django.utils import timezone
-
         date = timezone.localdate()
     return f"receipts/{date:%Y/%m}/{uuid.uuid4().hex}{suffix}"
 

@@ -31,12 +31,15 @@ from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS, reg
 from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.models import AuditLog
+lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .conditions import stamped
 from .contracts import endpoint_has_private_parts
 from .credential_mint import parse_expiry, store_references
 from .security import Capability, Principal
 from .ui import counted, ended
+lazy from .credential_sight import standing
+lazy from .facts import inventory_records
 
 
 def record_token(kind: str, identity: tuple[str, ...]) -> str:
@@ -204,8 +207,6 @@ def _summary(row: ProviderInventory) -> dict[str, Any]:
     """One kind as the sweep's own summary says it: its state in credential
     sight's words, its record count, and each part refused."""
 
-    from .credential_sight import standing
-
     state, label = standing(row)
     return {
         "state": state,
@@ -326,8 +327,6 @@ def retire_departed(payload: dict[str, Any]) -> list[str]:
     that returns under the same name is adopted again.
     """
 
-    from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-
     report = payload.get(CONTAINER_KIND)
     if report is None or not report["ok"] or report.get("refused_parts") or not report["records"]:
         return []
@@ -350,8 +349,6 @@ def retire_departed(payload: dict[str, Any]) -> list[str]:
 
 def live_spec(kind: str, spec: dict[str, Any]) -> dict[str, Any] | None:
     """What the last sweep found for the record ``spec`` declares, as a spec."""
-
-    from .facts import inventory_records
 
     identity = record_identity(kind, spec)
     for _snapshot, record in inventory_records(kind):
@@ -714,8 +711,6 @@ def record_identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
 
 def inventory_state() -> tuple[dict[str, Any], ...]:
     """Each provider's last sweep, for a surface that has to say how stale it is."""
-
-    from .credential_sight import standing
 
     found = []
     # A kind no connection could read is not a reading of zero.

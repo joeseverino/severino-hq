@@ -28,6 +28,7 @@ from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.routes import reverse
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from . import sections
 from .conditions import held_since
@@ -46,6 +47,10 @@ from .services import service_catalog
 from .timestamps import moment
 from .ui import Insight, counted, ended
 from .workflow_contracts import ActionLink, WorkflowPlan
+lazy from .approvals import pending, preview
+lazy from .capabilities import capability_title
+lazy from .tailnet import policy as tailnet_policy
+lazy from .tailnet_presence import tailnet_presence
 
 # Reconciliation states that mean the declared world and the real one disagree.
 # "degraded" is a failure; the others are a resource HQ cannot currently vouch
@@ -304,8 +309,6 @@ def tailnet() -> tuple[Insight, ...]:
     # The presence table, not the whole machine catalogue. Everything shown
     # here is on the tailnet reading itself, and assembling every machine to
     # reach it costs the dashboard a query per row for facts it does not use.
-    from .tailnet_presence import tailnet_presence
-
     # Read once, asked twice. The projection has a query budget and this is
     # the same table both questions are about.
     presences = sorted(tailnet_presence().items())
@@ -350,8 +353,6 @@ def tailnet() -> tuple[Insight, ...]:
     # Tailnet lock, which is a fact about the tailnet rather than about any one
     # machine's presence: a locked-out node is filtered out of the reading the
     # loop below walks, so asking each machine would never find one.
-    from .tailnet import policy as tailnet_policy
-
     read_policy = tailnet_policy()
     items.extend(
         Insight(
@@ -634,8 +635,6 @@ def _deploying(resource, health: dict[str, str]) -> Insight:
 def _apply_help(resource) -> dict:
     """Apply HQ's settings again, where its type allows; otherwise say where to change it."""
 
-    from hq.domains.control_plane.providers import PROVIDERS
-
     provider = PROVIDERS.get(resource.kind)
     policy = provider.actions.get("reconcile") if provider else None
     link = None
@@ -653,10 +652,6 @@ def _apply_help(resource) -> dict:
 
 def waiting_for_approval() -> tuple[Insight, ...]:
     """One item per change an agent asked for. Nothing is written until a person decides."""
-
-    from .action_links import ActionLink
-    from .approvals import pending, preview
-    from .capabilities import capability_title
 
     items = []
     for held in pending():

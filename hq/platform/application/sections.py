@@ -19,6 +19,7 @@ something to say. No flag, no configuration, no decision to revisit.
 
 from decimal import Decimal
 from typing import Any
+lazy from datetime import timedelta
 
 from django.conf import settings
 from django.db.models import Count, Q, Sum
@@ -33,6 +34,8 @@ from .derivations import passed, today as local_today
 from .money import money
 from .projection import read_once
 from .ui import counted
+lazy from .github_profile import accounts, profile, profiles
+lazy from .timestamps import moment
 
 Card = dict[str, Any]
 ZERO_MONEY = Decimal("0.00")
@@ -277,11 +280,6 @@ def watching() -> tuple[Card, ...]:
     """What is new in what you watch: advisories published in the last month,
     else releases. HQ has one operator, so the linked account is theirs; with
     more than one there is no single "you" and the card stays away."""
-
-    from datetime import timedelta
-
-    from .github_profile import accounts, profile, profiles
-    from .timestamps import moment
 
     # A profile is only ever read for a signed-in person's own linked account,
     # so its reading names them. A profile no account links is nobody's and is

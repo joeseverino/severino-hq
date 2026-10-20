@@ -18,6 +18,7 @@ from django.urls import reverse
 
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule
+lazy from hq.platform.application.derivations import today
 
 
 class DocumentationQuerySet(models.QuerySet):
@@ -36,7 +37,6 @@ class DocumentationQuerySet(models.QuerySet):
         clear, which is the one thing a queue must never contain.
         """
         review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
-        from hq.platform.application.derivations import today
 
         cutoff = today() - timedelta(days=review_days)
         return self.filter(

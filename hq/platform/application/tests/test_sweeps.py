@@ -112,9 +112,9 @@ class SweepTests(TestCase):
                 again = self.client.get(url, headers={"if-none-match": held})
 
                 self.assertEqual(again.status_code, 200)
-                self.assertEqual(again.json()["count"], self._fresh_count())
+                self.assertEqual(again.context["profile_action_count"], self._fresh_count())
                 self.assertNotEqual(again.headers["ETag"], held)
-        self.assertEqual(again.json(), first.json())
+        self.assertEqual(again.context["profile_action_count"], first.context["profile_action_count"])
 
     def test_a_reading_that_changed_in_a_sweep_is_seen_by_the_very_next_request(self):
         self._load()

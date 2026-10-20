@@ -22,7 +22,6 @@ from ..calendar import (
 )
 from ..calendar_entries import (
     EntryCommand,
-    NotFoundError,
     calendar_choices,
     choose_source,
     list_agenda,
@@ -33,6 +32,7 @@ from ..calendar_entries import (
 from ..deletion import DeleteCommand, delete_calendar_entry
 from ..domains import Domain, domain_navigation, host_domains
 from ..plugins import NavigationItem, PluginIntegration
+from ..record_errors import RecordNotFound
 from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal
 from .markup import all_elements, hrefs, select, text, texts, with_class
 
@@ -311,7 +311,7 @@ class WriteTests(TestCase):
         user = get_user_model().objects.create_user("calendar-chooser")
         choose_source(user, "history.deploys", True)
         self.assertEqual(calendar_choices(user), {"history.deploys": True})
-        with self.assertRaises(NotFoundError):
+        with self.assertRaises(RecordNotFound):
             choose_source(user, "no.such", False)
 
 

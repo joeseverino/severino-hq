@@ -365,6 +365,13 @@ invoking the registry: name, effect, required permissions, target kind and
 label, command JSON Schema, duplicates and the handler's signature. MCP grants
 must be a subset of the plugin's operator grants. A typo fails the composition's
 checks instead of becoming a production-only failure or an authority gap.
+
+A handler is called as `handler(command, *, principal, <target keyword>)`,
+the keyword being the one its `target_kind` binds (`current_slug`,
+`current_id`, ...). A handler that checks for a stale write also declares
+`expected_updated_at` and receives the caller's token; any other handler
+leaves it out and is never handed it.
+
 Fields that shape the Command Center form:
 
 - `subject_resource` names the `ResourceSpec` the operation acts on, which

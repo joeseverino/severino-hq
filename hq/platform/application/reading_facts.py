@@ -9,14 +9,11 @@ so what went quiet is said and not dropped.
 
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import fields, replace
-from datetime import datetime
 from typing import Any, ClassVar, Self
 
-from .derivations import since
 from .finding_model import FindingEstate, fact_values
-from .moments import duration
-from .timestamps import moment
 from .topology_model import TopologyNode, derived_id
+lazy from .facts import snapshots_of
 
 # Why a reading holds no record, when the reading itself is what failed.
 UNREAD = "unread"
@@ -71,8 +68,6 @@ def state_on_controller(
     says is never dropped for want of somewhere to say it.
     """
 
-    from .facts import snapshots_of
-
     for snapshot in snapshots_of(kind):
         found = tuple(row.fact for row in rows(snapshot))
         if not found:
@@ -94,10 +89,3 @@ def stated[R: FactRow](estate: FindingEstate, row: type[R]) -> Iterator[tuple[To
         values = fact_values(node, row.KEY)
         if values:
             yield node, tuple(row.of(value) for value in values)
-
-
-def ago(stamp: str, now: datetime) -> str:
-    """An instant as an age, in words that hold until the age reads differently."""
-
-    when = moment(stamp)
-    return f"{duration(since(when, now=now))} ago" if when is not None else "never"

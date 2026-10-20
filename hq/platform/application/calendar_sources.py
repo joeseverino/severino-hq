@@ -20,6 +20,7 @@ from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .estate import Expiry, estate_reading
 from .ui import counted
+lazy from .history import CONTAINERS, DEPLOYS, OUTSIDE_HQ, changes, external
 
 # How many windows of one history source are kept current: the one the
 # dashboard shows and the one last paged to.
@@ -166,8 +167,6 @@ def history_sources() -> tuple[CalendarSource, ...]:
 
 
 def _moments(first: date, last: date, sources: set[str]):
-    from .history import external
-
     since, until = _window(first, last)
     return external(sources, since=since, until=until)
 
@@ -178,8 +177,6 @@ _READINGS = ("control_plane.ProviderInventory",)
 
 @derivation("calendar.deploys", reads=_READINGS, ahead=WINDOWS)
 def deploy_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
-    from .history import DEPLOYS
-
     return tuple(
         CalendarEvent(
             id=f"deploy:{moment.url or moment.at.isoformat()}",
@@ -195,8 +192,6 @@ def deploy_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
 
 @derivation("calendar.containers", reads=_READINGS, ahead=WINDOWS)
 def container_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
-    from .history import CONTAINERS
-
     return tuple(
         CalendarEvent(
             id=f"container:{moment.title}:{moment.at.isoformat()}",
@@ -213,8 +208,6 @@ def container_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
 @derivation("calendar.changes", reads=("core.AuditLog",), ahead=WINDOWS)
 def change_events(first: date, last: date) -> tuple[CalendarEvent, ...]:
     """One line a day, by where the change was made: the day's history has the rest."""
-
-    from .history import OUTSIDE_HQ, changes
 
     since, until = _window(first, last)
     rows = changes(since, until - timedelta(microseconds=1)).values_list("created_at", "source")

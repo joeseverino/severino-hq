@@ -47,10 +47,10 @@ from hq.platform.application.idempotency import (
 )
 from hq.platform.application.integration_specs import RESERVED_QUERY_FIELD
 from hq.platform.application.projection import QueryRefusal
+from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.resources import (
     InvalidResourceInput,
     ResourceDescription,
-    ResourceNotFound,
     UnknownResource,
     UnsupportedResourceOperation,
     describe_resources,
@@ -62,6 +62,7 @@ from hq.platform.application.topology import topology as application_topology
 from hq.platform.core.network import client_ip
 
 from .security import TokenError, api_principal, granted, is_configured, verify
+lazy from .openapi import document
 
 CURRENT_API_VERSION = 2
 
@@ -146,6 +147,8 @@ Projection = dict[str, Any]
 CAPABILITY_STATUS = {
     "unknown_capability": 404,
     "forbidden": 403,
+    "not_found": 404,
+    "conflict": 409,
     "operation_failed": 409,
     "idempotency_conflict": 409,
     # Nothing is wrong with the request. This client is holding more decisions
@@ -410,8 +413,6 @@ def openapi(request: APIRequest) -> HttpResponse:
     resource is configured: it describes the code, not a credential.
     """
 
-    from .openapi import document
-
     return _json(document())
 
 
@@ -529,7 +530,7 @@ def _projection(
     return served
 
 
-topology = _projection(
+topology: View = _projection(
     application_topology,
     dict.fromkeys(("lens", "focus", "direction", "depth"), _STRING),
     "topology",
@@ -541,7 +542,7 @@ topology = _projection(
     """,
 )
 
-findings = _projection(
+findings: View = _projection(
     application_findings,
     {
         "rule": _STRING,
@@ -582,8 +583,9 @@ def _resource_failure(exc: Exception) -> HttpResponse:
     # ``str(exc)``: the message a client reads is written by HQ, not relayed.
     if isinstance(exc, UnknownResource):
         return _fail(exc.reason, code="unknown_resource", status=404)
-    if isinstance(exc, ResourceNotFound):
-        return _fail(exc.reason, code="not_found", status=404)
+    if isinstance(exc, RecordNotFound):
+        # Host-written and fixed (record_errors.py), like every reason here.
+        return _fail(str(exc), code="not_found", status=404)
     if isinstance(exc, UnsupportedResourceOperation):
         return _fail(exc.reason, code="unsupported_operation", status=405)
     if isinstance(exc, InvalidResourceInput):
@@ -645,7 +647,7 @@ def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResp
     except (
         AuthorizationError,
         InvalidResourceInput,
-        ResourceNotFound,
+        RecordNotFound,
         UnknownResource,
         UnsupportedResourceOperation,
     ) as exc:

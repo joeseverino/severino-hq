@@ -24,10 +24,10 @@ from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
 
-from . import assets as asset_use_cases, projects as project_use_cases
 from .assets import AssetCommand, upsert_asset
 from .domains import records_of
 from .projects import ProjectCommand, upsert_project
+from .record_errors import RecordConflict, RecordNotFound
 from .security import Principal, require_all
 from .ui import counted
 
@@ -56,7 +56,6 @@ class _Kind:
     model: type
     command: type
     upsert: Any
-    use_case_errors: tuple[type[Exception], ...]
 
 
 _PROJECT = _Kind(
@@ -64,14 +63,12 @@ _PROJECT = _Kind(
     Project,
     ProjectCommand,
     upsert_project,
-    (project_use_cases.NotFoundError, project_use_cases.ConflictError),
 )
 _ASSET = _Kind(
     "asset",
     Asset,
     AssetCommand,
     upsert_asset,
-    (asset_use_cases.NotFoundError, asset_use_cases.ConflictError),
 )
 
 
@@ -236,7 +233,7 @@ def _apply(planned: _Planned, principal: Principal) -> None:
         result = planned.kind.upsert(planned.command, principal=principal)
     except DjangoValidationError as exc:
         raise _Refused(_problem(planned.kind.name, planned.index, planned.slug, *exc.messages)) from exc
-    except planned.kind.use_case_errors as exc:
+    except (RecordNotFound, RecordConflict) as exc:
         raise _Refused(_problem(planned.kind.name, planned.index, planned.slug, str(exc))) from exc
     _audit(planned, result[planned.kind.name]["slug"])
 
@@ -318,7 +315,5 @@ def execute_hq_import(
     command: HQImportCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    del expected_updated_at
     return import_registry(command, principal=principal)

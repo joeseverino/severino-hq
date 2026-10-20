@@ -23,6 +23,9 @@ from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import demo_scope
 from hq.platform.core import speculation
 from hq.platform.core.outbound import serving
+lazy from hq.platform.application import hq_self
+lazy from hq.platform.application.plugins import plugin_token_authenticated_prefixes
+lazy from hq.platform.application.projection import projection_scope
 
 # Where the browser's own answer to "show me stand-ins" is kept. Named here
 # because the middleware that reads it and the view that writes it are the only
@@ -194,8 +197,6 @@ class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):
 
     @override
     def process_view(self, request, view_func, view_args, view_kwargs):
-        from hq.platform.application.plugins import plugin_token_authenticated_prefixes
-
         if request.path.startswith(plugin_token_authenticated_prefixes()):
             return None
         return super().process_view(request, view_func, view_args, view_kwargs)
@@ -215,10 +216,7 @@ class ProjectionMiddleware:
     def __call__(self, request):
         if request.method not in ("GET", "HEAD"):
             return self.get_response(request)
-        from hq.platform.application.hq_self import serving
-        from hq.platform.application.projection import projection_scope
-
-        with projection_scope(seed=serving(request)):
+        with projection_scope(seed=hq_self.serving(request)):
             response = self.get_response(request)
             # A template response renders after the view returns; inside the scope.
             if hasattr(response, "render") and not getattr(response, "is_rendered", True):

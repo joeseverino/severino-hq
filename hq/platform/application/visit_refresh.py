@@ -39,11 +39,18 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.platform.core.audit import operation_context
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .asks import Standing, read_standing, read_status_url
-from .cadence import controller_standing, forced_reads, request_reads
+from .cadence import controller_standing, forced_reads, request_reads, swept
 from .freshness import PAGE_VISIT, freshness
 from .security import Capability, Principal
+lazy from . import machines
+lazy from .credential_sight import fed_kinds
+lazy from .entity_links import entity_link
+lazy from .service_list import listed_service
+lazy from .services import alias_target
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,11 +68,6 @@ def askable(kind: str) -> bool:
     A kind nothing declares is neither, so it is not asked for.
     """
 
-    from hq.domains.control_plane.observations import OBSERVATIONS
-    from hq.domains.control_plane.providers import PROVIDERS
-
-    from .cadence import swept
-
     if not swept(kind):
         return False
     reading = OBSERVATIONS.get(kind)
@@ -78,10 +80,7 @@ def _machine_reads(name: str) -> Reads | None:
     """A machine is read through the connections that reach it: what their
     credentials read is what its page is made of."""
 
-    from .credential_sight import fed_kinds
-    from .machines import machine
-
-    found = machine(name)
+    found = machines.machine(name)
     if found is None:
         return None
     providers = sorted(
@@ -96,10 +95,6 @@ def _machine_reads(name: str) -> Reads | None:
 
 def _service_reads(hostname: str) -> Reads | None:
     """A service is read through the kinds its declarations are."""
-
-    from .entity_links import entity_link
-    from .service_list import listed_service
-    from .services import alias_target
 
     if not entity_link("service", hostname).url:
         return None

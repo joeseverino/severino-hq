@@ -29,6 +29,7 @@ from functools import cached_property
 from typing import Any
 
 from django.db import transaction
+lazy from django.core.exceptions import ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.names import normalized_hostname
@@ -38,11 +39,16 @@ from hq.domains.control_plane.provider_adapters.cloudflare import (
     ZONE_KIND,
 )
 from hq.platform.application.routes import reverse
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .adoption import unmanaged
+from .adoption import AdoptCommand, unmanaged
 from .entity_links import entity_link
-from .infrastructure import resource_health
+from .infrastructure import PolicyError, enabled_resources, resource_health
+from .record_errors import RecordNotFound
 from .ui import ListRow
+lazy from . import adoption, plugins
+lazy from .facts import snapshots_of
+lazy from .projection import read_once
 
 RECORD_KIND = DNS_RECORD_KIND
 
@@ -313,12 +319,10 @@ class Zone:
         least useful possible moment to fail.
         """
 
-        from .plugins import _import
-
         found = []
         for reference in ZONE_INSIGHTS:
             try:
-                insight = _import(reference)(self)
+                insight = plugins._import(reference)(self)
             except Exception:  # noqa: BLE001 - one card must not lose the page
                 continue
             if isinstance(insight, tuple):
@@ -358,8 +362,6 @@ def zone_catalog(pinned: frozenset[str] = frozenset()) -> tuple[Zone, ...]:
     Undeclared zones are included so one can be adopted from the list. Read
     once per projection.
     """
-
-    from .projection import read_once
 
     return read_once(f"zones.catalog:{','.join(sorted(pinned))}", lambda: _zone_catalog(pinned))
 
@@ -446,8 +448,6 @@ def zone_reads(resources=None) -> tuple[tuple[str, ...], dict[str, list[Any]]]:
     answer the domains page, the API and the estate count list.
     """
 
-    from .infrastructure import enabled_resources
-
     names = {
         normalized_hostname((resource.spec or {}).get("zone"))
         for resource in (enabled_resources() if resources is None else resources)
@@ -460,10 +460,6 @@ def zone_reads(resources=None) -> tuple[tuple[str, ...], dict[str, list[Any]]]:
 
 def _swept_zones(names: set[str]) -> dict[str, list[Any]]:
     """Add every swept zone to ``names``; when a reachable sweep read each."""
-
-    from hq.domains.control_plane.providers import PROVIDERS
-
-    from .facts import snapshots_of
 
     read: dict[str, list[Any]] = {}
     zones = PROVIDERS[ZONE_KIND]
@@ -482,10 +478,6 @@ def _swept_zones(names: set[str]) -> dict[str, list[Any]]:
 
 def _swept_record_zones() -> set[str]:
     """The zone of every swept record."""
-
-    from hq.domains.control_plane.providers import PROVIDERS
-
-    from .facts import snapshots_of
 
     records = PROVIDERS[RECORD_KIND]
     found = set()
@@ -547,17 +539,13 @@ def adopt_discovered_records(*, principal) -> dict[str, Any]:
     read through a connection that only observes: see ``application.adoption``.
     """
 
-    from django.core.exceptions import ValidationError
-
-    from .infrastructure import NotFoundError, PolicyError
-
     adopted: list[str] = []
     for zone in zone_catalog():
         if not zone.managed or not zone.adoptable:
             continue
         try:
             adopted.extend(adopt_zone_records(zone.zone, principal=principal)["adopted"])
-        except NotFoundError, PolicyError, ValidationError, ValueError:
+        except RecordNotFound, PolicyError, ValidationError, ValueError:
             # Recording what a provider holds must not depend on being allowed
             # to declare it. A deployment with public DNS switched off, or a
             # record whose live shape HQ's model cannot express, leaves the
@@ -587,17 +575,14 @@ def adopt_zone_records(zone: str, *, principal) -> dict[str, Any]:
     first reconciliation changes nothing.
     """
 
-    from .adoption import AdoptCommand, adopt
-    from .infrastructure import NotFoundError
-
     found = find_zone(zone)
     if found is None:
-        raise NotFoundError(f"No domain named {zone!r}.")
+        raise RecordNotFound("No domain has that name.")
     pending = list(found.adoptable)
     if not pending:
-        raise NotFoundError(f"All records in {found.zone} are already managed.")
+        raise RecordNotFound("Every record in that domain is already managed.")
     adopted = [
-        adopt(AdoptCommand(kind=RECORD_KIND, token=record.token), principal=principal)["resource"]["key"]
+        adoption.adopt(AdoptCommand(kind=RECORD_KIND, token=record.token), principal=principal)["resource"]["key"]
         for record in pending
     ]
     return {"ok": True, "zone": found.zone, "adopted": adopted}

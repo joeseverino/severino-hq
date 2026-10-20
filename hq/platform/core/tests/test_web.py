@@ -777,7 +777,14 @@ class DashboardWorkflowTests(_AuthedTestCase):
 
         (badge,) = select(page, "data-action-count")
         self.assertIn("hidden", badge.attrs)
-        self.assertEqual(count.json()["count"], 1)
+        self.assertIn("data-fragment-load", badge.attrs)
+        self.assertEqual(badge.attrs["data-fragment"], "/action-items/count/")
+        # The answer is the same region, counted, and asks for nothing more.
+        (answer,) = select(count, "data-action-count")
+        self.assertEqual(answer.attrs["id"], badge.attrs["id"])
+        self.assertNotIn("data-fragment", answer.attrs)
+        self.assertNotIn("hidden", answer.attrs)
+        self.assertEqual(count.context["profile_action_count"], 1)
 
     def test_the_controllers_dot_says_only_what_is_known(self):
         """Green while it is arriving, the attention colour once it has gone

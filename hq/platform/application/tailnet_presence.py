@@ -7,7 +7,15 @@ to.
 from dataclasses import dataclass
 from typing import Any
 
-from .tailnet import TAILNET_KIND
+lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
+
+from .tailnet import TAILNET_KIND, snapshots
+lazy from .arrivals import arrivals
+lazy from .expiry import days_until
+lazy from .locate import container_hosts, host_of
+lazy from .moments import elapsed
+lazy from .reach import is_public, network_of
+lazy from .timestamps import moment
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,8 +119,6 @@ class Presence:
         a path to anywhere.
         """
 
-        from .timestamps import moment
-
         if self.observer:
             return False
         return bool(self.public_key and moment(self.last_handshake))
@@ -121,8 +127,6 @@ class Presence:
     def handshake(self) -> str:
         """When the two keys last completed a handshake, phrased as HQ phrases
         every other elapsed time."""
-
-        from .moments import elapsed
 
         return elapsed(self.last_handshake)
 
@@ -159,16 +163,11 @@ class Presence:
     def tailnet_address(self) -> str:
         """The device's tailnet IPv4, the address everything on the tailnet uses."""
 
-        from .reach import network_of
-
         return next((a for a in self.addresses if ":" not in a and network_of(a) == "tailnet"), "")
 
     @property
     def public_addresses(self) -> tuple[str, ...]:
         """The endpoints' public addresses: not private, tailnet or documentation."""
-
-        from .locate import host_of
-        from .reach import is_public
 
         return tuple(
             dict.fromkeys(host for host in (host_of(endpoint) for endpoint in self.endpoints) if is_public(host))
@@ -182,9 +181,6 @@ class Presence:
         an expiry far away: one is a decision and the other is a deadline.
         """
 
-        from .expiry import days_until
-        from .timestamps import moment
-
         when = moment(self.key_expires)
         return days_until(when) if when is not None else None
 
@@ -194,11 +190,6 @@ def tailnet_presence() -> dict[str, Presence]:
 
     found: dict[str, Presence] = {}
     # The same read the policy uses. Three kinds in one table, asked once.
-    from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
-
-    from .arrivals import arrivals
-    from .tailnet import snapshots
-
     read = snapshots()
     arrived = arrivals(read[ARRIVAL_KIND])
     for snapshot in read[TAILNET_KIND]:
@@ -262,7 +253,6 @@ def observed_addresses() -> dict[str, str]:
         for address in presence.addresses:
             if address:
                 found.setdefault(address, "seen on the tailnet")
-    from .locate import container_hosts
 
     for address in container_hosts().values():
         if address:

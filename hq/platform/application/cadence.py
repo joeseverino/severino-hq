@@ -35,11 +35,23 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
+from hq.domains.control_plane.models import (
+    DashboardRefreshRequest,
+    ManagedResource,
+    OperationRequest,
+    ProviderConnection,
+    ProviderInventory,
+    ReadRequest,
+)
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.provider_adapters.github import KIND as GITHUB_KIND
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .derivations import asked_ahead, holds_until
 from .moments import duration
 from .security import Capability, Principal
+lazy from .credential_sight import fed_kinds
+lazy from .facts import stored_snapshots
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,8 +182,6 @@ def controller_standing(now: datetime | None = None) -> ControllerStanding:
 def newest_reading() -> datetime | None:
     """When the newest stored reading was taken, whichever controller took it."""
 
-    from .facts import stored_snapshots
-
     times = [row.observed_at for rows in stored_snapshots().values() for row in rows if row.observed_at]
     return max(times, default=None)
 
@@ -248,9 +258,6 @@ def swept(kind: str) -> bool:
     reading both go by it. A kind nothing declares is not swept.
     """
 
-    from hq.domains.control_plane.observations import OBSERVATIONS
-    from hq.domains.control_plane.providers import PROVIDERS
-
     reading = OBSERVATIONS.get(kind)
     if reading is not None:
         return reading.read_by == "controller"
@@ -262,8 +269,6 @@ def every_sweep(kind: str) -> bool:
     """Whether every sweep reads ``kind``: swept, and on no slower clock of its
     own. A kind on its own clock is carried by the sweeps between its reads, so
     its age says nothing about whether a sweep is due or has happened."""
-
-    from hq.domains.control_plane.observations import OBSERVATIONS
 
     reading = OBSERVATIONS.get(kind)
     return swept(kind) and (reading is None or reading.every is None)
@@ -383,8 +388,6 @@ def connection_providers(connection_ref: str) -> tuple[str, ...]:
 def forced_kinds(connection_ref: str, kind: str) -> tuple[str, ...] | None:
     """The kinds a read of one connection or one kind forces; None is every kind."""
 
-    from .credential_sight import fed_kinds
-
     if kind:
         return (kind,)
     if connection_ref:
@@ -449,9 +452,6 @@ def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
     Fails closed: a ref no controller reported, or a kind HQ does not store.
     """
 
-    from hq.domains.control_plane.observations import OBSERVATIONS
-    from hq.domains.control_plane.providers import PROVIDERS
-
     ref = command.connection_ref.strip()
     kind = command.kind.strip()
     named = [field for field, value in (("connection_ref", ref), ("kind", kind)) if value]
@@ -473,8 +473,6 @@ def pass_due() -> str:
     that comes due with time alone; a request that queues work rings on its own.
     An unanswered dashboard refresh stops counting after `read_request_lifetime()`.
     """
-
-    from hq.domains.control_plane.models import DashboardRefreshRequest, OperationRequest
 
     now = timezone.now()
     if OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).exists():
@@ -515,12 +513,12 @@ def request_delivery_read() -> bool:
     all: a request nothing answers would force sweeps until it expired.
     """
 
-    from hq.domains.control_plane.models import ManagedResource
-    from hq.domains.control_plane.provider_adapters.github import KIND as kind
-
-    if not (ProviderInventory.objects.filter(kind=kind).exists() or ManagedResource.objects.filter(kind=kind).exists()):
+    if not (
+        ProviderInventory.objects.filter(kind=GITHUB_KIND).exists()
+        or ManagedResource.objects.filter(kind=GITHUB_KIND).exists()
+    ):
         return False
-    return request_reading(kind)
+    return request_reading(GITHUB_KIND)
 
 
 def request_reading(kind: str) -> bool:
@@ -541,11 +539,9 @@ def request_controller_sweep(
     command: ControllerSweepCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
 ) -> dict[str, object]:
     """Wake the pull-based controller; with a subject, have it read that now."""
 
-    del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     subject = _read_subject(command)
     # An operator asking for fresh state makes HQ active before policy is read,

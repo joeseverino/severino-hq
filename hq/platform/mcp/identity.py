@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from hq.platform.application.security import AuthorizationError, Principal, mcp_principal
+lazy from hq.platform.api.security import api_principal
 
 # Never "web": an interactive interface would waive the approval hold.
 INTERFACE = "mcp"
@@ -37,8 +38,6 @@ def current_principal() -> Principal:
 
 def token_principal(claims: dict[str, Any]) -> Principal:
     """An agent holding its grant, capped by what this deployment allows MCP."""
-
-    from hq.platform.api.security import api_principal
 
     verified = api_principal(claims)
     ceiling = {str(capability) for capability in mcp_principal().capabilities}

@@ -13,6 +13,9 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
 from starlette.staticfiles import StaticFiles
 from whitenoise.storage import CompressedManifestStaticFilesStorage
+lazy from django.contrib.auth.decorators import login_not_required
+lazy from django.http import HttpResponsePermanentRedirect
+lazy from django.templatetags.static import static
 
 # A quoted string (kept whole, so a "/*" in one is not a comment) or a comment.
 # A comment that opens "/*!" is a licence, and is kept.
@@ -160,10 +163,6 @@ def root_icon(name: str):
     links (``/favicon.ico``, iOS's ``/apple-touch-icon.png``): a permanent
     redirect to the collected file, so each client asks once. Open before sign
     in, since a browser asks on the sign-in page too."""
-
-    from django.contrib.auth.decorators import login_not_required
-    from django.http import HttpResponsePermanentRedirect
-    from django.templatetags.static import static
 
     @login_not_required
     def view(request):

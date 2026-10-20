@@ -3,6 +3,7 @@
 from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any
+lazy from urllib.parse import urlsplit
 
 from django.db import transaction
 
@@ -14,12 +15,13 @@ from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context
 
 from .domains import records_of
-from .entity_links import EntityLink, entity_link
-from .labels import plural
+from .entity_links import EntityLink, entity_link, web_url
 from .projection import iso
+from .record_errors import RecordConflict, RecordNotFound
+from .record_links import linked_records
 from .security import Principal
 from .sensitivity import safe_doc_ids
-from .ui import counted
+lazy from .published_sites import projects_by_hostname
 
 
 def published_on(urls) -> EntityLink | None:
@@ -28,11 +30,6 @@ def published_on(urls) -> EntityLink | None:
     None when nothing is published or the addresses are on more than one
     site. A site no project publishes is named without a page.
     """
-
-    from urllib.parse import urlsplit
-
-    from .entity_links import web_url
-    from .published_sites import projects_by_hostname
 
     hosts = {urlsplit(web_url(url)).hostname for url in urls if url}
     hosts.discard(None)
@@ -43,14 +40,6 @@ def published_on(urls) -> EntityLink | None:
     if project is None:
         return EntityLink(label=host, kind="service", kind_label="Site")
     return entity_link("project", project.slug, label=host)
-
-
-class NotFoundError(ValueError):
-    """A content item or requested relationship does not exist."""
-
-
-class ConflictError(ValueError):
-    """A content item changed after the caller read it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,16 +80,6 @@ def serialize_content(item: ContentItem) -> dict[str, Any]:
     }
 
 
-def _resolve(model, field: str, values: tuple, label: str):
-    records = list(model.objects.filter(**{f"{field}__in": values}))
-    found = {getattr(record, field) for record in records}
-    missing = sorted(set(values) - found)
-    if missing:
-        found_none = counted(len(missing), f"related {label} not found", f"related {plural(label)} not found")
-        raise NotFoundError(f"{found_none}: {', '.join(map(str, missing))}")
-    return records
-
-
 @transaction.atomic
 def save_content(
     command: ContentCommand,
@@ -119,21 +98,16 @@ def save_content(
             try:
                 item = ContentItem.objects.select_for_update().get(slug=current_slug)
             except ContentItem.DoesNotExist as exc:
-                raise NotFoundError(f"The writeup or page {current_slug!r} was not found.") from exc
+                raise RecordNotFound("That writeup or page was not found.") from exc
             created = False
             if expected_updated_at and item.updated_at.isoformat() != expected_updated_at:
-                raise ConflictError(f"The writeup or page {current_slug!r} changed after it was read.")
+                raise RecordConflict("That writeup or page changed after it was read.")
 
         values = asdict(command)
-        projects = _resolve(Project, "slug", values.pop("related_projects"), "project")
-        assets = _resolve(Asset, "slug", values.pop("related_assets"), "asset")
-        expenses = _resolve(Expense, "id", values.pop("related_expenses"), "expense")
-        docs = _resolve(
-            DocumentationRecord,
-            "doc_id",
-            values.pop("related_documentation"),
-            "documentation record",
-        )
+        projects = linked_records(Project, "slug", values.pop("related_projects"))
+        assets = linked_records(Asset, "slug", values.pop("related_assets"))
+        expenses = linked_records(Expense, "id", values.pop("related_expenses"))
+        docs = linked_records(DocumentationRecord, "doc_id", values.pop("related_documentation"))
         for field, value in values.items():
             setattr(item, field, value)
         item.full_clean()

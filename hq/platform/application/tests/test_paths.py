@@ -324,9 +324,9 @@ class PathTests(TestCase):
         self.assertEqual(self.walk("not a host").routes, ())
 
     def test_the_api_refuses_a_name_that_is_not_a_host(self):
-        from ..resources import ResourceNotFound
+        from ..record_errors import RecordNotFound
 
-        with self.assertRaises(ResourceNotFound):
+        with self.assertRaises(RecordNotFound):
             get_resource("paths", "not a host", principal=READ)
 
     def test_why_unread_names_the_error(self):

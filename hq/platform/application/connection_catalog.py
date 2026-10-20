@@ -4,7 +4,7 @@ Each connection grouped by family, what it may do and why, and the evidence
 behind each ability. The API serialises the same view.
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 
 from django.core.exceptions import ImproperlyConfigured
@@ -29,6 +29,7 @@ from .connection_contracts import (
     ConnectionLink,
     ConnectionSpec,
 )
+from .connection_lifecycle import WORKING, Lifecycle, standing
 from .contracts import SCOPE_NAME, endpoint_has_private_parts
 from .derivations import passed, present
 from .integration_validation import safe_connection_url
@@ -36,6 +37,8 @@ from .integrations import integration_graph
 from .moments import ago
 from .projection import read_once
 from .security import Principal
+lazy from .capabilities import capability_title
+lazy from .entity_links import entity_link
 
 # The family the controller observes on HQ's behalf. It leads every inventory
 # because it is the one the page is about; the gateways beside it are the
@@ -79,20 +82,6 @@ EVIDENCE_DETAILS = {
 # say why. The rest either cannot be performed or has not been shown.
 PROVEN_EVIDENCE = frozenset({"verified", "coarse", "not_applicable"})
 
-# Where a connection is in its life, from the last observation of it. The one
-# word the State column shows.
-LIFECYCLE_LABELS = {
-    "configured": "Set up",
-    "unreachable": "Not answering",
-    "reachable": "Working",
-    "ready": "Working",
-    "unauthorized": "Permission missing",
-    "stale": "Out of date",
-    "revoked": "Credential refused",
-    # Only the connections page says this: its controller's report came with
-    # no connections, and the row is what HQ kept of it.
-    "unreported": "No longer reported",
-}
 # What HQ can say about the credential's permissions, as the one line under
 # the state. Blank where the owner can do nothing about it: a connection type
 # that never says how its permissions are checked is HQ's gap, not a state of
@@ -165,32 +154,39 @@ def connection_lifecycle(
     *,
     stale_after_hours: int,
     now: datetime,
-) -> str:
+) -> Lifecycle:
     """One state from the observation, its age, reachability and authority.
 
     Ordered by what matters most: a rejected credential is revoked whatever
-    else is true; nothing observed is merely configured; an old observation is
-    stale before it is anything else, because every later claim rests on it;
-    missing access fails closed ahead of reachability; and only a reached
-    connection with proven authority is ready.
+    else is true (``standing``); nothing observed is merely configured; an old
+    observation is stale before it is anything else, because every later claim
+    rests on it; missing access fails closed ahead of reachability; and only a
+    reached connection with proven authority is ready.
     """
 
-    if instance.credential_model == "rejected":
-        return "revoked"
+    return standing(
+        _observed_lifecycle(instance, authority, stale_after_hours=stale_after_hours, now=now),
+        refused=instance.credential_model == "rejected",
+    )
+
+
+def _observed_lifecycle(
+    instance: ConnectionInstance, authority: str, *, stale_after_hours: int, now: datetime
+) -> Lifecycle:
     observed = instance.observed_at
     if observed is None:
-        return "configured"
+        return Lifecycle.CONFIGURED
     if timezone.is_naive(observed):
         observed = timezone.make_aware(observed)
     if passed(observed + timedelta(hours=stale_after_hours), now=now):
-        return "stale"
+        return Lifecycle.STALE
     if authority == "missing":
-        return "unauthorized"
+        return Lifecycle.UNAUTHORIZED
     if instance.status == "serious":
-        return "unreachable"
+        return Lifecycle.UNREACHABLE
     if instance.status == "neutral":
-        return "configured"
-    return "ready" if authority in {"proven", "whole_account"} else "reachable"
+        return Lifecycle.CONFIGURED
+    return Lifecycle.READY if authority in {"proven", "whole_account"} else Lifecycle.REACHABLE
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,12 +219,12 @@ class ConnectionView:
     instance: ConnectionInstance
     abilities: tuple[ConnectionAbilityState, ...]
     actions: tuple[ActionLink, ...] = ()
-    lifecycle: str = "configured"
+    lifecycle: Lifecycle = Lifecycle.CONFIGURED
     authority: str = "none"
 
     @property
     def lifecycle_label(self) -> str:
-        return LIFECYCLE_LABELS[self.lifecycle]
+        return Lifecycle(self.lifecycle).label
 
     @property
     def authority_label(self) -> str:
@@ -246,25 +242,25 @@ class ConnectionView:
         """
 
         observed = self.instance.observed_at
-        if self.lifecycle == "revoked":
+        if self.lifecycle == Lifecycle.REVOKED:
             return ""
-        if self.lifecycle == "stale":
+        if self.lifecycle == Lifecycle.STALE:
             return f"Last read {ago(observed)}"
-        if self.lifecycle == "unreachable":
+        if self.lifecycle == Lifecycle.UNREACHABLE:
             return f"Last tried {ago(observed)}" if observed else ""
-        if self.lifecycle == "unauthorized":
+        if self.lifecycle == Lifecycle.UNAUTHORIZED:
             missing = tuple(dict.fromkeys(scope for state in self.abilities for scope in state.missing_scopes))
             return f"Needs {', '.join(missing)}" if missing else ""
         label = self.authority_label
-        if self.lifecycle == "configured" and (label != KEYLESS_LABEL and self.authority != "none"):
-            return "Not tested"
+        if self.lifecycle == Lifecycle.CONFIGURED and (label != KEYLESS_LABEL and self.authority != "none"):
+            return Lifecycle.UNPROBED.label
         return label
 
     @property
     def state_line_quiet(self) -> bool:
         """Whether ``state_line`` is shown only in the expanded row."""
 
-        return self.lifecycle in ("ready", "reachable") and self.authority in QUIET_AUTHORITY
+        return self.lifecycle in WORKING and self.authority in QUIET_AUTHORITY
 
     @property
     def name_link(self):
@@ -274,10 +270,6 @@ class ConnectionView:
         relationships when it has them: on the connections page its own row
         is where the reader already is.
         """
-
-        from dataclasses import replace
-
-        from .entity_links import entity_link
 
         link = entity_link("connection", self.instance.label)
         relationships = next((action for action in self.actions if action.name == "relationships"), None)
@@ -415,10 +407,6 @@ def _connection_instances(spec: ConnectionSpec) -> tuple[ConnectionInstance, ...
 def _ability_state(
     ability: ConnectionAbility, instance: ConnectionInstance, principal: Principal
 ) -> ConnectionAbilityState:
-    # At call time: capabilities compose plugin specs, which may declare
-    # connections. Same reason action_links defers it.
-    from .capabilities import capability_title
-
     evidence, missing = grant_evidence(ability, instance)
     # Unknown stays undecided; only absent or rejected proof closes the door.
     # Undeclared proof leaves the ability usable under HQ's own authorization,
@@ -474,7 +462,7 @@ def _connection_view(
         states,
         recommend_connection_action(
             actions,
-            unhealthy=instance.status != "good" or lifecycle in ("stale", "revoked"),
+            unhealthy=instance.status != "good" or lifecycle in (Lifecycle.STALE, Lifecycle.REVOKED),
             missing_scope_count=sum(len(state.missing_scopes) for state in states),
             unknown_scope_count=sum(state.available is None for state in states),
         ),

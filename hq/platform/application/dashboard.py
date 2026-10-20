@@ -9,6 +9,7 @@ from dataclasses import asdict
 from typing import Any
 
 from django.utils import timezone
+lazy from django.core.exceptions import ImproperlyConfigured
 
 from . import sections
 from .attention import contacts_state
@@ -24,6 +25,8 @@ from .projection import projection_scope
 from .read_models import recent_activity
 from .security import Capability
 from .workflows import serialize_workflow
+lazy from .action_items import item_key, item_revision, waiting_count
+lazy from .ui import DomainOverview
 
 
 @derivation("dashboard.highlights", reads=DASHBOARD_READS, vary=composed_variant)
@@ -33,9 +36,6 @@ def dashboard_highlights() -> dict[str, Any]:
     Derived once per change: each extension's cards and overview are
     derivations of their own, so this composes what is stored.
     """
-    from django.core.exceptions import ImproperlyConfigured
-
-    from .ui import DomainOverview
 
     domains = {domain.id: domain for domain in all_domains()}
     highlights, compact = [], []
@@ -73,15 +73,11 @@ def _count_variant(user_pk: int) -> tuple[Any, ...]:
 def waiting(user_pk: int) -> int:
     """How many items wait on one person: the queue, less what they set aside."""
 
-    from .action_items import waiting_count
-
     return waiting_count(work_queue(), user_pk)
 
 
 def queue_item(source_id: str, source: str, item: Any) -> dict[str, Any]:
     """One action item in the shape the queue partial and the API carry."""
-
-    from .action_items import item_key, item_revision
 
     subject = getattr(item, "subject", None)
     since = getattr(item, "since", None)

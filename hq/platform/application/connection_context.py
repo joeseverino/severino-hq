@@ -15,24 +15,25 @@ there is a request, and is returned under ``request``.
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
+lazy from urllib.parse import urlencode
 
 from hq.platform.core.audit import last_activity
 from hq.platform.core.models import AuditLog
+lazy from hq.platform.application.routes import reverse
 
 from .action_links import read_now_link
 from .cadence import forced_reads
 from .connection_catalog import (
     CONTROLLER_CONNECTIONS,
-    LIFECYCLE_LABELS,
     ConnectionGroup,
     ConnectionView,
     connection_catalog,
     serialize_connection,
 )
 from .connection_contracts import ConnectionInstance
+from .connection_lifecycle import WORKING, Lifecycle, standing
 from .connection_reach import ConnectionReach, connection_reach
 from .connection_security import (
-    ATTENTION_LIFECYCLES,
     REQUEST_CONTROLS,
     ConnectionSecurityPosture,
     connection_security_posture,
@@ -42,7 +43,7 @@ from .connection_setup import ProviderSetup, guide_url, setups
 from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import ProviderSight, sight_by_connection
-from .derived_reads import NotFoundError, serialize_path, serialize_provider_sight
+from .derived_reads import serialize_path, serialize_provider_sight
 from .entity_links import entity_link
 from .freshness import freshness
 from .hq_self import hq_hostnames
@@ -52,10 +53,12 @@ from .paths import hq_path
 from .posture import Inputs, Posture, posture
 from .problems import problem_counts
 from .projection import projection_scope, read_once
+from .record_errors import RecordNotFound
 from .request_path import joined
 from .security import Principal
 from .ui import counted
 from .workflow_contracts import ActionLink
+lazy from . import domains
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,10 +82,6 @@ class ConnectionRow:
 
     @property
     def problems_url(self) -> str:
-        from urllib.parse import urlencode
-
-        from hq.platform.application.routes import reverse
-
         about = entity_link("connection", self.instance.label).url
         return f"{reverse('action_items')}?{urlencode({'about': about})}" if self.problems else ""
 
@@ -95,28 +94,23 @@ class ConnectionRow:
         return self.connection.instance
 
     @property
-    def lifecycle(self) -> str:
-        """The connection's lifecycle, with what its readings found folded in.
+    def lifecycle(self) -> Lifecycle:
+        """The connection's lifecycle, with what its readings found folded in,
+        so the state cannot disagree with the readings beside it."""
 
-        A credential the service refused outright is refused whatever the
-        probe said, so the state cannot disagree with the readings beside it.
-        One its controller no longer reports is that before anything else: no
-        probe or reading about it is current.
-        """
-
-        if self.unreported_at is not None:
-            return "unreported"
-        if self.sight is not None and self.sight.credential_refusal:
-            return "revoked"
-        return self.connection.lifecycle
+        return standing(
+            Lifecycle(self.connection.lifecycle),
+            unreported=self.unreported_at is not None,
+            refused=self.sight is not None and bool(self.sight.credential_refusal),
+        )
 
     @property
     def state_label(self) -> str:
-        return LIFECYCLE_LABELS[self.lifecycle]
+        return self.lifecycle.label
 
     @property
     def _permissions_missing(self) -> int:
-        if self.sight is None or self.lifecycle not in ("ready", "reachable"):
+        if self.sight is None or self.lifecycle not in WORKING:
             return 0
         return len(self.sight.missing)
 
@@ -124,7 +118,7 @@ class ConnectionRow:
     def state_line(self) -> str:
         """The one line under the state word, or ""."""
 
-        if self.unreported_at is not None:
+        if self.lifecycle == Lifecycle.UNREPORTED:
             observed = self.instance.observed_at
             return f"Last reported {ago(observed)}" if observed else ""
         if self.lifecycle != self.connection.lifecycle:
@@ -249,7 +243,7 @@ class ConnectionsContext:
 
         counts: dict[str, int] = {}
         for row in self.rows:
-            if row.lifecycle in ATTENTION_LIFECYCLES:
+            if row.lifecycle.needs_attention:
                 label = row.state_label.lower()
                 counts[label] = counts.get(label, 0) + 1
         return tuple((count, label) for label, count in counts.items())
@@ -397,7 +391,7 @@ def _rows(
                 )
             )
         # Within its group, a connection that needs a person comes first.
-        rows.extend(sorted(found, key=lambda row: row.lifecycle not in ATTENTION_LIFECYCLES))
+        rows.extend(sorted(found, key=lambda row: not row.lifecycle.needs_attention))
     # Under what each is used for, in the order the first of each appears: the
     # sort is stable, so the controller's connections still lead.
     order = {name: place for place, name in enumerate(dict.fromkeys(row.used_for for row in rows))}
@@ -412,11 +406,9 @@ def _used_for() -> dict[str, str]:
     connections fall under the extension without the host naming it.
     """
 
-    from .domains import all_domains
-
     def load() -> dict[str, str]:
         found: dict[str, str] = {}
-        for domain in all_domains():
+        for domain in domains.all_domains():
             if domain.integration.connections is None:
                 continue
             named = next((item.group for item in domain.navigation if item.group), "") or domain.label
@@ -503,5 +495,5 @@ def get_connection_standing(connection_ref: str, *, principal: Principal) -> dic
         None,
     )
     if found is None:
-        raise NotFoundError(connection_ref)
+        raise RecordNotFound("No connection has that reference.")
     return found

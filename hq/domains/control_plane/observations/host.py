@@ -5,6 +5,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator, ConfigDict, Field
 
+lazy from hq.platform.application.timestamps import moment
+
 from .contract import ObservationRecord, ObservationSpec
 
 
@@ -48,8 +50,6 @@ def _word(value: Any) -> str:
 
 def _instant(value: Any) -> str:
     """An ISO 8601 instant as it was written, or "" when it is not one."""
-
-    from hq.platform.application.timestamps import moment
 
     return value if isinstance(value, str) and moment(value) is not None else ""
 

@@ -30,7 +30,11 @@ from typing import Any
 
 from django.utils import timezone
 
+lazy from hq.platform.application.routes import reverse
+
 from .entity_links import web_url
+lazy from . import domains
+lazy from .calendar_entries import own_sources
 
 logger = logging.getLogger("severino.calendar")
 
@@ -226,8 +230,6 @@ class CalendarCell:
     def url(self) -> str:
         """This day, open beside its month."""
 
-        from hq.platform.application.routes import reverse
-
         return f"{reverse('calendar:month')}?month={self.day:%Y-%m}&day={self.day.isoformat()}"
 
 
@@ -286,12 +288,9 @@ def calendar_sources() -> tuple[tuple[str, CalendarSource], ...]:
     make an operator's unchecked choice ambiguous.
     """
 
-    from .calendar_entries import own_sources
-    from .domains import all_domains
-
     # The operator's own events lead under no heading: they are one line.
     found: list[tuple[str, CalendarSource]] = [("", source) for source in own_sources()]
-    for domain in sorted(all_domains(), key=lambda domain: (domain.bar_order, domain.label)):
+    for domain in sorted(domains.all_domains(), key=lambda domain: (domain.bar_order, domain.label)):
         provider = domain.integration.calendars
         if provider is None:
             continue

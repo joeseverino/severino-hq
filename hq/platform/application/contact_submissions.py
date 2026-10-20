@@ -23,14 +23,11 @@ from hq.platform.core.models import AuditLog
 
 from .adoption import OBSERVES_ONLY, observes_only
 from .cadence import request_reading
+from .record_errors import RecordNotFound
 from .resource_operations import queue_reconcile
 from .security import Capability, Principal
 
 CONTACT_STATUSES = frozenset(get_args(ContactStatus))
-
-
-class ContactSubmissionNotFound(ValueError):
-    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +83,7 @@ def find_submission(identifier: int, current: inbox.Inbox | None = None) -> dict
 def _submission(identifier: int, current: inbox.Inbox) -> dict[str, Any]:
     found = find_submission(identifier, current)
     if found is None:
-        raise ContactSubmissionNotFound(f"Contact submission #{identifier} was not found.")
+        raise RecordNotFound("That contact submission was not found.")
     return found
 
 
@@ -98,9 +95,7 @@ def execute_contact_list(
     command: ContactListCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    del expected_updated_at
     principal.require(Capability.MANAGE_CONTACTS)
     return {
         "ok": True,
@@ -181,9 +176,7 @@ def execute_contact_review(
     *,
     principal: Principal,
     current_id: int,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    del expected_updated_at
     principal.require(Capability.MANAGE_CONTACTS)
     status = _status(command.status)
     if len(command.assigned_to) > 120:
@@ -222,9 +215,7 @@ def execute_contact_delete(
     *,
     principal: Principal,
     current_id: int,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    del expected_updated_at
     principal.require(Capability.MANAGE_CONTACTS)
     if command.confirm != str(current_id):
         raise ValueError(f"confirm must exactly match target {current_id!r}")

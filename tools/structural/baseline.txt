@@ -1,3 +1,2 @@
 # Structural baseline for `mise run checks:structural`: each near-duplicate
 # pair outside tests. Pairs only leave. Rewrite with --record.
-similar hq/platform/application/assets.py::serialize_asset <> hq/platform/application/projects.py::serialize_project

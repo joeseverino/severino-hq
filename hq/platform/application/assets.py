@@ -14,10 +14,11 @@ from hq.platform.core.audit import operation_context
 from .domains import records_of
 from .entity_links import EntityLink, entity_link
 from .projection import addressable, iso, listing
+from .record_errors import RecordConflict, RecordNotFound
+from .record_links import linked
 from .security import Principal
-from .sensitivity import safe_doc_ids
-from .ui import counted
 from .upserts import upsert_by_slug
+lazy from . import zones
 
 
 def managed_domain(asset: Asset) -> EntityLink | None:
@@ -27,20 +28,10 @@ def managed_domain(asset: Asset) -> EntityLink | None:
     its name is the join. None when the name is not a domain HQ knows.
     """
 
-    from .zones import zone_names
-
     if asset.category != "domain":
         return None
     name = asset.item_name.strip().lower()
-    return entity_link("zone", name) if name in zone_names() else None
-
-
-class NotFoundError(ValueError):
-    """A requested asset or related registry object does not exist."""
-
-
-class ConflictError(ValueError):
-    """The caller tried to write over a newer version of an asset."""
+    return entity_link("zone", name) if name in zones.zone_names() else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +54,7 @@ class AssetCommand:
 
 
 def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, Any]:
-    result = {
+    fields = {
         "slug": asset.slug,
         "item_name": asset.item_name,
         "vendor": asset.vendor,
@@ -80,14 +71,7 @@ def serialize_asset(asset: Asset, *, relationships: bool = False) -> dict[str, A
         "infrastructure": asset.infrastructure,
         "updated_at": iso(asset.updated_at),
     }
-    if relationships:
-        result["relationships"] = {
-            "projects": list(asset.related_projects.order_by("slug").values_list("slug", flat=True)),
-            "documentation": safe_doc_ids(asset.documentation_records),
-            "content": list(asset.content_items.order_by("slug").values_list("slug", flat=True)),
-            "expense_ids": list(asset.expenses.order_by("-date", "-id").values_list("id", flat=True)),
-        }
-    return result
+    return linked(fields, asset, relationships=relationships, projects=asset.related_projects)
 
 
 def list_assets(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:
@@ -102,7 +86,7 @@ def list_assets(*, status: str | None = None, query: str | None = None, limit: i
 
 
 def get_asset(slug: str) -> dict[str, Any]:
-    return addressable(Asset, serialize_asset, slug, label="Asset", missing=NotFoundError)
+    return addressable(Asset, serialize_asset, slug)
 
 
 @transaction.atomic
@@ -123,10 +107,10 @@ def save_asset(
             try:
                 asset = Asset.objects.select_for_update().get(slug=current_slug)
             except Asset.DoesNotExist as exc:
-                raise NotFoundError(f"Asset {current_slug!r} was not found.") from exc
+                raise RecordNotFound("That asset was not found.") from exc
             created = False
             if expected_updated_at and asset.updated_at.isoformat() != expected_updated_at:
-                raise ConflictError(f"Asset {current_slug!r} changed after it was read.")
+                raise RecordConflict("That asset changed after it was read.")
 
         values = asdict(command)
         project_slugs = values.pop("related_projects")
@@ -134,10 +118,7 @@ def save_asset(
         found_slugs = {project.slug for project in projects}
         missing = sorted(set(project_slugs) - found_slugs)
         if missing:
-            raise NotFoundError(
-                f"{counted(len(missing), 'related project not found', 'related projects not found')}: "
-                f"{', '.join(missing)}"
-            )
+            raise RecordNotFound("A related project was not found.")
 
         for field, value in values.items():
             setattr(asset, field, value)

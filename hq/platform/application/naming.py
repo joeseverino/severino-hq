@@ -23,6 +23,7 @@ from .infrastructure import (
 )
 from .locate import index_of, join_endpoint, split_endpoint
 from .projection import projection_scope, read_once
+lazy from .connections import connection_rows
 
 
 def name_context(hostname: str) -> NameContext:
@@ -205,6 +206,4 @@ def _covering(hostname: str) -> tuple[str, ...]:
 
 
 def _connection_rows() -> tuple:
-    from .connections import connection_rows
-
     return connection_rows()

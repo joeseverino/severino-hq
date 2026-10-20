@@ -15,11 +15,9 @@ from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
 
 from .domains import records_of
+from .projection import iso
+from .record_errors import RecordConflict, RecordNotFound
 from .security import Principal
-
-
-class NotFoundError(ValueError):
-    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,13 +37,13 @@ def serialize_receipt(receipt: Receipt) -> dict[str, Any]:
         "content_type": receipt.content_type,
         "size_bytes": receipt.size_bytes,
         "vendor": receipt.vendor,
-        "date": receipt.date.isoformat() if receipt.date else None,
+        "date": iso(receipt.date),
         "amount": str(receipt.amount),
         "notes": receipt.notes,
         "related_expense": receipt.related_expense_id,
         "related_asset": receipt.related_asset.slug if receipt.related_asset else None,
-        "uploaded_at": receipt.uploaded_at.isoformat(),
-        "updated_at": receipt.updated_at.isoformat(),
+        "uploaded_at": iso(receipt.uploaded_at),
+        "updated_at": iso(receipt.updated_at),
     }
 
 
@@ -54,7 +52,7 @@ def _relations(command: ReceiptMetadataCommand):
         expense = Expense.objects.get(pk=command.related_expense) if command.related_expense is not None else None
         asset = Asset.objects.get(slug=command.related_asset) if command.related_asset else None
     except (Expense.DoesNotExist, Asset.DoesNotExist) as exc:
-        raise NotFoundError("Related expense or asset was not found.") from exc
+        raise RecordNotFound("A related expense or asset was not found.") from exc
     return expense, asset
 
 
@@ -72,9 +70,9 @@ def update_receipt(
         try:
             receipt = Receipt.objects.select_for_update().get(pk=current_id)
         except Receipt.DoesNotExist as exc:
-            raise NotFoundError(f"Receipt {current_id!r} was not found.") from exc
+            raise RecordNotFound("That receipt was not found.") from exc
         if expected_updated_at and receipt.updated_at.isoformat() != expected_updated_at:
-            raise ValueError(f"Receipt {current_id!r} changed after it was read.")
+            raise RecordConflict("That receipt changed after it was read.")
         expense, asset = _relations(command)
         if upload is not None and hasattr(upload, "content_type"):
             validate_receipt_file(upload)

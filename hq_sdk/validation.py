@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+lazy from django.template.base import Lexer, TokenType
+
 # These are implementation packages in the public host repository. Plugins get
 # their supported equivalents from hq_sdk; importing one of these makes a host
 # refactor a coordinated multi-repository migration.
@@ -229,8 +231,6 @@ class _Template:
         self.problems.append((line, message))
 
     def check(self, text: str) -> list[tuple[int, str]]:
-        from django.template.base import Lexer, TokenType
-
         skipping = ""
         for token in Lexer(text).tokenize():
             if token.token_type not in (TokenType.BLOCK, TokenType.VAR):

@@ -9,6 +9,7 @@ from django.urls import reverse
 from hq.platform.core.models import TimestampedModel
 
 from .storage import PrivateReceiptStorage, receipt_upload_path
+lazy from .validation import FILE_TYPE_LABELS
 
 
 class Receipt(TimestampedModel):
@@ -67,8 +68,6 @@ class Receipt(TimestampedModel):
     @property
     def file_type(self) -> str:
         """The stored file type as a person says it; blank for one HQ does not accept."""
-
-        from .validation import FILE_TYPE_LABELS
 
         return FILE_TYPE_LABELS.get((self.content_type or "").strip().lower(), "")
 

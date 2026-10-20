@@ -41,8 +41,12 @@ from django.test.runner import (
     RemoteTestRunner,
     _init_worker,
 )
+lazy from django.apps import apps
+lazy from django.db.backends.sqlite3.creation import DatabaseCreation
 
 from hq.config.sandbox import sweep_abandoned
+lazy from hq.platform.application import plugins
+lazy from hq.platform.application.plugins import clear_plugin_composition_cache
 
 
 def performance_cores() -> int | None:
@@ -71,8 +75,6 @@ class _CompositionIsolation:
     """Make process caches obey the same per-test isolation as the database."""
 
     def startTest(self, test):
-        from hq.platform.application.plugins import clear_plugin_composition_cache
-
         clear_plugin_composition_cache()
         return super().startTest(test)
 
@@ -188,8 +190,6 @@ def _init_worker_on_file_databases(counter, *args, **kwargs):
     that imported this module afresh.
     """
 
-    from django.db.backends.sqlite3.creation import DatabaseCreation
-
     DatabaseCreation.setup_worker_connection = _use_the_file_clone
     return _init_worker(counter, *args, **kwargs)
 
@@ -230,13 +230,9 @@ NEUTRAL_IDENTITY = {
 def plugin_test_modules() -> list[str]:
     """The module of each installed plugin's Django app, where its tests live."""
 
-    from django.apps import apps
-
-    from hq.platform.application.plugins import installed_plugin_apps
-
     configs = {config.name: config.name for config in apps.get_app_configs()}
     configs |= {f"{type(c).__module__}.{type(c).__qualname__}": c.name for c in apps.get_app_configs()}
-    return [configs.get(entry, entry) for entry in installed_plugin_apps()]
+    return [configs.get(entry, entry) for entry in plugins.installed_plugin_apps()]
 
 
 def tests_in(suite: unittest.TestSuite):

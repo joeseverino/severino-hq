@@ -10,8 +10,14 @@ controller applies it only through a connection that manages.
 import json
 from typing import Any
 
+lazy from hq.domains.control_plane.models import ManagedResource
+
+from .record_errors import RecordNotFound
 from .security import Capability, Principal
 from .ui import counted
+lazy from .infrastructure import ManagedResourceCommand, PolicyError, save_managed_resource
+lazy from .resource_operations import refuse_while_drifted
+lazy from .tailnet import POLICY_KIND
 
 # Where a rule names who it admits and what it admits to.
 _RULE_SIDES = ("src", "dst")
@@ -105,22 +111,11 @@ def request_empty_groups_removal(
 ) -> dict[str, Any]:
     """Remove the empty groups the policy still grants, as a proposed policy change."""
 
-    from hq.domains.control_plane.models import ManagedResource
-
-    from .infrastructure import (
-        ManagedResourceCommand,
-        NotFoundError,
-        PolicyError,
-        save_managed_resource,
-    )
-    from .tailnet import POLICY_KIND
-
     del command
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     policy = ManagedResource.objects.filter(key=current_key, kind=POLICY_KIND).first()
     if policy is None:
-        raise NotFoundError(f"HQ has no tailnet policy named {current_key!r}.")
-    from .resource_operations import refuse_while_drifted
+        raise RecordNotFound("HQ has no tailnet policy by that name.")
 
     refuse_while_drifted(policy)
     try:

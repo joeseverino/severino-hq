@@ -15,6 +15,10 @@ import hashlib
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+lazy from .entity_links import web_url
+lazy from .findings import rule_origin
+lazy from .routes import reverse
+
 # How urgent, in the words a card's pill says.
 URGENCY = {"serious": "Urgent", "attention": "Needs attention", "neutral": "Note", "good": "Fine"}
 NOTICE = "Notice"
@@ -122,8 +126,6 @@ def _facts(pairs: Any) -> list[dict[str, Any]]:
     """Facts by label, in the order first given: each label once, with every
     value it was given, and a value that is a web address as a link."""
 
-    from .entity_links import web_url
-
     grouped: dict[str, list[dict[str, str]]] = {}
     for label, value in pairs:
         text = str(value)
@@ -134,8 +136,6 @@ def _facts(pairs: Any) -> list[dict[str, Any]]:
 def _origin(item: dict[str, Any]) -> dict[str, Any]:
     """What raised an item: a finding's rule and where it is declared, or the
     domain that raised anything else and the key it raised it under."""
-
-    from .findings import rule_origin
 
     key = str(item.get("key", ""))
     _, finding, rest = key.partition(":finding:")
@@ -152,8 +152,6 @@ def _anchor(key: str) -> str:
 def _own_page(subject: dict[str, Any], anchor: str) -> str:
     """The page that shows an item's whole card: the thing it is about, or the
     queue with its card in view."""
-
-    from .routes import reverse
 
     return subject.get("url") or f"{reverse('action_items')}#{anchor}"
 

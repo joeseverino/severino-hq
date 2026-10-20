@@ -26,9 +26,15 @@ from django.utils import timezone
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.credential_reads import MINTERS, Minter, observer_permissions
 from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.connection_shapes import projections
+lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
 from .projection import read_once
 from .timestamps import moment
+lazy from .connections import connection_rows
+lazy from .credential_findings import fix_steps
+lazy from .credential_sight import credential_sight
+lazy from .facts import snapshots_of
 
 # How far ahead of expiry a credential is replaced.
 RENEWAL_WINDOW = timedelta(days=30)
@@ -70,8 +76,6 @@ def parse_expiry(raw: Any) -> datetime | None:
 
 @cache
 def _projections() -> dict[str, dict[str, Any]]:
-    from hq.domains.control_plane.connection_shapes import projections
-
     return projections()
 
 
@@ -153,21 +157,15 @@ class CredentialFix:
 
     @property
     def expiry(self) -> str:
-        from hq.domains.control_plane.provider_spec import expiry_phrase
-
         return expiry_phrase(self.expires_at.isoformat()) if self.expires_at else ""
 
     @property
     def steps(self) -> tuple[Any, ...]:
-        from .credential_findings import fix_steps
-
         return fix_steps(self)
 
 
 def _accounts(provider: str) -> tuple[str, ...]:
     """Every account id the provider's readings name."""
-
-    from .facts import snapshots_of
 
     return tuple(
         sorted(
@@ -257,9 +255,6 @@ def credential_fixes() -> dict[str, CredentialFix]:
     """Each reported connection's credential fix, by connection ref."""
 
     def load() -> dict[str, CredentialFix]:
-        from .connections import connection_rows
-        from .credential_sight import credential_sight
-
         sights = {found.provider: found for found in credential_sight()}
         return {row.connection_ref: _fix(row, sights.get(row.provider)) for row in connection_rows()}
 

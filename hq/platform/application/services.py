@@ -52,11 +52,14 @@ from .locate import host_of, split_endpoint
 from .naming import name_context
 from .projection import read_once
 from .published_sites import published_projects
-from .reach import UNKNOWN, Reach, reach_of
+from .reach import UNKNOWN, Reach, is_documentation, reach_of
 from .service_declarations import Claim, declarations, runtime_claim
 from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, Facet
 from .ui import ListRow
 from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
+lazy from .exposure import exposure_of_name
+lazy from .paths import path_to
+lazy from .service_health import service_health
 
 HQ_MARK = "hq"
 OBSERVED_MARK = "observed"
@@ -103,16 +106,12 @@ class Service:
     def path(self):
         """The request path to this name, walked from the readings."""
 
-        from .paths import path_to
-
         return path_to(self.hostname)
 
     @property
     def exposure(self):
         """Who can reach this name: the internet, through a gate, or only a
         private network, from the same routes the path walks."""
-
-        from .exposure import exposure_of_name
 
         return exposure_of_name(self.hostname)
 
@@ -228,16 +227,12 @@ class Service:
     def health(self):
         """The one health rule's answer for this name (``service_health``)."""
 
-        from .service_health import service_health
-
         return service_health(self)
 
     @cached_property
     def base_health(self):
         """The same rule without HQ's own findings: what the topology, and so
         the findings, are derived from."""
-
-        from .service_health import service_health
 
         return service_health(self, own_findings=False)
 
@@ -761,7 +756,6 @@ def _points_nowhere(origin: Origin | None, dns: Facet | None = None) -> str:
         return ""
     if _served_by_the_provider(dns):
         return ""
-    from .reach import is_documentation
 
     address = split_endpoint(origin.address)[0] or origin.address
     if is_documentation(address):

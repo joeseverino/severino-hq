@@ -25,6 +25,8 @@ from hq.platform.core.models import LinkedAccount
 from .asks import Standing, read_standing
 from .linked_accounts import GITHUB
 from .security import Capability, Principal
+lazy from .cadence import forced_reads, request_reads
+lazy from .timestamps import moment
 
 # GitHub's allowance is by the hour, so a read that failed is tried again after one.
 RETRY_AFTER = timedelta(hours=1)
@@ -55,7 +57,6 @@ def profile(login: str) -> dict[str, Any] | None:
     value = _record(snapshot, login)
     if snapshot is None or value is None:
         return None
-    from .timestamps import moment
 
     watched = [
         {
@@ -95,8 +96,6 @@ def accounts() -> tuple[str, ...]:
 def asked_at() -> datetime | None:
     """When a read of the profile was asked for and has not been tried yet."""
 
-    from .cadence import forced_reads
-
     return next((read.requested_at for read in forced_reads() if read.kind == KIND), None)
 
 
@@ -135,8 +134,6 @@ def request_read(login: str, *, principal: Principal) -> datetime:
     so asking for one is gated like every other public lookup, and waking the
     controller is gated as Read now is.
     """
-
-    from .cadence import request_reads
 
     principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
     if login not in accounts():

@@ -11,65 +11,31 @@ from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
 
 from . import records
-from .projection import iso, page_size
+from .expenses import serialize_expense
+from .projection import iso, listing, page_size
+from .receipts import serialize_receipt
 from .sensitivity import SAFE_SENSITIVITIES
+lazy from .security import Capability
 
 
 def list_expenses(*, year: int | None = None, category: str | None = None, limit: int = 50) -> dict[str, Any]:
     """List expense records with stable, sensitivity-safe relationships."""
-    queryset = Expense.objects.select_related(
+    rows = Expense.objects.select_related(
         "related_project", "related_asset", "related_content", "related_documentation"
-    ).fetch_mode(FETCH_RAISE)
+    )
     if year is not None:
-        queryset = queryset.filter(date__year=year)
+        rows = rows.filter(date__year=year)
     if category:
-        queryset = queryset.filter(category=category)
-    items = [
-        {
-            "id": expense.id,
-            "date": expense.date.isoformat(),
-            "vendor": expense.vendor,
-            "item": expense.item,
-            "category": expense.category,
-            "total_cost": str(expense.total_cost),
-            "business_use_percentage": expense.business_use_percentage,
-            "estimated_deductible_amount": str(expense.estimated_deductible_amount),
-            "business_purpose": expense.business_purpose,
-            "related_project": (expense.related_project.slug if expense.related_project else None),
-            "related_asset": (expense.related_asset.slug if expense.related_asset else None),
-            "related_content": (expense.related_content.slug if expense.related_content else None),
-            "related_documentation": (
-                expense.related_documentation.doc_id
-                if expense.related_documentation and expense.related_documentation.sensitivity in SAFE_SENSITIVITIES
-                else None
-            ),
-        }
-        for expense in queryset.order_by("-date", "-id")[: page_size(limit)]
-    ]
-    return {"items": items, "count": len(items)}
+        rows = rows.filter(category=category)
+    return listing(rows, serialize_expense, order=("-date", "-id"), limit=limit)
 
 
 def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str, Any]:
     """List receipt metadata without file contents, storage paths, or URLs."""
-    queryset = Receipt.objects.fetch_mode(FETCH_RAISE)
+    rows = Receipt.objects.select_related("related_asset")
     if unmatched_only:
-        queryset = queryset.filter(related_expense__isnull=True, related_asset__isnull=True)
-    items = [
-        {
-            "id": receipt.id,
-            "original_filename": receipt.original_filename,
-            "content_type": receipt.content_type,
-            "size_bytes": receipt.size_bytes,
-            "vendor": receipt.vendor,
-            "date": iso(receipt.date),
-            "amount": str(receipt.amount),
-            "related_expense_id": receipt.related_expense_id,
-            "related_asset": (receipt.related_asset.slug if receipt.related_asset else None),
-            "uploaded_at": iso(receipt.uploaded_at),
-        }
-        for receipt in queryset.select_related("related_asset").order_by("-uploaded_at")[: page_size(limit)]
-    ]
-    return {"items": items, "count": len(items)}
+        rows = rows.filter(related_expense__isnull=True, related_asset__isnull=True)
+    return listing(rows, serialize_receipt, order=("-uploaded_at",), limit=limit)
 
 
 def documentation_status() -> dict[str, Any]:
@@ -108,8 +74,6 @@ def recent_activity(*, principal, limit: int = 25) -> dict[str, Any]:
 
     The audit trail is gated apart from baseline reads (``READ_AUDIT_LOG``).
     """
-
-    from .security import Capability
 
     principal.require(Capability.READ_AUDIT_LOG)
     items = [

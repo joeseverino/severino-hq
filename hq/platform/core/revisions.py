@@ -26,7 +26,11 @@ from dataclasses import dataclass
 
 from django.apps import apps
 from django.conf import settings
-from django.db import DatabaseError, connection as default_connection
+from django.db import DatabaseError, connection as default_connection, connections
+lazy from django.core.cache import caches
+lazy from django.core.management import call_command
+
+lazy from .models import Revision
 
 logger = logging.getLogger("severino.revisions")
 
@@ -42,8 +46,6 @@ def _trigger(table: str, event: str) -> str:
 
 def _uncounted() -> set[str]:
     """Tables whose writes are the bookkeeping itself."""
-
-    from .models import Revision
 
     tables = {Revision._meta.db_table}
     for config in settings.CACHES.values():
@@ -66,8 +68,6 @@ def counted_tables(connection=default_connection) -> list[str]:
 
 def install(connection=default_connection) -> list[str]:
     """Put the triggers on every counted table; return the tables counted."""
-
-    from .models import Revision
 
     if connection.vendor != "sqlite":
         return []
@@ -122,8 +122,6 @@ def read(connection=default_connection) -> Revisions | None:
     answer and the proof it can be trusted come from the same snapshot.
     """
 
-    from .models import Revision
-
     if connection.vendor != "sqlite":
         return None
     try:
@@ -151,10 +149,6 @@ def after_migrate(sender, using="default", **kwargs) -> None:
     that ran before the migrate is dropped, so no process reads a value an
     older version of a derivation stored.
     """
-
-    from django.core.cache import caches
-    from django.core.management import call_command
-    from django.db import connections
 
     call_command("createcachetable", database=using, verbosity=0)
     install(connections[using])

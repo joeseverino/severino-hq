@@ -52,10 +52,16 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.routes import reverse
 from hq.platform.core.audit import operation_context
+lazy from hq.platform.core.models import AuditLog
 
 from .derivations import reached
 from .entity_links import entity_link, kind_label
+from .record_errors import RecordNotFound
 from .security import AuthorizationError, Principal, internal_principal, is_interactive
+lazy from . import capabilities, resources
+lazy from .agent_access import agents_paused
+lazy from .capabilities import authorize_capability, capability_title, execute_approved, validate_command
+lazy from .resources import InvalidResourceInput, UnsupportedResourceOperation
 
 # How long an unanswered request stands. A day, because the person it is waiting
 # for sleeps and a request that lapses while they do is a nuisance, whereas one
@@ -214,24 +220,17 @@ def _record_subject(spec, target: Any) -> ApprovalSubject | None:
     to the person deciding, never returned to the caller.
     """
 
-    from .resources import (
-        InvalidResourceInput,
-        ResourceNotFound,
-        UnsupportedResourceOperation,
-        get_resource,
-    )
-
     kind = spec.subject_resource or spec.name
     if target is None or not spec.subject_resource:
         return ApprovalSubject(kind, "" if target is None else str(target), {})
     try:
-        baseline = get_resource(
+        baseline = resources.get_resource(
             spec.subject_resource,
             target,
             principal=internal_principal("approval-baseline"),
             strict=False,
         )
-    except ResourceNotFound:
+    except RecordNotFound:
         return None
     except UnsupportedResourceOperation, InvalidResourceInput:
         # No canonical read: still holdable, but staleness cannot be detected.
@@ -484,8 +483,6 @@ AGENT_SURFACES = ("mcp", "api")
 def _require_agents_running(held) -> None:
     """Pausing agents stops what they already asked for, not only what they ask next."""
 
-    from .agent_access import agents_paused
-
     if held.requested_interface in AGENT_SURFACES and agents_paused():
         raise ApprovalError(
             "Agents are paused, and an agent asked for this. Resume agents to approve it, or decline it."
@@ -508,10 +505,8 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     may be looking at this page) is atomic.
     """
 
-    from .capabilities import authorize_capability, capability_registry, execute_approved, validate_command
-
     held = _decidable(approval_id)
-    spec = capability_registry().get(held.capability)
+    spec = capabilities.capability_registry().get(held.capability)
     if spec is None:
         raise ApprovalError(f"{held.capability!r} is no longer something HQ can do, so this request cannot be applied.")
     _require_person(principal, held)
@@ -724,9 +719,7 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     that answers "what happens to the network if I click this".
     """
 
-    from .capabilities import capability_registry
-
-    spec = capability_registry().get(held.capability)
+    spec = capabilities.capability_registry().get(held.capability)
     if spec is not None and spec.subject_resource != DECLARATIONS:
         return _record_preview(spec, held)
     declared = dict(held.baseline.get("spec") or {})
@@ -793,8 +786,6 @@ def _field_rows(before: dict[str, Any], after: dict[str, Any], *, label: str) ->
 def review(held: ApprovalRequest) -> dict[str, Any]:
     """What the decision card shows."""
 
-    from .capabilities import capability_title
-
     return {
         "held": held,
         "title": capability_title(held.capability),
@@ -831,8 +822,6 @@ def for_audit_event(event) -> ApprovalRequest | None:
 
 def entry_event(approval_id) -> Any:
     """The audit row that records this request being made."""
-
-    from hq.platform.core.models import AuditLog
 
     return (
         AuditLog.objects.filter(

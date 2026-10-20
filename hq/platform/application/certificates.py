@@ -86,7 +86,6 @@ def store_certificate(
     command: UploadCertificateCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Seal an uploaded pair against an existing declaration.
 
@@ -95,7 +94,6 @@ def store_certificate(
     the operator would believe otherwise.
     """
 
-    del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     if not secrets.available():
         raise secrets.SecretsUnavailable("No secret store key is configured. Nothing was stored.")

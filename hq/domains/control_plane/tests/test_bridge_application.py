@@ -395,7 +395,7 @@ class ListenerSourceTests(SimpleTestCase):
         self.assertEqual(
             uses,
             [
-                "from hq.domains.control_plane.bridge_application import application as bridge_application",
-                "async with serving(bridge_application, settings.SEVERINO_BRIDGE_SOCKET):",
+                "lazy from hq.domains.control_plane.bridge_application import application as bridge_application",
+                "async with unix_server.serving(bridge_application, settings.SEVERINO_BRIDGE_SOCKET):",
             ],
         )

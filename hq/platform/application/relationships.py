@@ -20,6 +20,7 @@ from .security import Principal
 from .timestamps import moment
 from .topology import relation_graph
 from .topology_model import RELATIONS, TopologyEdge, relation_rank
+lazy from .action_links import topology_url
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,8 +139,6 @@ def _stated_between_services(edge: TopologyEdge) -> bool:
 
 def relationships_for(node_id: str, *, principal: Principal) -> Relationships:
     """Every edge of one node, grouped by what it says from that node."""
-
-    from .action_links import topology_url
 
     graph = relation_graph(principal=principal)
     nodes = {node.id: node for node in graph.topology.nodes}

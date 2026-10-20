@@ -43,6 +43,11 @@ class EstateTests(TestCase):
         self.assertEqual((found.name, found.refused), ("example/alpha", ("dependabot",)))
         self.assertIsNone(repository_for("https://github.com/example/other"))
 
+    def test_a_project_url_cased_unlike_the_apps_name_still_joins(self):
+        store()
+
+        self.assertEqual(repository_for("https://github.com/Example/Alpha.git").name, "example/alpha")
+
     def test_what_waits_on_a_person_becomes_the_action_queue(self):
         long_ago = (timezone.now() - timedelta(hours=3)).isoformat()
         soon = (timezone.now() + timedelta(days=5)).isoformat()

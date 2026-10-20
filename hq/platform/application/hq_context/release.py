@@ -8,6 +8,9 @@ from typing import Any
 from django.conf import settings
 
 from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, Tile, iso
+lazy from ..entity_links import web_url
+lazy from ..github_estate import repository_for
+lazy from ..plugins import installed_plugins
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,22 +89,16 @@ def repository(container: Any) -> Any:
     """The repository HQ is built from, as the GitHub App reads it: the one its
     image names, else the one this build says it came from."""
 
-    from ..github_estate import repository_for
-
     if container is not None and container.standing.repository is not None:
         return container.standing.repository
     return repository_for(_source())
 
 
 def _source() -> str:
-    from ..entity_links import web_url
-
     return web_url(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
 
 
 def release(container: Any) -> Release:
-    from ..plugins import installed_plugins
-
     standing = container.standing if container is not None else None
     build = standing.build if standing is not None else None
     return Release(

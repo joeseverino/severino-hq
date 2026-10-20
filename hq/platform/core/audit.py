@@ -13,22 +13,20 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import Any, Literal, overload
 from uuid import UUID
 
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
+lazy from django.contrib.auth.base_user import AbstractBaseUser
+lazy from django.db.models import Max, Model, Q, QuerySet
+lazy from django.utils import timezone
 
 from . import speculation
 from .facets import as_metadata as facet_metadata
 from .middleware import get_current_user
 from .models import AuditLog
-
-if TYPE_CHECKING:
-    from django.contrib.auth.base_user import AbstractBaseUser
-    from django.db.models import Model, QuerySet
-
-    from .facets import Facet
+lazy from .facets import Facet
 
 logger = logging.getLogger("severino.audit")
 
@@ -464,8 +462,6 @@ def record_operation(
 def last_activity(connections: Iterable[str]) -> dict[str, AuditLog]:
     """The latest audit event per named connection, in one query however many."""
 
-    from django.db.models import Max
-
     refs = {ref for ref in connections if ref}
     if not refs:
         return {}
@@ -483,9 +479,6 @@ def prune_routine(*, days: int, check_only: bool = False, batch: int = 1000) -> 
 
     Only ROUTINE_EVENTS with no user are eligible. Deleted in batches.
     """
-
-    from django.db.models import Q
-    from django.utils import timezone
 
     if days < 1:
         raise ValueError("Routine audit retention must be at least one day.")

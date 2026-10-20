@@ -9,6 +9,11 @@ from django.utils import timezone
 
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
+lazy from hq.domains.assets.models import Asset
+lazy from hq.domains.calendars.models import Entry
+lazy from hq.domains.content.models import ContentItem
+lazy from hq.domains.docs_index.models import DocumentationRecord
+lazy from hq.domains.expenses.models import Expense
 
 from .names import MACHINE
 from .network import RENEWS_IN
@@ -99,8 +104,6 @@ def projects():
 
 
 def _runbooks():
-    from hq.domains.docs_index.models import DocumentationRecord
-
     reviewed = timezone.localdate() - timedelta(days=20)
     for doc_id, title, environment, about in RUNBOOKS:
         record = DocumentationRecord.objects.create(
@@ -116,9 +119,6 @@ def _runbooks():
 
 
 def _writeups():
-    from hq.domains.content.models import ContentItem
-    from hq.domains.docs_index.models import DocumentationRecord
-
     today = timezone.localdate()
     for slug, title, project, days in WRITEUPS:
         item = ContentItem.objects.create(
@@ -135,8 +135,6 @@ def _writeups():
 
 
 def calendar():
-    from hq.domains.calendars.models import Entry
-
     today = timezone.localdate()
     Entry.objects.create(
         title="Restore test from offsite backup", starts_on=today + timedelta(days=2), starts_at=time(19)
@@ -147,9 +145,6 @@ def calendar():
 
 def money():
     """The host as an asset, and a year of what running it cost; one receipt still to file."""
-
-    from hq.domains.assets.models import Asset
-    from hq.domains.expenses.models import Expense
 
     machine = f"machine:{MACHINE}"
     asset = Asset.objects.create(

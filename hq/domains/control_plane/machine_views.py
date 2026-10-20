@@ -9,13 +9,19 @@ from django.views.generic import TemplateView
 
 from hq.platform.application.connections import machines_once
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
-from hq.platform.application.machine_context import machine_links, sections_for as machine_sections
+from hq.platform.application.machine_context import header_addresses, machine_links, sections_for as machine_sections
 from hq.platform.application.machines import declaration_seed, machine
 from hq.platform.application.pages import PageAction, PageDialog, PageMixin
 from hq.platform.application.resource_capabilities import resource_capabilities
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.application.tailnet_context import tailnet_context
+lazy from hq.platform.application import tailnet
+lazy from hq.platform.application.containers import on_machine
+lazy from hq.platform.application.docker_sections import docker_line
+lazy from hq.platform.application.page_relations import for_machine
+lazy from hq.platform.application.request_channel import displayed_client_ip
+lazy from hq.platform.application.tailnet import declaration, may_reach, ports, proposed_grant
 
 from .models import ManagedResource
 from .provider_adapters.declarations import MACHINE_KIND
@@ -55,15 +61,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
     with the question most likely being asked.
     """
 
-    from hq.platform.application.tailnet import (
-        declaration,
-        devices,
-        may_reach,
-        ports,
-        proposed_grant,
-    )
-
-    known = devices()
+    known = tailnet.devices()
     asked = {
         "source": request.GET.get("source", "") or default,
         "target": request.GET.get("target", "") or (default if target_default is None else target_default),
@@ -216,8 +214,6 @@ class MachineDetailView(PageMixin, TemplateView):
         # from this view. A band appears because a resolver produced one, so
         # what HQ learns next reaches the page without either being edited.
         sections = machine_sections(found)
-        from hq.platform.application.docker_sections import docker_line
-        from hq.platform.application.page_relations import for_machine
 
         whole, context["relationships"] = for_machine(found, sections, principal=web_principal(self.request.user))
         # One Docker environment is a line under the containers heading. Its
@@ -239,14 +235,10 @@ class MachineDetailView(PageMixin, TemplateView):
         # carries the addresses it answers at, so the page could always have
         # known, and said "this machine" while you looked at your own laptop.
         # Arithmetic on one address: no query, no sweep.
-        from hq.platform.application.request_channel import displayed_client_ip
-
         context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
         context["hq_label"] = HQ_LABEL
         context["page_aside"] = "control_plane/_machine_status.html"
         context["container_kind"] = CONTAINER_KIND
-        from hq.platform.application.containers import on_machine
-        from hq.platform.application.machine_context import header_addresses
 
         # Whether what each container runs is current and safe, as the
         # containers page says it, and what the machine keeps that nothing runs.

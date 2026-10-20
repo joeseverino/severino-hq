@@ -6,14 +6,21 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.utils import timezone
+lazy from django.db.models import Max, Q
 
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
+lazy from hq.domains.jobs.models import Job as JobRow
 
 from ..drawings import Dot, Dots
 from ..projection import read_once
 from ..timestamps import moment
 from ..ui import counted
 from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, iso
+lazy from .. import outbound_work, scheduled_work
+lazy from ..facts import stored_snapshots
+lazy from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering
+lazy from ..routes import reverse
+lazy from ..unit_findings import unit_state
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,8 +92,6 @@ def work() -> Work:
 
 
 def _work() -> Work:
-    from ..facts import stored_snapshots
-
     stored = stored_snapshots()
     units = next(iter(stored.get(UNIT_KIND, ())), None)
     renders = next(iter(stored.get(RENDER_STATUS_KIND, ())), None)
@@ -118,8 +123,6 @@ def _unread(snapshot: Any, noun: str) -> str:
 
 
 def _jobs(snapshot: Any) -> tuple[tuple[Job, ...], str]:
-    from ..unit_findings import unit_state
-
     unread = _unread(snapshot, "HQ's background jobs")
     if unread:
         return (), unread
@@ -135,10 +138,8 @@ def _runs(unit: str) -> str:
     """What a unit runs, in the words HQ has for it: the scheduled work an
     instance of the job template names, else the unit's own name."""
 
-    from ..scheduled_work import SCHEDULED
-
     instance = unit.partition("@")[2].rpartition(".")[0]
-    return next((work.label for work in SCHEDULED if instance and work.name == instance), unit)
+    return next((work.label for work in scheduled_work.SCHEDULED if instance and work.name == instance), unit)
 
 
 def _scheduled(starter: Any, target: Any) -> Job:
@@ -181,8 +182,6 @@ def _result(unit: Any) -> tuple[str, str]:
 
 
 def _renderers(snapshot: Any) -> tuple[tuple[Renderer, ...], str]:
-    from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering
-
     unread = _unread(snapshot, "how credentials were refreshed")
     if unread:
         return (), unread
@@ -232,8 +231,6 @@ RECENT = Dots.LIMIT
 
 
 def _run_dot(job: Any) -> Dot:
-    from ..routes import reverse
-
     result, _tone = _ENDED.get(job.state, ("Did not finish", ATTENTION))
     return Dot(
         filled=job.state == "succeeded",
@@ -246,15 +243,10 @@ def _scheduled_work() -> tuple[Scheduled, ...]:
     """Every piece of work done on a cadence, with its recent runs and when it
     is next due. Three queries, however many jobs there are."""
 
-    from django.db.models import Max, Q
-
-    from hq.domains.jobs.models import Job as JobRow
-
-    from ..outbound_work import declared_work
-    from ..scheduled_work import SCHEDULED
-
-    declared = [(work.name, work.label, work.every) for work in SCHEDULED if work.every is not None]
-    declared += [(work.name, work.label, work.every) for work in declared_work().values() if work.every is not None]
+    declared = [(work.name, work.label, work.every) for work in scheduled_work.SCHEDULED if work.every is not None]
+    declared += [
+        (work.name, work.label, work.every) for work in outbound_work.declared_work().values() if work.every is not None
+    ]
     if not declared:
         return ()
     now = timezone.now()

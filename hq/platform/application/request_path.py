@@ -21,16 +21,23 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.platform.core.network import is_trusted_proxy, split_host_port
+from hq.platform.core.network import client_ip, is_trusted_proxy, split_host_port
 
-from .connection import Connection
 from .entity_links import entity_link
 from .path_model import NETWORK_LABELS, Hop, Route, ServicePath, Source, last_machine
-from .paths import why_unread
+from .paths import hq_path, why_unread
 from .reach import network_of
-from .request_addresses import Address
+from .request_addresses import Address, addresses_of, addresses_of_hq
 from .request_channel import forwarded_chain, socket_peer
-from .request_headers import Header
+from .request_connection import Connection, connection
+from .request_headers import Header, headers_of
+lazy from . import connections
+lazy from .connection_security import observed_request_controls
+lazy from .derived_reads import serialize_hop, serialize_layer
+lazy from .facts import Subject, readings
+lazy from .hq_self import own_addresses, served_at, served_port, site_label
+lazy from .locate import index_of
+lazy from .projection import iso
 
 PROVEN = "proven"
 CONTRADICTED = "contradicted"
@@ -117,8 +124,6 @@ def address_chain(request) -> tuple[Evidence, ...]:
     hops occurred in; decided right to left, from the socket peer.
     """
 
-    from hq.platform.core.network import client_ip
-
     peer = socket_peer(request)
     forwarded = forwarded_chain(request)
     if not forwarded or not is_trusted_proxy(peer):
@@ -200,10 +205,8 @@ def _catalogued(addresses) -> str:
     computer in both places.
     """
 
-    from .connections import machines_once
-
     wanted = set(addresses)
-    return next((machine.name for machine in machines_once() if wanted & set(machine.addresses)), "")
+    return next((machine.name for machine in connections.machines_once() if wanted & set(machine.addresses)), "")
 
 
 def _proxy_hop(found: Connection) -> Hop | None:
@@ -248,8 +251,6 @@ def _device_gap(found: Connection) -> str:
 def joined(walked: ServicePath | None, request, found: Connection | None = None) -> ServicePath:
     """``walked`` from the caller's device, each hop joined to ``request``."""
 
-    from .connection import connection
-
     found = found if found is not None else connection(request)
     host = split_host_port(request.get_host())[0]
     primary = walked.primary if walked is not None else None
@@ -270,8 +271,6 @@ def joined(walked: ServicePath | None, request, found: Connection | None = None)
 
 
 def _hq_only(host: str) -> Hop:
-    from .hq_self import site_label
-
     return Hop("hq", "HQ", site_label() or host)
 
 
@@ -286,9 +285,6 @@ class _Context:
     def answered_on(self) -> str:
         """The machine holding the address HQ answered this request on, or one
         its host routes from; "" when none HQ knows does."""
-
-        from .hq_self import own_addresses, served_at
-        from .locate import index_of
 
         index = index_of(declared=self.found.declared)
         return next(
@@ -451,7 +447,6 @@ def _machine(hop: Hop, context: _Context):
     own = context.answered_on
     if hop.unread:
         return (), Check(UNPROVEN, hop.unread[:1].upper() + hop.unread[1:] + ".")
-    from .hq_self import served_at, served_port
 
     served = ", ".join(served_at(context.request))
     port = served_port(context.request)
@@ -572,8 +567,6 @@ def _edge(hop: Hop, context: _Context):
 
 
 def _access_headers(host: str) -> tuple[str, ...]:
-    from .facts import Subject, readings
-
     if not is_hostname(host):
         return ()
     about = readings().about(Subject.of(hostnames=(normalized_hostname(host),)))
@@ -603,11 +596,9 @@ def _container(hop: Hop, context: _Context):
     """Which container answered, from the one thing a process knows about its
     own: the container Docker started it in."""
 
-    from .connections import machines_once
-
     known = {
         running.id
-        for machine in machines_once()
+        for machine in connections.machines_once()
         for running in machine.containers
         # The container's name, not the hop's label ("Container"), which
         # matches nothing.
@@ -704,12 +695,6 @@ class RequestPath:
 def request_path(request) -> RequestPath:
     """How ``request`` reached HQ, read once per projection."""
 
-    from .connection import connection
-    from .connection_security import observed_request_controls
-    from .paths import hq_path
-    from .request_addresses import addresses_of, addresses_of_hq
-    from .request_headers import headers_of
-
     edge, firewall = observed_request_controls(request.get_host())
     found = connection(request, edge=edge, firewall=firewall)
     path = hq_path(request, found=found) or joined(None, request, found)
@@ -724,9 +709,6 @@ def request_path(request) -> RequestPath:
 
 def serialize_request_path(found: RequestPath) -> dict[str, Any]:
     """The request path as every adapter returns it: its hops as the items."""
-
-    from .derived_reads import serialize_hop, serialize_layer
-    from .projection import iso
 
     hops = [serialize_hop(hop) for hop in found.hops]
     connection = found.connection

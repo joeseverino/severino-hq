@@ -12,16 +12,13 @@ from django.db import transaction
 from hq.domains.calendars.models import Entry
 from hq.platform.core.audit import operation_context
 
+from .record_errors import RecordConflict, RecordNotFound
 from .security import Capability, Principal
 
 
 @dataclass(frozen=True, slots=True)
 class DeleteCommand:
     confirm: str
-
-
-class ConflictError(ValueError):
-    """The caller tried to delete a newer version of an object."""
 
 
 def delete_record(
@@ -47,9 +44,9 @@ def delete_record(
         try:
             obj = model.objects.select_for_update().get(**lookup)
         except model.DoesNotExist as exc:
-            raise ValueError(f"{type_name} {target!r} was not found.") from exc
+            raise RecordNotFound("That record was not found.") from exc
         if expected_updated_at and obj.updated_at.isoformat() != expected_updated_at:
-            raise ConflictError(f"{type_name.title()} {target!r} changed after it was read.")
+            raise RecordConflict("That record changed after it was read.")
         label = str(obj)
         cleanup = after_commit(obj) if after_commit else None
         obj.delete()

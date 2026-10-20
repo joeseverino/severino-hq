@@ -184,7 +184,7 @@ class PageTests(TestCase):
         self.assertEqual(self.shown(page), [OTHER["label"]])
         self.assertEqual(self.shown(page, "aside_groups"), [ITEM["label"]])
         self.assertEqual(page.context["profile_action_count"], 1)
-        self.assertEqual(self.client.get(reverse("action_item_count")).json(), {"count": 1})
+        self.assertEqual(self.client.get(reverse("action_item_count")).context["profile_action_count"], 1)
 
     def test_the_dashboard_counts_what_waits_and_items_not_the_numbers_they_carry(self):
         # ITEM stands for two widgets and still waits: one thing needs you.
@@ -193,7 +193,7 @@ class PageTests(TestCase):
         with mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, OTHER]):
             page = self.client.get(reverse("dashboard"))
 
-        expected = self.client.get(reverse("action_item_count")).json()["count"]
+        expected = self.client.get(reverse("action_item_count")).context["profile_action_count"]
         self.assertEqual(expected, 1)
         self.assertEqual(page.context["action_queue_count"], expected)
         self.assertEqual(page.context["profile_action_count"], expected)

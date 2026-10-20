@@ -35,6 +35,7 @@ from .input_errors import pydantic_refusal
 from .integration_specs import ResourceSpec
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
+from .record_errors import RecordNotFound
 from .search_contracts import SearchDefinition, search_lines
 from .security import Capability, Principal, require_all
 
@@ -140,7 +141,6 @@ CORE_RESOURCE_SPECS = (
         InfrastructureResourceQuery,
         resource_context.get_managed_resource,
         "key",
-        not_found_errors=(infrastructure.NotFoundError,),
         search=ResourceSearchDefinition(
             "infrastructure.resources",
             ManagedResource,
@@ -162,7 +162,6 @@ CORE_RESOURCE_SPECS = (
         EmptyQuery,
         service_list.get_service,
         "hostname",
-        not_found_errors=(service_list.NotFoundError,),
         web_route="control_plane:services",
     ),
     ResourceSpec(
@@ -192,7 +191,6 @@ CORE_RESOURCE_SPECS = (
         BoundedQuery,
         derived_reads.get_machine,
         "name",
-        not_found_errors=(derived_reads.NotFoundError,),
         web_route="control_plane:machines",
     ),
     ResourceSpec(
@@ -205,7 +203,6 @@ CORE_RESOURCE_SPECS = (
         BoundedQuery,
         container_reads.get_container,
         "address",
-        not_found_errors=(container_reads.NotFoundError,),
         web_route="control_plane:containers",
     ),
     ResourceSpec(
@@ -219,7 +216,6 @@ CORE_RESOURCE_SPECS = (
         BoundedQuery,
         container_reads.get_upgrade,
         "address",
-        not_found_errors=(container_reads.NotFoundError,),
         web_route="control_plane:containers",
     ),
     ResourceSpec(
@@ -231,7 +227,6 @@ CORE_RESOURCE_SPECS = (
         BoundedQuery,
         derived_reads.get_domain,
         "name",
-        not_found_errors=(derived_reads.NotFoundError,),
         web_route="zones:index",
     ),
     ResourceSpec(
@@ -241,7 +236,6 @@ CORE_RESOURCE_SPECS = (
         Capability.READ,
         detail_handler=derived_reads.get_relationships,
         identifier="node",
-        not_found_errors=(derived_reads.NotFoundError,),
         web_route="control_plane:topology",
         pass_principal=True,
     ),
@@ -252,7 +246,6 @@ CORE_RESOURCE_SPECS = (
         Capability.READ,
         detail_handler=derived_reads.get_path,
         identifier="hostname",
-        not_found_errors=(derived_reads.NotFoundError,),
         web_route="control_plane:services",
     ),
     ResourceSpec(
@@ -284,7 +277,6 @@ CORE_RESOURCE_SPECS = (
         ReadingQuery,
         derived_reads.get_reading,
         "kind",
-        not_found_errors=(derived_reads.NotFoundError,),
         web_route="control_plane:connections",
     ),
     ResourceSpec(
@@ -296,7 +288,6 @@ CORE_RESOURCE_SPECS = (
         EmptyQuery,
         derived_reads.get_credential,
         "provider",
-        not_found_errors=(derived_reads.NotFoundError,),
         web_route="control_plane:connections",
     ),
     ResourceSpec(
@@ -320,7 +311,6 @@ CORE_RESOURCE_SPECS = (
         EmptyQuery,
         connection_context.get_connection_standing,
         "connection_ref",
-        not_found_errors=(derived_reads.NotFoundError,),
         web_route="control_plane:connections",
         pass_principal=True,
     ),
@@ -362,10 +352,6 @@ class InvalidResourceInput(ResourceError):
         refusal = pydantic_refusal(name, errors)
         super().__init__(refusal.message)
         self.errors = refusal.details
-
-
-class ResourceNotFound(ResourceError):
-    pass
 
 
 def resource_registry() -> dict[str, ResourceSpec]:
@@ -600,7 +586,11 @@ def get_resource(
     strict: bool = True,
     fields: Fields | None = None,
 ) -> dict[str, Any]:
-    """One record of a resource; ``fields`` is a field mask over it."""
+    """One record of a resource; ``fields`` is a field mask over it.
+
+    A record that is not there raises ``RecordNotFound``, whichever handler
+    looked for it.
+    """
 
     spec = _resource(name)
     _authorize(spec, principal)
@@ -613,9 +603,9 @@ def get_resource(
     try:
         result = spec.detail_handler(parsed, **_caller(spec, principal))
     except spec.not_found_errors as exc:
-        # A provider declares these types; their text is written for the
-        # provider, not for a caller, so answer with this module's own.
-        raise ResourceNotFound(f"No {name!r} record matches the requested identifier.") from exc
+        # An extension declares these types; their text is written for the
+        # extension, not for a caller, so answer with this module's own.
+        raise RecordNotFound("No record matches the requested identifier.") from exc
     if not isinstance(result, dict):
         raise RuntimeError(f"Resource {name!r} detail handler returned a non-object.")
     if fields is None:

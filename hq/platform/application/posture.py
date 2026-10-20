@@ -11,8 +11,22 @@ from django.conf import settings
 
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 from hq.platform.core.oidc import sso_only
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .ui import counted
+lazy from . import cadence, tailnet
+lazy from .connection_security import host_firewall_control, ingress_kinds, observed_connection_controls
+lazy from .connection_setup import docs_url, setups
+lazy from .connections import connection_rows
+lazy from .derivations import present
+lazy from .facts import stored_snapshots
+lazy from .github_estate import REPOSITORY_KIND
+lazy from .hq_context.release import repository
+lazy from .hq_self import hq_hostnames
+lazy from .routes import reverse
 
 NOT_READ = "Not read yet"
 
@@ -124,8 +138,6 @@ class Posture:
 
     @property
     def guide(self) -> str:
-        from .connection_setup import docs_url
-
         return docs_url("Posture.md")
 
 
@@ -153,9 +165,6 @@ def _from_control(control, kinds: tuple[str, ...]) -> Reading:
 def _readers(kinds: tuple[str, ...]) -> tuple[str, ...]:
     """The connection providers whose readings these kinds are, from their declarations."""
 
-    from hq.domains.control_plane.observations import OBSERVATIONS
-    from hq.domains.control_plane.providers import PROVIDERS
-
     found: list[str] = []
     for kind in kinds:
         if kind in OBSERVATIONS:
@@ -169,13 +178,6 @@ def _not_read(kinds: tuple[str, ...], evidence: str = NOT_READ) -> Reading:
     """A check nothing has read, with what would read it: the connection to
     add, else the controller to run, else only that the reading is due."""
 
-    from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-
-    from .cadence import controller_standing
-    from .connections import connection_rows
-    from .derivations import present
-    from .routes import reverse
-
     if evidence == "Not read":
         evidence = NOT_READ
     connected = {row.provider for row in connection_rows()}
@@ -183,14 +185,12 @@ def _not_read(kinds: tuple[str, ...], evidence: str = NOT_READ) -> Reading:
     if readers and not connected.intersection(readers):
         labels = " or ".join(CONNECTION_LABELS[provider] for provider in readers)
         return Reading(None, evidence, remedy=f"connect {labels}", remedy_url=_setup_url())
-    if not controller_standing(present()).known:
+    if not cadence.controller_standing(present()).known:
         return Reading(None, evidence, remedy="run the controller", remedy_url=reverse("control_plane:controller"))
     return Reading(None, evidence)
 
 
 def _setup_url() -> str:
-    from .routes import reverse
-
     return reverse("control_plane:connections") + "#connection-setup-heading"
 
 
@@ -199,17 +199,10 @@ def _sign_in(_inputs) -> Reading:
 
 
 def _edge(inputs) -> Reading:
-    from .connection_security import ingress_kinds
-
     return _from_control(inputs.edge, ingress_kinds())
 
 
 def _firewall(_inputs) -> Reading:
-    from hq.domains.control_plane.observations.host import FIREWALL_KIND
-
-    from .connection_security import host_firewall_control
-    from .facts import stored_snapshots
-
     return _from_control(
         host_firewall_control(next(iter(stored_snapshots().get(FIREWALL_KIND, ())), None)), (FIREWALL_KIND,)
     )
@@ -230,8 +223,6 @@ def _allows_everyone(policy) -> bool:
 
 
 def _tailnet_policy(_inputs) -> Reading:
-    from . import tailnet
-
     policy = tailnet.policy()
     if not policy.known and not policy.acls:
         return _not_read((TAILNET_POLICY_KIND,))
@@ -241,8 +232,6 @@ def _tailnet_policy(_inputs) -> Reading:
 
 
 def _tailnet_lock(_inputs) -> Reading:
-    from . import tailnet
-
     lock = tailnet.policy().lock
     if not lock:
         return _not_read((TAILNET_POLICY_KIND,))
@@ -253,8 +242,6 @@ def _tailnet_lock(_inputs) -> Reading:
 def _scope(inputs) -> Reading:
     """Unmet only where the provider takes a scoped token (its setup lists
     permissions); a login has no scoped form."""
-
-    from .connection_setup import setups
 
     scoped = {setup.provider for setup in setups() if setup.permissions}
     connections = tuple(connection for group in inputs.groups for connection in group.connections)
@@ -291,12 +278,8 @@ def _scoped_where_offered(connections, scoped: set[str]) -> Reading:
 
 
 def _approval(_inputs) -> Reading:
-    from .hq_context.release import repository
-
     found = repository(None)
     if found is None:
-        from .github_estate import REPOSITORY_KIND
-
         return _not_read((REPOSITORY_KIND,))
     production = found.production_environment
     if production is None:
@@ -379,9 +362,6 @@ def posture(inputs: Inputs) -> Posture:
 
 def estate_posture(groups) -> Posture:
     """For callers that have not read the proxy's control for HQ's name."""
-
-    from .connection_security import observed_connection_controls
-    from .hq_self import hq_hostnames
 
     _policy, edge = observed_connection_controls(next(iter(hq_hostnames()), ""))
     return posture(Inputs(edge, tuple(groups)))

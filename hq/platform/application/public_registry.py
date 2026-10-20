@@ -37,12 +37,25 @@ from hq.domains.control_plane.observations.public_registry import (
     UPSTREAM_KIND,
     VULNERABILITY_KIND,
 )
+lazy from hq.domains.control_plane.models import ProviderInventory
+lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
+lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .facts import record_read_at
+from .facts import Subject, inventory_records, readings, record_read_at
 from .locate import host_of
 from .lookup import HOSTNAME, allocation_of, entity_name
 from .reach import is_public, public_label
 from .security import Capability, Principal
+lazy from . import osv, services, zones
+lazy from .attestations import reduce
+lazy from .containers import containers
+lazy from .github_public import GitHubReadError, get
+lazy from .images import ImageRef, newer, version
+lazy from .infrastructure import declared_machines
+lazy from .inventory import record_inventory
+lazy from .oci_registry import RegistryPrivate, RegistryReadError, attestations, digest_of, labels, tags
+lazy from .osv import OSVReadError, finding
+lazy from .tailnet_presence import tailnet_presence
 
 REFRESH_AFTER = timedelta(days=1)
 # How long each reading stands, by how fast what it reads changes: who holds
@@ -94,11 +107,9 @@ def wanted_addresses() -> tuple[str, ...]:
     """Public addresses a service is served from, a machine is declared at, or a
     machine's tailnet client reports."""
 
-    from .infrastructure import declared_machines
-    from .services import service_catalog
-    from .tailnet_presence import tailnet_presence
-
-    found = {public_address(service.origin.address) for service in service_catalog() if service.origin is not None}
+    found = {
+        public_address(service.origin.address) for service in services.service_catalog() if service.origin is not None
+    }
     for machine in declared_machines():
         found.update(public_address(str(item)) for item in machine.get("addresses") or ())
     # Already filtered to public addresses by the reach ranges.
@@ -109,8 +120,6 @@ def wanted_addresses() -> tuple[str, ...]:
 
 def holders(addresses) -> dict[str, str]:
     """Who holds each public address, from the stored registry reading."""
-
-    from .facts import Subject, readings
 
     index = readings()
     found = {}
@@ -140,9 +149,7 @@ def public_endpoints(addresses) -> tuple[tuple[str, str], ...]:
 
 
 def wanted_domains() -> tuple[str, ...]:
-    from .zones import zone_names
-
-    return tuple(name for name in zone_names() if HOSTNAME.match(name))
+    return tuple(name for name in zones.zone_names() if HOSTNAME.match(name))
 
 
 def read_address(address: str, allocations: Callable[..., dict] = registry) -> dict[str, Any]:
@@ -177,12 +184,6 @@ def read_domain(domain: str, registrations: Callable[..., dict] = domain_registr
 def wanted_images() -> dict[str, tuple[str, ...]]:
     """``{registry/repository: the references running}`` for every image a container runs."""
 
-    from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
-    from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-
-    from .facts import inventory_records
-    from .images import ImageRef
-
     # A reference pinned by digest alone names no tag; the machine's copy says
     # which tag it was pulled as, so that tag's digest can be read too.
     pulled_as: dict[tuple[str, str], list[str]] = {}
@@ -209,16 +210,12 @@ def wanted_upstreams() -> tuple[str, ...]:
     """``owner/repository`` for every GitHub repository a running image is
     built from, however that is known (``application.containers.source_of``)."""
 
-    from .containers import containers
-
     return tuple(sorted({item.standing.upstream for item in containers() if item.standing.upstream}))
 
 
 def wanted_digests() -> tuple[str, ...]:
     """``registry/repository@sha256:…`` for what runs, what its tag names now,
     and what an upgrade would pin: every digest a page compares."""
-
-    from .containers import containers
 
     found = set()
     for item in containers():
@@ -231,8 +228,6 @@ def wanted_digests() -> tuple[str, ...]:
 
 def wanted_vulnerabilities() -> tuple[str, ...]:
     """The digests whose publisher attached a package list to check."""
-
-    from .facts import inventory_records
 
     wanted = set(wanted_digests())
     return tuple(
@@ -247,9 +242,6 @@ def wanted_vulnerabilities() -> tuple[str, ...]:
 def read_image(name: str, references: tuple[str, ...]) -> dict[str, Any]:
     """The image's version tags and build labels, and the digest behind each
     running tag and the newest tag of the same shape: what an upgrade would pin."""
-
-    from .images import ImageRef, newer, version
-    from .oci_registry import RegistryPrivate, RegistryReadError, digest_of, labels, tags
 
     images = [image for image in (ImageRef.parse(reference) for reference in references) if image is not None]
     if not images:
@@ -292,10 +284,6 @@ def read_image(name: str, references: tuple[str, ...]) -> dict[str, Any]:
 def read_digest(key: str) -> dict[str, Any]:
     """The SBOM and provenance attached to one digest, reduced to what HQ uses."""
 
-    from .attestations import reduce
-    from .images import ImageRef
-    from .oci_registry import RegistryPrivate, RegistryReadError, attestations
-
     image = ImageRef.parse(key)
     if image is None or not image.digest:
         raise LookupNotFound(f"{key} names no digest.")
@@ -323,9 +311,6 @@ def vulnerability_reader(
     every digest one refresh reads, and what it leaves is read on the next.
     """
 
-    from .facts import inventory_records
-    from .osv import OSVReadError, detail, finding, matches
-
     packages = {
         str(record.get("digest")): tuple(record.get("packages") or ())
         for _snapshot, record in inventory_records(DIGEST_KIND)
@@ -341,13 +326,13 @@ def vulnerability_reader(
             return {**bare, "modified": ""}, False
         remaining[0] -= 1
         try:
-            return finding(detail(identifier), purl, modified), True
+            return finding(osv.detail(identifier), purl, modified), True
         except OSVReadError:
             return {**bare, "modified": ""}, False
 
     def read(key: str) -> dict[str, Any]:
         try:
-            checked, found = matches(packages.get(key, ()))
+            checked, found = osv.matches(packages.get(key, ()))
         except OSVReadError as exc:
             raise LookupUnavailable(str(exc)) from exc
         findings, unresolved = [], []
@@ -377,8 +362,6 @@ def _github_link(value: Any) -> str:
 
 
 def read_upstream(repository: str) -> dict[str, Any]:
-    from .github_public import GitHubReadError, get
-
     try:
         releases = get(f"/repos/{repository}/releases?per_page={UPSTREAM_RELEASES}", missing_ok=True)
         advisories = get(f"/repos/{repository}/security-advisories?state=published&per_page=100", missing_ok=True)
@@ -446,8 +429,6 @@ def _report(
     nothing was read, so its age says when HQ last checked it held all of it.
     """
 
-    from hq.domains.control_plane.models import ProviderInventory
-
     stored = ProviderInventory.objects.filter(kind=kind).first()
     kept = {str(record.get(key, "")): record for record in (stored.records if stored is not None else ())}
     wanted = tuple(dict.fromkeys(subjects))
@@ -512,8 +493,6 @@ def _registries(addresses, domains, allocations, registrations, now, force) -> d
 
 
 def _held_findings() -> dict[tuple[str, str, str], Mapping[str, Any]]:
-    from .facts import inventory_records
-
     return {
         (str(item.get("id", "")), str(item.get("package", "")), str(item.get("installed", ""))): item
         for _snapshot, record in inventory_records(VULNERABILITY_KIND)
@@ -526,8 +505,6 @@ def _images(now: datetime, force: bool, principal: Principal) -> list[Any]:
     tags name the digests, a digest's provenance can name the source, and
     its package list is what OSV is asked about. Each is stored before the
     next is chosen."""
-
-    from .inventory import record_inventory
 
     images = wanted_images()
     stages = (
@@ -569,8 +546,6 @@ def refresh(
     attestations, which cannot have changed.
     """
 
-    from .inventory import record_inventory
-
     principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
     now = timezone.now()
     kinds = (ADDRESS_KIND, DOMAIN_KIND)
@@ -589,11 +564,6 @@ def refresh(
 def registry_due() -> bool:
     """Whether a sweep found an image, or a digest of one, that HQ has not
     read. Cheap enough to ask on every sweep: two stored readings, no join."""
-
-    from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
-
-    from .facts import inventory_records
-    from .images import ImageRef
 
     wanted = wanted_images()
     held_images = {str(record.get("image")) for _snapshot, record in inventory_records(IMAGE_KIND)}

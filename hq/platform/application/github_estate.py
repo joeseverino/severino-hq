@@ -12,19 +12,21 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any
 
-from hq.domains.control_plane.observations.github import REPOSITORY_KIND
+from hq.domains.control_plane.observations.github import REPOSITORY_KIND, RepositoryRecord
 
 from .containers import SERIOUS
 from .derivations import reached, whole
 from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
-from .github_public import github_repository
 from .item_help import cannot_help, commands
 from .projection import read_once
 from .timestamps import moment
 from .ui import Insight, counted
 from .workflow_contracts import ActionLink
+lazy from .facts import snapshots_of
+lazy from .images import GHCR, ImageRef
+lazy from .projects import repository_key
 
 # An admission artifact that lapses stops the composition admitting its
 # extension, and nothing else says so until a deploy fails.
@@ -47,8 +49,6 @@ class Repository:
 
     def __getattr__(self, item: str) -> Any:
         """A field of the record, or the reading schema's default for it."""
-
-        from hq.domains.control_plane.observations.github import RepositoryRecord
 
         if item in self.record:
             return self.record[item]
@@ -175,8 +175,6 @@ def repositories() -> dict[str, Repository]:
 
 
 def _load() -> dict[str, Repository]:
-    from .facts import snapshots_of
-
     found: dict[str, Repository] = {}
     for snapshot in snapshots_of(REPOSITORY_KIND):
         refused_by_repo: dict[str, list[str]] = {}
@@ -193,8 +191,11 @@ def _load() -> dict[str, Repository]:
 def repository_for(url: str) -> Repository | None:
     """The repository a project's URL names, when the App reads it."""
 
-    parts = github_repository(url)
-    return repositories().get("/".join(parts)) if parts else None
+    def load() -> dict[str, Repository]:
+        return {repository_key(name): repo for name, repo in repositories().items()}
+
+    key = repository_key(url)
+    return read_once("github_estate.by_key", load).get(key) if key else None
 
 
 def attention() -> tuple[Insight, ...]:
@@ -371,8 +372,6 @@ def build_of(image: str) -> dict[str, Any] | None:
     ``ghcr.io/owner/name/composition@sha256:…``, as a container reports it.
     None for an image not pinned by digest or not read through the App.
     """
-
-    from .images import GHCR, ImageRef
 
     parsed = ImageRef.parse(image)
     if parsed is None or parsed.registry != GHCR or not parsed.digest:

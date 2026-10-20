@@ -4,9 +4,19 @@ Each provider's own console and the operator's declared links, as the
 navigation offers them.
 """
 
+lazy import json
+lazy from urllib.parse import urlsplit
+
+lazy from django.conf import settings
+
 from hq.domains.control_plane.models import ProviderConnection
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.platform.application.routes import reverse
 
 from .derivations import derivation
+lazy from .labels import human_label
+lazy from .pins import DASHBOARD_LINK, pinned
+lazy from .published_sites import public_sites
 
 # Declared next to the domains that emit them, so a gateway can import the
 # record without importing this reader. Re-exported here as the one name
@@ -26,12 +36,6 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
     deployment's address published to everyone who clones it, and stale for the
     deployment it belonged to.
     """
-
-    from urllib.parse import urlsplit
-
-    from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-
-    from .labels import human_label
 
     found = []
     for connection in ProviderConnection.objects.all():
@@ -62,8 +66,6 @@ def outward_links(user=None) -> tuple[list[dict[str, str]], bool]:
     that starts empty teaches nobody that it can be filled.
     """
 
-    from .pins import DASHBOARD_LINK, pinned
-
     offered = offered_links()
     chosen = pinned(user, DASHBOARD_LINK)
     if not chosen:
@@ -80,10 +82,6 @@ def offered_links() -> list[dict[str, str]]:
 
     The same for every reader: which of them a person chose is applied after.
     """
-
-    from hq.platform.application.routes import reverse
-
-    from .published_sites import public_sites
 
     return [
         {
@@ -104,8 +102,6 @@ def link_choices(user=None) -> list[dict[str, object]]:
     panel would not render or miss something it would.
     """
 
-    from .pins import DASHBOARD_LINK, pinned
-
     chosen = pinned(user, DASHBOARD_LINK)
     offered = offered_links()
     return [{**item, "chosen": item["href"].lower() in chosen} for item in offered]
@@ -119,10 +115,6 @@ def operator_links() -> list[dict[str, str]]:
     fatal: a dashboard is where an operator goes to fix things, and refusing to
     render it over a bad link is the least useful moment to fail.
     """
-
-    import json
-
-    from django.conf import settings
 
     raw = str(getattr(settings, "SEVERINO_DASHBOARD_LINKS", "") or "").strip()
     if not raw:

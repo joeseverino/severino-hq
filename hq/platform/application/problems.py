@@ -17,12 +17,13 @@ from typing import Any
 from .derivations import derivation
 from .derived_inputs import QUEUE_READS, estate_variant
 from .first_seen import about, look_due, note_open
+lazy from . import domains
+lazy from .dashboard import queue_item
+lazy from .projection import projection_scope
 
 
 def _host_entries() -> tuple[dict[str, Any], ...]:
     """The host's own queue, from the one derivation that composes it."""
-
-    from . import domains
 
     return domains._host_attention()
 
@@ -30,8 +31,6 @@ def _host_entries() -> tuple[dict[str, Any], ...]:
 @derivation("attention.by_subject", reads=QUEUE_READS, vary=estate_variant)
 def _by_subject() -> dict[str, tuple[dict[str, Any], ...]]:
     """The host's open items by the page each is about, in the queue's order."""
-
-    from .dashboard import queue_item
 
     found: dict[str, list[dict[str, Any]]] = {}
     for entry in _host_entries():
@@ -68,8 +67,6 @@ def problems_by_part(parts: Mapping[str, About]) -> tuple[tuple[str, dict[str, A
     """The open problems about any of several parts of a page, each with the
     first part it is about, in the queue's order."""
 
-    from .dashboard import queue_item
-
     tests = [
         (
             name,
@@ -104,8 +101,6 @@ def note_open_problems() -> bool:
     Called where a report was just stored. A report that finds no look due
     costs one read.
     """
-
-    from .projection import projection_scope
 
     if not look_due():
         return False

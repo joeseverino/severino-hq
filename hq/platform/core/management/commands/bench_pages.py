@@ -58,6 +58,8 @@ from hq.platform.application.resources import describe_resources
 from hq.platform.application.routes import routed
 from hq.platform.application.security import host_capabilities
 from hq.platform.core.bench import ZONES, Seeded, seed, unchanged_sweep
+lazy from hq.domains.jobs.testing import held_jobs
+lazy from hq.platform.core.models import LinkedAccount
 
 # Routes that are not a page an operator loads. Named, with the reason.
 SKIPPED = {
@@ -142,8 +144,6 @@ class Action:
 
 
 def _link_github(seeded: Seeded) -> None:
-    from hq.platform.core.models import LinkedAccount
-
     LinkedAccount.objects.create(user=seeded.user, provider="github", login="example-user")
 
 
@@ -257,8 +257,6 @@ def _actions(seeded: Seeded) -> tuple[list[tuple[str, str, Action]], list[tuple[
 def _held_outside() -> Iterator[None]:
     """Hold what an action does outside the database: the doorbell stays
     unrung and a job's work is recorded, not run."""
-
-    from hq.domains.jobs.testing import held_jobs
 
     with mock.patch("hq.platform.application.cadence._touch"), held_jobs():
         yield

@@ -341,8 +341,8 @@ Always `{"ok": false, "error": {"code", "message", "details"}}`.
 | `400` | `invalid_input`: the request did not match its schema. Fix the fields it names. |
 | `401` | No token, or it failed verification. Mint a new one. |
 | `403` | Verified, but this client was not granted that capability. Fix its scope. |
-| `404` | No such capability on this deployment. |
-| `409` | The domain refused the command, or a retry key was reused with different input. |
+| `404` | `unknown_capability`: no such capability on this deployment, or `not_found`: the record the command names does not exist. |
+| `409` | `conflict`: the record changed after it was read or clashes with another, `operation_failed`: the domain refused the command, or `idempotency_conflict`: a retry key was reused with different input. |
 | `413` | The request exceeds the deployment's body-size safety limit. |
 | `415` | A capability request was not sent as `application/json`. |
 | `503` | `SEVERINO_API_RESOURCE` is unset here. |

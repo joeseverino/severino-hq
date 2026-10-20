@@ -9,6 +9,7 @@ from .capabilities import CapabilitySpec
 from .entity_links import kind_label
 from .integrations import integration_graph
 from .projection import MAX_PAGE_SIZE
+from .record_errors import RecordNotFound
 from .resources import ResourceError, get_resource, list_resource
 from .security import Principal
 
@@ -103,7 +104,7 @@ def with_requested_target(
         return options
     try:
         detail = get_resource(spec.subject_resource, target, principal=principal)
-    except ResourceError:  # an unknown or malformed target is not offered
+    except ResourceError, RecordNotFound:  # an unknown, malformed or missing target is not offered
         return options
     item = detail.get("resource", detail)
     if not isinstance(item, dict):

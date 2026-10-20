@@ -13,10 +13,15 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
+lazy from django.utils.text import slugify
+
 from hq.domains.control_plane.names import names_a_host, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS, registry_label
 from hq.platform.application.routes import reverse
+
+lazy from .infrastructure import enabled_resources
+lazy from .projection import read_once
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,9 +140,6 @@ def record_names() -> Mapping[str, str]:
     that list those pass the name themselves.
     """
 
-    from .infrastructure import enabled_resources
-    from .projection import read_once
-
     return read_once(
         "entity_links.record_names",
         lambda: {
@@ -247,8 +249,6 @@ def container_link(host: str, name: str, watcher: str = "") -> EntityLink:
     """A container by its name: its own page when a record tracks it
     (``watcher``), else its row on its machine's page, which every container
     has. No link when neither is known."""
-
-    from django.utils.text import slugify
 
     if watcher:
         return entity_link("resource", watcher, label=name)

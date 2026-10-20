@@ -8,22 +8,28 @@ the finding, so this module does not import it.
 """
 
 from typing import Any
+lazy from urllib.parse import urlsplit
 
 from hq.domains.control_plane.provider_adapters.contracts import (
     ADDRESS_FAILURE,
     NETWORK_FAILURE,
     REFUSALS,
 )
+lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
+from .connection_lifecycle import UNREPORTED_FACT
 from .derivations import reached
 from .finding_model import THEN_READ_NOW, FindingRule, OperatorStep, built_findings, fact_values
 from .timestamps import moment
 from .ui import counted
+lazy from .credential_mint import address_fields
+lazy from .expiry import days_until
+lazy from .moments import span
 
 # Fact keys a connection node carries; ``topology`` writes them.
 FAILURE = "connection-failure"
 # When its controller's report came with no connections at all.
-UNREPORTED = "connection-unreported"
+UNREPORTED = UNREPORTED_FACT
 ENDPOINT = "connection-endpoint"
 MISSING = "credential-missing"
 UNSEEN = "credential-unseen"
@@ -105,8 +111,6 @@ def failure_of_node(node: Any) -> str:
 def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
     """The fix for a connection that does not answer, following why it did not."""
 
-    from .credential_mint import address_fields
-
     failure = failure_of_node(node)
     endpoint = next(iter(fact_values(node, ENDPOINT)), "")
     if failure == ADDRESS_FAILURE:
@@ -145,8 +149,6 @@ def _service(node: Any) -> str:
 
 
 def _host(endpoint: str) -> str:
-    from urllib.parse import urlsplit
-
     text = str(endpoint or "").strip()
     if "://" in text:
         return urlsplit(text).hostname or ""
@@ -187,11 +189,6 @@ def missing_permissions(estate: Any) -> tuple[dict[str, Any], ...]:
 
 def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     """A credential inside its renewal window, or past it."""
-
-    from hq.domains.control_plane.provider_spec import expiry_phrase
-
-    from .expiry import days_until
-    from .moments import span
 
     found = []
     for node in estate.nodes():

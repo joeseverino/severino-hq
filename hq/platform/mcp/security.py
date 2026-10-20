@@ -3,7 +3,7 @@
 import ipaddress
 import logging
 from collections.abc import Awaitable, Callable, Iterable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
@@ -12,9 +12,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from hq.platform.application import request_context
 from hq.platform.core.network import strict_host
 from hq.platform.mcp.identity import reset_principal, set_principal
-
-if TYPE_CHECKING:
-    from hq.platform.application.security import Principal
+lazy from hq.platform.application.security import Principal
 
 logger = logging.getLogger("severino.mcp")
 

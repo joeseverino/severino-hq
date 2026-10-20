@@ -4,10 +4,6 @@ The controller bridge is started from here and served elsewhere: on a private
 Unix socket, never on this application's listener.
 """
 
-from hq.config.first_use import load_on_first_use
-
-load_on_first_use()
-
 import contextlib
 import os
 
@@ -15,9 +11,20 @@ from django.conf import settings
 from django.core.asgi import get_asgi_application
 from starlette.applications import Starlette
 from starlette.routing import Mount
+lazy from asgiref.sync import sync_to_async
 
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
+lazy from hq.domains.control_plane.bridge_application import application as bridge_application
+lazy from hq.platform.api import security as api_security
+lazy from hq.platform.application.agent_access import agents_paused
+lazy from hq.platform.application.agent_registry import observe
+lazy from hq.platform.application.denials import record_denial
+lazy from hq.platform.core import doorbell, unix_server
+lazy from hq.platform.core.ahead import keeping
+lazy from hq.platform.mcp.identity import token_principal
+lazy from hq.platform.mcp.security import MCPBoundary
+lazy from hq.platform.mcp.server import mcp
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
 
@@ -27,16 +34,6 @@ django_application = get_asgi_application()
 # No compressor: the image build compressed each asset once and the mount sends
 # that copy.
 static_application = TrustedNetworkASGI(CachedStaticFiles(directory=settings.STATIC_ROOT, check_dir=False))
-
-from asgiref.sync import sync_to_async
-
-from hq.platform.api import security as api_security
-from hq.platform.application.agent_access import agents_paused
-from hq.platform.application.agent_registry import observe
-from hq.platform.application.denials import record_denial
-from hq.platform.mcp.identity import token_principal
-from hq.platform.mcp.security import MCPBoundary
-from hq.platform.mcp.server import mcp
 
 
 def verify_agent_token(bearer: str):
@@ -90,10 +87,8 @@ async def bridge_serving():
     if not settings.SEVERINO_BRIDGE_SOCKET:
         yield
         return
-    from hq.domains.control_plane.bridge_application import application as bridge_application
-    from hq.platform.core.unix_server import serving
 
-    async with serving(bridge_application, settings.SEVERINO_BRIDGE_SOCKET):
+    async with unix_server.serving(bridge_application, settings.SEVERINO_BRIDGE_SOCKET):
         yield
 
 
@@ -101,8 +96,6 @@ async def bridge_serving():
 async def deriving_ahead():
     """Derived answers asked again as their inputs change, for as long as the
     web application runs, so a request finds its answer stored."""
-
-    from hq.platform.core.ahead import keeping
 
     with keeping():
         yield
@@ -112,9 +105,7 @@ async def deriving_ahead():
 async def ringing_when_due():
     """Run the doorbell (hq.platform.core.doorbell) for the application's lifetime."""
 
-    from hq.platform.core.doorbell import ringing_when_due as ringing
-
-    with ringing():
+    with doorbell.ringing_when_due():
         yield
 
 

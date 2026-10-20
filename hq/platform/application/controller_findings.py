@@ -26,11 +26,11 @@ from .freshness import freshness
 from .infrastructure import DRIFT_LABEL
 from .labels import lower_first, plural
 from .moments import ago, duration
-from .reading_facts import ago as _since
 from .render_status_findings import RENDERER_UNITS
 from .topology_lenses import _STALE_AFTER
 from .topology_model import TopologyNode
 from .ui import counted
+lazy from .timestamps import moment
 
 # The background job that runs the controller on its machine (deploy/systemd).
 CONTROLLER_UNIT = "severino-hq-controller.service"
@@ -230,7 +230,8 @@ def _controller_stopped(estate: FindingEstate, machine: str, controller: str, ki
         subject=controller,
         title=(
             f"The controller on {machine} has not read "
-            f"{counted(len(kinds), 'type of record', 'types of record')}" + (f" since {ago(last)}" if last else "")
+            f"{counted(len(kinds), 'type of record', 'types of record')}"
+            + (f" for {duration(since(last, now=estate.now))}" if last else "")
         ),
         severity="serious",
         explanation="Everything listed is read by the same controller, so check it first.",
@@ -271,7 +272,6 @@ def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
     since = fact_values(node, "drift-since")
     if not since:
         return ()
-    from .timestamps import moment
 
     first = moment(since[0])
     near = fact_values(node, "drift-near")
@@ -560,7 +560,7 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
     for controller_id, connections in sorted(held.items()):
         node = by_id[controller_id]
         names = ", ".join(sorted(connection.label for connection in connections))
-        since = _since(min(fact_values(connection, UNREPORTED)[0] for connection in connections), estate.now)
+        since = ago(min(fact_values(connection, UNREPORTED)[0] for connection in connections), estate.now)
         found.append(
             Finding(
                 rule="connections-lost",

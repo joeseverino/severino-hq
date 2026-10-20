@@ -14,6 +14,7 @@ from hq.platform.application import business_use
 from hq.platform.application.money import quantize_money
 from hq.platform.application.references import CERTIFICATE, Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel, free_slug
+lazy from hq.platform.application.moments import when_day
 
 PAYMENT_METHOD_CHOICES = [
     ("cash", "Cash"),
@@ -111,7 +112,5 @@ class Asset(TimestampedModel):
     @property
     def bought_note(self) -> str:
         """When it was bought, beside its name where something else lists it."""
-
-        from hq.platform.application.moments import when_day
 
         return f"Bought {when_day(self.purchase_date)}" if self.purchase_date else ""

@@ -2,6 +2,7 @@
 
 import logging
 from typing import override
+lazy from urllib.parse import urlsplit
 
 import requests
 from django.conf import settings
@@ -9,6 +10,14 @@ from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
 from django.core.exceptions import PermissionDenied, SuspiciousOperation
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from mozilla_django_oidc.middleware import SessionRefresh
+lazy from django.utils import timezone
+lazy from django.utils.http import url_has_allowed_host_and_scheme
+
+lazy from hq.platform.application.avatars import SESSION_KEY, remember_avatar
+lazy from hq.platform.application.linked_accounts import SIGN_IN, bind_sign_in, record_claimed_accounts, sign_in_subject
+lazy from hq.platform.core.audit import record_event
+lazy from hq.platform.core.models import AuditLog
+lazy from hq.platform.core.outbound import allowed
 
 logger = logging.getLogger("severino.auth")
 
@@ -51,8 +60,6 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         the provider, so it has to be told why it stopped (``sso_failed``).
         """
 
-        from hq.platform.core.outbound import allowed
-
         try:
             with allowed("oidc"):
                 return super().authenticate(request, **kwargs)
@@ -65,8 +72,6 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
                 else "HQ could not reach Pocket ID to finish signing in."
             )
             logger.warning(reason, extra={"event": "auth.sso.exchange_failed", "status": status})
-            from hq.platform.core.audit import record_event
-            from hq.platform.core.models import AuditLog
 
             record_event(action=AuditLog.Action.DENIED, type_label="Sign-in", message=reason)
             session = getattr(request, "session", None)
@@ -110,14 +115,11 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         if user is None:
             return None
         self._remember_picture(user, access_token)
-        from hq.platform.application.linked_accounts import bind_sign_in, record_claimed_accounts
 
         bind_sign_in(user, self._subject_key(payload))
         record_claimed_accounts(user, payload)
         session = getattr(getattr(self, "request", None), "session", None)
         if session is not None:
-            from django.utils import timezone
-
             session.setdefault(SIGNED_IN_SESSION_KEY, timezone.now().isoformat())
             principal = _tailscale_principal(payload)
             if principal:
@@ -132,8 +134,6 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         Never a reason for a sign-in to fail: whatever goes wrong here, the
         person is still who the provider said, without a picture.
         """
-
-        from hq.platform.application.avatars import SESSION_KEY, remember_avatar
 
         session = getattr(getattr(self, "request", None), "session", None)
         try:
@@ -177,8 +177,6 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
     @staticmethod
     def _subject_key(claims) -> str:
-        from hq.platform.application.linked_accounts import sign_in_subject
-
         subject = claims.get("sub")
         if not isinstance(subject, str) or not subject.strip():
             return ""
@@ -194,8 +192,6 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         subject alone decides, so renaming someone does not hand them another
         person's account.
         """
-
-        from hq.platform.application.linked_accounts import SIGN_IN
 
         key = self._subject_key(claims)
         if not key:
@@ -294,10 +290,6 @@ class HQSessionRefresh(SessionRefresh):
 
 
 def _page_behind(request) -> str:
-    from urllib.parse import urlsplit
-
-    from django.utils.http import url_has_allowed_host_and_scheme
-
     referer = request.headers.get("referer", "")
     if url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
         parts = urlsplit(referer)

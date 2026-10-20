@@ -35,6 +35,7 @@ from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
 from hq.platform.search_index.services import rebuild_search_index
+lazy from hq.domains.control_plane.bridge_actions import ACTIONS
 
 VENDORS = (
     "Example Hosting",
@@ -81,8 +82,6 @@ def unchanged_sweep() -> None:
     new. The first sweep of a seeded estate adopts what it finds; every one
     after it changes nothing but when it was read.
     """
-
-    from hq.domains.control_plane.bridge_actions import ACTIONS
 
     by_name = {action.name: action for action in ACTIONS}
     inventory = {

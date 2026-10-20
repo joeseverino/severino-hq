@@ -4,6 +4,8 @@ from typing import ClassVar, override
 
 from django.views import View
 from django.views.generic import TemplateView
+lazy from django.http import Http404, JsonResponse
+lazy from django.utils import timezone
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, read_now_payload
 from hq.platform.application.capabilities import execute_capability
@@ -11,6 +13,18 @@ from hq.platform.application.connection_context import connections_context
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
+lazy from hq.platform.application.asks import (
+    FAILED,
+    WATCH_LIMIT,
+    Ask,
+    Standing,
+    answer,
+    read_standing,
+    read_status_url,
+    watched,
+)
+lazy from hq.platform.application.cadence import forced_kinds
+lazy from hq.platform.application.timestamps import moment
 
 
 class ConnectionListView(PageMixin, TemplateView):
@@ -47,8 +61,6 @@ class ConnectionListView(PageMixin, TemplateView):
         actions.append(PageAction("How I am connected", inspect, modal="connection"))
         read_all = found.read_all
         if read_all:
-            from hq.platform.application.asks import Ask
-
             actions.append(Ask(read_all.label, read_all.url, title=read_all.reason))
         return tuple(actions)
 
@@ -70,11 +82,6 @@ class ReadNowView(View):
     http_method_names: ClassVar[list[str]] = ["post"]
 
     def post(self, request):
-        from django.utils import timezone
-
-        from hq.platform.application.asks import FAILED, Standing, answer, read_standing, read_status_url
-        from hq.platform.application.cadence import forced_kinds
-
         back = reverse("control_plane:connections")
         payload = read_now_payload({**request.GET.dict(), **request.POST.dict()})
         asked = timezone.now()
@@ -105,11 +112,6 @@ class ReadStatusView(View):
     http_method_names: ClassVar[list[str]] = ["get"]
 
     def get(self, request):
-        from django.http import Http404, JsonResponse
-
-        from hq.platform.application.asks import WATCH_LIMIT, read_standing, watched
-        from hq.platform.application.timestamps import moment
-
         token = str(request.GET.get("watch", ""))
         found = watched(token) if 0 < len(token) <= WATCH_LIMIT else None
         asked = moment(found.get("asked", "")) if found else None

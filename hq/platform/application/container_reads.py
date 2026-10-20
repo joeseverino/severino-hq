@@ -10,10 +10,9 @@ from collections.abc import Callable
 from typing import Any
 
 from .projection import page_size, projection_scope
-
-
-class NotFoundError(ValueError):
-    """No running container answers to the address."""
+from .record_errors import RecordNotFound
+lazy from .containers import containers
+lazy from .upgrades import plans
 
 
 def _moment(value: Any) -> str | None:
@@ -174,21 +173,17 @@ def _one(found: Callable[[], list[Any]], address: str, serialize: Callable[[Any]
     with projection_scope():
         item = next((each for each in found() if getattr(each, "container", each).address == address), None)
         if item is None:
-            raise NotFoundError(address)
+            raise RecordNotFound("No container answers to that address.")
         return serialize(item)
 
 
 def list_containers(*, limit: int = 50) -> dict[str, Any]:
     """Every running container, worst standing first, as the containers page lists them."""
 
-    from .containers import containers
-
     return _listed(containers, serialize_container, limit)
 
 
 def get_container(address: str) -> dict[str, Any]:
-    from .containers import containers
-
     return _one(containers, address, serialize_container)
 
 
@@ -229,12 +224,8 @@ def serialize_plan(plan: Any) -> dict[str, Any]:
 def list_upgrades(*, limit: int = 50) -> dict[str, Any]:
     """Every container something newer is published for, and what upgrading it would take."""
 
-    from .upgrades import plans
-
     return _listed(plans, serialize_plan, limit)
 
 
 def get_upgrade(address: str) -> dict[str, Any]:
-    from .upgrades import plans
-
     return _one(plans, address, serialize_plan)

@@ -17,6 +17,8 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+lazy from hq.platform.application.infrastructure import _NamesByConnection
+
 from .models import ManagedResource
 from .provider_spec import ProviderResolutionContext
 from .providers import resolve_provider_spec
@@ -56,12 +58,9 @@ def desired_fingerprint(
     """
 
     if names_at is None:
-        # Deferred on purpose: application.infrastructure imports this module,
-        # so at module scope this is a cycle. Inside the call it is resolved
-        # after both modules exist, which is the whole reason for the default
-        # being constructed here rather than in the signature.
-        from hq.platform.application.infrastructure import _NamesByConnection
-
+        # Built per call: as the signature's default it would be evaluated at
+        # import, inside the cycle with application.infrastructure, which
+        # imports this module.
         names_at = _NamesByConnection()
     desired: dict[str, Any] = {"kind": kind, "spec": spec, "enabled": enabled}
     try:

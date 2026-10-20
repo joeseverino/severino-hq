@@ -20,6 +20,8 @@ from .contracts import route_url
 from .security import AuthorizationError, Principal
 from .ui import counted
 from .workflow_contracts import ActionLink
+lazy from . import capabilities
+lazy from .capabilities import authorize_capability
 
 
 class ConnectionLinkSpec(Protocol):
@@ -103,12 +105,7 @@ def _permitted_spec(name: str, principal: Principal):
 
     if not name:
         return None
-    # Imported here because capabilities compose plugin specs, which themselves
-    # may declare connections. Keeping the dependency at call time avoids a
-    # registry import cycle while retaining one authorization implementation.
-    from .capabilities import authorize_capability, capability_registry
-
-    spec = capability_registry().get(name)
+    spec = capabilities.capability_registry().get(name)
     if spec is None:
         return None
     try:

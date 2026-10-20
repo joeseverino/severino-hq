@@ -8,7 +8,7 @@ shape; adapters only parse input and render output.
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django.conf import settings
 from django.db import transaction
@@ -18,24 +18,53 @@ from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
 from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
+lazy from hq.domains.jobs.runner import JobConflict, start
+lazy from hq.platform.application.routes import reverse
 
 from .domains import records_of
-from .projection import addressable, iso, listing
+from .github_public import github_repository
+from .projection import addressable, iso, listing, read_once
+from .record_errors import RecordConflict, RecordNotFound
+from .record_links import linked
 from .security import Principal
-from .sensitivity import safe_doc_ids
 from .ui import counted
 from .upserts import upsert_by_slug
+lazy from . import capabilities
+lazy from .action_links import READ_NOW_CAPABILITY
+lazy from .entity_links import EntityLink, entity_link
+lazy from .github_estate import repository_for
+lazy from .plugins import installed_plugins
+lazy from .timestamps import moment
 
-if TYPE_CHECKING:
-    from .entity_links import EntityLink
+
+def repository_key(repository: str) -> str:
+    """How HQ compares repositories: ``owner/name``, lower-cased, as GitHub does.
+
+    Takes a repository's URL or its ``owner/name``. A URL that names no GitHub
+    repository has no key.
+    """
+
+    if "://" not in repository:
+        return repository.strip().lower()
+    parts = github_repository(repository)
+    return "/".join(parts).lower() if parts else ""
 
 
-class NotFoundError(ValueError):
-    """A requested HQ object does not exist."""
+def projects_by_repository() -> dict[str, Project]:
+    """Every project that names a GitHub repository, by its ``repository_key``.
 
+    Read once per projection. Look one up with ``repository_key`` of the other
+    side's URL or name.
+    """
 
-class ConflictError(ValueError):
-    """The caller tried to write over a newer version of an object."""
+    def load() -> dict[str, Project]:
+        found = {}
+        for project in Project.objects.exclude(repository_url=""):
+            if key := repository_key(project.repository_url):
+                found[key] = project
+        return found
+
+    return read_once("projects.by_repository", load)
 
 
 def hq_sections(project: Project) -> tuple[tuple[str, str], ...]:
@@ -46,18 +75,12 @@ def hq_sections(project: Project) -> tuple[tuple[str, str], ...]:
     other. The link opens the extension's first page in the nav.
     """
 
-    from hq.platform.application.routes import reverse
-
-    from .github_public import github_repository
-    from .plugins import installed_plugins
-
-    parts = github_repository(project.repository_url)
-    if not parts:
+    repository = repository_key(project.repository_url)
+    if not repository:
         return ()
-    repository = "/".join(parts).lower()
     found = []
     for manifest in installed_plugins():
-        if manifest.source_repository.lower() != repository or not manifest.navigation:
+        if repository_key(manifest.source_repository) != repository or not manifest.navigation:
             continue
         home = min(manifest.navigation, key=lambda item: item.order)
         found.append((manifest.name, reverse(home.route)))
@@ -71,26 +94,12 @@ def built_from(plugin_id: str) -> EntityLink | None:
     project names the same one. None when no project does.
     """
 
-    from .entity_links import entity_link
-    from .github_public import github_repository
-    from .plugins import installed_plugins
-    from .projection import read_once
-
     wanted = next(
-        (manifest.source_repository.lower() for manifest in installed_plugins() if manifest.id == plugin_id),
+        (repository_key(manifest.source_repository) for manifest in installed_plugins() if manifest.id == plugin_id),
         "",
     )
-    if not wanted:
-        return None
-    projects = read_once(
-        "projects.repositories",
-        lambda: tuple(Project.objects.exclude(repository_url="").values_list("slug", "name", "repository_url")),
-    )
-    for slug, name, url in projects:
-        parts = github_repository(url)
-        if parts and "/".join(parts).lower() == wanted:
-            return entity_link("project", slug, label=name)
-    return None
+    project = projects_by_repository().get(wanted) if wanted else None
+    return entity_link("project", project.slug, label=project.name) if project else None
 
 
 GitHubFetcher = Callable[..., datetime | None]
@@ -120,7 +129,7 @@ class ProjectRefreshCommand:
 
 
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
-    result = {
+    fields = {
         "slug": project.slug,
         "name": project.name,
         "category": project.category,
@@ -132,14 +141,7 @@ def serialize_project(project: Project, *, relationships: bool = False) -> dict[
         "last_push_at": iso(project.last_push_at),
         "updated_at": iso(project.updated_at),
     }
-    if relationships:
-        result["relationships"] = {
-            "documentation": safe_doc_ids(project.documentation_records),
-            "content": list(project.content_items.order_by("slug").values_list("slug", flat=True)),
-            "assets": list(project.assets.order_by("slug").values_list("slug", flat=True)),
-            "expense_ids": list(project.expenses.order_by("-date", "-id").values_list("id", flat=True)),
-        }
-    return result
+    return linked(fields, project, relationships=relationships, assets=project.assets)
 
 
 def list_projects(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:
@@ -154,7 +156,7 @@ def list_projects(*, status: str | None = None, query: str | None = None, limit:
 
 
 def get_project(slug: str) -> dict[str, Any]:
-    return addressable(Project, serialize_project, slug, label="Project", missing=NotFoundError)
+    return addressable(Project, serialize_project, slug)
 
 
 def refresh_project(
@@ -175,7 +177,7 @@ def refresh_project(
     try:
         project = Project.objects.get(slug=slug)
     except Project.DoesNotExist as exc:
-        raise NotFoundError(f"Project {slug!r} was not found.") from exc
+        raise RecordNotFound("That project was not found.") from exc
 
     result: dict[str, Any] = {"ok": True, "content": None, "github": None, "github_app": None}
     if slug == getattr(settings, "CONTENT_INDEX_PROJECT_SLUG", ""):
@@ -232,15 +234,13 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
     project page follow on the controller's next pass.
     """
 
-    from .action_links import READ_NOW_CAPABILITY
-    from .capabilities import execute_capability
-    from .github_estate import repository_for
-
     repository = repository_for(repository_url)
     connection_ref = str(repository.record.get("connection_ref") or "") if repository else ""
     if not connection_ref:
         return None
-    answer = execute_capability(READ_NOW_CAPABILITY, {"connection_ref": connection_ref}, principal=principal)
+    answer = capabilities.execute_capability(
+        READ_NOW_CAPABILITY, {"connection_ref": connection_ref}, principal=principal
+    )
     if answer.get("ok") and answer.get("requested"):
         return {
             "ok": True,
@@ -258,8 +258,6 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
 
 def _pushed_at(stamp: Any) -> datetime | None:
     """The App's last read of when the repository moved, if it read one."""
-
-    from .timestamps import moment
 
     return moment(stamp)
 
@@ -324,13 +322,11 @@ def request_project_refresh(slug: str, *, principal: Principal, requested_by: An
     as its last note. One refresh runs at a time (``jobs.runner.JobConflict``).
     """
 
-    from hq.domains.jobs.runner import start
-
     principal.require(records_of("projects").write)
     try:
         project = Project.objects.only("name").get(slug=slug)
     except Project.DoesNotExist as exc:
-        raise NotFoundError(f"Project {slug!r} was not found.") from exc
+        raise RecordNotFound("That project was not found.") from exc
 
     def work(progress: Any) -> dict[str, Any]:
         progress("Reading GitHub.")
@@ -353,13 +349,10 @@ def execute_project_refresh(
     *,
     principal: Principal,
     current_slug: str,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Capability-shaped entry point: starts the refresh and says where it runs."""
 
-    from hq.domains.jobs.runner import JobConflict
-
-    del command, expected_updated_at
+    del command
     try:
         job = request_project_refresh(current_slug, principal=principal)
     except JobConflict:
@@ -392,10 +385,10 @@ def save_project(
             try:
                 project = Project.objects.select_for_update().get(slug=current_slug)
             except Project.DoesNotExist as exc:
-                raise NotFoundError(f"Project {current_slug!r} was not found.") from exc
+                raise RecordNotFound("That project was not found.") from exc
             created = False
             if expected_updated_at and project.updated_at.isoformat() != expected_updated_at:
-                raise ConflictError(f"Project {current_slug!r} changed after it was read.")
+                raise RecordConflict("That project changed after it was read.")
 
         for field, value in asdict(command).items():
             setattr(project, field, value)

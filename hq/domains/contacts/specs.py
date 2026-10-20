@@ -87,7 +87,6 @@ def resources() -> tuple[ResourceSpec, ...]:
             contact_submissions.get_contact_submission,
             "id",
             int,
-            not_found_errors=(contact_submissions.ContactSubmissionNotFound,),
             web_route="contacts:list",
         ),
     )

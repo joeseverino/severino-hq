@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from .standards import Check, Posture, measure
+lazy from .containers import by_design, socket_holders
 
 # Host paths whose write access is the machine's, not the container's: the
 # path and everything under it.
@@ -98,8 +99,6 @@ def writable_system_binds(binds, docker_held: bool = False) -> tuple[Mapping[str
 
 def holds_socket(container: Any) -> bool:
     """Whether its declaration says holding the Docker socket is its job."""
-
-    from .containers import socket_holders
 
     return (container.machine.name, container.running.name) in socket_holders()
 
@@ -243,8 +242,6 @@ STANDARD: tuple[Check, ...] = (
 
 
 def posture_of(container: Any) -> Posture:
-    from .containers import by_design
-
     return measure(container, STANDARD, by_design().get((container.machine.name, container.running.name)))
 
 

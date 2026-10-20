@@ -20,24 +20,19 @@ from hq.domains.calendars.models import Entry, Preference
 from hq.platform.application.routes import reverse
 from hq.platform.core.audit import operation_context
 
-from .calendar import CalendarEvent, CalendarSource
+from .calendar import CalendarEvent, CalendarSource, gather
 from .derivations import derivation
 from .moments import when_day
+from .record_errors import RecordConflict, RecordNotFound
 from .security import Capability, Principal
 from .ui import counted
+lazy from . import calendar
+lazy from .references import dangling
 
 OWN_SOURCE = "calendar.mine"
 # Occurrences a repeating entry may yield into one window, so a daily entry
 # repeating for decades cannot turn a month into a long walk.
 MAX_OCCURRENCES = 400
-
-
-class NotFoundError(ValueError):
-    pass
-
-
-class ConflictError(ValueError):
-    pass
 
 
 # ----- Reading ----------------------------------------------------------------
@@ -232,7 +227,7 @@ def _entry(uid: str, *, lock: bool = False) -> Entry:
     try:
         return query.get(uid=uid)
     except (Entry.DoesNotExist, ValueError) as exc:
-        raise NotFoundError(f"Calendar event {uid!r} was not found.") from exc
+        raise RecordNotFound("That calendar event was not found.") from exc
 
 
 @transaction.atomic
@@ -251,7 +246,7 @@ def save_entry(
         else:
             entry, created = _entry(current_key, lock=True), False
             if expected_updated_at and entry.updated_at.isoformat() != expected_updated_at:
-                raise ConflictError("This event changed after it was read.")
+                raise RecordConflict("This event changed after it was read.")
         values = asdict(command)
         values["title"] = values["title"].strip()
         values["weekdays"] = ",".join(str(day) for day in sorted(set(values["weekdays"])))
@@ -275,10 +270,8 @@ def choose_source(user: Any, source_id: str, shown: bool) -> dict[str, bool]:
     not a change to anything HQ holds.
     """
 
-    from .calendar import calendar_sources
-
-    if source_id not in {source.id for _group, source in calendar_sources()}:
-        raise NotFoundError(f"No calendar source is called {source_id!r}.")
+    if source_id not in {source.id for _group, source in calendar.calendar_sources()}:
+        raise RecordNotFound("No calendar source has that name.")
     preference, _ = Preference.objects.select_for_update().get_or_create(user=user)
     preference.choices = {**preference.choices, source_id: bool(shown)}
     preference.save(update_fields=("choices", "updated_at"))
@@ -287,8 +280,6 @@ def choose_source(user: Any, source_id: str, shown: bool) -> dict[str, bool]:
 
 def attention() -> tuple[Any, ...]:
     """An event about something HQ no longer has, for the queue."""
-
-    from .references import dangling
 
     return dangling(Entry)
 
@@ -306,8 +297,6 @@ def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) 
     The agent's view of the calendar: checked or not, since an agent asking
     "what is coming" is asking about all of it.
     """
-
-    from .calendar import gather
 
     first = start or timezone.localdate()
     last = first + timedelta(days=min(max(days, 1), AGENDA_DAYS) - 1)

@@ -36,6 +36,10 @@ from pathlib import Path
 from django.apps import apps
 from django.conf import settings
 
+lazy from hq.platform.application import plugins
+lazy from hq.platform.application.ui import counted_forms
+lazy from hq.platform.core.templatetags.value_tags import counted_phrases
+
 EM_DASH = chr(0x2014)  # built, so this file holds no literal one
 TEMPLATE_COMMENT = re.compile(r"\{#.*?#\}|\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}", re.DOTALL)
 _SKIPPED = frozenset({"tests", "migrations", "staticfiles", "node_modules", "var", "data", "docs", "deploy"})
@@ -75,10 +79,9 @@ def _roots() -> list[Path]:
 
 def _plugin_roots() -> list[Path]:
     """Each installed extension's top-level package, wherever it is installed."""
-    from hq.platform.application.plugins import installed_plugin_apps
 
     roots = []
-    for name in installed_plugin_apps():
+    for name in plugins.installed_plugin_apps():
         spec = importlib.util.find_spec(name.split(".")[0])
         locations = (spec.submodule_search_locations or ()) if spec else ()
         roots.extend(Path(location).resolve() for location in locations)
@@ -112,8 +115,6 @@ def _text(path: Path) -> str | None:
 
 
 def _refusal(one: str, many: str | None) -> str | None:
-    from hq.platform.application.ui import counted_forms
-
     try:
         counted_forms(one, many)
     except ValueError as error:
@@ -122,8 +123,6 @@ def _refusal(one: str, many: str | None) -> str | None:
 
 
 def _template_counts(path: Path, number: int, line: str, reading: Reading) -> None:
-    from hq.platform.core.templatetags.value_tags import counted_phrases
-
     for match in _COUNTED_FILTER.finditer(line):
         reason = _refusal(*counted_phrases(match.group(2)))
         if reason:

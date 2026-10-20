@@ -16,6 +16,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.routes import reverse
+lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .action_links import (
     ActionLink as TopologyAction,
@@ -31,7 +32,7 @@ from .contradiction_findings import add_contradiction_facts
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
 from .entity_links import entity_link, kind_label, record_name
-from .infrastructure import is_drifted, resource_health
+from .infrastructure import RESOURCE_TONES, is_drifted, resource_health
 from .resource_capabilities import removals_pending, resource_capabilities
 from .security import Capability, Principal
 from .topology_facts import add_connection_facts, add_observed_facts
@@ -45,6 +46,11 @@ from .topology_model import (
     edge_between,
     newest_stamp,
 )
+lazy from .adoption import manages_through
+lazy from .hq_self import serving
+lazy from .posture import estate_posture
+lazy from .projection import projection_scope
+lazy from .topology_estate import add_estate
 
 _KIND_ORDER = {
     "controller": 0,
@@ -68,7 +74,6 @@ def _resource_status(resource: ManagedResource) -> tuple[str, str, str]:
     if not resource.enabled:
         return "neutral", "Switched off in HQ", ""
     health = resource_health(resource)
-    from .infrastructure import RESOURCE_TONES
 
     state = RESOURCE_TONES.get(health["state"], "neutral")
     return state, health["label"], health["message"]
@@ -455,9 +460,6 @@ def derive_topology(*, principal: Principal, request: Any = None) -> Topology:
     ``request``, where there is one, says which address reached HQ.
     """
 
-    from .hq_self import serving
-    from .projection import projection_scope
-
     principal.require(Capability.READ)
     with projection_scope(seed=serving(request) if request is not None else None):
         return _derive(principal)
@@ -470,8 +472,6 @@ def _resource_node(resource: ManagedResource) -> TopologyNode:
     key joins the two, and printed as the name it would repeat the machine
     wherever the machine is already the context.
     """
-
-    from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
     name = str((resource.spec or {}).get("name", "") or "") if resource.kind == CONTAINER_KIND else ""
     host = str((resource.spec or {}).get("host", "") or "") if name else ""
@@ -504,8 +504,6 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
     Read once per projection, so every page section shares one derivation.
     """
 
-    from .topology_estate import add_estate
-
     principal.require(Capability.READ)
 
     def build() -> RelationGraph:
@@ -533,9 +531,6 @@ def _relations(principal: Principal, build: Any) -> RelationGraph:
 
 @derivation("estate.topology", reads=ESTATE_READS, vary=estate_variant)
 def _derive(principal: Principal) -> Topology:
-    from .posture import estate_posture
-    from .topology_estate import add_estate
-
     edges: dict[str, TopologyEdge] = {}
     resources = tuple(ManagedResource.objects.all())
     nodes = _resource_nodes(resources, principal)
@@ -569,8 +564,6 @@ def _derive(principal: Principal) -> Topology:
 
 def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
     """One node per declaration, with its state and what may be done to it."""
-
-    from .adoption import manages_through
 
     # Only an operator is offered actions, so only an operator's view reads this.
     pending_removal = (

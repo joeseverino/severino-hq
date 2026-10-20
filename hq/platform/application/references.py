@@ -20,7 +20,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cache
-from typing import TYPE_CHECKING, Any, override
+from typing import Any, override
 
 from django import forms
 from django.apps import apps
@@ -30,10 +30,15 @@ from django.db import models
 from django.db.models import Q, Value
 from django.db.models.functions import Cast
 
-if TYPE_CHECKING:
-    from .entity_links import EntityLink
-    from .security import Principal
-    from .ui import Insight
+lazy from hq.domains.control_plane.providers import PROVIDERS
+
+lazy from . import security
+lazy from .demo import showing_demo
+lazy from .entity_links import NODE_KINDS, EntityLink, entity_link, kind_label, node_name
+lazy from .projection import read_once
+lazy from .security import Principal, cli_principal
+lazy from .topology import derive_topology
+lazy from .ui import Insight
 
 # The kinds the topology names by their label, which is what their page is addressed by.
 ESTATE_KINDS = ("machine", "zone", "service")
@@ -233,8 +238,6 @@ def _reader() -> Principal:
     """Who reads when no viewer does: the reader the queue derives the estate
     for, so one stored topology answers both."""
 
-    from .security import cli_principal
-
     return cli_principal()
 
 
@@ -286,10 +289,6 @@ def _estate(principal: Principal) -> Mapping[str, Mapping[str, str]]:
     its key, which is what ``entity_link`` takes for one.
     """
 
-    from .entity_links import node_name
-    from .projection import read_once
-    from .topology import derive_topology
-
     def read() -> Mapping[str, Mapping[str, str]]:
         found: dict[str, dict[str, str]] = defaultdict(dict)
         for node in derive_topology(principal=principal).nodes:
@@ -303,8 +302,6 @@ def _estate(principal: Principal) -> Mapping[str, Mapping[str, str]]:
 
 
 def _certificate_kinds() -> tuple[str, ...]:
-    from hq.domains.control_plane.providers import PROVIDERS
-
     return tuple(kind for kind, provider in PROVIDERS.items() if provider.covers)
 
 
@@ -363,8 +360,6 @@ def _found(references: Iterable[Reference], *, principal: Principal) -> dict[Ref
     for every model kind together.
     """
 
-    from .entity_links import NODE_KINDS, EntityLink, entity_link
-
     wanted = set(references)
     found: dict[Reference, EntityLink] = {}
     by_kind: dict[str, set[str]] = defaultdict(set)
@@ -420,8 +415,6 @@ def _keys(target: Target, identities: Iterable[str]) -> list[Any]:
 
 
 def _noun(kind: str) -> str:
-    from .entity_links import kind_label
-
     target = targets().get(kind)
     return target.noun.capitalize() if target is not None else kind_label(kind)
 
@@ -433,9 +426,6 @@ def resolve_many(stored: Sequence[tuple[str, str]], *, principal: Principal) -> 
     told about. A reference that names nothing answers with its stored name
     and no page.
     """
-
-    from .demo import showing_demo
-    from .entity_links import EntityLink
 
     parsed = [Reference.parse(value) for value, _name in stored]
     found = _found([reference for reference in parsed if reference], principal=principal)
@@ -494,8 +484,6 @@ def authored(value: object, *, principal: Principal) -> str:
     that reads as no reference is kept as written, so a page can show it and
     the queue can report it.
     """
-
-    from .entity_links import NODE_KINDS
 
     reference = Reference.parse(value)
     if reference is None:
@@ -562,10 +550,8 @@ class ReferencePickerMixin:
     """For a view of a form with a reference on it: its pickers offer what this viewer may choose."""
 
     def get_form(self, form_class: type[forms.BaseForm] | None = None) -> forms.BaseForm:
-        from .security import web_principal
-
         form = super().get_form(form_class)
-        bind(form, principal=web_principal(self.request.user))
+        bind(form, principal=security.web_principal(self.request.user))
         return form
 
 
@@ -576,8 +562,6 @@ def choices(field: ReferenceField, *, principal: Principal, held: tuple[str, str
     statement. The value the row holds stays in the list when its thing has
     gone, so saving the form does not drop it.
     """
-
-    from .entity_links import NODE_KINDS
 
     known = targets()
     estate_kinds = [
@@ -646,8 +630,6 @@ def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Me
     One statement for the page, whatever number of models hold a reference.
     """
 
-    from .entity_links import EntityLink
-
     value = str(Reference(kind, str(identity)))
     known = {target.model: target for target in targets().values()}
     fields = [
@@ -697,8 +679,6 @@ def dangling(
     names nothing. No models means
     every installed model, and no principal means HQ reading its own records.
     """
-
-    from .ui import Insight
 
     principal = principal or _reader()
     fields = [field for field in reference_fields() if not models_ or field.model in models_]

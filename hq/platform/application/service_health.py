@@ -11,6 +11,11 @@ from typing import Any
 
 from .projection import read_once
 from .ui import counted
+lazy from . import connections
+lazy from .findings import estate_findings
+lazy from .hq_self import hq_service
+lazy from .security import Capability, Principal
+lazy from .whereabouts import reads_containers_on
 
 GOOD = "good"
 ATTENTION = "attention"
@@ -126,8 +131,6 @@ def _behind_the_proxy(service: Any) -> tuple[str, str, str, bool] | None:
     """``(address, machine, container, whether HQ reads that machine's containers)``
     for where the proxy forwards, or None when no proxy forwards anywhere HQ can place."""
 
-    from .whereabouts import reads_containers_on
-
     route = service.path.primary
     hops = list(route.hops) if route is not None else []
     upstream = next((index for index, hop in enumerate(hops) if hop.step == "upstream"), None)
@@ -175,12 +178,7 @@ def hq_findings() -> tuple[Any, ...]:
 
 
 def _hq_findings() -> tuple[Any, ...]:
-    from .connections import machines_once
-    from .findings import estate_findings
-    from .hq_self import hq_service
-    from .security import Capability, Principal
-
-    own = hq_service(catalog=machines_once())
+    own = hq_service(catalog=connections.machines_once())
     if own is None:
         return ()
     subjects = {f"service:{name}" for name in own.hostnames}

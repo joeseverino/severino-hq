@@ -8,14 +8,18 @@ from typing import override
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+lazy from django.apps import apps
+lazy from django.urls import reverse
+lazy from django.utils.text import slugify
+
+lazy from hq.platform.application.labels import plural
 
 from .rules import singleton
+lazy from .audit import audited_labels
 
 
 @functools.cache
 def _model_labels() -> dict[str, str]:
-    from django.apps import apps
-
     return {model.__name__: _sentence(str(model._meta.verbose_name)) for model in reversed(apps.get_models())}
 
 
@@ -26,9 +30,6 @@ def _model_plurals() -> dict[str, str]:
     Only a declared one: Django's default is the singular with an "s", which
     is the guess ``labels.plural`` exists to replace.
     """
-    from django.apps import apps
-
-    from .audit import audited_labels
 
     declared = {
         model: _sentence(str(model._meta.verbose_name_plural))
@@ -76,7 +77,6 @@ def object_type_plural(stored: str) -> str:
     otherwise the label as ``labels.plural`` spells many of it. The one place
     a type's plural comes from, so no page appends an "s" to a label.
     """
-    from hq.platform.application.labels import plural
 
     if not stored:
         return ""
@@ -104,7 +104,6 @@ def free_slug(record: models.Model, text: str, fallback: str) -> str:
     One query for every slug that could collide, so a crowded name costs the
     same as a fresh one; the column's uniqueness still decides a race.
     """
-    from django.utils.text import slugify
 
     length = type(record)._meta.get_field("slug").max_length or 50
     base = (slugify(text) or fallback)[: length - 4].rstrip("-") or fallback
@@ -174,8 +173,6 @@ class AuditLog(models.Model):
         return f"[{self.created_at:%Y-%m-%d %H:%M}] {who} {self.action}{target}"
 
     def get_absolute_url(self) -> str:
-        from django.urls import reverse
-
         return reverse("core:audit_detail", kwargs={"pk": self.pk})
 
     @property

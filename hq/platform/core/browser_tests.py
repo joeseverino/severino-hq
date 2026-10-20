@@ -30,9 +30,12 @@ from django.contrib.staticfiles import finders
 from django.db import transaction
 from django.test import Client, SimpleTestCase
 from django.urls import reverse
+lazy from django.template.loader import render_to_string
 
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
 from hq.platform.core.tests.test_browser_fixtures import PAGES, build_estate, render_pages
+lazy from hq.platform.application.asks import Ask
+lazy from hq.platform.application.pages import Page, PageAction
 
 # The phone HQ is read on: its viewport in CSS pixels.
 PHONE_SCREEN = (402, 874)
@@ -1600,11 +1603,6 @@ def shared_parts():
 
 
 def speaking_heads():
-    from django.template.loader import render_to_string
-
-    from hq.platform.application.asks import Ask
-    from hq.platform.application.pages import Page, PageAction
-
     actions = (
         Ask("Read everything", "/probe/", primary=True),
         PageAction("First other", "/probe/first/"),
@@ -2603,7 +2601,7 @@ class FragmentBrowserTests(BrowserGate):
             answers = {
                 (url, ""): page.content.decode(),
                 (following, "calendar"): client.get(following, headers={"X-Fragment": "calendar"}).content.decode(),
-                (reverse("action_item_count"), ""): '{"count": 0}',
+                (reverse("action_item_count"), ""): client.get(reverse("action_item_count")).content.decode(),
             }
             transaction.set_rollback(True)
         return answers

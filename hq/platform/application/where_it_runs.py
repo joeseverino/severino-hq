@@ -15,9 +15,13 @@ from urllib.parse import urlparse
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
+lazy from hq.domains.docs_index.models import DocumentationRecord
 
 from .entity_links import EntityLink, container_link, entity_link
 from .projection import read_once
+lazy from . import services
+lazy from .infrastructure import enabled_resources
+lazy from .services import alias_target
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,13 +37,11 @@ def where_it_runs(public_url: str) -> RunsOn | None:
     """Where the thing published at ``public_url`` runs; None when no service
     HQ knows answers at that name."""
 
-    from .services import alias_target, service_catalog
-
     hostname = normalized_hostname(urlparse(str(public_url or "")).hostname or "")
     if not hostname:
         return None
     wanted = alias_target(hostname) or hostname
-    service = next((found for found in service_catalog() if found.hostname == wanted), None)
+    service = next((found for found in services.service_catalog() if found.hostname == wanted), None)
     if service is None:
         return None
     container = service.container
@@ -55,10 +57,6 @@ def _named() -> dict[str, EntityLink]:
     """Every name a note can link, by the name as written, lower case."""
 
     def load() -> dict[str, EntityLink]:
-        from hq.domains.docs_index.models import DocumentationRecord
-
-        from .infrastructure import enabled_resources
-
         found: dict[str, EntityLink] = {}
         for title, doc_id in DocumentationRecord.objects.values_list("title", "doc_id"):
             found[str(title).casefold()] = entity_link("document", doc_id, label=title)

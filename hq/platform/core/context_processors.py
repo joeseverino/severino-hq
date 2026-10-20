@@ -1,6 +1,10 @@
 from django.conf import settings
+lazy from django.utils.functional import SimpleLazyObject
 
 from hq.platform.application.domains import domain_navigation
+lazy from hq.platform.application.agent_access import agents_paused
+lazy from hq.platform.application.appearance import Theme, theme_for
+lazy from hq.platform.application.request_channel import channel_for_request
 
 
 def site(request):
@@ -85,8 +89,6 @@ def connection(request):
     being mislabeled as a local caller before the panel opens.
     """
 
-    from hq.platform.application.request_channel import channel_for_request
-
     return {"CONNECTION_CHANNEL": channel_for_request(request)}
 
 
@@ -96,9 +98,6 @@ def agent_access(request):
     user = getattr(request, "user", None)
     if not (user and user.is_authenticated):
         return {}
-    from django.utils.functional import SimpleLazyObject
-
-    from hq.platform.application.agent_access import agents_paused
 
     return {"agents_paused": SimpleLazyObject(agents_paused)}
 
@@ -109,10 +108,6 @@ def appearance(request):
     Lazy, so a fragment that never draws `<html>` never asks; anybody signed
     out follows the system without a query.
     """
-
-    from django.utils.functional import SimpleLazyObject
-
-    from hq.platform.application.appearance import Theme, theme_for
 
     user = getattr(request, "user", None)
     return {

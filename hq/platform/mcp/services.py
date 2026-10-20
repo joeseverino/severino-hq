@@ -16,7 +16,6 @@ from hq.platform.application.findings import findings as application_findings
 from hq.platform.application.registry import audit_registry as audit_application_registry
 from hq.platform.application.reports import export_year_summary as export_application_year_summary
 from hq.platform.application.resources import (
-    ResourceNotFound,
     describe_resources as describe_application_resources,
     get_resource as get_application_resource,
     list_resource as list_application_resource,
@@ -24,10 +23,6 @@ from hq.platform.application.resources import (
 from hq.platform.application.security import Capability
 from hq.platform.application.topology import topology as application_topology
 from hq.platform.mcp.identity import current_principal
-
-
-class NotFoundError(ValueError):
-    """A requested HQ object does not exist."""
 
 
 def describe_capabilities() -> dict[str, Any]:
@@ -137,10 +132,7 @@ def get_resource(name: str, identifier: str | int, fields: list[str] | None = No
     ``items.waiting`` keeps only ``waiting`` in every element of ``items``.
     """
 
-    try:
-        return get_application_resource(name, identifier, principal=current_principal(), strict=True, fields=fields)
-    except ResourceNotFound as exc:
-        raise NotFoundError(exc.reason) from exc
+    return get_application_resource(name, identifier, principal=current_principal(), strict=True, fields=fields)
 
 
 def _reader() -> None:

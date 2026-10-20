@@ -4,6 +4,8 @@ from typing import Any, override
 
 from django.core.management.base import BaseCommand, CommandError
 
+lazy from hq.platform.api.openapi import DOCUMENT_PATH, document, render
+
 
 class Command(BaseCommand):
     help = "Write hq_api/hq-api.openapi.json from the API's routes and registries, or --check it for drift."
@@ -18,8 +20,6 @@ class Command(BaseCommand):
 
     @override
     def handle(self, *args: Any, **options: Any) -> None:
-        from hq.platform.api.openapi import DOCUMENT_PATH, document, render
-
         current = render(document())
         if options["check"]:
             committed = DOCUMENT_PATH.read_text(encoding="utf-8") if DOCUMENT_PATH.exists() else ""

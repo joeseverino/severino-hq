@@ -7,9 +7,16 @@ inside another form without belonging to it: HTML has no nested forms, and a
 form written inside another silently detaches every control after it.
 """
 
+lazy from dataclasses import asdict, is_dataclass
+
 from django import template
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
+
+lazy from hq.platform.application import action_items, decisions
+lazy from hq.platform.application.asks import Ask
+lazy from hq.platform.application.dashboard import queue_item
+lazy from hq.platform.application.pages import PageAction
 
 register = template.Library()
 
@@ -19,38 +26,32 @@ POST_FORM_ID = "hq-post"
 @register.filter
 def row_value(item):
     """``{{ item|row_value }}``: what a queue row's own button names, from its one owner."""
-    from hq.platform.application.action_items import row_value as named
 
-    return named(item)
+    return action_items.row_value(item)
 
 
 @register.filter
 def decision(item):
-    from hq.platform.application.decisions import decision as present
-
-    return present(item)
+    return decisions.decision(item)
 
 
 @register.filter
 def urgency(status):
     """``{{ item.status|urgency }}``: how urgent, in the words every pill says."""
-    from hq.platform.application.decisions import urgency as said
 
-    return said(status)
+    return decisions.urgency(status)
 
 
 @register.filter
 def workflow_parts(plan):
     """A plan's steps and its reason, apart, as a card shows them."""
-    from hq.platform.application.decisions import workflow_parts as parts
 
-    return parts(plan)
+    return decisions.workflow_parts(plan)
 
 
 @register.filter
 def queue_entries(entries):
     """Keep the SDK attention include on the queue's single projection."""
-    from hq.platform.application.dashboard import queue_item
 
     return [queue_item(entry.get("source_id", ""), entry["source"], entry["item"]) for entry in entries]
 
@@ -58,9 +59,6 @@ def queue_entries(entries):
 @register.filter
 def workflow_action(action):
     """An emitted ActionLink uses the same renderer as a page action."""
-    from dataclasses import asdict, is_dataclass
-
-    from hq.platform.application.pages import PageAction
 
     values = asdict(action) if is_dataclass(action) else action
     return PageAction(
@@ -114,9 +112,6 @@ def as_ask(action):
     """An emitted ActionLink that asks for work, as the control that follows it:
     a row's Read now. It stands idle until pressed; the page's script follows
     what the press started."""
-    from dataclasses import asdict, is_dataclass
-
-    from hq.platform.application.asks import Ask
 
     values = asdict(action) if is_dataclass(action) else action
     return Ask(values["label"], values["url"], title=values.get("reason", ""), compact=True)

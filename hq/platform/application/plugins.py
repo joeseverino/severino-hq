@@ -24,6 +24,10 @@ from hq.platform.application.routes import reverse
 from .demo import showing_demo
 from .derivations import derivation, forget
 from .ui import STATUS_VALUES, DomainOverview
+lazy from .integrations import clear_integration_graph_cache
+lazy from .outbound_work import capability_for, clear_outbound_work_cache
+lazy from .plugin_admission import enforce_plugin_admission
+lazy from .security import host_capabilities
 
 PLUGIN_API_VERSION = 4
 
@@ -198,7 +202,6 @@ def _validate_capabilities(manifest: PluginManifest) -> None:
     for capability in declared_capabilities:
         if not CAPABILITY_NAME.fullmatch(capability):
             raise ImproperlyConfigured(f"Plugin {manifest.id!r} declares invalid capability {capability!r}.")
-    from .security import host_capabilities
 
     host = {str(capability) for capability in host_capabilities()}
     claimed = sorted(set(declared_capabilities) & host)
@@ -279,7 +282,6 @@ def _installed_plugins() -> tuple[PluginManifest, ...]:
         plugins.append(manifest)
     installed = tuple(sorted(plugins, key=lambda item: item.id))
     _validate_composition(installed)
-    from .plugin_admission import enforce_plugin_admission
 
     enforce_plugin_admission(installed)
     return installed
@@ -297,8 +299,6 @@ def clear_plugin_composition_cache() -> None:
     _installed_plugins.cache_clear()
     # A question asked of the composition that was is not asked of this one.
     forget()
-    from .integrations import clear_integration_graph_cache
-    from .outbound_work import clear_outbound_work_cache
 
     clear_integration_graph_cache()
     clear_outbound_work_cache()
@@ -711,8 +711,6 @@ def plugin_outbound_work() -> tuple[Any, ...]:
 def plugin_capability_specs() -> tuple[Any, ...]:
     """What every extension declares, and the capability each piece of its
     outbound work is asked for through."""
-
-    from .outbound_work import capability_for
 
     return (
         *_provided("capabilities"),

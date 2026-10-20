@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+lazy from . import OBSERVATIONS
+
 
 class ObservationRecord(BaseModel):
     """One observed record. Fields not named on the subclass are dropped.
@@ -194,8 +196,6 @@ class ObservationSpec:
 
 
 def _registered(kind: str) -> ObservationSpec:
-    from . import OBSERVATIONS
-
     return OBSERVATIONS[kind]
 
 

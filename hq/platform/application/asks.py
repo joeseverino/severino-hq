@@ -24,8 +24,14 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
 
+lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
+
 from .moments import duration
 from .routes import reverse
+lazy from . import cadence
+lazy from .cadence import every_sweep, read_request_lifetime
+lazy from .security import safe_next
 
 IDLE = "idle"
 QUEUED = "queued"
@@ -132,8 +138,6 @@ def answer(
     sentence a page without script shows; the standing's note otherwise.
     """
 
-    from .security import safe_next
-
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         return JsonResponse(
             {**standing.as_json(), "status": status_url if standing.live else ""},
@@ -183,11 +187,6 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
     controller last arrived.
     """
 
-    from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
-    from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
-
-    from .cadence import controller_standing, every_sweep, read_request_lifetime
-
     wanted = tuple(sorted(set(kinds)))
     found = ProviderInventory.objects.defer("records")
     snapshots = {
@@ -212,7 +211,7 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
                 f"No controller answered within {duration(read_request_lifetime())}.",
                 since=asked,
             )
-        seen = controller_standing().seen_at
+        seen = cadence.controller_standing().seen_at
         if seen is not None and seen > asked:
             return Standing(RUNNING, "The controller is reading it.", since=asked)
         return Standing(QUEUED, "Waiting for the controller.", since=asked)

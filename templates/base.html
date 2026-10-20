@@ -124,9 +124,15 @@
         <span class="search-label">Find anything</span>
         <kbd class="search-key keyboard-only" aria-hidden="true">⌘K</kbd>
       </a>
-      <a class="action-badge" href="{% url 'action_items' %}" title="Needs you" data-action-count-url="{% url 'action_item_count' %}"{% if show_action_count %} data-action-count-fresh="{{ profile_action_count }}"{% endif %}>
+      <a class="action-badge" href="{% url 'action_items' %}" title="Needs you">
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
-        <span data-action-count{% if not show_action_count or not profile_action_count %} hidden{% endif %}>{{ profile_action_count }}</span>
+        {% comment %}
+        The queue spans every installed domain, so a page that has not counted
+        it already asks for the count once it is up rather than while rendering.
+        {% endcomment %}
+        {% partialdef action_count inline %}
+        <span id="action-count" data-action-count{% if not show_action_count %} data-fragment="{% url 'action_item_count' %}" data-fragment-load{% endif %}{% if not profile_action_count %} hidden{% endif %}>{{ profile_action_count|default_if_none:"" }}</span>
+        {% endpartialdef %}
         <span class="visually-hidden">Needs you</span>
       </a>
       <details class="user-menu" data-menu>

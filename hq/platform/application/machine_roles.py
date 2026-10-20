@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from hq.domains.control_plane.observations.tailscale import EXIT_ROUTES
 
 from .locate import host_of
+lazy from .tailnet import policy
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,8 +62,6 @@ ROLES: tuple[MachineRole, ...] = (
 
 def role_context() -> RoleContext:
     """The tailnet-wide facts, from the stored policy reading."""
-
-    from .tailnet import policy
 
     return RoleContext(
         nameservers=frozenset(host_of(str(server)) for server in policy().dns.get("dns") or () if server)

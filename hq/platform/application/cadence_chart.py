@@ -7,6 +7,8 @@ in one short module.
 
 from dataclasses import dataclass
 
+lazy from .ui import MISSING
+
 
 @dataclass(frozen=True, slots=True)
 class CadenceWeek:
@@ -63,7 +65,6 @@ def _streak(weeks: tuple[CadenceWeek, ...]) -> int:
 
 def _tally(weeks: tuple[CadenceWeek, ...]) -> str:
     """Hits out of the periods with data, as "n/m"; MISSING when none has any."""
-    from .ui import MISSING
 
     known = len(_known(weeks))
     return f"{_hits(weeks)}/{known}" if known else MISSING

@@ -21,6 +21,7 @@ import shlex
 import sys
 from importlib import import_module
 from pathlib import Path
+lazy from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
@@ -133,7 +134,6 @@ CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 
 def site_host(origins, hosts) -> str:
     """The first trusted origin's host, else the first concrete allowed host."""
-    from urllib.parse import urlsplit
 
     for origin in origins:
         host = urlsplit(origin).hostname or ""

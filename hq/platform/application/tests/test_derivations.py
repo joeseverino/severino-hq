@@ -567,7 +567,7 @@ class ActionItemCountTests(TestCase):
 
         again = self.client.get(self.url, headers={"if-none-match": first.headers["ETag"]})
 
-        self.assertNotEqual(again.json(), first.json())
+        self.assertNotEqual(again.context["profile_action_count"], first.context["profile_action_count"])
         self.assertEqual(again.status_code, 200)
         self.assertNotEqual(again.headers["ETag"], first.headers["ETag"])
 
@@ -584,7 +584,7 @@ class ActionItemCountTests(TestCase):
         again = self.client.get(self.url, headers={"if-none-match": first.headers["ETag"]})
 
         self.assertEqual(again.status_code, 200)
-        self.assertEqual(again.json()["count"], first.json()["count"] - 1)
+        self.assertEqual(again.context["profile_action_count"], first.context["profile_action_count"] - 1)
 
     def test_another_person_holds_another_validator(self):
         from django.contrib.auth import get_user_model

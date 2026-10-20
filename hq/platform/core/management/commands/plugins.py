@@ -1,4 +1,5 @@
 from typing import override
+lazy import json
 
 from django.core.management.base import BaseCommand
 
@@ -10,6 +11,4 @@ class Command(BaseCommand):
 
     @override
     def handle(self, *args, **options):
-        import json
-
         self.stdout.write(json.dumps(describe_plugins(), indent=2, sort_keys=True))

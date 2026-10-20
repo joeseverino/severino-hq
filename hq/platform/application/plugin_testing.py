@@ -31,13 +31,20 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+lazy from django.utils import timezone
+
 from .plugins import (
+    DERIVED_PROVIDERS,
     PLUGIN_API_VERSION,
     PluginIntegration,
     PluginManifest,
     clear_plugin_composition_cache,
 )
 from .ui import DomainOverview, Insight
+lazy from . import plugins
+lazy from .derivation_testing import frozen
+lazy from .derivations import counting
+lazy from .projection import projection_scope
 
 # Deliberately not a name any real extension would take. A synthetic sibling
 # that collided with a real id would silently displace it.
@@ -160,20 +167,15 @@ def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None 
     for; the year around today when left out.
     """
 
-    from django.utils import timezone
-
-    from .derivation_testing import frozen
-    from .derivations import counting
-    from .plugins import DERIVED_PROVIDERS, installed_integrations
-    from .projection import projection_scope
-
     first, last = window or (
         timezone.localdate() - timedelta(days=183),
         timezone.localdate() + timedelta(days=183),
     )
 
     def questions() -> dict[str, Any]:
-        integration = next((found for plugin, found in installed_integrations() if plugin.id == plugin_id), None)
+        integration = next(
+            (found for plugin, found in plugins.installed_integrations() if plugin.id == plugin_id), None
+        )
         if integration is None:
             raise LookupError(f"No installed plugin has the id {plugin_id!r}.")
         asked = {

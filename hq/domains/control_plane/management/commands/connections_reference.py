@@ -4,6 +4,8 @@ from typing import override
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+lazy from hq.platform.application.connection_setup import reference_markdown
+
 
 def reference_path() -> Path:
     return Path(settings.BASE_DIR) / "docs" / "Connections.md"
@@ -18,8 +20,6 @@ class Command(BaseCommand):
 
     @override
     def handle(self, *args, **options):
-        from hq.platform.application.connection_setup import reference_markdown
-
         current = reference_markdown()
         path = reference_path()
         if options["check"]:

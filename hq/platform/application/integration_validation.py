@@ -16,10 +16,12 @@ from .connection_contracts import GRANT_MODELS, ConnectionAbility, ConnectionSpe
 from .contracts import DJANGO_ROUTE, DOTTED_NAME, EFFECTS, SCOPE_NAME
 from .integration_specs import (
     RESERVED_QUERY_FIELD,
+    STALE_WRITE_KEYWORD,
     TARGET_KINDS,
     CapabilitySpec,
     ResourceSpec,
     command_schema,
+    takes_stale_write_token,
 )
 from .search_contracts import SearchDefinition
 from .security import Capability
@@ -96,7 +98,9 @@ def _validate_capability_requirements(spec: CapabilitySpec) -> None:
 def _validate_capability_handler(spec: CapabilitySpec) -> None:
     if not callable(spec.handler):
         raise ImproperlyConfigured(f"Capability {spec.name!r} handler is not callable.")
-    kwargs: dict[str, Any] = {"principal": None, "expected_updated_at": None}
+    kwargs: dict[str, Any] = {"principal": None}
+    if takes_stale_write_token(spec.handler):
+        kwargs[STALE_WRITE_KEYWORD] = None
     kind = TARGET_KINDS.get(spec.target_kind) if spec.target_kind else None
     if kind:
         kwargs[kind.keyword] = None

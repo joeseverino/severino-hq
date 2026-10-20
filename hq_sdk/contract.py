@@ -35,6 +35,7 @@ from pydantic import BaseModel
 
 import hq_sdk
 import hq_sdk.template_contract
+lazy from hq.platform.application.plugins import PLUGIN_API_VERSION
 
 CONTRACT_PATH = Path(__file__).with_name("contract.json")
 # Modules that write the record rather than offer anything to an extension.
@@ -161,8 +162,6 @@ def _shape(value: object) -> dict[str, Any]:
 
 def describe() -> dict[str, Any]:
     """The current contract, as plain JSON data."""
-
-    from hq.platform.application.plugins import PLUGIN_API_VERSION
 
     modules = {}
     for name in module_names():

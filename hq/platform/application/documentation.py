@@ -22,9 +22,10 @@ from hq.platform.core.models import AuditLog
 from .domains import records_of
 from .entity_links import EntityLink, entity_link
 from .labels import plural
+from .record_errors import RecordConflict, RecordNotFound
+from .record_links import linked_records
 from .references import Mention, Mentions
 from .security import Capability, Principal
-from .ui import counted
 
 MAX_MANIFEST_ITEMS = 2000
 
@@ -171,16 +172,6 @@ def serialize_documentation(record: DocumentationRecord) -> dict[str, Any]:
     }
 
 
-def _resolve(model, field, values, label):
-    records = list(model.objects.filter(**{f"{field}__in": values}))
-    found = {getattr(record, field) for record in records}
-    missing = sorted(set(values) - found)
-    if missing:
-        found_none = counted(len(missing), f"related {label} not found", f"related {plural(label)} not found")
-        raise ManifestImportError(f"{found_none}: {missing}")
-    return records
-
-
 @transaction.atomic
 def save_documentation(
     command: DocumentationCommand,
@@ -198,14 +189,14 @@ def save_documentation(
             try:
                 record = DocumentationRecord.objects.select_for_update().get(doc_id=current_doc_id)
             except DocumentationRecord.DoesNotExist as exc:
-                raise ManifestImportError(f"Documentation record {current_doc_id!r} was not found.") from exc
+                raise RecordNotFound("That documentation record was not found.") from exc
             created = False
             if expected_updated_at and record.updated_at.isoformat() != expected_updated_at:
-                raise ManifestImportError(f"Documentation record {current_doc_id!r} changed after it was read.")
+                raise RecordConflict("That documentation record changed after it was read.")
         values = asdict(command)
-        projects = _resolve(Project, "slug", values.pop("related_projects"), "project")
-        assets = _resolve(Asset, "slug", values.pop("related_assets"), "asset")
-        expenses = _resolve(Expense, "id", values.pop("related_expenses"), "expense")
+        projects = linked_records(Project, "slug", values.pop("related_projects"))
+        assets = linked_records(Asset, "slug", values.pop("related_assets"))
+        expenses = linked_records(Expense, "id", values.pop("related_expenses"))
         for field, value in values.items():
             setattr(record, field, value)
         record.full_clean()
@@ -268,9 +259,7 @@ def execute_documentation_sync(
     command: DocumentationSyncCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    del expected_updated_at
     return sync_documentation(
         command.manifest,
         principal=principal,

@@ -12,17 +12,24 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from typing import Any
 
+lazy from django.urls import NoReverseMatch
+
 from hq.domains.control_plane.observations.portainer import IMAGE_KIND, short_id
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.platform.application.routes import reverse
 
 from .facts import inventory_records
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
     FindingRule,
+    OperatorStep,
+    Remedy,
     built_findings,
     cannot_run_commands,
     machine_step,
 )
+lazy from .adoption import unmanaged
+lazy from .inventory import record_token
 
 IMAGE_BEHIND = "image-behind"
 IMAGE_UNTAGGED = "image-untagged"
@@ -47,8 +54,6 @@ def _unrecognised(nodes, machine) -> None:
     The sweep did not adopt it, so it has no node of its own; its machine
     carries it, and a finding reads it from there.
     """
-
-    from .adoption import unmanaged
 
     for item in unmanaged():
         if item.adoptable or item.kind != CONTAINER_KIND:
@@ -139,13 +144,6 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
     something HQ does not know, so it is reported rather than adopted: a
     container nobody declared must never look like one somebody did.
     """
-
-    from django.urls import NoReverseMatch
-
-    from hq.platform.application.routes import reverse
-
-    from .finding_model import Remedy
-    from .inventory import record_token
 
     found: list[dict[str, Any]] = []
     for node in estate.nodes():
@@ -258,8 +256,6 @@ def images_untagged(estate: Any) -> tuple[dict[str, Any], ...]:
 
 
 def _step(**fields: Any) -> Any:
-    from .finding_model import OperatorStep
-
     return OperatorStep(**fields)
 
 

@@ -15,10 +15,12 @@ import threading
 import traceback
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django.db import IntegrityError, close_old_connections, connection, transaction
 from django.utils import timezone
+lazy from django.contrib.auth.base_user import AbstractBaseUser
+lazy from django.contrib.auth.models import AnonymousUser
 
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.database import gives_way
@@ -27,10 +29,6 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest, off_request, serving_request
 
 from .models import Job
-
-if TYPE_CHECKING:
-    from django.contrib.auth.base_user import AbstractBaseUser
-    from django.contrib.auth.models import AnonymousUser
 
 # How often progress reaches the database, at most. Work may report per
 # record; at a few million records the reporting would cost more than the work.

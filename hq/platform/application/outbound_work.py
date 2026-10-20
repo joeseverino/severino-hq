@@ -25,19 +25,22 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import BaseModel, ConfigDict
+lazy from django.contrib.auth import get_user_model
+lazy from django.utils import timezone
+
+lazy from hq.domains.jobs.models import Job
+lazy from hq.domains.jobs.runner import JobConflict, Progress, due as is_due, reap, run, start
 
 from .asks import FAILED, Ask, Standing, job_standing
 from .contracts import DOTTED_NAME
 from .integration_specs import CapabilitySpec
 from .security import Principal
-
-if TYPE_CHECKING:
-    from hq.domains.jobs.models import Job
-    from hq.domains.jobs.runner import Progress
+lazy from .plugins import plugin_outbound_work
+lazy from .routes import reverse
 
 # What outbound work may be: a change somewhere else, never a read of HQ.
 EFFECTS = frozenset({"remote_write", "destructive", "infrastructure_change"})
@@ -128,8 +131,6 @@ def validate(work: object) -> OutboundWork:
 
 @cache
 def _declared() -> dict[str, OutboundWork]:
-    from .plugins import plugin_outbound_work
-
     declared: dict[str, OutboundWork] = {}
     for work in plugin_outbound_work():
         validate(work)
@@ -154,12 +155,10 @@ def capability_for(work: OutboundWork) -> CapabilitySpec:
 
     validate(work)
 
-    def about(
-        command: Any, *, principal: Principal, expected_updated_at: Any = None, current_key: str = ""
-    ) -> dict[str, Any]:
+    def about(command: Any, *, principal: Principal, current_key: str = "") -> dict[str, Any]:
         return request_work(work, current_key, principal=principal)
 
-    def whole(command: Any, *, principal: Principal, expected_updated_at: Any = None) -> dict[str, Any]:
+    def whole(command: Any, *, principal: Principal) -> dict[str, Any]:
         return request_work(work, "", principal=principal)
 
     return CapabilitySpec(
@@ -190,7 +189,6 @@ def _requester(principal: Principal) -> Any:
 
     if principal.interface != "web":
         return None
-    from django.contrib.auth import get_user_model
 
     users = get_user_model()
     return users._default_manager.filter(**{users.USERNAME_FIELD: principal.actor}).first()
@@ -203,9 +201,6 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> d
     line has no thread that outlives it, so there the work runs to its end
     before the answer.
     """
-
-    from hq.domains.jobs.models import Job
-    from hq.domains.jobs.runner import JobConflict, run, start
 
     principal.require(work.required_capability)
     reason = _refusal(work, subject)
@@ -254,8 +249,6 @@ def run_now(name: str, subject: str = "", *, principal: Principal) -> Job:
     entry as a pressed button. Refused inside a request.
     """
 
-    from hq.domains.jobs.runner import run
-
     work = _named(name)
     principal.require(work.required_capability)
     reason = _refusal(work, subject)
@@ -285,10 +278,6 @@ def due(now: datetime | None = None) -> tuple[OutboundWork, ...]:
     """The declared work whose cadence has come round: never done, or last
     done well longer ago than its ``every``, and not being done now."""
 
-    from django.utils import timezone
-
-    from hq.domains.jobs.runner import due as is_due
-
     now = now or timezone.now()
     return tuple(
         work
@@ -299,9 +288,6 @@ def due(now: datetime | None = None) -> tuple[OutboundWork, ...]:
 
 def last_job(name: str, subject: str = "") -> Any:
     """The job that last did this work for this subject, or None. One query."""
-
-    from hq.domains.jobs.models import Job
-    from hq.domains.jobs.runner import reap
 
     job = Job.objects.filter(kind=name, **{f"request__{SUBJECT_FIELD}": subject}).first()
     if job is not None and job.is_stale:
@@ -325,8 +311,6 @@ def ask(
     Live work is followed. Work that failed says why until it is asked for
     again. Work that ended well stands idle: the page shows what it stored.
     """
-
-    from .routes import reverse
 
     work = _named(name)
     job = last_job(name, subject)

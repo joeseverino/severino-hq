@@ -17,12 +17,14 @@ from hq.domains.control_plane.models import (
     WeatherObservation,
 )
 from hq.platform.core.audit import operation_context
+lazy from hq.platform.application.routes import reverse
 
 from . import readings
 from .cadence import ring_doorbell
-from .connections import machines_once
+from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
 from .freshness import DASHBOARD_GLANCE, freshness
 from .security import Capability, Principal
+lazy from .projection import read_once
 
 # The National Weather Service API. The connection shows it and the glance plan
 # hands it to the controller, which states no address of its own.
@@ -31,15 +33,6 @@ NWS_API = "https://api.weather.gov"
 
 def connection_specs():
     """Emit the keyless NWS boundary without spending a discovery query."""
-
-    from hq.platform.application.routes import reverse
-
-    from .connections import (
-        ConnectionAbility,
-        ConnectionInstance,
-        ConnectionLink,
-        ConnectionSpec,
-    )
 
     def instances():
         return (
@@ -150,8 +143,6 @@ def _forecast_url(point: str) -> str:
 def panel_specs(
     configuration: DashboardConfiguration | None = None,
 ) -> tuple[DashboardPanelSpec, ...]:
-    from hq.platform.application.routes import reverse
-
     configuration = configuration or dashboard_configuration()
     specs = [
         DashboardPanelSpec(
@@ -188,8 +179,6 @@ def panel_specs(
 def dashboard_machines() -> tuple[ManagedResource, ...]:
     """The machines chosen for the dashboard, read once per page: the panels and
     the first steps both ask."""
-
-    from .projection import read_once
 
     return read_once("glance.dashboard_machines", _dashboard_machines)
 

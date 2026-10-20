@@ -21,6 +21,7 @@ from .provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
 )
+lazy from .providers import PROVIDERS
 
 WHOLE = ""
 
@@ -31,8 +32,6 @@ _REF_LENGTH = 160
 
 def parts_of(kind: str) -> Mapping[str, ReadingPart]:
     """Every part of ``kind`` by name, ``WHOLE`` first."""
-
-    from .providers import PROVIDERS
 
     spec = OBSERVATIONS.get(kind)
     if spec is not None:

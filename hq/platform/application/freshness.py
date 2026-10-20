@@ -11,7 +11,11 @@ decides either.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
+
 from .derivations import reached
+lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
+lazy from .public_registry import read_every
 
 CURRENT = "current"
 DUE = "due"
@@ -49,10 +53,6 @@ class Cadence:
 def cadence(kind: str = "") -> Cadence:
     """The cadence one kind of reading is taken on."""
 
-    from hq.domains.control_plane.observations import OBSERVATIONS
-
-    from .cadence import slowest_sweep_interval, ssh_probe_interval
-
     if kind == DASHBOARD_GLANCE:
         return Cadence(GLANCE_EVERY, missed=3)
     if kind == PAGE_VISIT:
@@ -61,8 +61,6 @@ def cadence(kind: str = "") -> Cadence:
         return Cadence(ssh_probe_interval(), missed=2)
     spec = OBSERVATIONS.get(kind)
     if spec is not None and spec.read_by == "hq":
-        from .public_registry import read_every
-
         return Cadence(read_every(kind), missed=2)
     if spec is not None and spec.every is not None:
         return Cadence(spec.every, missed=2)

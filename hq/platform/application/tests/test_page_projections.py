@@ -15,9 +15,9 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 
 from ..connection_context import ConnectionsContext, connections_context
+from ..record_errors import RecordNotFound
 from ..resources import (
     InvalidResourceInput,
-    ResourceNotFound,
     get_resource,
     list_resource,
 )
@@ -199,7 +199,7 @@ class ConnectionProjectionTests(TestCase):
         row = get_resource("connection.standing", "example-host", principal=cli_principal())
 
         self.assertEqual(row, next(item for item in read["items"] if item["connection_ref"] == "example-host"))
-        with self.assertRaises(ResourceNotFound):
+        with self.assertRaises(RecordNotFound):
             get_resource("connection.standing", "no-such-connection", principal=cli_principal())
 
     def test_how_hq_reaches_each_connection(self):

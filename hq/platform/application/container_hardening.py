@@ -18,6 +18,8 @@ from typing import Any
 
 from .container_standard import POWERFUL_CAPABILITIES, holds_socket, writable_system_binds
 from .standards import UNMET
+lazy from .container_attention import socket_holder_link
+lazy from .upgrades import data_of
 
 # Where HQ has no reading of what it uses: enough for most small services,
 # said as a starting point rather than a measurement.
@@ -98,7 +100,6 @@ class Hardening:
 
         if not self.container.running.watcher or not any(item.check == "no-docker-socket" for item in self.unwritten):
             return None
-        from .container_attention import socket_holder_link
 
         return socket_holder_link(self.container)
 
@@ -315,7 +316,6 @@ def _served_port(runtime: Mapping[str, Any]) -> tuple[str, str]:
 def _user(container, runtime, unmet):
     if "not-root" not in unmet:
         return
-    from .upgrades import data_of
 
     data = [str(mount.get("source")) for mount in data_of(container.mounts) if mount.get("type") == "bind"]
     low = sorted(

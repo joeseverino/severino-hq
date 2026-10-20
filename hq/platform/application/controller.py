@@ -8,24 +8,30 @@ from typing import Any
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
+lazy from django.conf import settings
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
+from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND
 from hq.domains.control_plane.providers import (
     PROVIDERS,
     controller_capability_registry,
     enabled_controller_actions,
 )
+lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 
 from .adoption import manages_through, observes_only
 from .agent_access import agents_paused
 from .approvals import AGENT_SURFACES
 from .conditions import stamped
-from .infrastructure import controller_contract, serialize_resource
+from .infrastructure import controller_contract, resolved_spec, serialize_resource
 from .plugin_admission import admitted_sources
 from .resource_operations import serialize_operation
+lazy from .expiry import certificate_expiry, renewal_opens_at, renewal_window
+lazy from .findings import auto_remediable
+lazy from .github_profile import plan as github_profiles
+lazy from .security import cli_principal
 
 _FORBIDDEN_STATUS_KEYS = ("private", "secret", "token", "password", "credential")
 
@@ -56,15 +62,11 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     would confirm the wrong row or silently confirm nothing.
     """
 
-    from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
-    from hq.domains.control_plane.provider_adapters.tls import UPLOADED_CERTIFICATE_KIND
-
     if resource.kind not in (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND):
         return
     verified = {str(item.get("consumer", "")) for item in (status or {}).get("consumers", ()) if item.get("consumer")}
     if not verified:
         return
-    from .infrastructure import resolved_spec
 
     reached = {
         consumer.get("connection_ref")
@@ -158,8 +160,6 @@ def _scheduler_now():
 def _certificate_expiry(resource: ManagedResource):
     """The provider's public expiry observation, parsed once, preserving UTC."""
 
-    from .expiry import certificate_expiry
-
     return certificate_expiry(resource.status)
 
 
@@ -189,7 +189,6 @@ def _automatic_renewal(resource: ManagedResource, now) -> tuple[bool, str, str]:
     expiry = _certificate_expiry(resource)
     if expiry is None:
         return False, "", ""
-    from .expiry import renewal_opens_at, renewal_window
 
     if now >= renewal_opens_at(expiry, renewal_window(resource.spec)):
         return True, "Automatic renewal window reached.", resource.status["not_after"]
@@ -220,12 +219,8 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
     changed and nothing looked broken.
     """
 
-    from django.conf import settings
-
     if not getattr(settings, "SEVERINO_FINDINGS_AUTO_REMEDY", False):
         return []
-    from .findings import auto_remediable
-    from .security import cli_principal
 
     queued: list[str] = []
     manages = manages_through()
@@ -487,8 +482,6 @@ def controller_registry() -> dict[str, Any]:
     HQ holds, which connections can read each kind, which extensions the image
     composes, and whose public GitHub profile is due a read.
     """
-
-    from .github_profile import plan as github_profiles
 
     registry = controller_capability_registry()
     return {

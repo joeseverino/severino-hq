@@ -28,15 +28,26 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.platform.core.network import split_host_port
 
 from .entity_links import EntityLink, entity_link, kind_label
-from .facts import Joined, Subject, readings, snapshots_of
+from .facts import Joined, Subject, readings, refusals_about, snapshots_of
 from .infrastructure import enabled_resources
 from .labels import lower_first
 from .locate import host_of, split_endpoint
 from .path_model import NETWORK_LABELS, Certificate, Hop, Route, ServicePath, Source, dns_label, pointing_at
 from .projection import read_once
 from .reach import is_documentation, network_of
+lazy from . import connections, request_path, services
+lazy from .containers import container_watchers, standing_of, uptime_of
+lazy from .expiry import days_until
+lazy from .hq_self import hq_service, scoped_served_at, scoped_served_port
+lazy from .inventory import record_identity
+lazy from .known_hosts import operator
+lazy from .services import CONTAINER_KIND
+lazy from .timestamps import moment
+lazy from .ui import counted
+lazy from .whereabouts import locate, machine_link, whereabouts
 
 # How deep an alias chain is followed before the path stops saying more.
 MAX_ALIASES = 3
@@ -96,8 +107,6 @@ def _names(provider, spec) -> tuple[str, ...]:
 
 
 def _swept(kind: str) -> dict[str, list[_Row]]:
-    from .inventory import record_identity
-
     provider = PROVIDERS[kind]
     # Matched by identity, the way the inventory decides a record is managed.
     declared = {
@@ -178,7 +187,6 @@ def _reading_gap(kinds: Iterable[str], name: str = "") -> str:
     whole = next((reason for kind in kinds if (reason := why_unread(kind))), "")
     if whole or not name:
         return whole
-    from .facts import refusals_about
 
     return next((refused.phrase for refused in refusals_about(Subject.of(hostnames=(name,)), kinds)), "")
 
@@ -398,8 +406,6 @@ def _edge_certificate(name: str, fronting_kind: str) -> Certificate:
 def _certificate_of(role: str, found: tuple[Joined, ...]) -> Certificate:
     """One certificate from the readings covering a name: every issuer, the earliest expiry."""
 
-    from .timestamps import moment
-
     dated = [(when, joined) for joined in found if (when := moment(joined.expires))]
     earliest = min(dated, key=lambda pair: pair[0])[1] if dated else found[0]
     return Certificate(
@@ -568,7 +574,6 @@ def _alias(name: str, target: str, *, fronted: bool, depth: int) -> list[Hop]:
                 Hop("alias", "Alias of", target, entity_link("service", target)),
                 *routes[0].hops,
             ]
-    from .known_hosts import operator
 
     return [
         Hop(
@@ -581,8 +586,6 @@ def _alias(name: str, target: str, *, fronted: bool, depth: int) -> list[Hop]:
 
 
 def _machine(address: str) -> Hop | None:
-    from .whereabouts import machine_link, whereabouts
-
     link = machine_link(address, at=_whereabouts(whereabouts))
     if link is None:
         return None
@@ -592,9 +595,7 @@ def _machine(address: str) -> Hop | None:
 def _machine_source(name: str) -> Source | None:
     """Where HQ knows a machine from: its tailnet reading, else its declaration."""
 
-    from .connections import machines_once
-
-    machine = next((item for item in machines_once() if item.name == name), None)
+    machine = next((item for item in connections.machines_once() if item.name == name), None)
     if machine is None:
         return None
     presence = machine.presence
@@ -606,8 +607,6 @@ def _machine_source(name: str) -> Source | None:
 def _container_reading(name: str, host: str) -> tuple[Source | None, tuple[tuple[str, str], ...]]:
     """The container reading that reports ``name`` on ``host``, and what it says
     is running: Docker's status, and the commit the image was built from."""
-
-    from .services import CONTAINER_KIND
 
     for snapshot in snapshots_of(CONTAINER_KIND):
         for record in snapshot.records or ():
@@ -621,8 +620,6 @@ def _running_facts(record: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
     """``(text, url)``: how long it has been up, the commit its image was built
     from (linked where the image names its repository), and whether what it
     runs is current and safe."""
-
-    from .containers import standing_of, uptime_of
 
     uptime = uptime_of(str(record.get("status", "") or ""))
     revision = str(record.get("revision", "") or "")
@@ -696,10 +693,6 @@ def _served_certificate(name: str, row: _Row, role: str) -> Certificate:
 
 
 def _days_left(stamp: str) -> str:
-    from .expiry import days_until
-    from .timestamps import moment
-    from .ui import counted
-
     when = moment(stamp) if stamp else None
     if when is None:
         return ""
@@ -716,9 +709,7 @@ def _declared_served(name: str, role: str) -> Certificate | None:
     rather than showing the declaration as if it were in place.
     """
 
-    from .services import certificates_serving
-
-    keys = certificates_serving(name)
+    keys = services.certificates_serving(name)
     resource = next((item for item in enabled_resources() if keys and item.key == keys[0]), None)
     if resource is None:
         return None
@@ -757,8 +748,6 @@ def _declared_served(name: str, role: str) -> Certificate | None:
 
 
 def _upstream(address: str, connector: tuple[str, ...] = (), on: str = "") -> list[Hop]:
-    from .whereabouts import locate, whereabouts
-
     if not address:
         return []
     host, _port = split_endpoint(address)
@@ -778,8 +767,6 @@ def _upstream(address: str, connector: tuple[str, ...] = (), on: str = "") -> li
             )
         )
     if origin.container:
-        from .containers import container_watchers
-
         source, running = _container_reading(origin.container, origin.host)
         # Its page, when a declaration watches it, as every other hop names
         # its page.
@@ -809,18 +796,14 @@ def hq_path(request: Any = None, *, found: Any = None) -> ServicePath | None:
     ``found`` is the request's ``connection.Connection`` when the caller holds it.
     """
 
-    from .connections import machines_once
-    from .hq_self import hq_service
-
-    own = hq_service(request, catalog=machines_once())
+    own = hq_service(request, catalog=connections.machines_once())
     if own is None:
         return None
     walked = path_to(_asked_for(request, own))
     if request is None:
         return walked
-    from .request_path import joined
 
-    return joined(walked, request, found)
+    return request_path.joined(walked, request, found)
 
 
 def _asked_for(request: Any, own: Any) -> str:
@@ -828,7 +811,6 @@ def _asked_for(request: Any, own: Any) -> str:
 
     if request is None:
         return own.hostname
-    from hq.platform.core.network import split_host_port
 
     host = normalized_hostname(split_host_port(request.get_host())[0])
     return host if host in own.hostnames else own.hostname
@@ -838,10 +820,7 @@ def _to_hq(name: str, routes: tuple[Route, ...]) -> tuple[Route, ...]:
     """Routes to one of HQ's own names, each ending at HQ; one via HQ's machine
     when no DNS answer leads there."""
 
-    from .connections import machines_once
-    from .hq_self import hq_service
-
-    own = hq_service(catalog=machines_once())
+    own = hq_service(catalog=connections.machines_once())
     if own is None or name not in own.hostnames:
         return routes
     if not routes:
@@ -851,8 +830,6 @@ def _to_hq(name: str, routes: tuple[Route, ...]) -> tuple[Route, ...]:
 
 
 def _hq_hop(own: Any) -> Hop:
-    from .hq_self import scoped_served_at, scoped_served_port
-
     served = ", ".join(scoped_served_at())
     port = scoped_served_port()
     return Hop(

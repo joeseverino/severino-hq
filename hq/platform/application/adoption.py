@@ -17,14 +17,25 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.db import transaction
+lazy from django.core.exceptions import ValidationError
+lazy from django.utils import timezone
 
-from hq.domains.control_plane.models import NotManaged, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS, registry_label, service_facets
 
 from .conditions import stamped
 from .inventory import record_identity, record_token, service_hostnames
+from .record_errors import RecordNotFound
 from .security import Principal
+lazy from .connections import connection_rows
+lazy from .infrastructure import (
+    ManagedResourceCommand,
+    PolicyError,
+    enabled_resources,
+    save_managed_resource,
+    suggest_key,
+)
 
 OBSERVES_ONLY = "This connection only reads. Its setup guide says how to let HQ make changes through it."
 
@@ -44,8 +55,6 @@ def manages_through(
 
     def by_provider() -> dict[str, list[tuple[str, bool]]]:
         if not loaded:
-            from .connections import connection_rows
-
             rows = connection_rows() if connections is None else connections
             found: dict[str, list[tuple[str, bool]]] = {}
             for row in rows:
@@ -200,8 +209,6 @@ def unmanaged() -> tuple[Unmanaged, ...]:
     actually happens.
     """
 
-    from .infrastructure import enabled_resources
-
     declared: dict[str, set[tuple[str, ...]]] = {}
     for resource in enabled_resources():
         if resource.kind not in PROVIDERS:
@@ -329,7 +336,6 @@ def adopt_service(
     command: AdoptServiceCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Adopt every unmanaged record behind one hostname, or none of them.
 
@@ -340,18 +346,12 @@ def adopt_service(
     would show a gap that is not really there.
     """
 
-    del expected_updated_at
-    from .infrastructure import NotFoundError
-
     found = next(
         (service for service in unmanaged_services() if service.hostname == normalized_hostname(command.hostname)),
         None,
     )
     if found is None:
-        raise NotFoundError(
-            f"HQ found nothing new to manage for {command.hostname!r}. It may be managed already, or gone."
-        )
-    from .infrastructure import PolicyError
+        raise RecordNotFound("HQ found nothing new to manage for that name. It may be managed already, or gone.")
 
     writable = [item for item in found.items if not item.observed_only]
     if not writable:
@@ -384,7 +384,6 @@ def adopt(
     command: AdoptCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Bring a record the provider already holds under HQ's management.
 
@@ -400,21 +399,9 @@ def adopt(
     are the ones every other write already uses.
     """
 
-    del expected_updated_at
-    from .infrastructure import (
-        ManagedResourceCommand,
-        NotFoundError,
-        PolicyError,
-        save_managed_resource,
-    )
-
     found = find_unmanaged(command.kind, command.hostname, token=command.token)
     if found is None:
-        subject = command.hostname or command.token or "that record"
-        raise NotFoundError(
-            f"HQ found no new {registry_label(command.kind).lower()} to manage "
-            f"for {subject!r}. It may be managed already, or gone."
-        )
+        raise RecordNotFound("HQ found no new record of that type to manage. It may be managed already, or gone.")
     if PROVIDERS[found.kind].adoption_gap:
         raise PolicyError(PROVIDERS[found.kind].adoption_gap)
     if found.observed_only:
@@ -454,10 +441,6 @@ def _record_as_observed(key: str, found: Unmanaged) -> None:
     of it is running.
     """
 
-    from django.utils import timezone
-
-    from hq.domains.control_plane.models import ManagedResource
-
     resource = ManagedResource.objects.filter(key=key).first()
     if resource is None:
         return
@@ -489,8 +472,6 @@ def _record_as_observed(key: str, found: Unmanaged) -> None:
 def suggested_key(item: Unmanaged) -> str:
     """A free key an operator would recognise on a list of declarations."""
 
-    from .infrastructure import suggest_key
-
     return suggest_key(item.kind, item.spec)
 
 
@@ -502,10 +483,6 @@ def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
     connection that only observes adopts nothing.
     """
 
-    from django.core.exceptions import ValidationError
-
-    from .infrastructure import NotFoundError, PolicyError
-
     excluded = kept_out()
     adopted: list[str] = []
     for item in unmanaged():
@@ -515,7 +492,7 @@ def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
             continue
         try:
             result = adopt(AdoptCommand(kind=item.kind, token=item.token), principal=principal)
-        except NotFoundError, PolicyError, ValidationError, ValueError:
+        except RecordNotFound, PolicyError, ValidationError, ValueError:
             # One record that cannot be adopted must not stop the rest. The
             # next sweep tries again, so this closes itself rather than needing
             # anybody to notice.

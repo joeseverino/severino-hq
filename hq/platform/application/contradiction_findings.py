@@ -21,12 +21,15 @@ import json
 import shlex
 from collections.abc import Iterable, Mapping
 from typing import Any
+lazy from dataclasses import replace
 
-from hq.domains.control_plane.names import normalized_hostname
+from hq.domains.control_plane.names import in_zone, normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .action_links import command_url
-from .exposure import public_name
+from .exposure import FRONT_DOOR_PORTS, front_door_names, listening_ports, public_name, publicly_answering
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
     Finding,
@@ -37,6 +40,12 @@ from .finding_model import (
     fact_values,
     on_machine,
 )
+lazy from . import exposure, zones
+lazy from .containers import containers
+lazy from .facts import inventory_records
+lazy from .infrastructure import enabled_resources
+lazy from .paths import path_to, routed_names
+lazy from .services import find_service
 
 # The fact a contradiction travels on, from the topology to the rule reading it.
 FACT = "contradiction"
@@ -56,8 +65,6 @@ def _update(key: str, label: str) -> Remedy:
 
 def _claims(hostname: str, facet_ids: Iterable[str] = ()) -> tuple[Any, ...]:
     """The declarations taking part in a name's service, optionally by facet."""
-
-    from .services import find_service
 
     service = find_service(hostname)
     if service is None:
@@ -79,10 +86,6 @@ def _subject(hostname: str) -> str:
 
 
 def _answered_by_nothing() -> tuple[Finding, ...]:
-    from .containers import containers
-    from .exposure import FRONT_DOOR_PORTS, listening_ports
-    from .paths import path_to, routed_names
-
     # Only a machine whose containers HQ reads can be said to serve nothing:
     # elsewhere (shared hosting, a bare server) what answers is unknown. A
     # machine where a container answers on a web port serves names HQ cannot
@@ -137,10 +140,6 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
 
 
 def _containers_by_place() -> dict[tuple[str, str], Mapping[str, Any]]:
-    from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-
-    from .facts import inventory_records
-
     return {
         (str(record.get("host", "")), str(record.get("name", ""))): record
         for _snapshot, record in inventory_records(CONTAINER_KIND)
@@ -170,8 +169,6 @@ def _said(state: str) -> str:
 
 
 def _routed_to_stopped() -> tuple[Finding, ...]:
-    from .paths import path_to, routed_names
-
     containers = _containers_by_place()
     found = []
     for name in routed_names():
@@ -205,17 +202,10 @@ def _routed_to_stopped() -> tuple[Finding, ...]:
 
 
 def _gates_guarding_nothing() -> tuple[Finding, ...]:
-    from hq.domains.control_plane.names import in_zone
-    from hq.domains.control_plane.observations import OBSERVATIONS
-
-    from .facts import inventory_records
-    from .paths import routed_names
-    from .zones import zone_names
-
     routed = set(routed_names())
     # Only a name in a domain HQ reads can be said to have no record: a gate on
     # the provider's own login domain names nothing HQ could have seen.
-    zones = zone_names()
+    domains = zones.zone_names()
     found = []
     for spec in OBSERVATIONS.values():
         if not spec.restricts:
@@ -223,7 +213,7 @@ def _gates_guarding_nothing() -> tuple[Finding, ...]:
         for _snapshot, record in inventory_records(spec.kind):
             title = spec.title(record)
             for name in sorted({normalized_hostname(host) for host in spec.hostnames(record)} - routed - {""}):
-                if "*" in name or not any(in_zone(name, zone) for zone in zones):
+                if "*" in name or not any(in_zone(name, zone) for zone in domains):
                     continue
                 console = spec.console(record)
                 found.append(
@@ -252,8 +242,6 @@ def _gates_guarding_nothing() -> tuple[Finding, ...]:
 
 
 def _split_horizon() -> tuple[Finding, ...]:
-    from .paths import path_to, routed_names
-
     found = []
     for name in routed_names():
         routes = path_to(name).routes
@@ -303,10 +291,7 @@ def _split_horizon() -> tuple[Finding, ...]:
 
 
 def _unfronted_ports() -> tuple[Finding, ...]:
-    from .containers import containers
-    from .exposure import front_door_names, publicly_answering, routed_containers
-
-    routed = routed_containers()
+    routed = exposure.routed_containers()
     found = []
     for item in containers():
         if not item.running.ports or item.serves or (item.machine.name, item.running.name) in routed:
@@ -359,8 +344,6 @@ def _served_not_held() -> tuple[Finding, ...]:
     installed; HQ holds and renews one certificate while the host hands out
     another, so a renewal changes nothing a browser sees.
     """
-
-    from .infrastructure import enabled_resources
 
     found = []
     for resource in enabled_resources():
@@ -416,8 +399,6 @@ def add_contradiction_facts(nodes) -> None:
     the first node: the rules read every node, so where it rides only has to
     exist.
     """
-
-    from dataclasses import replace
 
     if not nodes:
         return

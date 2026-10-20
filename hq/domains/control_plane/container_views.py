@@ -6,6 +6,20 @@ from django.views.generic import TemplateView
 
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.routes import reverse
+lazy from hq.platform.application.container_attention import needs_you
+lazy from hq.platform.application.containers import (
+    BEHIND,
+    CURRENT,
+    UP_TO_DATE,
+    UPDATE_AVAILABLE,
+    VULNERABLE,
+    containers,
+    standing_of,
+)
+lazy from hq.platform.application.machines import container_context
+lazy from hq.platform.application.upgrades import plan_for, readiness_of
+
+lazy from .views import returning_to
 
 
 def container_detail(resource: Any, request: Any) -> dict[str, Any]:
@@ -14,12 +28,6 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
     what it runs is current and safe, how it is run, and what upgrading it
     would take: the same objects the containers page and the containers and
     upgrades resources serve, so none can disagree."""
-
-    from hq.platform.application.containers import containers, standing_of
-    from hq.platform.application.machines import container_context
-    from hq.platform.application.upgrades import plan_for, readiness_of
-
-    from .views import returning_to
 
     found = container_context(resource.spec.get("host", ""), resource.spec.get("name", ""))
     running, machine = found.get("running"), found.get("machine")
@@ -52,17 +60,6 @@ class ContainerListView(PageMixin, TemplateView):
 
     @override
     def get_context_data(self, **kwargs):
-        from hq.platform.application.container_attention import needs_you
-        from hq.platform.application.containers import (
-            BEHIND,
-            CURRENT,
-            UP_TO_DATE,
-            UPDATE_AVAILABLE,
-            VULNERABLE,
-            containers,
-        )
-        from hq.platform.application.upgrades import plan_for
-
         context = super().get_context_data(**kwargs)
         found = containers()
         groups: dict[str, dict] = {}

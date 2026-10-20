@@ -28,11 +28,14 @@ from dataclasses import dataclass
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.observations.host import PERIMETER_KIND
 
 from .facts import Subject, readings
 from .path_model import Route
 from .projection import read_once
 from .reach import network_of
+lazy from . import paths
+lazy from .paths import path_to, routed_names
 
 OPEN, GATED, PRIVATE, UNKNOWN, UNROUTED = "open", "gated", "private", "unknown", "unrouted"
 # Worst first: the order a page lists them and the index a ranking compares.
@@ -215,8 +218,6 @@ def exposure_of_name(hostname: str) -> Exposure:
 
 
 def _exposure_of_name(name: str) -> Exposure:
-    from .paths import path_to
-
     found = []
     for route in path_to(name).routes:
         level = route_level(name, route)
@@ -242,8 +243,6 @@ def exposure_of_names(hostnames: Iterable[str]) -> Exposure:
 
 def publicly_answering(addresses: Iterable[str]) -> frozenset[int]:
     """The ports a perimeter check saw answer from the internet on these addresses."""
-
-    from hq.domains.control_plane.observations.host import PERIMETER_KIND
 
     subject = Subject.of(addresses=tuple(address for address in addresses if address))
     return frozenset(
@@ -272,8 +271,6 @@ def routed_containers() -> dict[tuple[str, str], frozenset[str]]:
 
 
 def _routed_containers() -> dict[tuple[str, str], frozenset[str]]:
-    from .paths import path_to, routed_names
-
     found: dict[tuple[str, str], set[str]] = {}
     for name in routed_names():
         for route in path_to(name).routes:
@@ -311,8 +308,6 @@ def front_door_names(item) -> frozenset[str]:
 
 
 def _exposure_of_container(item) -> Exposure:
-    from .paths import reads_every_route
-
     names = {
         *item.serves,
         *routed_containers().get((item.machine.name, item.running.name), ()),
@@ -336,13 +331,11 @@ def _exposure_of_container(item) -> Exposure:
     checked = not item.running.ports or bool(_perimeter_read(machine))
     return Exposure(
         tuple(sorted((*direct, *named.routes), key=lambda route: LEVELS.index(route.level))),
-        known=reads_every_route() and checked,
+        known=paths.reads_every_route() and checked,
     )
 
 
 def _perimeter_read(machine) -> bool:
-    from hq.domains.control_plane.observations.host import PERIMETER_KIND
-
     addresses = (*getattr(machine, "addresses", ()), getattr(machine, "address", ""))
     subject = Subject.of(addresses=tuple(address for address in addresses if address))
     return bool(readings().about(subject, kinds=(PERIMETER_KIND,)))

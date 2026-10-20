@@ -8,14 +8,25 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations.tailscale import EXIT_ROUTES
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.observations.host import PERIMETER_KIND
+lazy from hq.platform.core.network import parse_ip
 
 from .topology_model import TopologyNode
+lazy from . import tailnet
+lazy from .conditions import held_since
+lazy from .connections import connection_rows, unfinished_work
+lazy from .credential_findings import ENDPOINT, FAILURE, UNREPORTED, credential_facts
+lazy from .credential_mint import credential_fixes
+lazy from .estate import refused_connections
+lazy from .facts import Subject, connection_facts, inventory_about, snapshots_of
+lazy from .history import near
+lazy from .moments import ago
+lazy from .tailnet import device_at, may_reach, observer, posture_facts
+lazy from .zones import ZONE_KIND
 
 
 def _inventory_of(kind: str) -> tuple[Any, ...]:
     """Snapshots of one kind, from the join engine's one read of the inventory."""
-
-    from .facts import snapshots_of
 
     return snapshots_of(kind)
 
@@ -38,7 +49,6 @@ def _perimeter_facts() -> dict[str, tuple[tuple[str, str], ...]]:
     """Each machine's perimeter reading, keyed by the connection that took it."""
 
     found: dict[str, tuple[tuple[str, str], ...]] = {}
-    from hq.domains.control_plane.observations.host import PERIMETER_KIND
 
     for snapshot in _inventory_of(PERIMETER_KIND):
         for record in snapshot.records:
@@ -66,8 +76,6 @@ def _tailnet_facts() -> tuple[tuple[str, str], ...]:
     Nothing is said without a device reading, since every claim here compares
     against it.
     """
-
-    from hq.platform.core.network import parse_ip
 
     addresses: set[str] = set()
     routes: set[str] = set()
@@ -104,9 +112,7 @@ def _policy_verdicts(
     to change an access policy that was never the problem.
     """
 
-    from .tailnet import device_at, devices, may_reach, observer
-
-    known = devices()
+    known = tailnet.devices()
     watcher = observer(known)
     if watcher is None:
         return found
@@ -141,8 +147,6 @@ def add_observed_facts(
     and no declaration mentions. A rule reasoning about either has no other way
     to see it, and rules may not query.
     """
-
-    from .zones import ZONE_KIND
 
     found: dict[str, tuple[tuple[str, str], ...]] = {}
 
@@ -195,8 +199,6 @@ def add_observed_facts(
     if not zones:
         return found
 
-    from .facts import Subject, inventory_about
-
     for resource in zones:
         name = normalized_hostname(resource.spec.get("zone"))
         registration: dict[str, Any] = {}
@@ -216,10 +218,6 @@ def add_observed_facts(
 
 
 def _drift_facts(resource) -> tuple[tuple[str, str], ...]:
-    from .conditions import held_since
-    from .history import near
-    from .moments import ago
-
     since = held_since(resource.conditions, "Drifted")
     if since is None:
         return ()
@@ -248,13 +246,6 @@ def add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
     readings on the connections of the tailnet's providers, and what each
     reading's ``facts`` say about the connection that took it.
     """
-
-    from .connections import unfinished_work
-    from .credential_findings import credential_facts
-    from .credential_mint import credential_fixes
-    from .estate import refused_connections
-    from .facts import connection_facts
-    from .tailnet import TAILNET_KIND, posture_facts
 
     perimeter = _perimeter_facts()
     unanswered = _unanswered()
@@ -290,9 +281,6 @@ def _unanswered() -> dict[tuple[str, str], tuple[tuple[str, str], ...]]:
 
     One its controller stopped reporting says when instead of why.
     """
-
-    from .connections import connection_rows
-    from .credential_findings import ENDPOINT, FAILURE, UNREPORTED
 
     return {
         (row.controller_id, row.connection_ref): (

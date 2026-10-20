@@ -9,6 +9,11 @@ time it reads them and keys its answers on them from then on (``derivations``).
 
 from typing import Any
 
+lazy from .cadence import recently_used
+lazy from .demo import showing_demo
+lazy from .domains import composition
+lazy from .hq_self import scoped_served_at, scoped_served_port
+
 # The estate: what is declared, what the controller observed, and the readings
 # and registry records joined to them.
 ESTATE_READS: tuple[str, ...] = (
@@ -57,9 +62,6 @@ def composed_variant() -> tuple[Any, ...]:
     extension's part is worded by, and which providers compose it.
     """
 
-    from .demo import showing_demo
-    from .domains import composition
-
     return (*estate_variant(), showing_demo(), composition())
 
 
@@ -70,9 +72,6 @@ def estate_variant(principal: Any = None) -> tuple[Any, ...]:
     address and port the request reached HQ on, which place HQ's own service;
     and whether HQ is in use, which sets the sweep interval a finding quotes.
     """
-
-    from .cadence import recently_used
-    from .hq_self import scoped_served_at, scoped_served_port
 
     reader: tuple[Any, ...] = ()
     if principal is not None:

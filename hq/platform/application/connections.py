@@ -20,7 +20,8 @@ from datetime import datetime
 from hq.domains.control_plane.connection_kinds import connection_credential
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, registry_label
+from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, registry_label, resource_home
+lazy from hq.domains.control_plane.names import normalized_hostname
 
 from .connection_catalog import CONTROLLER_CONNECTIONS, connection_catalog, serialize_connection
 
@@ -34,21 +35,17 @@ from .connection_contracts import (
     ConnectionLink,
     ConnectionSpec,
 )
+from .connection_lifecycle import Lifecycle, probed, standing
 from .connection_setup import guide_url
 from .entity_links import entity_link
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
 from .moments import ago
 from .security import Capability, Principal
-
-# A reading's status in words. The age shown beside it is when the controller
-# reported, which is not when anything was probed.
-_READING_STATUS_LABELS = {
-    "unreachable": "Not answering",
-    "reachable": "Working",
-    "unprobed": "Not tested",
-    "unreported": "No longer reported",
-}
+lazy from . import machines
+lazy from .infrastructure import enabled_resources
+lazy from .locate import index_of
+lazy from .projection import read_once
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,16 +82,18 @@ class ConnectionReading:
     unreported_at: datetime | None = None
 
     @property
-    def status(self) -> str:
-        if self.unreported_at is not None:
-            return "unreported"
-        if not self.reachable:
-            return "unreachable"
-        return "reachable" if self.probed else "unprobed"
+    def status(self) -> Lifecycle:
+        return standing(
+            probed(reachable=self.reachable, was_probed=self.probed),
+            unreported=self.unreported_at is not None,
+        )
 
     @property
     def status_label(self) -> str:
-        return _READING_STATUS_LABELS[self.status]
+        """The status in words. The age shown beside it is when the controller
+        reported, which is not when anything was probed."""
+
+        return self.status.label
 
 
 def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
@@ -134,8 +133,6 @@ def _one_name(resource) -> str:
     Read from the provider: its hostnames, else an identity of a single value.
     """
 
-    from hq.domains.control_plane.names import normalized_hostname
-
     provider = PROVIDERS.get(resource.kind)
     if provider is None:
         return ""
@@ -159,8 +156,6 @@ def _depends(reading: ConnectionReading) -> tuple[tuple[ConnectionLink, ...], tu
     the name stays, linked to the target's page or else the declaration's home,
     and carries the declaration's key.
     """
-
-    from hq.domains.control_plane.names import normalized_hostname
 
     targets = (
         tuple(ConnectionLink(name, url) for name, url in reading.machines)
@@ -187,25 +182,17 @@ def _depends(reading: ConnectionReading) -> tuple[tuple[ConnectionLink, ...], tu
 def machines_once() -> tuple:
     """The machine catalogue, read once per projection and shared."""
 
-    from .machines import machine_catalog
-    from .projection import read_once
-
-    return read_once("machines.catalog", machine_catalog)
+    return read_once("machines.catalog", machines.machine_catalog)
 
 
 def connection_rows() -> tuple:
     """Every reported connection row, read once per projection and shared."""
-
-    from .projection import read_once
 
     return read_once("connections.rows", lambda: tuple(ProviderConnection.objects.all()))
 
 
 def connection_readings() -> tuple[ConnectionReading, ...]:
     """Every connection every controller last reported, and what ties to it."""
-
-    from .infrastructure import enabled_resources
-    from .locate import index_of
 
     catalog = machines_once()
     # Every name the board has for a machine, its own and the ones it folded
@@ -223,7 +210,6 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
     # is whatever the board decided it was, joined on a fact rather than on the
     # label a template happens to render.
     located = index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog])
-    from hq.domains.control_plane.providers import resource_home
 
     using: dict[str, list[tuple[str, str]]] = {}
     named: dict[str, list[tuple[str, str, str]]] = {}

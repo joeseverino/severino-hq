@@ -23,7 +23,6 @@ from hq.platform.application.entity_links import kind_label
 from hq.platform.application.glance import dashboard_machine_selected, select_dashboard_machine
 from hq.platform.application.infrastructure import (
     ManagedResourceCommand,
-    NotFoundError,
     PolicyError,
     resolved_spec,
     save_managed_resource,
@@ -37,6 +36,7 @@ from hq.platform.application.provider_forms import (
     ResourceIdentityForm,
     spec_form_class,
 )
+from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.resource_context import readout_rows
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
@@ -451,7 +451,7 @@ class AdoptView(View):
                 AdoptServiceCommand(hostname=hostname),
                 principal=web_principal(request.user),
             )
-        except (NotFoundError, PolicyError, DjangoValidationError) as exc:
+        except (RecordNotFound, PolicyError, DjangoValidationError) as exc:
             messages.error(request, _readable_error(exc))
             return redirect("control_plane:services")
         adopted = ", ".join(result["adopted"])
@@ -542,7 +542,7 @@ class AdoptRecordView(View):
                 AdoptCommand(kind=kind, token=token),
                 principal=web_principal(request.user),
             )
-        except (NotFoundError, PolicyError, ValueError) as exc:
+        except (RecordNotFound, PolicyError, ValueError) as exc:
             messages.error(request, str(exc))
         else:
             messages.success(

@@ -24,6 +24,30 @@ PROJECT_CATEGORY_CHOICES = [
 ]
 
 
+class ProjectQuerySet(models.QuerySet["Project"]):
+    def _without(self, relation: str) -> models.Exists:
+        through = getattr(self.model, relation).through
+        return ~models.Exists(through.objects.filter(project=models.OuterRef("pk")))
+
+    def no_content(self) -> ProjectQuerySet:
+        """Projects no writeup or page names."""
+
+        return self.filter(self._without("content_items"))
+
+    def no_docs(self) -> ProjectQuerySet:
+        """Projects no document names."""
+
+        return self.filter(self._without("documentation_records"))
+
+    def needs_output(self) -> ProjectQuerySet:
+        """Active projects still missing a writeup or a document."""
+
+        return self.filter(
+            models.Q(self._without("content_items")) | models.Q(self._without("documentation_records")),
+            status=Project.Status.ACTIVE,
+        )
+
+
 class Project(TimestampedModel):
     class Status(models.TextChoices):
         IDEA = "idea", "Idea"
@@ -55,6 +79,8 @@ class Project(TimestampedModel):
     notes = models.TextField(blank=True)
 
     referable = Referable(kind="project", key="slug", shows=("name",))
+
+    objects = ProjectQuerySet.as_manager()
 
     class Meta:
         ordering = ("-updated_at",)

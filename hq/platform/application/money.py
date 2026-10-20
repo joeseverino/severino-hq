@@ -14,6 +14,8 @@ re-derives the quantize with ``Decimal("0.01")`` gets the other rounding mode.
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import overload
 
+lazy from .ui import MISSING
+
 CENTS = Decimal("0.01")
 
 
@@ -57,8 +59,6 @@ def money(value: Decimal | int | float | None, *, cents: bool = True) -> str:
     ``cents=False`` is for a figure that is scanned, never reconciled: a
     balance, a total over a year. Nothing shows the mark for a missing value.
     """
-
-    from .ui import MISSING
 
     amount = to_money(value)
     if amount is None:

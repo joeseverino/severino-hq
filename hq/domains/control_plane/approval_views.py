@@ -6,6 +6,7 @@ from django.views import View
 
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import AuthorizationError, safe_next, web_principal
+lazy from hq.platform.application import approvals
 
 
 class ApprovalDecisionView(View):
@@ -17,8 +18,6 @@ class ApprovalDecisionView(View):
     """
 
     def post(self, request, approval_id, decision=None):
-        from hq.platform.application import approvals
-
         decision = decision or request.POST.get("decision", "")
         try:
             if decision == "approve":

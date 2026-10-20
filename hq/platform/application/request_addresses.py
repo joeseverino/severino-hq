@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from hq.platform.core.network import split_host_port
 
-from .connection import Connection
 from .request_channel import channel_of
+from .request_connection import Connection
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,5 +1,7 @@
 """Leaf contracts shared by integration emitters and the graph compiler."""
 
+import inspect
+from annotationlib import Format
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
@@ -9,6 +11,7 @@ from pydantic import BaseModel, TypeAdapter
 
 from .search_contracts import SearchDefinition
 from .security import Capability
+lazy from .labels import human_label
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +58,25 @@ def declares_idempotency_key(command_type: type) -> bool:
     """Whether the command carries the key into its own domain operation."""
 
     return IDEMPOTENCY_FIELD in command_schema(command_type).get("properties", {})
+
+
+# The caller's stale-write token, handed only to a handler that names it.
+STALE_WRITE_KEYWORD = "expected_updated_at"
+
+
+@cache
+def takes_stale_write_token(handler: Callable[..., Any]) -> bool:
+    """Whether a capability handler declares ``expected_updated_at`` by name.
+
+    Only a handler that checks for a stale write declares it; every other
+    handler is called without it.
+    """
+
+    parameter = inspect.signature(handler, annotation_format=Format.STRING).parameters.get(STALE_WRITE_KEYWORD)
+    return parameter is not None and parameter.kind in (
+        inspect.Parameter.KEYWORD_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    )
 
 
 def capability_schema(spec: CapabilitySpec) -> dict[str, Any]:
@@ -108,8 +130,6 @@ class CapabilitySpec:
     def title(self) -> str:
         """The command's name wherever a person reads it."""
 
-        from .labels import human_label
-
         return self.label or human_label(self.name)
 
 
@@ -133,6 +153,9 @@ class ResourceSpec:
     detail_handler: Callable[..., object] | None = None
     identifier: str | None = None
     identifier_type: type = str
+    # RecordNotFound is answered as not found without being listed; these are
+    # the other types a detail handler raises for a missing record, such as an
+    # extension model's DoesNotExist.
     not_found_errors: tuple[type[Exception], ...] = ()
     search: SearchDefinition | None = None
     web_route: str = ""

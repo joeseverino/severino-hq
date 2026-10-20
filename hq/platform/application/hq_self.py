@@ -25,6 +25,10 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.network import is_address
 
 from .locate import Machines, host_of
+lazy from . import connections, machines, request_path
+lazy from .containers import containers
+lazy from .entity_links import entity_link
+lazy from .projection import read_once
 
 
 def site_label() -> str:
@@ -66,8 +70,6 @@ class SelfService:
 
     @property
     def machine_url(self) -> str:
-        from .entity_links import entity_link
-
         return entity_link("machine", self.machine).url
 
 
@@ -124,15 +126,11 @@ def serving(request: Any) -> dict[str, Any]:
 def scoped_served_at() -> tuple[str, ...]:
     """The address the current projection was seeded with, or ()."""
 
-    from .projection import read_once
-
     return read_once(_SERVED_AT, tuple)
 
 
 def scoped_served_port() -> int | None:
     """The port the current projection was seeded with, or None."""
-
-    from .projection import read_once
 
     return read_once(_SERVED_PORT, lambda: None)
 
@@ -222,13 +220,11 @@ def hq_service(request: Any = None, *, catalog: Iterable[Any] | None = None) -> 
     The machine is the machine catalogue's answer, so every page agrees.
     """
 
-    from .machines import machine_catalog
-
     hostnames = hq_hostnames()
     if not hostnames:
         return None
     if catalog is None:
-        catalog = machine_catalog(served_at=served_at(request) if request is not None else None)
+        catalog = machines.machine_catalog(served_at=served_at(request) if request is not None else None)
     found = next((item for item in catalog if item.hq_hostnames), None)
     return SelfService(hostnames=hostnames, machine=found.name if found else "")
 
@@ -236,9 +232,7 @@ def hq_service(request: Any = None, *, catalog: Iterable[Any] | None = None) -> 
 def own_machine() -> Any | None:
     """The catalogue's machine HQ runs on, or None where no address names one."""
 
-    from .connections import machines_once
-
-    return next((item for item in machines_once() if item.runs_hq), None)
+    return next((item for item in connections.machines_once() if item.runs_hq), None)
 
 
 def own_container() -> Any | None:
@@ -251,17 +245,12 @@ def own_container() -> Any | None:
     one, so two candidates are "not known", never the first of them.
     """
 
-    from .projection import read_once
-
     return read_once("hq_self.own_container", _own_container)
 
 
 def _own_container() -> Any | None:
-    from .containers import containers
-    from .request_path import own_container_id
-
     running = containers()
-    here = own_container_id()
+    here = request_path.own_container_id()
     # Docker's short ID: twelve characters, whichever length a reading stored.
     by_id = [item for item in running if here and item.running.id and item.running.id[:12] == here[:12]]
     if len(by_id) == 1:

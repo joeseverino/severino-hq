@@ -17,20 +17,25 @@ from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
 from hq.platform.core.audit import operation_context
 
-from .adoption import OBSERVES_ONLY, observes_only
-from .approvals import consent_gap
+from .adoption import OBSERVES_ONLY, keep_out_declaration, observes_only
+from .approvals import AGENT_SURFACES, consent_gap
 from .cadence import ring_doorbell
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     ManagedResourceCommand,
-    NotFoundError,
     PolicyError,
     delivery_targets,
     is_drifted,
     save_managed_resource,
 )
+from .record_errors import RecordNotFound
 from .security import Capability, Principal
 from .ui import counted
+lazy from . import tailnet
+lazy from .inventory import live_spec
+lazy from .moments import when_day
+lazy from .resource_capabilities import public_dns_enabled
+lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,8 +114,6 @@ def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
 
 def requested_by(operation: OperationRequest) -> str:
     """Who asked, as a person reads it."""
-
-    from .approvals import AGENT_SURFACES
 
     if operation.requested_interface == _AUTOMATIC:
         return "Automatic"
@@ -218,7 +221,7 @@ def _resource_for_operation(key: str) -> ManagedResource:
     try:
         return ManagedResource.objects.select_for_update().get(key=key)
     except ManagedResource.DoesNotExist as exc:
-        raise NotFoundError(f"No record named {key!r}.") from exc
+        raise RecordNotFound("That record was not found.") from exc
 
 
 def _queue_operation(
@@ -304,12 +307,9 @@ def request_reconcile(
     *,
     principal: Principal,
     current_key: str,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
-    from .resource_capabilities import public_dns_enabled
 
     if PROVIDERS[resource.kind].public_effect and not public_dns_enabled():
         raise PolicyError("Public DNS changes are off on this server.")
@@ -366,8 +366,6 @@ def _forget_declaration(
     back means.
     """
 
-    from .adoption import keep_out_declaration
-
     with operation_context(
         interface=principal.interface,
         actor=principal.actor,
@@ -402,7 +400,6 @@ def request_lifecycle(
     principal: Principal,
     current_key: str,
     action: str,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Ask the controller to start, stop or restart what a declaration names.
 
@@ -415,7 +412,6 @@ def request_lifecycle(
     claim.
     """
 
-    del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
     with operation_context(
@@ -432,7 +428,6 @@ def accept_observed(
     *,
     principal: Principal,
     current_key: str,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Make the declaration say what the provider holds.
 
@@ -444,14 +439,11 @@ def accept_observed(
     finds the two agreeing.
     """
 
-    from .inventory import live_spec
-
-    del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
     found = live_spec(resource.kind, resource.spec)
     if found is None:
-        raise NotFoundError(f"No live record was last seen for {resource.key!r}, so there is nothing to accept.")
+        raise RecordNotFound("No live record was last seen for this one, so there is nothing to accept.")
     kept = {
         field: resource.spec[field] for field in PROVIDERS[resource.kind].unobservable_fields if field in resource.spec
     }
@@ -476,7 +468,6 @@ def request_removal(
     *,
     principal: Principal,
     current_key: str,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Queue removal of the thing this declaration describes.
 
@@ -490,7 +481,6 @@ def request_removal(
     just before an operator decides to be rid of it.
     """
 
-    del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
     # HQ deletes at the provider only through a connection that manages.
@@ -539,7 +529,6 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
     left = max(0, days_until(expiry))
     if datetime.now(UTC) >= renewal_opens_at(expiry, window):
         return True, f"{counted(left, 'day')} remaining."
-    from .moments import when_day
 
     return (
         False,
@@ -554,7 +543,6 @@ def request_route_approval(
     *,
     principal: Principal,
     current_key: str,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Approve the routes a tailnet device is already advertising.
 
@@ -565,7 +553,6 @@ def request_route_approval(
     to trust that machine with traffic for those addresses.
     """
 
-    del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
     with operation_context(
@@ -586,7 +573,6 @@ def request_reach_allow(
     *,
     principal: Principal,
     current_key: str,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Open the path a reading proved is shut, where the tailnet is what shut it.
 
@@ -600,20 +586,10 @@ def request_reach_allow(
     gated kind, so this proposes and somebody else consents.
     """
 
-    del expected_updated_at
     principal.require(Capability.MANAGE_INFRASTRUCTURE)
     resource = _resource_for_operation(current_key)
 
-    from .tailnet import (
-        POLICY_KIND,
-        device_at,
-        devices,
-        may_reach,
-        observer,
-        policy_allowing,
-    )
-
-    known = devices()
+    known = tailnet.devices()
     watcher = observer(known)
     if watcher is None:
         raise PolicyError(
@@ -670,9 +646,7 @@ def request_certificate_renewal(
     *,
     principal: Principal,
     current_key: str,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
-    del expected_updated_at
     principal.require(Capability.REQUEST_CERTIFICATE_RENEWAL)
     resource = _resource_for_operation(current_key)
     allowed, explanation = certificate_renewal_allowed(resource)

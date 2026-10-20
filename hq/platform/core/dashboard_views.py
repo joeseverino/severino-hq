@@ -34,6 +34,7 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import ListRow
 from hq.platform.application.visit_refresh import worth_asking
+lazy from hq.platform.application.pins import DASHBOARD_LINK, replace
 
 # A queue of this many or fewer is read on the dashboard itself, each card
 # with its button; a longer one is a count and a link to its page.
@@ -62,8 +63,6 @@ class DashboardLinkChoiceView(View):
         )
 
     def post(self, request):
-        from hq.platform.application.pins import DASHBOARD_LINK, replace
-
         offered = {item["href"].lower() for item in link_choices(None)}
         keep = {
             href.lower()

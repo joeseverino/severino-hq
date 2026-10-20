@@ -40,6 +40,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
+lazy from django.contrib.staticfiles.storage import staticfiles_storage
 
 from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 from hq.platform.core.example_estate.names import HQ, HQ_SOURCE
@@ -411,8 +412,6 @@ class DemoBuild(TestCase):
 
     def _copy_root(self, client: Client) -> None:
         """Copy the icons, the API document, the speculation rules and the liveness check."""
-
-        from django.contrib.staticfiles.storage import staticfiles_storage
 
         # By the collected name: only content-named copies are kept.
         for icon in _ROOT_ICONS:

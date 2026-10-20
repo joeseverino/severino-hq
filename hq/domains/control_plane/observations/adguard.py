@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from hq.platform.application.ui import counted
+lazy from hq.platform.application.reach import network_of
 
 from ..names import normalized_hostname
 from .contract import ObservationRecord, ObservationSpec, ReadingPart
@@ -144,8 +145,6 @@ def upstream(line: Any) -> dict[str, Any] | None:
 
 def is_local(host: str) -> bool:
     """Whether an upstream host is an address on this site: loopback, tailnet or private."""
-
-    from hq.platform.application.reach import network_of
 
     return network_of(host) in {"loopback", "tailnet", "network"}
 

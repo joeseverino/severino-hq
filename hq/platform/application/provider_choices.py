@@ -32,6 +32,7 @@ from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .connections import connections_for, reachable_through
+lazy from .tailnet_presence import observed_addresses
 
 
 def proxy_choices(context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
@@ -274,7 +275,5 @@ def machine_address_notes() -> dict[str, dict[str, str]]:
     the printer; leaving it silent invites somebody to correct HQ about a value
     HQ is watching.
     """
-
-    from .tailnet_presence import observed_addresses
 
     return {"addresses": observed_addresses()}

@@ -19,10 +19,10 @@ from django.utils.html import escape
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 
-from ..connection import connection
 from ..moments import when
 from ..request_addresses import addresses_of, addresses_of_hq
 from ..request_channel import channel_for_request, channel_of
+from ..request_connection import connection
 from ..request_headers import headers_of
 from ..request_path import address_chain
 from ..ui import MISSING
@@ -952,8 +952,8 @@ class ServingDeviceTests(TestCase):
 
     def resolution(self, own, served=()):
         from .. import tailnet
-        from ..connection import _serving_device_resolution
         from ..infrastructure import declared_machines
+        from ..request_connection import _serving_device_resolution
 
         with mock.patch("hq.platform.application.hq_self.host_addresses", return_value=frozenset(own)):
             return _serving_device_resolution(tailnet.devices(), declared_machines(), tuple(served))
@@ -1084,7 +1084,7 @@ class CarriageTests(TestCase):
         from unittest import mock
 
         with mock.patch(
-            "hq.platform.application.connection.on_link_networks",
+            "hq.platform.application.request_connection.on_link_networks",
             return_value=(ip_network("2001:db8:0:1::/64"),),
         ):
             home = self._connection(direct_endpoint="[2001:db8:0:1::99]:41641").peering
@@ -1297,7 +1297,7 @@ class VerdictTests(SimpleTestCase):
     def verdict(self, *layers):
         from types import SimpleNamespace
 
-        from ..connection import Connection
+        from ..request_connection import Connection
 
         return Connection(
             address="100.64.0.20",

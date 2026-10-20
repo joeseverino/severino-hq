@@ -20,11 +20,16 @@ from hq.domains.control_plane.provider_adapters.contracts import IngressPolicy
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.network import split_host_port
+lazy from hq.domains.control_plane.models import ProviderInventory
 
 from .connection_catalog import ConnectionGroup
+from .connection_lifecycle import ATTENTION, WORKING, Lifecycle
 from .reach import TAILNET
 from .request_channel import channel_for_request
 from .ui import counted
+lazy from .facts import stored_snapshots
+lazy from .moments import ago
+lazy from .request_path import address_chain
 
 # Each check is a statement that is true or not. The page answers it Yes, No,
 # Check or Unknown from the state beside it.
@@ -39,10 +44,6 @@ ANSWERS = {
     "attention": "Check",
     "neutral": "Unknown",
 }
-
-# Lifecycle states that need a person: stale evidence, missing access, a
-# failed probe, a rejected credential.
-ATTENTION_LIFECYCLES = ("stale", "unauthorized", "unreachable", "revoked", "unreported")
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,8 +308,6 @@ def host_firewall_control(snapshot) -> SecurityControl:
 def _snapshots(*kinds: str) -> dict:
     """The stored inventory of each kind, by kind, in one query."""
 
-    from hq.domains.control_plane.models import ProviderInventory
-
     return {row.kind: row for row in ProviderInventory.objects.filter(kind__in=kinds)}
 
 
@@ -332,8 +331,6 @@ def observed_connection_controls(
 ) -> tuple[SecurityControl, SecurityControl]:
     """Both provider controls, from the one read of every reading the
     connections page already shares."""
-
-    from .facts import stored_snapshots
 
     stored = stored_snapshots()
     snapshots = {kind: stored[kind][0] for kind in (*ingress_kinds(), TAILNET_POLICY_KIND) if stored.get(kind)}
@@ -364,7 +361,6 @@ REQUEST_CONTROLS = frozenset({"network", "transport", "proxy"})
 def _admission(request, gate: bool) -> _Admission:
     channel = channel_for_request(request)
     secure = bool(request.is_secure())
-    from .request_path import address_chain
 
     trusted_proxies = sum(item.role == "proxy" for item in address_chain(request))
     forwarded = bool(request.META.get("HTTP_X_FORWARDED_FOR", ""))
@@ -512,8 +508,6 @@ def _freshness_control(connections: tuple) -> SecurityControl:
     read, only the lookups made through it, which carry their own times.
     """
 
-    from .moments import ago
-
     connections = tuple(connection for connection in connections if connection.instance.credential_model != "none")
     read = tuple(connection for connection in connections if connection.instance.observed_at)
     oldest = min(read, key=lambda connection: connection.instance.observed_at, default=None)
@@ -550,8 +544,8 @@ def connection_security_posture(
     lifecycle = Counter(connection.lifecycle for connection in connections)
     # The headline counts the same lifecycle each row shows, so the two cannot
     # disagree about a connection.
-    healthy = lifecycle["ready"] + lifecycle["reachable"]
-    attention = sum(lifecycle[state] for state in ATTENTION_LIFECYCLES)
+    healthy = sum(lifecycle[state] for state in WORKING)
+    attention = sum(lifecycle[state] for state in ATTENTION)
     unverified = len(connections) - healthy - attention
     evidence = Counter(state.evidence for state in states)
     scope_verified = evidence["verified"]
@@ -615,9 +609,9 @@ def connection_security_posture(
         scope_undeclared_count=scope_undeclared,
         scope_missing_count=scope_missing,
         scope_unknown_count=scope_unknown,
-        ready_count=lifecycle["ready"],
-        stale_count=lifecycle["stale"],
-        revoked_count=lifecycle["revoked"],
+        ready_count=lifecycle[Lifecycle.READY],
+        stale_count=lifecycle[Lifecycle.STALE],
+        revoked_count=lifecycle[Lifecycle.REVOKED],
         external_custody_count=external_custody,
         dependency_count=dependencies,
     )

@@ -19,6 +19,12 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+lazy from django.utils import timezone
+
+lazy from hq.platform.application.derivation_testing import frozen
+lazy from hq_sdk.money import money
+lazy from hq_sdk.ui import ago, counted, span, when, when_day
+
 EXAMPLES_PATH = Path(__file__).with_name("text_examples.json")
 
 # The year every example is read in, so "this year" never moves the record.
@@ -26,11 +32,6 @@ _YEAR = 2026
 
 
 def _examples() -> dict[str, list[tuple[str, Callable[[], str]]]]:
-    from django.utils import timezone
-
-    from hq_sdk.money import money
-    from hq_sdk.ui import ago, counted, span, when, when_day
-
     def october(year: int, day: int, hour: int, minute: int) -> datetime:
         return timezone.make_aware(datetime(year, 10, day, hour, minute))
 
@@ -77,10 +78,6 @@ def _examples() -> dict[str, list[tuple[str, Callable[[], str]]]]:
 
 def describe() -> dict[str, Any]:
     """Each example's output, read with the clock in ``_YEAR``."""
-
-    from django.utils import timezone
-
-    from hq.platform.application.derivation_testing import frozen
 
     with frozen(timezone.make_aware(datetime(_YEAR, 6, 15, 12))):
         return {

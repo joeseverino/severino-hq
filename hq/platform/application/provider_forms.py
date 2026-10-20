@@ -26,6 +26,8 @@ from typing import Any, ClassVar, override
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
+lazy from django.utils.html import format_html, format_html_join
+lazy from django.utils.safestring import mark_safe
 
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
@@ -85,8 +87,6 @@ class NameListWidget(forms.Widget):
         it did not ask about instead of quietly dropping it.
         """
 
-        from django.utils.html import format_html
-
         note = self.notes.get(item, "")
         if note:
             return format_html(
@@ -114,9 +114,6 @@ class NameListWidget(forms.Widget):
 
     @override
     def render(self, name, value, attrs=None, renderer=None):
-        from django.utils.html import format_html, format_html_join
-        from django.utils.safestring import mark_safe
-
         # What HQ found first, what only this field records underneath it. The
         # observed one is the address the machine actually answers at on the
         # network everything reaches it over; the typed ones are the exceptions

@@ -1,14 +1,17 @@
 """The audit log and one entry in it."""
 
 from typing import override
+lazy from datetime import date, datetime, time, timedelta
 
 from django.urls import reverse
 from django.views.generic import DetailView, ListView
+lazy from django.utils import timezone
 
-from hq.platform.application import history
+from hq.platform.application import approvals, history
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import day_span, projection_scope
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
+lazy from hq.platform.application.approvals import AUDIT_LABELS, awaiting_ids
 
 from .models import AuditLog
 
@@ -44,8 +47,6 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        from hq.platform.application.approvals import awaiting_ids
-
         listing = reverse("core:audit_list")
         awaiting = self._awaiting()
         waiting = len(awaiting_ids())
@@ -71,8 +72,6 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         if not self.request.GET.get(READS):
             qs = qs.exclude(object_type=history.read_request_type())
         if self._awaiting():
-            from hq.platform.application.approvals import AUDIT_LABELS, awaiting_ids
-
             qs = qs.filter(
                 action=AuditLog.Action.CREATED,
                 object_type__in=AUDIT_LABELS,
@@ -85,10 +84,6 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         return self.apply_table_query(qs)
 
     def _day_bounds(self) -> dict:
-        from datetime import datetime, time, timedelta
-
-        from django.utils import timezone
-
         day = self._day()
         if day is None:
             return {}
@@ -97,8 +92,6 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
 
     def _day(self):
         """``?on=YYYY-MM-DD``: one day's history, as the calendar opens it."""
-
-        from datetime import date
 
         try:
             return date.fromisoformat(self.request.GET.get("on", ""))
@@ -194,8 +187,6 @@ class AuditLogDetailView(PageMixin, DetailView):
         """The approval this event opened, reviewed, if it opened one."""
 
         if not hasattr(self, "_held_approval"):
-            from hq.platform.application import approvals
-
             held = approvals.for_audit_event(self.object)
             self._held_approval = approvals.review(held) if held is not None else None
         return self._held_approval

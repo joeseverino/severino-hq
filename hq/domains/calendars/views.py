@@ -13,7 +13,6 @@ from django.views.generic import CreateView, DeleteView, RedirectView, TemplateV
 
 from hq.platform.application.calendar import calendar_day, calendar_month, month_of
 from hq.platform.application.calendar_entries import (
-    NotFoundError,
     calendar_choices,
     choose_source,
     entry_command,
@@ -25,6 +24,7 @@ from hq.platform.application.calendar_entries import (
 from hq.platform.application.deletion import delete_calendar_entry
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.references import ReferencePickerMixin, reference_of
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import ListRow
@@ -175,7 +175,7 @@ class CalendarSourceView(View):
     def post(self, request, source_id):
         try:
             choose_source(request.user, source_id, request.POST.get("shown") == "1")
-        except NotFoundError as exc:
+        except RecordNotFound as exc:
             raise Http404(str(exc)) from exc
         return HttpResponseRedirect(safe_next(request, fallback=reverse("calendar:month"), scope="/calendar/"))
 

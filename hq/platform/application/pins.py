@@ -5,6 +5,8 @@ where things are listed. It never reaches a spec, a generation or the
 controller: the world does not change because somebody starred a domain.
 """
 
+lazy from django.db.models import Max
+
 from hq.platform.core.models import Pin
 
 from .projection import read_once
@@ -69,8 +71,6 @@ def toggle(user, target_kind: str, target_key: str) -> bool:
 
 
 def _next_position(user, target_kind: str) -> int:
-    from django.db.models import Max
-
     highest = Pin.objects.filter(user=user, target_kind=target_kind).aggregate(highest=Max("position"))["highest"]
     return 0 if highest is None else highest + 1
 

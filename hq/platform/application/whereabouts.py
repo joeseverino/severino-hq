@@ -10,6 +10,8 @@ from .entity_links import EntityLink, entity_link
 from .infrastructure import declared_machines
 from .locate import Machines, host_of, machines_index, split_endpoint
 from .projection import read_once
+lazy from .known_hosts import operator
+lazy from .reach import is_documentation, network_of
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,8 +37,6 @@ class Origin:
     @property
     def parked(self) -> bool:
         """Whether the name points at a documentation address, where nothing answers."""
-
-        from .reach import is_documentation
 
         return not self.known and is_documentation(host_of(self.address))
 
@@ -69,8 +69,6 @@ class Origin:
         which is the case this property exists for.
         """
 
-        from .reach import network_of
-
         if self.known or split_endpoint(self.address)[1]:
             return False
         return network_of(host_of(self.address)) not in (
@@ -82,8 +80,6 @@ class Origin:
     @property
     def operator(self) -> str:
         """What a person calls whoever serves this, read off the name itself."""
-
-        from .known_hosts import operator
 
         return operator(self.address) if self.external else ""
 
@@ -306,8 +302,6 @@ def locate(
 
 def _is_loopback(address: str) -> bool:
     """Whether an address means "this machine", by the ranges rather than a name."""
-
-    from .reach import network_of
 
     return network_of(address) == "loopback"
 

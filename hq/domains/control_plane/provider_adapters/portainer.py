@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import Field, field_validator
 
 from hq.platform.application.github_public import GitHubRepositoryURL
+lazy from hq.platform.application.container_standard import CHECK_IDS
 
 from ..connection_shapes import API_TOKEN
 from ..provider_spec import (
@@ -101,8 +102,6 @@ class PortainerContainerSpec(ProviderModel):
     @field_validator("by_design")
     @classmethod
     def _known_checks_with_reasons(cls, value: dict[str, str]) -> dict[str, str]:
-        from hq.platform.application.container_standard import CHECK_IDS
-
         unknown = sorted(set(value) - CHECK_IDS)
         if unknown:
             raise ValueError(f"Not a check of the container standard: {', '.join(unknown)}.")

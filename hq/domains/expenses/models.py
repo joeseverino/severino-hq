@@ -4,11 +4,14 @@ from decimal import Decimal
 from typing import override
 
 from django.db import models
+lazy from django.urls import reverse
 
 from hq.domains.assets.models import PAYMENT_METHOD_CHOICES, quantize_money
 from hq.platform.application import business_use
 from hq.platform.application.references import Referable, ReferenceField
 from hq.platform.core.models import TimestampedModel
+lazy from hq.platform.application.moments import when_day
+lazy from hq.platform.application.money import money
 
 EXPENSE_CATEGORY_CHOICES = [
     ("hosting", "Hosting"),
@@ -127,9 +130,6 @@ class Expense(TimestampedModel):
     def paid_note(self) -> str:
         """When and how much, beside its name where something else lists it."""
 
-        from hq.platform.application.moments import when_day
-        from hq.platform.application.money import money
-
         return f"{when_day(self.date)} · {money(self.total_cost)}"
 
     @override
@@ -139,6 +139,4 @@ class Expense(TimestampedModel):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        from django.urls import reverse
-
         return reverse("expenses:detail", args=[self.pk])

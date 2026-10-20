@@ -77,7 +77,6 @@ def resources() -> tuple[ResourceSpec, ...]:
             AgendaQuery,
             calendar_entries.get_entry,
             "uid",
-            not_found_errors=(calendar_entries.NotFoundError,),
             search=SearchDefinition(
                 "calendar",
                 Entry,

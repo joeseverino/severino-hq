@@ -5,11 +5,13 @@ from unittest import mock
 
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, TestCase, override_settings
+from mcp import types
 
 from hq.domains.assets.models import Asset
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.platform.application import projection
+from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal, is_interactive
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.sentinel import (
@@ -169,9 +171,16 @@ class ServiceTests(SentinelMixin, TestCase):
 
         self.assertEqual(result["count"], projection.MAX_PAGE_SIZE)
 
-    def test_missing_object_uses_structured_service_error(self):
-        with self.assertRaisesRegex(services.NotFoundError, "No 'assets' record"):
-            services.get_resource("assets", "missing")
+    def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
+        sent = "sent-by-the-caller-7f3a"
+        for name in ("assets", "machines", "infrastructure.resources"):
+            with self.subTest(name):
+                with self.assertRaises(RecordNotFound):
+                    services.get_resource(name, sent)
+                params = types.CallToolRequestParams(name="get_resource", arguments={"name": name, "identifier": sent})
+                answer = async_to_sync(mcp._call)(None, params)
+                self.assertTrue(answer.is_error)
+                self.assertNotIn(sent, answer.content[0].text)
 
     def test_registry_audit_names_the_orphans(self):
         Project.objects.create(name="Unreferenced", slug="unreferenced")
@@ -265,7 +274,7 @@ class ServiceTests(SentinelMixin, TestCase):
 
         try:
             return read(*args)
-        except AuthorizationError, services.NotFoundError:
+        except AuthorizationError, RecordNotFound:
             return {}
 
     def test_derived_topology_traces_from_a_focus(self):
@@ -503,7 +512,7 @@ class MCPBoundaryTests(TestCase):
             for name in listable:
                 try:
                     services.list_resource(name)
-                except AuthorizationError, services.NotFoundError:
+                except AuthorizationError, RecordNotFound:
                     continue
                 except Exception as exc:  # noqa: BLE001 - every resource that fails is named, not only the first
                     failed[name] = repr(exc)

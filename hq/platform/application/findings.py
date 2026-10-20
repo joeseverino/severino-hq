@@ -40,7 +40,9 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
+lazy from hq.domains.control_plane.models import OperationRequest
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
 from . import (
     certificate_expiry,
@@ -91,6 +93,10 @@ from .workflows import (
     claim_resolution_plan,
     serialize_workflow,
 )
+lazy from . import cadence
+lazy from .estate import estate_reading
+lazy from .moments import ago
+lazy from .ui import counted
 
 _CLAIM_NAMESPACE = "infrastructure.finding"
 
@@ -217,9 +223,6 @@ class Coverage:
 
     @property
     def sentence(self) -> str:
-        from .moments import ago
-        from .ui import counted
-
         return (
             f"{counted(self.rules, 'check')} over {counted(self.machines, 'machine')} and "
             f"{counted(self.services, 'service')}, from readings {ago(self.read_at)}."
@@ -227,11 +230,8 @@ class Coverage:
 
 
 def coverage() -> Coverage:
-    from .cadence import controller_standing
-    from .estate import estate_reading
-
     estate = estate_reading()
-    return Coverage(len(RULES), len(estate.machines), len(estate.services), controller_standing().seen_at)
+    return Coverage(len(RULES), len(estate.machines), len(estate.services), cadence.controller_standing().seen_at)
 
 
 def rule_for(name: str) -> FindingRule | None:
@@ -370,8 +370,6 @@ def _no_help_reason(finding: Finding) -> str:
 def _read_subject(finding: Finding, subject: TopologyNode | None) -> dict[str, Any] | None:
     """What to read now so the check re-runs on fresh data; None when no reading
     is involved."""
-
-    from hq.domains.control_plane.observations import OBSERVATIONS
 
     if subject is not None and subject.kind == "connection" and subject.connection_ref:
         return {"connection_ref": subject.connection_ref}
@@ -662,9 +660,6 @@ def auto_remediable(*, principal: Principal, limit: int = 10) -> tuple[Repair, .
     the controller pulls; reversing that would put a provider credential in the
     web process, which is the one property the cadence design exists to protect.
     """
-
-    from hq.domains.control_plane.models import OperationRequest
-    from hq.domains.control_plane.providers import enabled_controller_actions
 
     automatic_kinds = {
         kind

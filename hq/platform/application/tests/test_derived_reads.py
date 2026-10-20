@@ -107,9 +107,9 @@ class ApplicationTests(TestCase):
         )
 
     def test_an_unknown_node_is_not_found(self):
-        from ..resources import ResourceNotFound
+        from ..record_errors import RecordNotFound
 
-        with self.assertRaises(ResourceNotFound):
+        with self.assertRaises(RecordNotFound):
             get_resource("relationships", "machine:absent", principal=READER)
 
     def test_search_puts_the_estate_first(self):

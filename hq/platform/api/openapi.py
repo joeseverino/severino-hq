@@ -36,6 +36,8 @@ from hq.platform.application.capabilities import capability_registry, describe_c
 from hq.platform.application.domains import Domain, all_domains
 from hq.platform.application.integration_specs import RESERVED_QUERY_FIELD
 from hq.platform.application.resources import describe_resources, resource_registry
+lazy from hq.platform.application.routes import routed
+lazy from hq.platform.mcp.declarations import tool_contract
 
 from . import urls, views
 
@@ -79,8 +81,6 @@ def _first_line(doc: str | None) -> str:
 
 def routes() -> Iterator[tuple[str, URLPattern]]:
     """Every hq_api route with its full path, wherever the project mounts it."""
-
-    from hq.platform.application.routes import routed
 
     ours = {id(pattern) for pattern in urls.urlpatterns}
     for route in routed():
@@ -579,7 +579,6 @@ def document() -> dict[str, Any]:
             "schemas": dict(sorted(builder.components.schemas.items())),
         },
     }
-    from hq.platform.mcp.declarations import tool_contract
 
     value["x-hq-mcp-tools"] = tool_contract(value)
     return value

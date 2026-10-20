@@ -18,14 +18,20 @@ from typing import Any
 
 from django.db import transaction
 
-from .adoption import adopt_discovered
+lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND
+lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+
+from .adoption import adopt_discovered, unmanaged
 from .cadence import settle_read_requests
 from .inventory import (
     confirm_observed,
     record_inventory,
     retire_departed,
 )
-from .zones import adopt_discovered_records
+from .zones import RECORD_KIND, adopt_discovered_records
+lazy from . import problems, scheduled_work
+lazy from .first_seen import look_due
+lazy from .public_registry import registry_due
 
 logger = logging.getLogger("severino.sweep")
 
@@ -66,13 +72,10 @@ def _note_open_problems() -> None:
     """Record what is open now that the report is stored, so a problem can
     say since when. A report is stored whether or not this can be."""
 
-    from .first_seen import look_due
-    from .problems import note_open_problems
-
     try:
         if look_due():
             with transaction.atomic():
-                note_open_problems()
+                problems.note_open_problems()
     except Exception:  # a look that fails must not lose the report
         logger.exception("The open problems could not be recorded after a report.")
 
@@ -80,12 +83,6 @@ def _note_open_problems() -> None:
 def _ring_for_new_images(payload: dict[str, Any]) -> None:
     """Start the registry read, once the sweep is stored, when it found an
     image or a digest HQ has not read, so it is read in minutes, not tomorrow."""
-
-    from hq.domains.control_plane.observations.portainer import IMAGE_KIND
-    from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-
-    from . import scheduled_work
-    from .public_registry import registry_due
 
     if (CONTAINER_KIND in payload or IMAGE_KIND in payload) and registry_due():
         transaction.on_commit(lambda: scheduled_work.start("registry.refresh"))
@@ -97,9 +94,6 @@ def _adoptable_kinds() -> tuple[str, ...]:
     Read from what the sweep just recorded rather than named here, so this
     cannot fall behind the provider registry.
     """
-
-    from .adoption import unmanaged
-    from .zones import RECORD_KIND
 
     # Everything except records, which `zones` adopts by domain rather than one
     # at a time. Domains are in, through a connection that manages.

@@ -135,10 +135,10 @@ class DestructiveDefaultTests(PolicyTestCase):
 
         from unittest import mock
 
-        from ..resources import ResourceNotFound
+        from ..record_errors import RecordNotFound
 
         project = Project.objects.create(name="Unseen")
-        with mock.patch("hq.platform.application.resources.get_resource", side_effect=ResourceNotFound("x")):
+        with mock.patch("hq.platform.application.resources.get_resource", side_effect=RecordNotFound("x")):
             result = self.delete(agent(capabilities=DELETES), project.slug)
 
         self.assertEqual(result["error"]["code"], "approval_subject_unreadable")

@@ -22,7 +22,6 @@ from hq.platform.application.adoption import AdoptCommand, adopt
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.infrastructure import (
     ManagedResourceCommand,
-    NotFoundError,
     PolicyError,
     save_managed_resource,
 )
@@ -39,6 +38,7 @@ from hq.platform.application.mail_policy import (
 )
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.pins import DOMAIN, pinned, toggle
+from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import public_dns_enabled, resource_capabilities
 from hq.platform.application.routes import reverse
@@ -202,7 +202,7 @@ class ZoneMailView(View):
                 principal=web_principal(request.user),
                 current_key=resource.key,
             )
-        except (DjangoValidationError, PolicyError, NotFoundError, ValueError) as exc:
+        except (DjangoValidationError, PolicyError, RecordNotFound, ValueError) as exc:
             messages.error(request, _readable_error(exc))
             return redirect("zones:mail", zone=zone.zone)
         messages.success(request, f"{what} saved. Publishing within a minute.")
@@ -359,14 +359,14 @@ class ZoneAdoptView(View):
                 AdoptCommand(kind=ZONE_KIND, token=request.POST.get("token", "")),
                 principal=principal,
             )
-        except (NotFoundError, PolicyError, DjangoValidationError) as exc:
+        except (RecordNotFound, PolicyError, DjangoValidationError) as exc:
             messages.error(request, _readable_error(exc))
             return redirect("zones:detail", zone=zone)
 
         try:
             records = adopt_zone_records(zone, principal=principal)
             adopted = len(records["adopted"])
-        except NotFoundError, PolicyError, DjangoValidationError:
+        except RecordNotFound, PolicyError, DjangoValidationError:
             # The domain is declared either way. A zone with nothing left to
             # take on is the ordinary case, not a failure worth interrupting.
             adopted = 0

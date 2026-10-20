@@ -1,16 +1,13 @@
 """Action items: the queue under its domains, and setting items aside."""
 
-import hashlib
 from typing import override
 
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.utils.decorators import method_decorator
-from django.views.decorators.http import condition
 from django.views.generic import TemplateView, View
 
-from hq.platform.application import action_items as queue_state
+from hq.platform.application import action_items as queue_state, fragments
 from hq.platform.application.dashboard import waiting, work_queue
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
@@ -80,32 +77,18 @@ class ActionItemsView(PageMixin, TemplateView):
         return context
 
 
-def _count_etag(request) -> str:
-    """The count and whose it is: the validator says what the answer is.
-
-    Named for the answer, not for what it was derived from, so a browser
-    holding it is told "not modified" for as long as the count is the same,
-    whatever was written or read again in between. The count is a derivation
-    (``attention.count``): asking costs the table revisions and one stored
-    number.
-    """
-
-    return hashlib.sha256(f"{waiting(request.user.pk)}|{request.user.pk}".encode()).hexdigest()
-
-
-@method_decorator(condition(etag_func=_count_etag), name="get")
 class ActionItemCountView(View):
-    """How many items wait, for the header, fetched after the page rather than during it.
+    """The header's count, the part ``base.html`` draws, fetched after the page rather than during it.
 
-    A request carrying the validator of the count as it stands is answered 304.
+    The count is its own revision, so a browser holding the answer is told
+    "not modified" for as long as the count is the same, whatever was written
+    in between.
     """
 
     def get(self, request):
-        count: int = int(waiting(request.user.pk))
-        response = JsonResponse({"count": count})
-        # Kept by the browser, and asked about before every reuse.
-        response.headers["Cache-Control"] = "private, no-cache"
-        return response
+        count = int(waiting(request.user.pk))
+        context = {"profile_action_count": count, "show_action_count": True}
+        return fragments.render(request, "base.html#action_count", context, revision=count)
 
 
 class ActionItemAsideView(View):

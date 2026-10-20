@@ -34,6 +34,9 @@ from django.utils.cache import patch_vary_headers
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_safe
 
+lazy from hq.platform.application.plugins import plugin_token_authenticated_prefixes
+lazy from hq.platform.application.routes import routed
+
 RULES_TYPE = "application/speculationrules+json"
 
 # Links that are not a page to arrive at: a file, another window, a dialog, a
@@ -91,9 +94,6 @@ def sessionless() -> tuple[str, ...]:
     Read from the URL configuration: the routes marked ``login_not_required``
     and the prefixes an extension authenticates itself.
     """
-
-    from hq.platform.application.plugins import plugin_token_authenticated_prefixes
-    from hq.platform.application.routes import routed
 
     found = {f"{prefix}*" for prefix in plugin_token_authenticated_prefixes()}
     for each in routed():
@@ -175,7 +175,6 @@ def before_view(request: HttpRequest, view_func: Any) -> HttpResponse | None:
 
     if _refused.get() is None:
         return None
-    from hq.platform.application.plugins import plugin_token_authenticated_prefixes
 
     own = request.path.startswith(plugin_token_authenticated_prefixes())
     if own or not getattr(view_func, "login_required", True):

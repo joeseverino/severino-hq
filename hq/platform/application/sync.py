@@ -27,11 +27,9 @@ def execute_hq_sync(
     command: HQSyncCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Apply the whole manifest or none of it."""
 
-    del expected_updated_at
     documentation = sync_documentation(
         command.manifest,
         principal=principal,

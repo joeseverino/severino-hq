@@ -20,9 +20,17 @@ from ipaddress import ip_address
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
-from .projection import read_once
+from .projection import projection_scope, read_once
 from .ui import counted
+lazy from . import connections
+lazy from .connections import connection_rows
+lazy from .facts import inventory_records
+lazy from .hq_self import scoped_served_port, site_label
+lazy from .infrastructure import enabled_resources
+lazy from .locate import host_of, points_at_host, split_endpoint
 
 # The settings row naming the tailnet's resolvers, by address.
 RESOLVES_THROUGH = "Resolves through"
@@ -402,8 +410,6 @@ def declaration() -> str:
     came from.
     """
 
-    from .infrastructure import enabled_resources
-
     # From the read every estate page already shares, in its order.
     return next((resource.key for resource in enabled_resources() if resource.kind == POLICY_KIND), "")
 
@@ -438,8 +444,6 @@ def snapshots() -> dict[str, list]:
     when each device last reached HQ. Read together they are one query, and
     every caller inside the projection shares it.
     """
-
-    from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
     def load() -> dict[str, list]:
         found: dict[str, list] = {TAILNET_KIND: [], POLICY_KIND: [], ARRIVAL_KIND: []}
@@ -580,17 +584,13 @@ def grant_ports(grants, known: dict[str, Device] | None = None, machines=None) -
     name is blank.
     """
 
-    from .projection import projection_scope
-
     with projection_scope():
         return _grant_ports(grants, known, machines)
 
 
 def _grant_ports(grants, known, machines) -> tuple[dict, ...]:
-    from .connections import machines_once
-
     known = devices() if known is None else known
-    machines = machines_once() if machines is None else machines
+    machines = connections.machines_once() if machines is None else machines
     by_name: dict[str, object] = {}
     for item in machines:
         for name in (item.name, *item.aliases):
@@ -609,9 +609,6 @@ def _grant_ports(grants, known, machines) -> tuple[dict, ...]:
 
 def _ssh_ports() -> dict[str, set[int]]:
     """The port each SSH-shaped connection opens, by connection ref."""
-
-    from .connections import connection_rows
-    from .locate import points_at_host, split_endpoint
 
     found: dict[str, set[int]] = {}
     for row in connection_rows():
@@ -636,11 +633,6 @@ class _ServicePort:
 
 def _service_ports() -> tuple[_ServicePort, ...]:
     """The port each connection to a service names in its URL, with the service's name."""
-
-    from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-
-    from .connections import connection_rows
-    from .locate import points_at_host, split_endpoint
 
     found = []
     for row in connection_rows():
@@ -679,17 +671,11 @@ class _PortNamer:
     """What answers on a port of a grant's machines: HQ, SSH, a container, a service."""
 
     def __init__(self, ssh_ports: dict[str, set[int]], service_ports: tuple[_ServicePort, ...] = ()):
-        from .hq_self import scoped_served_port
-
         self.ssh_ports = ssh_ports
         self.service_ports = service_ports
         self.hq_port = scoped_served_port()
 
     def name(self, port: int, targets) -> str:
-        from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-
-        from .hq_self import site_label
-
         if port == self.hq_port and any(getattr(t, "runs_hq", False) for t in targets):
             return site_label()
         if any(self._opens(target, port) for target in targets):
@@ -706,8 +692,6 @@ class _PortNamer:
 
     def _service(self, target, port: int) -> str:
         """The service a connection reads on this port of this machine."""
-
-        from .locate import host_of
 
         refs = {*target.reached_by, *target.opened_by}
         names = {str(name).lower() for name in (target.name, *target.aliases)}
@@ -737,9 +721,7 @@ def _policy_admits_only_named() -> bool:
     policy read), so an unknown never silences the finding.
     """
 
-    from .connections import machines_once
-
-    machine = next((item for item in machines_once() if item.runs_hq), None)
+    machine = next((item for item in connections.machines_once() if item.runs_hq), None)
     if machine is None or not machine.addresses:
         return False
     addresses = set(machine.addresses)
@@ -792,10 +774,6 @@ def unworn_tags(named) -> tuple[str, ...]:
     is the part before them. Nothing is said while no device was read: every
     tag would look unworn.
     """
-
-    from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
-
-    from .facts import inventory_records
 
     records = [record for _snapshot, record in inventory_records(TAILNET_KIND)]
     if not records:

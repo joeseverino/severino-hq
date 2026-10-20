@@ -2061,12 +2061,18 @@ class FragmentPrimitiveTests(SimpleTestCase):
     # on a timer.
     REFUSED = {
         "reads a response body as text": r"\.text\(\)",
+        "reads a response body as data": r"\.json\(\)",
         "parses markup": r"DOMParser|parseFromString|insertAdjacentHTML|\.innerHTML\b|\.outerHTML\s*=",
         "keeps its own interval": r"\bsetInterval\(",
         "sleeps in a loop": r"setTimeout\(\s*resolve\b",
         "opens its own stream": r"\bEventSource\b|\bXMLHttpRequest\(",
         "fetches outside the session boundary": r"(?<![\w.])fetch\(|window\.fetch\(",
     }
+    # How many times a script may still do what is refused, and why. Asked-for
+    # work answers with how it stands (state, note, seconds, status address),
+    # which every copy of its control on the page draws in place; that answer
+    # is data no one region is drawn from: the ask's post and its status poll.
+    ALLOWED = {("app.js", "reads a response body as data"): 2}
     # The attributes of the hand-rolled reads the primitive replaced.
     RETIRED = (
         "data-deferred",
@@ -2077,6 +2083,7 @@ class FragmentPrimitiveTests(SimpleTestCase):
         "data-dashboard-glance",
         "data-calendar-source",
         "X-Command-Center",
+        "data-action-count-url",
     )
 
     def scripts(self) -> dict[str, str]:
@@ -2093,8 +2100,9 @@ class FragmentPrimitiveTests(SimpleTestCase):
                 continue
             for what, pattern in self.REFUSED.items():
                 with self.subTest(script=name, rule=what):
-                    self.assertIsNone(
-                        re.search(pattern, source),
+                    self.assertEqual(
+                        len(re.findall(pattern, source)),
+                        self.ALLOWED.get((name, what), 0),
                         f"{name} {what}; a read is a `data-fragment` region or "
                         "`hqFragment.swap`, and a poll is `hqEvery`",
                     )

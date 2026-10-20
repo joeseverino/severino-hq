@@ -8,7 +8,7 @@ from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.search_index.backends import SnippetParts, search_backend
 from hq.platform.search_index.registry import BY_SCOPE
 
-from .projection import page_size
+from .projection import page_size, projection_scope
 from .resources import resource_search_capabilities
 from .security import AuthorizationError, Capability, Principal, require_all
 
@@ -192,7 +192,6 @@ def global_search(query: str, *, principal: Principal, limit_per_scope: int = 8)
     """Relevance-ranked, snippeted results across every scope the principal
     may search. Scopes the principal lacks (e.g. the audit log for a
     least-privilege adapter) are omitted entirely, not shown empty."""
-    from .projection import projection_scope
 
     with projection_scope():
         return _global_search(query, principal=principal, limit_per_scope=limit_per_scope)

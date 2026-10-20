@@ -5,6 +5,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
+lazy from django.utils.text import slugify
 
 from hq.domains.control_plane.desired_state import advance_dependents, desired_fingerprint
 from hq.domains.control_plane.models import ManagedResource
@@ -22,15 +23,16 @@ from hq.domains.control_plane.providers import (
     validate_spec,
 )
 from hq.platform.core.audit import operation_context
+lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
 
 from .adoption import OBSERVES_ONLY, observes_only
 from .approvals import consent_gap
 from .projection import page_size, read_once
+from .record_errors import RecordConflict, RecordNotFound
 from .security import Capability, Principal
-
-
-class NotFoundError(ValueError):
-    """A requested managed resource does not exist."""
+lazy from .delivery_progress import deploying_label
+lazy from .locate import names_by_connection
+lazy from .resource_capabilities import kind_converges
 
 
 class PolicyError(ValueError):
@@ -115,11 +117,6 @@ class _NamesByConnection:
 
     def __call__(self, connection_ref: str) -> tuple[str, ...]:
         if self._found is None:
-            # Deferred on purpose: locate imports this module, so at module
-            # scope this is a cycle. Resolved on first call, which is also the
-            # first point the answer is wanted.
-            from .locate import names_by_connection
-
             self._found = names_by_connection()
         return self._found.get(connection_ref, ())
 
@@ -148,8 +145,6 @@ def resolved_spec(resource: ManagedResource, targets: tuple[dict[str, Any], ...]
     the one beside it would disagree about which names a certificate covers.
     """
 
-    from hq.domains.control_plane.provider_spec import ProviderResolutionContext
-
     try:
         return resolve_provider_spec(
             resource.kind,
@@ -175,8 +170,6 @@ def suggest_key(kind: str, spec: dict[str, Any]) -> str:
     the fallback, which is what every provider that has exactly one record per
     name would have said anyway.
     """
-
-    from django.utils.text import slugify
 
     provider = PROVIDERS[kind]
     if provider.key_hint is not None:
@@ -265,8 +258,6 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
         if condition_type in active:
             condition = active[condition_type]
             if state == "degraded":
-                from .delivery_progress import deploying_label
-
                 label = deploying_label(resource)
                 state, label = ("deploying", label) if label else (state, "Has a problem")
             return {
@@ -276,8 +267,6 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
                 "message": condition.get("message", ""),
             }
     # Nothing converges this kind, so "not reported" would never change.
-    from .resource_capabilities import kind_converges
-
     if not kind_converges(resource.kind):
         return {
             "state": "declared",
@@ -305,8 +294,6 @@ def resource_health(resource: ManagedResource) -> dict[str, str]:
 
 def controller_contract(resource: ManagedResource) -> dict[str, Any]:
     """Return the minimal desired-only contract consumed by a controller."""
-    from hq.domains.control_plane.provider_spec import ProviderResolutionContext
-    from hq.domains.control_plane.providers import resolve_provider_spec
 
     def resource_status(key: str, kinds: tuple[str, ...]) -> dict[str, Any] | None:
         return ManagedResource.objects.filter(key=key, kind__in=kinds).values_list("status", flat=True).first()
@@ -426,9 +413,9 @@ def save_managed_resource(
             try:
                 resource = ManagedResource.objects.select_for_update().get(key=current_key)
             except ManagedResource.DoesNotExist as exc:
-                raise NotFoundError(f"No record named {current_key!r}.") from exc
+                raise RecordNotFound("That record was not found.") from exc
             if expected_updated_at and resource.updated_at.isoformat() != expected_updated_at:
-                raise PolicyError(f"The record {current_key!r} changed after it was read.")
+                raise RecordConflict("That record changed after it was read.")
             created = False
 
         changed = (

@@ -18,6 +18,13 @@ from .release import Release, release, release_json, release_tile, repository as
 from .sight import KEYLESS, Sees, Sight, sight, sight_json, sight_tile
 from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, Tile
 from .work import Job, Renderer, Work, work, work_json
+lazy from .. import hq_self, request_context, service_health
+lazy from ..decisions import urgency
+lazy from ..entity_links import entity_link
+lazy from ..findings import finding_key
+lazy from ..hq_self import hq_hostnames, own_machine, serving, site_label
+lazy from ..problems import About, problems_by_part
+lazy from ..request_path import request_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,17 +71,12 @@ class HQContext:
 def hq_context(request: Any = None) -> HQContext:
     """HQ as the page and the resource say it, for ``request`` when there is one."""
 
-    from ..hq_self import serving
-
     with projection_scope(seed=serving(request) if request is not None else None):
         return _context(request)
 
 
 def _context(request: Any) -> HQContext:
-    from ..hq_self import own_container, own_machine, site_label
-    from ..request_path import request_path
-
-    container = own_container()
+    container = hq_self.own_container()
     machine = container.machine if container is not None else own_machine()
     path = request_path(request) if request is not None else None
     found = _problems(machine, container, reached=path is not None)
@@ -108,12 +110,6 @@ def _problems(machine: Any, container: Any, *, reached: bool) -> tuple[tuple[str
     where it runs, when no request says how), the controller under what it
     can see."""
 
-    from ..entity_links import entity_link
-    from ..findings import finding_key
-    from ..hq_self import hq_hostnames
-    from ..problems import About, problems_by_part
-    from ..service_health import hq_findings
-
     urls = [machine.url if machine is not None else ""]
     if container is not None:
         urls.append(container.url)
@@ -121,7 +117,9 @@ def _problems(machine: Any, container: Any, *, reached: bool) -> tuple[tuple[str
             urls.append(container.project.get_absolute_url())
     names = [entity_link("service", name).url for name in hq_hostnames()]
     # A controller has no page of its own, so its findings are found by key.
-    keys = [finding_key(finding) for finding in hq_findings() if finding.subject.startswith("controller:")]
+    keys = [
+        finding_key(finding) for finding in service_health.hq_findings() if finding.subject.startswith("controller:")
+    ]
     repository = repository_of(container)
     return problems_by_part(
         {
@@ -136,8 +134,6 @@ def _problems(machine: Any, container: Any, *, reached: bool) -> tuple[tuple[str
 def _status(problems: Iterable[Mapping[str, Any]]) -> tuple[str, str]:
     """How HQ is doing, in the tone of its worst problem, with how many of each
     kind are open: "1 urgent · 1 needs attention"."""
-
-    from ..decisions import urgency
 
     states = [str(item.get("status", "")) for item in problems]
     if not states:
@@ -232,8 +228,6 @@ def serialize_hq(found: HQContext) -> dict[str, Any]:
 
 def read_hq() -> dict[str, Any]:
     """The ``hq`` resource: HQ as its own page says it, for the calling request."""
-
-    from .. import request_context
 
     return serialize_hq(hq_context(request_context.current()))
 

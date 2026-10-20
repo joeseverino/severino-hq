@@ -37,8 +37,8 @@ from .finding_model import (
     journal_step,
     machine_step,
 )
-from .moments import duration, when
-from .reading_facts import FactRow, ago as _when, rows_of, state_on_controller, stated
+from .moments import ago, duration, when
+from .reading_facts import FactRow, rows_of, state_on_controller, stated
 from .timestamps import moment
 from .topology_model import TopologyNode
 
@@ -320,7 +320,7 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity="serious" if stale else "attention",
                 explanation=(
                     (
-                        f"It is still using the ones it got {_when(failed[0].confirmed_at, estate.now)}."
+                        f"It is still using the ones it got {ago(failed[0].confirmed_at, estate.now)}."
                         if last_good is not None
                         else "It is still using the ones from its last good refresh."
                     )
@@ -332,8 +332,8 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
                     for item in (
                         ("Job", rendering.name),
                         ("Reason", _why(rendering)),
-                        ("Last tried", _when(rendering.attempted_at, estate.now)),
-                        ("Last refreshed", _when(rendering.confirmed_at, estate.now)),
+                        ("Last tried", ago(rendering.attempted_at, estate.now)),
+                        ("Last refreshed", ago(rendering.confirmed_at, estate.now)),
                     )
                 ),
                 steps=_journal(node, failed) + _run_again(node, failed, "Run it again"),
@@ -346,9 +346,9 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
 def _stale_evidence(rendering: Rendering, now: datetime) -> tuple[tuple[str, str], ...]:
     return (
         ("Job", rendering.name),
-        ("Last refreshed", _when(rendering.confirmed_at, now)),
-        ("Last read in full", _when(rendering.rendered_at, now)),
-        ("Last tried", _when(rendering.attempted_at, now)),
+        ("Last refreshed", ago(rendering.confirmed_at, now)),
+        ("Last read in full", ago(rendering.rendered_at, now)),
+        ("Last tried", ago(rendering.attempted_at, now)),
     )
 
 
@@ -453,7 +453,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                     for item in (
                         ("Job", rendering.name),
                         ("Sync", rendering.sync),
-                        ("Connect last read", _when(rendering.sync_read_at, estate.now)),
+                        ("Connect last read", ago(rendering.sync_read_at, estate.now)),
                     )
                 ),
                 steps=(

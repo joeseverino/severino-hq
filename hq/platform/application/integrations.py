@@ -20,6 +20,12 @@ from .integration_validation import (
     validate_resource_spec,
 )
 from .search_contracts import SearchDefinition
+lazy from . import plugins
+lazy from .core_capabilities import CORE_CAPABILITY_SPECS
+lazy from .domains import host_specs
+lazy from .plugins import plugin_capability_specs, plugin_search_definitions
+lazy from .records import capability_specs as record_capability_specs
+lazy from .resources import CORE_RESOURCE_SPECS
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,17 +275,6 @@ def compile_integration_graph(
 
 @cache
 def _compiled_integration_graph() -> IntegrationGraph:
-    from .core_capabilities import CORE_CAPABILITY_SPECS
-    from .domains import host_specs
-    from .plugins import (
-        plugin_capability_specs,
-        plugin_connection_specs,
-        plugin_resource_specs,
-        plugin_search_definitions,
-    )
-    from .records import capability_specs as record_capability_specs
-    from .resources import CORE_RESOURCE_SPECS
-
     return compile_integration_graph(
         capabilities=(
             *CORE_CAPABILITY_SPECS,
@@ -287,8 +282,8 @@ def _compiled_integration_graph() -> IntegrationGraph:
             *host_specs("capabilities"),
             *plugin_capability_specs(),
         ),
-        resources=(*CORE_RESOURCE_SPECS, *host_specs("resources"), *plugin_resource_specs()),
-        connections=(*host_specs("connections"), *plugin_connection_specs()),
+        resources=(*CORE_RESOURCE_SPECS, *host_specs("resources"), *plugins.plugin_resource_specs()),
+        connections=(*host_specs("connections"), *plugins.plugin_connection_specs()),
         search=plugin_search_definitions(),
     )
 

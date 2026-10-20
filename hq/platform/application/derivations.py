@@ -59,6 +59,13 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
+lazy from django.apps import apps
+lazy from django.core.cache import caches
+lazy from django.db import OperationalError, connection
+
+lazy from hq.platform.core import revisions
+lazy from hq.platform.core.database import without_waiting
+lazy from hq.platform.core.revisions import CACHE_ALIAS, _uncounted
 
 from .projection import projection_scope, read_once, seeded
 
@@ -121,8 +128,6 @@ def _bookkeeping() -> frozenset[str]:
     """The cache and revision tables, which every derivation touches."""
 
     if not _BOOKKEEPING:
-        from hq.platform.core.revisions import _uncounted
-
         _BOOKKEEPING.append(frozenset(_uncounted()))
     return _BOOKKEEPING[0]
 
@@ -245,8 +250,6 @@ class Derivation:
         """The database tables behind ``reads``, resolved once models load."""
 
         if not self._tables:
-            from django.apps import apps
-
             self._tables.append(frozenset(apps.get_model(label)._meta.db_table for label in self.reads))
         return self._tables[0]
 
@@ -321,9 +324,7 @@ def derivation[**P, T](
 def table_revisions(tables: frozenset[str] | tuple[str, ...]) -> tuple[int, ...] | None:
     """The revisions of ``tables``, read once per projection; None when not kept."""
 
-    from hq.platform.core.revisions import read
-
-    found = read_once("derivation.revisions", read)
+    found = read_once("derivation.revisions", revisions.read)
     return None if found is None else found.of(sorted(tables))
 
 
@@ -334,9 +335,7 @@ def every_revision() -> str | None:
     "unchanged" only while nothing at all was written.
     """
 
-    from hq.platform.core.revisions import read
-
-    found = read_once("derivation.revisions", read)
+    found = read_once("derivation.revisions", revisions.read)
     if found is None:
         return None
     counts = found.of(sorted(found.counts))
@@ -344,10 +343,6 @@ def every_revision() -> str | None:
 
 
 def _store():
-    from django.core.cache import caches
-
-    from hq.platform.core.revisions import CACHE_ALIAS
-
     return caches[CACHE_ALIAS]
 
 
@@ -412,8 +407,6 @@ def _awaited(key: str | None) -> bool:
     Never inside a transaction: this thread may then hold the write lock the
     other needs to store its answer, and would wait on itself.
     """
-
-    from django.db import connection
 
     if key is None or connection.in_atomic_block:
         return False
@@ -507,8 +500,6 @@ def _compute(declared: Derivation, args: tuple, kwargs: dict) -> tuple[Any, date
     which the host cannot name, are learned the first time they are read.
     """
 
-    from django.db import connection
-
     frame = _Frame(declared.tables, learns=declared.unseen)
     token = _FRAME.set(frame)
     try:
@@ -545,9 +536,6 @@ def _keep(key: str | None, value: Any, until: datetime | None) -> bool:
         lifetime = min((until - _clock()).total_seconds(), _LONGEST)
         if lifetime <= 0:
             return False
-    from django.db import OperationalError
-
-    from hq.platform.core.database import without_waiting
 
     # The pass stores what it asks. A request stores what it derived only if
     # the write lock is free: waiting behind an import would hold the page for

@@ -7,8 +7,11 @@ from typing import Any
 
 from django.db.models import Q, QuerySet, Sum
 
+lazy from hq.platform.application.search import apply_search
+
 from .page_reads import Remedy
 from .projection import guarded
+lazy from . import security
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,14 +132,11 @@ class TableListMixin:
 
     def _apply_table_search(self, queryset: QuerySet, query: str) -> QuerySet:
         if query and self.table_search_scope:
-            from hq.platform.application.search import apply_search
-            from hq.platform.application.security import web_principal
-
             return apply_search(
                 queryset,
                 scope=self.table_search_scope,
                 query=query,
-                principal=web_principal(self.request.user),
+                principal=security.web_principal(self.request.user),
             )
         if query and self.table_search_fields:
             try:

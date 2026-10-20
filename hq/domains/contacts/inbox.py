@@ -20,6 +20,7 @@ from django.conf import settings
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.cloudflare import CONTACT_SUBMISSION_KIND
 from hq.domains.control_plane.provider_adapters.cloudflare import CONTACT_INBOX_KIND
+lazy from hq.platform.application.projection import read_once
 
 READING = CONTACT_SUBMISSION_KIND
 DECLARATION = CONTACT_INBOX_KIND
@@ -147,8 +148,6 @@ def current() -> Inbox:
     Read once per projection: the header count, the dashboard card and the
     queue all ask, and must not disagree.
     """
-
-    from hq.platform.application.projection import read_once
 
     return read_once("contacts.inbox", _current)
 

@@ -21,6 +21,8 @@ from .resources import ResourceSpec
 from .security import Capability, Principal
 from .topology_lenses import topology_lenses
 from .ui import counted
+lazy from .estate import estate_reading
+lazy from .projection import projection_scope
 
 _MATCHING_ABILITY_BADGE_LIMIT = 3
 _SEARCH_WORD = re.compile(r"[a-z0-9]+")
@@ -285,8 +287,6 @@ _EXACT = 1000
 def _estate_items() -> tuple[DiscoveryItem, ...]:
     """Machines, services and domains, from the catalogues their pages read."""
 
-    from .estate import estate_reading
-
     estate = estate_reading()
     machines = tuple(
         DiscoveryItem(
@@ -384,8 +384,6 @@ def estate_search(query: str, *, principal: Principal) -> tuple[DiscoveryItem, .
 
 def command_center(query: str, *, principal: Principal, include_live_connections: bool = False) -> dict:
     """Return every permitted resource and capability matching ``query``."""
-
-    from .projection import projection_scope
 
     with projection_scope():
         return _command_center(query, principal=principal, include_live_connections=include_live_connections)

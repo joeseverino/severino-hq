@@ -11,6 +11,7 @@ from django.dispatch import receiver
 from .audit import record_event
 from .database import optimize
 from .models import AuditLog
+lazy from .network import client_ip
 
 
 @receiver(user_logged_in)
@@ -46,8 +47,6 @@ def _on_login_failed(sender, credentials, request=None, **kwargs):
     one is an attempt the lockout cannot count: a password sprayed across
     many usernames would leave nothing for the per-source rule to see.
     """
-
-    from .network import client_ip
 
     username = credentials.get("username", "") if credentials else ""
     ip = client_ip(request) if request is not None else ""

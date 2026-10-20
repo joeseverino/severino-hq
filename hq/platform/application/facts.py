@@ -28,14 +28,17 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.reading_parts import PartRefusal, refused_parts
+lazy from hq.domains.control_plane.models import ProviderInventory
 
 from .derivations import passed
 from .entity_links import kind_label
 from .freshness import stale_after
 from .locate import host_of
 from .projection import read_once
-from .tailnet import TAILNET_KIND
+from .tailnet import TAILNET_KIND, snapshots
 from .timestamps import moment
+lazy from . import tailnet
+lazy from .containers import Running
 
 OBSERVED = "observed"
 UNREADABLE = "unreadable"
@@ -650,8 +653,6 @@ def stored_snapshots() -> Mapping[str, tuple[Any, ...]]:
 def _stored() -> dict[str, tuple[Any, ...]]:
     """One read of every stored snapshot, shared by the joins and credential sight."""
 
-    from hq.domains.control_plane.models import ProviderInventory
-
     def load() -> dict[str, tuple[Any, ...]]:
         grouped: dict[str, list[Any]] = {}
         for snapshot in ProviderInventory.objects.all():
@@ -867,8 +868,6 @@ def _record_keys(provider, record) -> tuple[tuple[str, ...], tuple[str, ...], st
 
 
 def _container_facts(subject: Subject) -> Iterator[Fact]:
-    from .containers import Running
-
     provider = PROVIDERS[CONTAINER_KIND]
     label = provider.label or CONTAINER_KIND
     for snapshot in _inventory(CONTAINER_KIND):
@@ -887,11 +886,9 @@ def _container_facts(subject: Subject) -> Iterator[Fact]:
 
 
 def _tailnet_facts(subject: Subject) -> Iterator[Fact]:
-    from .tailnet import devices, snapshots
-
     provider = PROVIDERS[TAILNET_KIND]
     label = provider.label or TAILNET_KIND
-    known = devices()
+    known = tailnet.devices()
     for snapshot in snapshots()[TAILNET_KIND]:
         if not snapshot.connected:
             continue

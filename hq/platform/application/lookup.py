@@ -23,6 +23,7 @@ from django.utils.timezone import now
 from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.outbound import allowed
+lazy from hq.domains.control_plane.models import AddressReading
 
 from .projection import iso
 from .reach import is_documentation, is_public, network_of
@@ -149,12 +150,10 @@ def look_up_name(
     command: NameCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
     resolver: Callable[..., dict] | None = None,
 ) -> dict[str, Any]:
     """What a resolver outside this network returns for a name."""
 
-    del expected_updated_at
     principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
     wanted = normalized_hostname(command.name or "")
     if not wanted or not HOSTNAME.match(wanted):
@@ -208,8 +207,6 @@ def _address_answer(command: AddressCommand, *, principal: Principal) -> tuple[A
     when only the registries could say.
     """
 
-    from hq.domains.control_plane.models import AddressReading
-
     principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)
     try:
         parsed = ip_address(str(command.address or "").strip())
@@ -239,7 +236,6 @@ def look_up_address(
     command: AddressCommand,
     *,
     principal: Principal,
-    expected_updated_at: str | None = None,
     resolver: Callable[..., dict] = resolve,
     allocations: Callable[..., dict] = registry,
 ) -> dict[str, Any]:
@@ -255,9 +251,6 @@ def look_up_address(
     there.
     """
 
-    from hq.domains.control_plane.models import AddressReading
-
-    del expected_updated_at
     parsed, known = _address_answer(command, principal=principal)
     if known is not None and (not command.refresh or not is_public(str(parsed))):
         return known

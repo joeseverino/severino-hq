@@ -8,10 +8,10 @@ list page, the topology, the domain cards and the API read this one list.
 from dataclasses import dataclass, replace
 from typing import Any
 
-from hq.domains.control_plane.names import normalized_hostname
+from hq.domains.control_plane.names import is_hostname, normalized_hostname
 
-from .infrastructure import NotFoundError
-from .projection import read_once
+from .projection import projection_scope, read_once
+from .record_errors import RecordNotFound
 from .service_facets import zone_holding
 from .services import (
     HQ_MARK,
@@ -21,6 +21,10 @@ from .services import (
     prospects,
     service_catalog,
 )
+lazy from . import connections, zones
+lazy from .derived_reads import serialize_path
+lazy from .facts import readings
+lazy from .hq_self import hq_service
 
 
 def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
@@ -35,11 +39,8 @@ def listed_services(favorites: tuple[str, ...] = ()) -> tuple[Service, ...]:
 
 
 def _listed(favorites: tuple[str, ...]) -> tuple[Service, ...]:
-    from .connections import machines_once
-    from .hq_self import hq_service
-
     catalog = service_catalog()
-    own = hq_service(catalog=machines_once())
+    own = hq_service(catalog=connections.machines_once())
     own_names = frozenset(own.hostnames) if own is not None else frozenset()
     declared = {service.hostname for service in catalog}
     folded = {alias for service in catalog for alias in service.aliases}
@@ -64,14 +65,9 @@ def listed_service(hostname: str) -> Service:
 def observed_names() -> tuple[str, ...]:
     """Hostnames a service-naming reading holds, under a domain HQ knows."""
 
-    from hq.domains.control_plane.names import is_hostname
-
-    from .facts import readings
-    from .zones import zone_names
-
-    zones = zone_names()
+    domains = zones.zone_names()
     found = {
-        name for name in readings().hostnames(names_services=True) if is_hostname(name) and zone_holding(name, zones)
+        name for name in readings().hostnames(names_services=True) if is_hostname(name) and zone_holding(name, domains)
     }
     return tuple(sorted(found))
 
@@ -109,8 +105,6 @@ def serialize_service(service: Service) -> dict[str, Any]:
 def list_services() -> dict[str, Any]:
     """Every listed hostname, HQ's own and observed ones marked, and its wiring."""
 
-    from .projection import projection_scope
-
     with projection_scope():
         items = [serialize_service(service) for service in listed_services()]
     return {"items": items, "count": len(items)}
@@ -119,14 +113,11 @@ def list_services() -> dict[str, Any]:
 def get_service(hostname: str) -> dict[str, Any]:
     """One listed hostname, with the resources behind each facet and its request path."""
 
-    from .derived_reads import serialize_path
-    from .projection import projection_scope
-
     wanted = normalized_hostname(hostname)
     with projection_scope():
         found = next((service for service in listed_services() if service.hostname == wanted), None)
         if found is None:
-            raise NotFoundError(f"No service is listed for {hostname!r}.")
+            raise RecordNotFound("No service is listed for that hostname.")
         return {"service": serialize_service(found), "path": serialize_path(found.path)}
 
 

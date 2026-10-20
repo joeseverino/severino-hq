@@ -160,9 +160,10 @@ class ValidationTests(TestCase):
         from unittest import mock
 
         from .. import registry_import
+        from ..record_errors import RecordNotFound
 
         def refuse(command, *, principal):
-            raise registry_import.asset_use_cases.NotFoundError("refused while writing")
+            raise RecordNotFound("refused while writing")
 
         refusing = replace(registry_import._ASSET, upsert=refuse)
         with mock.patch.object(registry_import, "_ASSET", refusing):

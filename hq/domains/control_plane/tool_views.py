@@ -1,6 +1,7 @@
 """Operator tools: lookups HQ runs on request."""
 
 from typing import override
+lazy from urllib.parse import urlencode
 
 from django.shortcuts import redirect
 from django.views.generic import TemplateView
@@ -8,6 +9,8 @@ from django.views.generic import TemplateView
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.timestamps import moment
+lazy from hq.platform.application import capabilities, security
+lazy from hq.platform.application.toolkit import tab_named, tabs_for
 
 
 class ToolsView(PageMixin, TemplateView):
@@ -33,12 +36,8 @@ class ToolsView(PageMixin, TemplateView):
 
     @override
     def get_context_data(self, **kwargs):
-        from hq.platform.application.capabilities import execute_capability
-        from hq.platform.application.security import web_principal
-        from hq.platform.application.toolkit import tab_named, tabs_for
-
         context = super().get_context_data(**kwargs)
-        principal = web_principal(self.request.user)
+        principal = security.web_principal(self.request.user)
         tabs = tabs_for(principal)
         current = tab_named(self.request.GET.get("tab", ""), principal)
         context["tabs"] = tabs
@@ -51,7 +50,7 @@ class ToolsView(PageMixin, TemplateView):
         asked = {name: self.request.GET.get(name.rpartition(".")[2], "").strip() for name in current.capabilities}
         context["asked"] = asked
         context["results"] = {
-            name: execute_capability(name, {name.rpartition(".")[2]: value}, principal=principal)
+            name: capabilities.execute_capability(name, {name.rpartition(".")[2]: value}, principal=principal)
             for name, value in asked.items()
             if value
         }
@@ -68,17 +67,12 @@ class ToolsView(PageMixin, TemplateView):
     def post(self, request, *args, **kwargs):
         """Re-read an address's stored answer, then show it."""
 
-        from urllib.parse import urlencode
-
-        from hq.platform.application.capabilities import execute_capability
-        from hq.platform.application.security import web_principal
-
         address = request.POST.get("address", "").strip()
         if address:
-            execute_capability(
+            capabilities.execute_capability(
                 "lookup.address",
                 {"address": address, "refresh": True},
-                principal=web_principal(request.user),
+                principal=security.web_principal(request.user),
             )
         query = urlencode({"tab": request.POST.get("tab", ""), "address": address})
         return redirect(f"{reverse('control_plane:tools')}?{query}")

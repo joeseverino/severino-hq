@@ -13,6 +13,8 @@ from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUS
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
 
+lazy from .providers import readout_rows, registry_label, resource_home
+
 
 def _named(key: str) -> models.Expression:
     """The text a declaration's ``spec`` holds under ``key``, or "" when none.
@@ -105,21 +107,15 @@ class ManagedResource(TimestampedModel):
         return self.key
 
     def get_absolute_url(self) -> str:
-        from .providers import resource_home
-
         return resource_home(self)
 
     @property
     def kind_label(self) -> str:
-        from .providers import registry_label
-
         return registry_label(self.kind)
 
     @property
     def search_summary(self) -> str:
         """The provider's readout as one line, else the kind's label."""
-
-        from .providers import readout_rows
 
         rows = " · ".join(
             f"{label}: {desired or observed}" for label, desired, observed in readout_rows(self) if desired or observed

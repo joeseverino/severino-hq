@@ -24,6 +24,8 @@ from pydantic import (
 
 from hq.platform.application.moments import span, when_day
 from hq.platform.application.routes import reverse
+lazy from hq.platform.application.expiry import days_until
+lazy from hq.platform.application.timestamps import moment
 
 from .names import in_zone
 from .observations.contract import ReadingPart
@@ -632,9 +634,6 @@ def expiry_phrase(stamp: str) -> str:
     before it means anything, and the number it resolves to (how many days are
     left) is the entire reason anyone looks at it.
     """
-
-    from hq.platform.application.expiry import days_until
-    from hq.platform.application.timestamps import moment
 
     expires = moment(stamp)
     if expires is None:

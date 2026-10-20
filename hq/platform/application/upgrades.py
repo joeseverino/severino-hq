@@ -17,8 +17,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+lazy from django.conf import settings
+
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .images import affected, version
+lazy from . import exposure, hq_self
+lazy from .container_standard import DOCKER_SOCKETS, runtime_path, system_path
+lazy from .exposure import LEVELS
+lazy from .github_public import github_repository
 
 PATCH = "patch"
 MINOR = "minor"
@@ -134,8 +140,6 @@ def change_between(running: str, target: str) -> str:
 
 def data_of(mounts) -> tuple[Mapping[str, Any], ...]:
     """The writable mounts that hold what the container keeps."""
-
-    from .container_standard import DOCKER_SOCKETS, runtime_path, system_path
 
     return tuple(
         mount
@@ -423,8 +427,6 @@ def signer(source: str) -> str:
     """The certificate identity a release of ``source`` is signed with, or ""
     when it names no GitHub repository."""
 
-    from .github_public import github_repository
-
     named = github_repository(source)
     if named is None:
         return ""
@@ -434,9 +436,7 @@ def signer(source: str) -> str:
 def _running_image() -> str:
     """The digest-pinned image HQ runs, or "" when HQ cannot tell."""
 
-    from .hq_self import own_container
-
-    container = own_container()
+    container = hq_self.own_container()
     image = str(container.running.image) if container is not None else ""
     return image if _PINNED.match(image) else ""
 
@@ -445,8 +445,6 @@ def _copy_steps(machine: str) -> tuple[Step, ...]:
     """The helper put on a machine HQ's deploys never reach: hq-host, copied out
     of the release HQ runs once its signature is verified, refused when that
     release is built for another platform than the machine's."""
-
-    from django.conf import settings
 
     image = _running_image()
     identity = signer(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
@@ -527,8 +525,6 @@ def plans() -> list[Plan]:
     """Every container something newer is published for: fixes first, then by
     exposure, then least risky."""
 
-    from .exposure import LEVELS, exposure_of_container
-
     order = (LOW, MEDIUM, HIGH)
     found = [plan for plan in (plan_for(item) for item in containers()) if plan is not None]
     # What it fixes first, then the most exposed: an advisory the internet can
@@ -537,7 +533,7 @@ def plans() -> list[Plan]:
         found,
         key=lambda plan: (
             not plan.fixes,
-            LEVELS.index(exposure_of_container(plan.container).level),
+            LEVELS.index(exposure.exposure_of_container(plan.container).level),
             order.index(plan.risk),
             plan.container.address,
         ),

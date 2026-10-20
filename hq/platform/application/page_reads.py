@@ -14,7 +14,13 @@ from typing import Any
 
 from django.urls import resolve
 
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, CONNECTION_LABELS
+lazy from hq.domains.control_plane.models import ProviderConnection
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.provider_adapters import DECLARATIONS
+
 from .routes import reverse, routed
+lazy from .entity_links import NODE_KINDS
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,10 +33,6 @@ class Remedy:
 
 def readers(names: Iterable[str]) -> tuple[str, ...]:
     """The connection providers that read these things, in the order named."""
-
-    from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
-    from hq.domains.control_plane.observations import OBSERVATIONS
-    from hq.domains.control_plane.provider_adapters import DECLARATIONS
 
     by_kind = {definition.kind: definition.connection_providers for definition in DECLARATIONS}
     found: list[str] = []
@@ -52,11 +54,6 @@ def remedy(names: Iterable[str]) -> Remedy | None:
     The first that is already connected, at its row, since its state there says
     why nothing arrived; else how to connect the first that reads them.
     """
-
-    from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-    from hq.domains.control_plane.models import ProviderConnection
-
-    from .entity_links import NODE_KINDS
 
     providers = readers(names)
     if not providers:
