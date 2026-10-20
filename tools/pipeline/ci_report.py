@@ -98,15 +98,15 @@ _JOB_LISTING = re.compile(r"/jobs(\?|$)")
 
 
 class GitHub:
-    """GitHub's REST API through gh, as one token."""
+    """GitHub's REST API through gh, as one token, or as gh's own login when given none."""
 
-    def __init__(self, token: str, repo: str, run: Runner = _gh) -> None:
+    def __init__(self, token: str | None, repo: str, run: Runner = _gh) -> None:
         self.token = token
         self.repo = repo
         self._run = run
 
     def _call(self, *args: str, body: object = None) -> str:
-        env = {**os.environ, "GH_TOKEN": self.token}
+        env = {**os.environ, **({"GH_TOKEN": self.token} if self.token else {})}
         return self._run(["api", *args], env, None if body is None else json.dumps(body))
 
     def get(self, path: str) -> Any:
@@ -188,7 +188,22 @@ class LogUnreadable(RuntimeError):
 _TRANSIENT = frozenset({408, 429, 500, 502, 503, 504})
 
 
-def job_log(job: int, *, token: str, repo: str, api: str = "https://api.github.com", attempts: int = 3) -> str:
+def _backoff(attempt: int, retry_after: str | None) -> float:
+    """How long to wait before the next attempt: what the server asked for, or doubling from a second."""
+    if retry_after and retry_after.strip().isdigit():
+        return float(retry_after)
+    return float(2 ** (attempt - 1))
+
+
+def job_log(
+    job: int,
+    *,
+    token: str,
+    repo: str,
+    api: str = "https://api.github.com",
+    attempts: int = 3,
+    sleep: Callable[[float], None] = time.sleep,
+) -> str:
     """One job's log, read only to be matched against the catalog.
 
     Not through gh, which refuses a response holding terminal escapes, and a
@@ -201,6 +216,7 @@ def job_log(job: int, *, token: str, repo: str, api: str = "https://api.github.c
     )
     request.add_unredirected_header("Authorization", f"Bearer {token}")
     for attempt in range(1, attempts + 1):
+        retry_after = None
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 body: bytes = response.read()
@@ -209,9 +225,11 @@ def job_log(job: int, *, token: str, repo: str, api: str = "https://api.github.c
             error.close()
             if error.code not in _TRANSIENT or attempt == attempts:
                 raise LogUnreadable(f"HTTP {error.code} {error.reason}") from None
+            retry_after = error.headers.get("Retry-After")
         except (urllib.error.URLError, TimeoutError) as error:
             if attempt == attempts:
                 raise LogUnreadable(f"not reached: {getattr(error, 'reason', error)}") from None
+        sleep(_backoff(attempt, retry_after))
     raise AssertionError("unreachable")
 
 
@@ -420,8 +438,8 @@ def details(gh: GitHub, delivery: Delivery, verdict: Verdict) -> str:
     headline = _quietly(
         lambda: str(gh.get(f"repos/{gh.repo}/commits/{commit}")["commit"]["message"]).splitlines()[0], ""
     )
-    approvals = _approvals(gh, delivery.run.id)
-    approval = f"@{approvals[0]['user']['login']}" if approvals else "not recorded"
+    approver = next((entry for entry in _approvals(gh, delivery.run.id) if entry.get("state") == "approved"), None)
+    approval = f"@{approver['user']['login']}" if approver else "not recorded"
     if verdict.conclusion == "success":
         job = _deploy_job(gh, delivery.run.id)
         result = "Healthy" + (f" in {took(job.seconds)}" if job and job.seconds is not None else "")

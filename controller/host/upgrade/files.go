@@ -46,7 +46,13 @@ func unmoved(path string) bool {
 // copyFile writes source's bytes, mode, owner and times into target, in
 // place when it exists, as `cp -p` does. Neither end is followed through a
 // symlink.
-func copyFile(source, target string) (err error) {
+func copyFile(source, target string) error {
+	return copyFileOwned(source, target, nil)
+}
+
+// copyFileOwned is copyFile with target owned as owner is, or as source is
+// when owner is nil.
+func copyFileOwned(source, target string, owner fs.FileInfo) (err error) {
 	in, err := os.OpenFile(source, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return err
@@ -74,7 +80,10 @@ func copyFile(source, target string) (err error) {
 	if err := out.Chmod(info.Mode().Perm()); err != nil {
 		return err
 	}
-	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+	if owner == nil {
+		owner = info
+	}
+	if stat, ok := owner.Sys().(*syscall.Stat_t); ok {
 		// Only root can give a file away; an unprivileged drill keeps its own.
 		if err := out.Chown(int(stat.Uid), int(stat.Gid)); err != nil && !errors.Is(err, fs.ErrPermission) {
 			return err

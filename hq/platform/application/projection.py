@@ -6,8 +6,9 @@ shared module that reached for any of their models would make importing one of
 them mean importing all of them.
 
 What lives here is the handful of rules every surface shares: paging bounds,
-the page-size ceiling and the timestamp rendering. Each is defined once so a
-change to it reaches every surface.
+the page-size ceiling, the timestamp rendering and the refusal of an input
+that cannot narrow. Each is defined once so a change to it reaches every
+surface.
 """
 
 from collections.abc import Callable, Iterator, Mapping
@@ -30,6 +31,18 @@ _MISSING = object()
 _READ_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar("hq_projection_read_scope", default=None)
 # Where a scope keeps what it was seeded with, apart from what it read since.
 _SEED = "projection.seed"
+
+
+class QueryRefusal(ValueError):
+    """A narrowing input a projection cannot be read by.
+
+    ``reason`` is HQ's own sentence for the caller, and the only text an
+    adapter answers with: never ``str(exc)``, never the value sent.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 @contextmanager

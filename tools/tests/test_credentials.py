@@ -7,12 +7,14 @@ else: no stdout, argument list, URL or message.
 import io
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from tests.mise_tasks import body, mise_tasks
 from tools import credentials
 from tools.credentials import Call, OnePassword, Programs, Refused, Session, Usage
 
@@ -88,8 +90,18 @@ class Commands:
         return subprocess.CompletedProcess(command, 0, "", "")
 
 
+def declared_flags(provider: str) -> set[str]:
+    """The flags the mint task declares, as the ``usage_*`` names mise sets."""
+
+    usage = body(mise_tasks()[f"mint:{provider}"])
+    return {name.replace("-", "_") for name in re.findall(r'#USAGE flag\s+"--([\w-]+)', usage)}
+
+
 class Run:
     def __init__(self, provider: str, flags: dict[str, str], environ: dict[str, str]) -> None:
+        # A case that passes a flag the task does not declare tests nothing mise could hand it.
+        undeclared = set(flags) - declared_flags(provider)
+        assert not undeclared, f"mint:{provider} declares no {sorted(undeclared)}"
         self.api, self.commands = Api(), Commands()
         out, err = io.StringIO(), io.StringIO()
         spec = credentials.PROVIDERS[provider]
@@ -144,15 +156,13 @@ class CloudflareMintTests(SimpleTestCase):
         self.assertIn("CLOUDFLARE_BOOTSTRAP_TOKEN", run.err)
         self.assertEqual(run.api.calls, [])
 
-    def test_without_a_store_nothing_is_created_whatever_else_is_asked(self):
-        for flags in ({}, {"print_secret": "true"}):
-            with self.subTest(flags=flags):
-                run = cloudflare(**flags)
+    def test_without_a_store_nothing_is_created(self):
+        run = cloudflare()
 
-                self.assertIsNone(run.refused)
-                self.assertEqual(run.out, "")
-                self.assertIn("Nothing created", run.err)
-                self.assertEqual(run.api.posted(), [])
+        self.assertIsNone(run.refused)
+        self.assertEqual(run.out, "")
+        self.assertIn("Nothing created", run.err)
+        self.assertEqual(run.api.posted(), [])
 
     def test_a_stored_token_reports_its_id_and_expiry(self):
         run = cloudflare(expires="2030-01-01", store="op://Example Vault/item-1/credential")
@@ -222,15 +232,13 @@ class CloudflareMintTests(SimpleTestCase):
 @tag("source")
 class TailscaleMintTests(SimpleTestCase):
     def test_without_a_store_it_prints_the_scopes_and_calls_nothing(self):
-        for flags in ({}, {"print_secret": "true"}):
-            with self.subTest(flags=flags):
-                run = tailscale(**flags)
+        run = tailscale()
 
-                self.assertIsNone(run.refused)
-                self.assertEqual(run.out, "")
-                self.assertIn("devices:core:read", run.err)
-                self.assertIn("Nothing created", run.err)
-                self.assertEqual(run.api.calls, [])
+        self.assertIsNone(run.refused)
+        self.assertEqual(run.out, "")
+        self.assertIn("devices:core:read", run.err)
+        self.assertIn("Nothing created", run.err)
+        self.assertEqual(run.api.calls, [])
 
     def test_the_client_is_created_with_read_scopes_only(self):
         run = tailscale(

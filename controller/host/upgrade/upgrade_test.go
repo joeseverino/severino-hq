@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -375,6 +376,65 @@ func TestAnExistingOverrideKeepsEveryOtherLine(t *testing.T) {
 	}
 	if d.read("state/op-1/override.before") != hardening {
 		t.Error("the override's copy is not byte-exact")
+	}
+}
+
+// otherGroup is a group this process may give a file that a file it creates
+// would not get on its own, so a drill run without root can tell whose
+// ownership the kept override took.
+func otherGroup(t *testing.T, root string) int {
+	t.Helper()
+	groups, _ := os.Getgroups()
+	info, err := os.Stat(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inherited := info.Sys().(*syscall.Stat_t).Gid
+	for _, gid := range groups {
+		if gid != os.Getegid() && uint32(gid) != inherited {
+			return gid
+		}
+	}
+	t.Skip("this account is in no second group to hand a file to")
+	return 0
+}
+
+func group(t *testing.T, path string) (int, os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return int(info.Sys().(*syscall.Stat_t).Gid), info.Mode().Perm()
+}
+
+func TestAKeptOverrideKeepsTheOverridesOwnerAndMode(t *testing.T) {
+	d := newDrill(t)
+	gid := otherGroup(t, d.root)
+	d.write("stacks/app/compose.override.yaml", hardening)
+	if err := os.Chown(d.override, -1, gid); err != nil {
+		t.Fatal(err)
+	}
+	os.Chmod(d.override, 0o640)
+
+	d.expect(Kept, "kept", d.upgrade())
+
+	if got, mode := group(t, d.override); got != gid || mode != 0o640 {
+		t.Errorf("the kept override is group %d mode %v, not the override's %d 0640", got, mode, gid)
+	}
+}
+
+func TestANewOverrideTakesTheStackDirectorysOwner(t *testing.T) {
+	d := newDrill(t)
+	gid := otherGroup(t, d.root)
+	if err := os.Chown(d.stack, -1, gid); err != nil {
+		t.Fatal(err)
+	}
+
+	d.expect(Kept, "kept", d.upgrade())
+
+	if got, _ := group(t, d.override); got != gid {
+		t.Errorf("the new override is group %d, not the stack directory's %d", got, gid)
 	}
 }
 

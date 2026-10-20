@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from tools.gate.verdict import Step, run, verdict
+from tools.pipeline.ci_report import GitHub as API, GitHubError
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -49,6 +50,8 @@ PASSING = {"success", "skipped", "neutral"}
 ARCHITECTURES = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
 # hq-host check's exits.
 UNVERIFIED = 3
+# Watches that fail in a row before the watch, not the run, is the fault.
+WATCH_FAILURES = 5
 
 
 @dataclass
@@ -77,38 +80,27 @@ def gh(*args: str) -> str:
     return subprocess.run(["gh", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout
 
 
-def pages(path: str, key: str) -> list[dict]:
-    """Every item under key across the pages of one GitHub API listing."""
-
-    text, items, at = gh("api", "--paginate", path), [], 0
-    decoder = json.JSONDecoder()
-    while at < len(text):
-        if text[at].isspace():
-            at += 1
-            continue
-        page, at = decoder.raw_decode(text, at)
-        items.extend(page.get(key) or [])
-    return items
-
-
 class GitHub:
     """What GitHub ran on one commit, read until all of it has finished."""
 
     def __init__(self, sha: str, repository: str):
         self.sha, self.repository = sha, repository
+        self.api = API(None, repository)
         self.runs: list[dict] = []
         self.checks: list[dict] = []
 
     def read(self) -> None:
         newest: dict[str, dict] = {}
-        for item in pages(f"repos/{self.repository}/actions/runs?head_sha={self.sha}&per_page=100", "workflow_runs"):
+        for item in self.api.pages(
+            f"repos/{self.repository}/actions/runs?head_sha={self.sha}&per_page=100", "workflow_runs"
+        ):
             item["path"] = item["path"].split("@", 1)[0]
             if item["path"] != DEPLOY and item["created_at"] > newest.get(item["path"], {}).get("created_at", ""):
                 newest[item["path"]] = item
         self.runs = sorted(newest.values(), key=lambda item: item["path"])
         self.checks = [
             check
-            for check in pages(
+            for check in self.api.pages(
                 f"repos/{self.repository}/commits/{self.sha}/check-runs?filter=latest&per_page=100", "check_runs"
             )
             if check["name"] != PRODUCTION
@@ -134,6 +126,7 @@ class GitHub:
         return waiting, (running[0]["id"] if running else None)
 
     def settle(self, deadline: float, poll: int) -> bool:
+        failures = 0
         while True:
             self.read()
             waiting, running = self.unsettled()
@@ -144,15 +137,34 @@ class GitHub:
                 for line in waiting:
                     print(f"  {line}", file=sys.stderr)
                 return False
-            if running is not None:
-                subprocess.run(
-                    ["gh", "run", "watch", str(running), "-R", self.repository, "--interval", str(poll)],
-                    cwd=ROOT,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            else:
+            if running is None:
                 time.sleep(poll)
+                continue
+            error = self.watch(running, poll)
+            if error is None:
+                failures = 0
+                continue
+            failures += 1
+            if failures >= WATCH_FAILURES:
+                print(f"gh run watch failed {failures} times in a row: {error}", file=sys.stderr)
+                return False
+            time.sleep(poll)
+
+    def watch(self, run: int, poll: int) -> str | None:
+        """Wait for one run to finish; what gh said when it could not."""
+
+        watched = subprocess.run(
+            ["gh", "run", "watch", str(run), "-R", self.repository, "--interval", str(poll)],
+            cwd=ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if watched.returncode == 0:
+            return None
+        lines = watched.stderr.strip().splitlines()
+        return lines[0] if lines else f"gh exited {watched.returncode}"
 
     def passed(self) -> bool:
         ok = True
@@ -187,7 +199,9 @@ class GitHub:
         if not required:
             print(f"  could not read the jobs CI's {verdict_job} needs from {CI}")
             return False
-        jobs = pages(f"repos/{self.repository}/actions/runs/{ci['id']}/jobs?filter=latest&per_page=100", "jobs")
+        jobs = self.api.pages(
+            f"repos/{self.repository}/actions/runs/{ci['id']}/jobs?filter=latest&per_page=100", "jobs"
+        )
         promoted = any(
             step.get("name") == promote and step.get("conclusion") == "success"
             for job in jobs
@@ -239,6 +253,9 @@ def github_gates() -> bool:
     deadline = time.monotonic() + int(os.environ.get("PREFLIGHT_REMOTE_TIMEOUT", "3600"))
     try:
         return github.settle(deadline, int(os.environ.get("PREFLIGHT_REMOTE_POLL", "30"))) and github.passed()
+    except GitHubError as error:
+        print(f"GitHub could not be read: {error}", file=sys.stderr)
+        return False
     except subprocess.CalledProcessError as error:
         print(f"GitHub could not be read: {error.stderr or error}", file=sys.stderr)
         return False
@@ -299,14 +316,36 @@ def host_check(destination: str) -> int:
         except subprocess.CalledProcessError as error:
             print(f"The check could not be built from HEAD: {shlex.join(map(str, error.cmd))} failed.")
             return 1
-        with subprocess.Popen(
-            ["ssh", "-o", "BatchMode=yes", destination, REMOTE], cwd=ROOT, stdin=subprocess.PIPE
-        ) as proc:
+        # ssh's stderr goes to a file, so it cannot fill a pipe while the payload is written.
+        with (
+            tempfile.TemporaryFile() as said,
+            subprocess.Popen(
+                ["ssh", "-o", "BatchMode=yes", destination, REMOTE], cwd=ROOT, stdin=subprocess.PIPE, stderr=said
+            ) as proc,
+        ):
             assert proc.stdin
-            with tarfile.open(fileobj=proc.stdin, mode="w|") as payload:
-                payload.add(work / "payload", arcname=".")
-            proc.stdin.close()
-            return proc.wait()
+            sent = send(proc.stdin, work / "payload")
+            status = proc.wait()
+            said.seek(0)
+            stderr = said.read().decode("utf-8", "replace")
+        sys.stderr.write(stderr)
+        if not sent:
+            print(
+                f"The deploy host stopped reading the check (ssh exited {status}): {stderr.strip() or 'it said nothing'}"
+            )
+            return 1
+        return status
+
+
+def send(stdin, payload: Path) -> bool:
+    """Stream the payload as a tar; False when the host stopped reading first."""
+
+    try:
+        with stdin, tarfile.open(fileobj=stdin, mode="w|") as archive:
+            archive.add(payload, arcname=".")
+    except BrokenPipeError:
+        return False
+    return True
 
 
 def main() -> int:

@@ -3,6 +3,7 @@ package host
 import (
 	"archive/tar"
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"io"
@@ -221,5 +222,71 @@ func TestTheArchiveIsRootedAtTheRunbooksNames(t *testing.T) {
 	}
 	if len(tops) != 3 || !tops[Database] || !tops["media"] || !tops["exports"] {
 		t.Errorf("top-level entries %v", tops)
+	}
+}
+
+// archiveWhileWriting archives a tree whose upload changes, through change,
+// once the backup has opened it, and returns the restored tree and the
+// warnings the backup gave.
+func archiveWhileWriting(t *testing.T, change func(path string)) (string, string) {
+	t.Helper()
+	tree := t.TempDir()
+	for _, dir := range []string{"media", "exports"} {
+		os.Mkdir(filepath.Join(tree, dir), 0o755)
+	}
+	os.WriteFile(filepath.Join(tree, Database), []byte("database"), 0o644)
+	upload := filepath.Join(tree, "media", "upload.bin")
+	os.WriteFile(upload, []byte("0123456789"), 0o644)
+	os.WriteFile(filepath.Join(tree, "exports", "report.txt"), []byte("export-proof\n"), 0o644)
+
+	var archive, warnings bytes.Buffer
+	building := &assembly{warn: &warnings, opened: func(path string) {
+		if path == upload && change != nil {
+			change(path)
+		}
+	}}
+	dirs := map[string]string{"media": filepath.Join(tree, "media"), "exports": filepath.Join(tree, "exports")}
+	if err := building.write(&archive, filepath.Join(tree, Database), dirs); err != nil {
+		t.Fatalf("the backup failed because a file changed under it: %v", err)
+	}
+	restored := restore(t, &archive)
+	if body, _ := os.ReadFile(filepath.Join(restored, "exports", "report.txt")); string(body) != "export-proof\n" {
+		t.Errorf("the entry after the changed file restored as %q", body)
+	}
+	return restored, warnings.String()
+}
+
+func TestAFileThatGrowsDuringTheBackupIsArchivedAsItStoodAtOpen(t *testing.T) {
+	restored, warnings := archiveWhileWriting(t, func(path string) {
+		grown, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+		grown.WriteString("appended")
+		grown.Close()
+	})
+	if body, _ := os.ReadFile(filepath.Join(restored, "media", "upload.bin")); string(body) != "0123456789" {
+		t.Errorf("the grown file restored as %q", body)
+	}
+	if !strings.Contains(warnings, "media/upload.bin") {
+		t.Errorf("no warning names the file that changed: %q", warnings)
+	}
+}
+
+func TestAFileThatShrinksDuringTheBackupKeepsItsPlaceAndIsNamed(t *testing.T) {
+	restored, warnings := archiveWhileWriting(t, func(path string) { os.Truncate(path, 4) })
+	body, _ := os.ReadFile(filepath.Join(restored, "media", "upload.bin"))
+	if len(body) != 10 || string(body[:4]) != "0123" {
+		t.Errorf("the shrunk file restored as %q", body)
+	}
+	if !strings.Contains(warnings, "media/upload.bin") {
+		t.Errorf("no warning names the file that changed: %q", warnings)
+	}
+}
+
+func TestAnUntouchedTreeIsArchivedWithoutWarnings(t *testing.T) {
+	restored, warnings := archiveWhileWriting(t, nil)
+	if body, _ := os.ReadFile(filepath.Join(restored, "media", "upload.bin")); string(body) != "0123456789" {
+		t.Errorf("the file restored as %q", body)
+	}
+	if warnings != "" {
+		t.Errorf("an unchanged tree warned: %q", warnings)
 	}
 }

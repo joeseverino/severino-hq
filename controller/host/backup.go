@@ -141,7 +141,7 @@ func (m *Machine) writeArchive(ctx context.Context, file *os.File, recipients []
 	fmt.Fprintln(m.Out, "[2/3] Assembling the archive.")
 	if len(recipients) == 0 {
 		fmt.Fprintln(m.Out, "[3/3] Encryption skipped: SEVERINO_BACKUP_AGE_RECIPIENTS is not set.")
-		return assemble(file, snapshot, dirs)
+		return assemble(file, m.Out, snapshot, dirs)
 	}
 	fmt.Fprintln(m.Out, "[3/3] Encrypting it with age.")
 	var args []string
@@ -158,7 +158,7 @@ func (m *Machine) writeArchive(ctx context.Context, file *os.File, recipients []
 	if err := encrypt.Start(); err != nil {
 		return fmt.Errorf("age could not be started: %w", err)
 	}
-	assembled := assemble(plain, snapshot, dirs)
+	assembled := assemble(plain, m.Out, snapshot, dirs)
 	plain.Close()
 	if err := encrypt.Wait(); err != nil {
 		return fmt.Errorf("age refused the archive: %w: %s", err, refusal.String())
@@ -167,17 +167,30 @@ func (m *Machine) writeArchive(ctx context.Context, file *os.File, recipients []
 }
 
 // assemble writes a gzipped tar of the snapshot at its top level and each
-// directory that exists under its name.
-func assemble(w io.Writer, snapshot string, dirs map[string]string) error {
+// directory that exists under its name, warning on warn about a file that
+// changed while it was read.
+func assemble(w, warn io.Writer, snapshot string, dirs map[string]string) error {
+	return (&assembly{warn: warn}).write(w, snapshot, dirs)
+}
+
+type assembly struct {
+	archive *tar.Writer
+	warn    io.Writer
+	// opened runs between a file's stat and its copy: a test changes the file
+	// there, as HQ writing to it during a backup would.
+	opened func(path string)
+}
+
+func (a *assembly) write(w io.Writer, snapshot string, dirs map[string]string) error {
 	compressed := gzip.NewWriter(w)
-	archive := tar.NewWriter(compressed)
-	err := addFile(archive, snapshot, Database)
+	a.archive = tar.NewWriter(compressed)
+	err := a.addFile(snapshot, Database)
 	for _, name := range []string{"media", "exports"} {
 		if dir := dirs[name]; err == nil && dir != "" {
-			err = addTree(archive, dir, name)
+			err = a.addTree(dir, name)
 		}
 	}
-	if closeErr := archive.Close(); err == nil {
+	if closeErr := a.archive.Close(); err == nil {
 		err = closeErr
 	}
 	if closeErr := compressed.Close(); err == nil {
@@ -186,17 +199,17 @@ func assemble(w io.Writer, snapshot string, dirs map[string]string) error {
 	return err
 }
 
-func addFile(archive *tar.Writer, path, name string) error {
+func (a *assembly) addFile(path, name string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return err
 	}
-	return addEntry(archive, path, name, info)
+	return a.addEntry(path, name, info)
 }
 
 // addTree adds dir as name, keeping links as links; a directory that is not
 // there is left out, as a host with no uploads has none.
-func addTree(archive *tar.Writer, dir, name string) error {
+func (a *assembly) addTree(dir, name string) error {
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return nil
 	}
@@ -212,11 +225,14 @@ func addTree(archive *tar.Writer, dir, name string) error {
 		if err != nil {
 			return err
 		}
-		return addEntry(archive, path, filepath.ToSlash(filepath.Join(name, relative)), info)
+		return a.addEntry(path, filepath.ToSlash(filepath.Join(name, relative)), info)
 	})
 }
 
-func addEntry(archive *tar.Writer, path, name string, info fs.FileInfo) error {
+func (a *assembly) addEntry(path, name string, info fs.FileInfo) error {
+	if info.Mode().IsRegular() {
+		return a.addRegular(path, name)
+	}
 	link := ""
 	if info.Mode()&fs.ModeSymlink != 0 {
 		var err error
@@ -232,19 +248,59 @@ func addEntry(archive *tar.Writer, path, name string, info fs.FileInfo) error {
 	if info.IsDir() {
 		header.Name += "/"
 	}
-	if err := archive.WriteHeader(header); err != nil {
-		return err
-	}
-	if !info.Mode().IsRegular() {
-		return nil
-	}
+	return a.archive.WriteHeader(header)
+}
+
+// addRegular archives a file as it stood when it was opened, since HQ may be
+// writing it: the header takes the open file's size and exactly that many
+// bytes follow it. Bytes a file gained are left out, bytes it lost are zeros,
+// and either way the file is named on warn, as GNU tar does.
+func (a *assembly) addRegular(path, name string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	_, err = io.Copy(archive, file)
-	return err
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		fmt.Fprintf(a.warn, "%s: no longer a regular file; left out\n", name)
+		return nil
+	}
+	header, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return err
+	}
+	header.Name = name
+	if a.opened != nil {
+		a.opened(path)
+	}
+	if err := a.archive.WriteHeader(header); err != nil {
+		return err
+	}
+	copied, err := io.CopyN(a.archive, file, header.Size)
+	if errors.Is(err, io.EOF) {
+		fmt.Fprintf(a.warn, "%s: file shrank by %d bytes; padding with zeros\n", name, header.Size-copied)
+		_, err = io.CopyN(a.archive, zeros{}, header.Size-copied)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if after, err := file.Stat(); err == nil && (after.Size() != info.Size() || !after.ModTime().Equal(info.ModTime())) {
+		fmt.Fprintf(a.warn, "%s: file changed as we read it\n", name)
+	}
+	return nil
+}
+
+// zeros pads an entry whose file shrank to the size its header promised.
+type zeros struct{}
+
+func (zeros) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
 }
 
 // prune removes archives older than retention from dir, and nothing else:

@@ -78,6 +78,7 @@ from .finding_model import (
 )
 from .first_seen import recorded
 from .integrations import IntegrationGraph, integration_graph
+from .projection import QueryRefusal
 from .security import Capability, Principal
 from .topology import derive_topology
 from .topology_model import (
@@ -577,12 +578,8 @@ def serialize_finding(finding: Finding) -> dict[str, Any]:
     }
 
 
-class InvalidFindingsQuery(ValueError):
+class InvalidFindingsQuery(QueryRefusal):
     """A narrowing input the findings cannot be read by; ``reason`` says which."""
-
-    def __init__(self, reason: str) -> None:
-        super().__init__(reason)
-        self.reason = reason
 
 
 def _narrowing(severity: str, limit: int | None) -> int:

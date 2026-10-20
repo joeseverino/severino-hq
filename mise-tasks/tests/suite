@@ -29,15 +29,15 @@ cat "$log"
 [ "$status" -eq 0 ]
 uv run coverage combine --quiet
 total="$(uv run coverage report --format=total --precision=2)"
-uv run coverage report --fail-under="$COVERAGE_FLOOR" >/dev/null || {
+# Decimals, so awk compares them: test(1) compares integers only.
+awk -v total="$total" -v floor="$COVERAGE_FLOOR" 'BEGIN { exit !(total + 0 >= floor + 0) }' || {
     echo "coverage ${total}% is under the floor of ${COVERAGE_FLOOR}%" >&2
     exit 2
 }
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    percent="$(uv run coverage report --format=total --precision=2)"
     ran="$(sed -nE 's/^Ran ([0-9]+) tests? in ([0-9.]+)s$/\1 tests in \2s/p' "$log")"
     {
-        echo "### Python ${UV_PYTHON:-default}: ${ran}, coverage ${percent}% (floor ${COVERAGE_FLOOR}%)"
+        echo "### Python ${UV_PYTHON:-default}: ${ran}, coverage ${total}% (floor ${COVERAGE_FLOOR}%)"
         echo
         echo "<details><summary>Slowest tests</summary>"
         echo

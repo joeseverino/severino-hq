@@ -1,6 +1,7 @@
 """HQ's checks on a commit: the review, the production report and the reads behind them."""
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -107,6 +108,16 @@ class ListingTests(SimpleTestCase):
 
         self.assertEqual(ci_report.failed_steps(gh, "42", "2", "Build HQ"), ["Sign"])
         self.assertIn("--paginate", fake.calls[0]["args"])
+
+    def test_without_a_token_gh_reads_as_its_own_login(self):
+        envs = []
+        gh = ci_report.GitHub(None, REPO, run=lambda args, env, stdin: envs.append(env) or "[]")
+
+        with mock.patch.dict("os.environ"):
+            os.environ.pop("GH_TOKEN", None)
+            gh.pages(f"repos/{REPO}/actions/runs")
+
+        self.assertNotIn("GH_TOKEN", envs[0])
 
     def test_a_job_listing_cannot_be_read_as_one_page(self):
         gh, fake = github()
@@ -288,6 +299,16 @@ class ReportTests(SimpleTestCase):
         self.assertEqual((verdict.conclusion, verdict.title), ("neutral", "Not deployed: not approved"))
         self.assertEqual(len(writes), 1)
 
+    def test_a_rejected_deploy_names_no_approver(self):
+        rejected = {
+            f"repos/{REPO}/actions/runs/42/approvals": [[{"state": "rejected", "user": {"login": "example-rejecter"}}]]
+        }
+        _, writes, _ = self.report("failure", answers=rejected)
+
+        text = writes[0]["body"]["output"]["text"]
+        approved = next(line for line in text.splitlines() if line.startswith("| **Approved** |"))
+        self.assertNotIn("example-rejecter", approved)
+
     def test_cancelled_says_so(self):
         verdict, _, _ = self.report("cancelled")
 
@@ -309,7 +330,12 @@ class _Logs(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.seen.append((self.path, self.headers.get("Authorization")))
-        if self.path.endswith("/1/logs"):
+        if self.path.endswith("/3/logs") and len(self.seen) == 1:
+            # Rate limited once, then served.
+            self.send_response(429)
+            self.send_header("Retry-After", "7")
+            self.end_headers()
+        elif self.path.endswith(("/1/logs", "/3/logs")):
             self.send_response(302)
             self.send_header("Location", "/storage/1")
             self.end_headers()
@@ -319,6 +345,9 @@ class _Logs(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif self.path.endswith("/4/logs"):
+            self.send_response(503)
+            self.end_headers()
         else:
             self.send_response(404)
             self.end_headers()
@@ -353,3 +382,22 @@ class JobLogTests(SimpleTestCase):
 
         self.assertIn("404", str(raised.exception))
         self.assertEqual(len(_Logs.seen), 1)
+
+    def test_a_rate_limit_is_waited_out_for_as_long_as_it_asks(self):
+        waits = []
+
+        log = ci_report.job_log(3, token="secret-token", repo=REPO, api=self.api, sleep=waits.append)
+
+        self.assertEqual(log, "the log")
+        self.assertEqual(waits, [7])
+
+    def test_a_server_error_is_retried_after_a_growing_wait(self):
+        waits = []
+
+        with self.assertRaises(ci_report.LogUnreadable):
+            ci_report.job_log(4, token="secret-token", repo=REPO, api=self.api, attempts=3, sleep=waits.append)
+
+        self.assertEqual(len(_Logs.seen), 3)
+        self.assertEqual(len(waits), 2)
+        self.assertGreater(waits[0], 0)
+        self.assertGreater(waits[1], waits[0])

@@ -2,6 +2,7 @@ package upgrade
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -368,8 +369,14 @@ func (r *run) execute() int {
 			return r.fault(err)
 		}
 	}
+	// Root wrote the pinned copy; the kept override is the stack owner's, as
+	// the override was, or as the stack directory is when there was none.
+	owner, err := os.Lstat(cmp.Or(r.override, r.dir))
+	if err != nil {
+		return r.fault(err)
+	}
 	staged := r.pinFile + ".hq-pin"
-	if err := copyFile(pinnedFile, staged); err != nil {
+	if err := copyFileOwned(pinnedFile, staged, owner); err != nil {
 		os.Remove(staged)
 		return r.fault(err)
 	}

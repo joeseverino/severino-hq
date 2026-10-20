@@ -46,6 +46,7 @@ from hq.platform.application.idempotency import (
     validate_key,
 )
 from hq.platform.application.integration_specs import RESERVED_QUERY_FIELD
+from hq.platform.application.projection import QueryRefusal
 from hq.platform.application.resources import (
     InvalidResourceInput,
     ResourceDescription,
@@ -459,23 +460,8 @@ QueryFields = Mapping[str, Mapping[str, Any]]
 _STRING: Mapping[str, Any] = {"type": "string"}
 
 
-class _UnreadableQuery(ValueError):
+class _UnreadableQuery(QueryRefusal):
     """A declared parameter whose value is not of its declared type."""
-
-    def __init__(self, reason: str) -> None:
-        super().__init__(reason)
-        self.reason = reason
-
-
-def _refusal_reason(exc: ValueError) -> str:
-    """The ``reason`` a refusal's author wrote for the caller, never ``str(exc)``.
-
-    A refusal's arguments can carry whatever raised it; one with no curated
-    reason is answered in HQ's words instead.
-    """
-
-    reason = getattr(exc, "reason", None)
-    return reason if isinstance(reason, str) else "The query cannot be read."
 
 
 def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]:
@@ -504,7 +490,7 @@ def _projection(
     title: str,
     doc: str,
     *,
-    refusals: tuple[type[ValueError], ...] = (),
+    refusals: tuple[type[QueryRefusal], ...] = (),
 ) -> View:
     """One principal-scoped projection, served with declared narrowing inputs.
 
@@ -522,13 +508,13 @@ def _projection(
     refusal's ``reason``: HQ's own text, written for the caller, never the value sent.
     """
 
-    refused: tuple[type[ValueError], ...] = (_UnreadableQuery, *refusals)
+    refused: tuple[type[QueryRefusal], ...] = (_UnreadableQuery, *refusals)
 
     def view(request: APIRequest) -> HttpResponse:
         try:
             return _ok(serve(principal=request.principal, **_narrowing(request, query_fields)))
         except refused as exc:
-            return _fail(_refusal_reason(exc), code="invalid_input", status=400)
+            return _fail(exc.reason, code="invalid_input", status=400)
         except AuthorizationError as exc:
             return _fail(exc.reason, code=exc.code, status=403)
 

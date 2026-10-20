@@ -8,7 +8,7 @@
 set -eu
 # Hermetic: none of what the gates are asked for comes from the caller.
 unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST PREFLIGHT_BASE_REF \
-    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_HOST_EXIT TEST_UNAME
+    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_HOST_EXIT TEST_UNAME TEST_HOST_REFUSES TEST_PROGRAM_PAD
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 work="$(mktemp -d)"
@@ -19,13 +19,14 @@ fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 # The fixture repository: the real task and its verdict helper, CI's
 # workflow, the units, and hq-host's source.
 repo="${work}/repo"
-mkdir -p "${repo}/tools/gate" "${repo}/controller/cmd/hq-host" "${repo}/.github/workflows"
+mkdir -p "${repo}/tools/gate" "${repo}/tools/pipeline" "${repo}/controller/cmd/hq-host" "${repo}/.github/workflows"
 cd "${repo_dir}"
 cp -R deploy .gitignore "${repo}/"
 cp .github/workflows/ci.yml "${repo}/.github/workflows/"
 cp controller/cmd/hq-host/main.go "${repo}/controller/cmd/hq-host/"
 cp tools/__init__.py "${repo}/tools/"
 cp tools/gate/__init__.py tools/gate/preflight.py tools/gate/verdict.py "${repo}/tools/gate/"
+cp tools/pipeline/__init__.py tools/pipeline/ci_report.py "${repo}/tools/pipeline/"
 # Hermetic: the fixture is a throwaway repository, so no signing and no hooks.
 git_() {
     git -C "${repo}" -c user.name=test -c user.email=test@example.com \
@@ -52,6 +53,10 @@ echo "ssh $*" >>"${TEST_LOG}"
 case "$*" in
     *" uname -s -m") echo "${TEST_UNAME-Linux x86_64}"; exit 0 ;;
 esac
+if [ -n "${TEST_HOST_REFUSES-}" ]; then
+    echo "mktemp: ${TEST_HOST_REFUSES}" >&2
+    exit 1
+fi
 dir="$(mktemp -d)"
 tar -x -C "${dir}" || exit 70
 (cd "${dir}" && find . -type f | LC_ALL=C sort) >"${TEST_PAYLOAD}"
@@ -66,6 +71,8 @@ cat >"${bin}/go" <<'EOF'
 echo "go $* GOOS=${GOOS-} GOARCH=${GOARCH-} CGO_ENABLED=${CGO_ENABLED-}" >>"${TEST_LOG}"
 while [ "$#" -gt 0 ] && [ "$1" != -o ]; do shift; done
 cp cmd/hq-host/main.go "$2"
+# Padded past any pipe buffer, so a host that stops reading breaks the pipe.
+if [ -n "${TEST_PROGRAM_PAD-}" ]; then dd if=/dev/zero bs=1024 count=4096 2>/dev/null >>"$2"; fi
 EOF
 cat >"${bin}/mise" <<'EOF'
 #!/bin/sh
@@ -151,6 +158,12 @@ expect 2 "a release the host cannot verify"
 says "UNKNOWN  deploy host deploy.example.test, read-only: the release it runs is unverified"
 says "HOST NOT VERIFIED"
 unset TEST_HOST_EXIT
+export TEST_HOST_REFUSES="example.test: no space left" TEST_PROGRAM_PAD=1
+expect 1 "a host that stops reading the check"
+says "FAILED   deploy host deploy.example.test"
+says "no space left"
+if grep -q "Traceback" "${work}/out"; then fail "a host that stops reading crashed preflight"; fi
+unset TEST_HOST_REFUSES TEST_PROGRAM_PAD
 export TEST_UNAME="Linux aarch64"
 expect 0 "an arm64 host"
 logged "GOOS=linux GOARCH=arm64" "the check was not built for arm64"
@@ -171,7 +184,7 @@ unset TEST_FAIL_COMPOSED
 
 # 5. --remote reads what GitHub ran on HEAD instead of running `mise run ci`.
 #    The fake gh answers from JSON pages, <API path with / as _>.<page>.json in
-#    TEST_GH; past the first page only with --paginate. Watching a run
+#    TEST_GH; every page, as one JSON array, only with --paginate --slurp. Watching a run
 #    replaces the pages with those in TEST_GH/finished.
 cat >"${bin}/gh" <<'EOF'
 #!/bin/sh
@@ -182,14 +195,17 @@ case "$1" in
     api)
         shift
         pages=1
-        if [ "$1" = --paginate ]; then pages=99; shift; fi
+        if [ "$1" = --paginate ] && [ "$2" = --slurp ]; then pages=99; shift 2; fi
         [ "$#" -eq 1 ] || exit 64
         key="$(printf '%s' "${1%%\?*}" | tr / _)"
+        [ "${pages}" -eq 1 ] || printf '['
         page=1
         while [ "${page}" -le "${pages}" ] && [ -f "${TEST_GH}/${key}.${page}.json" ]; do
+            [ "${page}" -eq 1 ] || printf ','
             cat "${TEST_GH}/${key}.${page}.json"
             page=$((page + 1))
-        done ;;
+        done
+        [ "${pages}" -eq 1 ] || printf ']' ;;
     *) exit 64 ;;
 esac
 EOF
