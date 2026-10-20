@@ -62,7 +62,7 @@ def resource_contract(document: dict[str, Any]) -> ResourceContract:
     )
 
 
-def catalogue(resources: tuple[Resource, ...]) -> str:
+def catalog(resources: tuple[Resource, ...]) -> str:
     """The resource descriptions already emitted by the API contract."""
 
     return "\n".join(

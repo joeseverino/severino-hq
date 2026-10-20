@@ -1,4 +1,4 @@
-"""Services: the catalogue, one service's page, publishing a new one, and the favourites order."""
+"""Services: the catalog, one service's page, publishing a new one, and the favorites order."""
 
 from functools import cached_property
 from typing import override
@@ -285,7 +285,7 @@ class ServicePinView(View):
 
 
 class ServiceMoveView(View):
-    """Move one favorite past its neighbour.
+    """Move one favorite past its neighbor.
 
     Up and down rather than dragging: it is one POST, it works without script,
     and it says out loud which two things swapped, which a drag does not.

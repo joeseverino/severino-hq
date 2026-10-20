@@ -52,7 +52,7 @@ class QueryRefusal(ValueError):
 def projection_scope(seed: Mapping[str, Any] | None = None, *, apart: bool = False) -> Iterator[None]:
     """Share exact read results for one assembled projection, then forget them.
 
-    This is request/use-case memoisation, not a process cache. Nested composers
+    This is request/use-case memoization, not a process cache. Nested composers
     reuse the active scope and the outermost caller clears it in ``finally``,
     so two consumers assembling one answer cannot disagree or repeat a read,
     while the next request always sees current state.

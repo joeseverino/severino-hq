@@ -493,7 +493,7 @@ def approve(approval_id: str, *, principal: Principal) -> dict[str, Any]:
     """Agree to a held change and run exactly the call that was held.
 
     The replay is the original call, under a principal that still names whoever
-    asked for it and now also names who allowed it. Attribution is not moved
+    asked for it and also names who allowed it. Attribution is not moved
     onto the approver: the audit trail has to keep saying that a token asked and
     a person agreed, because those are two different facts.
 

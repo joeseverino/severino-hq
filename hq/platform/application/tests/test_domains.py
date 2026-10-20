@@ -153,7 +153,7 @@ class ComposedQueueTests(TestCase):
         self.assertIn(reverse("content:list"), entry["url"])
 
     def test_a_section_with_no_data_contributes_no_card(self):
-        """The whole of the dormant-section behaviour, with no flag to set.
+        """The whole of the dormant-section behavior, with no flag to set.
 
         A section holding no rows contributes no tile. A figure that is always
         zero on the page an operator reads every day teaches them to skim the

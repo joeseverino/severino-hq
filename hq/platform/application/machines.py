@@ -340,7 +340,7 @@ def machine(name: str, *, served_at: tuple[str, ...] | None = None) -> Machine |
     declared under, for instance."""
 
     wanted = name.strip().lower()
-    # Inside a projection, the catalogue every section and the relation graph share.
+    # Inside a projection, the catalog every section and the relation graph share.
     catalog = connections.machines_once() if served_at is None else machine_catalog(served_at=served_at)
     return next(
         (item for item in catalog if item.name.lower() == wanted),
@@ -381,7 +381,7 @@ def _reached(connections: tuple[ProviderConnection, ...]) -> dict[str, set[str]]
             for name in connection.reaches:
                 found.setdefault(str(name), set()).add(connection.connection_ref)
         # A connection that opens a shell somewhere *is* that somewhere.
-        # Recognised by pointing at a host and a port rather than at a URL,
+        # Recognized by pointing at a host and a port rather than at a URL,
         # which is what an ssh_transport projection produces and nothing else
         # does, so a machine HQ can log into is a machine whether or not
         # anything else ever mentions it.
@@ -501,7 +501,7 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
     page says it is served from cannot disagree.
     """
 
-    # Ranked exactly as the service catalogue ranks them, through the one rule
+    # Ranked exactly as the service catalog ranks them, through the one rule
     # both read. A name whose ingress declares an origin is served where the
     # ingress forwards; the record pointing at that ingress is not a second
     # answer to file it under a second machine.

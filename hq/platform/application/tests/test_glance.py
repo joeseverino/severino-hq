@@ -598,7 +598,7 @@ class GlanceRenderingTests(TestCase):
         self.assertTrue(all(button.tag == "button" for button in select(html, "form", "glance-refresh")))
         self.assertIn(reverse("dashboard_glance_settings"), hrefs(html))
 
-    def test_machine_routes_read_the_catalogue_once_per_projection(self):
+    def test_machine_routes_read_the_catalog_once_per_projection(self):
         from ..projection import projection_scope
 
         with (

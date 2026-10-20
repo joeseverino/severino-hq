@@ -76,7 +76,7 @@ def _next_position(user, target_kind: str) -> int:
 
 
 def move(user, target_kind: str, target_key: str, delta: int) -> None:
-    """Shift one pin up or down among its neighbours.
+    """Shift one pin up or down among its neighbors.
 
     Implemented as a swap with the adjacent pin rather than by rewriting every
     position, so two operators reordering different pairs do not clobber each
@@ -100,7 +100,7 @@ def move(user, target_kind: str, target_key: str, delta: int) -> None:
 def reorder(user, target_kind: str, keys) -> None:
     """Renumber the pins of one kind into the given order.
 
-    Only keys already pinned are honoured: an order is a statement about what
+    Only keys already pinned are honored: an order is a statement about what
     is pinned, and letting it create pins would make reordering a way to pin
     things without meaning to.
     """

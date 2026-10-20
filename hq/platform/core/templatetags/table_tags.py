@@ -1,6 +1,6 @@
 """The tags a data table is declared through.
 
-``{% table_region %}`` wraps the table in its labelled scroll region,
+``{% table_region %}`` wraps the table in its labeled scroll region,
 ``{% table_heading %}`` draws each column heading with its kind, the box width
 it leaves at, and its sort control, and ``{% row_toggle %}`` draws the
 disclosure of a row that holds more than it shows. All of it is in the HTML on
@@ -148,7 +148,7 @@ def _region(
     mid: int = 0,
     narrow: int = 0,
 ) -> dict[str, Any]:
-    """The labelled region a table sits in: the container its tiers are
+    """The labeled region a table sits in: the container its tiers are
     measured against, and how many columns, by rank, leave in a mid-width box
     (``mid``) and in a narrow one (``narrow``). An identifier in it is cut at a
     share of the region's width; ``room`` names a smaller share for a row whose

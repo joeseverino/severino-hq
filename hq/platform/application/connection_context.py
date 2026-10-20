@@ -202,7 +202,7 @@ class ConnectionsContext:
     # The same for each provider already connected: a second account of one is
     # still a connection to add, so the page always offers a way to add one.
     again: tuple[ProviderSetup, ...]
-    unlabelled: tuple[ConnectionView, ...]
+    unlabeled: tuple[ConnectionView, ...]
     oldest: ConnectionInstance | None
     # The estate alone, the same for every caller.
     estate_posture: ConnectionSecurityPosture
@@ -310,7 +310,7 @@ class ConnectionsContext:
                 }
                 for provider in self.unconnected_providers
             ],
-            "unclassified": [view.instance.label for view in self.unlabelled],
+            "unclassified": [view.instance.label for view in self.unlabeled],
             "posture": {
                 "state": estate.state,
                 "summary": estate.summary,
@@ -454,7 +454,7 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
             unconnected_providers=unconnected,
             setups=available,
             again=tuple(setup for setup in every if setup.provider in connected),
-            unlabelled=tuple(view for view in controller if view.instance.kind == "unclassified"),
+            unlabeled=tuple(view for view in controller if view.instance.kind == "unclassified"),
             # The oldest, named, because the page's honesty depends on the
             # staler half: the newest would describe every row as current.
             oldest=min(

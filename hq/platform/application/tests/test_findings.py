@@ -1628,7 +1628,7 @@ class PerimeterClaimTests(TestCase):
         self.assertEqual(self._findings(_firewall_stopped), ())
 
 
-class UnrecognisedContainerTests(TestCase):
+class UnrecognizedContainerTests(TestCase):
     """A container no compose project declares is reported, never adopted.
 
     The sweep leaves it unmanaged, so it has no node of its own. Its machine
@@ -1675,7 +1675,7 @@ class UnrecognisedContainerTests(TestCase):
             return derive_topology(principal=MANAGE)
 
     def found(self):
-        return [f for f in derive_findings(self.projected(), principal=MANAGE) if f.rule == "unrecognised-container"]
+        return [f for f in derive_findings(self.projected(), principal=MANAGE) if f.rule == "unrecognized-container"]
 
     def test_it_is_one_serious_finding_about_its_machine_gathered_with_the_topology(self):
         """The fact is gathered while the topology is built, not by the rule."""
@@ -1688,7 +1688,7 @@ class UnrecognisedContainerTests(TestCase):
             raised = derive_findings(projection, principal=MANAGE)
 
         self.assertEqual(len(captured), 0)
-        (finding,) = [f for f in raised if f.rule == "unrecognised-container"]
+        (finding,) = [f for f in raised if f.rule == "unrecognized-container"]
         self.assertEqual((finding.subject, finding.severity), ("machine:a-docker-host", "serious"))
         self.assertIn("a-stray", finding.title)
 

@@ -155,7 +155,7 @@ class ProviderModel(BaseModel):
 
         HTML submits a textarea as CRLF and every provider returns LF, so a
         multi-line field saved through a form never again equals the identical
-        document read back. Normalised on the way in, so the declaration and
+        document read back. Normalized on the way in, so the declaration and
         the reading are comparable at all, and asked of every string field
         rather than the two that have textareas today. Runs ``after`` because
         a ``before`` validator is not allowed on a discriminated union's
@@ -228,7 +228,7 @@ def origin_is_authoritative(provider: ProviderSpec) -> bool:
     is the answer to "what serves this", so the first has to yield wherever both
     are present.
 
-    Stated once, here, because two surfaces rank origins (the service catalogue
+    Stated once, here, because two surfaces rank origins (the service catalog
     and the machine board) and must agree.
     """
 

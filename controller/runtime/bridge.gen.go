@@ -1116,7 +1116,7 @@ type ControllerRegistry struct {
 	// Capabilities Actions the controller may apply.
 	Capabilities []Capability `json:"capabilities"`
 
-	// ConnectionCredentials Providers a connection credential is modelled for.
+	// ConnectionCredentials Providers a connection credential is modeled for.
 	ConnectionCredentials []ConnectionProvider `json:"connection_credentials"`
 
 	// ConnectionProviders Each resource kind's connection providers.

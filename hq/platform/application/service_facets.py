@@ -206,7 +206,7 @@ class Facet:
         """``good``, ``attention`` or ``serious``: blank when nothing supplies it.
 
         Blank rather than a state, because an absence is not a health reading.
-        Colouring "no certificate declared" as a failure would claim HQ had
+        Coloring "no certificate declared" as a failure would claim HQ had
         looked at something and found it wrong, when in fact there is nothing to
         look at, and the two call for different reactions.
         """

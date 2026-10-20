@@ -77,13 +77,13 @@ class NamesTests(TestCase):
         from unittest import mock
 
         declare("site-dns", "adguard.rewrite", domain="site.test", answer="10.9.9.9")
-        relabelled = (
+        relabeled = (
             ("runtime", "Runtime"),
             ("dns", "Resolver"),
             ("proxy", "Ingress"),
             ("certificate", "Certificate"),
         )
-        with mock.patch("hq.domains.control_plane.providers.SERVICE_FACETS", relabelled):
+        with mock.patch("hq.domains.control_plane.providers.SERVICE_FACETS", relabeled):
             section = by_id(a_machine("site.test"))["names"]
 
         # The page heads a facet it knows in its own words, whatever the registry calls it.

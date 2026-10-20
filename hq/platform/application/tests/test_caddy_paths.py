@@ -184,7 +184,7 @@ class RequestedHostRouteTests(TestCase):
         self.assertNotIn("Origin", [fact.label for fact in facts if fact.source_kind == "caddy.route"])
         self.assertNotIn(PLACEHOLDER, [fact.value for fact in facts])
 
-    def test_the_catalogue_and_the_graph_read_it_without_an_origin(self):
+    def test_the_catalog_and_the_graph_read_it_without_an_origin(self):
         self.routes(PLACEHOLDER, to_requested_host=True)
 
         with projection_scope():

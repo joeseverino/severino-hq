@@ -7,7 +7,7 @@ the capability that asks for it. A domain says what the work is, as an
 declaration:
 
 - the job that runs it off the request, one at a time (``hq.domains.jobs``);
-- the capability of the same name, so the API, MCP, the command centre and a
+- the capability of the same name, so the API, MCP, the command center and a
   command line ask for it through the same authorization, consent and denial
   record as any other command, and are answered at once;
 - the route its button posts to and the status resource the button follows;

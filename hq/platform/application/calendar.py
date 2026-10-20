@@ -14,7 +14,7 @@ calendar list instead of taking the page down with it.
 
 Three shapes cover everything a source emits:
 
-- a **mark**: a dot on its day, read by colour. Many fit one day.
+- a **mark**: a dot on its day, read by color. Many fit one day.
 - an **item**: a line with a title (an appointment, an expiry).
 - a **span**: an item over several days (a certificate's renewal window:
   opens, then expires).
@@ -44,7 +44,7 @@ EVENT_STATES = frozenset({"", "done", "planned", "missed"})
 # Dotted and lower-case, so a source id reads as whose it is ("example.sessions")
 # and can sit in a URL or a preference row unescaped.
 SOURCE_ID = re.compile(r"^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$")
-# Chart series the palette has. A source asking for one keeps the colour its
+# Chart series the palette has. A source asking for one keeps the color its
 # domain's charts already use; the rest are dealt from what is left.
 SERIES_SLOTS = 10
 # Rows a month cell shows, bars first, before the rest fold into "+N more".
@@ -70,7 +70,7 @@ class CalendarEvent:
     url: str = ""
     state: str = ""
     # A dot on its day rather than a line: for what is many a day and read by
-    # colour.
+    # color.
     mark: bool = False
 
     def __post_init__(self) -> None:
@@ -156,7 +156,7 @@ class CalendarSource:
     # Checked until the operator unchecks it. History (what happened, rather
     # than what is coming) starts unchecked: the day panel shows it anyway.
     shown: bool = True
-    # A chart series slot, to keep a colour the domain's charts already use;
+    # A chart series slot, to keep a color the domain's charts already use;
     # 0 lets the calendar choose.
     slot: int = 0
 
@@ -306,7 +306,7 @@ def calendar_sources() -> tuple[tuple[str, CalendarSource], ...]:
 
 
 def _slots(sources: Iterable[CalendarSource]) -> dict[str, int]:
-    """A colour per source: its own when it asks, the least used otherwise.
+    """A color per source: its own when it asks, the least used otherwise.
 
     Sources checked by default are dealt first, so what shows together is told
     apart; unchecked history takes what is left. Dealt from the declarations
@@ -315,8 +315,8 @@ def _slots(sources: Iterable[CalendarSource]) -> dict[str, int]:
     """
 
     sources = tuple(sources)
-    # A colour a domain asks for is its identity (the colour its own charts
-    # use): never dealt to another source while any other colour remains.
+    # A color a domain asks for is its identity (the color its own charts
+    # use): never dealt to another source while any other color remains.
     asked = {source.slot for source in sources if source.slot}
     taken = [source.slot for source in sources if source.slot]
     dealt = {source.id: source.slot for source in sources if source.slot}

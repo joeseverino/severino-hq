@@ -357,7 +357,7 @@ class ServiceColumnTests(TestCase):
         declare_record("hosted", "hosted.example.com", "A", "203.0.113.7")
         store(
             ADDRESS_KIND,
-            {"address": "203.0.113.7", "organisation": "Example Hosting", "read_at": timezone.now().isoformat()},
+            {"address": "203.0.113.7", "organization": "Example Hosting", "read_at": timezone.now().isoformat()},
         )
         self.user = get_user_model().objects.create_user("operator", password="x" * 20)
         self.client.force_login(self.user)

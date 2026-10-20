@@ -112,7 +112,7 @@
           <dd>Another tailnet (shared in)</dd>
         {% endif %}
         {% if not machine.presence.authorized %}
-          <dt>Authorised</dt>
+          <dt>Authorized</dt>
           <dd><strong>No</strong>. It cannot connect until you approve it.</dd>
         {% endif %}
         {% if machine.presence.lock_error %}
@@ -162,7 +162,7 @@
           {% comment %}
           One per line: three addresses are three answers, not a phrase.
           {% endcomment %}
-          <dd>{% for label, address in labelled_addresses %}{% if label %}<span class="muted">{{ label }}</span> {% endif %}<code>{{ address|breakable }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}</dd>
+          <dd>{% for label, address in labeled_addresses %}{% if label %}<span class="muted">{{ label }}</span> {% endif %}<code>{{ address|breakable }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}</dd>
               {% comment %}
         Who the policy lets in, per port: the answer the policy test gives,
         shown without having to ask. A policy alias names a machine's address

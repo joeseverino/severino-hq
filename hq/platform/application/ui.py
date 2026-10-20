@@ -20,8 +20,8 @@ from .workflow_contracts import ActionLink, WorkflowPlan
 # The one status vocabulary. Every surface that shows state (dashboard cards,
 # insight panels, extension-provided projections) draws from this set, so a
 # state means the same thing and looks the same wherever it is rendered.
-# Reserved: these never double as categorical series colours, and each is always
-# rendered with its own text so state is never carried by colour alone.
+# Reserved: these never double as categorical series colors, and each is always
+# rendered with its own text so state is never carried by color alone.
 STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
 
 
@@ -235,14 +235,14 @@ class ListRow:
     # Leaves HQ. Rendered so the operator knows before they click, and so a
     # linked page cannot reach back through window.opener.
     external: bool = False
-    # Optional state. `badge` carries the text, so state is never colour alone.
+    # Optional state. `badge` carries the text, so state is never color alone.
     status: str = ""
     badge: str = ""
 
     def __post_init__(self) -> None:
         _one_of("ListRow status", self.status, STATUS_VALUES, or_empty=True)
         if self.status and not self.badge:
-            raise ValueError("ListRow status needs a badge: state is never carried by colour alone.")
+            raise ValueError("ListRow status needs a badge: state is never carried by color alone.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,7 +286,7 @@ PLOT_LEFT, PLOT_TOP, PLOT_WIDTH, PLOT_HEIGHT = 48.0, 12.0, 606.0, 202.0
 # The strip after the plot, and the mirror of the gutter before it, so the
 # most recent period (the one being looked at) has room around it and the
 # chart does not lean left.
-# The same number as the left: the end labels are centred on their points, so
+# The same number as the left: the end labels are centered on their points, so
 # equal margins make the first and last label clear their edges by the same
 # amount.
 # Taken out of the plot rather than added to the box: the drawing stays 702
@@ -296,7 +296,7 @@ PLOT_RIGHT = PLOT_LEFT
 # A chart in a card of its own, rather than one of a pair: the drawing fills a
 # full-width card instead of stopping at half-width. The height is unchanged:
 # this is the same chart given the room it is put in, not a bigger one.
-# Room to the right of the plot for the last category label, which is centred
+# Room to the right of the plot for the last category label, which is centered
 # on the last point and so hangs half its width past the axis. Sized for the
 # label at its largest: a phone scales the whole drawing down, so the type
 # has to be enlarged in these units to survive it, and the overhang is twice
@@ -539,7 +539,7 @@ class LineChart(Chart):
     marks: tuple[LineMark, ...]
 
 
-# How much room a date label needs beside its neighbour. "Aug 14" is about
+# How much room a date label needs beside its neighbor. "Aug 14" is about
 # forty pixels at the axis size, and two of them closer than this print over
 # one another rather than beside each other.
 LABEL_GAP = 52.0
@@ -567,11 +567,11 @@ def line_chart(
         raise ValueError("Chart series slots must be between 1 and 5.")
     slots = [item[2] for item in cleaned]
     if len(set(slots)) != len(slots):
-        # The slot is the colour. Two series sharing one draws a legend with
+        # The slot is the color. Two series sharing one draws a legend with
         # the same swatch twice and two indistinguishable lines under it,
         # a chart that looks finished and cannot be read. Caught here because
         # it is invisible in the data and only shows up on the rendered page.
-        raise ValueError(f"Chart series must not share a colour slot: {sorted(slots)}.")
+        raise ValueError(f"Chart series must not share a color slot: {sorted(slots)}.")
     every = [value for _, points, _ in cleaned for _, value in points]
     if not every or len(every) < 2:
         return LineChart(
@@ -649,7 +649,7 @@ def line_chart(
     while cursor <= last_day:
         stamps.append(cursor)
         cursor += timedelta(days=step)
-    # The last day is always labelled (it is the one an eye goes to) but
+    # The last day is always labeled (it is the one an eye goes to) but
     # stepping from the first rarely lands on it, so the step before it can
     # fall a couple of days short and the two labels print on top of each
     # other. Whichever of the pair is not the last day gives way.
@@ -720,7 +720,7 @@ CALENDAR_STATES = frozenset({"done", "missed", "planned", "empty"})
 class CalendarDay:
     """One day: what the plan asked for, and what actually happened.
 
-    `slots` are ChartSeries slot numbers, so a filled dot takes the same colour
+    `slots` are ChartSeries slot numbers, so a filled dot takes the same color
     as that series' band in the chart beside it. The shared vocabulary is the
     point: "green is strength" has to mean the same thing in both, or reading
     them together is worse than reading either alone.

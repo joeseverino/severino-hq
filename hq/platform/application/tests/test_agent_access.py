@@ -87,7 +87,7 @@ class SwitchTests(TestCase):
         self.assertEqual(response.status_code, 405)
         self.assertFalse(agents_paused())
 
-    def test_an_unrecognised_state_changes_nothing(self):
+    def test_an_unrecognized_state_changes_nothing(self):
         response = self._set("yes")
 
         self.assertEqual(response.status_code, 400)

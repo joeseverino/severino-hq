@@ -98,7 +98,7 @@ class ReferenceStyleTests(SimpleTestCase):
     def setUp(self):
         self.sheet = _uncommented(_source("css", "api-reference.css"))
 
-    def test_it_carries_no_colour_size_or_face_of_its_own(self):
+    def test_it_carries_no_color_size_or_face_of_its_own(self):
         self.assertEqual(re.findall(r"#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|color-mix)\(", self.sheet), [])
         self.assertNotIn("font-family", self.sheet)
         self.assertEqual(re.findall(r"font-size:\s*[\d.]", self.sheet), [])

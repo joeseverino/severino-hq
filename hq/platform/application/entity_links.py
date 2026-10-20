@@ -296,7 +296,7 @@ def node_link(node: Any) -> EntityLink:
     # A declaration is named by its provider's label, not "Resource".
     registry_kind = str(getattr(node, "kind_key", "") or "")
     named = registry_kind if registry_kind in PROVIDERS or registry_kind in OBSERVATIONS else node.kind
-    # A declaration's node is labelled by its key, which is what a command
+    # A declaration's node is labeled by its key, which is what a command
     # is addressed by. A page names it by what it stands for.
     shown = node_name(node)
     return EntityLink(

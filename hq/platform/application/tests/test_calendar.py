@@ -206,7 +206,7 @@ class MonthTests(TestCase):
         ):
             calendar_sources()
 
-    def test_a_source_keeps_the_colour_it_asks_for_and_the_rest_are_dealt(self):
+    def test_a_source_keeps_the_color_it_asks_for_and_the_rest_are_dealt(self):
         with _with(_domain([_source("example.a", [], slot=3), _source("example.b", []), _source("example.c", [])])):
             groups = calendar_month(date(2026, 10, 1), today=TODAY).groups
         slots = {view.id: view.slot for _group, views in groups for view in views}

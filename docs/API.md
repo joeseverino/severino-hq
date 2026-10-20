@@ -142,7 +142,7 @@ reference, not a client:
   in its own place. The version tag is a badge (`kind: badge`) and carries
   `x-scalar-ignore`, the form the viewer reads, so it is no section.
 - **Appearance** is HQ's tokens, handed to the viewer's theme variables by
-  `static/css/api-reference.css`. That sheet holds no colour, size or face of
+  `static/css/api-reference.css`. That sheet holds no color, size or face of
   its own, and both of the viewer's modes take the same tokens, so the page
   follows the operator's theme (`data-theme` on `<html>`, else the system's)
   with no toggle of its own.
@@ -215,7 +215,7 @@ principal holds; the `SEVERINO_MCP_ENABLE_*` switches gate writes, not reads.
 |---|---|---|
 | Estate reading (`estate.cards`) | Dashboard | `estate` |
 | Action items (`dashboard.work_queue`, estate items included) | Action items | `action.items` |
-| Machine catalogue, roles, HQ's own machine | Machines | `machines` |
+| Machine catalog, roles, HQ's own machine | Machines | `machines` |
 | Running containers: standing, runtime, posture, supply chain (`containers.containers`) | Containers | `containers` (`get <machine:container>`) |
 | Upgrade plans, read-only (`upgrades.plans`) | Containers, container page | `upgrades` (`get <machine:container>`) |
 | Domains, their services and registration | Domains | `domains` |
@@ -441,7 +441,7 @@ All MCP tool input schemas and descriptions consume the live deployment's
 OpenAPI document after Django initialization. `x-hq-mcp-tools` records MCP-only
 metadata; it does not invent HTTP operations for those tools. Argument types
 and defaults are emitted from the declared service signatures with the MCP
-SDK and Pydantic. Resource names, identifiers and catalogues consume the
+SDK and Pydantic. Resource names, identifiers and catalogs consume the
 already-emitted resource paths. Registration fails if the document disagrees
 with the execution signature, and calls validate against the documented
 constraints before entering application code. Unknown arguments, mistyped

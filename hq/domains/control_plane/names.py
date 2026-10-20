@@ -68,8 +68,8 @@ _LEGAL_SUFFIX = re.compile(
 )
 
 
-def organisation_name(name: str) -> str:
-    """How a person says a registry's organisation: "Example Registrar, Inc." is
+def organization_name(name: str) -> str:
+    """How a person says a registry's organization: "Example Registrar, Inc." is
     Example Registrar. Only a trailing legal suffix goes; the name itself is kept."""
 
     text = " ".join(str(name or "").split())

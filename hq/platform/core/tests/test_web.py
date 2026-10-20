@@ -787,7 +787,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         self.assertEqual(count.context["profile_action_count"], 1)
 
     def test_the_controllers_dot_says_only_what_is_known(self):
-        """Green while it is arriving, the attention colour once it has gone
+        """Green while it is arriving, the attention color once it has gone
         quiet, and neither where it has never run."""
 
         marker = Path(tempfile.mkdtemp()) / "controller-heartbeat"

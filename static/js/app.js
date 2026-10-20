@@ -99,7 +99,7 @@ document.addEventListener("keydown", (event) => {
 
 // Hover-to-open, for pointers only. On touch there is no hover: the first tap
 // would open a menu and the second would be needed to follow a link, so those
-// devices keep plain click behaviour.
+// devices keep plain click behavior.
 if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
   // Small delays absorb the pointer crossing a menu on its way somewhere else,
   // and the gap between the summary and its panel.
@@ -567,7 +567,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   });
 })();
 
-// Asked-for work: one behaviour for every "do this now".
+// Asked-for work: one behavior for every "do this now".
 //
 // A request never does the work. It stores the ask and answers at once with
 // how the work stands and the address of a status resource (202 while it is
@@ -1174,7 +1174,7 @@ document.addEventListener("input", (event) => {
 
 // The topology is useful HTML before this runs: every card's select control
 // is a link that focuses the node, and a focused page draws its details. This
-// enhancement filters, isolates a node's immediate neighbourhood, and loads
+// enhancement filters, isolates a node's immediate neighborhood, and loads
 // the selected node's details into the one panel beside the lanes, creating
 // no client-side topology state of its own.
 document.querySelectorAll("[data-topology]").forEach((workspace) => {

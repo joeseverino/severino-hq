@@ -27,7 +27,7 @@ class ProjectionMiddlewareTests(TestCase):
             getattr(self.client, method)(url)
         return catalog.call_count
 
-    def test_a_resource_page_builds_the_machine_catalogue_once(self):
+    def test_a_resource_page_builds_the_machine_catalog_once(self):
         url = reverse("control_plane:detail", kwargs={"key": "app-proxy"})
 
         self.assertEqual(self.counted("get", url), 1)

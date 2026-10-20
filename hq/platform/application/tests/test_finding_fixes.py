@@ -53,7 +53,7 @@ class EveryRuleSaysHowTests(TestCase):
     def test_every_rule_declares_one(self):
         for rule in RULES:
             self.assertTrue(rule.operator_action.strip(), rule.name)
-            self.assertNotIn("—", rule.operator_action, rule.name)
+            self.assertNotIn("\u2014", rule.operator_action, rule.name)
 
     def test_a_finding_without_its_own_action_carries_the_rules(self):
         tailnet_connection()
@@ -214,7 +214,7 @@ class ProductionFindingsTests(TestCase):
             },
         )
 
-        (finding,) = raised("unrecognised-container")
+        (finding,) = raised("unrecognized-container")
 
         self.assertIn("docker rm -f example-leftover", steps_text(finding))
         self.assertTrue(any(remedy["label"] == "Adopt it" for remedy in finding["remedies"]))

@@ -636,7 +636,7 @@ def findings(*, principal: Principal, rule: str = "", severity: str = "", limit:
 #     work would fail a minute later in a job result;
 #   - and a cap, because a class-wide condition fires on the whole class at once.
 #
-# HQ forms no opinion about what is safe to run unattended. That judgement is
+# HQ forms no opinion about what is safe to run unattended. That judgment is
 # already written down, per kind and per action, in the controller contract,
 # so the only actions considered here are the ones it already declares
 # automatic, and withdrawing one there withdraws it here.

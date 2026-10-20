@@ -17,7 +17,7 @@ A plain record domain (one declared with ``Records`` in
 ``RecordDeleteMixin`` deletes through the declared deleter. The view names
 only its form; noun, permission and target come from the declaration.
 
-Reloading is deliberate rather than wasteful. Services return serialisable
+Reloading is deliberate rather than wasteful. Services return serializable
 results because the API and the MCP share them; a Django view needs a model
 instance for ``get_absolute_url`` and ``__str__``. The alternative is teaching
 the view to rebuild the URL itself, which duplicates knowledge the model

@@ -30,7 +30,7 @@
   and where they are on the cookies are named `__Host-sessionid` and
   `__Host-csrftoken`. The prefix is enforced by the browser rather than by HQ:
   no other host or path under the domain can set a cookie of that name, so a
-  session cannot be planted by a neighbour for HQ to read back.
+  session cannot be planted by a neighbor for HQ to read back.
 - `SECURE_CONTENT_TYPE_NOSNIFF`, `X-Frame-Options:
   DENY`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy:
   same-origin` and `Cross-Origin-Resource-Policy: same-origin` enabled. The

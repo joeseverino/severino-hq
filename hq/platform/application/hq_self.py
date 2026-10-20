@@ -217,7 +217,7 @@ def hq_machine(
 def hq_service(request: Any = None, *, catalog: Iterable[Any] | None = None) -> SelfService | None:
     """HQ's own service, or None when it answers at no name worth listing.
 
-    The machine is the machine catalogue's answer, so every page agrees.
+    The machine is the machine catalog's answer, so every page agrees.
     """
 
     hostnames = hq_hostnames()
@@ -230,7 +230,7 @@ def hq_service(request: Any = None, *, catalog: Iterable[Any] | None = None) -> 
 
 
 def own_machine() -> Any | None:
-    """The catalogue's machine HQ runs on, or None where no address names one."""
+    """The catalog's machine HQ runs on, or None where no address names one."""
 
     return next((item for item in connections.machines_once() if item.runs_hq), None)
 

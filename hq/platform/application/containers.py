@@ -265,7 +265,7 @@ def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
     """Which declaration watches which container, and whether it is folded away.
 
     Keyed on the identity the provider uses, so a container declared in HQ and
-    the same container found by a sweep are recognised as one thing. Both facts
+    the same container found by a sweep are recognized as one thing. Both facts
     come back together because a page rendering a table of containers asks both
     of every row, and asking twice is two queries for one join.
     """
@@ -676,10 +676,10 @@ def source_of(
 ) -> tuple[str, str]:
     """``(owner/repository, how it is known)`` for what an image is built from."""
 
-    labelled = github_repository(str((published or {}).get("source", "") or ""))
+    labeled = github_repository(str((published or {}).get("source", "") or ""))
     for named, how in (
         (declared, DECLARED),
-        ("/".join(labelled) if labelled else "", LABEL),
+        ("/".join(labeled) if labeled else "", LABEL),
         (github_source(str(((attested or {}).get("provenance") or {}).get("source", "") or "")), PROVENANCE),
         (image.github, REGISTRY),
     ):

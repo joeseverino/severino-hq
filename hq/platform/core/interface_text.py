@@ -1,6 +1,6 @@
 """What HQ and its extensions show people: their words and markup, read as source.
 
-An em dash in interface text is the most recognisable mark of generated prose,
+An em dash in interface text is the most recognizable mark of generated prose,
 and it spreads by copying. A value that is missing is shown with the
 `or_empty` filter or ``MISSING``, never a literal dash.
 

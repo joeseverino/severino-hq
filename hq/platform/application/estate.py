@@ -1,7 +1,7 @@
 """The estate at a glance: machines, services, domains and connections.
 
-Read from the catalogues the pages use, once per projection: the machine
-catalogue, the service catalogue, the zone names, the connection rows and the
+Read from the catalogs the pages use, once per projection: the machine
+catalog, the service catalog, the zone names, the connection rows and the
 joined readings. The dashboard card, the estate's action items and the command
 center read ``estate_reading``; none keeps a list of its own.
 """

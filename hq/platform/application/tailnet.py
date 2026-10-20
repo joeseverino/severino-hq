@@ -65,7 +65,7 @@ class Device:
     public_key: str = ""
     offers_exit_node: bool = False
     # What actually admits a node, as distinct from what lists one. A device in
-    # the inventory has been seen; a device the tailnet has authorised and lock
+    # the inventory has been seen; a device the tailnet has authorized and lock
     # has signed is one the tailnet will carry traffic for.
     authorized: bool = True
     lock_error: str = ""

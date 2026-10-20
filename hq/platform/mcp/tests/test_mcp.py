@@ -193,7 +193,7 @@ class ServiceTests(SentinelMixin, TestCase):
     def test_resource_kinds_are_derived_from_the_live_document(self):
         from hq.platform.api.openapi import document
 
-        from ..contract import catalogue, resource_contract
+        from ..contract import catalog, resource_contract
 
         contract = resource_contract(document())
         listable = [resource.name for resource in contract.listable]
@@ -202,8 +202,8 @@ class ServiceTests(SentinelMixin, TestCase):
 
         self.assertEqual(tools["list_resource"].input_schema["properties"]["name"]["enum"], listable)
         self.assertEqual(tools["get_resource"].input_schema["properties"]["name"]["enum"], addressable)
-        self.assertIn(catalogue(contract.listable), tools["list_resource"].description)
-        self.assertIn(catalogue(contract.addressable), tools["get_resource"].description)
+        self.assertIn(catalog(contract.listable), tools["list_resource"].description)
+        self.assertIn(catalog(contract.addressable), tools["get_resource"].description)
 
     def test_each_tool_is_served_once_and_only_execute_writes(self):
         from hq.platform.mcp.server import mcp as served
@@ -979,7 +979,7 @@ class ResourceContractTests(SimpleTestCase):
         }
 
     def test_an_injected_document_owns_the_catalog(self):
-        from ..contract import catalogue, resource_contract
+        from ..contract import catalog, resource_contract
 
         with mock.patch(
             "hq.platform.application.resources.resource_registry", side_effect=AssertionError("registry walk")
@@ -987,7 +987,7 @@ class ResourceContractTests(SimpleTestCase):
             contract = resource_contract(self._document())
         self.assertEqual([r.name for r in contract.listable], ["example.events", "example.notes"])
         self.assertEqual([r.name for r in contract.addressable], ["example.notes", "example.single"])
-        self.assertIn("`example.notes`: Synthetic notes. Identifier: `slug`.", catalogue(contract.addressable))
+        self.assertIn("`example.notes`: Synthetic notes. Identifier: `slug`.", catalog(contract.addressable))
 
     def test_altering_the_document_changes_the_catalog(self):
         from ..contract import resource_contract

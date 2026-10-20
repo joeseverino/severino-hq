@@ -87,7 +87,7 @@ class ChannelTests(TestCase):
     def test_a_private_address_is_the_local_network(self):
         self.assertEqual(channel_of(A_LAN_ADDRESS).id, "network")
 
-    def test_a_public_address_is_not_recognised(self):
+    def test_a_public_address_is_not_recognized(self):
         self.assertEqual(channel_of("203.0.113.7").id, "elsewhere")
 
     def test_nonsense_is_not_quietly_treated_as_private(self):
@@ -299,7 +299,7 @@ class LayerTests(TestCase):
         self.assertFalse(layer.holds)
         self.assertIn("Secure=off", layer.evidence)
 
-    def test_a_published_name_is_not_treated_as_a_defence(self):
+    def test_a_published_name_is_not_treated_as_a_defense(self):
         ProviderInventory.objects.update_or_create(
             kind="cloudflare.dns_record",
             defaults={
@@ -617,7 +617,7 @@ class ConnectionPageTests(TestCase):
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class AddressEvidenceTests(TestCase):
-    def test_received_lan_and_public_endpoints_are_both_shown_and_labelled(self):
+    def test_received_lan_and_public_endpoints_are_both_shown_and_labeled(self):
         a_tailnet(
             a_device(
                 "a-laptop",
@@ -1029,7 +1029,7 @@ class ServingDeviceTests(TestCase):
         policy = next(layer for layer in found.layers if layer.id == "policy")
         self.assertFalse(policy.conclusive)
 
-    def test_an_unrecognised_address_never_guesses_a_node(self):
+    def test_an_unrecognized_address_never_guesses_a_node(self):
         found = self.serving({"198.51.100.7"})
 
         self.assertEqual(found.name, "example-controller")
@@ -1252,7 +1252,7 @@ class TailnetLockTests(TestCase):
         self.assertTrue(found.conclusive)
         self.assertIn("2 signing keys", found.evidence)
 
-    def test_one_signing_key_is_not_pluralised(self):
+    def test_one_signing_key_is_not_pluralized(self):
         a_tailnet_policy(enabled=True, trusted_keys=1)
         self.assertTrue(self.layer(connection(a_request())).evidence.endswith("1 signing key"))
 

@@ -473,7 +473,7 @@ ignored the day the frame stops rendering it.
 
 A data table is declared through the table tags, so its shape is in the HTML on
 first paint. `{% table_region "Label" mid=1 narrow=3 %}…{% endtable_region %}`
-wraps it in its labelled scroll region, saying how many columns, by rank,
+wraps it in its labeled scroll region, saying how many columns, by rank,
 leave in a box under 1000px and under 640px; each column heading is
 `{% table_heading "Name" "identifier" %}`, with its kind (`prose`,
 `identifier`, `numeric`, `status` or `control`, following from `num-col`,
@@ -603,7 +603,7 @@ the rest:
 | Derived | What it is |
 | --- | --- |
 | The job | `run` is called on a job's own thread, where reaching out is allowed. One job of a name is live at a time, held by the database, so a second press or caller starts nothing. |
-| The capability | `notes.lookup`, with the subject as its target. The API, MCP, the command centre and `hq_call` ask through it with the same authorization, approval policy and denial record as any command, and are answered at once with the job's id. A command line waits for the work, because nothing there outlives the command. |
+| The capability | `notes.lookup`, with the subject as its target. The API, MCP, the command center and `hq_call` ask through it with the same authorization, approval policy and denial record as any command, and are answered at once with the job's id. A command line waits for the work, because nothing there outlives the command. |
 | The route and status | The control posts to `jobs:ask` and follows `jobs:status`. The extension has no URL, view, template or script for either. |
 | The control | `ask("notes.lookup", note.slug)` is the shared Ask (`partials/_ask.html`), standing as the stored job does: live work is followed, failed work says why until asked for again. It may stand among a page's actions. One query. |
 | The audit entries | Who asked, how it ended, how long it took, and the `seen`, `created`, `updated` and `skipped` counts the work returns. |
@@ -705,7 +705,7 @@ from hq_sdk.reads import derivation, today
 
 @derivation("example.overview", reads=("example.Session", "example.Goal"))
 def overview():
-    return _summarise(as_of=today())
+    return _summarize(as_of=today())
 ```
 
 HQ counts writes to every model table in the writing transaction, an
@@ -805,11 +805,11 @@ A source keeps four rules:
   is a claim; a day the domain cannot speak for emits nothing.
 - **Mind the noise.** History (what happened, rather than what is coming)
   starts unchecked (`shown=False`); a dot (`mark=True`) is for what is many a
-  day and read by colour.
+  day and read by color.
 
 `ends` is exclusive, as in iCalendar: an all-day event over the 3rd to the 5th
 ends on the 6th. A timed event's `starts` is an aware datetime. `slot` keeps a
-colour the domain's charts already use; otherwise the calendar deals one.
+color the domain's charts already use; otherwise the calendar deals one.
 
 The calendar page is the host's. An extension may place a host page in its own
 navigation group by naming its route, `NavigationItem("Calendar",

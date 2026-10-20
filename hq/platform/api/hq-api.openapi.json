@@ -2638,7 +2638,7 @@
           },
           "payload": {
             "additionalProperties": false,
-            "description": "An address to ask the public registries about.\n\n``refresh`` asks again rather than reading the stored answer. The default\nis the stored one: an allocation moves between organisations rarely and a\nPTR record changes when somebody reconfigures a network, so re-asking per\npage load spends a stranger's rate limit to hear the same thing, and\ndiscloses, every time, which addresses HQ is interested in.",
+            "description": "An address to ask the public registries about.\n\n``refresh`` asks again rather than reading the stored answer. The default\nis the stored one: an allocation moves between organizations rarely and a\nPTR record changes when somebody reconfigures a network, so re-asking per\npage load spends a stranger's rate limit to hear the same thing, and\ndiscloses, every time, which addresses HQ is interested in.",
             "properties": {
               "address": {
                 "title": "Address",

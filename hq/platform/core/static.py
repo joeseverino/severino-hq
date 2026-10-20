@@ -18,7 +18,7 @@ lazy from django.http import HttpResponsePermanentRedirect
 lazy from django.templatetags.static import static
 
 # A quoted string (kept whole, so a "/*" in one is not a comment) or a comment.
-# A comment that opens "/*!" is a licence, and is kept.
+# A comment that opens "/*!" is a license, and is kept.
 _CSS_STRING_OR_COMMENT = re.compile(r"""("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|/\*(?!!).*?\*/""", re.DOTALL)
 
 

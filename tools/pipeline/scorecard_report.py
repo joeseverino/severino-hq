@@ -14,7 +14,7 @@ from pathlib import Path
 # The checks local mode can answer from files alone. The rest (Branch-Protection,
 # Code-Review, CII-Best-Practices, Fuzzing, Maintained and the like) describe
 # the project on GitHub, not the tree. License is left out because local mode
-# cannot see GitHub's license detection and reports MIT as unrecognised.
+# cannot see GitHub's license detection and reports MIT as unrecognized.
 CHECKS = (
     "Binary-Artifacts",
     "Dangerous-Workflow",

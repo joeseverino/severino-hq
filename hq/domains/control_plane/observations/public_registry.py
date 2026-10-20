@@ -9,7 +9,7 @@ same ingest as a sweep.
 
 from typing import Any
 
-from ..names import normalized_hostname, organisation_name
+from ..names import normalized_hostname, organization_name
 from .contract import ObservationRecord, ObservationSpec
 
 ADDRESS_KIND = "registry.address"
@@ -22,8 +22,8 @@ VULNERABILITY_KIND = "registry.vulnerabilities"
 
 class AddressHolderRecord(ObservationRecord):
     address: str
-    # The organisation the allocation names, and the network's own name.
-    organisation: str = ""
+    # The organization the allocation names, and the network's own name.
+    organization: str = ""
     network: str = ""
     handle: str = ""
     country: str = ""
@@ -144,7 +144,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Address owner",
         AddressHolderRecord,
         addresses=_address,
-        title=lambda record: organisation_name(str(record.get("organisation") or record.get("network") or "")),
+        title=lambda record: organization_name(str(record.get("organization") or record.get("network") or "")),
         relation="On the network of",
         facet="network",
         read_by="hq",
@@ -155,7 +155,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Domain registration",
         DomainRegistrationRecord,
         hostnames=_domain,
-        title=lambda record: organisation_name(str(record.get("registrar") or "")),
+        title=lambda record: organization_name(str(record.get("registrar") or "")),
         relation="Registered through",
         facet="registration",
         expires=lambda record: str(record.get("expires_at", "")),

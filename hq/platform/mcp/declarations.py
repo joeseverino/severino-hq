@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, create_model
 
 from . import services
-from .contract import catalogue, resource_contract
+from .contract import catalog, resource_contract
 
 HANDLERS: tuple[Callable[..., Any], ...] = (
     services.describe_capabilities,
@@ -71,7 +71,7 @@ def tool_contract(document: dict[str, Any]) -> dict[str, Any]:
         if name in {"list_resource", "get_resource"}:
             kinds = resources.listable if name == "list_resource" else resources.addressable
             schema["properties"]["name"]["enum"] = [resource.name for resource in kinds]
-            description += "\nKinds:\n" + catalogue(kinds)
+            description += "\nKinds:\n" + catalog(kinds)
         entries[name] = {"description": description, "inputSchema": schema, "annotations": hints(handler)}
     if len(entries) != len(HANDLERS):
         raise ValueError("MCP handler names must be unique.")

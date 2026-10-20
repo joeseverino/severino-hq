@@ -20,7 +20,7 @@ from django.utils import timezone
 from hq.platform.core.models import ActionItemRead
 
 # How long a set-aside mark outlives its item. Long enough that a finding which
-# clears and returns within a sweep or two is still recognised as set aside.
+# clears and returns within a sweep or two is still recognized as set aside.
 FORGET_AFTER = timedelta(days=30)
 
 

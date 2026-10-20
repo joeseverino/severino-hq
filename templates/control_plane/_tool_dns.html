@@ -78,9 +78,9 @@
               <dt>Reverse DNS</dt>
               <dd>{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}</dd>
             {% endif %}
-            {% if reading.allocation.organisation %}
+            {% if reading.allocation.organization %}
               <dt>Allocated to</dt>
-              <dd><strong>{{ reading.allocation.organisation }}</strong></dd>
+              <dd><strong>{{ reading.allocation.organization }}</strong></dd>
             {% endif %}
             {% if reading.allocation.prefixes %}
               <dt>Block</dt>

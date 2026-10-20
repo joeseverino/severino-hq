@@ -57,7 +57,7 @@ def record_for(kind, hostname, address):
     return sample
 
 
-def labelled(facts, label):
+def labeled(facts, label):
     return [fact for fact in facts if fact.label == label]
 
 
@@ -71,7 +71,7 @@ class JoinTests(TestCase):
 
         facts = facts_about((), ("198.51.100.7",))
 
-        addresses = labelled(facts, "Address")
+        addresses = labeled(facts, "Address")
         self.assertEqual([f.value for f in addresses], ["198.51.100.7"])
         self.assertEqual(addresses[0].source_kind, PERIMETER)
         self.assertEqual(addresses[0].source_label, OBSERVATIONS[PERIMETER].label)
@@ -89,7 +89,7 @@ class JoinTests(TestCase):
 
         facts = facts_about(("WWW.example.com.",), ())
 
-        self.assertEqual([f.value for f in labelled(facts, "Address")], ["192.0.2.10"])
+        self.assertEqual([f.value for f in labeled(facts, "Address")], ["192.0.2.10"])
         self.assertEqual({f.source_kind for f in facts}, {kind})
 
     def test_a_container_joins_by_the_host_it_runs_on(self):
@@ -107,8 +107,8 @@ class JoinTests(TestCase):
 
         facts = facts_about(("example-host",), ())
 
-        self.assertEqual([f.value for f in labelled(facts, "Container")], ["web"])
-        self.assertEqual([f.value for f in labelled(facts, "Address")], ["10.0.0.5"])
+        self.assertEqual([f.value for f in labeled(facts, "Container")], ["web"])
+        self.assertEqual([f.value for f in labeled(facts, "Address")], ["10.0.0.5"])
 
     def test_nothing_joins_a_subject_with_no_keys(self):
         store(PERIMETER, reachable=False, error="refused")
@@ -205,7 +205,7 @@ class UnreadableTests(TestCase):
         self.assertEqual(len(unread), 1)
         self.assertEqual(unread[0].label, "answered_publicly")
         self.assertIn("the probe was refused", unread[0].detail)
-        self.assertTrue(labelled(facts, "Address"))
+        self.assertTrue(labeled(facts, "Address"))
 
     def test_an_old_reading_is_stale(self):
         store(
@@ -227,7 +227,7 @@ class DisagreementTests(TestCase):
 
         facts = facts_about(("www.example.com",), ())
 
-        addresses = labelled(facts, "Address")
+        addresses = labeled(facts, "Address")
         self.assertEqual(sorted(f.value for f in addresses), ["10.0.0.5", "192.0.2.10"])
 
 

@@ -256,7 +256,7 @@ class Service:
 
         Projected here rather than marked up in a template, so a second surface
         that wants to show them renders the same thing without restating it,
-        and so the badge, which is what stops the state being carried by colour
+        and so the badge, which is what stops the state being carried by color
         alone, cannot be forgotten by one of them.
         """
 
@@ -508,7 +508,7 @@ def _container_declarations() -> dict[tuple[str, str], Any]:
 class _ContainersRunning:
     """The container sweep, read at most once and only if a service runs in one.
 
-    A catalogue asks once per service; each asking the database made the page
+    A catalog asks once per service; each asking the database made the page
     cost a query, and a parse of every container, per hostname.
     """
 
@@ -540,7 +540,7 @@ class _Estate:
     machines: tuple[dict[str, Any], ...]
     containers: dict[tuple[str, str], Any]
     # What places an address: whose machine it is, and what answers there. Read
-    # at most once for the whole catalogue, and not at all by a page that lists
+    # at most once for the whole catalog, and not at all by a page that lists
     # no service.
     at: Whereabouts | None = None
     in_use: _CertificatesInUse | None = None
@@ -549,7 +549,7 @@ class _Estate:
 
     @classmethod
     def read(cls, covering, machines) -> _Estate:
-        """The readings a catalogue needs, taken once."""
+        """The readings a catalog needs, taken once."""
 
         return cls(
             readings=stored_readings(),

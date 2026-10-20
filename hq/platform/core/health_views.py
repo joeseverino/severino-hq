@@ -44,7 +44,7 @@ def health_ready(request):
     # The image carries its assets and a start collects none, so an image
     # built without them is not ready. Read once, when the storage loads.
     checks["assets"] = settings.STATIC_LIVE or collected()
-    # Aggregated for anonymous callers, itemised for signed-in ones.
+    # Aggregated for anonymous callers, itemized for signed-in ones.
     #
     # This endpoint answers without a credential, because a container
     # healthcheck cannot sign in. A probe only needs to know whether HQ can

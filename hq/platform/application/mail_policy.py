@@ -189,7 +189,7 @@ def compose_dmarc(tags: dict[str, str]) -> str:
     """The record a set of tags publishes as.
 
     ``v`` leads because receivers require it first. Everything else keeps the
-    declared order, then anything unrecognised, so a round trip through this
+    declared order, then anything unrecognized, so a round trip through this
     module never reorders a tag it did not put there.
     """
 

@@ -219,7 +219,7 @@ controls all take their size from `--control-size`.
 **One menu.** `.overflow-menu` for "more actions", the nav dropdown for
 navigation. Every dropdown carries `data-menu`, which gives it the shared
 dismissal (outside click, Escape). Inside a menu every control is a plain row;
-a destructive one is only its colour.
+a destructive one is only its color.
 
 **The user menu says whose session it is first.** The person's picture (kept
 by HQ from sign-on, never loaded from the provider by a page), their name,
@@ -256,12 +256,12 @@ A count's plural has one owner too: `counted`, which spells a single noun
 through `labels.plural` ("2 entries"). An audit type's plural is
 `AuditLog.type_plural`: the model's `verbose_name_plural` where declared.
 
-**Colour comes from tokens.** No colour literal outside `@layer tokens`, so a
+**Color comes from tokens.** No color literal outside `@layer tokens`, so a
 theme is a set of token values and dark mode is not a second stylesheet.
 
 **Buttons.** Primary for the one thing a page is for; default for the rest;
 `ghost` for link-like actions that sit inline; `danger` in red text on the same
-surface as its neighbours, loud only in its confirmation.
+surface as its neighbors, loud only in its confirmation.
 
 **A queue row says what is wrong and holds what fixes it.** The queue is
 named "Needs you" wherever it appears. The queue page, the findings page, a
@@ -447,8 +447,8 @@ it was asked. Without script the same button is a form post back to the page,
 which draws the control from what is stored, so a page loaded while the work is
 live says so and resumes following it. A job's panel (`_job_progress.html`) and
 the readings a page asks for when it opens (`_visit_refresh.html`) are the same
-ask drawn differently; one behaviour in `app.js` follows all three.
-*Gates:* `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_script_behaviour`;
+ask drawn differently; one behavior in `app.js` follows all three.
+*Gates:* `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_script_behavior`;
 `hq/platform/core/tests/test_action_budgets.py`.
 
 **A read is a fragment.** A part of a page that is fetched after the page,
@@ -491,7 +491,7 @@ is not polled, and a region that fails is asked less often.
 
 Script that needs a part calls `hqFragment.swap(region, {url})`; script that
 needs to ask again calls `hqEvery(work, {ms})`. After a swap the new content
-hears `hq:fragment`, which is where a behaviour binds to it.
+hears `hq:fragment`, which is where a behavior binds to it.
 *Gates:* `FragmentPrimitiveTests` (no other script reads a response as text,
 parses markup or keeps an interval; every named part is defined);
 `FragmentBrowserTests` (browser).
@@ -516,7 +516,7 @@ page and fails on one that writes.
 1. Find the primitive. Most pages are a head, a band or card of facts, and a
    table or list.
 2. If one almost fits, extend it in `app.css` and its partial, with a comment
-   saying what it now covers and why.
+   saying what it covers and why.
 3. A new container of content is a surface: add its selector to the surface
    list, write only its layout.
 4. A new state of a page (empty, failing, waiting, crowded) gets a fixture in

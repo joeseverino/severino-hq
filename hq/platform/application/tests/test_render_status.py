@@ -203,7 +203,7 @@ class OneDeclarationTests(SimpleTestCase):
 
         self.assertIn("OnUnitActiveSec=1h\n", timer)
         self.assertIn("RandomizedDelaySec=30s\n", timer)
-        # gofmt aligns the field to its neighbours, so any run of spaces.
+        # gofmt aligns the field to its neighbors, so any run of spaces.
         self.assertRegex(main, r"FullEvery: +24 \* time\.Hour,")
         # Read from the timer, not restated beside it.
         self.assertEqual(rules.RENDER_EVERY, timedelta(hours=1))
@@ -316,7 +316,7 @@ class FailingTests(TestCase):
 
         self.assertIn("(example_class)", finding["title"])
         self.assertIn(
-            {"label": "Reason", "value": "an error HQ does not recognise (example_class)"}, finding["evidence"]
+            {"label": "Reason", "value": "an error HQ does not recognize (example_class)"}, finding["evidence"]
         )
 
     def test_a_renderer_with_no_known_unit_gets_the_steps_in_words(self):

@@ -480,7 +480,7 @@ DATABASES = {
             # one at a time, and a job importing an archive holds the write
             # lock in bursts while somebody is browsing the site. The default
             # is five seconds and then a 500 on an unrelated page; waiting is
-            # the correct behaviour, since the other writer is about to finish.
+            # the correct behavior, since the other writer is about to finish.
             "timeout": 30,
         },
         "TEST": {

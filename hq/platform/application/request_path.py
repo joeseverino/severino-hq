@@ -176,7 +176,7 @@ def caller_hop(found: Connection) -> Hop:
     """The device that made the request, as the tailnet reading names it."""
 
     device = found.caller_device
-    name = found.machine_name or _catalogued(device.addresses if device is not None else ())
+    name = found.machine_name or _catalogd(device.addresses if device is not None else ())
     link = entity_link("machine", name) if name else None
     if device is None:
         return Hop(
@@ -193,14 +193,14 @@ def caller_hop(found: Connection) -> Hop:
         presence.connection_ref if presence is not None else "",
         device.observed_at,
     )
-    # Named as the machine catalogue names it, so one computer reads as one name.
+    # Named as the machine catalog names it, so one computer reads as one name.
     return Hop("device", "Device", name or device.label, link, detail=_whose(found), source=source)
 
 
-def _catalogued(addresses) -> str:
-    """The machine the catalogue knows at these addresses.
+def _catalogd(addresses) -> str:
+    """The machine the catalog knows at these addresses.
 
-    The catalogue, not only declarations: the path's machine hop is named from
+    The catalog, not only declarations: the path's machine hop is named from
     it, so a caller on an undeclared machine (a laptop running HQ) is the same
     computer in both places.
     """

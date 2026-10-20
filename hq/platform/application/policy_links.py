@@ -2,7 +2,7 @@
 
 A policy names a device by an alias for one of its addresses (``hosts``), by a
 tag it carries, or by its owner. An alias resolves through the address to the
-machine the catalogue says answers there, and links to it; two aliases for
+machine the catalog says answers there, and links to it; two aliases for
 one machine (its IPv4 and IPv6 addresses) are one link with both names in its
 title. A tag lists the devices carrying it. Users and unresolved names stay as
 the policy writes them.
@@ -27,7 +27,7 @@ class PolicyName:
 
 
 class PolicyNames:
-    """Resolves policy names against one read of the catalogue and the policy."""
+    """Resolves policy names against one read of the catalog and the policy."""
 
     def __init__(self, hosts: dict | None = None, machines: Iterable[Any] | None = None):
         catalog = tuple(connections.machines_once() if machines is None else machines)

@@ -16,7 +16,7 @@
 
 @layer tokens {
 
-/* Two palettes, one set of names. Every colour token is written
+/* Two palettes, one set of names. Every color token is written
    `light-dark(<light>, <dark>)`, so each pair is decided side by side and a
    token cannot exist in one theme only; `color-scheme` picks the half, and
    also moves the form controls, scrollbars and other native widgets with it.
@@ -27,7 +27,7 @@
    lightness as they come forward (page, card, raised row), because a shadow
    has nothing to fall on; hairlines are lighter than the surfaces they
    divide; status inks lighten and their fills deepen so a tone keeps its hue
-   and its contrast; chart and category colours lift until they clear 5:1 on
+   and its contrast; chart and category colors lift until they clear 5:1 on
    the card they sit on. Text, muted text included, clears 4.5:1 on every
    surface, and `core.browser_tests` samples it to keep that true. */
 :root {
@@ -53,7 +53,7 @@
   --attn: light-dark(#b0521a, #ef9258);
 
   /* Code surface. Dark by intent, not by theme: a block of code reads as a
-     quoted artefact rather than as more page. On a dark page it sinks below
+     quoted artifact rather than as more page. On a dark page it sinks below
      the page instead, for the same reason. */
   --code-bg: light-dark(#161922, #0b0c0f);
   --code-ink: light-dark(#eaeef2, #e3e7ec);
@@ -64,7 +64,7 @@
 
   /* Category identity. Like --series-* these are a set, not a list: they are
      chosen against each other and against the page for separation under
-     normal and colour-deficient vision. Changing one means re-checking all. */
+     normal and color-deficient vision. Changing one means re-checking all. */
   --cat-homelab: light-dark(#2e7d8c, #5bb4c4);
   --cat-automation: light-dark(#6c4ab5, #a18ae6);
   --cat-wordpress-security: light-dark(#1b6b3f, #4fb47b);
@@ -138,7 +138,7 @@
   --text-4xl: 22px;
   --text-display: 40px;
 
-  /* Tones. A status colour is never one value: it is a fill, ink that stays
+  /* Tones. A status color is never one value: it is a fill, ink that stays
      legible on that fill, and a border a shade deeper than both. Those three
      have to agree, so each tone is defined once here for every component.
 
@@ -166,7 +166,7 @@
      a banner covering half the page is not, and the same value that reads as
      a label at 20px reads as an alarm at full width. Ink and border are
      shared with the tone above (only the fill lightens) so a banner and
-     the chip beside it are recognisably the same status. Tones without a
+     the chip beside it are recognizably the same status. Tones without a
      wash have no large-surface use yet; add one when they do. */
   --tone-positive-wash: light-dark(#e8f5ec, #14261a);
   --tone-caution-wash: light-dark(#fbf1d6, #272110);
@@ -197,14 +197,14 @@
   --tone-special-ink: light-dark(#4a2a72, #d4bff2);
   --tone-special-line: light-dark(#d3c2e8, #4a3666);
 
-  /* Categorical series palette. Assigned in fixed order, never cycled: colour
+  /* Categorical series palette. Assigned in fixed order, never cycled: color
      follows the entity, not its rank, so filtering a series must not repaint
      the survivors. These are validated as a set (lightness band, chroma floor,
-     colour-vision separation, normal-vision floor) against the white chart
+     color-vision separation, normal-vision floor) against the white chart
      surface: do not hand-tune a slot without re-validating the whole set.
      Slots 3-5 sit under 3:1 contrast on white, so any chart using them must
      also carry visible labels or its data table (both provided by the
-     chart primitive). Status colours above are reserved and never used as a slot.
+     chart primitive). Status colors above are reserved and never used as a slot.
      The dark halves keep each hue and its order and lift it until every slot
      clears 7:1 on the dark card. */
   --series-1: light-dark(#0e88a8, #3fb8d8);
@@ -218,7 +218,7 @@
   --series-8: light-dark(#a0603a, #d39470);
   --series-9: light-dark(#2f8f8a, #6cc9c2);
   --series-10: light-dark(#8a8f2f, #c2c76c);
-  /* A calendar source's colour, set by its series class; the accent until then. */
+  /* A calendar source's color, set by its series class; the accent until then. */
   --source: var(--accent);
   --radius: 8px;
   --radius-sm: 5px;
@@ -365,7 +365,7 @@ pre code { background: transparent; padding: 0; color: inherit; }
 :is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
 .whole:is(td *, th *) { display: inline-block; max-width: 100%; }
 :is(td, th) [data-entity] > .token, :is(td, th) [data-entity] > .token > .whole { display: contents; }
-/* A chip that is a link reads as one: the link colour, underlined on hover. */
+/* A chip that is a link reads as one: the link color, underlined on hover. */
 a code { color: var(--accent-2); }
 a:hover code { color: var(--accent); text-decoration: underline; }
 /* A command or a file: its lines as written, scrolled inside its block, which
@@ -572,7 +572,7 @@ select:not([multiple], [size]) {
 }
 input::-webkit-datetime-edit { padding-block: 0; }
 input::-webkit-date-and-time-value { text-align: start; }
-/* WebKit fills an empty date with today's date in grey, which reads as a
+/* WebKit fills an empty date with today's date in gray, which reads as a
    value. app.js marks an empty one, and it shows nothing until focused. */
 input[data-empty]:not(:focus)::-webkit-datetime-edit { -webkit-text-fill-color: transparent; }
 input:where([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], :not([type])):focus,
@@ -592,7 +592,7 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
    `--tone-wash` for a banner, `--tone-tint` for a mark carrying strong ink);
    this section decides only what the tone *is*. Adding a status means adding
    its class to one of these lists. Adding a component means reading the
-   contract, not restating the colours. */
+   contract, not restating the colors. */
 
 .pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public,
 .pill-replied, .pill-reachable, .pill-good, .msg-success, .conn-kind-tailnet,
@@ -660,7 +660,7 @@ textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0
 /* One rhythm for every stacked page section, set in one place. Adjacent sibling
    margins collapse, so a section that already declares its own bottom margin
    keeps whichever is larger rather than adding to this. `dialog` is excluded:
-   an open modal centres itself with `margin: auto`, which a margin-top here would quietly override. */ .content > * + *:not(dialog){ margin-top: var(--stack-gap); }
+   an open modal centers itself with `margin: auto`, which a margin-top here would quietly override. */ .content > * + *:not(dialog){ margin-top: var(--stack-gap); }
 
 h1 { font-size: var(--font-h1); margin: 0 0 var(--space-2); letter-spacing: -.012em; font-weight: 650; }
 /* A section heading reads as a heading: ink, sentence case, a step above body,
@@ -985,7 +985,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    starts at the first column's edge, and what answers it starts at the
    second's, half-way across. The switches, the theme's buttons, the
    connection's network and the second of two links all share that one edge,
-   so nothing is centred in one row and pushed to the side in the next. */
+   so nothing is centered in one row and pushed to the side in the next. */
 .menu-settings { display: grid; grid-template-columns: 1fr 1fr; }
 .menu-setting { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
 /* What a row's status says in a word, after its mark, and light. */
@@ -1097,7 +1097,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .control-metric strong { font-size: var(--text-lg); line-height: 1.35; overflow-wrap: anywhere; }
 .control-metric > span:last-child { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; overflow-wrap: anywhere; }
 /* A summary is one raised band, not a box per fact. Each fact is its label
-   over its value, divided from its neighbours by a hairline; a row that wraps
+   over its value, divided from its neighbors by a hairline; a row that wraps
    keeps its hairlines because each cell draws its own left and top edge and
    the band clips whatever falls outside it. */
 .control-summary > .control-metric {
@@ -1189,7 +1189,7 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
    several lines tall. */
 .data-table td:has(> strong:first-child) { min-width: 11rem; }
 /* A name in the muted line under it is context the row already shares with
-   its neighbours ("on example-host"): one line, cut at the cell's edge. */
+   its neighbors ("on example-host"): one line, cut at the cell's edge. */
 .data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
 /* A value quoted in a cell (a record's text, a key) can hold a run with no
    seam in it. It breaks wherever it must, so the run never widens its
@@ -1240,7 +1240,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 /* The one thing a stylesheet cannot know is where a given label goes, because
    there is one per data point and the position is computed from the data. That
    single coordinate arrives as `--at`; every decision about how the label
-   looks (size, colour, weight, anchoring) is here. */
+   looks (size, color, weight, anchoring) is here. */
 .chart-frame .chart-axis {
   position: absolute;
   color: var(--muted);
@@ -1261,9 +1261,9 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 /* A layer of its own, so "first" and "last" mean the first and last date
    rather than the topmost of the y-axis ticks. */
 .chart-cats { position: absolute; inset: 0; pointer-events: none; }
-/* Every label is centred on the point it names, including the two at the ends:
+/* Every label is centered on the point it names, including the two at the ends:
    anchored inward, the end labels leave their own points and overlap their
-   neighbours. The drawing keeps a strip either side of its plot for the
+   neighbors. The drawing keeps a strip either side of its plot for the
    overhang, and what a long label needs beyond that it takes from the card's
    padding, rather than from the label. */
 .chart-frame .chart-category {
@@ -1279,10 +1279,10 @@ td.row-actions > * + * { margin-left: var(--space-6); }
    full-bleed sentence sitting over a fixed-width drawing. */
 .chart-card figcaption p { margin: var(--space-2) 0 0; max-width: var(--chart-max); color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
 /* Two lines are reserved only when the pair sits side by side, so the drawings
-   start level; a stacked card has no neighbour to line up with and reserves
+   start level; a stacked card has no neighbor to line up with and reserves
    nothing. 656px is two 320px tracks and the 16px gap `.two-col` resolves to. */
 /* A calendar is not a plot: its legend comes between the caption and the
-   days, so nothing under its caption lines up with a neighbour's drawing and
+   days, so nothing under its caption lines up with a neighbor's drawing and
    a reserved line there is only a blank band. */
 @container pair (min-width: 656px) {
   .chart-card:not(.calendar-card) figcaption p { min-height: calc(2 * 1.45em); }
@@ -1366,7 +1366,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .pie-chart { display: block; inline-size: min(100%, 260px); block-size: auto; flex: none; }
 /* Legend beside the circle rather than above it. A pie is square and a card is
    wide, so stacking them leaves a band of empty card the width of the legend
-   and the height of the drawing. Centred together so the pair sits in the
+   and the height of the drawing. Centered together so the pair sits in the
    card rather than against its left edge. */
 .pie-row { display: flex; align-items: center; justify-content: center; gap: var(--space-10); flex-wrap: wrap; margin: var(--space-2) 0 var(--space-4); }
 .pie-row .chart-legend { flex-direction: column; align-items: flex-start; gap: var(--space-3); margin: 0; }
@@ -1382,7 +1382,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .control-unknown { color: var(--muted); }
 /* Neither is a health reading: one is a responsibility nothing reconciles, the
    other is a resource between being declared and being applied. Both take the
-   neutral colour rather than a warning one. */
+   neutral color rather than a warning one. */
 .control-declared, .control-pending { color: var(--muted); }
 .compact-table { box-shadow: none; }
 /* A node's relationships: the phrase once per group with its ends beside it,
@@ -1505,7 +1505,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
 .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
 /* A destructive action that should not be the loudest thing in its row. */
-/* A button like its neighbours, in red: the same surface and lift, so it does
+/* A button like its neighbors, in red: the same surface and lift, so it does
    not read as an outline with the page showing through beside solid ones. */
 .btn.ghost.danger { background: var(--surface); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); box-shadow: var(--shadow-sm); }
 .btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
@@ -1753,7 +1753,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    this answers "what is this made of" at a glance and takes one line of a
    card doing it. Segments carry `.chart-series-N`, which already sets
    `background` as well as `fill`, so a proportion and a plotted series of the
-   same thing are the same colour without a second palette to keep in step. */
+   same thing are the same color without a second palette to keep in step. */
 .allocation {
   display: flex;
   block-size: 10px;
@@ -2007,7 +2007,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* ── Pills / tags ───────────────────────────────────────────────── */
 
 /* Reads the tone contract, so every variant below is a choice of tone rather
-   than three colours. Falls back to neutral, so an unrecognised status renders
+   than three colors. Falls back to neutral, so an unrecognized status renders
    as a plain pill instead of an unstyled one. */
 .pill {
   display: inline-flex; align-items: center; gap: var(--space-2);
@@ -2065,7 +2065,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 
 /* Wrapping row, not a track grid. The 1px hairlines are the container's own
    background showing through the gaps, so any track a grid left empty would
-   paint as a solid grey block. A flex row has no cells to leave empty:
+   paint as a solid gray block. A flex row has no cells to leave empty:
    whatever wraps grows to fill its row instead, at every width. */
 .kpi-grid { display: flex; flex-wrap: wrap; margin: 0 0 var(--stack-gap); }
 .kpi { flex: 1 1 150px; min-width: 0; padding: var(--space-7) var(--space-8); display: flex; flex-direction: column; gap: var(--space-2); }
@@ -2081,7 +2081,7 @@ a.kpi:hover { background: var(--surface-2); }
 .kpi .label .icon { width: 14px; height: 14px; margin-top: 1px; color: var(--muted-2); }
 /* The supporting figures of an overview stand three to a row. In a card too
    narrow for a mark and its label to fit one of those columns, the mark goes:
-   a label running into its neighbour costs more than the mark is worth. */
+   a label running into its neighbor costs more than the mark is worth. */
 .kpi-grid.is-featured > :not(:first-child) .label .icon { display: none; }
 @container (min-width: 325px) {
   .kpi-grid.is-featured > :not(:first-child) .label .icon { display: inline; }
@@ -2141,7 +2141,7 @@ a.kpi:hover { background: var(--surface-2); }
 .insight-body { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-2); }
 /* Sits with the body it follows, not pinned to the card's floor: pinned, it
    leaves a hole in the middle of every card whose body is shorter than its
-   tallest neighbour. Cards still share a height; the slack goes underneath. */
+   tallest neighbor. Cards still share a height; the slack goes underneath. */
 .insight-action { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted); }
 
 
@@ -2370,7 +2370,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 /* Two columns at most: a track is never narrower than half the row, so four
    cards pair up 2+2 instead of leaving one orphaned, and below two 320px
    tracks it is one column with no breakpoint. A card is as tall as what it
-   holds: stretched to a taller neighbour, a short card is mostly empty frame,
+   holds: stretched to a taller neighbor, a short card is mostly empty frame,
    which reads worse than a card that is honestly short. */
 .two-col { container: pair / inline-size; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(320px, (100% - var(--layout-gap)) / 2)), 1fr)); gap: var(--layout-gap); align-items: start; margin: 0 0 var(--stack-gap); }
 
@@ -2554,7 +2554,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .calendar-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); }
 .calendar-head h2 { margin: 0; }
 .calendar-head-copy { min-width: 0; }
-/* The calendar. A source's colour is one custom property, so a dot, a line, a
+/* The calendar. A source's color is one custom property, so a dot, a line, a
    bar and a swatch all read it the same way. */
 .series-1 { --source: var(--series-1); }
 .series-2 { --source: var(--series-2); }
@@ -2608,9 +2608,9 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 }
 .month-date:hover { background: var(--bg-tint); }
 .month-day.is-today .month-date { background: var(--accent); color: var(--surface); }
-/* A mark is a dot in its source's colour: filled once done, a ring while
+/* A mark is a dot in its source's color: filled once done, a ring while
    planned, a ring struck through once missed. Shape carries the state, so the
-   source's colour stays the only colour. */
+   source's color stays the only color. */
 .month-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--source); }
 .month-item-dot { display: none; }
 .month-mark.is-planned { background: transparent; box-shadow: inset 0 0 0 1.5px var(--source); }
@@ -2656,7 +2656,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .month-item.is-planned::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--source); }
 .month-item time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .month-item:hover > span { color: var(--accent); }
-/* All day: a filled block in its colour, as a one-day bar. */
+/* All day: a filled block in its color, as a one-day bar. */
 .month-item.is-all-day { padding: 0 var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--source) 18%, var(--surface)); font-weight: 600; }
 .month-item.is-all-day::before { content: none; }
 .month-more { display: block; color: var(--muted); font-size: var(--text-3xs); font-weight: 600; text-decoration: none; }
@@ -2678,7 +2678,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .calendar-swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
 .calendar-sources ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 .calendar-sources form { margin: 0; }
-/* A source is a toggle: the whole row is the button, its box filled in its colour when checked. */
+/* A source is a toggle: the whole row is the button, its box filled in its color when checked. */
 .calendar-source {
   display: flex;
   align-items: center;
@@ -3369,7 +3369,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-credential-steps { font-size: var(--text-xs); }
 /* Opened beneath the row, the things it reads fill the line, row by row. */
 .row-detail .connection-sight-list { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
-/* Each reading carries its state's colour, so what needs reading again shows. */
+/* Each reading carries its state's color, so what needs reading again shows. */
 .row-detail .connection-sight-list > li::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .row-detail .connection-sight-list > li:is(.connection-sight-partial)::before { background: var(--warn); }
 .row-detail .connection-sight-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
@@ -3474,7 +3474,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   padding: var(--space-3) 0;
 }
 /* The line, through the middle of every icon. A hop that does not hold
-   colours its stretch, as the connection panel's does. */
+   colors its stretch, as the connection panel's does. */
 .request-path li::before {
   content: ""; position: absolute; left: 12px; top: 0; bottom: 0; width: 2px;
   background: var(--line);
@@ -3514,7 +3514,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 @container route (min-width: 54rem) { .request-path:has(> li:nth-child(6):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
 @container route (min-width: 63rem) { .request-path:has(> li:nth-child(7):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
 @container route (min-width: 72rem) { .request-path:has(> li:nth-child(8):last-child) { --across: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: var(--space-6); } }
-/* Across, every hop is one equal column, centred: its icon on the line, its
+/* Across, every hop is one equal column, centered: its icon on the line, its
    kind, then what it is. The icons fall evenly and the line runs first to last. */
 @container style(--across: 1) {
   .request-path li { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; justify-items: center; align-items: start; row-gap: var(--space-2); padding: 0; text-align: center; }
@@ -3526,7 +3526,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   .request-path .hop-body > strong { justify-content: center; }
   .request-path .hop-icon { grid-row: 1; }
 }
-/* A hop's certificate: a check in a circle after its name, in the name's colour
+/* A hop's certificate: a check in a circle after its name, in the name's color
    once the controller has verified it, faint until then. */
 .cert-mark { display: inline-flex; margin-left: .35em; font-size: 1.15em; color: var(--accent-2); vertical-align: -.15em; cursor: default; }
 .cert-mark.is-pending { color: var(--muted-2); }
@@ -3683,7 +3683,7 @@ kbd {
    tokens, and only the fill differs by design. */
 /* A notice in the page: a titled callout in one of the tones, for anything
    that needs saying before the content it is about. Tone from the modifier
-   (notice-attention, notice-serious, notice-info); the tone section colours it. */
+   (notice-attention, notice-serious, notice-info); the tone section colors it. */
 .notice {
   margin: 0 0 var(--stack-gap);
   padding: var(--space-6) var(--space-7);
@@ -3708,7 +3708,7 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   color: var(--tone-ink, inherit);
   border: 1px solid var(--tone-line, var(--line));
 }
-/* Variants carry no colour of their own: the tone assignment section above
+/* Variants carry no color of their own: the tone assignment section above
    gives them one. */
 
 .pagination { display: flex; gap: var(--space-6); align-items: center; margin: var(--space-8) 0; font-size: var(--text-sm); }
@@ -3957,7 +3957,7 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 .cadence-mark.is-hit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 /* A period nothing is known about. Dashed and unfilled with the missing-value
    dash inside, so it reads as "no reading" beside a period that was skipped,
-   by shape as well as by colour. */
+   by shape as well as by color. */
 .cadence-mark.is-no-data { background: transparent; border-style: dashed; color: var(--muted-2); }
 .cadence-mark.is-no-data::before { content: "\2013"; }
 .cadence-label { font-size: var(--text-3xs); color: var(--muted-2); white-space: nowrap; }
@@ -4027,8 +4027,8 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
    second border and a second block of padding inside the first. */
 .chart-panel .chart-card { border: 0; padding: 0; margin: 0; box-shadow: none; background: none; }
 
-/* What a reading was worth, in the outcome's own units. Coloured by whether it
-   helped, with the sign and the number carrying the meaning: the colour is
+/* What a reading was worth, in the outcome's own units. Colored by whether it
+   helped, with the sign and the number carrying the meaning: the color is
    never the only thing saying which way it went. */
 .worth { font-variant-numeric: tabular-nums; }
 .worth-good { color: var(--ok); }
@@ -4041,7 +4041,7 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 .finding-evidence { margin: 0 0 var(--space-7); font-size: var(--text-xs); }
 
 /* A route, drawn from its own points. No basemap, so the line carries
-   everything: shape for where, colour for how fast. */
+   everything: shape for where, color for how fast. */
 .route-frame { background: var(--bg-tint); border-radius: var(--radius); padding: var(--space-2); margin: var(--space-5) 0 var(--space-2); }
 .route-map { display: block; width: 100%; height: auto; }
 /* Semi-transparent so a retraced route shows its repeats as density rather
@@ -4119,7 +4119,7 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 /* A page that leaves the building: the care brief is handed to a clinician on
    paper, in black and white. Three things break when a screen page is printed
    without help: backgrounds and borders are dropped, so cards dissolve;
-   anything carried by colour is carried by nothing; and a chart lands half on
+   anything carried by color is carried by nothing; and a chart lands half on
    one page and half on the next. */
 @media print {
   /* Room for the browser's own header and footer. */
@@ -4184,10 +4184,10 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   .chart-frame, .line-chart, .bar-chart { max-width: none !important; }
   .chart-card { margin-bottom: 0; }
 
-  /* These charts use colour to separate a declared measure from context; on
+  /* These charts use color to separate a declared measure from context; on
      paper that distinction lives in the caption instead and every line is
      drawn in the one ink there is. `print-color-adjust` is what keeps the
-     grid a grey rather than nothing. */
+     grid a gray rather than nothing. */
   .chart-line, .chart-line-1, .chart-line-2, .chart-line-3, .chart-line-4,
   .chart-line-5 { stroke: var(--print-ink) !important; }
   .chart-dot, .chart-series-1, .chart-series-2, .chart-series-3,
@@ -4202,13 +4202,13 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   /* A hit area for a pointer paper does not have. */
   .chart-hit { display: none; }
 
-  /* Muted greys print faint, and the small print is the part a careful
+  /* Muted grays print faint, and the small print is the part a careful
      reader wants. */
-  /* Secondary greys (dates, reading counts, chart captions) recede on a
+  /* Secondary grays (dates, reading counts, chart captions) recede on a
      backlit display and disappear on paper. On paper it is all one ink. */
   .muted, .lede, p, td, th, li, span, small, figcaption, .count,
   .page-lede, .chart-card figcaption p,
-  /* Headings too: a muted grey reads as hierarchy on screen and as faded
+  /* Headings too: a muted gray reads as hierarchy on screen and as faded
      toner on paper. */
   h1, h2, h3, .section-head h2, .page-head h1 { color: var(--print-ink) !important; }
   .data-table th, .data-table td { border-bottom: 0.5pt solid var(--print-rule); padding: 4pt 6pt; }
@@ -4286,7 +4286,7 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   box-shadow: var(--shadow);
   text-align: left;
 }
-/* The nav panel's own item metrics *and* its type: same colour, weight, size
+/* The nav panel's own item metrics *and* its type: same color, weight, size
    and padding, so the two dropdowns read as one object. */
 .overflow-menu-panel a,
 .overflow-menu-panel span,
@@ -4297,7 +4297,7 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 }
 .overflow-menu-panel a:hover, .overflow-menu-panel button:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
 /* A control from a page head, in the menu: a row like the others, whatever
-   kind of button it was beside the title. Destructive keeps only its colour. */
+   kind of button it was beside the title. Destructive keeps only its color. */
 .overflow-menu-panel :is(a, button, span).btn {
   display: flex; width: 100%; justify-content: flex-start; min-height: 0;
   border: 0; background: none; box-shadow: none;
@@ -4436,7 +4436,7 @@ textarea.code {
 .conn-tailnet .conn-dot { background: var(--ok); }
 .conn-network .conn-dot, .conn-loopback .conn-dot { background: var(--warn); }
 .conn-elsewhere .conn-dot { background: var(--danger); }
-/* The tailnet's colour only once every check on the way in is confirmed
+/* The tailnet's color only once every check on the way in is confirmed
    (Connection.verdict). */
 .conn-verdict-unconfirmed:is(.conn-tailnet, .conn-badge-tailnet) .conn-dot { background: var(--muted-2); }
 .conn-verdict-failing:is(.conn-tailnet, .conn-badge-tailnet) .conn-dot { background: var(--attn); }
@@ -4448,7 +4448,7 @@ textarea.code {
 .conn-path { display: grid; gap: var(--space-4); align-content: start; container: path / inline-size; }
 .conn-path .conn-layer-label { overflow-wrap: normal; }
 /* A hop: its kind, what it is with what HQ read about it, and what opening it
-   shows. Every part starts on one line of a set height, so the tick's centre
+   shows. Every part starts on one line of a set height, so the tick's center
    sits a known distance down its hop whatever wraps or opens below it, and the
    route's line is drawn from there. */
 .conn-path > .conn-layers > .conn-layer > details > summary {
@@ -4562,7 +4562,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
   overflow-wrap: break-word; -webkit-box-decoration-break: clone; box-decoration-break: clone;
 }
 /* The path is a route: each hop a stop on one line from your device down to
-   HQ, the tick on the line. A hop that does not hold colours its stretch. */
+   HQ, the tick on the line. A hop that does not hold colors its stretch. */
 .conn-path > .conn-layers { gap: 0; }
 .conn-path > .conn-layers > .conn-layer {
   --hop-line: 1.25rem;
@@ -4723,7 +4723,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
    explanation is only wanted when the verdict is surprising. */
 .conn-why > p { margin: var(--space-1) 0 0; }
 
-/* ----- Favourites ------------------------------------------------------- */
+/* ----- Favorites ------------------------------------------------------- */
 
 .service-name { display: flex; align-items: center; gap: var(--space-4); }
 /* The star keeps a full touch target but hangs into the cell's padding, so
@@ -4737,7 +4737,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .pin-toggle {
   background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
   /* An empty star, not an absent one: quiet, but it has to be findable. The
-     hairline colour would vanish on a dark page. */
+     hairline color would vanish on a dark page. */
   font-size: var(--text-lg); line-height: 1; color: var(--muted-2);
 }
 .pin-toggle:hover { color: var(--muted); }
@@ -4759,7 +4759,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
    and a bare `.sweep` is (0,1,0). */
 .content > .sweep { margin-top: var(--space-12); }
 /* Each item draws its own ring, as topology lanes do, rather than the grid
-   painting its gaps: a short last row then leaves blank card, not a grey
+   painting its gaps: a short last row then leaves blank card, not a gray
    block. Auto-fit lets a single row of readings take the whole width. */
 .sweep-grid {
   display: grid;
@@ -5087,7 +5087,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .vital dt { font-size: var(--text-2xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .vital dd { margin: 0; display: flex; align-items: baseline; gap: var(--space-4); font-size: var(--text-lg); }
 .vital-rate { font-weight: 650; font-feature-settings: "tnum"; color: var(--attn); }
-/* 75% of samples good is what passing means; the colour says which side of it
+/* 75% of samples good is what passing means; the color says which side of it
    this metric is on rather than making the reader compare two numbers. */
 .vital-rate.is-passing { color: var(--ok); }
 .vital .unit { font-size: .8em; margin-inline-start: 1px; }
@@ -5226,8 +5226,8 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 .dash-readings:has(.glance-panel:nth-child(6 of .glance-panel)) { --readings: 8; --half: calc(50% - var(--space-5)); }
 .dash-readings :is(.dash-reading, .glance-panel) { min-width: 0; max-width: 100%; }
 /* One shape for all of them, so they line up: the lead on a line of one
-   height, in one size and one colour, with the mark beside that line rather
-   than centred on however many lines the reading happens to have (it keeps
+   height, in one size and one color, with the mark beside that line rather
+   than centered on however many lines the reading happens to have (it keeps
    its own column for the whole reading, so nothing is ever set under it); then
    the quiet lines, which start level because the leads do. */
 .dash-readings .glance-panel-head { padding-inline: var(--space-3); grid-template-columns: 22px minmax(min-content, 1fr); }
@@ -5282,7 +5282,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .github-list { list-style: none; margin: 0 0 var(--space-6); padding: var(--surface-inset, 0); }
   .github-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-4) var(--space-7); font-size: var(--text-sm); }
   .github-list li + li { border-top: 1px solid var(--line-2); }
-  /* Workflows as chips that wrap like tags: the mark in its colour, the name. */
+  /* Workflows as chips that wrap like tags: the mark in its color, the name. */
   .workflow-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-6); }
   .workflow-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-6); border: 1px solid var(--line); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); }
   .workflow-chip .icon { color: var(--muted-2); }
@@ -5400,7 +5400,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .nowrap { white-space: nowrap; }
   /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
   .one-line { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; }
-  /* The same mark as a verified certificate: a check in a circle, one colour. */
+  /* The same mark as a verified certificate: a check in a circle, one color. */
   .gh-verified { display: inline-flex; margin-left: var(--space-3); color: var(--accent-2); font-size: .9em; vertical-align: -.1em; cursor: default; }
   .gh-stats { display: flex; flex-wrap: wrap; gap: var(--space-9); margin: 0; }
   .gh-stats div { display: grid; gap: var(--space-1); }
@@ -5433,7 +5433,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
      surface (stats in a card, a list in a band) draws no second frame and adds
      no second inset. Nothing downstream has to remember that rule.
 
-     A grid that draws its dividers with a coloured background behind 1px gaps
+     A grid that draws its dividers with a colored background behind 1px gaps
      keeps that background; the frame around it is still this one. */
   :where(
   .table-scroll:has(> .data-table), .card, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section), .control-card,
@@ -5483,7 +5483,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   }
   /* What a figure looks like, beside it: dots for a part of a whole, a line
      for a direction. A filled dot is solid and an empty one is a ring, so the
-     count does not rest on colour. The line takes the room the value leaves
+     count does not rest on color. The line takes the room the value leaves
      and is drawn only in a card wide enough to give it some. */
   .kpi-figure { display: flex; align-items: center; gap: var(--space-5); min-width: 0; }
   .kpi-dots { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); }

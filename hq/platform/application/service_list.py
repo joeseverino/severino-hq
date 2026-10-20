@@ -123,7 +123,7 @@ def get_service(hostname: str) -> dict[str, Any]:
 
 @dataclass(frozen=True, slots=True)
 class ZoneMember:
-    """A service a domain holds: one from the catalogue, or HQ's own."""
+    """A service a domain holds: one from the catalog, or HQ's own."""
 
     hostname: str
     url: str

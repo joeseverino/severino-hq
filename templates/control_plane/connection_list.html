@@ -148,10 +148,10 @@ part's heading shows only when there is more than one.
   {% include "partials/_empty_state.html" with message="No connection types installed." %}
 {% endif %}
 
-{% if connections.unlabelled %}
+{% if connections.unlabeled %}
   <div class="notice notice-attention">
     <strong>HQ does not know what these are</strong>
-    <p>{% for view in connections.unlabelled %}{{ view.instance.label }}{% if not forloop.last %}, {% endif %}{% endfor %}. Add a <code>provider</code> field to the item in 1Password, then press Read all now.</p>
+    <p>{% for view in connections.unlabeled %}{{ view.instance.label }}{% if not forloop.last %}, {% endif %}{% endfor %}. Add a <code>provider</code> field to the item in 1Password, then press Read all now.</p>
   </div>
 {% endif %}
 

@@ -180,7 +180,7 @@ def _depends(reading: ConnectionReading) -> tuple[tuple[ConnectionLink, ...], tu
 
 
 def machines_once() -> tuple:
-    """The machine catalogue, read once per projection and shared."""
+    """The machine catalog, read once per projection and shared."""
 
     return read_once("machines.catalog", machines.machine_catalog)
 
@@ -206,7 +206,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             known.setdefault(alias.lower(), item)
     # And by address, through the same resolver every other surface uses, so a
     # credential pointing at a machine HQ knows names it rather than printing a
-    # bare endpoint. The catalogue's own addresses are the evidence: a machine
+    # bare endpoint. The catalog's own addresses are the evidence: a machine
     # is whatever the board decided it was, joined on a fact rather than on the
     # label a template happens to render.
     located = index_of(declared=[{"name": item.name, "addresses": item.addresses} for item in catalog])

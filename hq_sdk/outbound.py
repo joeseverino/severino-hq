@@ -25,7 +25,7 @@ declares the work instead, and HQ runs it:
 
 `PluginIntegration(outbound=outbound)` is the whole declaration. From it HQ
 derives the job (one live at a time, recorded and audited), a capability named
-`notes.lookup` for the API, MCP, the command centre and a command line, the
+`notes.lookup` for the API, MCP, the command center and a command line, the
 route the button posts to, and the status resource the button follows. The
 page shows what is stored and puts the control beside it:
 

@@ -29,7 +29,7 @@ reproduce and, where applicable, a suggested mitigation.
 
 - Volumetric public-internet denial of service; HQ is reachable only through
   the private tailnet.
-- Reports about DEBUG mode behaviour (production requires `DEBUG=0` at
+- Reports about DEBUG mode behavior (production requires `DEBUG=0` at
   startup).
 - Reports that assume root access to the host or control of the private
   tailnet without demonstrating an additional boundary failure.

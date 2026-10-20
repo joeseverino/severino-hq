@@ -371,7 +371,7 @@ def machines_index(declared: Iterable[Mapping[str, Any]] | None = None) -> Machi
     """The index over everything HQ holds, read from the database.
 
     ``declared`` is accepted already-read because most callers have it: the
-    service catalogue reads the declarations once for a whole page and would
+    service catalog reads the declarations once for a whole page and would
     otherwise pay for them twice.
     """
 

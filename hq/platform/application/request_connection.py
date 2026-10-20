@@ -460,7 +460,7 @@ def _serving_device_resolution(
     through ``hq_self``: a device holding one of HQ's own addresses, else the
     device holding an address of the machine ``hq_machine`` places HQ on.
 
-    ``machine`` is the machine catalogue's answer for HQ, the one every page
+    ``machine`` is the machine catalog's answer for HQ, the one every page
     shows; a device holding one of its addresses is the next placement. Falls
     back to the observer flag when nothing resolves.
     """

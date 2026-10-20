@@ -40,7 +40,7 @@ HOSTNAME = re.compile(
 
 # The types HQ asks for, in the order a person reads them. The resolver matches
 # these case-sensitively and answers an unknown one with an empty list rather
-# than an error, so an unrecognised type would be indistinguishable from a name
+# than an error, so an unrecognized type would be indistinguishable from a name
 # with no records. Fixing the set here means that cannot happen.
 RECORD_TYPES = ("A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "CAA")
 
@@ -57,7 +57,7 @@ class AddressCommand:
     """An address to ask the public registries about.
 
     ``refresh`` asks again rather than reading the stored answer. The default
-    is the stored one: an allocation moves between organisations rarely and a
+    is the stored one: an allocation moves between organizations rarely and a
     PTR record changes when somebody reconfigures a network, so re-asking per
     page load spends a stranger's rate limit to hear the same thing, and
     discloses, every time, which addresses HQ is interested in.
@@ -115,7 +115,7 @@ def entity_name(payload: dict, role: str) -> str:
 
 
 def _registrant(payload: dict) -> str:
-    """The organisation an RDAP entity list names as holding the allocation."""
+    """The organization an RDAP entity list names as holding the allocation."""
 
     return entity_name(payload, "registrant")
 
@@ -129,7 +129,7 @@ def allocation_of(held: dict) -> dict[str, Any]:
         if isinstance(item, dict)
     ]
     return {
-        "organisation": _registrant(held),
+        "organization": _registrant(held),
         "name": str(held.get("name") or ""),
         "handle": str(held.get("handle") or ""),
         "country": str(held.get("country") or ""),

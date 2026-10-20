@@ -71,7 +71,7 @@ class ProductionSettingsTests(SimpleTestCase):
     def test_debug_on_without_the_flag_leaves_it_off(self):
         self.assert_off(load_settings(DJANGO_DEBUG="1"))
 
-    def test_an_unrecognised_flag_value_leaves_it_off(self):
+    def test_an_unrecognized_flag_value_leaves_it_off(self):
         self.assert_off(load_settings(DJANGO_DEBUG="1", SEVERINO_DEBUG_TOOLBAR="maybe"))
 
     def test_debug_and_the_flag_install_it_only_where_it_is_importable(self):

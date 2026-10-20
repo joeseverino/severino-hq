@@ -1072,7 +1072,7 @@ class MultipleFileFieldTests(SimpleTestCase):
 
 
 class ListRowTests(SimpleTestCase):
-    """State on a shared row is never carried by colour alone."""
+    """State on a shared row is never carried by color alone."""
 
     def test_status_requires_its_own_text(self):
         from ..ui import ListRow

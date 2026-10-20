@@ -473,16 +473,11 @@ lives on the tmpfs, so the first run of every boot is a full read.
 **An identity is compared as a key, not as bytes.** The OpenSSH encoding holds
 random check bytes, so the same key encodes differently on every render.
 
-**The certificate publisher still runs `op`.** 1Password's Go SDK
-(`onepassword-sdk-go` v0.4.1) was evaluated for it on 2026-10-04 and not
-adopted. It builds without cgo and can attach files, but it embeds a 9.5 MB
-closed-source WebAssembly core and runs it in process (extism on wazero): a
-minimal program linking it is 22.7 MB against 9.4 MB for the whole controller,
-client start-up took 2.8 seconds and 173 MB of memory before any request, its
-errors are strings apart from two types, it adds ten modules to the build, and
-its API is pre-1.0. It would also put a vault client inside the image the web
-container shares, which lending the host's `op` to one run avoids. Revisit when
-the SDK reaches 1.0 or Connect gains file upload.
+**The certificate publisher still runs `op`.** 1Password's Go SDK embeds a
+closed-source WebAssembly core run in process, would put a vault client inside
+the image the web container shares, which lending the host's `op` to one run
+avoids, and is pre-1.0. Revisit when the SDK reaches 1.0 or Connect gains file
+upload.
 
 ## Checking the renderer on a host
 

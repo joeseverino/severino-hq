@@ -247,7 +247,7 @@ def machine_links(machine, relationships) -> dict[str, object]:
         "serves_links": serves,
         "serves_count": len(serves) + len(getattr(machine, "roles", ()) or ()),
         "declaration_links": tuple(entity_link("resource", key) for key in machine.other_declarations),
-        "labelled_addresses": (),
+        "labeled_addresses": (),
         "tailscale_version": "",
         "device_link": None,
         "magic_dns_link": None,
@@ -255,7 +255,7 @@ def machine_links(machine, relationships) -> dict[str, object]:
     }
     if presence is None:
         return links
-    links["labelled_addresses"] = labelled_addresses(machine)
+    links["labeled_addresses"] = labeled_addresses(machine)
     # The release, without the build it was cut from.
     links["tailscale_version"] = str(presence.client_version or "").partition("-")[0]
     record = {"addresses": presence.addresses}
@@ -274,7 +274,7 @@ def machine_links(machine, relationships) -> dict[str, object]:
 _NETWORKS = {"tailnet": "Tailnet", "network": "LAN", "public": "Public"}
 
 
-def labelled_addresses(machine) -> tuple[tuple[str, str], ...]:
+def labeled_addresses(machine) -> tuple[tuple[str, str], ...]:
     """``(label, address)`` for each address the machine is reached at, by the
     network it is on. A loopback address is left out: it places no machine."""
 

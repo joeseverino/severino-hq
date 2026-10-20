@@ -147,7 +147,7 @@ def _field(setting: Setting) -> ItemField:
         return ItemField(name, "", f"The item's own {name} field.{optional}", setting.secret)
     if setting.url is not None:
         return ItemField("website", "", f"The item's website: the service's address.{optional}", setting.secret)
-    return ItemField(setting.label, "", f"A field labelled {setting.label}.{optional}", setting.secret)
+    return ItemField(setting.label, "", f"A field labeled {setting.label}.{optional}", setting.secret)
 
 
 REFERENCE_HEADER = """# Connections

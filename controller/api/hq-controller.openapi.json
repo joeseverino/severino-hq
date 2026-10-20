@@ -1532,7 +1532,7 @@
             "items": {
               "$ref": "#/components/schemas/ConnectionProvider"
             },
-            "description": "Providers a connection credential is modelled for."
+            "description": "Providers a connection credential is modeled for."
           },
           "extensions": {
             "type": "array",

@@ -23,7 +23,7 @@
 min_version = "2026.10.15"
 
 [settings.task]
-# Gates that run together print one after another, each whole and labelled,
+# Gates that run together print one after another, each whole and labeled,
 # never line by line into each other: an aggregate reads gate by gate, and each
 # gate's failures sit under its own verdict.
 output = "keep-order"

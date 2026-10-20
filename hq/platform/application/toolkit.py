@@ -1,7 +1,7 @@
 """The tools an operator reaches for, declared once.
 
 A tool is not a new kind of thing: each is backed by registered capabilities,
-which already carry the behaviour, the authorization and the other adapters.
+which already carry the behavior, the authorization and the other adapters.
 This module only says which belong together on a page and in what order.
 
 A registry rather than tabs hard-coded into a template, for the reason

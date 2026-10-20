@@ -18,7 +18,7 @@ STORED = {
     "hostnames": ["host.example.net"],
     "note": "",
     "allocation": {
-        "organisation": "Example Networks",
+        "organization": "Example Networks",
         "name": "EXAMPLE-NET",
         "country": "",
         "prefixes": [],

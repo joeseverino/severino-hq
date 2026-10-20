@@ -65,9 +65,9 @@ class IndexedSearchTests(TestCase):
         # An update that restates the body leaves the entry as it stands.
         document.update(body=document.get().body)
         self.assertEqual(search_ids("projects", "lighthouse", principal=OPERATOR), [project.slug])
-        document.update(body="harbour")
+        document.update(body="harbor")
         self.assertEqual(search_ids("projects", "lighthouse", principal=OPERATOR), [])
-        self.assertEqual(search_ids("projects", "harbour", principal=OPERATOR), [project.slug])
+        self.assertEqual(search_ids("projects", "harbor", principal=OPERATOR), [project.slug])
         with connection.cursor() as cursor:
             cursor.execute("INSERT INTO search_index_fts(search_index_fts) VALUES ('integrity-check')")
 
@@ -481,7 +481,7 @@ class GlobalSearchTests(TestCase):
         (item,) = group["items"]
         self.assertEqual(item["title"], record.title)
         self.assertEqual(item["badge"], record.doc_id)
-        self.assertNotIn("—", item["title"])
+        self.assertNotIn("\u2014", item["title"])
 
     def test_scopes_the_principal_lacks_are_omitted_not_empty(self):
         AuditLog.objects.create(action="login", object_type="user", message="hq login")

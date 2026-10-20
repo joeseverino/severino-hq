@@ -349,7 +349,7 @@ class _Builder:
         template = path_template(route)
         expand = EXPANSIONS.get(view.__name__)
         if _PARAMETER.search(route) and expand is None:
-            raise OpenAPIError(f"No OpenAPI expansion for parameterised route {route!r}.")
+            raise OpenAPIError(f"No OpenAPI expansion for parameterized route {route!r}.")
         for method in view.__hq_methods__:
             if expand is not None:
                 expand(self, template, method, view)

@@ -1,7 +1,7 @@
 """How HQ reaches each connection: over which network, to which machine, by which path.
 
 Joined from readings HQ already holds: the connection's endpoint, the addresses
-HQ's DNS readings see its name answering at, the machine catalogue, and the
+HQ's DNS readings see its name answering at, the machine catalog, and the
 tailnet peering the machine page shows (``Presence.peer_path``). Nothing is
 probed and nothing is resolved live.
 """

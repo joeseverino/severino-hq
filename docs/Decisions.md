@@ -40,8 +40,8 @@ local run cannot disagree ([Development](Development.md)).
 ## Built-ins weighed against HQ's own helpers
 
 The rule: adopt the standard option when it is at least as good and leaves the
-code easier to read and change. Each helper below was measured against its
-replacement, and kept for the reason given.
+code easier to read and change. Each helper below is kept for the reason
+given.
 
 Plurals keep `counted`. HQ is English-only with no catalog, so `ngettext`
 would only pick one of two strings: it does not print the count, group its

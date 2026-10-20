@@ -73,7 +73,7 @@ class NameLookupTests(SimpleTestCase):
         )
 
         self.assertTrue(answer["ok"])
-        # Normalised before anything left the machine.
+        # Normalized before anything left the machine.
         self.assertEqual(answer["name"], "example.test")
         values = [item["value"] for item in answer["answers"]]
         self.assertIn("10 mx.example.test", values)
@@ -132,7 +132,7 @@ class AddressLookupTests(TestCase):
         reading = self._look(GLOBAL)
 
         self.assertEqual(reading["hostnames"], ["host.example.test"])
-        self.assertEqual(reading["allocation"]["organisation"], "Example Networks LLC")
+        self.assertEqual(reading["allocation"]["organization"], "Example Networks LLC")
         self.assertEqual(reading["allocation"]["prefixes"], [f"{BLOCK}.0/24"])
 
     def test_a_private_address_is_answered_without_asking_anybody(self):
@@ -233,7 +233,7 @@ class AddressCacheTests(TestCase):
         second = self._look()
 
         self.assertEqual(len(self.calls), calls_after_first)
-        self.assertEqual(first["allocation"]["organisation"], second["allocation"]["organisation"])
+        self.assertEqual(first["allocation"]["organization"], second["allocation"]["organization"])
 
     def test_the_stored_answer_says_when_it_was_read(self):
         self.assertTrue(self._look()["observed_at"])

@@ -856,7 +856,7 @@ class UnobservableFieldTests(TestCase):
         """The guard above skips fields its sample record omits, which is
         exactly what a field the reading never carries looks like.
 
-        Asked behaviourally instead: set the field, sweep the record it was
+        Asked behaviorally instead: set the field, sweep the record it was
         built from, and nothing should be left unconfirmed. Booleans are
         covered as well as strings: a flag is exactly the kind of field HQ
         keeps for itself (fold this row away, keep this device on the tailnet),
@@ -981,7 +981,7 @@ class LineEndingsAreNotDriftTests(TestCase):
         """CRLF against LF, one line against hundreds (HQ stores the policy it
         applied minified; Tailscale returns it pretty-printed) and object key
         order are layout. A list's order is not: in a policy the order of grants
-        is the policy. The normalisation must not swallow a difference that
+        is the policy. The normalization must not swallow a difference that
         matters."""
 
         import json
@@ -1015,8 +1015,8 @@ class LineEndingsAreNotDriftTests(TestCase):
         self.assertNotEqual(_differences("tailscale.policy", declared, found), ())
 
     def test_a_spec_saved_with_crlf_is_stored_with_one_newline(self):
-        """Normalised on the way in as well, so the stored value is comparable
-        to anything, not only to what this one comparison normalises.
+        """Normalized on the way in as well, so the stored value is comparable
+        to anything, not only to what this one comparison normalizes.
         """
 
         spec = validate_spec(

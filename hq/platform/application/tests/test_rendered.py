@@ -202,8 +202,8 @@ class RenderedPageTests(TestCase):
             doubled = sorted(name for name, count in page.ids.items() if count > 1)
             if doubled:
                 problems.append(f"{path}: ids used twice: {', '.join(doubled[:5])}")
-            if "—" in text:
-                at = text.index("—")
+            if "\u2014" in text:
+                at = text.index("\u2014")
                 problems.append(f"{path}: em dash in {text[max(at - 30, 0) : at + 30]!r}")
             # "-ous" words are adjectives ("1 serious"), not plurals.
             problems.extend(

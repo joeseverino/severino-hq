@@ -1,7 +1,7 @@
 """Authorized contact-submission use cases.
 
 The shared application boundary used by web, Command Center, API and MCP, so
-a change cannot acquire different validation or audit behaviour in each
+a change cannot acquire different validation or audit behavior in each
 adapter. Reads come from the stored reading (``contacts.inbox``). A change is
 written to the ``cloudflare.contact_inbox`` declaration and queued for the
 controller, which applies it through the cloudflare_api connection: HQ holds

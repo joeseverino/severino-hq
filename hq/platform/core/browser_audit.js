@@ -24,7 +24,7 @@ async (page) => {
     };
 
     // A card whose content stops well above its own bottom edge. Either the
-    // card is stretching to a neighbour it should not match, or padding has
+    // card is stretching to a neighbor it should not match, or padding has
     // outlived the content it held.
     const CARD_SLACK = 28;
     // A pair's cards are each as tall as what they hold, so nothing in a pair
@@ -218,7 +218,7 @@ async (page) => {
 
     // Controls sitting together at different heights. A row of buttons is
     // read as one object, and one control four pixels shorter than its
-    // neighbours is the kind of thing that is obvious in a screenshot and
+    // neighbors is the kind of thing that is obvious in a screenshot and
     // invisible in a diff. It happens whenever a control is wrapped (a
     // button in a form, a summary in a details) because the wrapper stretches
     // and its child does not.
@@ -259,7 +259,7 @@ async (page) => {
       });
     });
 
-    // The operating system's grey tooltip where the app has its own.
+    // The operating system's gray tooltip where the app has its own.
     document.querySelectorAll('.card [title], figure [title]').forEach((el) => {
       add('native-tooltip', { tag: el.tagName.toLowerCase(), title: el.title });
     });
@@ -289,7 +289,7 @@ async (page) => {
       const speaks = (cell) => {
         if (!cell) return false;
         const text = (cell.textContent || '').trim();
-        if (text && text !== '—') return true;
+        if (text && text !== '\u2014') return true;
         return !!cell.querySelector('input, button, select, textarea, a, svg, img');
       };
       heads.forEach((head, index) => {

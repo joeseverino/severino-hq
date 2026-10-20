@@ -2,7 +2,7 @@
 
 This adapter adds no capability, no domain model, and no business rule. Every
 command it runs is already in HQ's registry, which is what keeps the web UI,
-the CLI, MCP and a Shortcut from drifting into four behaviours. A phone cannot
+the CLI, MCP and a Shortcut from drifting into four behaviors. A phone cannot
 develop its own idea of what a domain record is.
 
 The version is in the path, not a header: a Shortcut on a phone you have not
@@ -497,7 +497,7 @@ def _projection(
 
     `topology` and `findings` are the same adapter: authorize, read one query
     parameters, hand them to the application layer, and turn a refusal into a
-    403. An adapter that adds no behaviour of its own is not copied once per
+    403. An adapter that adds no behavior of its own is not copied once per
     read model. ``query_fields`` maps each parameter to its JSON schema, which
     the OpenAPI document declares as is.
 
@@ -713,7 +713,7 @@ def _parse_envelope(request: HttpRequest) -> tuple[dict[str, Any], Envelope]:
 
     Returns the raw body alongside the parsed envelope because the idempotency
     fingerprint is taken over what was actually sent, not over what survived
-    interpretation: two different bodies that normalise to the same command
+    interpretation: two different bodies that normalize to the same command
     are still two different requests.
     """
 

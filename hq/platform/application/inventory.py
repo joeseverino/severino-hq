@@ -675,7 +675,7 @@ def _record_manages(row: ProviderConnection) -> None:
 
 
 def service_hostnames(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
-    """The hostnames a spec claims, normalised.
+    """The hostnames a spec claims, normalized.
 
     The same function the providers use for the service view, so a name here
     means exactly what "the same service" means everywhere else.

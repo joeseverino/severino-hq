@@ -14,7 +14,7 @@ actually decides it: a reading is evidence. A page that fetches live can only
 say what is true now, and cannot say what was true in June, which is the
 question anyone looking at a traffic page is really asking.
 
-Units are normalised at ingest, once. Cloudflare reports timings in
+Units are normalized at ingest, once. Cloudflare reports timings in
 microseconds and reports "no data" as -1; both of those are provider details
 and neither survives into this table. Timings are milliseconds, absence is
 NULL, and no template has to know that Cloudflare ever said otherwise.
@@ -121,7 +121,7 @@ class RumDaily(models.Model):
     date = models.DateField()
     dimension = models.CharField(max_length=16, choices=Dimension.choices)
     # A path keeps its leading slash and trailing slash exactly as the browser
-    # reported it, because that is what joins to a published URL. Normalising
+    # reported it, because that is what joins to a published URL. Normalizing
     # here would mean two rows that differ only by a slash silently merging,
     # and the site genuinely serves one of those and 404s the other.
     value = models.CharField(max_length=512)

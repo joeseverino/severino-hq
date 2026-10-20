@@ -77,7 +77,7 @@ def same_machine(
 
     The address is what they all agree on, so it is the identity, and the
     index is what turns an address into the one name kept for it, so the fold
-    here and the machine a proxy is said to forward to are the same judgement.
+    here and the machine a proxy is said to forward to are the same judgment.
     ``10.0.0.5`` and ``10.0.0.5:22`` are one machine.
 
     The name kept is the index's: a declaration first, then the name containers

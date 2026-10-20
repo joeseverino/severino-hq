@@ -171,7 +171,7 @@ def container_stack(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
 
     described = _declared_roles()
     return {
-        # Labelled with what the machine is for where HQ has been told, because
+        # Labeled with what the machine is for where HQ has been told, because
         # Portainer calls its own host "local" and that is nobody's hostname.
         "host": tuple(
             (host, f"{host} · {described[host]}" if described.get(host) else host)
@@ -183,7 +183,7 @@ def container_stack(context: NameContext) -> dict[str, tuple[tuple[str, str], ..
 
 
 def _declared_roles() -> dict[str, str]:
-    """What each declared machine is for, for labelling only."""
+    """What each declared machine is for, for labeling only."""
 
     return {
         spec["name"]: spec.get("role", "")
@@ -211,7 +211,7 @@ def _known_zones() -> tuple[tuple[str, str], ...]:
     unmodified record is invalid. A menu that cannot describe what already
     exists is a worse failure than one that offers a zone nobody declared.
 
-    Undeclared zones are labelled rather than hidden, which is the nudge without
+    Undeclared zones are labeled rather than hidden, which is the nudge without
     the dead end.
 
     Shared by the two forms that ask which domain, so declaring one and adding a

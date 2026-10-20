@@ -22,8 +22,8 @@ class WithoutCommentsTests(SimpleTestCase):
 
         self.assertEqual(without_comments(css), css)
 
-    def test_a_licence_is_kept(self):
-        css = "/*! Licence: keep me */\n.a { color: red; }\n"
+    def test_a_license_is_kept(self):
+        css = "/*! License: keep me */\n.a { color: red; }\n"
 
         self.assertEqual(without_comments(css), css)
 
@@ -61,12 +61,12 @@ class SavedAssetTests(SimpleTestCase):
 
         self.assertEqual(saved, ".a { color: red; }\n.b { color: blue; }\n")
 
-    def test_a_script_is_minified_and_keeps_its_licence(self):
-        source = "/*! Licence: keep me */\nfunction example(first, second) {\n  return first + second;\n}\n"
+    def test_a_script_is_minified_and_keeps_its_license(self):
+        source = "/*! License: keep me */\nfunction example(first, second) {\n  return first + second;\n}\n"
 
         saved = self.saved("js/example.js", source)
 
-        self.assertTrue(saved.startswith("/*! Licence: keep me */"))
+        self.assertTrue(saved.startswith("/*! License: keep me */"))
         self.assertIn("function example(", saved)
         self.assertLess(len(saved), len(source))
 

@@ -584,7 +584,7 @@ class ContentSectionTrafficTests(TestCase):
                 published_url=f"https://{HOST}/portfolio/extra-{index}/",
             )
 
-        # Materialised outside the count: the claim is about the join, not
+        # Materialized outside the count: the claim is about the join, not
         # about the queryset the table engine already paid for.
         items = list(ContentItem.objects.all())
 

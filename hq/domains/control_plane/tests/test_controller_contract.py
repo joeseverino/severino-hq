@@ -1,4 +1,4 @@
-"""The controller bridge honours its OpenAPI contract.
+"""The controller bridge honors its OpenAPI contract.
 
 The contract is the bridge's own messages joined to what the registry declares
 (``test_bridge_registry`` holds the join and the files written from it); the Go

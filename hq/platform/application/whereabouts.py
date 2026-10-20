@@ -132,8 +132,8 @@ class MachineLink:
     """A machine named on a card, and the page for it.
 
     Built from the origin and the machines the caller already holds. Looking the
-    machine up instead would be a catalogue read per service, which on a board
-    is a catalogue read per row.
+    machine up instead would be a catalog read per service, which on a board
+    is a catalog read per row.
     """
 
     name: str
@@ -186,7 +186,7 @@ class Whereabouts:
 
     Both are estate-wide readings that every address in a pass shares: the
     connections, the container sweep and the container declarations. Taken per
-    address, a catalogue would pay for all three once per name.
+    address, a catalog would pay for all three once per name.
 
     Read at most once each and only if asked, for the same reason as the
     certificates below: a dashboard listing no service resolves no address, and
@@ -391,7 +391,7 @@ def _load_answering() -> dict[tuple[str, Any], list[str]]:
 
     Built whole rather than asked per address. The same two tables answer every
     such question in a pass, and read per question they would dominate what a
-    service catalogue spends.
+    service catalog spends.
     """
 
     found: dict[tuple[str, Any], set[str]] = {}

@@ -14,9 +14,9 @@
       <span class="conn-row-note"></span>
     </div>
   {% endfor %}
-  {% if reading.allocation.organisation or reading.allocation.name %}
+  {% if reading.allocation.organization or reading.allocation.name %}
     <div class="conn-row">
-      <code>{{ reading.allocation.organisation|default:reading.allocation.name|breakable }}</code>
+      <code>{{ reading.allocation.organization|default:reading.allocation.name|breakable }}</code>
       <span class="conn-kind conn-kind-read">allocation</span>
       <span class="conn-row-note"></span>
     </div>

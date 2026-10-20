@@ -1,7 +1,7 @@
 """The connections page's reading of every connection.
 
 Each connection grouped by family, what it may do and why, and the evidence
-behind each ability. The API serialises the same view.
+behind each ability. The API serializes the same view.
 """
 
 from dataclasses import asdict, dataclass, replace
@@ -419,7 +419,7 @@ def _ability_state(
         missing,
         # Named for the command it opens, not for the ability that led here.
         # Several abilities are commonly performed by one command, and a button
-        # labelled with the ability lands on a page that says something else.
+        # labeled with the ability lands on a page that says something else.
         capability_action_link(
             ability.capability,
             ability.effect,

@@ -285,8 +285,8 @@ class ConnectionPageTests(SentinelMixin, TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        unlabelled = [view.instance.label for view in response.context["connections"].unlabelled]
-        self.assertEqual(unlabelled, ["a-portainer"])
+        unlabeled = [view.instance.label for view in response.context["connections"].unlabeled]
+        self.assertEqual(unlabeled, ["a-portainer"])
         self.assertContains(response, "a-portainer")
 
     def test_the_workspace_query_cost_does_not_grow_with_connections(self):

@@ -452,7 +452,7 @@ off until you want HQ to change things through it
 - **HQ's standard.** The Connections page lists checks beyond what every HQ
   enforces, such as tailnet lock. `SEVERINO_POSTURE=advanced` on the env item
   lists each unmet one in Needs you ([Posture](Posture.md)).
-- **Releases.** From now on a merge to `main` reaches this host through
+- **Releases.** A merge to `main` reaches this host through
   Compose and Deploy, after your approval ([Deployment](Deployment.md)).
   Rerun `hq-host bootstrap` whenever `host.json` changes, and once after a
   release that changes the sudo rule it renders.

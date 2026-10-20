@@ -183,7 +183,7 @@ class ZoneInsight:
     value: str
     detail: str = ""
     url: str = ""
-    # The full list behind a summarised value, shown in a dialog. A domain with
+    # The full list behind a summarized value, shown in a dialog. A domain with
     # thirty services cannot name them on a card and should not have to lose
     # them to a count: the count is the answer, and the list is one click under
     # it. ``url`` stays required alongside this and must reach a page that does
@@ -505,7 +505,7 @@ class DomainContext:
 
 
 def domain_context(zone: str, *, pinned: frozenset[str] = frozenset()) -> DomainContext | None:
-    """The domain named ``zone`` out of one catalogue build, or None."""
+    """The domain named ``zone`` out of one catalog build, or None."""
 
     zones = zone_catalog(pinned=pinned)
     wanted = normalized_hostname(zone)

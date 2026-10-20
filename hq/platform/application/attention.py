@@ -306,7 +306,7 @@ def tailnet() -> tuple[Insight, ...]:
     reporting success.
     """
 
-    # The presence table, not the whole machine catalogue. Everything shown
+    # The presence table, not the whole machine catalog. Everything shown
     # here is on the tailnet reading itself, and assembling every machine to
     # reach it costs the dashboard a query per row for facts it does not use.
     # Read once, asked twice. The projection has a query budget and this is

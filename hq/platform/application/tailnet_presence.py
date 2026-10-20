@@ -50,7 +50,7 @@ class Presence:
     advertised_routes: tuple[str, ...] = ()
     enabled_routes: tuple[str, ...] = ()
     # Facts with no symptom until they matter. A device the tailnet has not
-    # authorised reaches nothing; one carrying a lock error cannot be reached
+    # authorized reaches nothing; one carrying a lock error cannot be reached
     # by anything under tailnet lock; and a client left behind is how a fleet
     # acquires versions nobody chose.
     authorized: bool = True

@@ -37,7 +37,7 @@ class Entry(TimestampedModel):
         YEARLY = "yearly", "Every year"
 
     # The iCalendar UID: stable for the entry's life, so a feed or a synced
-    # calendar recognises an edit as the same event.
+    # calendar recognizes an edit as the same event.
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     title = models.CharField(max_length=160)
     starts_on = models.DateField()

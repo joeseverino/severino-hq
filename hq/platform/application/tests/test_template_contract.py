@@ -35,7 +35,7 @@ OUTSIDE = {
     "templates/example/_own.html": '{% load example_tags %}{{ value|doubled }}{% now "Y" %}',
     "templates/example/tags.html": (
         "{% load nav_tags %}\n{% problems_about %}\n{{ value|readable }}\n{{ count|counted }}\n"
-        '{% post_button "Go" url colour="red" %}'
+        '{% post_button "Go" url color="red" %}'
     ),
     "templates/example/markup.html": (
         '<div class="card invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p></div>'
@@ -69,7 +69,7 @@ class TemplateValidationTests(SimpleTestCase):
             "tags.html:2": "problems_about",
             "tags.html:3": "readable",
             "tags.html:4": "counted",
-            "tags.html:5": "colour",
+            "tags.html:5": "color",
             "markup.html:1": "invented",
             "markup.html:2": "data-secret",
         }

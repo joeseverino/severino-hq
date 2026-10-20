@@ -28,7 +28,7 @@ from .reading_parts import parts_of
 REFERENCE = "#/components/schemas/"
 
 # How a word of a registry name is written in a controller constant, where
-# capitalising its first letter is not it.
+# capitalizing its first letter is not it.
 _WORDS = {
     "acl": "ACL",
     "acme": "ACME",

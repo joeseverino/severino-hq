@@ -47,7 +47,7 @@ RUN want="$(sed -n 's/^go \([0-9.]*\)$/\1/p' go.mod)" \
     && go mod download
 COPY controller/ ./
 # hq-host deploys only what its source repository's compose workflow signed,
-# so it is told that repository here, from the source the image is labelled with.
+# so it is told that repository here, from the source the image is labeled with.
 ARG HQ_SOURCE=""
 RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq-controller \
     && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-secrets ./cmd/hq-secrets \

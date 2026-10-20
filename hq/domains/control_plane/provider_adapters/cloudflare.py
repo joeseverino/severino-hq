@@ -138,7 +138,7 @@ if set(DNS_RECORD_TYPES_BY_ID) != set(get_args(DNSRecordTypeId)):
 
 
 # One expression, used both to validate a CAA value and to take it apart, so a
-# value the form accepts is one the canonicaliser can parse.
+# value the form accepts is one the canonicalizer can parse.
 _CAA_VALUE_PARTS = r'^\s*(\d{1,3})\s+(issue|issuewild|iodef)\s+"([^"]*)"\s*$'
 
 
@@ -331,7 +331,7 @@ def _dns_record_from_record(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _dns_record_identity(spec: dict[str, Any]) -> tuple[str, ...]:
-    """What makes this record itself and not its neighbour.
+    """What makes this record itself and not its neighbor.
 
     Cloudflare's own record id would be the obvious answer and is the wrong one
     here: a declaration authored in HQ has never had one, so identity has to be
@@ -354,8 +354,8 @@ def caa_parts(content: str) -> tuple[int, str, str] | None:
 
     Cloudflare returns a CAA record as one formatted string and accepts it only
     as three fields. HQ stores the string, because that is what a zone file shows
-    and what an operator recognises, and splits it here, once, for the
-    validator, the canonicaliser and the controller.
+    and what an operator recognizes, and splits it here, once, for the
+    validator, the canonicalizer and the controller.
     """
 
     parsed = re.match(_CAA_VALUE_PARTS, str(content))
@@ -394,7 +394,7 @@ def normalized_record_content(record_type: str, content: str) -> str:
 
 
 def _dns_record_key_hint(spec: dict[str, Any]) -> str:
-    """A name an operator would recognise on a list of declarations.
+    """A name an operator would recognize on a list of declarations.
 
     The record type is in it because a name usually has more than one record and
     "example-com" would collide with itself four times over on a zone apex.

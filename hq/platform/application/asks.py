@@ -6,7 +6,7 @@ controller, a job for the runner) and answers at once; the work reports where
 its result is stored, and a page watching it asks how it stands.
 
 One shape says how any such work stands (``Standing``), whichever mechanism
-does it, so one control (``partials/_ask.html``) and one script behaviour
+does it, so one control (``partials/_ask.html``) and one script behavior
 follow all of it. A status resource answers with ``Standing.as_json``.
 
 What a page may watch is handed to it signed (``watch_token``), so a status

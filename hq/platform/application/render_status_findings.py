@@ -91,7 +91,7 @@ RENDERED_WITHIN = FULL_READ_EVERY + CONFIRMED_WITHIN
 RENDERER_UNITS = {"hq": "severino-hq-secrets.service"}
 
 # A failure filed under a word the table below does not hold, or under none.
-UNKNOWN_FAILURE = "an error HQ does not recognise"
+UNKNOWN_FAILURE = "an error HQ does not recognize"
 
 # What each word a failed run is filed under means (``Class`` in
 # controller/secrets/render.go, and the table in docs/Secrets.md).

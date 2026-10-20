@@ -571,7 +571,7 @@ class AddressReading(models.Model):
     """What the public registries last said about one address.
 
     Kept because the answer barely moves. An allocation changes when a block is
-    transferred between organisations; a PTR record changes when someone
+    transferred between organizations; a PTR record changes when someone
     reconfigures a network. Neither happens between two page loads, and
     re-asking on every load spends a stranger's rate limit to be told the same
     thing, and tells them, each time, which addresses HQ is interested in.

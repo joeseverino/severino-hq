@@ -1,6 +1,6 @@
 {% comment %}
 One thing a connection's credential lets HQ do. A permission note stands
-beside it only when it differs from its neighbours or cannot be used: the
+beside it only when it differs from its neighbors or cannot be used: the
 state column says it once for the connection.
 {% endcomment %}
 <li{% if not state.available %} class="is-unavailable"{% endif %}{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>

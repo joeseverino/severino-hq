@@ -69,7 +69,7 @@ class EveryItemComesWithHelpTests(SimpleTestCase):
         for rule in RULES:
             with self.subTest(rule=rule.name):
                 self.assertTrue(rule.no_help_reason.strip())
-                self.assertNotIn("—", rule.no_help_reason)
+                self.assertNotIn("\u2014", rule.no_help_reason)
 
     def test_a_rule_without_a_reason_is_refused(self):
         with self.assertRaisesRegex(ValueError, "why HQ cannot"):
@@ -147,7 +147,7 @@ def _item(**fields) -> Insight:
 
 
 class ItemHelpTests(SimpleTestCase):
-    def test_each_kind_of_help_is_recognised(self):
+    def test_each_kind_of_help_is_recognized(self):
         remedy = ActionLink("remedy", "Fix", "remote_write", "/fix/", capability="example.fix")
         posted = ActionLink("approve", "Approve", "remote_write", "/approve/", method="POST")
 

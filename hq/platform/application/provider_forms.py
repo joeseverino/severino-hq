@@ -381,7 +381,7 @@ def _field_for(field: Any) -> forms.Field:
         options["initial"] = default
     if field.description:
         options["help_text"] = field.description
-    # The model's own title, so a field is labelled by the question it asks
+    # The model's own title, so a field is labeled by the question it asks
     # rather than by the variable that holds the answer. Django would otherwise
     # prettify the attribute name (`topology_ref` as "Topology ref").
     if field.title:

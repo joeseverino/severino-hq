@@ -724,7 +724,7 @@ class ProviderFacetContractTests(TestCase):
     def test_the_facet_order_is_declared_once(self):
         """Templates render columns from SERVICE_FACETS, so nothing restates it.
 
-        Filtered to the facets some provider supplies, in the catalogue's order:
+        Filtered to the facets some provider supplies, in the catalog's order:
         a facet can be declared before the provider that fills it exists, and
         until then it is not a column with nothing in it.
         """

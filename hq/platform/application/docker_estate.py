@@ -39,7 +39,7 @@ def add(nodes, edges, resources, machine: Callable[[Any], str]) -> None:
     """Container facts on machines."""
 
     _image_facts(nodes, machine)
-    _unrecognised(nodes, machine)
+    _unrecognized(nodes, machine)
 
 
 def _add_fact(nodes, node_id: str, fact: tuple[str, str]) -> None:
@@ -48,7 +48,7 @@ def _add_fact(nodes, node_id: str, fact: tuple[str, str]) -> None:
         nodes[node_id] = replace(node, facts=(*node.facts, fact))
 
 
-def _unrecognised(nodes, machine) -> None:
+def _unrecognized(nodes, machine) -> None:
     """A container on a machine that no compose project declares, as its fact.
 
     The sweep did not adopt it, so it has no node of its own; its machine
@@ -61,7 +61,7 @@ def _unrecognised(nodes, machine) -> None:
         host = str(item.spec.get("host", ""))
         machine_id = machine(host)
         if machine_id:
-            _add_fact(nodes, machine_id, ("unrecognised-container", f"{item.spec.get('name', '')}@{host}"))
+            _add_fact(nodes, machine_id, ("unrecognized-container", f"{item.spec.get('name', '')}@{host}"))
 
 
 def _on(record: Mapping[str, Any], machine: Callable[[Any], str]) -> str:
@@ -136,7 +136,7 @@ def _parts(value: str) -> tuple[str, ...]:
     return container, host, reference, running, tagged, service
 
 
-def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
+def unrecognized_containers(estate: Any) -> tuple[dict[str, Any], ...]:
     """A container a sweep found that no compose project declares.
 
     Every container that belongs on a machine is created by a compose project,
@@ -148,7 +148,7 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
     found: list[dict[str, Any]] = []
     for node in estate.nodes():
         for key, value in node.facts:
-            if key != "unrecognised-container":
+            if key != "unrecognized-container":
                 continue
             name, _, host = value.rpartition("@")
             try:
@@ -163,9 +163,9 @@ def unrecognised_containers(estate: Any) -> tuple[dict[str, Any], ...]:
                 adopt_url = ""
             found.append(
                 {
-                    "rule": "unrecognised-container",
+                    "rule": "unrecognized-container",
                     "subject": node.id,
-                    "title": f"Unrecognised container {name} on {node.label}",
+                    "title": f"Unrecognized container {name} on {node.label}",
                     "severity": "serious",
                     "explanation": (
                         "No compose project started it, so HQ is not tracking it. "
@@ -273,10 +273,10 @@ def _recreate(container: str, service: str, host: str) -> tuple:
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
-        "unrecognised-container",
+        "unrecognized-container",
         "A container no compose project started",
         "serious",
-        lambda estate: built_findings(unrecognised_containers(estate)),
+        lambda estate: built_findings(unrecognized_containers(estate)),
         operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
         no_help_reason=("HQ cannot remove a container it did not start."),
     ),

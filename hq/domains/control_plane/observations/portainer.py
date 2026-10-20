@@ -3,7 +3,7 @@
 Every record names the machine it was read on twice: ``host`` as the sweep
 files containers, and ``host_address`` as every other source knows it. Both
 are join keys, so a record reaches the machine page whichever one the machine
-catalogue holds.
+catalog holds.
 
 Environment variables, labels other than compose's own, and registry
 credentials are never named, so the schema drops them.

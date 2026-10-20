@@ -18,7 +18,7 @@
     <span>{{ rule_count|counted:"rule changed from the default,rules changed from the default" }}</span>
     {% if awaiting_count %}<a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count }}</strong> waiting for your approval</a>{% endif %}
     <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count }}</strong> refused in the last day</a>
-    {% if any_dormant %}<span class="policy-dormant-note">A greyed-out rule does nothing until HQ's settings let agents do that action.</span>{% endif %}
+    {% if any_dormant %}<span class="policy-dormant-note">A grayed-out rule does nothing until HQ's settings let agents do that action.</span>{% endif %}
   </p>
   {% if agents %}
     <ul class="policy-agents">

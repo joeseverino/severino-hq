@@ -98,7 +98,7 @@ class ServiceSection:
         if not self.label.strip():
             raise ValueError("ServiceSection label must not be empty.")
         # A column no row has anything in is a heading over nothing. Dropped
-        # here, so no section has to check its own; an unknown value ("—") is
+        # here, so no section has to check its own; an unknown value (the dash placeholder) is
         # something to say and keeps its column.
         if self.records:
             keep = tuple(
@@ -207,7 +207,7 @@ class SummaryItem:
     link: EntityLink | None = None
     detail: str = ""
     tone: str = ""
-    # Shown as a pill in ``tone``: a state never carried by colour alone.
+    # Shown as a pill in ``tone``: a state never carried by color alone.
     pill: bool = False
     # What kind of fact it is, drawn as its tile: a name in partials/_icon.html.
     icon: str = ""
@@ -389,7 +389,7 @@ class PartRow:
     # Where the hop's value was read, when the hop itself carries none: the
     # tailnet link is the machine's tailnet device, a forward the proxy's.
     read_from: Any = None
-    # The hop's detail, unless a neighbouring row says it: a proxy's forward
+    # The hop's detail, unless a neighboring row says it: a proxy's forward
     # target is the "Forwards to" row after it, a machine's address the
     # network row before it.
     detail: str = ""
@@ -428,7 +428,7 @@ def part_rows(service, route) -> tuple[PartRow, ...]:
         certificate = hop.certificate
         certificate_claim = claims.get(certificate.link.url) if certificate is not None and certificate.link else None
         used.update(item.url for item in (claim, certificate_claim) if item is not None)
-        neighbours = {
+        neighbors = {
             _shown(item)
             for item in (
                 route.hops[index - 1] if index else None,
@@ -444,7 +444,7 @@ def part_rows(service, route) -> tuple[PartRow, ...]:
                 certificate_claim=certificate_claim,
                 observed_health=None if claim is not None else _observed_health(route.hops, index),
                 read_from=hop.source or _read_from(route.hops, index),
-                detail="" if hop.detail in neighbours else hop.detail,
+                detail="" if hop.detail in neighbors else hop.detail,
             )
         )
     rows.extend(PartRow(claim=claim) for url, claim in claims.items() if url not in used)
@@ -460,7 +460,7 @@ def _shown(hop) -> str:
 
 
 def _read_from(hops, index: int):
-    """The reading behind a hop that is derived from its neighbour: a tailnet
+    """The reading behind a hop that is derived from its neighbor: a tailnet
     link from the machine's tailnet device, a forward from its proxy."""
 
     step = hops[index].step

@@ -398,9 +398,9 @@ destructive, so a finding never offers it as a remedy.
 Machines, services and domains are nodes of their own
 (`hq.platform.application.topology_estate`). A controller or target that names
 one folds into it; anything else a connection reaches stays a target. A machine
-is reached through the connections the machine catalogue names. A domain's join
+is reached through the connections the machine catalog names. A domain's join
 keys are every name under it. HQ's own service is a service node, running on
-the machine the catalogue names (`hq.platform.application.hq_self`), the same
+the machine the catalog names (`hq.platform.application.hq_self`), the same
 answer as the machine page and the services list.
 
 Nothing in the topology names a provider to draw its edges. They follow from
@@ -408,7 +408,7 @@ the declarations:
 
 - A reading joins its subject through the `hostnames`, `addresses` and
   `containers` its spec declares. The edge comes from the connection that read
-  it, labelled with the reading's `relation` and carrying its kind, its age and
+  it, labeled with the reading's `relation` and carrying its kind, its age and
   each record as a linked entity; it exists only while the reading does. A
   tailnet device is a subject by its addresses too. A reading HQ takes itself
   comes from its public registry's node; one whose connection no controller
@@ -643,8 +643,8 @@ and search read `Machine.roles`.
 
 ## The estate at a glance
 
-`hq.platform.application.estate.estate_reading` reads the machine catalogue,
-the service catalogue, the zone names, the connection rows and the joined
+`hq.platform.application.estate.estate_reading` reads the machine catalog,
+the service catalog, the zone names, the connection rows and the joined
 readings once per projection. The dashboard's estate card, the estate action
 items (offline machines, managed certificates in their renewal window) and the
 command center's estate results read it. Every derived read is a registered

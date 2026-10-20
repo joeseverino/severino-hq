@@ -348,7 +348,7 @@ PUBLIC_SURFACE = (
     "/apple-touch-icon-precomposed.png",
 )
 
-# A value each URL converter accepts, so a parameterised route can be asked for.
+# A value each URL converter accepts, so a parameterized route can be asked for.
 _CONVERTER_SAMPLES = {
     "IntConverter": "1",
     "StringConverter": "sample",
@@ -858,7 +858,7 @@ class ReturnDestinationTests(TestCase):
         response = self.client.post("/domains/example.com/pin/", {"next": "//example.net/phish"})
         self.assertNotIn("example.net", response["Location"])
 
-    def test_a_local_destination_is_honoured(self):
+    def test_a_local_destination_is_honored(self):
         response = self.client.post("/domains/example.com/pin/", {"next": "/domains/example.com/"})
         self.assertEqual(response["Location"], "/domains/example.com/")
 
@@ -946,7 +946,7 @@ class SourceBoundaryTests(SimpleTestCase):
 
 
 class CookiePrefixTests(SimpleTestCase):
-    """A cookie no neighbouring host can have written, on a deployment whose browser will keep it."""
+    """A cookie no neighboring host can have written, on a deployment whose browser will keep it."""
 
     def test_a_cookie_carries_the_host_prefix_exactly_when_it_is_secure(self):
         # A browser refuses a `__Host-` cookie that is not Secure, scoped to a
@@ -1078,7 +1078,7 @@ class SafeNextTests(SimpleTestCase):
         request = getattr(RequestFactory(), method)("/", {"next": next_}, secure=secure)
         return safe_next(request, fallback="/fallback/", scope=scope)
 
-    def test_what_is_honoured_and_what_falls_back(self):
+    def test_what_is_honored_and_what_falls_back(self):
         cases = (
             ("/calendar/2026/", "", True),
             ("/expenses/", "", True),
@@ -1089,9 +1089,9 @@ class SafeNextTests(SimpleTestCase):
             ("https://example.net/", "", False),
             ("", "", False),
         )
-        for next_, scope, honoured in cases:
+        for next_, scope, honored in cases:
             with self.subTest(next=next_, scope=scope):
-                self.assertEqual(self.destination(next_, scope=scope), next_ if honoured else "/fallback/")
+                self.assertEqual(self.destination(next_, scope=scope), next_ if honored else "/fallback/")
 
     def test_a_secure_request_is_not_sent_back_over_plain_http(self):
         self.assertEqual(self.destination("http://testserver/expenses/", secure=True), "/fallback/")

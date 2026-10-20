@@ -540,7 +540,7 @@ CARD_OPTIONAL_KEYS = frozenset({"detail", "status", "trend"})
 # Imported, not restated: one status vocabulary serves every surface that shows
 # state, so a card and an insight cannot drift apart on what "attention" means.
 CARD_STATUS_VALUES = STATUS_VALUES
-# Direction of travel, not a judgement: whether "up" is good is the domain's
+# Direction of travel, not a judgment: whether "up" is good is the domain's
 # business, which is what `status` is for.
 CARD_TREND_VALUES = frozenset({"up", "down", "flat"})
 

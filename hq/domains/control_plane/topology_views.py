@@ -201,7 +201,7 @@ class TopologyView(PageMixin, TemplateView):
         hops = dict(trace.hops) if trace else {}
         neighbors: dict[str, set[str]] = {node.id: set() for node in topology.nodes}
         # An edge is a verb with a direction. Collapsing it to an undirected
-        # neighbour set answers "is this related" and throws away "how" and
+        # neighbor set answers "is this related" and throws away "how" and
         # "which way", which is the only part an operator is actually reading.
         # Both ends get a row so a node can state its relationships from where
         # it stands, without the reader re-deriving the arrow.

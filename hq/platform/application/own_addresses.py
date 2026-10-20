@@ -85,7 +85,7 @@ def sightings(presences) -> Sightings:
 
 
 def tailnet_sightings() -> Sightings:
-    """The sightings for the machine catalogue, read once per projection."""
+    """The sightings for the machine catalog, read once per projection."""
 
     return read_once(
         "machines.sightings",

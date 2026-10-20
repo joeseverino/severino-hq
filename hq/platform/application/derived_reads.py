@@ -2,7 +2,7 @@
 
 Each handler asks the function its page asks and projects the answer to JSON.
 Nothing here derives a fact: the estate reading, the machine and service
-catalogues, the relation graph, the join engine, credential sight and the
+catalogs, the relation graph, the join engine, credential sight and the
 action queue do. Readings leave only through their schema
 (``ObservationSpec.admitted``); no provider payload and no secret is stored,
 so none can be returned.

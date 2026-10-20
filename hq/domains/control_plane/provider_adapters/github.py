@@ -16,7 +16,7 @@ from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, SharedV
 
 KIND = "github.delivery"
 # Shared values (``SHARED``): the controller reports a sweep's record with the
-# same defaults, which is what lets `adopts` recognise it.
+# same defaults, which is what lets `adopts` recognize it.
 CURRENT = "Every extension's latest admission, confirmed on GitHub"
 COMPOSE_WORKFLOW = ".github/workflows/compose.yml"
 MAIN_BRANCH = "main"

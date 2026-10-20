@@ -27,7 +27,7 @@ EXPENSE_CATEGORY_CHOICES = [
     ("professional_services", "Professional services"),
     ("miscellaneous", "Miscellaneous"),
 ]
-# What an expense nobody categorised is filed under.
+# What an expense nobody categorized is filed under.
 DEFAULT_CATEGORY = "miscellaneous"
 
 

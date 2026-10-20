@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // The document names no server: it is served by the one it describes. The
     // samples are written against this origin, so a copied one runs as it is.
     servers: [{ url: window.location.origin }],
-    // Colour, type and spacing are HQ's tokens (static/css/api-reference.css).
+    // Color, type and spacing are HQ's tokens (static/css/api-reference.css).
     theme: "none",
     hideDarkModeToggle: true,
     ...(theme ? { forceDarkModeState: theme } : {}),

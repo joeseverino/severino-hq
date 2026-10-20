@@ -795,7 +795,7 @@ export type LookupAddressRequest = {
      * An address to ask the public registries about.
      *
      * ``refresh`` asks again rather than reading the stored answer. The default
-     * is the stored one: an allocation moves between organisations rarely and a
+     * is the stored one: an allocation moves between organizations rarely and a
      * PTR record changes when somebody reconfigures a network, so re-asking per
      * page load spends a stranger's rate limit to hear the same thing, and
      * discloses, every time, which addresses HQ is interested in.

@@ -186,7 +186,7 @@ TEXT_CONTRAST = 4.5
 LARGE_TEXT_CONTRAST = 3.0
 # The least a dividing line may differ from its surface. The faint line token
 # on a card is 1.15:1, the plain one on a tinted panel 1.08:1; below this a
-# line is the surface's own colour.
+# line is the surface's own color.
 LINE_CONTRAST = 1.07
 
 # Structural rules from browser_audit.js that hold on every page at
@@ -582,13 +582,13 @@ _ROW_HEIGHTS = (
 }"""
 )
 
-# What the browser paints, as an opaque colour: any colour syntax read back
+# What the browser paints, as an opaque color: any color syntax read back
 # through a canvas pixel, a translucent one composited over what is behind it,
 # and the WCAG contrast ratio between two.
-_COLOUR = """
+_COLOR = """
   const canvas = document.createElement('canvas').getContext('2d', {willReadFrequently: true});
   canvas.canvas.width = canvas.canvas.height = 1;
-  // Whatever syntax the browser serialises a colour in (rgb(), color(srgb),
+  // Whatever syntax the browser serializes a color in (rgb(), color(srgb),
   // oklch from a color-mix), paint it and read the pixel back.
   const cache = new Map();
   const rgba = (value) => {
@@ -608,9 +608,9 @@ _COLOUR = """
   const background = (el) => {
     const layers = [];
     for (let up = el; up; up = up.parentElement) {
-      const colour = rgba(getComputedStyle(up).backgroundColor);
-      if (colour[3] > 0) layers.push(colour);
-      if (colour[3] >= 1) break;
+      const color = rgba(getComputedStyle(up).backgroundColor);
+      if (color[3] > 0) layers.push(color);
+      if (color[3] >= 1) break;
     }
     let result = rgba(getComputedStyle(document.documentElement).backgroundColor);
     if (result[3] < 1) result = [255, 255, 255, 1];
@@ -633,13 +633,13 @@ _COLOUR = """
 _CONTRAST = (
     "([scope, body, large]) => {"
     + _DESCRIBE
-    + _COLOUR
+    + _COLOR
     + """
   // Every visible element that holds text of its own, measured against the
-  // colour actually behind it: the nearest ancestor that paints a background,
-  // with translucent layers composited down to an opaque one. A colour
+  // color actually behind it: the nearest ancestor that paints a background,
+  // with translucent layers composited down to an opaque one. A color
   // written for one palette only is what this catches: a light-mode ink left
-  // on a dark card reads as nothing, and no other check looks at colour.
+  // on a dark card reads as nothing, and no other check looks at color.
   // Inactive controls and deliberately faded content are exempt, as WCAG
   // exempts them: they say they are not in play.
   const inactive = (el) => el.closest(':disabled, [aria-disabled="true"], [hidden]')
@@ -675,11 +675,11 @@ _CONTRAST = (
 
 # A line drawn to separate things (a divider, a frame's edge) is seen against
 # the surface it is drawn on. A faint token on a tinted panel is a line in the
-# panel's own colour: the rows it was meant to part run together.
+# panel's own color: the rows it was meant to part run together.
 _FAINT_LINES = (
     "([scope, least]) => {"
     + _DESCRIBE
-    + _COLOUR
+    + _COLOR
     + """
   const found = [];
   for (const root of document.querySelectorAll(scope)) {
@@ -688,14 +688,14 @@ _FAINT_LINES = (
       const style = getComputedStyle(el);
       for (const side of ['Top', 'Right', 'Bottom', 'Left']) {
         if (parseFloat(style[`border${side}Width`]) < 1 || ['none', 'hidden'].includes(style[`border${side}Style`])) continue;
-        const colour = rgba(style[`border${side}Color`]);
-        if (colour[3] === 0) continue;
+        const color = rgba(style[`border${side}Color`]);
+        if (color[3] === 0) continue;
         // A box that paints its own fill is edged against what is outside it,
         // by its border or by the fill itself.
         const fill = rgba(style.backgroundColor);
         const filled = fill[3] > 0 && el.parentElement;
         const behind = filled ? background(el.parentElement) : background(el);
-        const measured = Math.max(ratio(over(colour, behind), behind), filled ? ratio(over(fill, behind), behind) : 0);
+        const measured = Math.max(ratio(over(color, behind), behind), filled ? ratio(over(fill, behind), behind) : 0);
         if (measured < least) found.push(`${describe(el)} ${side.toLowerCase()} ${measured.toFixed(2)}:1 on ${behind.slice(0, 3).map(Math.round)}`);
       }
     }
@@ -707,8 +707,8 @@ _FAINT_LINES = (
 
 # A route's mark (a hop's icon, a check's tick) holds its glyph in its middle.
 # A glyph keeps the line height of the row around it unless its mark sets its
-# own, and a line taller than the mark pushes the glyph off its centre.
-_OFF_CENTRE_MARKS = (
+# own, and a line taller than the mark pushes the glyph off its center.
+_OFF_CENTER_MARKS = (
     "(mark) => {"
     + _DESCRIBE
     + """
@@ -721,7 +721,7 @@ _OFF_CENTRE_MARKS = (
     const at = box(el);
     const dy = glyph.top + glyph.height / 2 - (at.top + at.height / 2);
     const dx = glyph.left + glyph.width / 2 - (at.left + at.width / 2);
-    if (Math.abs(dy) > 1 || Math.abs(dx) > 1) found.push(`${describe(el)}: glyph ${dx.toFixed(1)}, ${dy.toFixed(1)} off its centre`);
+    if (Math.abs(dy) > 1 || Math.abs(dx) > 1) found.push(`${describe(el)}: glyph ${dx.toFixed(1)}, ${dy.toFixed(1)} off its center`);
   }
   return [...new Set(found)].slice(0, 10);
 }"""
@@ -843,12 +843,12 @@ def authored_selectors(css: str) -> list[str]:
     return found
 
 
-def _opaque(colour: str) -> tuple[int, ...]:
-    """A computed colour's red, green and blue, without its opacity, as 0-255:
-    ``rgb(255, 255, 255)`` and ``color(srgb 1 1 1 / 0.8)`` are one colour."""
+def _opaque(color: str) -> tuple[int, ...]:
+    """A computed color's red, green and blue, without its opacity, as 0-255:
+    ``rgb(255, 255, 255)`` and ``color(srgb 1 1 1 / 0.8)`` are one color."""
 
-    numbers = [float(n) for n in re.findall(r"[\d.]+", colour.split("/")[0])]
-    if colour.startswith("color("):
+    numbers = [float(n) for n in re.findall(r"[\d.]+", color.split("/")[0])]
+    if color.startswith("color("):
         return tuple(round(n * 255) for n in numbers[:3])
     return tuple(round(n) for n in numbers[:3])
 
@@ -976,8 +976,8 @@ _NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' 
     const column = toggle.closest('td, th').cellIndex;
     const edges = [...table.querySelectorAll('tbody > tr:not([data-row-detail])')]
       .map((row) => row.children[column])
-      // A gutter that holds only the toggle has no name: the name starts the next cell.
-      .map((cell) => (cell && cell.matches('.row-gutter') && !cell.textContent.trim() ? cell.nextElementSibling : cell))
+      // A cell that holds only the toggle has no name: the name starts the next cell.
+      .map((cell) => (cell && !cell.textContent.trim() ? cell.nextElementSibling : cell))
       .filter((cell) => cell && !cell.hasAttribute('colspan') && cell.textContent.trim())
       .map((cell) => {
         const range = document.createRange();
@@ -1058,7 +1058,7 @@ _MOVED_SINCE_DRAWN = (
   return found;
 }"""
 )
-# Colours transition between palettes, so contrast is measured after the
+# Colors transition between palettes, so contrast is measured after the
 # transition ends.
 _FINISH_TRANSITIONS = """() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } })"""
 
@@ -1311,8 +1311,8 @@ _UNEVEN_ROUTES = (
   for (const el of document.querySelectorAll('main ' + route)) {
     const icons = [...el.querySelectorAll(icon)].filter((mark) => mark.checkVisibility()).map(box);
     if (icons.length < 3 || new Set(icons.map((mark) => Math.round(mark.top))).size > 1) continue;
-    const centres = icons.map((mark) => mark.left + mark.width / 2);
-    const gaps = centres.slice(1).map((centre, i) => centre - centres[i]);
+    const centers = icons.map((mark) => mark.left + mark.width / 2);
+    const gaps = centers.slice(1).map((center, i) => center - centers[i]);
     if (Math.max(...gaps) - Math.min(...gaps) > 1) found.push(`${describe(el)}: gaps ${gaps.map(Math.round).join(', ')}`);
   }
   return found;
@@ -1322,7 +1322,7 @@ _UNEVEN_ROUTES = (
 # The dashboard's queue cards end their buttons at one edge: no card's end
 # stops more than a pixel short of another's. The full queue is a table, whose
 # columns hold its rows to one edge.
-# A route's line runs from the centre of its first stop's mark to the centre
+# A route's line runs from the center of its first stop's mark to the center
 # of its last, opened or closed: each stop draws its stretch as `::before`,
 # read back from its computed box.
 _ROUTE_LINE_ENDS = (
@@ -1342,12 +1342,12 @@ _ROUTE_LINE_ENDS = (
     });
     if (!stretches.length) { found.push(`${describe(el)}: no line`); continue; }
     const down = stretches[0].height > stretches[0].width;
-    const centre = (stop) => { const at = box(stop.querySelector(mark));
+    const center = (stop) => { const at = box(stop.querySelector(mark));
       return down ? at.top + at.height / 2 : at.left + at.width / 2; };
     const start = Math.min(...stretches.map((s) => down ? s.top : s.left));
     const end = Math.max(...stretches.map((s) => down ? s.top + s.height : s.left + s.width));
-    const first = centre(stops[0]);
-    const last = centre(stops.at(-1));
+    const first = center(stops[0]);
+    const last = center(stops.at(-1));
     if (Math.abs(start - first) > 2 || Math.abs(end - last) > 2) {
       found.push(`${describe(el)}: line ${Math.round(start)} to ${Math.round(end)}, marks ${Math.round(first)} to ${Math.round(last)}`);
     }
@@ -1902,7 +1902,7 @@ class LayoutBrowserTests(BrowserGate):
 
     def in_scheme(self, scheme):
         """The same load in the other palette. Without script no animation
-        frame runs, so the colours are not waited for: they are finished."""
+        frame runs, so the colors are not waited for: they are finished."""
 
         self.page.emulate_media(color_scheme=scheme)
         self.page.evaluate(_FINISH_TRANSITIONS)
@@ -2098,7 +2098,7 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(self.page.evaluate(_NARROW_FRAMES, SELECTORS["table_scroll"]), [])
 
     def a_mark_holds_its_glyph_in_its_middle(self, _name):
-        self.assertEqual(self.page.evaluate(_OFF_CENTRE_MARKS, SELECTORS["route_mark"]), [])
+        self.assertEqual(self.page.evaluate(_OFF_CENTER_MARKS, SELECTORS["route_mark"]), [])
 
     def opening_a_disclosure_moves_nothing_before_it(self, _name):
         self.assertEqual(self.page.evaluate(_MOVING_SUMMARIES), [])
@@ -2109,8 +2109,8 @@ class LayoutBrowserTests(BrowserGate):
     def text_reads_in_the_dark_theme(self, _name):
         """Text clears WCAG AA on whatever it sits on, in the dark palette.
 
-        Colour lives in tokens and each token carries both palettes, so a
-        light-only colour can only come from a component that went round them.
+        Color lives in tokens and each token carries both palettes, so a
+        light-only color can only come from a component that went round them.
         The stylesheet test catches a literal; this catches the rest (a token
         whose dark half was never checked, ink meant for one surface drawn on
         another) by measuring what the browser actually paints.
@@ -2599,8 +2599,8 @@ _REFERENCE_FRAME = """(root) => {
 _REFERENCE_PAINT = """() => {
   const behind = (el) => {
     for (let up = el; up; up = up.parentElement) {
-      const colour = getComputedStyle(up).backgroundColor;
-      if (!/rgba\\(0, 0, 0, 0\\)|transparent/.test(colour)) return colour;
+      const color = getComputedStyle(up).backgroundColor;
+      if (!/rgba\\(0, 0, 0, 0\\)|transparent/.test(color)) return color;
     }
     return '';
   };
@@ -2761,7 +2761,7 @@ class ReferenceBrowserTests(BrowserGate):
         self.assertIn(mode, paint["mode"].split())
         self.assertEqual(paint["viewer"], paint["page"])
         # The header lets the page show through its surface; the sidebar is that
-        # surface, so they match in colour whatever the header's opacity.
+        # surface, so they match in color whatever the header's opacity.
         self.assertEqual(_opaque(paint["sidebar"]), _opaque(paint["header"]))
         self.assertEqual(paint["title"], paint["ink"])
         self.assertEqual(paint["title_face"], paint["face"])

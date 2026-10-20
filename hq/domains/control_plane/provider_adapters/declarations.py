@@ -358,7 +358,7 @@ def _delivery_target_readout(spec: dict[str, Any], status: dict[str, Any]) -> tu
     }.get(str(spec.get("kind", "")))
     # Named first because the list beside this shows only the first row, and
     # the name a certificate goes by at the target is the thing an operator
-    # recognises: the key already says which connection it is.
+    # recognizes: the key already says which connection it is.
     rows = [
         ("Name at target", "", str(spec.get("name", ""))),
         ("Type", "", str(spec.get("kind", ""))),

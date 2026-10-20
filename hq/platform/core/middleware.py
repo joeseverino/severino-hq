@@ -205,7 +205,7 @@ class LoginRequiredMiddleware(auth_middleware.LoginRequiredMiddleware):
 class ProjectionMiddleware:
     """One read projection per page request, seeded with where it arrived.
 
-    Every composer on a GET shares one machine catalogue, one relation graph and
+    Every composer on a GET shares one machine catalog, one relation graph and
     one set of readings, and knows the address and port HQ was reached on. A
     write is left unscoped so it never reads a value it has just changed.
     """

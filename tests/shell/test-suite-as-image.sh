@@ -38,15 +38,15 @@ chmod +x "${work}/bin/uv"
 other="${work}/tmp/severino-test-tree-1-other"
 mkdir "${other}"
 
-run() { # run <uv behaviour> [NAME=value...]; prints the task's exit status
-    behaviour="$1"
+run() { # run <uv behavior> [NAME=value...]; prints the task's exit status
+    behavior="$1"
     shift
     status=0
     # Its own heavy turn, so a heavy command elsewhere on the machine cannot
     # refuse it. Run as mise runs a file task: in its config root, named by
     # MISE_CONFIG_ROOT. No extension set unless a case names one.
     (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" XDG_CACHE_HOME="${work}/cache" \
-        TEST_UV="${behaviour}" TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" \
+        TEST_UV="${behavior}" TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" \
         HQ_LOCAL_PLUGINS= REQUIRE_COMPOSED= "$@" "./${task}") >/dev/null 2>&1 || status=$?
     echo "${status}"
 }
@@ -54,15 +54,15 @@ run() { # run <uv behaviour> [NAME=value...]; prints the task's exit status
 fail() { echo "$*" >&2; exit 1; }
 
 for case in 0:0 3:3 term:143; do
-    behaviour="${case%%:*}"
+    behavior="${case%%:*}"
     want="${case#*:}"
     rm -f "${work}/seen"
-    got="$(run "${behaviour}")"
-    [ "${got}" = "${want}" ] || fail "uv ${behaviour}: the task exited ${got}, not ${want}"
+    got="$(run "${behavior}")"
+    [ "${got}" = "${want}" ] || fail "uv ${behavior}: the task exited ${got}, not ${want}"
     seen="$(cat "${work}/seen")"
     case "${seen}" in "${work}/tmp/severino-test-tree-"*) ;; *) fail "the suite ran in ${seen}, not a copy" ;; esac
-    [ ! -e "${seen}" ] || fail "uv ${behaviour}: the copy ${seen} was left behind"
-    [ -d "${other}" ] || fail "uv ${behaviour}: another run's copy was removed"
+    [ ! -e "${seen}" ] || fail "uv ${behavior}: the copy ${seen} was left behind"
+    [ -d "${other}" ] || fail "uv ${behavior}: another run's copy was removed"
 done
 
 # Required without an extension set, it refuses before the suite runs; with

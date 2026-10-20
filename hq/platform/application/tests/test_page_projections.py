@@ -180,7 +180,7 @@ class ConnectionProjectionTests(TestCase):
             "connection_posture",
             "hq_path",
             "oldest",
-            "unlabelled",
+            "unlabeled",
         ):
             self.assertNotIn(retired, response.context)
         web = found.as_dict()

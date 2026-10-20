@@ -277,7 +277,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_OIDC_CLIENT_ID` | installer | HQ's client at the identity provider |
 | `SEVERINO_OIDC_CLIENT_SECRET` | installer | that client's secret |
 | `SEVERINO_OIDC_ALLOWED_GROUPS` | installer | the groups whose members may sign in, comma-separated |
-| `SEVERINO_OIDC_ALLOWED_EMAILS` | installer | addresses that may sign in, honoured only when the provider marks them verified; setting it requests the `email` scope |
+| `SEVERINO_OIDC_ALLOWED_EMAILS` | installer | addresses that may sign in, honored only when the provider marks them verified; setting it requests the `email` scope |
 | `SEVERINO_OIDC_CREATE_USER` | installer | whether a first sign-in creates the account; on by default |
 | `SEVERINO_PASSWORD_LOGIN_ENABLED` | installer | break-glass: `1` reopens the password form beside SSO; follows `SEVERINO_OIDC_ENABLED` when unset |
 | `SEVERINO_API_RESOURCE` | installer | the identity provider's API audience; empty disables the machine API and MCP |

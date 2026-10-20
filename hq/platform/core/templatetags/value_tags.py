@@ -417,7 +417,7 @@ def readout(value):
     would write in a sentence (a count, a word, a phrase) as text.
 
     Every value in code made "11", "On" and "Need approval" look like keys to
-    copy, and put a grey chip around each number in a list of three numbers.
+    copy, and put a gray chip around each number in a list of three numbers.
     """
 
     text = str(value)

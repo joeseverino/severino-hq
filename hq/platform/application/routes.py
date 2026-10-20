@@ -1,7 +1,7 @@
 """Where a named route is, worked out once.
 
 HQ composes its pages from derived structures (the topology, the queue, the
-catalogues) whose every node carries the links to its own pages. Composing one
+catalogs) whose every node carries the links to its own pages. Composing one
 queue asks for several hundred addresses, most of them the same few dozen, and
 Django works each out afresh: correct, and a measurable share of the request.
 

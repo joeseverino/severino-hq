@@ -73,7 +73,7 @@ def path_of(url: str) -> str:
 
     Cloudflare reports what the browser asked for, so this keeps the trailing
     slash rather than tidying it away: the site serves one form and redirects
-    the other, and a normalisation here would silently match a path that never
+    the other, and a normalization here would silently match a path that never
     gets requested. Location parsing lives in one place; path-only consumers
     derive their view from it.
     """

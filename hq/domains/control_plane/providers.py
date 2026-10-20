@@ -22,7 +22,7 @@ from .provider_spec import (
 
 
 def service_facets() -> tuple[tuple[str, str], ...]:
-    """The facets to render, in catalogue order.
+    """The facets to render, in catalog order.
 
     A facet nothing supplies is a gap in HQ, not in the service, and a column
     with nothing in it tells the operator to go fix something they cannot. So a
@@ -142,15 +142,15 @@ def observer_abilities() -> tuple[ObserverAbility, ...]:
 # A provider a resource can be reconciled through, or an observer can read
 # through, without a credential model would be reported as "proof undeclared"
 # forever. Refused here, beside the declarations, rather than found on the page.
-_unmodelled = sorted(
+_unmodeled = sorted(
     (
         {provider for spec in PROVIDERS.values() for provider in spec.connection_providers}
         | {ability.provider for ability in _OBSERVER_ABILITIES}
     )
     - set(CONNECTION_CREDENTIALS)
 )
-if _unmodelled:
-    raise ValueError(f"Connection providers without a credential model: {', '.join(_unmodelled)}.")
+if _unmodeled:
+    raise ValueError(f"Connection providers without a credential model: {', '.join(_unmodeled)}.")
 
 
 if _unattributed := unattributed_kinds(OBSERVATIONS, PROVIDERS.values()):

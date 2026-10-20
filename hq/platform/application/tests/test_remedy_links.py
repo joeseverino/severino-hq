@@ -5,7 +5,7 @@ A remedy that opens a command with nothing selected looks like it worked and
 does nothing; one that opens the "replaces the whole record" trap turns a fix
 into a way to blank a record. Both happened. These tests make either
 impossible as a class: every command that takes a target preselects any target
-it acts on, however far down the catalogue, and every link the findings, the
+it acts on, however far down the catalog, and every link the findings, the
 action queue and the service pages emit is followed and checked.
 """
 

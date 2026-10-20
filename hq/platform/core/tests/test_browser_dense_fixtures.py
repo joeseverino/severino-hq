@@ -381,7 +381,7 @@ def build_dense_estate():
                 "detail": f"{HOSTNAMES + 4} proxy hosts.",
             },
             {
-                # On a catalogued machine: the row says which, as a link in
+                # On a catalogd machine: the row says which, as a link in
                 # the smaller line under the endpoint.
                 "connection_ref": "an-example-dns-server-connection",
                 "provider": "adguard",
@@ -551,7 +551,7 @@ def _starred(user):
     }
     watched = [
         {
-            "name": f"an-example-organisation/an-example-repository-with-a-long-name-{index}",
+            "name": f"an-example-organization/an-example-repository-with-a-long-name-{index}",
             "url": f"https://github.com/example/an-example-repository-with-a-long-name-{index}",
             "description": "An example repository description long enough to wrap across a line or two",
             "starred_at": (now - timedelta(days=index + 1)).isoformat(),

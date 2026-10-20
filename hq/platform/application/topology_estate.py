@@ -3,10 +3,10 @@
 The estate is the hub of the topology. A controller or a reached target that
 names a machine, a service or a domain folds into that node. Every stored
 reading joined to an estate node through ``application.facts`` becomes an edge
-from the connection that read it, labelled with the reading's relation phrase,
+from the connection that read it, labeled with the reading's relation phrase,
 and exists only while the reading does.
 
-Resolution is the machine catalogue's own index, the service catalogue and the
+Resolution is the machine catalog's own index, the service catalog and the
 zone inventory: never a match on labels alone. What an extension reaches that
 is none of these stays a target.
 """
@@ -151,7 +151,7 @@ def _machines(nodes, edges, resources) -> _Estate:
             machine_ids.setdefault(name, node_id)
         if machine.declaration:
             _declared_by(edges, node_id, f"resource:{machine.declaration}", nodes)
-        # The connections the catalogue says reach it, the same answer as the
+        # The connections the catalog says reach it, the same answer as the
         # machine list's "Reached through".
         for ref in machine.reached_by:
             for connection_id in connections.get(ref, ()):

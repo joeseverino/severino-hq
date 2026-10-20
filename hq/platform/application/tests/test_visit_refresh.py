@@ -231,7 +231,7 @@ class VisitRefreshTests(TestCase):
         with page(FAST):
             self.assertEqual(self.ask()["requested"], [])
 
-    def test_a_watch_hq_did_not_sign_is_not_honoured(self):
+    def test_a_watch_hq_did_not_sign_is_not_honored(self):
         from ..asks import _WATCH_SALT
 
         forged = signing.dumps({"read": [FAST]}, salt="some.other.salt")

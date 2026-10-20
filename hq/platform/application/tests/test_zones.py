@@ -173,7 +173,7 @@ class IdentityTests(TestCase):
     def test_a_txt_value_compares_equal_whether_or_not_it_was_quoted(self):
         """Cloudflare returns TXT quoted whichever way it was sent.
 
-        Without normalising, a record typed without quotes reports as drifted
+        Without normalizing, a record typed without quotes reports as drifted
         against itself forever: HQ sends `v=spf1 ...`, Cloudflare answers
         `"v=spf1 ..."`, and neither is wrong.
         """
@@ -282,7 +282,7 @@ class ZoneViewTests(TestCase):
         self.assertFalse(cards["Security"].concern)
 
     def test_left_over_challenge_records_are_the_one_thing_flagged(self):
-        """The single judgement this page makes without a declared policy.
+        """The single judgment this page makes without a declared policy.
 
         A missing CAA record and a permissive DMARC policy are choices, and HQ
         holds no credential that could change either. A challenge record that
@@ -587,7 +587,7 @@ class ZoneInsightTests(TestCase):
         self.assertIn("SPF", card.detail)
         self.assertIn("DMARC", card.detail)
 
-    def test_a_recognised_mail_host_is_named_the_way_people_say_it(self):
+    def test_a_recognized_mail_host_is_named_the_way_people_say_it(self):
         sweep(
             records=[
                 record("example.com", "MX", "mx01.mail.icloud.com", rid="m1", priority=10),
@@ -597,7 +597,7 @@ class ZoneInsightTests(TestCase):
 
         self.assertEqual(self._insight("example.com", "Email").value, "iCloud")
 
-    def test_mail_split_across_providers_is_not_summarised_into_one(self):
+    def test_mail_split_across_providers_is_not_summarized_into_one(self):
         sweep(
             records=[
                 record("example.com", "MX", "mx01.mail.icloud.com", rid="m1", priority=10),
@@ -690,7 +690,7 @@ class ServicesInsightTests(TestCase):
 
     def test_a_count_carrying_every_service_and_a_link_to_the_same_list(self):
         """The dialog is an enhancement: without a real href behind it, a card
-        that summarises thirty services into a number loses them when it does not open."""
+        that summarizes thirty services into a number loses them when it does not open."""
         card = self._card()
 
         self.assertIn("3", card.value)
@@ -1054,7 +1054,7 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
         self.assertContains(response, "HQ expects 10.0.0.10")
 
 
-class ResourcePageAfterWalkthroughTests(TestCase):
+class ResourcePageLifecycleTests(TestCase):
     """Fixes for what driving the UI actually surfaced.
 
     Every case here is something that only showed up by adding a service,
@@ -1351,7 +1351,7 @@ class CertificateEditFormTests(TestCase):
 
 class WhatCountsAsAServiceTests(TestCase):
     """A hostname is not a service just because a record type says so. Two
-    modelling errors, rather than bad data, can fill the board with rows that
+    modeling errors, rather than bad data, can fill the board with rows that
     are not services.
     """
 
@@ -1411,7 +1411,7 @@ class WhatCountsAsAServiceTests(TestCase):
 class KnownHostTests(TestCase):
     """Who runs a name, read off the name, in one table both cards share."""
 
-    def test_a_recognised_operator_is_named_the_way_people_say_it(self):
+    def test_a_recognized_operator_is_named_the_way_people_say_it(self):
         from ..known_hosts import operator
 
         self.assertEqual(operator("example.pages.dev"), "Cloudflare Pages")
@@ -1476,7 +1476,7 @@ class AliasRecordPlacementTests(TestCase):
 
         self.assertEqual(keys, {"www"})
 
-    def test_it_is_labelled_with_the_name_it_serves(self):
+    def test_it_is_labeled_with_the_name_it_serves(self):
         alias, _ = self.service.alias_claims[0]
 
         self.assertEqual(alias, "www.example.com")

@@ -285,7 +285,7 @@ _EXACT = 1000
 
 
 def _estate_items() -> tuple[DiscoveryItem, ...]:
-    """Machines, services and domains, from the catalogues their pages read."""
+    """Machines, services and domains, from the catalogs their pages read."""
 
     estate = estate_reading()
     machines = tuple(

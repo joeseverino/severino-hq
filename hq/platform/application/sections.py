@@ -12,7 +12,7 @@ renders host and extension cards through one loop and a new section needs no
 template change to appear.
 
 A section with nothing to report returns no card. That is the whole of the
-"dormant section" behaviour: a section carrying no data stops occupying a tile
+"dormant section" behavior: a section carrying no data stops occupying a tile
 on the page checked every day, and lights up on its own the moment it has
 something to say. No flag, no configuration, no decision to revisit.
 """
@@ -216,7 +216,7 @@ def _deductible(reading: dict[str, Any]) -> str:
 
 # ----- Recent rows -----------------------------------------------------------
 #
-# Each section decides which of its own fields summarise one of its records,
+# Each section decides which of its own fields summarize one of its records,
 # and how many of them a glance is worth. Held here beside the querysets they
 # read, so a field added to a summary is one edit in the section that owns it.
 

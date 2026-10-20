@@ -60,7 +60,7 @@ port, so signing in to a second one signs the first out: open the second as
 
 Python dependencies come from `uv.lock`: `mise.toml` sets `UV_LOCKED`, so every
 task's `uv run` refuses a lock that `pyproject.toml` has moved past, and no
-virtualenv is made by hand. `uv lock` and `uv add` honour it too: change the
+virtualenv is made by hand. `uv lock` and `uv add` honor it too: change the
 lock outside a mise task, or with `UV_LOCKED=0`. The default groups are `dev` and
 `tools`; the browser gate adds `browser`. The image installs a hashed export
 with every default group omitted.

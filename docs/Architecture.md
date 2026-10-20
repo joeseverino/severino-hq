@@ -229,7 +229,7 @@ the same seed, at two sizes where a per-row read would show.
 The first request after a change derives what it needs and stores it, about
 five statements per derivation on top of the reads. One change of the estate
 costs seven derivations in all, whichever pages ask first: the queue, the
-catalogue, the relation graph, and the topology and findings once for the
+catalog, the relation graph, and the topology and findings once for the
 queue's reader and once for the operator's. `test_page_budgets.py` pins both:
 each stored page's queries at two sizes with no derivation run, and the
 derivations a change costs.
@@ -255,7 +255,7 @@ something is written.
 
 ### Derived once per change
 
-The topology, the service catalogue, the findings and the action queue are
+The topology, the service catalog, the findings and the action queue are
 functions of a few tables, of who is reading, and of the clock. They are
 declared that way and computed once per change of those inputs:
 
@@ -378,7 +378,7 @@ costs nobody:
 The request that asks answers at once, in one shape for both
 (`hq.platform.application.asks`): how the work stands and, while it is live, a
 status resource, with 202. `partials/_ask.html` draws the control and one
-script behaviour follows it ([Design](Design.md), "Asked-for work is an ask").
+script behavior follows it ([Design](Design.md), "Asked-for work is an ask").
 
 The interpreter holds the rule (`hq/platform/core/outbound.py`). Python raises
 an audit event whenever any library opens a connection, resolves a name,

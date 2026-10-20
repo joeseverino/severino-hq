@@ -210,7 +210,7 @@ def host():
         "registry.address",
         {
             "address": PUBLIC,
-            "organisation": "Example Broadband",
+            "organization": "Example Broadband",
             "network": "EXAMPLE-RESIDENTIAL",
             "handle": "NET-198-51-100-0-1",
             "country": "US",

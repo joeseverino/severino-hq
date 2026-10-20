@@ -94,7 +94,7 @@ def _configured() -> bool:
 
 
 def public_address(value: str) -> str:
-    """The address, normalised, when it is routable on the public internet."""
+    """The address, normalized, when it is routable on the public internet."""
 
     try:
         parsed = ip_address(host_of(value))
@@ -157,7 +157,7 @@ def read_address(address: str, allocations: Callable[..., dict] = registry) -> d
     allocation = allocation_of(held)
     return {
         "address": address,
-        "organisation": allocation["organisation"],
+        "organization": allocation["organization"],
         "network": allocation["name"],
         "handle": allocation["handle"],
         "country": allocation["country"],

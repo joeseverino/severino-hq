@@ -52,7 +52,7 @@ CATALOG = Path(__file__).resolve().parents[2] / "deploy" / "diagnoses.json"
 UNKNOWN = {
     "id": "unknown",
     "title": "A step failed",
-    "fix": "No known cause matched. The failing step's log says what happened; once it is understood, add it to deploy/diagnoses.json so it is recognised next time.",
+    "fix": "No known cause matched. The failing step's log says what happened; once it is understood, add it to deploy/diagnoses.json so it is recognized next time.",
 }
 
 # GitHub echoes each step's script and environment between these markers, so

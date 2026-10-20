@@ -63,7 +63,7 @@ const (
 	// HostProgram is this program, in the tree.
 	HostProgram = Lib + "/deploy/bin/hq-host"
 	// DeployEntry is what the runner's sudo rules have named; it execs
-	// `HostProgram deploy`, which the rule now also admits.
+	// `HostProgram deploy`, which the rule also admits.
 	DeployEntry = Lib + "/scripts/deploy-image.sh"
 	// DeployArgument is the one argument the rule lets the runner give
 	// `hq-host deploy`, as a sudoers regular expression (sudo 1.9.10 or

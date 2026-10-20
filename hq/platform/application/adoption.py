@@ -470,7 +470,7 @@ def _record_as_observed(key: str, found: Unmanaged) -> None:
 
 
 def suggested_key(item: Unmanaged) -> str:
-    """A free key an operator would recognise on a list of declarations."""
+    """A free key an operator would recognize on a list of declarations."""
 
     return suggest_key(item.kind, item.spec)
 

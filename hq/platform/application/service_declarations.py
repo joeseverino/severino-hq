@@ -184,7 +184,7 @@ class Declarations(NamedTuple):
 def declarations() -> Declarations:
     """Every enabled declaration, sorted into what it names and what it covers.
 
-    Shared by the catalogue and by a name nobody has declared anything for yet,
+    Shared by the catalog and by a name nobody has declared anything for yet,
     so a prospective service is assembled from the same reading of the world.
     Read once per projection.
     """
@@ -276,7 +276,7 @@ def runtime_claim(origin: Origin | None, containers: dict[tuple[str, str], Any])
 
     Matched on what the origin already resolved: a machine and a container on
     it. That is the same pair the declaration carries, so the two are the same
-    thing recognised from opposite directions: one authored, one observed.
+    thing recognized from opposite directions: one authored, one observed.
     """
 
     if origin is None or not origin.host or not origin.container:

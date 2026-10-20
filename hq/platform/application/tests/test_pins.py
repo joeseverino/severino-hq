@@ -36,7 +36,7 @@ class ServiceFavoriteTests(TestCase):
             ["one.example.test", "two.example.test", "three.example.test"],
         )
 
-    def test_moving_one_up_swaps_it_with_its_neighbour(self):
+    def test_moving_one_up_swaps_it_with_its_neighbor(self):
         from hq.platform.application.pins import SERVICE, move
 
         self.pin("one.example.test", "two.example.test", "three.example.test")

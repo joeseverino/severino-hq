@@ -43,7 +43,7 @@ OPAQUE_CHANNEL = Channel(
 )
 ELSEWHERE_CHANNEL = Channel(
     "elsewhere",
-    "Unrecognised",
+    "Unrecognized",
     "This address is in none of the ranges HQ accepts.",
 )
 

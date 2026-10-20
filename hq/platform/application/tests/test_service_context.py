@@ -201,7 +201,7 @@ class TrafficSectionTests(TestCase):
         self.assertIsNone(self.traffic())
 
     def test_the_host_join_is_case_and_trailing_dot_insensitive(self):
-        # Ingest stores it normalised; the lookup is what must tolerate mess.
+        # Ingest stores it normalized; the lookup is what must tolerate mess.
         self._measure("probe.example.com")
         from ..analytics import traffic_for_hosts
 

@@ -360,7 +360,7 @@ class ReleaseTests(SimpleTestCase):
                 self.assertNotIn("candidate", step)
 
     def test_branch_code_builds_without_the_jobs_credentials(self):
-        """tests/shell/test-extension-branches.sh holds the behaviour; this holds the workflow to it."""
+        """tests/shell/test-extension-branches.sh holds the behavior; this holds the workflow to it."""
         branches = {
             match.group(1): step
             for step in steps(jobs(self.compose)["compose"])

@@ -154,7 +154,7 @@ def _render(source: str, context: dict | None = None, request=None) -> str:
 
 
 class TableTagTests(SimpleTestCase):
-    def test_a_region_is_labelled_and_only_one_that_scrolls_takes_focus(self):
+    def test_a_region_is_labeled_and_only_one_that_scrolls_takes_focus(self):
         html = _render('{% table_region "Machines" %}<table class="data-table"></table>{% endtable_region %}')
         (region,) = select(html, "role", "region")
         self.assertEqual(region.attrs["aria-label"], "Machines")
@@ -252,7 +252,7 @@ class TableTagTests(SimpleTestCase):
 
     def test_a_heading_refuses_what_cannot_be(self):
         for source in (
-            '{% table_heading "Name" "colour" %}',
+            '{% table_heading "Name" "color" %}',
             '{% table_heading "State" css="key-col" drop=1 %}',
             '{% table_heading "Name" sort="name" local_sort=True %}',
         ):
@@ -278,7 +278,7 @@ class TableTagTests(SimpleTestCase):
 
     def test_an_unknown_argument_is_refused_when_the_template_compiles(self):
         with self.assertRaises(TemplateSyntaxError):
-            _render('{% table_heading "Name" colour="red" %}')
+            _render('{% table_heading "Name" color="red" %}')
 
     def test_a_page_sorted_heading_draws_its_button(self):
         (heading,) = elements(_render('{% table_heading "Name" local_sort=True %}'), "th")

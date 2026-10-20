@@ -7,8 +7,8 @@ row of DNS trivia into the answer somebody was actually after: who has the
 mailbox, who serves the site.
 
 Derived, not configured. Nothing here is a per-domain setting; it is a small
-table of operators recognisable by the domain they publish under, and anything
-unrecognised falls back to the registrable domain, which is already the useful
+table of operators recognizable by the domain they publish under, and anything
+unrecognized falls back to the registrable domain, which is already the useful
 answer. The Email card and the Origin card both read it, because "who runs
 this" is one question asked in two places.
 

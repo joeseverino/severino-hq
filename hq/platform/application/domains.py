@@ -9,7 +9,7 @@ One thing is deliberately not unified. A ``PluginManifest`` also carries
 *distribution* facts: wheel, admission policy, source workflow, URL mount,
 because it crosses a trust boundary. A host section crosses none and is never
 admitted. Runtime behavior is unified: host sections and extensions both carry
-one typed, lazy ``PluginIntegration``. The registry normalises both into one
+one typed, lazy ``PluginIntegration``. The registry normalizes both into one
 ``Domain`` view so composing surfaces cannot tell, or care, which is which.
 
 This repo is public. Host descriptors therefore never name an extension: group
@@ -125,7 +125,7 @@ class DomainDescriptor:
 class Domain:
     """A descriptor or a manifest, seen through one lens.
 
-    ``origin`` exists for diagnostics and tests, not for behaviour. A surface
+    ``origin`` exists for diagnostics and tests, not for behavior. A surface
     that renders domains differently depending on who supplied them would
     reintroduce exactly the host/extension asymmetry this registry removes.
     """

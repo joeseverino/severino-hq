@@ -319,7 +319,7 @@ class LineChartTests(TestCase):
         line = line_chart("Resting", "", self.SERIES, unit="bpm")
         bars = stacked_bar_chart("Training", "", ("a", "b"), (ChartSeries("Run", (1.0, 2.0), 1),), unit="m")
         # Two charts stacked in a column have to share an axis position, or the
-        # page reads as two unrelated drawings. A bar is centred in its own
+        # page reads as two unrelated drawings. A bar is centered in its own
         # column so its x is not the plot's left edge; the axis is what has to
         # line up, and the line does start at the edge.
         self.assertEqual(line.ticks[0].y, bars.ticks[0].y)

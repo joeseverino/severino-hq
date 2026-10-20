@@ -209,7 +209,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["default_count"] = sum(len(group.rows) for group in context["default_groups"])
         context["agents"] = [column for column in context["columns"] if column.identity]
         # A column whose every settable rule is dormant is off as a whole, and
-        # says so once in its header rather than greying each cell unexplained.
+        # says so once in its header rather than graying each cell unexplained.
         # A row's cells are in column order, so a cell's column is its position.
         settable = [
             (index, cell)

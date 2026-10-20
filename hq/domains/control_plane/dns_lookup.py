@@ -173,7 +173,7 @@ def _get(url: str, *, timeout: int | None = None, accept: str) -> dict:
     a missing parameter as a 400 with prose, a name that does not exist as a
     200 with an empty list, and an address with no PTR record as a 200 carrying
     an error beside a full body: distinctions too inconsistent to hand
-    upward. A caller can act on "no answer"; it cannot act on which flavour
+    upward. A caller can act on "no answer"; it cannot act on which flavor
     of no answer this is.
     """
 
@@ -216,7 +216,7 @@ def registry(address: str, *, timeout: int | None = None) -> dict:
     The address is interpolated into the path because that is the shape of the
     protocol, and it is safe to do here for one reason: the service above has
     already parsed it with ``ipaddress``, so by this point it is the
-    normalised text of a real address and cannot carry a path segment.
+    normalized text of a real address and cannot carry a path segment.
     """
 
     url = f"{_base('SEVERINO_RDAP_ENDPOINT')}/ip/{address}"
