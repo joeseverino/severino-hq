@@ -132,6 +132,22 @@ class DecisionTests(SimpleTestCase):
             (below,) = with_class(html, "row-below")
             self.assertIn("example", below.words)
 
+    def test_an_opened_row_reads_its_meaning_in_full_and_keeps_its_buttons_together(self):
+        links = tuple(ActionLink(f"open-{n}", f"Open page {n}", "read", f"/example/{n}/") for n in range(3))
+        html = card(self.item(actions=links))
+
+        # The meaning in full opens beneath the title, across the line.
+        (below,) = with_class(html, "row-below")
+        self.assertIn("What it means for the reader.", below.words)
+        # Every button, the first two and those that wait, is in one cell.
+        cells = {
+            id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td"))
+            for link in elements(html, "a")
+            if link.attrs.get("href", "").startswith("/example/")
+        }
+        self.assertEqual(len(cells), 1)
+        self.assertEqual(sorted(hrefs(html)), [f"/example/{n}/" for n in range(3)])
+
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
         subject = asdict(ActionLink("subject", "example-host", "read", "/machines/example-host/"))
         about = decision(self.item(url="/findings/?rule=example", subject=subject))

@@ -268,11 +268,14 @@ named "Needs you" wherever it appears. The queue page, the findings page, a
 thing's urgent problems and a domain's own attention list use one projection
 (`hq/platform/application/decisions.py`) and draw it as one table
 (`partials/_work_queue.html`, its rows `partials/_queue_rows.html`), so every
-row's dot, words and buttons share one edge. A row reads, in order:
+row's urgency, words and buttons share one edge. A row reads, in order:
 
-- how urgent it is, a dot in its tone whose tip says it in one set of words
-  (`decisions.URGENCY`), and the title, which states what is wrong and links
-  to the thing it is about;
+- the title and, only when it is urgent, the word "Urgent" after it in its
+  tone (the words are `decisions.URGENCY`; a row that needs attention carries
+  no mark, its word kept for a screen reader), which states
+  what is wrong and links to the thing it is about. The title is what a reader
+  presses, so it leads; a domain's heading, a family's name and their counts
+  read below it;
 - since when, where its owner knows (`Insight(since=...)`), and never a guess;
   how old the reading it is drawn from is (`Insight(observed_at=...)`). An
   out-of-date reading never asserts a live condition: its owner says what was
@@ -283,14 +286,17 @@ row's dot, words and buttons share one edge. A row reads, in order:
   Where the reader sorts their own queue, Dismiss or Restore ends the row.
 
 Closed, a row is those one or two lines. Everything taller is the row's
-`row-below`, opened by its toggle into the line beneath, the table's width:
-what was read that shows it (`Insight(facts=...)`), each label once with its
-values beside it; what to do, where a command or an instruction is a step,
+`row-below`, opened by its toggle into the line beneath, from the title's edge
+to the table's: what it means in full; what was read that shows it
+(`Insight(facts=...)`), each label once with its values beside it; what to do, where a command or an instruction is a step,
 one standing alone and several numbered; the reason it cannot be done from
 here, as a sentence and never as a step; and the pages that help look into
-it (`Insight(links=...)`), the topology's as icons with HQ's tooltip. On a
-phone the buttons wait there too, and Dismiss stays. A command is
-`partials/_command.html`, with its copy button in its corner. The dot is
+it (`Insight(links=...)`), the topology's as icons with HQ's tooltip. The
+buttons past the first two follow, in one place under the rest, and on a
+phone every button waits there, each the line's width, while Dismiss stays in
+the row as a mark. A row toggles only where opening it shows something more.
+A command is `partials/_command.html`, with its copy button in its corner.
+The word is
 `partials/_urgency_pill.html`: a Cmd- or Ctrl-click opens what raised it (the
 finding rule, its severity and the line its detector is defined at, or the
 domain and key of anything else), read from the code rather than written

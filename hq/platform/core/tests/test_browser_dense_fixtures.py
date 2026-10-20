@@ -414,7 +414,203 @@ def build_dense_estate():
         object_repr="an-example-edge-machine-agent-stack-an-example-agent-service-1",
         connection=PORTAINER,
     )
+    _audit_trail(user)
+    _starred(user)
+    _operations(user)
+    _unmanaged()
+    _tailnet_policy()
     return user
+
+
+# A record whose history and queued work fill the records list, its own page
+# and the controller's: on its own record, so no other page changes.
+OPERATED = "an-example-proxy-host-whose-operations-are-recorded"
+
+
+def _operations(user):
+    from hq.domains.control_plane.models import OperationRequest
+
+    now = timezone.now()
+    operated = _proxy(OPERATED, f"{OPERATED}.example.com", ADDRESS, 9100)
+    queued = _proxy(f"{OPERATED}-and-queued", f"{OPERATED}-and-queued.example.com", ADDRESS, 9101)
+
+    def asked(resource, action, state, message, interface="web", **fields):
+        return OperationRequest.objects.create(
+            resource=resource,
+            action=action,
+            state=state,
+            requested_by=user,
+            requested_actor="an-example-operator-with-a-long-name@example.com",
+            requested_interface=interface,
+            idempotency_key=f"{resource.key}-{action}-{state}-{message[:12]}",
+            result={"message": message} if message else {},
+            **fields,
+        )
+
+    for index, (state, message) in enumerate(
+        (
+            ("succeeded", f"Applied the forward host {ADDRESS} to {_hostname(HOSTNAMES - 1)} and read it back"),
+            ("failed", "The proxy manager refused the change: the certificate named is not one it holds"),
+            ("succeeded", "Reconciled with nothing to change"),
+        )
+    ):
+        asked(operated, "reconcile", state, message, interface="web" if index else "controller", completed_at=now)
+    asked(operated, "restart", "queued", "")
+    asked(
+        queued,
+        "reconcile",
+        "claimed",
+        "",
+        claimed_by="example-controller",
+        claimed_at=now,
+        lease_expires_at=now + timedelta(minutes=5),
+    )
+
+
+def _unmanaged():
+    """Names a provider answers for that nothing in HQ declares."""
+
+    ProviderInventory.objects.update_or_create(
+        kind="adguard.rewrite",
+        defaults={
+            "records": [
+                {
+                    "domain": f"an-unmanaged-name-with-a-long-description-{index}.example.com",
+                    "answer": f"192.0.2.{50 + index}",
+                }
+                for index in range(3)
+            ],
+            "observed_at": timezone.now(),
+            "reachable": True,
+        },
+    )
+
+
+def _tailnet_policy():
+    """A policy with services the tailnet serves and the shell access it grants."""
+
+    ProviderInventory.objects.update_or_create(
+        kind="tailscale.policy",
+        defaults={
+            "observed_at": timezone.now(),
+            "reachable": True,
+            "records": [
+                {
+                    "groups": [
+                        {"name": "group:an-example-group-of-administrators", "members": ["example@example.com"]}
+                    ],
+                    "grants": [
+                        {"src": ["group:an-example-group-of-administrators"], "dst": ["tag:server"], "ip": ["tcp:443"]}
+                    ],
+                    "services": [
+                        {
+                            "name": f"svc:an-example-tailnet-service-with-a-long-name-{index}",
+                            "addresses": [f"100.100.0.{index + 1}", f"fd7a:115c:a1e0::{index + 1}"],
+                            "ports": ["tcp:443", "tcp:8443"],
+                            "comment": "An example service the tailnet serves, said at a real comment's length",
+                        }
+                        for index in range(3)
+                    ],
+                    "ssh_rules": [
+                        {
+                            "src": ["group:an-example-group-of-administrators"],
+                            "dst": ["tag:server"],
+                            "users": ["root", "an-example-service-account"],
+                            "action": "check",
+                        },
+                        {
+                            "src": ["autogroup:member"],
+                            "dst": ["autogroup:self"],
+                            "users": ["autogroup:nonroot"],
+                            "action": "accept",
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+
+
+def _starred(user):
+    """The GitHub account the sign-in claims, starring repositories with long
+    names, releases and advisories."""
+
+    from hq.domains.control_plane.observations.github import PROFILE_KIND
+    from hq.platform.application.linked_accounts import GITHUB
+    from hq.platform.core.models import LinkedAccount
+
+    login = "an-example-account"
+    LinkedAccount.objects.create(user=user, provider=GITHUB, login=login)
+    now = timezone.now()
+    advisory = {
+        "id": "GHSA-abcd-efgh-ijkl",
+        "url": "https://github.com/advisories/GHSA-abcd-efgh-ijkl",
+        "severity": "high",
+        "summary": "An example advisory whose summary runs to the length a real one does, and past it",
+        "published_at": (now - timedelta(days=3)).isoformat(),
+    }
+    watched = [
+        {
+            "name": f"an-example-organisation/an-example-repository-with-a-long-name-{index}",
+            "url": f"https://github.com/example/an-example-repository-with-a-long-name-{index}",
+            "description": "An example repository description long enough to wrap across a line or two",
+            "starred_at": (now - timedelta(days=index + 1)).isoformat(),
+            "release": {
+                "tag": f"v1.{index}.0-an-example-release-candidate",
+                "url": f"https://github.com/example/an-example-repository-with-a-long-name-{index}/releases",
+                "published_at": (now - timedelta(days=index)).isoformat(),
+            }
+            if index % 2
+            else None,
+            "advisories": [advisory] * index,
+        }
+        for index in range(4)
+    ]
+    ProviderInventory.objects.update_or_create(
+        kind=PROFILE_KIND,
+        defaults={
+            "records": [{"login": login, "url": f"https://github.com/{login}", "watched": watched}],
+            "reachable": True,
+            "observed_at": now,
+        },
+    )
+
+
+AUDITED = "an-example-proxy-host-with-a-deliberately-long-name"
+
+
+def _audit_trail(user):
+    """One change to a proxy host, among the rest of its operation and the
+    object's history: the audit page's every table, with long words in it."""
+
+    def logged(action, message, **fields):
+        defaults = {"user": user, "object_type": "proxy_host", "object_repr": AUDITED}
+        return AuditLog.objects.create(action=action, message=message, **(defaults | fields))
+
+    operation = "an-example-operation-0123456789abcdef"
+    for index in range(3):
+        logged(
+            AuditLog.Action.UPDATED,
+            f"Changed the forward host of {_hostname(index)} to {ADDRESS}",
+            object_id=f"another-{index}",
+            object_repr=_hostname(index),
+            operation_id=operation,
+        )
+        logged(AuditLog.Action.CREATED, f"Created {AUDITED} from a request on {_hostname(index)}", object_id="7")
+    logged(
+        AuditLog.Action.UPDATED,
+        f"Pointed {AUDITED} at a new upstream",
+        object_id="7",
+        operation_id=operation,
+        metadata={
+            "changes": {
+                "forward_host": [ADDRESS, EDGE_ADDRESS],
+                "domain_names": [[_hostname(0)], [_hostname(0), _hostname(1)]],
+                "certificate": ["an-example-wildcard-certificate", "an-example-certificate-with-a-long-name"],
+            },
+            "requested_from": SERVICE,
+        },
+    )
 
 
 # The same kind of table as test_browser_fixtures.PAGES, under dense/ so a
@@ -443,6 +639,15 @@ DENSE_PAGES = {
         lambda: reverse("control_plane:connections"),
         _asked_through_the_proxy,
         _THROUGH_THE_PROXY,
+    ),
+    "dense/starred": (lambda: reverse("watching"), ExitStack),
+    "dense/records": (lambda: reverse("control_plane:list"), ExitStack),
+    "dense/record": (lambda: reverse("control_plane:detail", kwargs={"key": OPERATED}), ExitStack),
+    "dense/controller": (lambda: reverse("control_plane:controller"), ExitStack),
+    "dense/tailnet": (lambda: reverse("control_plane:tailnet"), ExitStack),
+    "dense/audit-event": (
+        lambda: reverse("core:audit_detail", args=[AuditLog.objects.filter(metadata__has_key="changes").get().pk]),
+        ExitStack,
     ),
 }
 

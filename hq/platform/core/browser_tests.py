@@ -976,6 +976,8 @@ _NAME_EDGES = """(scroll) => [...document.querySelectorAll('main ' + scroll + ' 
     const column = toggle.closest('td, th').cellIndex;
     const edges = [...table.querySelectorAll('tbody > tr:not([data-row-detail])')]
       .map((row) => row.children[column])
+      // A gutter that holds only the toggle has no name: the name starts the next cell.
+      .map((cell) => (cell && cell.matches('.row-gutter') && !cell.textContent.trim() ? cell.nextElementSibling : cell))
       .filter((cell) => cell && !cell.hasAttribute('colspan') && cell.textContent.trim())
       .map((cell) => {
         const range = document.createRange();

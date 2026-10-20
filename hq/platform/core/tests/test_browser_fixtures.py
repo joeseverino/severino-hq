@@ -91,6 +91,20 @@ def build_estate():
             "forward_port": 8000,
         },
     )
+    # Other names for the service: each answers with the service's own name.
+    for index in range(2):
+        _healthy(
+            f"app-alias-{index}",
+            "cloudflare.dns_record",
+            {
+                "zone": "example.com",
+                "name": f"another-name-for-the-application-with-a-long-name-{index}.example.com",
+                "record_type": "CNAME",
+                "content": SERVICE,
+                "proxied": False,
+                "ttl": 1,
+            },
+        )
     _healthy(
         "example-wildcard",
         "tls.certificate",
@@ -373,6 +387,7 @@ def _records():
     from hq.domains.assets.models import Asset
     from hq.domains.calendars.models import Entry
     from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
+    from hq.domains.receipts.models import Receipt
 
     machine = f"machine:{MACHINE}"
     asset = Asset.objects.create(
@@ -402,12 +417,20 @@ def _records():
             about=machine if index < 2 else "",
             about_name=MACHINE if index < 2 else "",
         )
+    # A receipt no expense claims yet, whose vendor names every one of them.
+    Receipt.objects.create(file="receipts/example.pdf", original_filename="example.pdf", vendor="Example vendor")
 
 
 def _expense() -> str:
     from hq.domains.expenses.models import Expense
 
     return Expense.objects.exclude(about="").first().get_absolute_url()
+
+
+def _receipt_match() -> str:
+    from hq.domains.receipts.models import Receipt
+
+    return reverse("receipts:match", args=[Receipt.objects.get().pk])
 
 
 def _calendar_day() -> str:
@@ -489,6 +512,7 @@ PAGES = {
     "asset": (lambda: reverse("assets:detail", args=[ASSET]), ExitStack),
     "expense": (_expense, ExitStack),
     "event-form": (lambda: reverse("calendar:entry_new"), ExitStack),
+    "receipt-match": (_receipt_match, ExitStack),
 }
 
 

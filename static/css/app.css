@@ -1395,9 +1395,11 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .relation-ends { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin: 0; padding: 0; list-style: none; }
 .relation-ends li { min-width: 0; overflow-wrap: anywhere; }
 .relation-source { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
-/* Policy names and ports: each chip whole, the row wrapping between them. */
+/* Policy names and ports, the row wrapping between them. In
+   a table a chip is held whole; elsewhere a chip wider than its line breaks
+   at its seams. */
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
-.code-list code { white-space: nowrap; }
+.data-table .code-list code { white-space: nowrap; }
 .external-link::after { content: " \2197"; font-size: .85em; }
 /* A band lays out as whole even rows, by how many cells it has: one takes the
    band, two are two or one, three are three or one, four are four, two or one,
@@ -1826,7 +1828,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    other identifiers (`snug`) each is held near one short length, since the
    narrower the region, the fewer of them a row keeps. */
 .table-scroll.is-shared > .data-table { --identifier-max: clamp(30ch, 57cqi - 13rem, 85ch); }
-.table-scroll.is-snug > .data-table { --identifier-max: clamp(15ch, 30cqi, 26ch); }
+.table-scroll.is-snug > .data-table { --identifier-max: clamp(15ch, 30cqi, 22ch); }
 /* What a page says about a table's columns: which stay whatever happens, and
    which a list ranks first to leave. Named here because this sheet is the
    list of classes a template may use (an extension's templates are held to
@@ -2205,16 +2207,23 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-facts > div { display: contents; }
 .attention-facts dt { color: var(--muted); }
 .attention-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-/* How urgent a row is, as a dot in its tone. It keeps the pill's tip, which
-   says the word, and its origin panel. */
-.pill.is-mark { flex: none; display: inline-block; width: .5rem; height: .5rem; padding: 0; border: 0; border-radius: 50%; background: var(--tone-ink); font-size: 0; vertical-align: middle; }
-
-/* The queue's table. The dot and the title share one line height, so the dot
-   sits on the title's first line; the buttons end every row at the table's
-   edge. The meaning under a title is one line until the row is opened. */
+/* The queue's table. A row's urgency is a word, quiet, after its title and
+   only when it is urgent; a row that needs attention carries no mark, and the
+   toggle is its one symbol. Either way the pill keeps its word for a screen
+   reader, its tip and its origin panel. The title is what a reader presses, so it leads; the meaning under it is one
+   quiet line until the row is opened, and the buttons end the row at the
+   table's edge. */
 .queue-table > tbody > tr > :is(.queue-mark, .queue-what) { font-size: var(--text-md); line-height: 1.5; }
-.queue-table .queue-mark { width: 1%; padding-inline-end: 0; }
-.queue-table .queue-mark > .pill.is-mark { vertical-align: middle; }
+/* The gutter is the queue's at every width, so the title and everything the
+   opened line holds start on one edge whatever the rows offer. */
+.queue-table > tbody > tr > .queue-mark { width: 1%; padding-inline: var(--row-gutter) 0; }
+.queue-table .queue-mark > [data-row-toggle] { inset-inline-start: var(--space-5); }
+.pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); line-height: 1.5; font-weight: 600; }
+.pill.is-mark:not(.pill-serious) {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%);
+}
+.queue-table .attention-title { font-weight: 600; }
+.queue-table a.attention-title:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 .queue-table .attention-detail {
   margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden;
@@ -2222,29 +2231,68 @@ a.kpi:hover { background: var(--surface-2); }
 /* A table with no headings has no floors from tables.js, so the column that
    names the row keeps a readable width itself. */
 .queue-table .queue-what { min-width: 10rem; }
-.queue-table .queue-act { width: 1%; text-align: right; white-space: nowrap; padding-block-start: calc(var(--row-pad) - var(--space-1)); padding-inline-end: 0; }
+.queue-table .queue-act { width: 1%; text-align: right; white-space: nowrap; padding-block-start: calc(var(--row-pad) - var(--space-1)); padding-inline-end: var(--space-4); }
 .queue-table .queue-act > * { display: inline-flex; flex-wrap: nowrap; gap: var(--space-3); margin: 0; vertical-align: top; }
 .queue-table .queue-act > * + * { margin-inline-start: var(--space-3); }
 .queue-table .queue-act form { margin: 0; }
 /* A row with nothing to press, or whose buttons wait in the line beneath in a
    narrow table, gives the title the room its padding would keep. */
 .queue-table .queue-act:not(:has(> *)) { padding: 0; }
-@media (scripting: enabled) {
-  @container table-region (width < 640px) { .queue-table .queue-act:not(:has(> :not(.narrow-more))) { padding: 0; } }
-}
-/* A long label is cut to one line, whole again when the row is opened. */
+/* A long label is cut to one line. An opened row keeps its buttons as they
+   were drawn, so opening it moves no column; this outranks the rule that
+   lifts every clamp in an opened row, on purpose. */
 .queue-table .queue-act .btn { max-width: 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* What the row holds back, in the line beneath once opened. */
+.queue-table tr.is-expanded > .queue-act, .queue-table tr.is-expanded > .queue-act *:not(.visually-hidden) { white-space: nowrap !important; }
+.queue-table tr.is-expanded > .queue-act .btn { max-width: 14rem !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+@media (scripting: enabled) {
+  /* Past the first two, a row's buttons wait in the line beneath at any
+     width, with the rest of what it holds. */
+  .queue-table > tbody > tr:not(.row-detail) .queue-later { display: none; }
+  /* The meaning in full is the opened line's, so the row keeps its title. */
+  .queue-table tr.is-expanded > .queue-what > .attention-detail { display: none; }
+  /* A row whose opened line would only repeat the meaning it shows whole
+     offers nothing: its toggle shows once the meaning is cut short, or the
+     row holds something else back. */
+  .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .narrow-more, .queue-more > :not(.queue-meaning))) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
+  @container table-region (width >= 640px) {
+    .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .queue-more > :not(.queue-meaning))) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
+  }
+  @container table-region (width < 640px) {
+    .queue-table .queue-act:not(:has(> :not(.narrow-more))) { padding: 0; }
+    /* On a phone the title has the row: Dismiss is a mark at its end, still
+       named by its word. */
+    .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss { width: 2rem; max-width: none; padding: 0; justify-content: center; font-size: 0; }
+    .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss::before { content: "\00d7" / ""; font-size: var(--text-lg); line-height: 1; }
+  }
+}
+/* The opened line: on the title's edge and the table's full width, what the
+   row means in full, what was read and what to do, then one place for every
+   button the row holds, each the line's width on a phone. */
+.queue-table .row-detail > td { padding-inline: calc(var(--row-gutter) + var(--space-6)) var(--space-6); padding-bottom: var(--space-8); }
+.queue-meaning { max-width: var(--measure); margin: 0; font-size: var(--text-sm); line-height: 1.6; color: var(--ink-2); overflow-wrap: anywhere; }
 .queue-more > :first-child { margin-top: 0; }
+.queue-table .row-detail .row-columns { display: block; margin-top: var(--space-6); padding: 0; background: none; }
+.queue-table .row-detail .row-columns:first-child { margin-top: 0; }
+.queue-table .row-detail .row-columns > dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.queue-table .row-detail .row-columns > dd { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.queue-table .row-detail .row-columns > dd > .attention-actions { display: contents; }
+@container table-region (width < 640px) {
+  .queue-table .row-detail .row-columns > dd { flex-direction: column; }
+  .queue-table .row-detail .row-columns > dd .btn { width: 100%; justify-content: center; white-space: normal; text-align: center; }
+}
 /* A family: how bad, what kind and how many, opening to its rows, which are
-   set in under its name. */
+   set in under its name. Its name heads them, so it reads below a title. */
 .queue-family { cursor: pointer; }
-.queue-family-name { font-weight: 650; color: var(--ink); }
-.queue-family .count { margin-inline-start: var(--space-3); }
-@container table-region (width >= 640px) { .queue-table tr[data-folded] > .queue-what { padding-inline-start: calc(var(--space-6) + var(--space-10)); } }
+.queue-family-name { font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); }
+.queue-table .count { margin-inline-start: var(--space-1); color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.queue-table .row-group > th { font-weight: 600; color: var(--muted); }
+@container table-region (width >= 640px) {
+  .queue-table tr[data-folded] > .queue-what { padding-inline-start: calc(var(--space-6) + var(--space-10)); }
+  .queue-table tr[data-folded] + .row-detail > td { padding-inline-start: calc(var(--row-gutter) + var(--space-6) + var(--space-10)); }
+}
 /* A row dismissed in place: its title, quiet, and the way back. */
 .queue-row[data-dismissed] > td > :not(.attention-head, [data-triage]),
-.queue-row[data-dismissed] .attention-meta { display: none; }
+.queue-row[data-dismissed] :is(.attention-meta, .pill.is-mark) { display: none; }
 .queue-row[data-dismissed] .attention-title { color: var(--muted); font-weight: 400; }
 .queue-row[data-dismissed] .attention-title::before { content: "Dismissed: "; }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
@@ -4801,7 +4849,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .topology-lane { min-width: 0; padding: 0 0 var(--space-6); }
 .topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
 .topology-lane > header {
-  display: grid; break-after: avoid;
+  display: grid; break-inside: avoid; break-after: avoid;
   grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-3);
   padding: var(--space-1) var(--space-1) var(--space-4);
 }

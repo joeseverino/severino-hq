@@ -29,9 +29,9 @@
       <tbody>
         {% for change in changes %}
         <tr>
-          <th>{{ change.field }}</th>
-          <td>{{ change.before|or_empty }}</td>
-          <td>{{ change.after|or_empty }}</td>
+          <th>{{ change.field|breakable }}</th>
+          <td>{% if change.before is None or change.before == "" %}{% empty_value %}{% else %}{{ change.before|breakable }}{% endif %}</td>
+          <td>{% if change.after is None or change.after == "" %}{% empty_value %}{% else %}{{ change.after|breakable }}{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -305,22 +305,17 @@ above it found is not a row.
             <span class="pill pill-{{ operation.tone }}">{{ operation.state_label }}</span>
             <strong>{{ operation.headline }}</strong>
             {% if operation.affected %}
-              <details class="operation-evidence" open>
-                <summary>{{ operation.affected|length|counted:"name serves a different certificate,names serve a different certificate" }}</summary>
-                <ul>
-                  {% for item in operation.affected %}
-                    <li><strong>{{ item.consumer }}</strong> · {{ item.domain }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12" }}…</code>, found <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code></span></li>
-                  {% endfor %}
-                </ul>
-              </details>
+              <span class="muted">{{ operation.affected|length|counted:"name serves a different certificate,names serve a different certificate" }}</span>
+              <ul class="operation-evidence row-below" data-label="Affected">
+                {% for item in operation.affected %}
+                  <li><strong>{{ item.consumer }}</strong> · {{ item.domain }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12" }}…</code>, found <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code></span></li>
+                {% endfor %}
+              </ul>
             {% elif operation.matched %}
               <p class="muted">{{ operation.matched|counted:"name serves,names serve" }} this certificate<span title="{{ operation.expected_fingerprint_sha256 }}"> ({{ operation.expected_fingerprint_sha256|slice:":8" }}…)</span>.</p>
             {% endif %}
             {% if operation.raw_result %}
-              <details class="operation-evidence">
-                <summary>Raw result</summary>
-                <pre>{{ operation.raw_result }}</pre>
-              </details>
+              <div class="operation-evidence row-below" data-label="Raw result"><pre>{{ operation.raw_result }}</pre></div>
             {% endif %}
           </td>
           <td>{{ operation.by }}{% if operation.attempt_count > 1 %}<br><span class="muted">Attempt {{ operation.attempt_count }}</span>{% endif %}</td>
