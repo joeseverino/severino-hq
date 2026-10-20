@@ -135,7 +135,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # `checks:badges` holds this to tools/pipeline/toolchain.env: a matrix cannot read it.
+        # PythonVersionTests holds this to tools/pipeline/toolchain.env: a matrix cannot read it.
         python: ["3.15"]
     env:
       # `mise run tests` walks this list; a leg is one interpreter.
@@ -173,19 +173,11 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
       - name: Browser
-        # This leg's browser:* gate. Every leg fails while mise.toml declares
-        # one that no leg runs, so the matrix cannot fall behind it.
+        # This leg's browser:* gate. GateReferenceTests holds the legs to the
+        # gates mise.toml declares, so the matrix cannot fall behind it.
         env:
           GATE: browser:${{ matrix.gate }}
-          LEGS: ${{ strategy.job-total }}
-        run: |
-          set -euo pipefail
-          gates="$(mise tasks ls --json | jq '[.[].name | select(startswith("browser:"))] | length')"
-          if [ "$gates" != "$LEGS" ]; then
-            echo "::error title=Browser gates::mise.toml declares ${gates} browser:* gates and this job runs ${LEGS}: give the new one a leg."
-            exit 1
-          fi
-          mise run "$GATE"
+        run: mise run "$GATE"
 
   # The Go controller: format, generated types against their specs, vet, and
   # the unit tests under the race detector.

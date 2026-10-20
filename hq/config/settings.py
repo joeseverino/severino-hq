@@ -1,6 +1,9 @@
 """
 Severino HQ settings.
 
+Every setting HQ relies on is stated here, Django's defaults included, so this
+file reads as the whole configuration and no default can move underneath it.
+
 Production guidance:
 - DEBUG must be False (set DJANGO_DEBUG=0).
 - SECRET_KEY must come from the environment.

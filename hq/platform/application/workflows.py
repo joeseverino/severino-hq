@@ -1,6 +1,6 @@
 """Domain-neutral resolution plans derived from claims and registered actions."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from hashlib import sha256
 from typing import Any
 
@@ -71,42 +71,3 @@ def serialize_workflow(plan: WorkflowPlan | None) -> dict[str, Any] | None:
     """JSON-safe contract shared by API and MCP finding adapters."""
 
     return asdict(plan) if plan is not None else None
-
-
-@dataclass(frozen=True, slots=True)
-class WorkflowLayout:
-    """A claim as a card shows it: the remedies lead as the fix, and where to
-    look and how to confirm are one line of links."""
-
-    fix: tuple[ActionLink, ...] = ()
-    impact: tuple[ActionLink, ...] = ()
-    related: tuple[ActionLink, ...] = ()
-    confirm: tuple[ActionLink, ...] = ()
-
-    @property
-    def links(self) -> bool:
-        return bool(self.impact or self.related or self.confirm)
-
-
-def workflow_layout(
-    plan: WorkflowPlan | None,
-    *,
-    investigations: tuple[ActionLink, ...] = (),
-    offers: tuple[ActionLink, ...] = (),
-) -> WorkflowLayout:
-    """A plan's remedies and confirmation, beside the claim's own links: what
-    it affects and the pages it concerns, each named once."""
-
-    phases = {step.phase: step.actions for step in plan.steps} if plan is not None else {}
-    seen: set[str] = set()
-    related = []
-    for action in _dedupe(offers):
-        if action.label not in seen:
-            seen.add(action.label)
-            related.append(action)
-    return WorkflowLayout(
-        fix=phases.get("act", ()),
-        impact=_dedupe(investigations),
-        related=tuple(related),
-        confirm=phases.get("verify", ()),
-    )

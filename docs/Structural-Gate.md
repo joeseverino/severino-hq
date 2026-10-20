@@ -58,7 +58,12 @@ With the repository indexed in a code knowledge graph, ask:
 | Hidden O(n²)? | `MATCH (f) WHERE (f:Function OR f:Method) AND f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.linear_scan_in_loop` | every hit bounded by a fixed or small input |
 | Did I tangle the call graph? | `get_architecture(aspects: ["cycles"])` | no new confirmed cycle |
 
-Write the queries exactly as given, and mind two traps in this engine.
+Write the queries exactly as given, and mind the traps in this engine. The
+generated `*.gen.go` files are near-duplicates of each other by design, so the
+pair query returns thousands of rows until it is scoped positively to the
+paths under review. The graph cannot answer "what has no callers": an `OPTIONAL
+MATCH` comes back empty and `max_degree` counts both directions, so dead code
+is found by diffing the defined names against the referenced ones with `rg`.
 `is_test` is **not** reliable: test classes carry `is_test: false`, so a filter
 on it silently counts the whole suite. And `NOT <prop> CONTAINS "..."` returns
 **no rows at all** rather than the complement, so a negated filter reads as a

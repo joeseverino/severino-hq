@@ -5,7 +5,7 @@ from django.test import SimpleTestCase
 
 from ..action_links import ActionLink
 from ..ui import Insight
-from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow, workflow_layout
+from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
 from .markup import actions, hrefs
 
 REMEDY = ActionLink(
@@ -80,38 +80,3 @@ class FindingResolutionWorkflowTests(SimpleTestCase):
         offered = hrefs(html) + actions(html)
         self.assertIn(REMEDY.url, offered)
         self.assertIn(VERIFY.url, offered)
-
-
-class WorkflowLayoutTests(SimpleTestCase):
-    """A card leads with the remedy; where to look and how to confirm are links."""
-
-    TOPOLOGY = ActionLink("open", "Show in topology", "read", "/topology/")
-    OPEN = ActionLink("open", "Open", "read", "/connections/")
-
-    def layout(self, plan):
-        return workflow_layout(plan, investigations=(self.TOPOLOGY,), offers=(self.OPEN,))
-
-    def test_remedies_lead_and_the_claims_own_links_follow(self):
-        layout = self.layout(plan_of())
-
-        self.assertEqual(layout.fix, (REMEDY,))
-        self.assertEqual(layout.impact, (self.TOPOLOGY,))
-        self.assertEqual(layout.related, (self.OPEN,))
-        self.assertEqual(layout.confirm, (VERIFY,))
-
-    def test_without_a_remedy_nothing_is_offered_as_the_fix(self):
-        layout = self.layout(None)
-
-        self.assertEqual((layout.fix, layout.confirm), ((), ()))
-        self.assertTrue(layout.links)
-
-    def test_two_pages_with_one_name_are_offered_once(self):
-        other = ActionLink("open", "Open", "read", "/domains/one/")
-        layout = workflow_layout(None, offers=(self.OPEN, other))
-
-        self.assertEqual(layout.related, (self.OPEN,))
-
-    def test_no_plan_and_no_links_is_an_empty_layout(self):
-        layout = workflow_layout(None)
-
-        self.assertEqual((layout.fix, layout.links), ((), False))

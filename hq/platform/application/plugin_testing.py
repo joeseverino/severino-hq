@@ -44,6 +44,27 @@ from .ui import DomainOverview, Insight
 SIBLING_PREFIX = "example."
 
 
+def stylesheet_selectors(css: str) -> list[str]:
+    """Every selector of a stylesheet, each rule's comma-separated list split.
+
+    Only text ahead of a ``{`` is read, so a number, a ``url()`` or a custom
+    property value never passes for a class."""
+
+    rules = re.findall(r"([^{};]+)\{", re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL))
+    return [
+        selector.strip()
+        for rule in rules
+        for selector in re.sub(r"\[[^\]]*\]|url\([^)]*\)|\"[^\"]*\"|'[^']*'", "", rule).split(",")
+        if selector.strip()
+    ]
+
+
+def selector_classes(selector: str) -> list[str]:
+    """The class names a selector writes, in order."""
+
+    return re.findall(r"\.([a-zA-Z_][\w-]*)", selector)
+
+
 def undefined_style_classes(template_root: str | Path) -> list[str]:
     """Class names an extension's templates use that the host does not define.
 
@@ -61,7 +82,11 @@ def undefined_style_classes(template_root: str | Path) -> list[str]:
     Returns sorted "template.html: .name" strings so a failure names the file.
     """
     css = Path(__file__).resolve().parents[3] / "static" / "css" / "app.css"
-    defined = set(re.findall(r"\.([a-z][a-z0-9-]*)", css.read_text(encoding="utf-8")))
+    defined = {
+        name
+        for selector in stylesheet_selectors(css.read_text(encoding="utf-8"))
+        for name in selector_classes(selector)
+    }
     offenders = set()
     for template in sorted(Path(template_root).rglob("*.html")):
         text = template.read_text(encoding="utf-8")

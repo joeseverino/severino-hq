@@ -1463,7 +1463,6 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .control-metric > .control-diagnostics[open] > summary { margin-bottom: var(--space-3); }
 .operation-result { max-width: 34rem; overflow-wrap: anywhere; }
 .operation-result > strong { display: block; line-height: 1.35; }
-.operation-guidance { margin: var(--space-2) 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
 .operation-evidence { margin-top: var(--space-3); color: var(--ink); }
 .operation-evidence ul { margin: var(--space-3) 0 0; padding-left: var(--space-9); }
 .operation-evidence li { margin: var(--space-1) 0; }
@@ -2326,8 +2325,7 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
    stacking margin is dead space. Declared after the section rules above so it
    wins on source order at equal specificity. */
 .two-col > *,
-.dashboard-patterns > *,
-.search-results > * { margin-bottom: 0; }
+.dashboard-patterns > * { margin-bottom: 0; }
 
 /* What sits beside the heading takes the next line when the two do not fit. */
 .section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
@@ -3047,12 +3045,6 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .tag { display: inline-block; padding: 1px var(--space-4); margin-right: var(--space-2); background: var(--bg-tint); border-radius: 999px; font-size: var(--text-2xs); color: var(--ink-2); }
 
 .search-page-form input[type=search] { flex-basis: 420px; }
-.search-results {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: var(--layout-gap);
-  margin-top: var(--layout-gap);
-}
 .command-center-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
@@ -3154,10 +3146,6 @@ a.discovery-link:hover strong { color: var(--accent); }
 .command-result-json summary { cursor: pointer; }
 .command-result-json summary .muted { display: block; margin-top: var(--space-1); }
 .command-result-json pre { margin-top: var(--space-4); }
-.scope-read { border-color: var(--line); }
-.scope-remote_write { border-color: var(--accent); color: var(--accent); }
-.scope-infrastructure_change { border-color: var(--warn); color: var(--warn); }
-.scope-destructive { border-color: var(--danger); color: var(--danger); }
 .connection-summary {
   display: flex;
   gap: var(--space-4) var(--space-9);
@@ -3168,7 +3156,6 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 .connection-summary strong { color: var(--ink); }
 .connection-summary .is-attention strong { color: var(--attn); }
-.connection-inspect { margin-left: auto; }
 /* A line of its own size: inline after a <br>, its links would align to the
    cell's larger line and sit above the words beside them. */
 .connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
@@ -3250,23 +3237,6 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 .connection-sight-never_swept .connection-sight-state,
 .connection-sight-not_connected .connection-sight-state { color: var(--muted); }
-.connection-security {
-  position: relative;
-  overflow: hidden;
-  margin-bottom: var(--layout-gap);
-  padding: 0;
-  border-top: 3px solid var(--accent);
-}
-.connection-security::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto auto;
-  width: 280px;
-  height: 180px;
-  background: radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 12%, transparent), transparent 68%);
-  pointer-events: none;
-}
-.connection-security-serious { border-top-color: var(--danger); }
 .connection-security-advanced { margin-top: calc(var(--layout-gap) * 1.5); padding: 0; overflow: hidden; }
 .connection-security-advanced > summary {
   display: flex;
@@ -3452,11 +3422,6 @@ a.discovery-link:hover strong { color: var(--accent); }
    sizing columns; each fact wraps inside it rather than being cut. */
 .connection-standing { display: grid; gap: var(--space-1); justify-items: start; min-width: 18ch; }
 .connection-standing .muted { font-size: var(--text-2xs); }
-/* What was done names a resource, which can be any length: it holds one
-   line within the standing's width and its age keeps a line of its own, so a
-   long container name never sets the column. The title carries it whole. */
-.connection-last-activity { display: grid; max-width: 26ch; font-size: var(--text-2xs); }
-.connection-last-activity > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .connection-authority { color: var(--muted); font-size: var(--text-2xs); }
 .connection-problems { color: var(--attn); font-size: var(--text-2xs); font-weight: 650; }
 /* Where a published thing runs, and a note with the names in it as links. */
@@ -3510,24 +3475,11 @@ a.discovery-link:hover strong { color: var(--accent); }
   font-size: var(--text-2xs);
 }
 
-.connection-ability { margin-bottom: var(--space-2); }
-.connection-ability summary { cursor: pointer; }
-.connection-ability[open] { display: grid; gap: var(--space-1); }
-.connection-ability > .muted { font-size: var(--text-2xs); }
-.connection-ability.is-unavailable summary strong { color: var(--danger); }
-.connection-ability-state { color: var(--danger); font-size: var(--text-2xs); font-weight: 700; }
-.connection-more { margin-top: var(--space-2); }
-.connection-more summary { color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
-.connection-more[open] summary { margin-bottom: var(--space-2); }
 /* Each thing to do next keeps to one line: the column is as wide as its
    longest, and the table gives the room from columns that can wrap. */
 .connection-next { min-width: 0; }
 .connection-next > :is(a, .btn) { white-space: nowrap; }
 .connection-next > .muted { display: block; max-width: 240px; margin-top: var(--space-2); font-size: var(--text-2xs); line-height: 1.35; }
-.connection-actions { margin-top: var(--space-3); }
-.connection-actions > summary { color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
-.connection-actions > span { display: grid; justify-items: start; gap: var(--space-2); margin-top: var(--space-3); }
-.connection-actions a { font-size: var(--text-xs); font-weight: 600; }
 .connection-direct-action { font-size: var(--text-xs); font-weight: 600; }
 .connection-direct-action.is-destructive { color: var(--danger); }
 kbd {
@@ -3592,9 +3544,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 .notice-search { justify-content: center; margin: 0 0 var(--space-8); }
 
 /* ── Dashboard: external links ─────────────────────────────────── */
-.link-cell { white-space: nowrap; }
-.link-cell a { font-size: var(--text-xs); font-weight: 500; margin-right: var(--space-5); }
-.link-cell a:last-child { margin-right: 0; }
 
 .ext-links { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
 .ext-links a {
@@ -3735,30 +3684,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   }
   .user-menu { order: 2; }
 }
-
-/* ── Renewal timeline ───────────────────────────────────────────────
-   A countdown list. The number leads because "how long have I got" is the
-   question being asked; the date answers the follow-up. */
-
-.renewal-list { list-style: none; margin: 0; padding: 0; }
-.renewal-row {
-  display: grid;
-  grid-template-columns: 56px 1fr;
-  align-items: baseline;
-  gap: var(--space-7);
-  padding: var(--space-5) 0;
-  border-top: 1px solid var(--line-2);
-}
-.renewal-row:first-child { border-top: 0; padding-top: var(--space-1); }
-.renewal-when {
-  font-size: var(--text-2xl); font-weight: 650; letter-spacing: -.02em;
-  color: var(--ink); text-align: right; font-feature-settings: "tnum";
-}
-.renewal-when.is-due { color: var(--attn); }
-.renewal-unit { font-size: var(--text-xs); font-weight: 550; color: var(--muted); margin-left: 1px; }
-.renewal-body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-.renewal-title { font-size: var(--text-sm); font-weight: 600; color: var(--ink); }
-.renewal-meta { font-size: var(--text-xs); color: var(--muted); }
 
 /* ── Planning timeline ─────────────────────────────────────────────
    One chronological primitive for every domain. A two-column horizon uses the
@@ -3954,8 +3879,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 .route-band-4.route-swatch { background: var(--route-band-4); }
 .route-band-5.route-swatch { background: var(--route-band-5); }
 .route-marker { stroke: var(--surface); stroke-width: 2.5; }
-.route-start { fill: var(--ok); }
-.route-finish { fill: var(--tone-severe-ink); }
 .route-scale { stroke: var(--ink-2); stroke-width: 2; }
 .route-map:hover .route-line:not(:hover) { opacity: .55; }
 
@@ -4363,10 +4286,6 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-aside { display: grid; gap: var(--stack-gap); }
 .conn-findings { display: grid; gap: var(--space-2); }
 .conn-findings .conn-agree { margin: 0; }
-.conn-decision-head { display: flex; align-items: end; justify-content: space-between; gap: var(--space-7); }
-.conn-decision-head h3 { margin-bottom: var(--space-1); }
-.conn-decision-head p { margin: 0; color: var(--muted); font-size: var(--text-2xs); }
-.conn-decision-head > strong { color: var(--muted); font-size: var(--text-2xs); font-weight: 550; white-space: nowrap; }
 .conn-protocol { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .conn-protocol > summary {
   display: flex;
@@ -4517,10 +4436,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 
 @container conn (max-width: 36rem) {
   .conn-verdict { flex-wrap: wrap; }
-  .conn-address { width: 100%; }
   .conn-layer-body { margin-left: var(--space-6); }
-  .conn-decision-head { align-items: start; }
-  .conn-decision-head > strong { max-width: 130px; white-space: normal; text-align: right; }
   .conn > * { --conn-rows: stacked; }
 }
 /* In a narrow panel or a fact's value, a row's value takes a line of its own
@@ -4547,16 +4463,13 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-peer strong { font-size: var(--text-md); }
 .conn-peer code { font-size: var(--text-xs); }
 .conn-link { display: grid; gap: var(--space-2); justify-items: center; min-width: 120px; }
-.conn-link-label { font-size: var(--text-2xs); font-weight: 600; color: var(--accent-2); }
 .conn-link-line {
   width: 100%; height: 2px; border-radius: 2px;
   background: linear-gradient(90deg, var(--accent-2), var(--ok));
 }
 .conn-link-relayed .conn-link-line { background: repeating-linear-gradient(
   90deg, var(--warn) 0 5px, transparent 5px 10px); }
-.conn-link-relayed .conn-link-label { color: var(--warn); }
 .conn-link-idle .conn-link-line { background: var(--line); }
-.conn-link-idle .conn-link-label, .conn-link-unknown .conn-link-label { color: var(--muted); }
 @container conn (max-width: 36rem) {
   /* Stacked, the two ends read as one column rather than as two facing each
      other, so they share an axis instead of one hugging each edge. */

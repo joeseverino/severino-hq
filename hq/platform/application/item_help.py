@@ -124,16 +124,6 @@ def finding_plan(finding: Finding, key: str) -> WorkflowPlan:
     return _plan(key, steps + told + ((cannot_step(reason),) if reason else ()))
 
 
-def finding_help(finding: Finding) -> str:
-    """Which help a finding carries, or blank when it carries none."""
-
-    if finding.remedies:
-        return REMEDY
-    if any(step.command for step in finding.steps):
-        return COMMAND
-    return REASON if finding.no_help_reason.strip() else ""
-
-
 def _plan_help(plan: WorkflowPlan | None) -> str:
     kinds = set()
     for step in plan.steps if plan is not None else ():

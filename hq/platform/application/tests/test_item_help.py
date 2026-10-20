@@ -20,7 +20,6 @@ from ..item_help import (
     REMEDY,
     cannot_help,
     commands,
-    finding_help,
     finding_plan,
     instructions,
     item_help,
@@ -110,7 +109,6 @@ def _finding(**fields) -> Finding:
 class FindingHelpTests(SimpleTestCase):
     def test_a_finding_with_neither_remedy_nor_command_carries_its_rules_reason(self):
         self.assertEqual(_no_help_reason(_finding()), RULES[0].no_help_reason)
-        self.assertEqual(finding_help(_finding(no_help_reason=_no_help_reason(_finding()))), REASON)
 
     def test_its_own_reason_wins_over_the_rules(self):
         self.assertEqual(_no_help_reason(_finding(no_help_reason="Specific.")), "Specific.")
@@ -120,12 +118,10 @@ class FindingHelpTests(SimpleTestCase):
         commanded = _finding(steps=(OperatorStep("Run it", command="example --fix"),))
 
         self.assertEqual((_no_help_reason(remedied), _no_help_reason(commanded)), ("", ""))
-        self.assertEqual((finding_help(remedied), finding_help(commanded)), (REMEDY, COMMAND))
 
     def test_a_label_without_a_command_is_not_help(self):
         prose = _finding(steps=(OperatorStep("Go and figure it out"),))
 
-        self.assertEqual(finding_help(prose), "")
         self.assertEqual(_no_help_reason(prose), RULES[0].no_help_reason)
 
     def test_the_queue_item_carries_the_findings_commands_or_its_reason(self):

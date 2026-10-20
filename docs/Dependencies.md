@@ -11,8 +11,8 @@ Where every pin lives, and how to move one.
 | uv in the images | `Dockerfile` and `composition/Dockerfile`, uv's own image by digest at the version `mise.toml` pins | `checks:toolchain` |
 | Go and its modules | `controller/go.mod` and `go.sum` | `controller:check` |
 | Base images | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build` |
-| GitHub Actions | each workflow, by commit with its version beside it | `checks:pins` |
-| Hosted runner image, Python matrix, coverage floor, Cordon commit, the Trivy release the image scans run | [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `checks:runners`, `checks:badges` |
+| GitHub Actions | each workflow, by commit with its version beside it | `ActionPinTests` |
+| Hosted runner image, Python matrix, coverage floor, Cordon commit, the Trivy release the image scans run | [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `JobLimitTests`, `PythonVersionTests` |
 | cosign, on the host and in every workflow | `CosignVersion` in `controller/host/verifier.go`; workflows install it through `.github/actions/cosign` | `hq-host install` |
 | The API reference bundle | `static/vendor/scalar/standalone.js`, version and SHA-256 in `UPSTREAM` | a test |
 
@@ -67,5 +67,5 @@ reason, in `controller/osv-scanner.toml`.
    `mise lock`, `go mod tidy`).
 2. `mise run check`, then `mise run ci`. A browser or Playwright change can
    move rendering: run `mise run browser`.
-3. A change to the Python matrix changes the README badge; `checks:badges`
+3. A change to the Python matrix changes the README badge; `PythonVersionTests`
    fails until they agree.

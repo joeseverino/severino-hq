@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import tempfile
+import tomllib
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path, PurePosixPath
 from unittest.mock import patch
@@ -131,6 +132,97 @@ class ActionPinTests(SimpleTestCase):
                 pins.setdefault(action, set()).add(sha)
         self.assertGreater(len(pins), 5)
         self.assertEqual({action: shas for action, shas in pins.items() if len(shas) > 1}, {})
+
+    def test_every_pinned_commit_carries_its_version_beside_it(self):
+        """The comment is what Renovate rewrites with the commit, and what a reader checks."""
+        pinned = [
+            (path.name, line.strip())
+            for path in [*workflows(), *composite_actions()]
+            for line in path.read_text().splitlines()
+            if re.search(r"uses:\s*[\w.-]+/\S*@[0-9a-f]{40}", line)
+        ]
+        self.assertGreater(len(pinned), 10)
+        for name, line in pinned:
+            with self.subTest(file=name, line=line):
+                self.assertRegex(line, r"@[0-9a-f]{40} # v\d+(\.\d+){0,2}$")
+
+
+def toolchain() -> dict[str, str]:
+    """``tools/pipeline/toolchain.env``, read as the shell reads it."""
+    text = (ROOT / "tools" / "pipeline" / "toolchain.env").read_text()
+    return {key: value.strip('"') for key, value in re.findall(r"(?m)^([A-Z_]+)=(.*)$", text)}
+
+
+def all_jobs() -> list[tuple[str, str, str]]:
+    """Every job of every workflow, as (workflow, job id, job text)."""
+    return [(path.name, name, job) for path in workflows() for name, job in jobs(path.read_text()).items()]
+
+
+@tag("source")
+class JobLimitTests(SimpleTestCase):
+    def test_every_hosted_job_runs_on_the_declared_runner_image(self):
+        """``ubuntu-latest`` moves to a new OS on GitHub's schedule."""
+        image = toolchain()["RUNNER_IMAGE"]
+        hosted = 0
+        for path, name, job in all_jobs():
+            runner = block(job, "runs-on", 4)
+            if not runner or "self-hosted" in " ".join(runner):
+                continue
+            hosted += 1
+            with self.subTest(workflow=path, job=name):
+                self.assertEqual(runner, [image])
+        self.assertGreater(hosted, 3)
+
+    def test_every_job_has_a_timeout(self):
+        """Without one a hung job holds its runner for GitHub's six-hour default. A job
+        that calls a reusable workflow cannot take one; the workflow it calls is checked."""
+        timed = 0
+        for path, name, job in all_jobs():
+            if block(job, "uses", 4):
+                continue
+            timed += 1
+            with self.subTest(workflow=path, job=name):
+                self.assertTrue(block(job, "timeout-minutes", 4))
+        self.assertGreater(timed, 3)
+
+
+@tag("source")
+class PythonVersionTests(SimpleTestCase):
+    """What cannot read ``PYTHON_VERSIONS`` is held to it. Its first, oldest, version is
+    the one the images run and the floor of requires-python, where ruff and mypy take
+    their target."""
+
+    def setUp(self):
+        self.versions = toolchain()["PYTHON_VERSIONS"].split()
+        self.oldest = self.versions[0]
+        self.readme = (ROOT / "README.md").read_text()
+
+    def test_the_readme_badge_names_every_version(self):
+        badge = re.search(r"badge/python-(.*?)-blue", self.readme)
+        self.assertIsNotNone(badge)
+        self.assertEqual(badge.group(1).split("%20%7C%20"), self.versions)
+
+    def test_every_workflow_matrix_runs_every_version(self):
+        matrix = block(jobs(workflow("ci.yml"))["tests"], "python", 8)
+        self.assertEqual(json.loads(matrix[0]), self.versions)
+        (default,) = [
+            line for line in block(workflow("plugin-checks.yml"), "python-versions", 6) if line.startswith("default:")
+        ]
+        self.assertEqual(json.loads(default.removeprefix("default:").strip().strip("'")), self.versions)
+
+    def test_the_images_and_requires_python_take_the_oldest(self):
+        project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+        self.assertRegex(project["requires-python"], rf"^>={re.escape(self.oldest)}(,|$)")
+        named = [
+            *(
+                re.findall(r"(?m)^FROM python:(\d+\.\d+)-", (ROOT / path).read_text())
+                for path in ("Dockerfile", "composition/Dockerfile")
+            ),
+            re.findall(r"on Python (\d+\.\d+)", self.readme),
+        ]
+        for found in named:
+            self.assertTrue(found)
+            self.assertEqual(set(found), {self.oldest})
 
 
 @tag("source")
@@ -423,6 +515,12 @@ class GateReferenceTests(SimpleTestCase):
         for name, task in named:
             with self.subTest(workflow=name, task=task):
                 self.assertIn(task, tasks)
+
+    def test_every_browser_gate_has_a_leg_and_every_leg_a_gate(self):
+        """The Browser job runs one ``browser:*`` gate per leg; a gate with no leg never runs in CI."""
+        (legs,) = block(jobs(workflow("ci.yml"))["browser"], "gate", 8)
+        named = {f"browser:{leg.strip()}" for leg in legs.strip("[]").split(",")}
+        self.assertEqual(named, {name for name in mise_tasks() if name.startswith("browser:")})
 
     # Tasks that hand whatever follows them to manage.py, whose command line no
     # usage spec can declare: mise appends the words as they were typed.

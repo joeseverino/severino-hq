@@ -15,7 +15,10 @@ runs:
       shell: bash
       env:
         HOST: ${{ inputs.host }}
-      run: echo "mise=$(sed -n 's/^min_version = "\(.*\)"$/\1/p' "$HOST/mise.toml")" >> "$GITHUB_OUTPUT"
+      run: |
+        set -euo pipefail
+        mise="$("$HOST/.github/actions/toolchain/mise-version.sh" "$HOST/mise.toml")"
+        echo "mise=$mise" >> "$GITHUB_OUTPUT"
     # Only uv: the host's other tools and its [env] are not this job's.
     - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
       env:

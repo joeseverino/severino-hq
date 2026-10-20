@@ -22,10 +22,11 @@ runs:
       run: |
         set -euo pipefail
         . ./tools/pipeline/toolchain.env
+        mise="$("$GITHUB_ACTION_PATH/mise-version.sh" mise.toml)"
         {
           # shellcheck disable=SC2086  # the version list is meant to split
           echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"
-          echo "mise=$(sed -n 's/^min_version = "\(.*\)"$/\1/p' mise.toml)"
+          echo "mise=$mise"
         } >> "$GITHUB_OUTPUT"
         # Nothing installs that mise.lock does not record. The tools no gate of
         # these jobs runs are lazy in mise.toml, so they are never fetched here.

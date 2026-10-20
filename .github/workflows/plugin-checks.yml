@@ -29,7 +29,7 @@ on:
           input instead of forking this file.
         required: false
         type: string
-        # PYTHON_VERSIONS (tools/pipeline/toolchain.env), held to it by checks:badges.
+        # PYTHON_VERSIONS (tools/pipeline/toolchain.env), held to it by PythonVersionTests.
         default: '["3.15"]'
       package-dir:
         description: >-
@@ -102,34 +102,6 @@ jobs:
           repository: ${{ env.HOST_REPOSITORY }}
           ref: ${{ steps.hq.outputs.ref }}
           path: host
-      - name: Report whether the host pin is current
-        id: pin
-        # A pin behind the host is legitimate, so it does not fail here. It
-        # surfaces as an ImportError for a name the pinned contract lacks,
-        # which reads like a bug in the extension. A warning, unlike a notice,
-        # shows on the checks list and the job summary.
-        env:
-          REF: ${{ steps.hq.outputs.ref }}
-        run: |
-          set -euo pipefail
-          pinned="$(git -C host rev-parse HEAD)"
-          current="$(git -C host ls-remote origin "refs/heads/$REF" | cut -f1)"
-          if [ -z "$current" ]; then
-            current="$(git -C host ls-remote origin refs/heads/main | cut -f1)"
-          fi
-          behind=0
-          if [ "$pinned" != "$current" ]; then
-            behind="$(git -C host rev-list --count "$pinned..$current" 2>/dev/null || echo '?')"
-            echo "::warning title=Host pin is behind::Testing against ${pinned:0:7}; \
-          the branch head is ${current:0:7} ($behind commits ahead). If a name is \
-          missing from the host contract, run against the default hq-ref before \
-          debugging this repo."
-          fi
-          {
-            echo "pinned=$pinned"
-            echo "current=$current"
-            echo "behind=$behind"
-          } >> "$GITHUB_OUTPUT"
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -145,28 +117,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ matrix.python }}-${{ hashFiles(format('{0}/uv.lock', inputs.package-dir), 'host/uv.lock') }}
       - name: Verify package and host contract
         # The identity comes from the package itself (tools/pipeline/plugin_identity.py).
-        id: contract
         env:
           HQ_ROOT: host
           PACKAGE_DIR: ${{ inputs.package-dir }}
           PLUGIN_REPOSITORY: ${{ github.repository }}
         run: host/scripts/check-plugin.sh --plugin-root "$PACKAGE_DIR"
-
-      # A host pin behind its branch fails as a missing name, which reads as a
-      # broken extension. Said at the failure, where it is read.
-      - name: Explain a failure against a stale host pin
-        if: failure() && steps.pin.outputs.behind != '0'
-        env:
-          BEHIND: ${{ steps.pin.outputs.behind }}
-          PINNED: ${{ steps.pin.outputs.pinned }}
-          CURRENT: ${{ steps.pin.outputs.current }}
-        run: |
-          echo "::error title=Host pin is $BEHIND commits behind::\
-          These checks ran against host $PINNED, not the \
-          branch head ($CURRENT). An ImportError or \
-          ModuleNotFoundError for something the host has since gained is this, \
-          not a fault in this repository. Re-run against the default hq-ref \
-          before debugging further."
 
   secret-scan:
     name: Secret scan
