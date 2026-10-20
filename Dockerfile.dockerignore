@@ -21,7 +21,9 @@
 !mise.toml
 !policy/
 !pyproject.toml
-!scripts/
+# scripts/ is synced to the deploy host whole: only the shims its sudo rules name.
+!scripts/deploy-image.sh
+!scripts/upgrade-container.sh
 !static/
 !templates/
 !tests/

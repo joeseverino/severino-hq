@@ -1,7 +1,7 @@
 #!/bin/sh
 # What an image carries instead of making at every start: its collected static
 # assets and its bytecode. The build files are read as text, since no gate here
-# builds an image; scripts/collect-assets.sh is run against a stand-in python.
+# builds an image. What the collected tree holds is image:verify:assets's.
 
 set -eu
 
@@ -21,10 +21,10 @@ fi
 collects_last() {
     file="$1"
     label="$2"
-    order="$(grep -nE 'collect-assets\.sh|^[[:space:]]*(COPY|USER)[[:space:]]' "${file}" |
+    order="$(grep -nE 'collectstatic|^[[:space:]]*(COPY|USER)[[:space:]]' "${file}" |
         grep -vE 'COPY --chown=severino:severino entrypoint\.sh' || true)"
-    collect="$(printf '%s\n' "${order}" | grep -n 'collect-assets\.sh' | tail -n 1 | cut -d: -f1)"
-    [ -n "${collect}" ] || { fail "${label} never runs scripts/collect-assets.sh"; return 0; }
+    collect="$(printf '%s\n' "${order}" | grep -n 'collectstatic' | tail -n 1 | cut -d: -f1)"
+    [ -n "${collect}" ] || { fail "${label} never collects its static files"; return 0; }
     after="$(printf '%s\n' "${order}" | sed -n "$((collect + 1)),\$p")"
     before="$(printf '%s\n' "${order}" | sed -n "1,$((collect - 1))p")"
     if printf '%s\n' "${after}" | grep -q 'COPY'; then
@@ -56,41 +56,6 @@ grep -q 'PYTHONHASHSEED=0 python -m compileall' Dockerfile ||
     fail "Dockerfile compiles under the random hash seed the image sets"
 sed -n '/ AS installer-base$/,/^FROM /p' composition/Dockerfile | grep -q 'UV_COMPILE_BYTECODE=1' ||
     fail "composition/Dockerfile installs extension wheels without bytecode"
-
-# 4. collect-assets.sh refuses a tree it could not serve.
-bin="${work}/bin"
-mkdir -p "${bin}"
-cat >"${bin}/python" <<'EOF'
-#!/bin/sh
-# Stands in for `python manage.py collectstatic`.
-mkdir -p "${DJANGO_STATIC_ROOT}/css"
-case "${TEST_COLLECT}" in
-    nothing) ;;
-    private)
-        echo '{}' >"${DJANGO_STATIC_ROOT}/staticfiles.json"
-        echo body >"${DJANGO_STATIC_ROOT}/css/app.css"
-        chmod 0640 "${DJANGO_STATIC_ROOT}/css/app.css" ;;
-    good)
-        echo '{}' >"${DJANGO_STATIC_ROOT}/staticfiles.json"
-        echo body >"${DJANGO_STATIC_ROOT}/css/app.css" ;;
-esac
-[ -n "${DJANGO_SECRET_KEY}" ] || exit 9
-EOF
-chmod +x "${bin}/python"
-collect() {
-    TEST_COLLECT="$1" DJANGO_STATIC_ROOT="${work}/static-$1" PATH="${bin}:${PATH}" \
-        sh scripts/collect-assets.sh >/dev/null 2>&1
-}
-collect good || fail "collect-assets.sh refused a readable tree with a manifest"
-if collect nothing; then fail "collect-assets.sh accepted a tree with no manifest"; fi
-if collect private; then fail "collect-assets.sh accepted an asset the serving account cannot read"; fi
-# Under a private umask the result is still readable by another account.
-(umask 077 && collect good) || fail "collect-assets.sh failed under a private umask"
-[ -z "$(find "${work}/static-good" ! -perm -004)" ] ||
-    fail "collect-assets.sh left an asset private under a private umask"
-if DJANGO_STATIC_ROOT='' PATH="${bin}:${PATH}" TEST_COLLECT=good sh scripts/collect-assets.sh >/dev/null 2>&1; then
-    fail "collect-assets.sh ran with no DJANGO_STATIC_ROOT"
-fi
 
 if [ "${failures}" -ne 0 ]; then
     echo "Image asset contracts failed (${failures})." >&2

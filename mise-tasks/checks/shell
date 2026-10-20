@@ -2,7 +2,7 @@
 #MISE description="Every shell file parses and passes shellcheck; the shell suites pass"
 set -eu
 
-sources="$(scripts/shell-sources.sh)"
+sources="$(tools/gate/shell-sources.sh)"
 # Each parsed by the shell its first line names.
 for f in $sources; do
     case "$(head -n 1 "$f")" in

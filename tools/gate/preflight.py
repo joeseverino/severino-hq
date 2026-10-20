@@ -13,7 +13,7 @@ Runs, in order:
    the one that checks, and handed the units this release and main ship.
 
 The host is SEVERINO_HQ_DEPLOY_HOST, an SSH destination, set in the
-environment or in mise.local.toml (scripts/mise.local.example.toml). The
+environment or in mise.local.toml (tools/dev/mise.local.example.toml). The
 release is HEAD, which must be committed: a check of uncommitted files proves
 nothing about the commit that ships.
 

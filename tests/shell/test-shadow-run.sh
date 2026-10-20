@@ -1,5 +1,5 @@
 #!/bin/sh
-# scripts/shadow-run.sh against a fake docker and systemctl: a rehearsal
+# tools/pipeline/shadow-run.sh against a fake docker and systemctl: a rehearsal
 # passes only when every check passed and the live web was not restarted, it
 # never renders secrets or restarts anything, and it leaves nothing behind.
 set -eu
@@ -78,7 +78,7 @@ shadow() { # shadow <expected status> <why>
     status=0
     PATH="${bin}:${PATH}" SHADOW_SECRET_DIR="${secrets}" SHADOW_ACME_DIR="${work}/acme" \
         SHADOW_DIR="${scratch}" SHADOW_READY_TRIES=2 \
-        sh "${repo_dir}/scripts/shadow-run.sh" example.test/hq@sha256:0123 >"${work}/out" 2>&1 || status=$?
+        sh "${repo_dir}/tools/pipeline/shadow-run.sh" example.test/hq@sha256:0123 >"${work}/out" 2>&1 || status=$?
     [ "${status}" -eq "$1" ] || fail "$2: exit ${status}, expected $1
 $(cat "${work}/out")"
 }

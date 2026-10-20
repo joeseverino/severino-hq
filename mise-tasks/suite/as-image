@@ -18,13 +18,13 @@ repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 . "${repo}/tools/lib/heavy-turn.sh"
 cd "${repo}"
 
-# shellcheck source=scripts/lib/composed.sh
-. ./scripts/lib/composed.sh
-# shellcheck source=scripts/lib/export-tree.sh
-. ./scripts/lib/export-tree.sh
-# shellcheck source=scripts/lib/source-url.sh
-. ./scripts/lib/source-url.sh
-composed_set || echo "No HQ_LOCAL_PLUGINS supplied: the host alone, as the image runs it (scripts/mise.local.example.toml)."
+# shellcheck source=tools/lib/composed.sh
+. ./tools/lib/composed.sh
+# shellcheck source=tools/lib/export-tree.sh
+. ./tools/lib/export-tree.sh
+# shellcheck source=tools/lib/source-url.sh
+. ./tools/lib/source-url.sh
+composed_set || echo "No HQ_LOCAL_PLUGINS supplied: the host alone, as the image runs it (tools/dev/mise.local.example.toml)."
 
 source_url="$(source_url)"
 # Named as a test run's scratch is, for this shell, so a copy left by a killed

@@ -68,7 +68,7 @@
       "matchManagers": ["custom.regex"],
       "matchDepNames": ["@scalar/api-reference"],
       "postUpgradeTasks": {
-        "commands": ["node scripts/vendor-scalar.mjs"],
+        "commands": ["node tools/dev/vendor-scalar.mjs"],
         "fileFilters": ["static/vendor/scalar/**"],
         "executionMode": "update"
       }

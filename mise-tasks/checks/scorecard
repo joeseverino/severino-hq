@@ -9,8 +9,8 @@ set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "${repo}"
-# shellcheck source=scripts/lib/export-tree.sh
-. ./scripts/lib/export-tree.sh
+# shellcheck source=tools/lib/export-tree.sh
+. ./tools/lib/export-tree.sh
 
 work="${XDG_CACHE_HOME:-$HOME/.cache}/severino-hq/scan-$(printf '%s' "${repo}" | cksum | cut -d' ' -f1)"
 src="${work}/src-scorecard"

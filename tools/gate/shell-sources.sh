@@ -4,7 +4,7 @@
 # whose first line names a shell, as a shebang or as a shellcheck directive (a
 # sourced library has no shebang). What the gates parse and shellcheck.
 set -eu
-cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 git ls-files --cached --others --exclude-standard | while IFS= read -r file; do
     [ -f "${file}" ] || continue
     if head -n 1 "${file}" 2>/dev/null |

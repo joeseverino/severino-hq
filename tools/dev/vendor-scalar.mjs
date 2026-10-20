@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Vendors the API reference bundle at the version static/vendor/scalar/UPSTREAM
 // names, and rewrites UPSTREAM to record it. To move it: change `version:` in
-// UPSTREAM, then `node scripts/vendor-scalar.mjs`. Renovate runs the same
+// UPSTREAM, then `node tools/dev/vendor-scalar.mjs`. Renovate runs the same
 // command after it changes the version.
 //
 // The tarball is checked against the registry's integrity before anything is
@@ -14,7 +14,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const vendor = new URL("../static/vendor/scalar/", import.meta.url);
+const vendor = new URL("../../static/vendor/scalar/", import.meta.url);
 const upstream = new URL("UPSTREAM", vendor);
 const file = "dist/browser/standalone.js";
 

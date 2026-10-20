@@ -73,6 +73,8 @@ ENV SEVERINO_HQ_PLUGINS=${SEVERINO_HQ_PLUGIN_REFERENCES} \
     SEVERINO_HQ_PLUGIN_POLICY_SHA256=${PLUGIN_POLICY_SHA256} \
     SEVERINO_HQ_REVISION=${HQ_REVISION}
 # The extensions bring assets of their own, so the tree the host image
-# collected is collected again with them, under the settings set above.
-RUN /app/scripts/collect-assets.sh
+# collected is collected again with them, under the settings set above. The
+# key exists for this step alone: collecting signs nothing.
+RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
+    python manage.py collectstatic --noinput --clear --verbosity 0
 USER severino

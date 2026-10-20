@@ -40,13 +40,13 @@ Every gate and server is a mise task. These are the ones to start from;
 ## Development servers
 
 Each server is a mise task, and its env says where it listens and which
-database it opens; `scripts/dev.sh` refuses what env cannot express. Every one
+database it opens; `tools/dev/dev.sh` refuses what env cannot express. Every one
 collects versioned assets and runs Uvicorn with reload on the production ASGI
 path, watching this checkout and each extension's sources. The extension set
 is the one `mise.local.toml` names ([The extension set](#the-extension-set)).
 `dev:scratch` is the throwaway one; `dev` is the long-lived server behind a TLS
 proxy, configured by the gitignored `dev.local.toml` (copy
-`scripts/dev.local.example.toml`).
+`tools/dev/dev.local.example.toml`).
 
 Only `dev` reads `dev.local.toml`, and a new worktree does not copy it, so the
 others never take its bind or database. Each checkout has its own scratch
@@ -111,7 +111,7 @@ carries fails.
 ### The extension set
 
 Name it once in a gitignored `mise.local.toml` (copy
-`scripts/mise.local.example.toml`): `HQ_LOCAL_PYTHONPATH` says where the
+`tools/dev/mise.local.example.toml`): `HQ_LOCAL_PYTHONPATH` says where the
 extensions' sources are and `HQ_LOCAL_PLUGINS` which to enable. Only the
 composed suite and the dev servers load the set. Without it the composed pass
 says it did not run and passes; `REQUIRE_COMPOSED=1 mise run suite:composed`
@@ -230,8 +230,8 @@ deploy/                   systemd units, tmpfiles rule, remote targets, host.jso
 composition/              the composed image
 policy/                   the extension admission policy
 demo/                     the static demo site built from HQ's own pages
-tools/                    the programs behind the gates and the pipeline, with their tests
-scripts/                  development servers, extension checks and deployment programs
+tools/                    development and CI programs, never in the image (tools/README.md)
+scripts/                  what an outside contract calls by path: the deploy host's shims, the extension check
 mise-tasks/               tasks whose body is a script, declared in its own #MISE header
 tests/                    synthetic extension fixtures, the SDK consumer, property and shell suites
 var/                      ignored local runtime state

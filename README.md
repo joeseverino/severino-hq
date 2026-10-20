@@ -108,7 +108,8 @@ deploy/        systemd units, tmpfiles rule, remote targets, host.json shape
 composition/   the composed image
 policy/        the extension admission policy
 demo/          the static demo site built from HQ's own pages
-scripts/       gates, pipeline helpers and operator tools
+scripts/       the deploy host's shims and the extension check, called by path
+tools/         development and CI programs, never in the image
 tests/         synthetic extension fixtures and property tests
 docs/          architecture, operations and guides
 ```

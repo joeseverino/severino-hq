@@ -46,7 +46,7 @@ The Dependency Dashboard issue lists what is pending, held for age or
 blocked. A Renovate pull request is worked like any other: push the code a
 major needs onto its branch. To vendor a new API reference bundle by hand,
 change `version:` in `static/vendor/scalar/UPSTREAM` and run
-`node scripts/vendor-scalar.mjs`.
+`node tools/dev/vendor-scalar.mjs`.
 
 ## Advisories
 

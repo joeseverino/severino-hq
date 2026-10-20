@@ -25,7 +25,7 @@ template needs `check` ([The gates](docs/Development.md#the-gates)).
 
 The composed suite is where the host and its extensions first meet, which CI
 cannot reach. Name the extension set once in a gitignored `mise.local.toml`
-(copy `scripts/mise.local.example.toml`); without it the composed pass says it
+(copy `tools/dev/mise.local.example.toml`); without it the composed pass says it
 did not run and passes, covering less.
 
 A test that reads the repository rather than running the product carries

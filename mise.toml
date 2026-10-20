@@ -114,10 +114,10 @@ timeout = "30m"
 # --------------------------------------------------------------- operator
 
 # The development servers. Each profile is a task whose env says where it
-# listens and which database it opens; scripts/dev.sh refuses what env cannot.
+# listens and which database it opens; tools/dev/dev.sh refuses what env cannot.
 
 # The long-lived server behind a TLS proxy. Its facts live only in the
-# gitignored dev.local.toml (scripts/dev.local.example.toml), which no other
+# gitignored dev.local.toml (tools/dev/dev.local.example.toml), which no other
 # task reads. The profile's invariants come after the file, so it cannot
 # change them.
 [tasks.dev]
@@ -127,11 +127,11 @@ usage = '''
 flag "--fresh" help="Delete its database and migrate a new one"
 flag "--plan" help="Print what it would run under, without secrets, and exit"
 '''
-run = "scripts/dev.sh"
+run = "tools/dev/dev.sh"
 
 [tasks.dev.env]
 _.file = "dev.local.toml"
-UVICORN_HOST = { required = "Copy scripts/dev.local.example.toml to dev.local.toml and fill it in" }
+UVICORN_HOST = { required = "Copy tools/dev/dev.local.example.toml to dev.local.toml and fill it in" }
 UVICORN_PORT = { required = true }
 DJANGO_ALLOWED_HOSTS = { required = true }
 DJANGO_CSRF_TRUSTED_ORIGINS = { required = true }
@@ -188,7 +188,7 @@ flag "--seed <seed>" help="Fill it with the example estate" {
 flag "--port <port>" help="A fixed port instead of a free one"
 flag "--plan" help="Print what it would run under and exit"
 '''
-run = "scripts/dev.sh"
+run = "tools/dev/dev.sh"
 
 [tasks."dev:session"]
 extends = "dev:scratch-env"

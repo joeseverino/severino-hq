@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="It carries its collected assets and their manifest, readable by the account that serves them"
+#MISE depends=["image:build"]
+set -eu
+
+# As the image's own user, so "readable" means readable by the server.
+docker run --rm --entrypoint sh "${IMAGE:-severino-hq:ci-local}" -c '
+    root="${DJANGO_STATIC_ROOT:?}"
+    [ -s "$root/staticfiles.json" ] || { echo "$root has no manifest, so a page falls back to plain names." >&2; exit 1; }
+    unreadable="$(find "$root" ! -readable | head -n 5)"
+    [ -z "$unreadable" ] || { printf "%s\n" "$unreadable" >&2; echo "Collected assets the serving account cannot read." >&2; exit 1; }
+'

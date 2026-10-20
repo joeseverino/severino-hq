@@ -6,7 +6,7 @@
 set -eu
 unset CDPATH
 
-root=$(cd -- "$(dirname -- "$0")/.." && pwd)
+root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 
 die() {

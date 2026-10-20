@@ -12,7 +12,7 @@ repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 . "${repo}/tools/lib/heavy-turn.sh"
 cd "${repo}"
 
-# shellcheck source=scripts/lib/composed.sh
-. ./scripts/lib/composed.sh
-composed_set || { echo "Composed suite not run: no HQ_LOCAL_PLUGINS supplied (scripts/mise.local.example.toml)."; exit 0; }
+# shellcheck source=tools/lib/composed.sh
+. ./tools/lib/composed.sh
+composed_set || { echo "Composed suite not run: no HQ_LOCAL_PLUGINS supplied (tools/dev/mise.local.example.toml)."; exit 0; }
 exec uv run python manage.py test --noinput --parallel auto

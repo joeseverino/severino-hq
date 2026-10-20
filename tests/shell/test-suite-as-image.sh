@@ -10,10 +10,10 @@ trap 'rm -rf "${work}"' EXIT
 
 # A checkout with what the task reads: the image admits manage.py, not notes/.
 fixture="${work}/checkout"
-mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/scripts/lib" "${fixture}/tools/lib" "${fixture}/notes" "${work}/bin" "${work}/tmp"
+mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/tools/lib" "${fixture}/notes" "${work}/bin" "${work}/tmp"
 cp "${repo}/${task}" "${fixture}/${task}"
 cp "${repo}/tools/lib/heavy.sh" "${repo}/tools/lib/heavy-turn.sh" "${fixture}/tools/lib/"
-cp "${repo}/scripts/lib/composed.sh" "${repo}/scripts/lib/export-tree.sh" "${repo}/scripts/lib/source-url.sh" "${fixture}/scripts/lib/"
+cp "${repo}/tools/lib/composed.sh" "${repo}/tools/lib/export-tree.sh" "${repo}/tools/lib/source-url.sh" "${fixture}/tools/lib/"
 printf '*\n!manage.py\n' >"${fixture}/Dockerfile.dockerignore"
 : >"${fixture}/manage.py"
 : >"${fixture}/notes/private.md"

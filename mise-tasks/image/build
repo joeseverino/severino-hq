@@ -8,8 +8,8 @@
 # IMAGE_BUILD_CACHE carries the pipeline's layer cache flags; a checkout has none.
 set -eu
 
-# shellcheck source=scripts/lib/source-url.sh
-. ./scripts/lib/source-url.sh
+# shellcheck source=tools/lib/source-url.sh
+. ./tools/lib/source-url.sh
 source="$(source_url)"
 revision="${usage_revision:-$(git rev-parse HEAD)}"
 # The security archive's release date keys the layer that applies Debian's

@@ -24,7 +24,7 @@ SEVERINO_HQ_DEPLOY_HOST = "deploy.example.test"
 # read at use, or a file path.
 # SEVERINO_FAILURE_LOG_IDENTITY = "op://vault/item/password"
 
-# Dev HQ's own values live in dev.local.toml (scripts/dev.local.example.toml).
+# Dev HQ's own values live in dev.local.toml (tools/dev/dev.local.example.toml).
 
 # Optional. The Django Debug Toolbar on the dev server. Needs DJANGO_DEBUG on;
 # the suite ignores it. See hq/config/devtools.py.

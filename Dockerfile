@@ -114,7 +114,13 @@ RUN mkdir -p /data /media /exports /run/hq-bridge \
 # beside it cannot change in an image, and a timestamp would make the bytes
 # depend on when the build ran. The hash seed is fixed for this step so they
 # cannot depend on it either. Tests compile when a gate runs them.
-RUN scripts/collect-assets.sh \
+#
+# The settings refuse to load without a signing key. Collecting signs nothing,
+# so the key exists for this step alone. The storage writes every asset
+# readable by the serving account (STORAGES in hq/config/settings.py), which
+# image:verify:assets holds.
+RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
+        python manage.py collectstatic --noinput --clear --verbosity 0 \
     && PYTHONHASHSEED=0 python -m compileall -q --invalidation-mode unchecked-hash \
         -x '/tests/' hq hq_sdk
 

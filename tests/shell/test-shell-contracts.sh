@@ -6,7 +6,7 @@ set -eu
 
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 # Derived from the tree, so no shell file can be outside these checks.
-sources="$(scripts/shell-sources.sh)"
+sources="$(tools/gate/shell-sources.sh)"
 failures=0
 failure_marker="$(mktemp)"
 trap 'rm -f "${failure_marker}"' EXIT HUP INT TERM
@@ -18,11 +18,14 @@ fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 # An engine function with no call site is not a safety net, it is a comment that
 # looks like code, and a validator that nothing calls reads exactly like one
 # that does.
-for lib in scripts/lib/*.sh; do
+for lib in tools/lib/*.sh; do
     [ -f "${lib}" ] || continue
+    # A program run by path keeps its own helpers; only a sourced library has
+    # callers elsewhere.
+    head -n 1 "${lib}" | grep -q '^#!' && continue
     sed -n 's/^\([a-z_][a-z_0-9]*\)() *{.*/\1/p' "${lib}" | while IFS= read -r fn; do
         # shellcheck disable=SC2086
-        callers="$(grep -l "${fn}" ${sources} 2>/dev/null | grep -cv "^${lib}$")"
+        callers="$(grep -l "${fn}" ${sources} 2>/dev/null | grep -cv "^${lib}$" || true)"
         if [ "${callers}" -eq 0 ]; then
             echo "FAIL ${lib##*/}: ${fn}() has no caller in any shell file" >&2
             echo x >>"${failure_marker}"

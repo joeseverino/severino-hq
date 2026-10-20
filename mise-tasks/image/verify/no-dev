@@ -1,7 +1,21 @@
 #!/bin/sh
-#MISE description="It cannot import development layers"
+#MISE description="It cannot import development layers and ships no development programs"
 #MISE depends=["image:build"]
 set -eu
 
-docker run --rm --entrypoint python "${IMAGE:-severino-hq:ci-local}" -c \
+image="${IMAGE:-severino-hq:ci-local}"
+docker run --rm --entrypoint python "$image" -c \
     "import importlib.util, sys; sys.exit(importlib.util.find_spec('debug_toolbar') is not None)"
+
+# scripts/ is synced to the deploy host whole, so it holds only the shims the
+# host's sudo rules name; tools/ is development and CI, never shipped.
+shipped="$(docker run --rm --entrypoint sh "$image" -c \
+    'cd /app && find scripts tools -type f 2>/dev/null | sort')"
+expected="$(printf '%s\n' scripts/deploy-image.sh scripts/upgrade-container.sh)"
+if [ "$shipped" != "$expected" ]; then
+    echo "The image ships, under scripts/ and tools/:" >&2
+    printf '%s\n' "$shipped" >&2
+    echo "It should ship only:" >&2
+    printf '%s\n' "$expected" >&2
+    exit 1
+fi

@@ -4,7 +4,7 @@
 #
 #   mise run shadow-run IMAGE          (from a checkout: copies this script to
 #                                       SEVERINO_HQ_DEPLOY_HOST and runs it there)
-#   scripts/shadow-run.sh IMAGE        (as root, on the deploy host)
+#   tools/pipeline/shadow-run.sh IMAGE        (as root, on the deploy host)
 #
 #   1. Copies the production database, read-only and as HQ's account, into a
 #      scratch volume.

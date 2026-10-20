@@ -5,7 +5,7 @@
 composed_set() {
     [ -n "${HQ_LOCAL_PLUGINS:-}" ] && return 0
     if [ "${REQUIRE_COMPOSED:-0}" = 1 ]; then
-        echo "The composed suite is required and HQ_LOCAL_PLUGINS is unset (scripts/mise.local.example.toml)." >&2
+        echo "The composed suite is required and HQ_LOCAL_PLUGINS is unset (tools/dev/mise.local.example.toml)." >&2
         exit 1
     fi
     return 1

@@ -9,7 +9,7 @@
 # sets it) and unpacks it.
 set -euo pipefail
 
-identity="${SEVERINO_FAILURE_LOG_IDENTITY:?set SEVERINO_FAILURE_LOG_IDENTITY (see scripts/mise.local.example.toml)}"
+identity="${SEVERINO_FAILURE_LOG_IDENTITY:?set SEVERINO_FAILURE_LOG_IDENTITY (see tools/dev/mise.local.example.toml)}"
 
 umask 077
 dir="${usage_dir:-$(mktemp -d)}"
