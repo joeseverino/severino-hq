@@ -423,7 +423,7 @@ it does; a patch release adds no features. No compatibility
 translation is applied. Resource filters emit individual query parameters;
 `x-hq-query-schema` retains the aggregate schema, including unknown-field policy.
 
-Install the locked contract tools with `npm --prefix scripts/openapi ci`.
+Install the locked contract tools with `npm --prefix tools/clients ci`.
 `mise run checks:openapi` validates both descriptions against the specification
 and runs the generated client's runtime tests; `mise run drift` checks that the
 client is current. The TypeScript

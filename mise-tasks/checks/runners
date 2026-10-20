@@ -9,6 +9,6 @@ stray="$(grep -HnE '^[[:space:]]*runs-on:' .github/workflows/*.yml \
     | grep -v "runs-on: ${RUNNER_IMAGE}\$" || true)"
 if [ -n "$stray" ]; then
     printf '%s\n' "$stray" >&2
-    echo "Hosted jobs must run on ${RUNNER_IMAGE} (scripts/toolchain.env)." >&2
+    echo "Hosted jobs must run on ${RUNNER_IMAGE} (tools/pipeline/toolchain.env)." >&2
     exit 1
 fi

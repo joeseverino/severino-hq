@@ -16,9 +16,9 @@ repository must change. Three kinds exist:
 | :--- | :--- | :--- |
 | The repository `hq-host deploy` accepts: its composition `ghcr.io/<owner>/<repo>/composition`, signed by its Compose workflow on `main` | nowhere by hand: CI builds `hq-host` with `HQ_SOURCE` from `github.repository` (`BuildSource` in [`controller/host/deploy.go`](../controller/host/deploy.go)) | `hq-host deploy`, which refuses any other image; a build without a source deploys nothing |
 | The Go module path, `github.com/<owner>/<repo>/controller` | [`controller/go.mod`](../controller/go.mod) and every import under `controller/` | the Go build |
-| The Cordon repository and commit | `repository:` in `.github/actions/admit-plugin/action.yml` and `.github/workflows/compose.yml`; `CORDON_COMMIT` in [`scripts/toolchain.env`](../scripts/toolchain.env) | extension admission and Compose |
+| The Cordon repository and commit | `repository:` in `.github/actions/admit-plugin/action.yml` and `.github/workflows/compose.yml`; `CORDON_COMMIT` in [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | extension admission and Compose |
 | The host repository extensions are checked against | `HOST_REPOSITORY` in `.github/workflows/plugin-checks.yml` | an extension's checks |
-| The failure-log recipient (an age public key) | `FAILURE_LOG_RECIPIENT` in [`scripts/toolchain.env`](../scripts/toolchain.env) | `scripts/seal-failure-logs.sh` ([Deployment](Deployment.md#when-a-run-fails)) |
+| The failure-log recipient (an age public key) | `FAILURE_LOG_RECIPIENT` in [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `tools/pipeline/seal-failure-logs.sh` ([Deployment](Deployment.md#when-a-run-fails)) |
 | The runner label, `severino-hq` | `runs-on` of the Deploy job in `.github/workflows/deploy.yml` | Deploy |
 | The check names, **Severino HQ · Review** and **Severino HQ · Production** | the `ci_report check` calls in the workflows and the admission action | the ruleset's required check |
 | The site name | `SEVERINO_SITE_NAME` (default in `hq/config/settings.py`) | page titles and the header |

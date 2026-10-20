@@ -18,7 +18,7 @@ from hq.platform.core import browser_tests
 
 ROOT = Path(settings.BASE_DIR)
 GATE = ROOT / "hq/platform/core" / "browser_tests.py"
-AUDIT = ROOT / "scripts" / "layout-audit.js"
+AUDIT = ROOT / "hq/platform/core" / "browser_audit.js"
 # Host templates and the public example extension: the markup this repository
 # can see. Installed extensions ship their own templates.
 TEMPLATE_ROOTS = (ROOT / "templates", ROOT / "tests/fixtures/example_hq_plugin" / "templates")

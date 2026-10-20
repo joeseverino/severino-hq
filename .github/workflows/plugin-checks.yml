@@ -29,7 +29,7 @@ on:
           input instead of forking this file.
         required: false
         type: string
-        # PYTHON_VERSIONS (scripts/toolchain.env), held to it by checks:badges.
+        # PYTHON_VERSIONS (tools/pipeline/toolchain.env), held to it by checks:badges.
         default: '["3.15"]'
       package-dir:
         description: >-
@@ -144,7 +144,7 @@ jobs:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ matrix.python }}-${{ hashFiles(format('{0}/uv.lock', inputs.package-dir), 'host/uv.lock') }}
       - name: Verify package and host contract
-        # The identity comes from the package itself (scripts/plugin-identity.py).
+        # The identity comes from the package itself (tools/pipeline/plugin_identity.py).
         id: contract
         env:
           HQ_ROOT: host

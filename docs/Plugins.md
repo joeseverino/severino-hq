@@ -122,7 +122,7 @@ jobs:
 ```
 
 The extension's identity is declared once, by the package:
-`scripts/plugin-identity.py` reads the distribution from `pyproject.toml` and
+`tools/pipeline/plugin_identity.py` reads the distribution from `pyproject.toml` and
 the plugin id and Django app from the `plugin = PluginManifest(...)` in
 `src/<package>/plugin.py`, where `<package>` is the distribution with
 underscores. It fails when the two disagree, before anything is built or
@@ -179,7 +179,7 @@ repository's admission workflow on `main` and has not failed.
 
 Each leg retains its own artifact, `admission-<plugin id>`. Compose resolves
 each repository's admission run once and reads every listed extension's
-artifact from it by id (`scripts/admissions.sh`); a listed id with no artifact
+artifact from it by id (`tools/pipeline/admissions.sh`); a listed id with no artifact
 in that run fails the composition. A coordinated branch builds each listed
 extension from its `path`, which must declare that id, and nothing else in the
 repository.

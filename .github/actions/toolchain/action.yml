@@ -21,7 +21,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        . ./scripts/toolchain.env
+        . ./tools/pipeline/toolchain.env
         {
           # shellcheck disable=SC2086  # the version list is meant to split
           echo "oldest-python=$(printf '%s\n' $PYTHON_VERSIONS | head -1)"

@@ -29,7 +29,7 @@ jobs:
   # A push to main whose pull request already passed with this exact tree is
   # not checked twice: Checks, Tests and Browser stand on that run, and Image
   # promotes the pull request's image instead of building another. Anything
-  # less than proof (scripts/proven-on-pr.sh) and every gate runs.
+  # less than proof (tools/pipeline/proven-on-pr.sh) and every gate runs.
   proven:
     name: Proven on its pull request
     if: github.event_name == 'push'
@@ -62,7 +62,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          scripts/proven-on-pr.sh | tee -a "$GITHUB_OUTPUT"
+          tools/pipeline/proven-on-pr.sh | tee -a "$GITHUB_OUTPUT"
           pr="$(sed -n 's/^pr=//p' "$GITHUB_OUTPUT" | tail -1)"
           if [ -n "$pr" ]; then
             echo "Proven on #$pr: its checks passed on this exact tree, and its image is promoted." >> "$GITHUB_STEP_SUMMARY"
@@ -104,12 +104,17 @@ jobs:
         run: >-
           python3 -m tools.pipeline.ci_report check "Severino HQ · Review" "$HEAD_SHA" in_progress "Checking"
           "CI, CodeQL and the build of HQ are running. This becomes the verdict when they finish."
+      # The structural bar builds its Go inspector from the controller's module.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: controller/go.mod
+          cache-dependency-path: controller/go.sum
       - uses: ./.github/actions/toolchain
       # Node itself is mise's, from mise.lock; only npm's downloads are cached.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('scripts/openapi/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('tools/clients/package-lock.json') }}
       - name: Checks
         # Every gate named checks:* in mise.toml. Each runs to the end, and the
         # last lines of this step name every one that failed.
@@ -130,7 +135,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # `checks:badges` holds this to scripts/toolchain.env: a matrix cannot read it.
+        # `checks:badges` holds this to tools/pipeline/toolchain.env: a matrix cannot read it.
         python: ["3.15"]
     env:
       # `mise run tests` walks this list; a leg is one interpreter.
@@ -253,7 +258,7 @@ jobs:
     env:
       # The commit the image is tagged for. On a pull request `GITHUB_SHA` is
       # the merge commit, while the push to main that merges it looks for the
-      # pull request's head, the branch tip (scripts/proven-on-pr.sh).
+      # pull request's head, the branch tip (tools/pipeline/proven-on-pr.sh).
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       # Set when this tree's image was proven on its pull request: promoted,
       # not rebuilt.
@@ -319,14 +324,14 @@ jobs:
       # a signature over a pointer proves nothing about what it points at now.
       - name: Promote the image its pull request proved
         # The same manifest under this commit's tag, so the tag names the
-        # digest that is signed (scripts/retag.sh).
+        # digest that is signed (tools/pipeline/retag.sh).
         id: promote
         if: env.PROVEN != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          scripts/retag.sh "$PROVEN" "sha-${HEAD_SHA::12}" latest
+          tools/pipeline/retag.sh "$PROVEN" "sha-${HEAD_SHA::12}" latest
           echo "digest=$PROVEN" >> "$GITHUB_OUTPUT"
       - name: Sign
         # On a promotion too: Compose deploys only an image signed by this

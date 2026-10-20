@@ -8,12 +8,11 @@ the first pages a visitor sees show a healthy homelab with demo data locked on.
 
 import os
 import re
-import threading
 import unittest
-from functools import partial
 from html import unescape
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from demo.serve import serving
 
 # Where demo:build saved it. This file doesn't import Django.
 OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(__file__).resolve().parents[1] / "var" / "demo")
@@ -47,23 +46,12 @@ def _visible_lines(page: str) -> list[str]:
     return [line for line in (re.sub(r"\s+", " ", raw).strip() for raw in text.split("\n")) if line]
 
 
-class _Quiet(SimpleHTTPRequestHandler):
-    def log_message(self, *args):
-        pass
-
-
 class DemoSiteTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if not (OUT / "index.html").is_file():
             raise unittest.SkipTest(f"no demo at {OUT}: run demo:build first")
-        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), partial(_Quiet, directory=str(OUT)))
-        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
-        cls.origin = f"http://127.0.0.1:{cls.server.server_port}"
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.shutdown()
+        cls.origin = cls.enterClassContext(serving(OUT))
 
     def test_every_address_a_page_names_is_in_the_demo(self):
         missing = set()

@@ -9,8 +9,7 @@ rules, the host/extension boundary and the definition of done.
 Install [mise](https://mise.jdx.dev) and a `python3`; `mise install` brings uv
 with the other tools `fast` and `check` run. A tool only a heavier gate needs
 (CodeQL, age) is `lazy` in `mise.toml`: its first use installs it, checked
-against `mise.lock` like the rest. The toolchain gate and the structural bar
-run `python3` directly.
+against `mise.lock` like the rest.
 
 ```sh
 git clone https://github.com/joeseverino/severino-hq.git
@@ -23,6 +22,21 @@ The log names the address and the throwaway account to sign in as. Nothing
 reads a `.env` file: `.env.example` is the production template, rendered by
 the host and named by `SEVERINO_APP_ENV_PATH` ([Deployment](Deployment.md)).
 
+## Tasks
+
+Every gate and server is a mise task. These are the ones to start from;
+`mise tasks` lists every task with its description, and `mise run <task>
+--help` shows what it takes.
+
+| Task | What it is |
+| --- | --- |
+| `mise run fast` | The inner loop: the quick gates and the tests the change reaches. |
+| `mise run check` | Does my change work: every Checks gate, the Tests gates, the composed suite. |
+| `mise run ci` | Every gate the pipeline runs. |
+| `mise run dev:scratch` | A throwaway server on loopback with a database of this checkout's own. |
+| `mise run regen` / `mise run drift` | Rewrite every derived file from its source / check that none is behind. |
+| `mise run preflight` | Ready to release: the gates, the composed suite and the deploy host. |
+
 ## Development servers
 
 Each server is a mise task, and its env says where it listens and which
@@ -30,15 +44,9 @@ database it opens; `scripts/dev.sh` refuses what env cannot express. Every one
 collects versioned assets and runs Uvicorn with reload on the production ASGI
 path, watching this checkout and each extension's sources. The extension set
 is the one `mise.local.toml` names ([AGENTS.md](../AGENTS.md#start-here)).
-
-| Task | What it is |
-| --- | --- |
-| `mise run dev:scratch` | A throwaway server: loopback, DEBUG on, a new database under this checkout's `var/dev/scratch/` each start, on a port the system picks. `--keep` reuses the last database, `--seed showcase` or `standard` fills it with the example estate (`seed_demo`), `--port` fixes the port, `--plan` prints the environment and exits. |
-| `mise run dev:session` | Prints a session cookie (`dev_session`) for the scratch server's account, for a browser context or `curl --cookie`. |
-| `mise run dev:look <pages>` | Screenshots of pages of the browser gate's estate (`connections,dense/services`) under `var/look/`, at the phone, 820 and 1360 unless `--widths` says. `--rule <name>` runs one of `LayoutBrowserTests`' rules there and fails if it does not hold; `--css` adds a stylesheet first, which is how a new rule is shown to fail on the defect it was written for. `--open` opens every disclosure and `--expand` every table row first. `--dark`, `--no-script`. |
-| `mise run dev:manage -- <command>` | `manage.py` against the scratch database, extensions loaded. `routes [filter]` lists each named route and its path. |
-| `mise run dev:demo [seed]` | Builds that demo seed and serves the static site on loopback ([demo](../demo/README.md)). |
-| `mise run dev` | The long-lived server behind a TLS proxy: DEBUG off, single sign-on, its bind, hostnames and database read from the gitignored `dev.local.toml` (copy `scripts/dev.local.example.toml`). It reads its signing key and client secret from the password manager when it starts. `--fresh` deletes its database first; `--plan` prints the environment, without secrets, and exits. |
+`dev:scratch` is the throwaway one; `dev` is the long-lived server behind a TLS
+proxy, configured by the gitignored `dev.local.toml` (copy
+`scripts/dev.local.example.toml`).
 
 Only `dev` reads `dev.local.toml`, and a new worktree does not copy it, so the
 others never take its bind or database. Each checkout has its own scratch
@@ -67,7 +75,7 @@ worker per core (per performance core on Apple silicon);
 ### Heavy gates take turns
 
 Two suites at once exhaust a small machine's memory, so the heavy tasks (`fast`,
-`check`, `ci`, `tests`, `preflight`, the suites, the browser gates,
+`check`, `ci`, `checks`, `tests`, `preflight`, the suites, the browser gates,
 `demo:build`, `dev:look`, `docs:screenshot`) run under `tools/lib/heavy.sh`,
 which holds an exclusive lock on `~/.cache/severino/heavy.lock` (under
 `XDG_CACHE_HOME` when it is set) for as long as the task runs. Every checkout
@@ -102,7 +110,7 @@ each pin lives. Beyond those:
   contracts model the host's runner with the current account, which must not
   be root. The readiness tests need `var/` writable.
 - **Every supported Python** (`PYTHON_VERSIONS` in
-  [`scripts/toolchain.env`](../scripts/toolchain.env)). `mise run tests` walks
+  [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env)). `mise run tests` walks
   the list, each in its own `.venv-<version>`, with uv supplying the
   interpreter.
 - **System tools:** Go at the version `controller/go.mod` names, and
@@ -121,7 +129,7 @@ dashboard, service, connections, machine, topology and project pages over a
 synthetic `example.*` estate at phone through desktop widths, with JavaScript
 off, and checks that nothing escapes the page sideways, tables scroll in their
 own container, grid rows end together, siblings never overlap, and the rules
-of `scripts/layout-audit.js` hold. A failure saves a screenshot to the OS
+of `hq/platform/core/browser_audit.js` hold. A failure saves a screenshot to the OS
 temporary directory. A check selects markup only through `SELECTORS`, and
 `hq/platform/core/tests/test_browser_selectors.py` fails on a selector no
 template renders.

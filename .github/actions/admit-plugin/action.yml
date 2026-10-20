@@ -34,7 +34,7 @@ description: >-
 # the commit as waiting for production.
 
 # The plugin id and distribution are read from the package
-# (scripts/plugin-identity.py), never passed: a caller that repeats them can
+# (tools/pipeline/plugin_identity.py), never passed: a caller that repeats them can
 # drift from what the wheel declares.
 inputs:
   package-dir:
@@ -131,7 +131,8 @@ runs:
     - name: Read the extension's identity from its package
       id: identity
       shell: bash
-      run: python3 host/scripts/plugin-identity.py "$PACKAGE_DIR" --repository "$GITHUB_REPOSITORY" | tee -a "$GITHUB_OUTPUT"
+      # -P: the extension's checkout is the working directory, and none of it is imported.
+      run: PYTHONPATH=host python3 -P -m tools.pipeline.plugin_identity "$PACKAGE_DIR" --repository "$GITHUB_REPOSITORY" | tee -a "$GITHUB_OUTPUT"
 
     - name: Read the host's toolchain pins
       id: pins
@@ -139,7 +140,7 @@ runs:
       run: |
         set -euo pipefail
         cd host
-        . ./scripts/toolchain.env
+        . ./tools/pipeline/toolchain.env
         # shellcheck disable=SC2086  # the version list is meant to split
         echo "python=$(printf '%s\n' $PYTHON_VERSIONS | tail -1)" >> "$GITHUB_OUTPUT"
         echo "cordon-commit=$CORDON_COMMIT" >> "$GITHUB_OUTPUT"

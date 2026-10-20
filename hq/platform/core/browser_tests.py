@@ -57,7 +57,7 @@ ROW_LINES = 6
 # The stylesheet's phone breakpoint: `@media (max-width: 640px)`.
 PHONE = 640
 ORIGIN = "http://hq.example.test"
-AUDIT = Path(settings.BASE_DIR) / "scripts" / "layout-audit.js"
+AUDIT = Path(__file__).with_name("browser_audit.js")
 
 SELECTORS = {
     # The fragment primitive: a placeholder's failure line, the disclosure
@@ -175,7 +175,7 @@ LARGE_TEXT_CONTRAST = 3.0
 # line is the surface's own colour.
 LINE_CONTRAST = 1.07
 
-# Structural rules from scripts/layout-audit.js that hold on every page at
+# Structural rules from browser_audit.js that hold on every page at
 # every width. A card with a band of empty frame under its last line
 # (empty-card-bottom) is one: a card is as tall as what it holds. The audit's
 # other density heuristics (card-too-wide, row-height-hole, horizontal-slack)
@@ -2258,6 +2258,14 @@ REFERENCE_PHONE = PHONE_SCREEN[0]
 # The viewer is one large script: parsing it takes longer than a page's load.
 REFERENCE_READY = 30_000
 _REFERENCE_MOUNTED = "() => document.querySelector('main main h1') !== null"
+
+
+def wait_for_reference(page):
+    """Until the viewer has drawn the reference."""
+
+    page.wait_for_function(_REFERENCE_MOUNTED, timeout=REFERENCE_READY)
+
+
 # The sidebar is a list of entries, each named by its own link. An entry that
 # opens to show more carries the control that opens it; an operation is a leaf.
 _REFERENCE_ENTRY = """(path) => {
@@ -2371,25 +2379,31 @@ def reference_outline(document):
     ]
 
 
+def render_reference():
+    """The reference in each theme, the document its viewer reads and the count
+    the header asks for, by path."""
+
+    with transaction.atomic():
+        client = Client()
+        client.force_login(get_user_model().objects.create_user(username="operator"))
+        page = reverse("api_reference:reference")
+        pages = {
+            url.strip("/"): client.get(url).content.decode()
+            for url in (page, reverse("hq_api:openapi"), reverse("action_item_count"))
+        }
+        client.post(reverse("theme"), {"theme": "dark"})
+        pages[REFERENCE_DARK] = client.get(page).content.decode()
+        transaction.set_rollback(True)
+    return pages
+
+
 class ReferenceBrowserTests(BrowserGate):
     """The API reference reads as a page of HQ's, at every width and in both themes."""
 
     @classmethod
     def render(cls):
-        with transaction.atomic():
-            client = Client()
-            client.force_login(get_user_model().objects.create_user(username="operator"))
-            document = reverse("hq_api:openapi")
-            page = reverse("api_reference:reference")
-            # The document the viewer reads, and the count the header asks for.
-            pages = {
-                url.strip("/"): client.get(url).content.decode()
-                for url in (page, document, reverse("action_item_count"))
-            }
-            client.post(reverse("theme"), {"theme": "dark"})
-            pages[REFERENCE_DARK] = client.get(page).content.decode()
-            transaction.set_rollback(True)
-        cls.document = json.loads(pages[document.strip("/")])
+        pages = render_reference()
+        cls.document = json.loads(pages[reverse("hq_api:openapi").strip("/")])
         return pages
 
     def start(self, **options):
@@ -2412,7 +2426,7 @@ class ReferenceBrowserTests(BrowserGate):
     def visit(self, width, name=REFERENCE, fragment=""):
         self.page.set_viewport_size({"width": width, "height": 900})
         self.page.goto(f"{ORIGIN}/{name}/{fragment}", wait_until="load")
-        self.page.wait_for_function(_REFERENCE_MOUNTED, timeout=REFERENCE_READY)
+        wait_for_reference(self.page)
 
     def frame(self):
         return self.page.evaluate(_REFERENCE_FRAME, SELECTORS["reference"])
@@ -2539,7 +2553,7 @@ class ReferenceBrowserTests(BrowserGate):
         fragment = landed()
         self.assertNotEqual(fragment, "")
         self.page.reload(wait_until="load")
-        self.page.wait_for_function(_REFERENCE_MOUNTED, timeout=REFERENCE_READY)
+        wait_for_reference(self.page)
         self.assertEqual(landed(), fragment)
         self.assertEqual(self.refused, [])
         self.assertEqual(self.errors, [])

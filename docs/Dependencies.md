@@ -12,7 +12,7 @@ Where every pin lives, and how to move one.
 | Go and its modules | `controller/go.mod` and `go.sum` | `controller:check` |
 | Base images | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build` |
 | GitHub Actions | each workflow, by commit with its version beside it | `checks:pins` |
-| Hosted runner image, Python matrix, coverage floor, Cordon commit, the Trivy release the image scans run | [`scripts/toolchain.env`](../scripts/toolchain.env) | `checks:runners`, `checks:badges` |
+| Hosted runner image, Python matrix, coverage floor, Cordon commit, the Trivy release the image scans run | [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `checks:runners`, `checks:badges` |
 | cosign, on the host and in every workflow | `CosignVersion` in `controller/host/verifier.go`; workflows install it through `.github/actions/cosign` | `hq-host install` |
 | The API reference bundle | `static/vendor/scalar/standalone.js`, version and SHA-256 in `UPSTREAM` | a test |
 

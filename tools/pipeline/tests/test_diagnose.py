@@ -22,7 +22,7 @@ else:
 
 IMAGE = "ghcr.io/example-owner/example-repo/composition@sha256:" + "a" * 64
 STAMP = "2026-10-02T00:12:32.36Z "
-SEALED = "scripts/failure-logs.sh"
+SEALED = "mise run failure-logs"
 
 # A log line, the diagnosis it is named as, and what its fix points at (None: any).
 CASES = (

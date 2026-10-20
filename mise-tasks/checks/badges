@@ -1,7 +1,7 @@
 #!/bin/sh
 #MISE description="The README, the workflow matrices, pyproject.toml and the images state the toolchain's Python"
 
-# What cannot read scripts/toolchain.env is held to it. The first, oldest, of
+# What cannot read tools/pipeline/toolchain.env is held to it. The first, oldest, of
 # PYTHON_VERSIONS is the one the images run and the floor pyproject.toml admits;
 # ruff and mypy take their target from requires-python.
 set -eu
@@ -19,23 +19,23 @@ fi
 declared="$(printf '%s\n' $PYTHON_VERSIONS | jq -Rc '[.]' | jq -sc 'add')"
 matrix="$(yq -o=json -I=0 '.jobs.tests.strategy.matrix.python' .github/workflows/ci.yml)"
 if [ "$matrix" != "$declared" ]; then
-    echo "Tests runs $matrix; scripts/toolchain.env declares $declared." >&2
+    echo "Tests runs $matrix; tools/pipeline/toolchain.env declares $declared." >&2
     exit 1
 fi
 plugins="$(yq '.on.workflow_call.inputs.python-versions.default' .github/workflows/plugin-checks.yml | jq -c .)"
 if [ "$plugins" != "$declared" ]; then
-    echo "plugin-checks.yml defaults to $plugins; scripts/toolchain.env declares $declared." >&2
+    echo "plugin-checks.yml defaults to $plugins; tools/pipeline/toolchain.env declares $declared." >&2
     exit 1
 fi
 requires="$(yq -p toml -oy '.project.requires-python' pyproject.toml)"
 case "$requires" in
     ">=$oldest,"* | ">=$oldest") ;;
-    *) echo "pyproject.toml requires Python $requires; the oldest scripts/toolchain.env declares is $oldest." >&2; exit 1 ;;
+    *) echo "pyproject.toml requires Python $requires; the oldest tools/pipeline/toolchain.env declares is $oldest." >&2; exit 1 ;;
 esac
 stray="$(grep -nE '^FROM python:' Dockerfile composition/Dockerfile | grep -v "FROM python:${oldest}-" || true)"
 stray="$stray$(grep -noE 'on Python [0-9]+\.[0-9]+' README.md | grep -v "on Python ${oldest}\$" || true)"
 if [ -n "$stray" ]; then
     printf '%s\n' "$stray" >&2
-    echo "Each names a Python other than $oldest, the oldest scripts/toolchain.env declares." >&2
+    echo "Each names a Python other than $oldest, the oldest tools/pipeline/toolchain.env declares." >&2
     exit 1
 fi

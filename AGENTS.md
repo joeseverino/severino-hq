@@ -51,14 +51,14 @@ suite and says so. It reads Python imports and app names, so a rule tested
 only through a string or a template it cannot see needs `mise run check`. It
 never replaces `mise run check`. A new host domain: `docs/New-Domain.md`.
 `fast` and `check` close on a verdict line naming each failed task and test
-(`scripts/gate_verdict.py`), so run them plain and read that line; a pipe
+(`tools/gate/verdict.py`), so run them plain and read that line; a pipe
 reports the filter's exit status, not the gate's.
 
 `mise run check` answers "do my changes work?". `mise run ci` answers "will the
 pipeline accept them?": the aggregates `checks` (ruff and mypy at the locked
 versions, the lockfile, the workflows, the shell gates, the source tests, the
 Django deployment check, `pip-audit`, the structural bar, Scorecard), `tests` on every Python in
-`PYTHON_VERSIONS` (`scripts/toolchain.env`), `browser`, `controller`, `scan`
+`PYTHON_VERSIONS` (`tools/pipeline/toolchain.env`), `browser`, `controller`, `scan`
 (CodeQL) and `image`: the image build and what an image must pass (it comes
 up healthy and under its unit, carries the host programs and the controller,
 runs Python without package managers and cannot import development layers).
@@ -305,9 +305,9 @@ finds.
 
 Tests answer "does this behave?". They do not answer "is this still one
 system?": duplication and tangling are green all the way down. Those are graph
-questions. `scripts/structural-bar.sh` asks one as a gate (`checks:structural`,
+questions. `tools/structural/bar.py` asks one as a gate (`checks:structural`,
 part of `mise run ci`): no new near-duplicate pair outside tests, against
-`scripts/structural-baseline.txt`. The other questions, the exact queries and
+`tools/structural/baseline.txt`. The other questions, the exact queries and
 the traps in the graph engine are in [Structural Gate](docs/Structural-Gate.md);
 index the checkout you work in before asking it anything. File size is a test,
 not a graph question: `FileSizeTests` holds every source file under 1,000

@@ -1,0 +1,29 @@
+#!/bin/sh
+#MISE description="Scorecard: every file-based check at 10"
+
+# What .github/workflows/scorecard.yml reports after a merge, before the push:
+# the Scorecard mise.toml pins, every check local mode can answer from files
+# (tools/pipeline/scorecard_report.py), over an export of the files git would
+# push.
+set -eu
+
+repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
+cd "${repo}"
+# shellcheck source=scripts/lib/export-tree.sh
+. ./scripts/lib/export-tree.sh
+
+work="${XDG_CACHE_HOME:-$HOME/.cache}/severino-hq/scan-$(printf '%s' "${repo}" | cksum | cut -d' ' -f1)"
+src="${work}/src-scorecard"
+rm -rf "${src}"
+mkdir -p "${src}"
+export_tree "${src}"
+
+checks="$(uv run python -m tools.pipeline.scorecard_report --checks)"
+# No token: local mode reads files, and a token would let it reach GitHub on
+# this machine's credentials.
+env -u GITHUB_AUTH_TOKEN -u GITHUB_TOKEN -u GH_TOKEN -u GH_AUTH_TOKEN \
+    scorecard --local "${src}" --checks "${checks}" \
+    --show-details --format json --output "${work}/scorecard.json" \
+    2>"${work}/scorecard.log" ||
+    { cat "${work}/scorecard.log" >&2; exit 1; }
+uv run python -m tools.pipeline.scorecard_report "${work}/scorecard.json"

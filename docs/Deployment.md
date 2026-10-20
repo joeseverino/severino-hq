@@ -45,13 +45,13 @@ with it. A rollback by hand, to a release that already stood, keeps the
 schema the newer release left: nothing unapplies a migration. So a migration is
 one the release before it can run on (add a table or a column with a default,
 remove one only in a later release), or that rollback starts from a backup
-([Backup](Backup.md)). `scripts/host-boot-drill.sh` deploys a migrating
+([Backup](Backup.md)). `tools/pipeline/host-boot-drill.sh` deploys a migrating
 release that cannot serve and proves the previous one comes back on its schema.
 
 ### Checked once
 
 When a pull request merges, the push to `main` asks
-`scripts/proven-on-pr.sh` whether the pull request already proved it: its last
+`tools/pipeline/proven-on-pr.sh` whether the pull request already proved it: its last
 CI run passed, its image carries a `dev.severino.hq.tree` label equal to the
 pushed commit's tree, and it is signed by that run. With all three, Checks,
 Tests and Browser are skipped and Image promotes that image by digest to the
@@ -90,8 +90,8 @@ Every log is public, so each failure is reported at two levels:
 | the host, `/var/log/severino-hq/` | the pull, sync, install and failed-health output, root-only | the host's own detail |
 
 Compose writes what it withholds to `WITHHELD_DIR`;
-`scripts/seal-failure-logs.sh` encrypts it with [age](https://age-encryption.org)
-to `FAILURE_LOG_RECIPIENT` in [`scripts/toolchain.env`](../scripts/toolchain.env).
+`tools/pipeline/seal-failure-logs.sh` encrypts it with [age](https://age-encryption.org)
+to `FAILURE_LOG_RECIPIENT` in [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env).
 `mise run failure-logs RUN_ID` opens it with the identity in
 `SEVERINO_FAILURE_LOG_IDENTITY`. To rotate, generate a pair with
 `age-keygen -pq`, store the identity, and replace the recipient; runs sealed
@@ -187,8 +187,8 @@ A unit that fails is reported to HQ with no wiring of its own:
 timers and paths) sets `OnFailure=severino-hq-job@units.read.service` for
 every unit whose name begins `severino-hq-`. The controller and the
 `units.read` job carry an empty drop-in of that name, because each would
-otherwise restart itself on failure. `scripts/test-systemd-units.sh` holds the
-shipped units to those rules.
+otherwise restart itself on failure. `controller/host/units_rules_test.go`
+holds the shipped units to those rules.
 
 ## A deploy
 
@@ -237,7 +237,7 @@ directory is not its account's alone. The design is in
 
 [Install](Install.md) brings up a new host, step by step: Connect, the
 encrypted credential, the runner, `host.json`, the vault items and the first
-start. `scripts/host-boot-drill.sh` does the web unit's part of it on every
+start. `tools/pipeline/host-boot-drill.sh` does the web unit's part of it on every
 image CI builds.
 
 Every later change arrives through Deploy. Rerun `hq-host bootstrap` when

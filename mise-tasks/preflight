@@ -5,7 +5,7 @@
 #USAGE flag "--remote" help="Read every check GitHub ran on this commit instead of running `mise run ci`; the commit must be pushed"
 #USAGE flag "--skip-host" help="Local gates only, exiting 2: not a verdict on the release"
 
-# The verdict is scripts/preflight.py's. The turn is taken here: Python under
+# The verdict is tools/gate/preflight.py's. The turn is taken here: Python under
 # uv is a child process, not this one, so it cannot keep the pid the turn
 # names.
 set -eu
@@ -14,4 +14,4 @@ repo="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 # shellcheck source=tools/lib/heavy-turn.sh
 . "${repo}/tools/lib/heavy-turn.sh"
 cd "${repo}"
-exec uv run python scripts/preflight.py
+exec uv run python -m tools.gate.preflight

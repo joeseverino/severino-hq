@@ -1,6 +1,5 @@
 """What the pipeline promises: pinned actions, least privilege, sealed logs, and releases only from main."""
 
-import importlib.util
 import io
 import json
 import re
@@ -13,6 +12,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, tag
 
 from tests.mise_tasks import body, mise_tasks
+from tools.pipeline import compose_plugins, plugin_identity
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -305,7 +305,7 @@ class ExtensionsAgainstHostTests(SimpleTestCase):
         self.assertIn('"$WITHHELD_DIR/', run)
         self.assertIn("exit 1", run)
         self.assertNotIn("GH_TOKEN", check)
-        verify = next(index for index, step in enumerate(self.steps) if "scripts/composed-suite.sh" in step)
+        verify = next(index for index, step in enumerate(self.steps) if "tools/pipeline/composed-suite.sh" in step)
         self.assertLess(self.steps.index(check), verify)
 
     def test_an_extension_is_checked_from_its_coordinated_branch_or_its_default_branch(self):
@@ -368,7 +368,7 @@ class PublicLogTests(SimpleTestCase):
 
     def test_the_composed_suite_prints_through_the_filter(self):
         self.assertNotIn("manage.py test", code(self.compose))
-        self.assertIn("scripts/composed-suite.sh", code(self.compose))
+        self.assertIn("tools/pipeline/composed-suite.sh", code(self.compose))
 
     def test_a_scan_writes_a_file_not_the_package_table(self):
         scans = [step for step in self.steps if "aquasecurity/trivy-action@" in step]
@@ -382,11 +382,11 @@ class PublicLogTests(SimpleTestCase):
         for upload in uploads:
             with self.subTest(step=upload.splitlines()[0]):
                 self.assertRegex(block(upload, "path", 10)[0], r"\.age$")
-        self.assertIn("scripts/seal-failure-logs.sh", code(self.compose))
-        self.assertTrue((ROOT / "scripts" / "seal-failure-logs.sh").is_file())
+        self.assertIn("tools/pipeline/seal-failure-logs.sh", code(self.compose))
+        self.assertTrue((ROOT / "tools" / "pipeline" / "seal-failure-logs.sh").is_file())
 
     def test_sealed_logs_are_encrypted_to_a_post_quantum_key(self):
-        pins = (ROOT / "scripts" / "toolchain.env").read_text()
+        pins = (ROOT / "tools" / "pipeline" / "toolchain.env").read_text()
         self.assertRegex(pins, r"(?m)^FAILURE_LOG_RECIPIENT=age1pq1[0-9a-z]+$")
 
     def test_wheel_digests_reach_the_build_as_a_file_not_an_argument(self):
@@ -488,20 +488,13 @@ class GateReferenceTests(SimpleTestCase):
                 self.assertTrue(task["timeout"], "a hung suite would hold the turn forever")
 
 
-def compose_plugins():
-    spec = importlib.util.spec_from_file_location("compose_plugins", ROOT / "scripts" / "compose-plugins.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @tag("source")
 class ComposeCandidateTests(SimpleTestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
-        self.module = compose_plugins()
+        self.module = compose_plugins
 
     def wheel(self, name: str) -> Path:
         path = self.root / "in" / name
@@ -714,13 +707,6 @@ class ScriptInputTests(SimpleTestCase):
         self.assertLess(check, use)
 
 
-def plugin_identity():
-    spec = importlib.util.spec_from_file_location("plugin_identity", ROOT / "scripts" / "plugin-identity.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @tag("source")
 class PluginIdentityTests(SimpleTestCase):
     """An extension's identity is read from its package, and only from there."""
@@ -745,7 +731,7 @@ class PluginIdentityTests(SimpleTestCase):
         return f"from hq_sdk.plugin import PluginManifest\nplugin = PluginManifest({body})\n"
 
     def test_the_package_declares_everything_admission_needs(self):
-        found = plugin_identity().identity(self.package(self.manifest()))
+        found = plugin_identity.identity(self.package(self.manifest()))
         self.assertEqual(
             found,
             {
@@ -765,19 +751,19 @@ class PluginIdentityTests(SimpleTestCase):
         }
         for reason, manifest in cases.items():
             with self.subTest(reason=reason), self.assertRaises(SystemExit) as refused:
-                plugin_identity().identity(self.package(manifest))
+                plugin_identity.identity(self.package(manifest))
             self.assertIn(reason, str(refused.exception))
 
     def test_a_manifest_naming_another_repository_is_refused_where_it_is_admitted(self):
         package = self.package(self.manifest(source_repository='"owner/example-alpha"'))
-        self.assertEqual(plugin_identity().identity(package, "owner/example-alpha")["plugin-id"], "example.alpha")
+        self.assertEqual(plugin_identity.identity(package, "owner/example-alpha")["plugin-id"], "example.alpha")
         with self.assertRaises(SystemExit) as refused:
-            plugin_identity().identity(package, "owner/example-extensions")
+            plugin_identity.identity(package, "owner/example-extensions")
         self.assertIn("owner/example-extensions", str(refused.exception))
 
     def test_a_manifest_away_from_its_package_is_refused(self):
         with self.assertRaises(SystemExit) as refused:
-            plugin_identity().identity(self.package(self.manifest(), name="example-gamma"))
+            plugin_identity.identity(self.package(self.manifest(), name="example-gamma"))
         self.assertIn("src/example_gamma/plugin.py", str(refused.exception))
 
 
@@ -793,7 +779,7 @@ class ExtensionCallerTests(SimpleTestCase):
                 self.assertNotIn(f"\n  {name}", admit.split("\nruns:")[0])
                 self.assertNotIn(f"\n      {name}", checks.split("\npermissions:")[0])
         self.assertIn('check-plugin.sh --plugin-root "$PACKAGE_DIR"', checks)
-        self.assertIn("scripts/plugin-identity.py", admit)
+        self.assertIn("tools.pipeline.plugin_identity", admit)
 
 
 def action_steps(text: str) -> list[str]:
@@ -811,9 +797,9 @@ class OneRepositoryManyExtensionsTests(SimpleTestCase):
     def test_each_package_retains_the_artifact_compose_reads_by_its_id(self):
         uploaded = re.search(r"(?m)^\s+name: (\S+)\$\{\{ steps\.identity\.outputs\.plugin-id \}\}$", self.admit)
         self.assertIsNotNone(uploaded, "the admission artifact is not named by plugin id")
-        fetched = (ROOT / "scripts" / "admissions.sh").read_text()
+        fetched = (ROOT / "tools" / "pipeline" / "admissions.sh").read_text()
         self.assertIn(f'--name "{uploaded.group(1)}$id"', fetched)
-        self.assertIn("scripts/admissions.sh fetch", workflow("compose.yml"))
+        self.assertIn("tools/pipeline/admissions.sh fetch", workflow("compose.yml"))
 
     def test_a_run_starts_the_composition_and_reports_on_its_commit_only_where_it_dispatches(self):
         reaching = [

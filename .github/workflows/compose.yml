@@ -114,7 +114,7 @@ jobs:
         id: pins
         run: |
           set -euo pipefail
-          . ./scripts/toolchain.env
+          . ./tools/pipeline/toolchain.env
           echo "cordon-commit=$CORDON_COMMIT" >> "$GITHUB_OUTPUT"
           echo "trivy=$TRIVY_VERSION" >> "$GITHUB_OUTPUT"
 
@@ -357,14 +357,14 @@ jobs:
         # newest successful admission run, shared by every extension that
         # repository holds. This is the whole input to "has anything
         # changed?", and it is deliberately the cheapest question that can
-        # answer it (scripts/admissions.sh). It can be conservative in one
+        # answer it (tools/pipeline/admissions.sh). It can be conservative in one
         # direction only (a re-run that produced an identical wheel looks like
         # a change and rebuilds) which is the safe direction to be wrong in.
         #
         # Written to a file rather than a step output. An output is read back by
         # interpolation, which puts its contents into the text of the step that
         # reads it, and these lines name the private repositories.
-        run: scripts/admissions.sh find composition-set.json admissions.txt
+        run: tools/pipeline/admissions.sh find composition-set.json admissions.txt
 
       - name: Find coordinated extension branches
         # A pull request whose branch name an extension also carries is a
@@ -562,7 +562,7 @@ jobs:
         # own artifact, by its id: several may come from one run.
         if: >-
           steps.fingerprint.outputs.build == 'true'
-        run: scripts/admissions.sh fetch admissions.txt artifacts
+        run: tools/pipeline/admissions.sh fetch admissions.txt artifacts
 
       - name: Check out exact Cordon verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -668,7 +668,7 @@ jobs:
           set -f
           mkdir -p "$WITHHELD_DIR"
           # shellcheck disable=SC2046
-          if ! python scripts/compose-plugins.py $(cat build/compose-args) --out build/composition \
+          if ! python3 -m tools.pipeline.compose_plugins $(cat build/compose-args) --out build/composition \
             2> "$WITHHELD_DIR/compose-plugins.log"; then
             echo "::error title=Composition refused::The admitted set does not compose. The reason is in this run's sealed failure logs."
             exit 1
@@ -712,7 +712,7 @@ jobs:
             # is built from its path, which must declare that id, and nothing
             # else in the repository is. Read without running the branch's code.
             while IFS=$'\t' read -r id package; do
-              if ! declared=$(python3 scripts/plugin-identity.py "$dir/$package" \
+              if ! declared=$(python3 -m tools.pipeline.plugin_identity "$dir/$package" \
                    2> "$WITHHELD_DIR/candidate-identity-$id.log" | sed -n 's/^plugin-id=//p') \
                  || [ "$declared" != "$id" ]; then
                 echo "::error title=Coordinated branch did not build::A coordinated branch does not carry an extension the composition lists at its path."
@@ -738,7 +738,7 @@ jobs:
           set -euo pipefail
           args=()
           for wheel in candidate-wheels/*.whl; do args+=(--wheel "$wheel"); done
-          python scripts/compose-plugins.py --candidate "${args[@]}" --out build/candidate
+          python3 -m tools.pipeline.compose_plugins --candidate "${args[@]}" --out build/candidate
 
       - name: Build the candidate image
         # Admission off: these wheels are unsigned branch builds. The tag has no
@@ -799,10 +799,10 @@ jobs:
         # the only contributor to a global surface.
         #
         # The log gets totals and failing host test ids only: an extension's
-        # tests name its models, routes and fixtures (scripts/composed-suite.sh).
+        # tests name its models, routes and fixtures (tools/pipeline/composed-suite.sh).
         env:
           IMAGE: ${{ steps.candidate.outputs.image }}
-        run: scripts/composed-suite.sh "$IMAGE"
+        run: tools/pipeline/composed-suite.sh "$IMAGE"
 
       - name: The composed image comes up healthy
         # As production boots it, before anything is published: the suite above
@@ -811,7 +811,7 @@ jobs:
           steps.fingerprint.outputs.build == 'true'
         env:
           IMAGE: ${{ steps.candidate.outputs.image }}
-        run: scripts/image-health.sh "$IMAGE"
+        run: tools/pipeline/image-health.sh "$IMAGE"
 
       - name: Scan composed image
         # Skipped only by an admission's dispatch that found nothing to do.
@@ -903,7 +903,7 @@ jobs:
         if: failure()
         run: |
           set -euo pipefail
-          scripts/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age
+          tools/pipeline/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age
           if [ -f failure-logs.tar.age ]; then echo "sealed=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Upload the sealed output
@@ -930,7 +930,7 @@ jobs:
             echo "Nothing was published; production still runs the previous image."
             if [ "$SEALED" = true ]; then
               echo
-              echo "Withheld output, for the operator: \`scripts/failure-logs.sh ${GITHUB_RUN_ID}\`"
+              echo "Withheld output, for the operator: \`mise run failure-logs ${GITHUB_RUN_ID}\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 

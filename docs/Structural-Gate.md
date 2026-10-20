@@ -44,10 +44,9 @@ paths and missing Go graph symbols fail the classification command. Unresolved o
 unsupported executable patterns remain in the similarity gate; they do not become
 an inferred exemption. Typed NPM projection loops remain gated in this iteration.
 
-Run `go build -o /tmp/structural-inspector scripts/structural_go.go`, then
-`STRUCTURAL_INSPECTOR=/tmp/structural-inspector python3 scripts/test_structural_classify.py`
-for focused adversarial tests. `STRUCTURAL_REVIEW_ROOT` optionally adds read-only
-checks of the actual reviewed declaration, generated, delegation and NPM pairs.
+The inspector is `controller/cmd/structural-inspector`, held by the
+controller's gate like the rest of its module. The adversarial tests are
+`mise run checks:source tools.structural`, which builds it.
 
 ## Asking the graph
 

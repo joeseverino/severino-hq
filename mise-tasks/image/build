@@ -26,7 +26,7 @@ fi
 # The source label is the standard OCI one: GHCR links the package to this
 # repository by it, and the controller reads which repository delivers it from
 # the image it runs. The tree label is what a push to main compares to promote
-# an image proven on its pull request (scripts/proven-on-pr.sh).
+# an image proven on its pull request (tools/pipeline/proven-on-pr.sh).
 # shellcheck disable=SC2086  # the cache flags are meant to split
 docker buildx build --load ${IMAGE_BUILD_CACHE:-} \
     --label "org.opencontainers.image.source=$source" \

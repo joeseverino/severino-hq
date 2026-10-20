@@ -1,0 +1,19 @@
+#!/bin/sh
+#MISE description="Trivy over an image, as Compose scans the composed one: fixable HIGH and CRITICAL fail"
+#USAGE arg "[image]" help="The image to scan; without one, the host image is built and scanned"
+
+# Compose runs the pinned trivy-action at TRIVY_VERSION
+# (tools/pipeline/toolchain.env); this runs the same release with its flags.
+set -eu
+
+image="${usage_image:-}"
+if [ -z "${image}" ]; then
+    image="severino-hq:trivy"
+    mise run image:build --tag "${image}"
+fi
+have="$(trivy --version 2>/dev/null | sed -n 's/^Version: //p')"
+if [ "${have}" != "${TRIVY_VERSION#v}" ]; then
+    echo "Trivy ${have:-is not installed}; Compose scans with ${TRIVY_VERSION}." >&2
+    exit 2
+fi
+trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table "${image}"

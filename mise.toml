@@ -31,7 +31,7 @@ output = "keep-order"
 [env]
 # Facts that are not tools: the Python matrix, the coverage floor, the runner
 # image. Shell and workflows read the same file.
-_.file = "scripts/toolchain.env"
+_.file = "tools/pipeline/toolchain.env"
 SEVERINO_LOG_LEVEL = "CRITICAL"
 # `uv run`, `uv sync` and `uv export` refuse a uv.lock that pyproject.toml has
 # moved past, as `--locked` does. So do `uv lock` and `uv add`: change the lock
@@ -48,7 +48,7 @@ jq = "1.8.2"
 uv = "0.13.1"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
 scorecard = "5.6.0"
-# Seals a failed Compose run's output (scripts/seal-failure-logs.sh). Lazy:
+# Seals a failed Compose run's output (tools/pipeline/seal-failure-logs.sh). Lazy:
 # `mise install` leaves it to its first use, held to mise.lock all the same.
 age = { version = "1.3.2", lazy = true }
 
@@ -198,9 +198,9 @@ run = "uv run python manage.py dev_session operator"
 [tasks."dev:look"]
 extends = "django"
 depends = ["setup:webkit"]
-description = "Screenshot pages of the browser gate's estate at a few widths, and run one of its rules there"
+description = "Screenshot HQ pages as the browser gates draw them at a few widths, and run one of their rules there"
 usage = '''
-arg "<pages>" help="Comma-separated pages of the gate's estate (connections,dense/services), or all"
+arg "<pages>" help="Comma-separated pages: the gate's estate (connections,dense/services), the API reference (api/docs), the example estate's navigation (estate, estate/infrastructure), or all"
 flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
 flag "--rule <rule>" help="A rule method of LayoutBrowserTests to run on each page"
 flag "--css <css>" help="A stylesheet added first: the defect a new rule must catch"
@@ -229,7 +229,7 @@ run = "uv run --group browser python manage.py"
 description = "Rewrite every derived file from its source; `mise run drift` checks them instead"
 # In the order each reads the last: the API document feeds the clients, the
 # bridge contract feeds the Go types. Each step takes the heavy turn, the
-# contract tools' install among them, so none shares scripts/openapi's
+# contract tools' install among them, so none shares tools/clients'
 # node_modules with a drift gate's install.
 extends = "django"
 shell = "tools/lib/heavy.sh sh -o errexit -c"
@@ -238,7 +238,7 @@ run = [
   "mise run setup:openapi",
   "uv run python manage.py sdk_contract",
   "uv run python manage.py api_openapi",
-  "scripts/generate-clients.sh --write",
+  "tools/clients/generate.sh --write",
   "uv run python manage.py bridge_contract",
   "cd controller && go generate ./...",
   "uv run python manage.py connections_reference",
@@ -252,15 +252,6 @@ description = "Every derived file is what its source generates: each drift:* gat
 extends = "heavy"
 run = "mise run -c 'drift:*'"
 
-[tasks.failure-logs]
-description = "Open a failed Compose run's sealed logs"
-raw = true
-usage = '''
-arg "<run>" help="The Compose run whose logs were sealed"
-arg "[dir]" help="Where to unpack them; a private temporary directory by default"
-'''
-run = 'scripts/failure-logs.sh "$usage_run" ${usage_dir:+"$usage_dir"}'
-
 # ------------------------------------------------------------- aggregates
 
 [tasks.fast]
@@ -273,17 +264,17 @@ flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test worke
 '''
 shell = "tools/lib/heavy.sh sh -o errexit -c"
 timeout = "30m"
-run = 'uv run python scripts/fast_gate.py ${usage_list:+--list} --parallel "$usage_parallel" ${usage_base:+"$usage_base"}'
+run = 'uv run python -m tools.gate.fast ${usage_list:+--list} --parallel "$usage_parallel" ${usage_base:+"$usage_base"}'
 
 [tasks.check]
 description = "Does my change work: every Checks gate, the Tests gates on one Python, and the suite composed"
 # Named by aggregate and glob, so a new gate joins without an edit here. One
 # task at a time: each suite starts a worker per core, and two at once exhaust
 # a small machine's memory. CI runs each job's aggregate, never this task.
-# gate_verdict ends the output on the tasks and tests that failed.
+# tools.gate.verdict ends the output on the tasks and tests that failed.
 extends = "heavy"
 timeout = "2h"
-run = "uv run python scripts/gate_verdict.py check mise run -c -j 1 checks ::: 'tests:*' ::: suite:composed"
+run = "uv run python -m tools.gate.verdict check mise run -c -j 1 checks ::: 'tests:*' ::: suite:composed"
 
 [tasks.ci]
 description = "Every gate the pipeline runs"
@@ -294,7 +285,10 @@ run = "mise run -c checks ::: tests ::: browser ::: controller ::: scan ::: imag
 
 [tasks.checks]
 description = "CI job Checks"
-depends = ["checks:*", "drift:*"]
+# Run-form, so the gates and the installs they depend on run inside one turn.
+extends = "heavy"
+timeout = "2h"
+run = "mise run -c 'checks:*' ::: 'drift:*'"
 
 [tasks.browser]
 description = "CI job Browser"
@@ -334,9 +328,9 @@ run = "uv run python -m mypy"
 [tasks."setup:openapi"]
 description = "Install the locked contract tools"
 hide = true
-sources = ["scripts/openapi/package-lock.json"]
-outputs = ["scripts/openapi/node_modules/.package-lock.json"]
-run = "npm --prefix scripts/openapi ci"
+sources = ["tools/clients/package-lock.json"]
+outputs = ["tools/clients/node_modules/.package-lock.json"]
+run = "npm --prefix tools/clients ci"
 
 [tasks."checks:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
@@ -344,8 +338,8 @@ depends = ["setup:openapi"]
 # Specification rules cover wire contracts. HTTP style recommendations do not
 # apply to Django's canonical trailing slashes or the stdin/stdout bridge.
 run = [
-  "node scripts/openapi/node_modules/@redocly/cli/bin/cli.js lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json",
-  "node --test scripts/openapi/test-client.mjs",
+  "node tools/clients/node_modules/@redocly/cli/bin/cli.js lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json",
+  "node --test tools/clients/test-client.mjs",
 ]
 
 [tasks."checks:lockfile"]
@@ -354,7 +348,7 @@ run = "uv lock --check"
 
 [tasks."checks:toolchain"]
 description = "mise.lock has a checksum for every pinned tool on every platform a gate runs on, and the images take the uv mise pins"
-run = "python3 scripts/toolchain_lock.py"
+run = "uv run python -m tools.pipeline.toolchain_lock"
 
 [tasks."checks:mise-tasks"]
 description = "Every task is valid: its usage spec parses, its dependencies exist, its timeout and globs are well formed"
@@ -391,11 +385,7 @@ run = "uv run python manage.py check --deploy --fail-level WARNING"
 [tasks."checks:structural"]
 description = "No new near-duplicate pair outside tests"
 usage = 'flag "--record" help="Rewrite the baseline from this tree instead of checking it"'
-run = 'scripts/structural-bar.sh ${usage_record:+--record}'
-
-[tasks."checks:scorecard"]
-description = "Scorecard: every file-based check at 10"
-run = "scripts/security-scan.sh scorecard"
+run = 'uv run python -m tools.structural.bar ${usage_record:+--record}'
 
 # ------------------------------------------------------------------ drift
 # Each derived file against its source, run by the Checks job, by `mise run
@@ -415,7 +405,7 @@ run = "uv run python manage.py api_openapi --check"
 [tasks."drift:clients"]
 description = "The generated API clients are what the API document generates"
 depends = ["setup:openapi"]
-run = "scripts/generate-clients.sh --check"
+run = "tools/clients/generate.sh --check"
 
 [tasks."drift:bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"
@@ -459,7 +449,7 @@ run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parall
 description = "Retake the README's pictures from the showcase demo"
 depends = ["setup:webkit", "demo:build"]
 extends = "heavy"
-run = "uv run --group browser python scripts/readme_screenshot.py"
+run = "uv run --group browser python -m demo.screenshot"
 
 [tasks."browser:demo"]
 description = "Build the demo and check it in WebKit"
@@ -492,21 +482,15 @@ run = "uv run --group browser python manage.py test hq.platform.core.estate_brow
 description = "The Go controller: format, generated types, vet, race tests"
 run = "controller/scripts/check.sh"
 
-# ------------------------------------------------------------------- scan
-
-[tasks."scan:codeql"]
-description = "CodeQL, security-and-quality: no alerts"
-run = "scripts/security-scan.sh codeql"
-
 # ------------------------------------------------------------------ image
 # IMAGE names the image under test; the pipeline passes the one it built.
 
 [tasks."image:verify:healthy"]
 description = "It comes up healthy"
 depends = ["image:build"]
-run = 'scripts/image-health.sh "${IMAGE:-severino-hq:ci-local}"'
+run = 'tools/pipeline/image-health.sh "${IMAGE:-severino-hq:ci-local}"'
 
 [tasks."image:verify:host-boot"]
 description = "It boots under its unit: waits for its environment, survives a crash and a reboot"
 depends = ["image:build"]
-run = 'scripts/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'
+run = 'tools/pipeline/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'

@@ -36,7 +36,7 @@
       "id": "admission-artifact",
       "match": "has no artifact of its own in its repository's newest successful admission run",
       "title": "A listed extension was not admitted in its repository's run",
-      "fix": "The composition set lists an extension whose repository's newest successful admission run retained no admission-<id> artifact for it: its package is not among the run's admission legs, or its id differs from the listed one. Which id is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID). Add the package to that repository's admission matrix and re-run it, or correct the composition set."
+      "fix": "The composition set lists an extension whose repository's newest successful admission run retained no admission-<id> artifact for it: its package is not among the run's admission legs, or its id differs from the listed one. Which id is in the run's sealed failure logs (mise run failure-logs RUN_ID). Add the package to that repository's admission matrix and re-run it, or correct the composition set."
     },
     {
       "id": "host-unsigned",
@@ -60,25 +60,25 @@
       "id": "composition-refused",
       "match": "The admitted set does not compose",
       "title": "The admitted extensions do not compose",
-      "fix": "Cordon or the host refused the admitted set as one composition: a wheel that is not its admitted artifact, a duplicate, or mixed admission policies. The reason is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID)."
+      "fix": "Cordon or the host refused the admitted set as one composition: a wheel that is not its admitted artifact, a duplicate, or mixed admission policies. The reason is in the run's sealed failure logs (mise run failure-logs RUN_ID)."
     },
     {
       "id": "composition-did-not-run",
       "match": "The composed suite did not run",
       "title": "The composed application did not start",
-      "fix": "The composed image raised before its suite ran, usually settings or an extension that does not load against this host. The exception's type is in the log, the rest in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID)."
+      "fix": "The composed image raised before its suite ran, usually settings or an extension that does not load against this host. The exception's type is in the log, the rest in the run's sealed failure logs (mise run failure-logs RUN_ID)."
     },
     {
       "id": "candidate-build",
       "match": "A coordinated branch did not build",
       "title": "A coordinated extension branch did not build",
-      "fix": "The branch named for this pull request did not build a wheel. Its build output is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID); fix it in that branch and push again."
+      "fix": "The branch named for this pull request did not build a wheel. Its build output is in the run's sealed failure logs (mise run failure-logs RUN_ID); fix it in that branch and push again."
     },
     {
       "id": "image-unhealthy",
       "match": "The container did not report healthy within",
       "title": "The image did not come up healthy",
-      "fix": "The container never reported healthy within 90 seconds of booting as production does. For the host image its log follows the error; for the composed image it is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID)."
+      "fix": "The container never reported healthy within 90 seconds of booting as production does. For the host image its log follows the error; for the composed image it is in the run's sealed failure logs (mise run failure-logs RUN_ID)."
     },
     {
       "id": "host-tests",
@@ -90,7 +90,7 @@
       "id": "composition-tests",
       "match": "(composed suite: FAILED \\(|extension test\\(s\\) failed)",
       "title": "The composed application failed its tests",
-      "fix": "The suite failed inside the composed image. A failing host test is named in the log; an extension's are only counted, and their output is in the run's sealed failure logs (scripts/failure-logs.sh RUN_ID). The fix belongs in the host or that extension."
+      "fix": "The suite failed inside the composed image. A failing host test is named in the log; an extension's are only counted, and their output is in the run's sealed failure logs (mise run failure-logs RUN_ID). The fix belongs in the host or that extension."
     },
     {
       "id": "unsigned-composition",
