@@ -485,7 +485,8 @@ the page. A row that holds more than it shows ends its naming cell with
 carry `row-gutter`; the stylesheet shows the toggle only where the row holds
 something back. A `TableListMixin` list declares the same through
 `TableColumn(kind=)`, its ranks derived from the columns unless one says
-`drop=`, and its counts as `table_drop_mid` and `table_drop_narrow`.
+`drop=`, its counts as `table_drop_mid` and `table_drop_narrow`, and its region's
+`room=` as `table_room`.
 
 <!-- sdk_contract: shared UI contract, written by `mise run regen` from hq_sdk/template_contract.py -->
 

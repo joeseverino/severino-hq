@@ -115,7 +115,11 @@ whole value in its title and in the open row. A region whose rows leave an
 identifier less of the row names it with `room=`: `shared` when the
 identifier sits beside wide columns (it gets little until the region is wide),
 `snug` when it sits beside other identifiers (each is held near one short
-length). A run of links longer than the count its template
+length); a list view says it as `table_room`. Free text in a cell (a message,
+a record's words) is marked `cell-data` and breaks a run with no seam in it (a
+link, a digest) wherever it must, so it never holds its column wider than its
+box; an identifier in a prose column waits for the open row (`row-more`)
+rather than holding that column at its cap. A run of links longer than the count its template
 declares folds behind "+N", and a stacked list longer than four shows three
 and "+N more". A row that holds anything back gets one toggle that lifts every
 cut and opens every fold in it. Nothing is measured to lay a table out:

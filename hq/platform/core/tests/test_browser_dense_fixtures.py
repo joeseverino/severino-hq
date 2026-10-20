@@ -415,6 +415,7 @@ def build_dense_estate():
         connection=PORTAINER,
     )
     _audit_trail(user)
+    _unbroken_words(user)
     _starred(user)
     _operations(user)
     _unmanaged()
@@ -613,6 +614,34 @@ def _audit_trail(user):
     )
 
 
+def _unbroken_words(user):
+    """What a history holds with no seam in it: a sign-in's subject, a link
+    quoted in a message, and a run of containers seen one after another, each
+    named after its stack and machine."""
+
+    AuditLog.objects.create(
+        action=AuditLog.Action.UPDATED,
+        user=user,
+        object_type="user",
+        object_repr="oidc:" + "0123456789abcdef" * 4,
+        message="Signed in through the identity provider",
+    )
+    AuditLog.objects.create(
+        action=AuditLog.Action.UPDATED,
+        user=user,
+        object_type="action_item",
+        object_repr="An example action item",
+        message="Marked read from https://hq.example.test/action-items/?q=has+not+been+read&status=&source=",
+    )
+    for index in range(3):
+        AuditLog.objects.create(
+            action=AuditLog.Action.CREATED,
+            object_type="container",
+            object_repr=f"{MACHINE}-{_container(index)}-{index + 1}",
+            connection=PORTAINER,
+        )
+
+
 # The same kind of table as test_browser_fixtures.PAGES, under dense/ so a
 # failure names which estate it came from.
 DENSE_PAGES = {
@@ -645,6 +674,7 @@ DENSE_PAGES = {
     "dense/record": (lambda: reverse("control_plane:detail", kwargs={"key": OPERATED}), ExitStack),
     "dense/controller": (lambda: reverse("control_plane:controller"), ExitStack),
     "dense/tailnet": (lambda: reverse("control_plane:tailnet"), ExitStack),
+    "dense/audit": (lambda: reverse("core:audit_list"), ExitStack),
     "dense/audit-event": (
         lambda: reverse("core:audit_detail", args=[AuditLog.objects.filter(metadata__has_key="changes").get().pk]),
         ExitStack,

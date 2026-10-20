@@ -3,7 +3,7 @@
 import shlex
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Literal
 
 from django.db.models import Q, QuerySet, Sum
 
@@ -164,6 +164,10 @@ class TableListMixin:
     # one: `{% table_region %}`'s ``mid`` and ``narrow``.
     table_drop_mid = 0
     table_drop_narrow = 0
+    # How much of a row an identifier in it may take: `{% table_region %}`'s
+    # ``room`` ("shared" beside a wide prose column, "snug" beside other
+    # identifiers).
+    table_room: Literal["", "shared", "snug"] = ""
     # A checkbox per row, for copying the selected rows' ids.
     table_selectable = False
     table_sorts: tuple[TableSort, ...] = ()
@@ -305,6 +309,7 @@ class TableListMixin:
                 else named_first(self.table_columns)
             ),
             "drop": {"mid": self.table_drop_mid, "narrow": self.table_drop_narrow},
+            "room": self.table_room,
             "selectable": self.table_selectable,
             "active_count": active_count,
             "querystring": query_params.urlencode(),

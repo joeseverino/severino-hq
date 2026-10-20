@@ -431,22 +431,33 @@ _NESTED_DISCLOSURES = (
 )
 
 # A plain word split across lines inside a table cell: its column was given
-# less than the word, because another column's content took the width.
+# less than the word, because another column's content took the width. A word
+# inside a run with no space in it (a link, a digest) that is itself wider than
+# its cell breaks somewhere wherever the column is, so it is not counted.
 _BROKEN_WORDS = (
     "() => {"
     + _DESCRIBE
     + """
   const found = [];
   const range = document.createRange();
+  const across = (node, start, end) => {
+    range.setStart(node, start);
+    range.setEnd(node, end);
+    return [...range.getClientRects()].filter((r) => r.width);
+  };
   for (const cell of document.querySelectorAll('main td')) {
+    const style = getComputedStyle(cell);
+    const line = cell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       if (!node.parentElement.checkVisibility()) continue;
-      for (const match of node.textContent.matchAll(/[A-Za-z]{4,}/g)) {
-        range.setStart(node, match.index);
-        range.setEnd(node, match.index + match[0].length);
-        const lines = new Set([...range.getClientRects()].filter((r) => r.width).map((r) => Math.round(r.top)));
-        if (lines.size > 1) found.push(`${describe(cell)} breaks "${match[0]}"`);
+      for (const run of node.textContent.matchAll(/\\S+/g)) {
+        const wide = across(node, run.index, run.index + run[0].length).reduce((sum, r) => sum + r.width, 0) > line;
+        for (const match of run[0].matchAll(/[A-Za-z]{4,}/g)) {
+          const at = run.index + match.index;
+          const lines = new Set(across(node, at, at + match[0].length).map((r) => Math.round(r.top)));
+          if (lines.size > 1 && !(wide && match[0].length < run[0].length)) found.push(`${describe(cell)} breaks "${match[0]}"`);
+        }
       }
     }
   }
@@ -982,7 +993,7 @@ _TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' +
   .map((box) => [box, box.querySelector(':scope > table')])
   .filter(([box, table]) => table && table.querySelector('tbody td')
     && table.getBoundingClientRect().width > box.clientWidth + 1)
-  .map(([box, table]) => (table.querySelector('th') || table).textContent.trim().slice(0, 24)
+  .map(([box, table]) => (box.getAttribute('aria-label') || table.querySelector('th')?.textContent || '').trim().slice(0, 24)
     + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
 # A frame has been drawn and nothing is moving.
 _PAINTED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
@@ -1439,13 +1450,15 @@ const chars = (root) => {
       range.setStart(node, i);
       range.setEnd(node, i + 1);
       const rect = [...range.getClientRects()].find((r) => r.width);
-      out.push({ch: node.data[i], top: rect ? Math.round(rect.top) : null, bottom: rect ? rect.bottom : 0, width: rect ? rect.width : 0});
+      out.push({ch: node.data[i], top: rect ? Math.round(rect.top) : null, bottom: rect ? rect.bottom : 0, node});
     }
   }
   return out;
 };
+// An element laid out as a block of its own (a flex item, say, beside a mark
+// that shares its row) is that box; an inline one is set in its ancestor's.
 const room = (el) => {
-  let line = el.parentElement;
+  let line = el;
   while (getComputedStyle(line).display.startsWith('inline') || getComputedStyle(line).display === 'contents') line = line.parentElement;
   const style = getComputedStyle(line);
   return line.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
@@ -1470,7 +1483,19 @@ _TOKEN_BREAKS = (
     const prev = list[i - 1].ch, next = list[i].ch, before = i > 1 ? list[i - 2].ch : '';
     return prev === '/' || (prev === ':' && next !== ':') || (prev === '.' && !(digit.test(before) && digit.test(next)));
   };
-  const widthOf = (list) => list.reduce((sum, c) => sum + c.width, 0);
+  // The width the browser asks for the run unbroken, in the font it is set
+  // in: its max-content, which is what it weighs against the line. A sum of
+  // each character's own box is not that width: the boxes overlap, and miss
+  // the kerning between characters.
+  const widthOf = (list) => {
+    const run = document.createElement('span');
+    run.style.cssText = 'position: absolute; visibility: hidden; inline-size: max-content; white-space: pre';
+    run.textContent = list.map((c) => c.ch).join('');
+    list[0].node.parentElement.append(run);
+    const width = run.getBoundingClientRect().width;
+    run.remove();
+    return width;
+  };
   for (const el of document.querySelectorAll('main ' + token)) {
     if (!el.checkVisibility() || el.parentElement.closest(token)) continue;
     const all = chars(el);

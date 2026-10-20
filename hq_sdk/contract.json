@@ -1412,6 +1412,10 @@
             "kind": "attribute",
             "type": "tuple"
           },
+          "table_room": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "table_search_fields": {
             "kind": "attribute",
             "type": "tuple"

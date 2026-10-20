@@ -23,7 +23,7 @@ the pages.
 {% if not object_list %}
 {% if table.active_count %}{% include "partials/_empty_state.html" with message="Nothing matches." remedy=table.clear %}{% elif table.empty_link %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=table.empty_link %}{% elif table.empty_remedy %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=page.remedy %}{% else %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why %}{% endif %}
 {% else %}
-{% table_region page.title mid=table.drop.mid narrow=table.drop.narrow %}
+{% table_region page.title room=table.room mid=table.drop.mid narrow=table.drop.narrow %}
   <table class="data-table"{% if table.selectable %} data-selectable-table{% endif %}>
     <thead>
       <tr>

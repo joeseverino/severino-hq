@@ -154,12 +154,15 @@ class Things(tables.TableListMixin, pages.PageMixin):
     # How many ranked columns leave a mid-width box and a narrow one.
     table_drop_mid = 0
     table_drop_narrow = 1
+    # An identifier beside a wide prose column takes what it leaves.
+    table_room = "shared"
 
 
 class WronglyDeclared(tables.TableListMixin):
     table_empty = None  # type: ignore[assignment]
     table_columns = ("Name",)  # type: ignore[assignment]
     table_drop_narrow = "1"  # type: ignore[assignment]
+    table_room = "wide"  # type: ignore[assignment]
 
 
 def a_column() -> None:

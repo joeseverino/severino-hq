@@ -1192,10 +1192,11 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* A name in the muted line under it is context the row already shares with
    its neighbors ("on example-host"): one line, cut at the cell's edge. */
 .data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
-/* A value quoted in a cell (a record's text, a key) can hold a run with no
-   seam in it. It breaks wherever it must, so the run never widens its
-   column past its box. */
-.data-table td .cell-data { overflow-wrap: anywhere; }
+/* A value quoted in a cell (a record's text, a message, a key) can hold a run
+   with no seam in it: a link, a digest. It breaks wherever it must, so the run
+   never widens its column past its box. Marked on the cell when the whole
+   cell is such text. */
+.data-table :is(td.cell-data, td .cell-data) { overflow-wrap: anywhere; }
 /* Two links in one cell need to read as two, not as one control with a strange
    name. The class sits on a span in one place and on a td in two others, and a
    cell given a flex display leaves table layout, so only the span gets the box
@@ -1827,7 +1828,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    they leave: little until the region is wide, then most of the rest. Beside
    other identifiers (`snug`) each is held near one short length, since the
    narrower the region, the fewer of them a row keeps. */
-.table-scroll.is-shared > .data-table { --identifier-max: clamp(30ch, 57cqi - 13rem, 85ch); }
+.table-scroll.is-shared > .data-table { --identifier-max: clamp(22ch, 57cqi - 13rem, 85ch); }
 .table-scroll.is-snug > .data-table { --identifier-max: clamp(15ch, 30cqi, 22ch); }
 /* What a page says about a table's columns: which stay whatever happens, and
    which a list ranks first to leave. Named here because this sheet is the
@@ -5606,9 +5607,10 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
     vertical-align: middle;
   }
   :is(.row-expand, .row-fold):hover { border: 0; background: var(--line-2); color: var(--ink); }
-  /* What a row holds back until it is expanded, and the hint it replaces. */
-  .data-table tr:not(.is-expanded) .row-more,
-  .data-table tr.is-expanded .row-less { display: none; }
+  /* What a row holds back until it is expanded, and the hint it replaces. A
+     cell moved to the line beneath an open row is open too. */
+  .data-table tr:not(.is-expanded, .row-detail) .row-more,
+  .data-table tr:is(.is-expanded, .row-detail) .row-less { display: none; }
   :is(.row-expand, .row-fold) > svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s ease; }
   :is(.row-expand, .row-fold)[aria-expanded="true"] > svg { transform: rotate(90deg); }
   @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > svg { transition: none; } }
