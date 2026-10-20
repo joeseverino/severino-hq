@@ -9,7 +9,9 @@
 //	hq-host sync IMAGE       replace the root-owned tree with IMAGE's
 //	hq-host verify           report where the host differs from its release
 //	hq-host bootstrap        write the host's own configuration from host.json
-//	hq-host backup           back up HQ's volumes with scripts/backup.sh
+//	hq-host backup           back up HQ's volumes: database, uploads and exports
+//	hq-host upgrade ARGS     move one compose service to a pinned image (package upgrade)
+//	hq-host check            the deploy host's half of a preflight, as any account
 package main
 
 import (
@@ -29,10 +31,11 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/host"
+	"github.com/joeseverino/severino-hq/controller/host/upgrade"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply] | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup"
+const usage = "usage: hq-host run-web | controller [--apply] | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | check --release DIR --main DIR"
 
 // hostConfig is the host's own configuration, which bootstrap reads.
 const hostConfig = "/etc/severino-hq/host.json"
@@ -49,6 +52,15 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usage)
 		return 2
+	}
+	// An upgrade answers in JSON whatever happens, a refusal to run as
+	// anyone but root included.
+	if args[0] == "upgrade" {
+		return upgrade.Main(ctx, args[1:], getenv, euid, stdout, stderr)
+	}
+	// A preflight runs its check as the operator's own account.
+	if args[0] == "check" {
+		return check(ctx, args[1:], stdout, stderr)
 	}
 	if euid != 0 {
 		fmt.Fprintln(stderr, "hq-host must run as root.")
@@ -137,6 +149,26 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 	return runner.Run(ctx)
 }
 
+// check is the deploy host's half of a preflight: --release and --main are
+// the unit directories this release and main ship.
+func check(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	options := flag.NewFlagSet("check", flag.ContinueOnError)
+	options.SetOutput(stderr)
+	release := options.String("release", "", "the unit directory this release ships")
+	main := options.String("main", "", "the unit directory main ships")
+	if err := options.Parse(args); err != nil || options.NArg() != 0 || *release == "" || *main == "" {
+		fmt.Fprintln(stderr, usage)
+		return 2
+	}
+	checker := &host.Checker{
+		Lib: host.Lib, Systemd: "/etc/systemd/system", RootUID: 0,
+		Release: *release, Main: *main,
+		FreeBytes: host.DeployFreeBytes, Free: host.Free,
+		Command: host.Command, Out: stdout,
+	}
+	return checker.Check(ctx)
+}
+
 func release(ctx context.Context, args []string, stdout io.Writer) error {
 	options := flag.NewFlagSet("release", flag.ContinueOnError)
 	stage := options.String("stage", "", "the directory deploy copied this program into, removed when done")
@@ -210,7 +242,7 @@ func deployer(stdout io.Writer) *host.Deployer {
 		Exec:      syscall.Exec,
 		Drain:     3 * time.Minute,
 		Poll:      5 * time.Second,
-		FreeBytes: 512 << 20,
+		FreeBytes: host.DeployFreeBytes,
 		FreeOn:    "/",
 		Free:      host.Free,
 	}

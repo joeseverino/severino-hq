@@ -12,6 +12,7 @@ HQ's own image is never planned here: it is deployed by its own signed
 pipeline, and only by that.
 """
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -377,8 +378,9 @@ def readiness_of(item: Container) -> Readiness:
     return Readiness(item, data, verified_by, blockers, not_automatic)
 
 
-# Where each deploy syncs the helper, root-owned (scripts/upgrade-container.sh).
-HELPER = "/usr/local/lib/severino-hq/scripts/upgrade-container.sh"
+# The helper is `hq-host upgrade`, in the root-owned tree each deploy syncs
+# (controller/host/upgrade).
+HELPER = "/usr/local/lib/severino-hq/deploy/bin/hq-host"
 SUDOERS = "/etc/sudoers.d/severino-hq-upgrade"
 # The one directory whose direct children the helper upgrades. The helper
 # holds the same constant, and nothing a sudo caller passes can move it.
@@ -388,7 +390,7 @@ STACKS_ROOT = "/opt/apps"
 # patterns: a regular expression, which sudo matches from 1.9.10. An older sudo
 # reads it as a literal and admits nothing, so it fails closed.
 ARGUMENTS = (
-    "^--operation [A-Za-z0-9-]{1,64}"
+    "^upgrade --operation [A-Za-z0-9-]{1,64}"
     f" --project-dir {STACKS_ROOT}/[A-Za-z0-9][A-Za-z0-9_.-]{{0,127}}"
     " --service [A-Za-z0-9][A-Za-z0-9_.-]{0,62}"
     " --from [A-Za-z0-9][A-Za-z0-9_./:@-]{0,254}"
@@ -398,9 +400,14 @@ ARGUMENTS = (
 # An empty digest: a request the rule admits and the helper refuses harmlessly
 # (no such stack), which is how the check below asks sudo without running it.
 _PROBE = (
-    f"--operation sudo-check --project-dir {STACKS_ROOT}/example --service example "
+    f"upgrade --operation sudo-check --project-dir {STACKS_ROOT}/example --service example "
     f"--from example/app:1 --to example/app@sha256:{'0' * 64}"
 )
+
+# What a release's signature is checked against: the source's compose
+# workflow on main, as hq-host's deploy checks it (controller/host/deploy.go).
+SIGNER_ISSUER = "https://token.actions.githubusercontent.com"
+_PINNED = re.compile(r"^[a-z0-9][a-z0-9_./:-]*@sha256:[0-9a-f]{64}$")
 
 
 def sudoers_command() -> str:
@@ -412,49 +419,69 @@ def sudoers_command() -> str:
     return f"{HELPER} {escaped}"
 
 
-def _helper_digest() -> str:
-    """The sha256 of the helper this build ships, or "" when it is not here."""
+def signer(source: str) -> str:
+    """The certificate identity a release of ``source`` is signed with, or ""
+    when it names no GitHub repository."""
 
-    import hashlib
-    from pathlib import Path
+    from .github_public import github_repository
 
-    from django.conf import settings
+    named = github_repository(source)
+    if named is None:
+        return ""
+    return rf"^https://github\.com/{re.escape('/'.join(named))}/\.github/workflows/compose\.yml@refs/heads/main$"
 
-    shipped = Path(settings.BASE_DIR) / "scripts" / Path(HELPER).name
-    return hashlib.sha256(shipped.read_bytes()).hexdigest() if shipped.is_file() else ""
+
+def _running_image() -> str:
+    """The digest-pinned image HQ runs, or "" when HQ cannot tell."""
+
+    from .hq_self import own_container
+
+    container = own_container()
+    image = str(container.running.image) if container is not None else ""
+    return image if _PINNED.match(image) else ""
 
 
 def _copy_steps(machine: str) -> tuple[Step, ...]:
-    """The helper put on a machine HQ's deploys never reach: this build's
-    copy, root-owned, and checked against the digest of the one HQ ships."""
+    """The helper put on a machine HQ's deploys never reach: hq-host, copied out
+    of the release HQ runs once its signature is verified, refused when that
+    release is built for another platform than the machine's."""
 
     from django.conf import settings
 
-    source = getattr(settings, "SEVERINO_HQ_SOURCE", "")
-    revision = getattr(settings, "SEVERINO_HQ_REVISION", "")
-    if source and revision:
+    image = _running_image()
+    identity = signer(str(getattr(settings, "SEVERINO_HQ_SOURCE", "") or ""))
+    if not (image and identity):
         fetch = Step(
             "fetch",
-            f"Take the helper from the commit this HQ was built from ({revision[:12]})",
-            f"git clone {source} severino-hq && git -C severino-hq checkout --detach {revision}",
+            "Take the helper from the release HQ runs",
+            "HQ cannot name the signed image it runs, so take hq-host from the one the machine HQ deploys to "
+            "records in /var/lib/severino-hq/release, at /app/deploy/bin/hq-host in it, after verifying "
+            "its signature.",
         )
     else:
+        platform = "{{.Os}}/{{.Architecture}}"
         fetch = Step(
             "fetch",
-            "Take the helper from a checkout of the HQ release you run",
-            "HQ does not know the commit it was built from, so check out that release's "
-            "commit. The helper is scripts/upgrade-container.sh in it.",
+            f"On {machine}, take hq-host from the release HQ runs, once its signature checks out "
+            "(this needs cosign there, and read access to the image)",
+            f"image={image} && cosign verify --certificate-oidc-issuer {SIGNER_ISSUER} "
+            f"--certificate-identity-regexp '{identity}' \"$image\" >/dev/null "
+            '&& docker pull -q "$image" >/dev/null '
+            f'&& built="$(docker image inspect --format \'{platform}\' "$image")" '
+            "&& here=\"$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')\" "
+            '&& { [ "$built" = "$here" ] || { echo "hq-host in this release is built for $built; '
+            f'{machine} runs $here" >&2; false; }}; }} '
+            '&& container="$(docker create --pull never "$image")" '
+            '&& docker cp "$container:/app/deploy/bin/hq-host" ./hq-host && docker rm "$container" >/dev/null',
         )
     directory = HELPER.rsplit("/", 1)[0]
-    digest = _helper_digest()
-    verify = f" && echo '{digest}  {HELPER}' | sha256sum -c -" if digest else ""
     return (
         fetch,
         Step(
             "install",
-            f"Copy it to {machine} as ./upgrade-container.sh, then install it there owned by root",
+            f"Install it on {machine} owned by root",
             f"sudo install -d -o root -g root -m 0755 {directory} "
-            f"&& sudo install -o root -g root -m 0755 upgrade-container.sh {HELPER}{verify}",
+            f"&& sudo install -o root -g root -m 0755 hq-host {HELPER}",
         ),
     )
 

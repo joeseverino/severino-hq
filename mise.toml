@@ -251,17 +251,6 @@ fi
 exec scripts/regen.sh
 '''
 
-[tasks.preflight]
-description = "Ready to release: every gate, the composed suite and the deploy host"
-raw = true
-usage = '''
-flag "--remote" help="Read every check GitHub ran on this commit instead of running `mise run ci`; the commit must be pushed"
-flag "--skip-host" help="Local gates only, exiting 2: not a verdict on the release"
-'''
-extends = "heavy"
-timeout = "2h"
-run = "scripts/preflight.sh"
-
 [tasks.failure-logs]
 description = "Open a failed Compose run's sealed logs"
 raw = true

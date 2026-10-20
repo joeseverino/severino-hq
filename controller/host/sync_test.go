@@ -21,7 +21,7 @@ func TestTheTreeIsTheImagesSealed(t *testing.T) {
 	}
 	for path, mode := range map[string]os.FileMode{
 		"deploy/bin/hq-host":        0o755,
-		"scripts/backup.sh":         0o755,
+		"scripts/deploy-image.sh":   0o755,
 		"hq/config/controller.json": 0o644,
 		"deploy/systemd":            0o755,
 	} {

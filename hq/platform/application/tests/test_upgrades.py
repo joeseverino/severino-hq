@@ -1,3 +1,5 @@
+import re
+
 from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone
 
@@ -319,14 +321,14 @@ class HelperInstallTests(TestCase):
         self.assertFalse(plan.install_brought)
         (fetch, install, allow, check) = plan.install
         self.assertEqual((fetch.id, install.id), ("fetch", "install"))
-        self.assertIn(f"-o root -g root -m 0755 upgrade-container.sh {HELPER}", install.detail)
+        self.assertIn(f"-o root -g root -m 0755 hq-host {HELPER}", install.detail)
         # A rule for the one program and only an upgrade's arguments, never a broader one.
-        self.assertIn(f"'{HELPER} ^--operation ", allow.detail)
+        self.assertIn(f"'{HELPER} ^upgrade --operation ", allow.detail)
         self.assertIn(f"visudo -cf {SUDOERS}", allow.detail)
         # The account is not something HQ knows: the step says so, and cannot run as written.
         self.assertIn("HQ does not know which account", allow.label)
         self.assertIn('id -u "$account"', allow.detail)
-        self.assertTrue(check.detail.startswith(f"sudo -n -l {HELPER} --operation "))
+        self.assertTrue(check.detail.startswith(f"sudo -n -l {HELPER} upgrade --operation "))
 
     def test_on_the_machine_hq_deploys_to_only_the_rule_is_needed(self):
         from ..upgrades import install_steps
@@ -341,7 +343,7 @@ class HelperInstallTests(TestCase):
         rule = re.compile(ARGUMENTS)
         digest = "sha256:" + "a" * 64
         request = (
-            f"--operation op-1 --project-dir {STACKS_ROOT}/app --service app "
+            f"upgrade --operation op-1 --project-dir {STACKS_ROOT}/app --service app "
             f"--from ghcr.io/example/app:1.2.0 --to ghcr.io/example/app@{digest}"
         )
         self.assertTrue(rule.fullmatch(request))
@@ -354,6 +356,8 @@ class HelperInstallTests(TestCase):
             f"{request} --data app_data:/data",
             f"{request} --wait 120 --tag 1.2.1",
             f"{request}; true",
+            request.removeprefix("upgrade "),
+            request.replace("upgrade ", "deploy ", 1),
         ):
             self.assertIsNone(rule.fullmatch(refused), refused)
         # sudoers reads a comma, colon, equals sign or backslash in arguments
@@ -361,51 +365,98 @@ class HelperInstallTests(TestCase):
         self.assertNotRegex(sudoers_command(), r"(?<!\\)[,:=]")
 
 
-@tag("source")
-class HelperInstallSourceTests(SimpleTestCase):
-    """The helper's install steps, digest and sudo rule as shipped."""
+class HelperCopyTests(TestCase):
+    """The helper on a machine HQ does not deploy to: taken from the release HQ
+    runs, by its signed digest, and refused on another platform."""
 
-    def test_elsewhere_the_helper_comes_from_this_build_checked_by_its_digest(self):
-        import hashlib
-        from pathlib import Path
+    def test_elsewhere_hq_host_comes_from_the_signed_release_hq_runs(self):
+        from types import SimpleNamespace
+        from unittest import mock
 
         from django.test import override_settings
 
-        from ..upgrades import HELPER, install_steps
+        from ..upgrades import SIGNER_ISSUER, install_steps
 
-        shipped = Path(__file__).resolve().parents[4] / "scripts" / Path(HELPER).name
-        digest = hashlib.sha256(shipped.read_bytes()).hexdigest()
-        with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq", SEVERINO_HQ_REVISION="a" * 40):
+        release = "ghcr.io/example/hq/composition@sha256:" + "b" * 64
+        running = SimpleNamespace(running=SimpleNamespace(image=release))
+        with (
+            override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"),
+            mock.patch("hq.platform.application.hq_self.own_container", return_value=running),
+        ):
             fetch, install, *_ = install_steps("example-edge")
-        self.assertIn(f"checkout --detach {'a' * 40}", fetch.detail)
-        self.assertIn(f"echo '{digest}  {HELPER}' | sha256sum -c -", install.detail)
-        with override_settings(SEVERINO_HQ_SOURCE="", SEVERINO_HQ_REVISION=""):
-            fetch, *_ = install_steps("example-edge")
-        self.assertIn("HQ does not know the commit", fetch.detail)
 
-    def test_the_helper_ships_where_the_install_steps_say(self):
+        self.assertIn(f"image={release} ", fetch.detail)
+        # Verified against the compose workflow's identity before anything is pulled.
+        self.assertIn(f"cosign verify --certificate-oidc-issuer {SIGNER_ISSUER}", fetch.detail)
+        self.assertIn(r"example/hq/\.github/workflows/compose\.yml@refs/heads/main$", fetch.detail)
+        self.assertLess(fetch.detail.index("cosign verify"), fetch.detail.index("docker pull"))
+        # The copy is the verified digest or nothing, and only for the machine's own platform.
+        self.assertIn('docker create --pull never "$image"', fetch.detail)
+        self.assertIn('[ "$built" = "$here" ]', fetch.detail)
+        self.assertLess(fetch.detail.index('"$built" = "$here"'), fetch.detail.index("docker create"))
+        self.assertIn("example-edge runs $here", fetch.detail)
+        self.assertIn("install -o root -g root -m 0755 hq-host", install.detail)
+
+    def test_a_release_hq_cannot_name_by_digest_gives_no_command(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from ..upgrades import install_steps
+
+        for image, source in (
+            ("ghcr.io/example/hq/composition:latest", "https://github.com/example/hq"),
+            ("ghcr.io/example/hq/composition@sha256:" + "b" * 64, ""),
+        ):
+            running = SimpleNamespace(running=SimpleNamespace(image=image))
+            with (
+                self.subTest(image=image, source=source),
+                override_settings(SEVERINO_HQ_SOURCE=source),
+                mock.patch("hq.platform.application.hq_self.own_container", return_value=running),
+            ):
+                fetch, *_ = install_steps("example-edge")
+                self.assertIn("HQ cannot name the signed image it runs", fetch.detail)
+                self.assertNotIn("docker create", fetch.detail)
+
+
+@tag("source")
+class HelperInstallSourceTests(SimpleTestCase):
+    """The helper's sudo rule and signer as the Go program holds them."""
+
+    @staticmethod
+    def _source(path):
         from pathlib import Path
 
-        from ..upgrades import HELPER, STACKS_ROOT
+        return (Path(__file__).resolve().parents[4] / path).read_text()
 
-        shipped = Path(__file__).resolve().parents[4] / "scripts" / Path(HELPER).name
-        self.assertTrue(shipped.is_file())
-        self.assertTrue(HELPER.startswith("/usr/local/lib/severino-hq/scripts/"))
+    def test_the_helper_is_hq_hosts_upgrade_at_the_stacks_root_the_rule_names(self):
+        from ..upgrades import STACKS_ROOT
+
+        self.assertIn('if args[0] == "upgrade" {', self._source("controller/cmd/hq-host/main.go"))
         # The helper holds the stacks root the rule names; neither moves alone.
-        self.assertIn(f"\nSTACKS_ROOT={STACKS_ROOT}\n", shipped.read_text())
+        self.assertIn(f'StacksRoot = "{STACKS_ROOT}"', self._source("controller/host/upgrade/upgrade.go"))
 
     def test_the_rule_admits_each_argument_by_the_helpers_own_pattern(self):
-        import re
-        from pathlib import Path
+        from ..upgrades import ARGUMENTS
 
-        from ..upgrades import ARGUMENTS, HELPER
-
-        helper = (Path(__file__).resolve().parents[4] / "scripts" / Path(HELPER).name).read_text()
-        patterns = dict(re.findall(r"matches \"\$\{(\w+)\}\" '\^(.+?)\$'", helper))
+        patterns = dict(
+            re.findall(
+                r'"(\w+)":\s+regexp\.MustCompile\(`\^(.+?)\$`\)', self._source("controller/host/upgrade/upgrade.go")
+            )
+        )
 
         for argument in ("operation", "service", "from", "to", "tag", "wait", "name"):
             with self.subTest(argument=argument):
                 self.assertIn(patterns[argument], ARGUMENTS)
+
+    def test_the_signer_is_the_one_a_deploy_checks(self):
+        from ..upgrades import SIGNER_ISSUER, signer
+
+        deploy = self._source("controller/host/deploy.go")
+        self.assertIn(f'signerIssuer = "{SIGNER_ISSUER}"', deploy)
+        (suffix,) = re.findall(r"QuoteMeta\(string\(s\)\) \+ `([^`]+)`", deploy)
+        self.assertTrue(signer("https://github.com/example/hq").endswith(suffix))
 
 
 class ExposureOrderTests(TestCase):

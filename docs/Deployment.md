@@ -136,7 +136,7 @@ fingerprint, then delete the old key on GitHub.
 | `/usr/local/lib/severino-hq-verifier/cosign` | root's pinned cosign, outside the tree a deploy replaces | `hq-host install` |
 | `/etc/severino-hq/host.json` | the host's own values ([`deploy/host.example.json`](../deploy/host.example.json)) | the operator |
 | `/etc/systemd/system/` | every unit and drop-in under `deploy/systemd`, plus the drop-ins `hq-host bootstrap` renders | `hq-host install`, `hq-host bootstrap` |
-| `/etc/sudoers.d/severino-hq-deploy` | the runner's one rule: `deploy-image.sh` | `hq-host bootstrap` |
+| `/etc/sudoers.d/severino-hq-deploy` | the runner's one rule: `hq-host deploy` with one digest-pinned composition, and `scripts/deploy-image.sh`, which execs it, until the deploy job calls `hq-host` itself | `hq-host bootstrap` |
 | `/etc/credstore.encrypted/` | the Connect token, as an encrypted systemd credential | the operator ([Secrets](Secrets.md)) |
 | `/var/lib/severino-hq/release` | the digest-pinned image the web unit runs | a deploy |
 | `/run/severino-hq-secrets/` | rendered credentials, on a root-only `noswap` tmpfs (`run-severino\x2dhq\x2dsecrets.mount`) | `hq-secrets` |
@@ -160,7 +160,9 @@ from the tree, and every unit and the deploy call it.
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
 | `verify` | reports where the host differs from its release: tree, units, and anything retired (`severino-hq-script-drift.timer`, daily) |
 | `bootstrap` | renders the drop-ins and sudo rule `host.json` decides |
-| `backup` | runs `scripts/backup.sh` over HQ's volumes, where docker says they are |
+| `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
+| `upgrade ARGS` | moves one compose service to a pinned image, through its own sudo rule ([Container upgrades](#container-upgrades)) |
+| `check` | the host's half of `mise run preflight`, as any account and read-only: the runner's sudo rule, `verify` (or the drift unit's run since the release was installed), every program a sudo rule names is root's alone, the established units, free disk. Preflight builds it from HEAD for the host's platform and runs it from a temporary directory over SSH, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
 
 ### Units
 
@@ -269,9 +271,9 @@ cannot rewrite its own remote authorization.
 
 ## Container upgrades
 
-`scripts/upgrade-container.sh` is the program an upgrade plan in HQ
-describes. It runs as root for another account, so it trusts nothing that
-account passes beyond naming the upgrade:
+`hq-host upgrade` ([`controller/host/upgrade`](../controller/host/upgrade))
+is the program an upgrade plan in HQ describes. It runs as root for another
+account, so it trusts nothing that account passes beyond naming the upgrade:
 
 - The stack is a directory directly under `/opt/apps`, not a symlink. The
   directory, its compose file, any override and any `.env` are owned by root
@@ -288,16 +290,22 @@ the digest in the stack's compose override, recreates the service and
 verifies it stays up for a settle window. Any failure restores the override
 and the data. It is idempotent by operation id and prints one JSON result:
 exit 0 kept, 3 rolled back, 2 refused or unchanged, 1 failed and not put back.
-It needs Docker Compose 2.24.4 or later; `scripts/test-upgrade-container.sh`
-drills it.
+It needs Docker Compose 2.24.4 or later, `tar`, and Linux.
 
 A machine runs it only through a sudo rule for that one program with an
 upgrade's arguments, as a regular expression (sudo 1.9.10 or later); the plan
 shows the rule and how to check it. The rule is only worth having if that
-account cannot already reach Docker. HQ's own host has the helper in its tree;
-any other machine needs its own root-owned copy, checked against the digest the
-plan shows. HQ does not yet queue an upgrade to another machine, so the helper
+account cannot already reach Docker. HQ's own host has `hq-host` in its tree.
+Any other machine needs its own root-owned copy: the plan's fetch step takes
+it from the composed image HQ runs, by digest, after `cosign` verifies the
+compose workflow's signature, and stops if the image's platform is not the
+machine's. HQ does not yet queue an upgrade to another machine, so the helper
 is run by hand with the plan's values.
+
+A rule written before the helper moved into `hq-host` names
+`scripts/upgrade-container.sh`, which now only execs `hq-host upgrade`. Re-run
+the plan's allow step on each machine once to write the new rule; the script
+goes when no rule names it.
 
 ## Verifying
 

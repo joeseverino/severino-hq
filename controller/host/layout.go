@@ -52,14 +52,24 @@ const (
 	ControllerUnit = "severino-hq-controller.service"
 	// BackupUnit snapshots HQ's volumes.
 	BackupUnit = "severino-hq-backup.service"
+	// DeployFreeBytes is the free space on / a deploy needs before it pulls.
+	DeployFreeBytes = 512 << 20
 	// StopSeconds is how long HQ is given to stop before it is killed; the
 	// web unit's TimeoutStopSec allows more, so systemd never kills the stop.
 	StopSeconds = "30"
 
 	// Lib is the root-owned tree a release installs and every unit runs from.
 	Lib = "/usr/local/lib/severino-hq"
-	// DeployEntry is the one program the runner may run as root.
+	// HostProgram is this program, in the tree.
+	HostProgram = Lib + "/deploy/bin/hq-host"
+	// DeployEntry is what the runner's sudo rules have named; it execs
+	// `HostProgram deploy`, which the rule now also admits.
 	DeployEntry = Lib + "/scripts/deploy-image.sh"
+	// DeployArgument is the one argument the rule lets the runner give
+	// `hq-host deploy`, as a sudoers regular expression (sudo 1.9.10 or
+	// later; an older sudo reads it literally and admits nothing): a
+	// digest-pinned composition. Deploy checks the source it names.
+	DeployArgument = `^ghcr[.]io/[a-z0-9_.-]+/[a-z0-9_.-]+/composition@sha256\:[0-9a-f]{64}$`
 
 	// SecretDir is the root-only, noswap tmpfs the renderer installs into.
 	SecretDir = "/run/severino-hq-secrets"

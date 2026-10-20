@@ -129,12 +129,12 @@ User=%s
 	return m.run(ctx, "systemctl", "daemon-reload")
 }
 
-// sudoRule lets the runner's account run the deploy entry and nothing else.
-// It is checked by visudo before it is installed: a broken file in
-// sudoers.d stops sudo for every account.
+// sudoRule lets the runner's account deploy one image and nothing else. It is
+// checked by visudo before it is installed: a broken file in sudoers.d stops
+// sudo for every account.
 func (m *Machine) sudoRule(ctx context.Context, user string) error {
-	rule := fmt.Sprintf("# Rendered by hq-host bootstrap: the runner deploys, and may do nothing else as root.\n%s ALL=(root) NOPASSWD: %s\n",
-		user, DeployEntry)
+	rule := fmt.Sprintf("# Rendered by hq-host bootstrap: the runner deploys, and may do nothing else as root.\n%s ALL=(root) NOPASSWD: %s, %s deploy %s\n",
+		user, DeployEntry, HostProgram, DeployArgument)
 	staged, err := os.CreateTemp(m.Sudoers, ".severino-hq-deploy.")
 	if err != nil {
 		return err

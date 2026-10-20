@@ -71,8 +71,11 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 		return answer("c0ffee\n", 0)
 	case strings.HasPrefix(call, "docker volume inspect"):
 		return answer(filepath.Join(f.root, "volumes", args[len(args)-1])+"\n", 0)
-	case strings.HasSuffix(name, "backup.sh"):
-		return exec.CommandContext(ctx, "/bin/sh", "-c", `env > "$1"`, "sh", filepath.Join(f.root, "backup-env"))
+	case name == "sqlite3":
+		return exec.CommandContext(ctx, "sqlite3", args...)
+	case name == "age":
+		// Its output says it went through age, and for whom, then the input.
+		return exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", `echo "age $*"; cat`, "sh"}, args...)...)
 	case strings.HasPrefix(call, "docker image inspect"):
 		return answer(imageID+"\n", 0)
 	case strings.HasPrefix(call, "docker cp"):
@@ -131,7 +134,7 @@ func newFakeHost(t *testing.T) *fakeHost {
 	exec.Command("cp", "-R", filepath.Join(lib, "deploy"), filepath.Join(f.image, "deploy")).Run()
 	for name, body := range map[string]string{
 		"deploy/bin/hq-host":        "#!/bin/sh\n",
-		"scripts/backup.sh":         "#!/bin/sh\n",
+		"scripts/deploy-image.sh":   "#!/bin/sh\n",
 		"scripts/synced-release":    "",
 		"hq/config/controller.json": "{}\n",
 	} {

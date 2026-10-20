@@ -32,8 +32,8 @@ fork changes them in every place listed.
 | :--- | :--- |
 | `/usr/local/lib/severino-hq`, `/var/lib/severino-hq`, `/run/severino-hq-secrets`, `/run/severino-hq`, `/var/log/severino-hq` | [`controller/host/layout.go`](../controller/host/layout.go), `controller/cmd/hq-host/main.go`, `deploy/systemd/` |
 | `/opt/apps/severino-hq/secrets` (renderer lock, ACME state) | `ACMEDir` in `layout.go`; `SEVERINO_HQ_SECRET_DIR` default in `controller/cmd/hq-secrets/main.go`; `severino-hq-secrets.service`, `severino-hq-controller.service` |
-| `/opt/apps` (the stacks container upgrades may touch) | `STACKS_ROOT` in `scripts/upgrade-container.sh` and `hq/platform/application/upgrades.py` |
-| `/srv/severino-hq/backups` (backup archives) | `scripts/backup.sh` default, `severino-hq-backup.service`, `deploy/tmpfiles/severino-hq.conf` |
+| `/opt/apps` (the stacks container upgrades may touch) | `StacksRoot` in `controller/host/upgrade/upgrade.go`, `STACKS_ROOT` in `hq/platform/application/upgrades.py` |
+| `/srv/severino-hq/backups` (backup archives) | `BackupDir` in `controller/host/backup.go`, `severino-hq-backup.service`, `deploy/tmpfiles/severino-hq.conf` |
 | The web account, UID/GID `10001` | `WebUID` in `layout.go`, the `Dockerfile`, `deploy/tmpfiles/severino-hq.conf` |
 
 ## 2. Outside the repository

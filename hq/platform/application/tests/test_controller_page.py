@@ -157,5 +157,4 @@ class HostLayoutTests(SimpleTestCase):
         layout = (Path(__file__).resolve().parents[4] / "controller" / "host" / "layout.go").read_text()
         (lib,) = re.findall(r'^\tLib = "([^"]+)"$', layout, re.MULTILINE)
 
-        self.assertEqual(HELPER, f"{lib}/scripts/upgrade-container.sh")
-        self.assertTrue((Path(__file__).resolve().parents[4] / "scripts" / "upgrade-container.sh").is_file())
+        self.assertEqual(HELPER, f"{lib}/deploy/bin/hq-host")

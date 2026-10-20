@@ -9,18 +9,20 @@ HQ's state is three things:
 
 ## The backup
 
-[`scripts/backup.sh`](../scripts/backup.sh) snapshots the live database with
-SQLite's `VACUUM INTO`, so a write in progress cannot tear it, tars the
-snapshot with the media and exports directories, and encrypts the archive with
-[age](https://age-encryption.org) when recipients are set. The archive is
-`severino-hq-<UTC timestamp>.tar.gz` or `.tar.gz.age` in
-`SEVERINO_BACKUP_DIR`. Each path is an environment variable; the defaults are
-`/srv/severino-hq/backups` for the archives.
+`hq-host backup` ([`controller/host/backup.go`](../controller/host/backup.go))
+asks docker where HQ's volumes are, snapshots the live database with SQLite's
+`VACUUM INTO`, so a write in progress cannot tear it, checks the snapshot's
+integrity, and archives it with the uploads and exports as `severino.sqlite3`,
+`media/` and `exports/`. With recipients set the archive is streamed through
+[age](https://age-encryption.org), so no plaintext archive is written. The
+archive is `severino-hq-<UTC timestamp>.tar.gz` or `.tar.gz.age` in
+`SEVERINO_BACKUP_DIR` (`/srv/severino-hq/backups` by default), mode `0600`,
+and appears whole or not at all. The host needs `sqlite3`, and `age` when
+encrypting.
 
-`severino-hq-backup.timer` runs `hq-host backup` nightly as root, which asks
-docker where HQ's volumes are and runs the script over them, so the host
-arranges no path for the backup to find the data. The unit requires encryption and keeps
-30 days of archives. Set the recipients, and any other override, in
+`severino-hq-backup.timer` runs it nightly as root. The unit requires
+encryption and keeps 30 days of archives. Set the recipients (comma-separated,
+anything `age -r` takes), and any other override, in
 `/etc/severino-hq/backup.env`, root-owned, mode `0600`:
 
 ```sh
@@ -30,9 +32,10 @@ SEVERINO_BACKUP_RETENTION_DAYS=30
 
 A missing database fails the run instead of skipping it.
 
-`scripts/test-backup.sh` is the restore drill: it builds a database with media
-and exports, runs the real script, extracts the archive, queries the restored
-database and compares the files. CI runs it on every pull request.
+`controller/host/backup_test.go` is the restore drill: it builds a database
+with media and exports, runs the backup, extracts the archive with `tar`,
+queries the restored database and compares the files. CI runs it on every
+pull request.
 
 A local archive is not an off-host backup. Replicate `SEVERINO_BACKUP_DIR` to
 separate storage (restic, or another reviewed mechanism) and watch the

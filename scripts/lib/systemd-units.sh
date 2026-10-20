@@ -1,8 +1,8 @@
 # shellcheck shell=sh
 # The systemd files this repository ships, derived in one place.
 #
-# hq-host derives the same set (Shipped in controller/host/units.go); the
-# preflight asks this one from the operator's machine, where no hq-host runs.
+# hq-host derives the same set (Shipped in controller/host/units.go); the unit
+# contracts in scripts/test-systemd-units.sh walk it from the shell.
 
 # Print, relative to $1 and sorted, every file under it that systemd would read:
 # a unit file at the top level, or a `.conf` drop-in one directory down. That is

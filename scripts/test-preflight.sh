@@ -1,12 +1,14 @@
 #!/bin/sh
-# scripts/preflight.sh against a fixture repository and a fake deploy host
-# reached through a fake ssh: exit 0 only when every gate ran and passed.
+# scripts/preflight.py, what `mise run preflight` runs, against a fixture repository, a fake GitHub and a fake
+# deploy host reached through a fake ssh: exit 0 only when every gate ran and
+# passed. What the host half checks is hq-host check's, held by
+# controller/host/check_test.go; here, that it is built from HEAD for the
+# host's platform, handed the units, and its exit read.
 
 set -eu
 # Hermetic: none of what the gates are asked for comes from the caller.
-unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST \
-    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_FREE_KB TEST_DRIFT TEST_SUDO_PASSWORD \
-    TEST_UNIT_STATE TEST_INSTALLED_AT
+unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST PREFLIGHT_BASE_REF \
+    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_HOST_EXIT TEST_UNAME
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 work="$(mktemp -d)"
@@ -14,18 +16,15 @@ trap 'rm -rf "${work}"' EXIT HUP INT TERM
 failures=0
 fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 
-# The fixture repository: the real preflight, host half and unit library,
-# with mise stubbed to report how the gates were called.
+# The fixture repository: the real task and its verdict helper, CI's
+# workflow, the units, and hq-host's source.
 repo="${work}/repo"
-mkdir -p "${repo}/scripts/lib"
+mkdir -p "${repo}/scripts" "${repo}/controller/cmd/hq-host" "${repo}/.github/workflows"
 cd "${repo_dir}"
-cp -R deploy "${repo}/"
-mkdir -p "${repo}/controller/cmd/hq-host" "${repo}/.github/workflows"
+cp -R deploy .gitignore "${repo}/"
 cp .github/workflows/ci.yml "${repo}/.github/workflows/"
 cp controller/cmd/hq-host/main.go "${repo}/controller/cmd/hq-host/"
-for f in preflight.sh preflight-host.sh deploy-image.sh lib/systemd-units.sh upgrade-container.sh; do
-    cp "scripts/${f}" "${repo}/scripts/${f}"
-done
+cp scripts/preflight.py scripts/gate_verdict.py "${repo}/scripts/"
 # Hermetic: the fixture is a throwaway repository, so no signing and no hooks.
 git_() {
     git -C "${repo}" -c user.name=test -c user.email=test@example.com \
@@ -38,79 +37,54 @@ git_ update-ref refs/remotes/origin/main HEAD
 # The release adds a unit main does not ship: the release installs it, so the
 # host is not expected to have it yet.
 printf '[Timer]\nOnCalendar=daily\n' >"${repo}/deploy/systemd/severino-hq-example.timer"
+printf '// the release\n' >>"${repo}/controller/cmd/hq-host/main.go"
 git_ add -A
 git_ commit -q -m release
 
-# The deploy host as the previous release left it.
-host="${work}/host"
-lib="${host}/lib"
-mkdir -p "${lib}" "${host}/etc" "${host}/bin"
-git_ archive HEAD~1 scripts deploy | tar -x -C "${lib}"
-(cd "${lib}/deploy/systemd" && find . -type f ! -name '*.example') | while IFS= read -r f; do
-    mkdir -p "${host}/etc/$(dirname "${f}")"
-    cp "${lib}/deploy/systemd/${f}" "${host}/etc/${f}"
-done
-
 bin="${work}/bin"
 mkdir -p "${bin}"
-: >"${lib}/.source"
-cat >"${bin}/ssh" <<EOF
+# The deploy host: it names its platform, then unpacks what it is handed,
+# lists it, and exits as TEST_HOST_EXIT says hq-host check did.
+cat >"${bin}/ssh" <<'EOF'
 #!/bin/sh
-echo "ssh \$*" >>"\${TEST_LOG}"
-PATH="${host}/bin:\${PATH}" PREFLIGHT_LIB="${lib}" \\
-    PREFLIGHT_SYSTEMD="${host}/etc" PREFLIGHT_ROOT_UID="$(id -u)" exec sh -s
-EOF
-# GNU stat's modification time, which the host has: the release was installed
-# at TEST_INSTALLED_AT, in Unix seconds.
-cat >"${host}/bin/stat" <<'EOF'
-#!/bin/sh
-[ "$1 $2" = "-c %Y" ] && [ -e "$3" ] || exit 1
-echo "${TEST_INSTALLED_AT:-1000}"
-EOF
-# sudo refuses to run unless its stdin is empty: stdin is the host script.
-cat >"${host}/bin/sudo" <<'EOF'
-#!/bin/sh
-if IFS= read -r _; then echo "sudo read the host script from stdin" >&2; exit 99; fi
-case "$1 ${2##*/} $3" in
-    "-l -U "*) printf '%s\n' "${TEST_SUDO_RULES}" ;;
-    "-n hq-host verify")
-        if [ -n "${TEST_SUDO_PASSWORD:-}" ]; then echo "sudo: a password is required" >&2; exit 1; fi
-        if [ -n "${TEST_DRIFT:-}" ]; then echo "drift: ${TEST_DRIFT}" >&2; exit 1; fi
-        echo "The host is its release." ;;
-    *) exit 98 ;;
+echo "ssh $*" >>"${TEST_LOG}"
+case "$*" in
+    *" uname -s -m") echo "${TEST_UNAME-Linux x86_64}"; exit 0 ;;
 esac
+dir="$(mktemp -d)"
+tar -x -C "${dir}" || exit 70
+(cd "${dir}" && find . -type f | LC_ALL=C sort) >"${TEST_PAYLOAD}"
+cp "${dir}/hq-host" "${TEST_PAYLOAD}.program"
+rm -rf "${dir}"
+echo "ok      the fake host"
+exit "${TEST_HOST_EXIT:-0}"
 EOF
-cp "${repo_dir}/scripts/fixtures/systemctl" "${host}/bin/systemctl"
-TEST_ACCOUNT="$(id -un)"
-export TEST_ACCOUNT
-cat >"${host}/bin/df" <<'EOF'
+# go build writes, as the program, the hq-host source it was given.
+cat >"${bin}/go" <<'EOF'
 #!/bin/sh
-printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
-printf '/dev/test 99999999 1 %s 1%% /\n' "${TEST_FREE_KB:-9999999}"
+echo "go $* GOOS=${GOOS-} GOARCH=${GOARCH-} CGO_ENABLED=${CGO_ENABLED-}" >>"${TEST_LOG}"
+while [ "$#" -gt 0 ] && [ "$1" != -o ]; do shift; done
+cp cmd/hq-host/main.go "$2"
 EOF
-cat >"${bin}/mise" <<'STUB'
+cat >"${bin}/mise" <<'EOF'
 #!/bin/sh
 echo "mise $* REQUIRE_COMPOSED=${REQUIRE_COMPOSED:-}" >>"${TEST_LOG}"
 case "$*" in
     *suite:as-image*) exit "${TEST_FAIL_COMPOSED:-0}" ;;
     *) exit "${TEST_FAIL_CI:-0}" ;;
 esac
-STUB
-chmod 0755 "${bin}/ssh" "${bin}/mise" "${host}/bin/sudo" "${host}/bin/df" "${host}/bin/stat"
-
-readonly good_rules="Matching Defaults entries:
-    env_reset, secret-marker-example
-User runner may run the following commands:
-    (root) NOPASSWD: ${lib}/scripts/deploy-image.sh"
-TEST_SUDO_RULES="${good_rules}"
+EOF
+chmod 0755 "${bin}/ssh" "${bin}/go" "${bin}/mise"
 TEST_LOG="${work}/log"
-export TEST_SUDO_RULES TEST_LOG
+TEST_PAYLOAD="${work}/payload"
+export TEST_LOG TEST_PAYLOAD
 
 preflight() {
     : >"${TEST_LOG}"
+    rm -f "${TEST_PAYLOAD}"
     status=0
     PATH="${bin}:${PATH}" SEVERINO_HQ_DEPLOY_HOST="${SEVERINO_HQ_DEPLOY_HOST-deploy.example.test}" \
-        env "$@" sh "${repo}/scripts/preflight.sh" >"${work}/out" 2>&1 || status=$?
+        env "$@" python3 "${repo}/scripts/preflight.py" >"${work}/out" 2>&1 || status=$?
     return "${status}"
 }
 expect() { # expect <status> <why> [the task's usage_* flags]
@@ -122,22 +96,36 @@ expect() { # expect <status> <why> [the task's usage_* flags]
     [ "${status}" -eq "${want}" ] || fail "${why}: exit ${status}, expected ${want}
 $(cat "${work}/out")"
 }
-says() { grep -qF "$1" "${work}/out" || fail "output lacks '$1'"; }
+says() { grep -qF -- "$1" "${work}/out" || fail "output lacks '$1'"; }
+logged() { grep -qF -- "$1" "${TEST_LOG}" || fail "$2"; }
 
-# 1. A current host and passing gates: ready, every gate required, host reached.
+# 1. A current host and passing gates: ready, every gate required, the host
+#    checked by the release's own hq-host.
 expect 0 "a ready release"
-says "[preflight] READY"
-grep -qx "mise run -c ci REQUIRE_COMPOSED=" "${TEST_LOG}" ||
-    fail "the pipeline's gates did not run"
-grep -qx "mise run suite:as-image REQUIRE_COMPOSED=1" "${TEST_LOG}" ||
-    fail "the composed suite ran without being required"
-grep -qx "ssh -o BatchMode=yes deploy.example.test sh -s" "${TEST_LOG}" ||
-    fail "the host was not reached through ssh as expected"
-says "ok      the host is the release it runs"
-says "upgrade-container.sh is root's alone"
-if grep -q "secret-marker-example" "${work}/out"; then
-    fail "the host check printed the sudo rules"
+says "READY"
+grep -qx "mise run -c ci REQUIRE_COMPOSED=" "${TEST_LOG}" || fail "the pipeline's gates did not run"
+grep -qx "mise run suite:as-image REQUIRE_COMPOSED=1" "${TEST_LOG}" || fail "the composed suite ran without being required"
+logged "ssh -o BatchMode=yes deploy.example.test uname -s -m" "the host was not asked its platform"
+logged "GOOS=linux GOARCH=amd64 CGO_ENABLED=0" "the check was not built for the host's platform"
+logged "check --release" "the host did not run hq-host check"
+grep -qx "./hq-host" "${TEST_PAYLOAD}" || fail "the host was not handed hq-host"
+grep -qx "./release/deploy/systemd/severino-hq-example.timer" "${TEST_PAYLOAD}" ||
+    fail "the host was not handed the release's units"
+grep -qx "./main/deploy/systemd/severino-hq-web.service" "${TEST_PAYLOAD}" ||
+    fail "the host was not handed main's units"
+if grep -q "./main/deploy/systemd/severino-hq-example.timer" "${TEST_PAYLOAD}"; then
+    fail "main's units include the release's new one"
 fi
+git_ show HEAD:controller/cmd/hq-host/main.go | cmp -s - "${TEST_PAYLOAD}.program" ||
+    fail "hq-host was not built from HEAD"
+
+# Built from HEAD, never from the working tree.
+printf '// not committed\n' >>"${repo}/controller/cmd/hq-host/main.go"
+expect 1 "an uncommitted change"
+says "FAILED   committed tree"
+git_ show HEAD:controller/cmd/hq-host/main.go | cmp -s - "${TEST_PAYLOAD}.program" ||
+    fail "hq-host was built from the working tree"
+git_ checkout -q -- controller/cmd/hq-host/main.go
 
 # 2. Skipping the host is loud and never a pass.
 expect 2 "a skipped host" usage_skip_host=true
@@ -151,22 +139,38 @@ expect 1 "an unset deploy host"
 says "SEVERINO_HQ_DEPLOY_HOST is not set"
 unset SEVERINO_HQ_DEPLOY_HOST
 
-# 3. A failing local gate, or an uncommitted change, is not ready.
+# 3. The host's verdict is the check's exit; a platform it cannot build for
+#    fails rather than guessing.
+export TEST_HOST_EXIT=1
+expect 1 "a host fault"
+says "FAILED   deploy host deploy.example.test"
+export TEST_HOST_EXIT=3
+expect 2 "a release the host cannot verify"
+says "UNKNOWN  deploy host deploy.example.test, read-only: the release it runs is unverified"
+says "HOST NOT VERIFIED"
+unset TEST_HOST_EXIT
+export TEST_UNAME="Linux aarch64"
+expect 0 "an arm64 host"
+logged "GOOS=linux GOARCH=arm64" "the check was not built for arm64"
+export TEST_UNAME="Darwin arm64"
+expect 1 "a host that is not Linux"
+says "runs Darwin arm64"
+unset TEST_UNAME
+
+# 4. A failing local gate is not ready, and the verdict names it.
 export TEST_FAIL_CI=1
 expect 1 "a failing gate"
+says "[preflight] FAILED in"
+says "every gate the pipeline runs"
 unset TEST_FAIL_CI
 export TEST_FAIL_COMPOSED=1
 expect 1 "a failing composed suite"
 unset TEST_FAIL_COMPOSED
-: >"${repo}/uncommitted"
-expect 1 "an uncommitted change"
-says "FAILED   committed tree"
-rm "${repo}/uncommitted"
 
-# 4. --remote reads what GitHub ran on HEAD instead of running `mise run ci`.
+# 5. --remote reads what GitHub ran on HEAD instead of running `mise run ci`.
 #    The fake gh answers from JSON pages, <API path with / as _>.<page>.json in
-#    TEST_GH, through the real jq; past the first page only with --paginate.
-#    Watching a run replaces the pages with those in TEST_GH/finished.
+#    TEST_GH; past the first page only with --paginate. Watching a run
+#    replaces the pages with those in TEST_GH/finished.
 cat >"${bin}/gh" <<'EOF'
 #!/bin/sh
 echo "gh $*" >>"${TEST_LOG}"
@@ -177,11 +181,11 @@ case "$1" in
         shift
         pages=1
         if [ "$1" = --paginate ]; then pages=99; shift; fi
-        [ "$2" = --jq ] || exit 64
+        [ "$#" -eq 1 ] || exit 64
         key="$(printf '%s' "${1%%\?*}" | tr / _)"
         page=1
         while [ "${page}" -le "${pages}" ] && [ -f "${TEST_GH}/${key}.${page}.json" ]; do
-            jq -r "$3" "${TEST_GH}/${key}.${page}.json" || exit 1
+            cat "${TEST_GH}/${key}.${page}.json"
             page=$((page + 1))
         done ;;
     *) exit 64 ;;
@@ -315,72 +319,7 @@ git_ update-ref -d refs/remotes/origin/main
 expect 1 "an unpushed HEAD" usage_remote=true
 says "HEAD is not pushed"
 git_ update-ref refs/remotes/origin/main HEAD~1
-git_ update-ref refs/remotes/origin/feature HEAD
 unset TEST_GH PREFLIGHT_REMOTE_POLL PREFLIGHT_REMOTE_TIMEOUT
-
-# 5. Each host fault fails the preflight and says what it is.
-host_fault() { # host_fault <why> <expected output>
-    expect 1 "$1"
-    says "$2"
-}
-TEST_SUDO_RULES="    (ALL : ALL) ALL"
-host_fault "a runner with unrestricted sudo" "may run any command"
-TEST_SUDO_RULES="    (root) NOPASSWD: /usr/bin/true"
-host_fault "a runner without the rule" "has no NOPASSWD sudo rule"
-TEST_SUDO_RULES="${good_rules}"
-export TEST_FREE_KB=1024
-host_fault "a full disk" "the deploy needs"
-unset TEST_FREE_KB
-
-rm "${host}/etc/severino-hq-controller.timer"
-host_fault "an established unit missing" "severino-hq-controller.timer is not installed"
-cp "${lib}/deploy/systemd/severino-hq-controller.timer" "${host}/etc/"
-
-export TEST_DRIFT="scripts/backup.sh differs from the image's"
-host_fault "a host that is not its release" "FAIL    scripts/backup.sh differs from the image's"
-unset TEST_DRIFT
-
-# Where sudo needs a password, the drift unit's run since the release was
-# installed is the evidence; without one there is no verdict on the host.
-export TEST_SUDO_PASSWORD=1
-expect 2 "a verify that cannot run, and no run of the drift unit"
-says "UNKNOWN hq-host verify needs a password here"
-says "HOST NOT VERIFIED"
-drift_unit() { # drift_unit <started> <result> <status>
-    printf 'ActiveState=inactive\nResult=%s\nExecMainStatus=%s\nExecMainStartTimestamp=@%s\nExecMainExitTimestamp=@%s\n' \
-        "$2" "$3" "$1" "$(($1 + 60))" >"${TEST_UNIT_STATE}/severino-hq-script-drift.service"
-}
-TEST_UNIT_STATE="${work}/units"
-mkdir -p "${TEST_UNIT_STATE}"
-export TEST_UNIT_STATE TEST_INSTALLED_AT=1000
-drift_unit 2000 success 0
-expect 0 "a drift unit that verified the installed release"
-says "ok      the host is the release it runs (severino-hq-script-drift.service"
-drift_unit 500 success 0
-expect 2 "a drift unit that last verified an earlier release"
-drift_unit 2000 exit-code 1
-host_fault "a drift unit that failed on the installed release" "severino-hq-script-drift.service failed since this release was installed"
-drift_unit 2000 success 0
-mv "${lib}/.source" "${lib}/.source.held"
-expect 2 "a release whose install time cannot be read"
-mv "${lib}/.source.held" "${lib}/.source"
-unset TEST_SUDO_PASSWORD TEST_UNIT_STATE TEST_INSTALLED_AT
-
-chmod g+w "${lib}/scripts/upgrade-container.sh"
-host_fault "a helper sudo runs as root that others can write" "upgrade-container.sh is writable by its group or others"
-chmod g-w "${lib}/scripts/upgrade-container.sh"
-
-TEST_ACCOUNT=root
-host_fault "a runner that runs as root" "the Actions runner runs as 'root'"
-TEST_ACCOUNT="$(id -un)"
-
-expect 0 "the repaired host"
-
-# 6. Every sudo in the host half reads /dev/null: stdin is the script itself.
-if grep -nE '(^[[:space:]]*|\$\(|[;&|][[:space:]]*)sudo[[:space:]]' \
-    "${repo_dir}/scripts/preflight-host.sh" | grep -v '</dev/null'; then
-    fail "a sudo in preflight-host.sh does not read /dev/null"
-fi
 
 if [ "${failures}" -ne 0 ]; then
     echo "Preflight contracts failed (${failures})." >&2

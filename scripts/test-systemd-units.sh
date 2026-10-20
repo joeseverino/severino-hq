@@ -1,5 +1,5 @@
 #!/bin/sh
-# The systemd files the repository ships: the set the preflight expects, the
+# The systemd files the repository ships: the set systemd reads, the
 # drop-ins that would override a unit's command, and failure reporting.
 
 set -eu

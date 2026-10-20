@@ -490,9 +490,11 @@ off until you want HQ to change things through it
   lists each unmet one in Needs you ([Posture](Posture.md)).
 - **Releases.** From now on a merge to `main` reaches this host through
   Compose and Deploy, after your approval ([Deployment](Deployment.md)).
-  Rerun `hq-host bootstrap` whenever `host.json` changes.
+  Rerun `hq-host bootstrap` whenever `host.json` changes, and once after a
+  release that changes the sudo rule it renders.
 - **Backup.** `hq-host install` enabled the nightly backup. It needs
-  `/etc/severino-hq/backup.env` ([Backup](Backup.md)).
+  `/etc/severino-hq/backup.env`, `sqlite3`, and `age` to encrypt
+  ([Backup](Backup.md)).
 
 ## When the first run fails
 
