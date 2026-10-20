@@ -795,13 +795,13 @@ func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 		}
 		return string(data)
 	}
-	for _, path := range []string{".github/workflows/deploy.yml", ".github/actions/admit-plugin/action.yml", "scripts/hq-report.sh"} {
+	for _, path := range []string{".github/workflows/deploy.yml", ".github/actions/admit-plugin/action.yml", "tools/pipeline/ci_report.py"} {
 		if !strings.Contains(read(path), githubCheckName) {
 			t.Errorf("%s does not name the check %q", path, githubCheckName)
 		}
 	}
-	marker, _, _ := strings.Cut(githubDeliveryMark, "%s")
-	if !strings.Contains(read("scripts/hq-report.sh"), `marker="`+marker+"${COMMIT") {
-		t.Errorf("hq-report.sh does not write the marker %q", marker)
+	marker := strings.Replace(githubDeliveryMark, "%s", "{}", 1)
+	if !strings.Contains(read("tools/pipeline/ci_report.py"), `DELIVERY_MARK = "`+marker+`"`) {
+		t.Errorf("ci_report.py does not write the marker %q", marker)
 	}
 }

@@ -1,16 +1,16 @@
 """Property tests of the parsers that read outside input.
 
 Each reads text HQ did not write: an image reference a container reports, a
-package URL an SBOM lists, a provenance source a build attests, a failed run's
-log. Examples cover the shapes seen so far; these generate thousands of inputs
-each, so a shape nobody thought of fails here rather than in a sweep.
+package URL an SBOM lists, a provenance source a build attests. Examples
+cover the shapes seen so far; these generate thousands of inputs each, so a
+shape nobody thought of fails here rather than in a sweep. The diagnosis of a
+failed run's log has its own, in tools/pipeline/tests.
 
 Hypothesis is a development tool (the tools dependency group), not part of the
 image, so inside the image these are skipped and the suite runs them on every
 interpreter in the CI matrix.
 """
 
-import importlib.util
 import string
 import tempfile
 from pathlib import Path
@@ -34,8 +34,6 @@ from ..attestations import github_source
 from ..images import ImageRef
 from ..osv import query_of
 
-ROOT = Path(__file__).resolve().parents[4]
-
 if HYPOTHESIS:
     SEGMENT = st.text(string.ascii_lowercase + string.digits, min_size=1, max_size=12)
     OWNER = st.text(string.ascii_letters + string.digits + "-", min_size=1, max_size=20).filter(
@@ -46,13 +44,6 @@ if HYPOTHESIS:
     )
     TAG = st.text(string.ascii_letters + string.digits + "._-", min_size=1, max_size=20)
     FAST = settings(max_examples=300, deadline=None)
-
-
-def _diagnose():
-    spec = importlib.util.spec_from_file_location("diagnose", ROOT / "scripts" / "diagnose.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 @skipUnless(HYPOTHESIS, "hypothesis is a development tool")
@@ -115,20 +106,3 @@ class ProvenanceSourceProperties(SimpleTestCase):
         )
         def test_every_way_of_writing_a_repository_names_it(self, owner, repository, form):
             self.assertEqual(github_source(form.format(owner, repository)), f"{owner}/{repository}")
-
-
-@skipUnless(HYPOTHESIS, "hypothesis is a development tool")
-class DiagnosisProperties(SimpleTestCase):
-    if HYPOTHESIS:
-
-        @FAST
-        @given(st.text())
-        def test_a_diagnosis_only_ever_repeats_the_catalog(self, log):
-            """Whatever the log says, nothing of it is printed: the catalog's
-            text is safe on a public repository and the log's may not be."""
-
-            module = _diagnose()
-            allowed = [module.UNKNOWN, *module.diagnoses()]
-            found = module.diagnose(log)
-
-            self.assertIn(found, [{key: entry[key] for key in ("id", "title", "fix")} for entry in allowed])

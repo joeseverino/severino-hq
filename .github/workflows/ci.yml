@@ -102,7 +102,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: >-
-          scripts/hq-check.sh "Severino HQ · Review" "$HEAD_SHA" in_progress "Checking"
+          python3 -m tools.pipeline.ci_report check "Severino HQ · Review" "$HEAD_SHA" in_progress "Checking"
           "CI, CodeQL and the build of HQ are running. This becomes the verdict when they finish."
       - uses: ./.github/actions/toolchain
       # Node itself is mise's, from mise.lock; only npm's downloads are cached.
@@ -435,7 +435,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           THIS_RUN: ${{ github.run_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: scripts/hq-verdict.sh
+        run: python3 -m tools.pipeline.ci_report verdict
 
   # On main, CI starts the build of HQ for this commit once every gate has
   # passed, and names the commit, so what Compose builds is exactly what CI
@@ -455,7 +455,7 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
           REQUIRED: image
-        run: scripts/hq-verdict.sh
+        run: python3 -m tools.pipeline.ci_report verdict
       - name: Mint a token to start Compose
         id: compose
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0

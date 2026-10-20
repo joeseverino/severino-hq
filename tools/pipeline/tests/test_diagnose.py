@@ -1,13 +1,24 @@
-"""The pipeline's plain-English diagnoses (scripts/diagnose.py)."""
+"""The pipeline's plain-English diagnoses (deploy/diagnoses.json)."""
 
-import importlib.util
 import json
 import re
+import tempfile
 from pathlib import Path
+from unittest import skipUnless
 
 from django.test import SimpleTestCase, tag
 
-ROOT = Path(__file__).resolve().parents[4]
+from tools.pipeline import ci_report
+
+try:
+    from hypothesis import given, settings, strategies as st
+    from hypothesis.configuration import set_hypothesis_home_dir
+except ImportError:  # pragma: no cover - a development tool
+    HYPOTHESIS = False
+else:
+    HYPOTHESIS = True
+    # Outside the checkout: a cache in the tree is text the host must never carry.
+    set_hypothesis_home_dir(str(Path(tempfile.gettempdir()) / "severino-hq-hypothesis"))
 
 IMAGE = "ghcr.io/example-owner/example-repo/composition@sha256:" + "a" * 64
 STAMP = "2026-10-02T00:12:32.36Z "
@@ -69,17 +80,10 @@ CASES = (
 )
 
 
-def _diagnose():
-    spec = importlib.util.spec_from_file_location("diagnose", ROOT / "scripts" / "diagnose.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 @tag("source")
 class DiagnoseTests(SimpleTestCase):
     def test_a_log_is_named_with_its_fix(self):
-        diagnose = _diagnose().diagnose
+        diagnose = ci_report.diagnose
         for log, expected, points_at in CASES:
             with self.subTest(expected=expected, log=log[-40:]):
                 found = diagnose(log)
@@ -89,15 +93,32 @@ class DiagnoseTests(SimpleTestCase):
 
     def test_it_never_repeats_the_log(self):
         secret = "private-extension-name"
-        found = _diagnose().diagnose(f"{secret}: denied: permission_denied: write_package")
+        found = ci_report.diagnose(f"{secret}: denied: permission_denied: write_package")
 
         self.assertNotIn(secret, json.dumps(found))
 
     def test_every_entry_is_complete_and_its_pattern_compiles(self):
-        entries = json.loads((ROOT / "deploy" / "diagnoses.json").read_text())["diagnoses"]
+        entries = json.loads(ci_report.CATALOG.read_text())["diagnoses"]
         ids = [entry["id"] for entry in entries]
 
         self.assertEqual(len(ids), len(set(ids)))
         for entry in entries:
             self.assertEqual(set(entry), {"id", "match", "title", "fix"})
             re.compile(entry["match"])
+
+
+@tag("source")
+@skipUnless(HYPOTHESIS, "hypothesis is a development tool")
+class DiagnosisProperties(SimpleTestCase):
+    if HYPOTHESIS:
+
+        @settings(max_examples=300, deadline=None)
+        @given(st.text())
+        def test_a_diagnosis_only_ever_repeats_the_catalog(self, log):
+            """Whatever the log says, nothing of it is printed: the catalog's
+            text is safe on a public repository and the log's may not be."""
+
+            allowed = [ci_report.UNKNOWN, *ci_report.diagnoses()]
+            found = ci_report.diagnose(log)
+
+            self.assertIn(found, [{key: entry[key] for key in ("id", "title", "fix")} for entry in allowed])

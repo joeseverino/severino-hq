@@ -17,9 +17,6 @@ import sys
 import atheris
 
 with atheris.instrument_imports():
-    import importlib.util
-    from pathlib import Path
-
     import django
 
     django.setup()
@@ -27,18 +24,7 @@ with atheris.instrument_imports():
     from hq.platform.application.attestations import github_source
     from hq.platform.application.images import ImageRef
     from hq.platform.application.osv import query_of
-
-_DIAGNOSE = Path(__file__).resolve().parents[2] / "scripts" / "diagnose.py"
-
-
-def _diagnose():
-    spec = importlib.util.spec_from_file_location("diagnose", _DIAGNOSE)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.diagnose
-
-
-diagnose = _diagnose()
+    from tools.pipeline.ci_report import diagnose
 
 
 def test_one_input(data: bytes) -> None:

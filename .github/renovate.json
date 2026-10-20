@@ -76,6 +76,16 @@
   ],
   "customManagers": [
     {
+      "description": "The mise release CI installs, which min_version decides; mise's own manager reads only the tools.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^mise\\.toml$/"],
+      "matchStrings": ["min_version = \"(?<currentValue>[^\"]+)\""],
+      "depNameTemplate": "jdx/mise",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
       "description": "The vendored API reference bundle, by the version UPSTREAM records.",
       "customType": "regex",
       "managerFilePatterns": ["/^static/vendor/scalar/UPSTREAM$/"],

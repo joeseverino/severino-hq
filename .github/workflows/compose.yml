@@ -551,7 +551,7 @@ jobs:
           HEAD_SHA: ${{ steps.host.outputs.sha }}
           CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: >-
-          scripts/hq-check.sh "Severino HQ · Production" "$HEAD_SHA" in_progress "Building HQ"
+          python3 -m tools.pipeline.ci_report check "Severino HQ · Production" "$HEAD_SHA" in_progress "Building HQ"
           "The host and every admitted extension are being built and tested as one application."
 
       - name: Download admitted artifacts
@@ -922,7 +922,7 @@ jobs:
           SEALED: ${{ steps.seal.outputs.sealed }}
         run: |
           set -euo pipefail
-          step="$(scripts/failed-step.sh "Build HQ" 2>/dev/null | head -1 || true)"
+          step="$(python3 -m tools.pipeline.ci_report failed-step "Build HQ" 2>/dev/null | head -1 || true)"
           echo "step=${step:-a step}" >> "$GITHUB_OUTPUT"
           {
             echo "### Not built: ${step:-a step} failed"
@@ -942,6 +942,6 @@ jobs:
           FAILED_STEP: ${{ steps.failed.outputs.step }}
           CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: >-
-          scripts/hq-check.sh "Severino HQ · Production" "$HEAD_SHA" completed "Not deployed: ${FAILED_STEP} failed"
+          python3 -m tools.pipeline.ci_report check "Severino HQ · Production" "$HEAD_SHA" completed "Not deployed: ${FAILED_STEP} failed"
           "Nothing was published, so production still runs the previous image."
           failure

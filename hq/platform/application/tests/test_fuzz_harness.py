@@ -11,7 +11,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 ROOT = Path(__file__).resolve().parents[4]
 SEEDS = (
@@ -43,6 +43,9 @@ def _harness():
     return module
 
 
+# The harness fuzzes the pipeline's diagnosis too, a tool of the checkout the
+# image does not carry.
+@tag("source")
 class FuzzHarnessTests(SimpleTestCase):
     def test_every_seed_is_answered_without_raising(self):
         harness = _harness()

@@ -33,7 +33,7 @@ class PipelineReportTests(SimpleTestCase):
         name = '"Severino HQ · Review"'
 
         self.assertIn(name, self.read(".github", "workflows", "ci.yml"))
-        self.assertIn(f"check_name={name}", self.read("scripts", "hq-verdict.sh"))
+        self.assertIn(f"REVIEW = {name}", self.read("tools", "pipeline", "ci_report.py"))
 
     def test_hqs_key_never_reaches_the_homelab_runner(self):
         import re

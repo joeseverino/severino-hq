@@ -2325,7 +2325,8 @@ _REFERENCE_PAINT = """() => {
 }"""
 _REFERENCE_CHROME = """() => ({
   said: document.querySelector('main').innerText,
-  leaves: [...document.querySelectorAll('main a[href]')]
+  // Every link drawn anywhere on the page, the viewer's sidebar and its foot included.
+  leaves: [...document.links]
     .filter((a) => a.origin !== location.origin && a.checkVisibility())
     .map((a) => a.href),
   search: document.querySelector('aside button').innerText,
@@ -2493,6 +2494,10 @@ class ReferenceBrowserTests(BrowserGate):
         """One search that says it is the reference's, no request sent from the page,
         no token asked for, no way out to the vendor, and nothing fetched from it."""
 
+        self.visit(REFERENCE_PHONE)
+        self.page.evaluate(_REFERENCE_OPEN_MENU, SELECTORS["reference"])
+        self.settle()
+        self.assertEqual(self.page.evaluate(_REFERENCE_CHROME)["leaves"], [])
         self.visit(1360)
         chrome = self.page.evaluate(_REFERENCE_CHROME)
         for words in ("Test Request", "Bearer Token", "Open API Client", "Powered by", "Client Libraries"):

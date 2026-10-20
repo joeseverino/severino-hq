@@ -4,9 +4,10 @@ import importlib.util
 import io
 import json
 import re
+import subprocess
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, tag
@@ -210,6 +211,41 @@ class RenovateTests(SimpleTestCase):
         for command in commands:
             with self.subTest(command=command):
                 self.assertTrue(any(re.search(pattern, command) for pattern in allowed))
+
+    def test_every_custom_manager_finds_its_pin(self):
+        """A file that moves without its pattern, or a line reworded under its
+        match string, leaves the pin unwatched and Renovate says nothing."""
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split("\0")
+        managers = json.loads((ROOT / ".github" / "renovate.json").read_text())["customManagers"]
+        self.assertTrue(managers)
+        for manager in managers:
+            with self.subTest(manager=manager["description"]):
+                patterns = manager.get("managerFilePatterns", manager.get("fileMatch", []))
+                self.assertTrue(patterns)
+                named: set[str] = set()
+                for pattern in patterns:
+                    files = {name for name in tracked if name and renovate_file_pattern_matches(pattern, name)}
+                    self.assertTrue(files, f"{pattern} matches no tracked file")
+                    named |= files
+                for match_string in manager["matchStrings"]:
+                    expression = re.compile(match_string.replace("(?<", "(?P<"))
+                    self.assertTrue(
+                        any(expression.search((ROOT / name).read_text()) for name in named),
+                        f"{match_string} matches nothing in {sorted(named)}",
+                    )
+
+
+def renovate_file_pattern_matches(pattern: str, name: str) -> bool:
+    """Renovate reads ``/…/`` as a regular expression and anything else as a glob."""
+    if len(pattern) > 1 and pattern.startswith("/") and pattern.endswith("/"):
+        return re.search(pattern[1:-1], name) is not None
+    return PurePosixPath(name).full_match(pattern)
 
 
 @tag("source")

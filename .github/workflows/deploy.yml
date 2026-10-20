@@ -90,7 +90,7 @@ jobs:
           COMMIT: ${{ steps.find.outputs.commit }}
           CHECK_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: >-
-          scripts/hq-check.sh "Severino HQ · Production" "$COMMIT" in_progress "Waiting for approval"
+          python3 -m tools.pipeline.ci_report check "Severino HQ · Production" "$COMMIT" in_progress "Waiting for approval"
           "HQ is built, signed and ready. Open the run and review the deployment to put it in production."
 
   approve:
@@ -193,4 +193,4 @@ jobs:
           THIS_RUN: ${{ github.run_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMPOSE_RUN: ${{ inputs.compose_run }}
-        run: scripts/hq-report.sh
+        run: python3 -m tools.pipeline.ci_report report

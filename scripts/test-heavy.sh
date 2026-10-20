@@ -1,7 +1,7 @@
 #!/bin/sh
-# Heavy commands take turns: a second one is refused and names the first, a
-# killed holder frees the turn, a heavy command inside a turn runs, and CI takes
-# no lock.
+# Heavy commands take turns: a second one names the first and waits for it, a
+# bound that runs out exits 75 naming the holder, a killed holder frees the
+# turn, a heavy command inside a turn runs, and CI takes no lock.
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -13,7 +13,7 @@ cleanup() {
     rm -rf "${work}"
 }
 trap cleanup EXIT
-unset CI SEVERINO_HEAVY_HOLDER
+unset CI SEVERINO_HEAVY_HOLDER SEVERINO_HEAVY_WAIT
 XDG_CACHE_HOME="${work}/cache"
 export XDG_CACHE_HOME
 lock="${XDG_CACHE_HOME}/severino/heavy.lock"
@@ -23,38 +23,64 @@ fail() {
     exit 1
 }
 
-# Starts a holder and returns once it holds the turn: it writes to the fifo
-# only from inside the command.
+fifo() {
+    rm -f "${work}/$1"
+    mkfifo "${work}/$1"
+}
+
+# Starts a holder and returns once it holds the turn: it writes to the ready
+# fifo only from inside the command, then holds until a line reaches release.
 hold() {
-    rm -f "${work}/ready"
-    mkfifo "${work}/ready"
+    fifo ready
+    fifo release
     # shellcheck disable=SC2016  # expanded by the inner shell
-    "${heavy}" sh -c 'echo up >"$1"; exec sleep 60' sh "${work}/ready" &
+    MISE_TASK_NAME=example-holder "${heavy}" sh -c 'echo up >"$1"; read -r _ <"$2"' sh "${work}/ready" "${work}/release" &
     holder=$!
     read -r _ <"${work}/ready"
 }
 
+names_holder() {
+    case "$1" in
+        *"pid ${holder}, task example-holder, running "*release*) ;;
+        *) fail "$2 does not name the holder (pid ${holder}): $1" ;;
+    esac
+}
+
 hold
 status=0
-said="$("${heavy}" true 2>&1)" || status=$?
-[ "${status}" -eq 75 ] || fail "a second heavy command exited ${status}, not 75"
-case "${said}" in
-    *"pid ${holder},"*sleep*) ;;
-    *) fail "the refusal does not name the holder (pid ${holder}): ${said}" ;;
-esac
+said="$(SEVERINO_HEAVY_WAIT=0 "${heavy}" true 2>&1)" || status=$?
+[ "${status}" -eq 75 ] || fail "a heavy command whose bound ran out exited ${status}, not 75"
+names_holder "${said}" "the expired wait"
 
 status=0
-SEVERINO_HEAVY_HOLDER="${holder}" "${heavy}" true 2>/dev/null || status=$?
+SEVERINO_HEAVY_HOLDER="${holder}" SEVERINO_HEAVY_WAIT=0 "${heavy}" true 2>/dev/null || status=$?
 [ "${status}" -eq 75 ] || fail "a process outside the turn borrowed it by naming the holder"
 
 status=0
 CI=true "${heavy}" true || status=$?
 [ "${status}" -eq 0 ] || fail "under CI a heavy command waited for the lock"
 
+# A second heavy command says whom it waits for, then runs once the first ends.
+fifo waiting
+# shellcheck disable=SC2016  # expanded by the inner shell
+"${heavy}" sh -c 'echo ran >"$1"' sh "${work}/second" 2>"${work}/waiting" &
+second=$!
+exec 8<"${work}/waiting"
+read -r said <&8 || fail "the second heavy command did not say it was waiting"
+names_holder "${said}" "the waiting line"
+[ ! -e "${work}/second" ] || fail "the second heavy command ran while the first held the turn"
+echo go >"${work}/release"
+wait "${holder}" || fail "the holder failed"
+holder=""
+wait "${second}" || fail "the waiting heavy command failed once the turn was free"
+exec 8<&-
+[ "$(cat "${work}/second")" = ran ] || fail "the waiting heavy command did not run"
+
+hold
 kill -KILL "${holder}"
 wait "${holder}" 2>/dev/null || true
 holder=""
-"${heavy}" true || fail "a killed holder kept the turn"
+SEVERINO_HEAVY_WAIT=0 "${heavy}" true || fail "a killed holder kept the turn"
 
 # shellcheck disable=SC2016  # expanded by the inner shell
 said="$("${heavy}" sh -c '"$1" echo nested' sh "${heavy}")" || fail "a heavy command inside a turn was refused"

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "_comment": "Why a pipeline run failed, in plain words, and what fixes it. scripts/diagnose.py matches a failed run's log against these, first match wins, and prints only this text: never a line of the log, so a check or comment on this public repository cannot repeat anything private. Add an entry the first time a failure needs investigating, so it never needs investigating twice.",
+  "_comment": "Why a pipeline run failed, in plain words, and what fixes it. tools/pipeline/ci_report.py matches a failed run's log against these, first match wins, and prints only this text: never a line of the log, so a check or comment on this public repository cannot repeat anything private. Add an entry the first time a failure needs investigating, so it never needs investigating twice.",
   "diagnoses": [
     {
       "id": "package-write",

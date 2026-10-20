@@ -71,7 +71,7 @@ HQ's GitHub App posts one check, linked to the run behind it:
   admission, and marked live by the controller once production runs it, when
   its connection manages `github.delivery`.
 
-Why a run failed comes from `deploy/diagnoses.json`: `scripts/diagnose.py`
+Why a run failed comes from `deploy/diagnoses.json`: `tools/pipeline/ci_report.py`
 matches the failed job's log against it and prints only the catalog's words.
 A new failure is added there once, and named with its fix every time after.
 

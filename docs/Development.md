@@ -72,8 +72,11 @@ Two suites at once exhaust a small machine's memory, so the heavy tasks (`fast`,
 which holds an exclusive lock on `~/.cache/severino/heavy.lock` (under
 `XDG_CACHE_HOME` when it is set) for as long as the task runs. Every checkout
 and worktree shares that file. A heavy task started while another holds it
-does not wait: it exits 75 with one line naming the holder's pid, how long it
-has run and its command. A heavy task run by one that holds the lock (`ci`
+prints one line naming the holder (its pid, its mise task, how long it has run
+and its command) and waits for the turn. The wait is bounded by
+`SEVERINO_HEAVY_WAIT` seconds, two hours by default, the longest a heavy task
+may run; past that it exits 75 (`EX_TEMPFAIL`) naming the holder again. A
+heavy task run by one that holds the lock (`ci`
 running `browser`, `check` running `suite:composed`) runs inside its turn. The
 lock goes with the process, so a killed gate frees it. CI runs one job per
 machine and takes no lock.

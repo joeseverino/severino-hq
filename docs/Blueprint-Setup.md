@@ -20,7 +20,7 @@ repository must change. Three kinds exist:
 | The host repository extensions are checked against | `HOST_REPOSITORY` in `.github/workflows/plugin-checks.yml` | an extension's checks |
 | The failure-log recipient (an age public key) | `FAILURE_LOG_RECIPIENT` in [`scripts/toolchain.env`](../scripts/toolchain.env) | `scripts/seal-failure-logs.sh` ([Deployment](Deployment.md#when-a-run-fails)) |
 | The runner label, `severino-hq` | `runs-on` of the Deploy job in `.github/workflows/deploy.yml` | Deploy |
-| The check names, **Severino HQ · Review** and **Severino HQ · Production** | the `scripts/hq-check.sh` calls in the workflows and the admission action | the ruleset's required check |
+| The check names, **Severino HQ · Review** and **Severino HQ · Production** | the `ci_report check` calls in the workflows and the admission action | the ruleset's required check |
 | The site name | `SEVERINO_SITE_NAME` (default in `hq/config/settings.py`) | page titles and the header |
 
 ### Host paths
