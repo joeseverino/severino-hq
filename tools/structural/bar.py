@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
-import zlib
 from pathlib import Path
 
 from tools.structural.classify import similar_pairs
@@ -41,10 +41,18 @@ def graph_binary() -> str:
     return found.stdout.strip()
 
 
-def cli(binary: str, tool: str, arguments: dict) -> dict:
+def cli(binary: str, store: Path, tool: str, arguments: dict) -> dict:
+    # The graph's store and daemon directory are the gate's own, so it meets no
+    # daemon an editor started from another build and leaves nothing behind.
+    env = os.environ | {"CBM_CACHE_DIR": str(store / "cache"), "CBM_RUNTIME_DIR": str(store / "run")}
     # The tool says why it could not answer; without that this fails silently.
     answer = subprocess.run(
-        [binary, "cli", "--json", tool], input=json.dumps(arguments), capture_output=True, text=True, check=False
+        [binary, "cli", "--json", tool],
+        input=json.dumps(arguments),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
     )
     if answer.returncode != 0:
         print(answer.stderr, file=sys.stderr)
@@ -52,7 +60,7 @@ def cli(binary: str, tool: str, arguments: dict) -> dict:
     return json.loads(answer.stdout)
 
 
-def graph_pages(binary: str, project: str) -> list[dict]:
+def graph_pages(binary: str, store: Path, project: str) -> list[dict]:
     """Every page of the answer: the graph pages a large result, and the
     classifier refuses one that does not add up to its total."""
 
@@ -60,6 +68,7 @@ def graph_pages(binary: str, project: str) -> list[dict]:
     while True:
         page = cli(
             binary,
+            store,
             "query_graph",
             {"project": project, "query": QUERY, "format": "json", "max_rows": 99998}
             | ({"cursor": cursor} if cursor else {}),
@@ -88,10 +97,15 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     binary = graph_binary()
-    project = f"structural-bar-{zlib.crc32(str(ROOT).encode())}"
-    cli(binary, "index_repository", {"repo_path": str(ROOT), "mode": "full", "name": project})
-    with tempfile.TemporaryDirectory() as scratch:
-        current = similar_pairs(ROOT, build_inspector(Path(scratch)), graph_pages(binary, project))
+    project = "structural-bar"
+    # Under /tmp: the daemon's socket lives in the store, and a socket's path
+    # must fit 104 bytes, which macOS's per-user temporary directory overruns.
+    with tempfile.TemporaryDirectory(prefix="cbm-", dir="/tmp") as scratch:
+        store = Path(scratch)
+        for part in ("cache", "run"):
+            (store / part).mkdir(mode=0o700)
+        cli(binary, store, "index_repository", {"repo_path": str(ROOT), "mode": "full", "name": project})
+        current = similar_pairs(ROOT, build_inspector(store), graph_pages(binary, store, project))
 
     if args.record:
         BASELINE.write_text(HEADER + "".join(f"{line}\n" for line in current))

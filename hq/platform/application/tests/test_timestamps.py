@@ -8,7 +8,7 @@ from unittest import mock
 from django.test import SimpleTestCase, tag
 
 from ..timestamps import moment
-from .source import parsed
+from .source import parsed, source_files
 
 PLUS_TWO = timezone(timedelta(hours=2))
 ROOT = Path(__file__).resolve().parents[4]
@@ -147,8 +147,7 @@ class OneParserTests(SimpleTestCase):
 
     def test_no_other_module_parses_an_iso_instant_itself(self):
         offenders = []
-        tops = [top for top in ROOT.iterdir() if top.is_dir() and not top.is_symlink() and not top.name.startswith(".")]
-        for path in sorted(path for top in tops for path in top.rglob("*.py")):
+        for path in source_files(ROOT, "*.py"):
             relative = str(path.relative_to(ROOT))
             if relative in self.KEPT or path.name.startswith("test") or "/migrations/" in relative:
                 continue

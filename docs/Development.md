@@ -19,8 +19,8 @@ mise run dev:scratch --seed showcase
 ```
 
 The log names the address and the throwaway account to sign in as. Nothing
-reads a `.env` file: `.env.example` is the production template, rendered by
-the host and named by `SEVERINO_APP_ENV_PATH` ([Deployment](Deployment.md)).
+reads a `.env` file: production's configuration is in
+[Deployment](Deployment.md#configuration).
 
 ## Tasks
 
@@ -113,11 +113,12 @@ carries fails.
 Name it once in a gitignored `mise.local.toml` (copy
 `tools/dev/mise.local.example.toml`): `HQ_LOCAL_PYTHONPATH` says where the
 extensions' sources are and `HQ_LOCAL_PLUGINS` which to enable. Only the
-composed suite and the dev servers load the set. Without it the composed pass
-says it did not run and passes; `REQUIRE_COMPOSED=1 mise run suite:composed`
-fails instead. `mise run suite:as-image` runs the composed suite as the image
-does, in a copy of only the files `Dockerfile.dockerignore` admits, with
-`DEBUG` off and `SEVERINO_HQ_SOURCE` stamped; `mise run preflight` requires it.
+composed suite and the dev servers load the set. The composed suite,
+`mise run suite:as-image`, runs as the image does: in a copy of only the files
+`Dockerfile.dockerignore` admits, with `DEBUG` off and `SEVERINO_HQ_SOURCE`
+stamped, so a test that reads a file the image leaves out fails here. Without
+the set it runs the host alone and says so; `REQUIRE_COMPOSED=1` fails
+instead, which is how `mise run preflight` runs it.
 
 ### Heavy gates take turns
 
@@ -132,13 +133,13 @@ and its command) and waits for the turn. The wait is bounded by
 `SEVERINO_HEAVY_WAIT` seconds, two hours by default, the longest a heavy task
 may run; past that it exits 75 (`EX_TEMPFAIL`) naming the holder again. A
 heavy task run by one that holds the lock (`ci`
-running `browser`, `check` running `suite:composed`) runs inside its turn. The
+running `browser`, `check` running `suite:as-image`) runs inside its turn. The
 lock goes with the process, so a killed gate frees it. CI runs one job per
 machine and takes no lock.
 
 A TOML task takes the turn by extending the `heavy` template in `mise.toml`,
-or, when it extends `django`, by its own `shell` and `timeout` lines; a file
-task sources `tools/lib/heavy-turn.sh` and sets `#MISE timeout`. Each heavy
+or `django-heavy` when it is a Django gate; a file task sources
+`tools/lib/heavy-turn.sh` and sets `#MISE timeout`. Each heavy
 task has a timeout (30 minutes for a gate, two hours for an aggregate), so a
 hung gate stops and frees the turn.
 

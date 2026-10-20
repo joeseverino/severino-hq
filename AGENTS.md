@@ -23,10 +23,11 @@ run them plain, since a pipe reports the filter's exit status. `fast` selects
 through Python imports and app names, so a rule held only by a string or a
 template needs `check` ([The gates](docs/Development.md#the-gates)).
 
-The composed suite is where the host and its extensions first meet, which CI
-cannot reach. Name the extension set once in a gitignored `mise.local.toml`
-(copy `tools/dev/mise.local.example.toml`); without it the composed pass says it
-did not run and passes, covering less.
+The composed suite (`suite:as-image`, run as the image runs it) is where the
+host and its extensions first meet, which CI cannot reach. Name the extension
+set once in a gitignored `mise.local.toml` (copy
+`tools/dev/mise.local.example.toml`); without it the pass runs the host alone,
+covering less.
 
 A test that reads the repository rather than running the product carries
 `@tag("source")` and runs only in `checks:source`, since no image ships those

@@ -5,10 +5,8 @@
 # One turn covers every interpreter's suite.
 set -eu
 
-repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 # shellcheck source=tools/lib/heavy-turn.sh
-. "${repo}/tools/lib/heavy-turn.sh"
-cd "${repo}"
+. ./tools/lib/heavy-turn.sh
 
 failed=0
 # A pipeline leg names its one interpreter in TEST_PYTHONS.

@@ -100,7 +100,7 @@
   counted per surface, source and reason per minute. Credentials are never
   recorded.
 - Routine machine events (a connection probed by a sweep) are deleted after
-  `SEVERINO_AUDIT_ROUTINE_DAYS` (30 by default) by the daily `audit.prune`
+  30 days (`SEVERINO_AUDIT_ROUTINE_DAYS`) by the daily `audit.prune`
   job. Only the types listed in `hq.platform.core.audit.ROUTINE_EVENTS` are eligible, and
   only when no user is attached. Logins, refusals, settings changes, deletions
   and every change to a resource or credential are kept indefinitely.
@@ -153,7 +153,7 @@
   (`/audit/?awaiting=1`), or from its action item, against a fingerprinted
   field-by-field diff, so a
   record that changes meanwhile supersedes the request. Requests lapse after
-  `SEVERINO_APPROVAL_WINDOW_HOURS` (24 by default), each actor may hold ten,
+  24 hours (`SEVERINO_APPROVAL_WINDOW_HOURS`), each actor may hold ten,
   and approval requires the web interface, so no token can approve its own.
 
 ## Production checklist
@@ -249,9 +249,9 @@
       it does not use the LAN/NPM browser route.
 - [ ] The tailnet ACL permits the intended admin client to reach port 8000 and
       no broader identity than required.
-- [ ] `SEVERINO_MCP_ENABLE_WRITES`, `SEVERINO_MCP_ENABLE_PRUNE`, and
-      `SEVERINO_MCP_ENABLE_DELETES` are enabled only for the capabilities the
-      MCP service account actually needs.
+- [ ] `SEVERINO_MCP_ENABLE_WRITES`, `SEVERINO_MCP_ENABLE_DOC_SYNC` and
+      `SEVERINO_MCP_ENABLE_INFRASTRUCTURE` are enabled only for the
+      capabilities the MCP service account actually needs.
 - [ ] The DNS-01 token is its own connection item, with only Zone Read and
       DNS Edit on the zones it renews, and is not the Cloudflare API token.
 - [ ] No personal SSH private key is rendered for the controller. Its

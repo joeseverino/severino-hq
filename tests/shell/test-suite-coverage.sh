@@ -40,9 +40,11 @@ judge() { # judge <total> <floor>; prints the task's exit status
     : >"${work}/reports"
     : >"${work}/summary"
     status=0
-    # CI: one runner, one job, so the task takes no machine-wide turn.
-    CI=1 PATH="${work}/bin:${PATH}" TEST_TOTAL="$1" COVERAGE_FLOOR="$2" TEST_REPORTS="${work}/reports" \
-        GITHUB_STEP_SUMMARY="${work}/summary" "${fixture}/${task}" >"${work}/out" 2>&1 || status=$?
+    # CI: one runner, one job, so the task takes no machine-wide turn. Run as
+    # mise runs a file task: in its config root, named by MISE_CONFIG_ROOT.
+    (cd "${fixture}" && CI=1 PATH="${work}/bin:${PATH}" TEST_TOTAL="$1" COVERAGE_FLOOR="$2" \
+        TEST_REPORTS="${work}/reports" GITHUB_STEP_SUMMARY="${work}/summary" MISE_CONFIG_ROOT="${fixture}" \
+        "./${task}") >"${work}/out" 2>&1 || status=$?
     echo "${status}"
 }
 

@@ -73,6 +73,22 @@ class FastGateMappingTests(SimpleTestCase):
                 chosen, _ = fast_gate.test_labels(files, set(), {"projects"})
             self.assertEqual(chosen, ["test_model", "test_namespace"])
 
+    def test_a_changed_file_selects_the_tests_that_name_its_path_or_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, text in {
+                "string": 'read(".github/actions/example/action.yml")',
+                "segments": 'root / ".github" / "actions" / "example" / "action.yml"',
+                "arguments": 'Path(".github", "actions", "example")',
+                "longer": 'read(".github/actions/example-other/action.yml")',
+                "other": 'read(".github/actions/elsewhere/action.yml")',
+            }.items():
+                (root / f"test_{name}.py").write_text(text)
+            files = sorted(Path(p.name) for p in root.iterdir())
+            with patch.object(fast_gate, "ROOT", root):
+                chosen, _ = fast_gate.test_labels(files, set(), set(), [".github/actions/example/action.yml"])
+            self.assertEqual(chosen, ["test_arguments", "test_segments", "test_string"])
+
     def test_a_test_change_selects_that_test_and_the_architecture_tests(self):
         labels = self.labels("hq/platform/core/tests/test_security.py")
         self.assertIn("hq.platform.core.tests.test_security", labels)

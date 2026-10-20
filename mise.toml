@@ -83,8 +83,8 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 # one (two processes making one new file WAL at once: one is refused as
 # "database is locked"). It is named as a test run's scratch is, for the mise
 # that ran it, so the next test run sweeps it (hq/config/sandbox.py). A gate
-# sees no extension set it did not ask for. A task extends one template, so
-# the composed one restates what it shares with django.
+# sees no extension set it did not ask for. A task extends one template and a
+# template extends none, so composed and django-heavy restate django's env.
 
 [task_templates.django]
 env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
@@ -102,12 +102,17 @@ env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/seve
 # SEVERINO_HEAVY_WAIT seconds (two hours by default), then exits 75. A heavy
 # task inside a turn runs in it. CI takes no lock. The timeout stops a
 # hung holder: well above the slowest gate (the suite, a browser gate), and an
-# aggregate's above the gates it runs in turn. A task that extends django
-# restates these two lines, since a task extends one template; a file task
-# sources tools/lib/heavy-turn.sh and sets its timeout in its header. mise's
-# own task.timeout setting would bound the whole run, development servers
+# aggregate's above the gates it runs in turn. A file task sources
+# tools/lib/heavy-turn.sh and sets its timeout in its header. mise's own
+# task.timeout setting would bound the whole run, development servers
 # included, so each heavy task carries its own.
 [task_templates.heavy]
+shell = "tools/lib/heavy.sh sh -o errexit -c"
+timeout = "30m"
+
+# A Django gate that loads the machine: django's env inside a heavy turn.
+[task_templates.django-heavy]
+env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 shell = "tools/lib/heavy.sh sh -o errexit -c"
 timeout = "30m"
 
@@ -196,7 +201,7 @@ description = "A signed-in session cookie for this checkout's scratch server"
 run = "uv run python manage.py dev_session operator"
 
 [tasks."dev:look"]
-extends = "django"
+extends = "django-heavy"
 depends = ["setup:webkit"]
 description = "Screenshot HQ pages as the browser gates draw them at a few widths, and run one of their rules there"
 usage = '''
@@ -209,8 +214,6 @@ flag "--open" help="With every disclosure open"
 flag "--expand" help="With every table row opened"
 flag "--no-script" help="As the server drew it, before tables.js and the rest run"
 '''
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
 run = "uv run --group browser python manage.py test hq.platform.core.browser_look.Look.test_look --noinput --parallel 1"
 
 [tasks."dev:manage"]
@@ -231,9 +234,7 @@ description = "Rewrite every derived file from its source; `mise run drift` chec
 # bridge contract feeds the Go types. Each step takes the heavy turn, the
 # contract tools' install among them, so none shares tools/clients'
 # node_modules with a drift gate's install.
-extends = "django"
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
+extends = "django-heavy"
 run = [
   "mise run setup:openapi",
   "uv run python manage.py sdk_contract",
@@ -256,14 +257,12 @@ run = "mise run -c 'drift:*'"
 
 [tasks.fast]
 description = "Inner loop: the quick gates, and the tests the change reaches"
-extends = "django"
+extends = "django-heavy"
 usage = '''
 arg "[base]" env="CHECK_BASE" help="The ref to diff against; default origin/main, then main"
 flag "--list" help="Print the selected test modules and run nothing"
 flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test workers per suite; 1 rules out an order or isolation failure"
 '''
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
 run = 'uv run python -m tools.gate.fast ${usage_list:+--list} --parallel "$usage_parallel" ${usage_base:+"$usage_base"}'
 
 [tasks.check]
@@ -274,7 +273,7 @@ description = "Does my change work: every Checks gate, the Tests gates on one Py
 # tools.gate.verdict ends the output on the tasks and tests that failed.
 extends = "heavy"
 timeout = "2h"
-run = "uv run python -m tools.gate.verdict check mise run -c -j 1 checks ::: 'tests:*' ::: suite:composed"
+run = "uv run python -m tools.gate.verdict check mise run -c -j 1 checks ::: 'tests:*' ::: suite:as-image"
 
 [tasks.ci]
 description = "Every gate the pipeline runs"
@@ -367,10 +366,8 @@ run = "actionlint -color"
 description = "The tests that read the repository, run once on the checkout"
 # Tagged "source"; a whole-suite run leaves them out (hq/platform/core/test_runner.py),
 # so no image or composed pass runs them.
-extends = "django"
+extends = "django-heavy"
 usage = 'arg "[labels]..." var=#true help="Test labels, dotted; only their tagged tests run. Every one by default"'
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
 run = "uv run python manage.py test --tag source --noinput --parallel auto ${usage_labels:-}"
 
 [tasks."checks:deploycheck"]
@@ -379,7 +376,7 @@ description = "Production settings raise no security warning"
 # check judges how settings.py reads one. The key is a throwaway long enough
 # for the strength check.
 extends = "django"
-env = { DJANGO_DEBUG = "0", DJANGO_SECRET_KEY = "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef", DJANGO_ALLOWED_HOSTS = "hq.example.com", SEVERINO_OIDC_ISSUER = "https://sso.example.com", DJANGO_BEHIND_TLS_PROXY = "1", DJANGO_SESSION_COOKIE_SECURE = "1", DJANGO_CSRF_COOKIE_SECURE = "1", DJANGO_HSTS_SECONDS = "31536000", DJANGO_HSTS_INCLUDE_SUBDOMAINS = "1", DJANGO_HSTS_PRELOAD = "1" }
+env = { DJANGO_DEBUG = "0", DJANGO_SECRET_KEY = "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef", DJANGO_ALLOWED_HOSTS = "hq.example.com", SEVERINO_OIDC_ISSUER = "https://sso.example.com", DJANGO_BEHIND_TLS_PROXY = "1", DJANGO_SESSION_COOKIE_SECURE = "1", DJANGO_CSRF_COOKIE_SECURE = "1", DJANGO_HSTS_SECONDS = "31536000" }
 run = "uv run python manage.py check --deploy --fail-level WARNING"
 
 [tasks."checks:structural"]
@@ -438,9 +435,7 @@ run = "uv run python manage.py makemigrations --check --dry-run"
 
 [tasks."tests:api-properties"]
 description = "Generated API cases through the real WSGI middleware"
-extends = "django"
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
+extends = "django-heavy"
 run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
 
 # ---------------------------------------------------------------- browser
@@ -463,17 +458,13 @@ run = "uv run --group browser python -m unittest demo.check -v"
 [tasks."browser:layout"]
 description = "Real-browser layout invariants over the stress estate"
 depends = ["setup:webkit"]
-extends = "django"
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
+extends = "django-heavy"
 run = "uv run --group browser python manage.py test hq.platform.core.browser_tests.LayoutBrowserTests --noinput --parallel 1"
 
 [tasks."browser:navigation"]
 description = "Real-browser invariants over the example estate, the frame around a page and its fragments"
 depends = ["setup:webkit"]
-extends = "django"
-shell = "tools/lib/heavy.sh sh -o errexit -c"
-timeout = "30m"
+extends = "django-heavy"
 run = "uv run --group browser python manage.py test hq.platform.core.estate_browser_tests hq.platform.core.browser_tests.ReferenceBrowserTests hq.platform.core.browser_tests.FragmentBrowserTests --noinput --parallel 1"
 
 # ------------------------------------------------------------- controller

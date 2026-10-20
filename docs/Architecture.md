@@ -388,7 +388,7 @@ named entry in `ALLOWED` with its reason, entered with `allowed("name")`:
 signing in (bounded by `OIDC_TIMEOUT`) and a public lookup an operator asked
 for by name.
 `RequestNeverWaitsTests` holds the entries to their places.
-`SEVERINO_OUTBOUND_IN_REQUEST=report` logs `outbound.in_request` and lets the
+The setting `SEVERINO_OUTBOUND_IN_REQUEST = "report"` logs `outbound.in_request` and lets the
 call go, for a composition whose extensions still reach out from a request; an
 extension moves that work to [outbound work](Plugins.md#outbound-work).
 

@@ -7,10 +7,8 @@
 #USAGE }
 set -eu
 
-repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 # shellcheck source=tools/lib/heavy-turn.sh
-. "${repo}/tools/lib/heavy-turn.sh"
-cd "${repo}"
+. ./tools/lib/heavy-turn.sh
 
 seed="${usage_seed:?}"
 out=var/demo

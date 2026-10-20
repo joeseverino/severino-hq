@@ -243,6 +243,87 @@ image CI builds.
 Every later change arrives through Deploy. Rerun `hq-host bootstrap` when
 `host.json` changes.
 
+## Configuration
+
+Every setting is a value in [`hq/config/settings.py`](../hq/config/settings.py).
+The environment carries only what differs per installation or is secret, and
+these are all the variables HQ reads. An installer sets the *installer* rows on
+the application-environment item ([Install](Install.md#7-create-the-application-environment));
+the image, the composition and `hq-host run-web` set the *platform* rows; the
+*development* rows are for a checkout, its gates and CI. A real environment
+variable wins over the rendered file, so a platform row set on the item
+changes nothing. A secret marked `_FILE` may instead be read from the file
+that variable names. `test_settings_env.py` holds this table to the code.
+
+| Variable | Set by | Does |
+| :--- | :--- | :--- |
+| `DJANGO_SECRET_KEY` | installer | signs sessions; required, HQ will not start without it |
+| `DJANGO_ALLOWED_HOSTS` | installer | every hostname browsers and clients use, comma-separated; required, anything else gets 400 |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | installer | each full origin the browser uses, such as `https://hq.example.com`; sign-in through a proxy fails without it |
+| `DJANGO_BEHIND_TLS_PROXY` | installer | `1`: trust the proxy's `X-Forwarded-Proto` and redirect plain HTTP to `SEVERINO_SITE_HOST` |
+| `DJANGO_DEBUG` | installer | `0` in production; `1` turns on development's defaults |
+| `DJANGO_SESSION_COOKIE_SECURE` | installer | the session cookie only over HTTPS; on unless `DJANGO_DEBUG` |
+| `DJANGO_CSRF_COOKIE_SECURE` | installer | the CSRF cookie only over HTTPS; on unless `DJANGO_DEBUG` |
+| `DJANGO_HSTS_SECONDS` | installer | how long browsers insist on HTTPS; a year by default, `0` only while TLS is not working |
+| `DJANGO_TIME_ZONE` | installer | the time zone dates are shown in, such as `America/New_York`; `America/Chicago` by default |
+| `SEVERINO_SITE_NAME` | installer | the name in page titles and the header |
+| `SEVERINO_SITE_HOST` | installer | the canonical host for printed pages, exports and the HTTPS redirect; derived from the two lists above when unset |
+| `SEVERINO_TRUSTED_NETWORKS` | installer | who may reach HQ at all, as CIDR ranges; loopback and Tailscale's ranges by default |
+| `SEVERINO_TRUSTED_PROXIES` | installer | the proxy's exact address, the only source whose `X-Forwarded-For` HQ believes; loopback by default |
+| `SEVERINO_SECRET_STORE_KEY`, `SEVERINO_SECRET_STORE_KEY_FILE` | installer | 32 characters or more; seals the secrets an operator hands HQ ([Secrets](Secrets.md#severino_secret_store_key)); unset, HQ holds none |
+| `SEVERINO_POSTURE` | installer | `advanced` lists each unmet check of HQ's standard in Needs you ([Posture](Posture.md)) |
+| `SEVERINO_OIDC_ENABLED` | installer | `1` signs in through the identity provider and closes the password form |
+| `SEVERINO_OIDC_ISSUER` | installer | the identity provider's issuer URL |
+| `SEVERINO_OIDC_CLIENT_ID` | installer | HQ's client at the identity provider |
+| `SEVERINO_OIDC_CLIENT_SECRET` | installer | that client's secret |
+| `SEVERINO_OIDC_ALLOWED_GROUPS` | installer | the groups whose members may sign in, comma-separated |
+| `SEVERINO_OIDC_ALLOWED_EMAILS` | installer | addresses that may sign in, honoured only when the provider marks them verified; setting it requests the `email` scope |
+| `SEVERINO_OIDC_CREATE_USER` | installer | whether a first sign-in creates the account; on by default |
+| `SEVERINO_PASSWORD_LOGIN_ENABLED` | installer | break-glass: `1` reopens the password form beside SSO; follows `SEVERINO_OIDC_ENABLED` when unset |
+| `SEVERINO_API_RESOURCE` | installer | the identity provider's API audience; empty disables the machine API and MCP |
+| `SEVERINO_MCP_ALLOWED_HOSTS` | installer | the host names MCP clients connect to; empty disables MCP |
+| `SEVERINO_MCP_ALLOWED_NETWORKS` | installer | the networks MCP answers; Tailscale's ranges by default |
+| `SEVERINO_MCP_ALLOWED_ORIGINS` | installer | browser origins MCP accepts; none by default |
+| `SEVERINO_MCP_ENABLE_WRITES` | installer | `1` lets an agent make ordinary writes |
+| `SEVERINO_MCP_ENABLE_DOC_SYNC` | installer | `1` lets an agent mirror the documentation index, without other writes |
+| `SEVERINO_MCP_ENABLE_INFRASTRUCTURE` | installer | `1` lets an agent declare infrastructure |
+| `SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS` | installer | `1` lets public DNS declarations reconcile |
+| `SEVERINO_DASHBOARD_LINKS` | installer | extra dashboard links, as a JSON list of `{"label", "sub", "href"}` |
+| `HQ_CONTROLLER_ID` | installer | the installation a sweep files its findings under; the machine's name when unset |
+| `CONTENT_INDEX_URL` | installer | a public site's content index to sync; unset turns the sync off |
+| `CONTENT_INDEX_PROJECT_SLUG` | installer | the project the index belongs to, when its public URL does not say |
+| `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_ID_FILE` | installer | the Cloudflare Access service token's ID the index sits behind |
+| `CF_ACCESS_CLIENT_SECRET`, `CF_ACCESS_CLIENT_SECRET_FILE` | installer | that token's secret |
+| `CLOUDFLARE_D1_DATABASE_NAME` | installer | which D1 database is the contact inbox, when more than one holds the contact table |
+| `SEVERINO_APP_ENV_PATH` | platform | the rendered application environment, which settings load into every process |
+| `SEVERINO_DATABASE_PATH` | platform | the SQLite database; HQ will not start without it |
+| `SEVERINO_MEDIA_ROOT` | platform | where uploads are kept |
+| `SEVERINO_EXPORTS_ROOT` | platform | where exports are written |
+| `DJANGO_STATIC_ROOT` | platform | the collected static tree, built into the image |
+| `SEVERINO_HQ_SOURCE` | platform | the repository this build came from |
+| `SEVERINO_HQ_REVISION` | platform | the commit this build is |
+| `SEVERINO_HQ_PLUGINS` | platform | the installed extensions' manifests, as `package.module:PluginManifest` entries |
+| `SEVERINO_HQ_PLUGIN_LOCK` | platform | the composition's signed lock of admitted extensions |
+| `SEVERINO_HQ_PLUGIN_POLICY_SHA256` | platform | the digest of the admission policy the lock was made under |
+| `SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION` | platform | whether extensions must be admitted; on unless `DJANGO_DEBUG` when unset |
+| `SEVERINO_BRIDGE_SOCKET` | platform | the Unix socket the controller bridge is served on; unset serves none |
+| `SEVERINO_CONTROLLER_DOORBELL` | platform | the file HQ touches when it queues controller work |
+| `SEVERINO_SCHEMA_SNAPSHOT` | platform | where boot keeps a copy of the database before migrating it |
+| `SEVERINO_LOG_LEVEL` | development | a standard Python log level; `INFO` by default |
+| `DJANGO_TEMPLATE_CACHE` | development | whether rendered templates are cached; on unless `DJANGO_DEBUG` |
+| `DJANGO_WHITENOISE_AUTOREFRESH` | development | serves static files from the source trees, uncached; refused with `DJANGO_DEBUG` off in a deployment check |
+| `SEVERINO_DEBUG_TOOLBAR` | development | `1` with `DJANGO_DEBUG` shows Django Debug Toolbar |
+| `SEVERINO_DEBUG_TOOLBAR_IPS` | development | who sees the toolbar; loopback by default |
+| `SEVERINO_CONTROLLER_HEARTBEAT` | development | where HQ records that the controller reached it; beside the database when unset |
+| `SEVERINO_ACTIVITY_MARKER` | development | where HQ marks itself in use; beside the database when unset |
+| `SEVERINO_TEST_DATABASE_PATH` | development | the suite's database file; one per run in the temporary directory by default |
+| `SEVERINO_TEST_MARKERS` | development | the directory a test run keeps the controller's markers in |
+| `SEVERINO_TEST_BUILDS` | development | the directory a test run builds programs into |
+| `SEVERINO_TEST_LEAK_LEDGER` | development | the file parallel test workers record leaked resources in |
+| `HQ_BROWSER_ENGINE` | development | the browser gates' engine: `webkit` by default, `chromium` or `firefox` |
+| `HQ_BROWSER_CHANNEL` | development | a Playwright browser channel for that engine |
+| `HQ_API_RECORD_EXAMPLES` | development | `1`, with `--parallel 1`, writes the API responses a run receives to `openapi-examples.json` |
+
 ## Network exposure
 
 The container uses host networking and Uvicorn binds port 8000, so `/mcp/`

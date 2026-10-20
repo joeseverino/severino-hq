@@ -7,16 +7,11 @@
 # push.
 set -eu
 
-repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
-cd "${repo}"
 # shellcheck source=tools/lib/export-tree.sh
 . ./tools/lib/export-tree.sh
 
-work="${XDG_CACHE_HOME:-$HOME/.cache}/severino-hq/scan-$(printf '%s' "${repo}" | cksum | cut -d' ' -f1)"
-src="${work}/src-scorecard"
-rm -rf "${src}"
-mkdir -p "${src}"
-export_tree "${src}"
+work="$(scan_tree scorecard)"
+src="${work}/src"
 
 checks="$(uv run python -m tools.pipeline.scorecard_report --checks)"
 # No token: local mode reads files, and a token would let it reach GitHub on

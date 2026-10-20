@@ -14,36 +14,7 @@ from starlette.staticfiles import StaticFiles
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
 
-from .source import parsed
-
-# Installed or generated trees inside a checkout. With hidden directories
-# (.git, a virtualenv under any name) they are not this project's source.
-NOT_SOURCE = {
-    "venv",
-    "site-packages",
-    "node_modules",
-    "staticfiles",
-    "build",
-    "data",
-    "var",
-    "media",
-    "exports",
-    "backups",
-}
-
-
-def source_files(root: Path, pattern: str) -> list[Path]:
-    """This checkout's own files matching ``pattern``.
-
-    Read from the directory tree, not from git: the suite also runs inside the
-    image, where there is no git to ask what is tracked.
-    """
-
-    return sorted(
-        path
-        for path in root.rglob(pattern)
-        if not any(part.startswith(".") or part in NOT_SOURCE for part in path.relative_to(root).parts[:-1])
-    )
+from .source import parsed, source_files
 
 
 def view_modules(root: Path) -> list[Path]:

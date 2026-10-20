@@ -3,6 +3,9 @@ Severino HQ settings.
 
 Every setting HQ relies on is stated here, Django's defaults included, so this
 file reads as the whole configuration and no default can move underneath it.
+A value is read from the environment only where it differs per deployment or
+is secret, through the env_* readers below; every variable is in the table in
+docs/Deployment.md#configuration, and a test holds the two to each other.
 
 Production guidance:
 - DEBUG must be False (set DJANGO_DEBUG=0).
@@ -38,16 +41,9 @@ host_apps = import_module("hq.platform.application.domains").host_apps
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-# The rendered app env (shell-quoted KEY='value' lines), where hq-host mounts
-# it and says so in SEVERINO_APP_ENV_PATH. Loading it here, not only in the
-# entrypoint, gives it to every process in the container, `docker exec`
-# sessions included. setdefault: real environment variables always win.
-_APP_ENV_FILE = Path(os.environ.get("SEVERINO_APP_ENV_PATH") or os.devnull)
-if _APP_ENV_FILE.is_file():
-    for _token in shlex.split(_APP_ENV_FILE.read_text(encoding="utf-8")):
-        _key, _sep, _value = _token.partition("=")
-        if _sep:
-            os.environ.setdefault(_key, _value)
+
+def env_str(name: str, default: str = "") -> str:
+    return os.environ.get(name, default)
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -57,27 +53,15 @@ def env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def env_int(name: str, default: int, *, minimum: int | None = None, maximum: int | None = None) -> int:
-    """A whole number from the environment, or the default when it is not one.
-
-    Refusing to start over a malformed cadence value would take HQ down to
-    protect a polling interval. The default is always a working answer.
-
-    A ``minimum`` marks a value HQ will not guess, such as the month a fiscal
-    year starts: not a number, or outside the bounds, refuses to start.
-    """
+def env_int(name: str, default: int) -> int:
+    """A whole number from the environment, or the default when it is not one,
+    which is always a working answer."""
 
     raw = os.environ.get(name, "").strip()
     try:
-        value = int(raw) if raw else default
+        return int(raw) if raw else default
     except ValueError:
-        value = None
-    if minimum is None:
-        return default if value is None else value
-    if value is None or value < minimum or (maximum is not None and value > maximum):
-        allowed = f"at least {minimum}" if maximum is None else f"between {minimum} and {maximum}"
-        raise RuntimeError(f"{name} must be {allowed}.")
-    return value
+        return default
 
 
 def env_list(name: str, default: list[str] | None = None) -> list[str]:
@@ -101,6 +85,18 @@ def env_secret(name: str) -> str:
         raise RuntimeError(f"Could not read {name}_FILE.") from exc
 
 
+# The rendered app env (shell-quoted KEY='value' lines), where hq-host mounts
+# it and says so in SEVERINO_APP_ENV_PATH. Loading it here, not only in the
+# entrypoint, gives it to every process in the container, `docker exec`
+# sessions included. setdefault: real environment variables always win.
+_APP_ENV_FILE = Path(env_str("SEVERINO_APP_ENV_PATH") or os.devnull)
+if _APP_ENV_FILE.is_file():
+    for _token in shlex.split(_APP_ENV_FILE.read_text(encoding="utf-8")):
+        _key, _sep, _value = _token.partition("=")
+        if _sep:
+            os.environ.setdefault(_key, _value)
+
+
 # ----- Core security -----------------------------------------------------------
 
 # What production cannot run without. Below, the settings refuse to load
@@ -121,7 +117,7 @@ _STARTED_WRONG = (
     "or `mise run dev:scratch` and `mise run dev:manage -- <command>` for the scratch server."
 )
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+SECRET_KEY = env_str("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     raise ImproperlyConfigured(
         f"DJANGO_SECRET_KEY is not set; in production the rendered app environment supplies it. {_STARTED_WRONG}"
@@ -153,7 +149,7 @@ def site_host(origins, hosts) -> str:
 # page, an exported file, the host a plain-HTTP request is sent back to. Not
 # taken from the request: a brief printed from a laptop names the same host as
 # one printed from the server.
-SEVERINO_SITE_HOST = os.environ.get("SEVERINO_SITE_HOST") or site_host(CSRF_TRUSTED_ORIGINS, ALLOWED_HOSTS)
+SEVERINO_SITE_HOST = env_str("SEVERINO_SITE_HOST") or site_host(CSRF_TRUSTED_ORIGINS, ALLOWED_HOSTS)
 
 # Tighter defaults in production. These can be overridden via env behind a
 # TLS-terminating reverse proxy on a Tailscale-only interface.
@@ -180,15 +176,15 @@ CSRF_COOKIE_NAME = "__Host-csrftoken" if CSRF_COOKIE_SECURE else "csrftoken"
 # top-level redirect back from the identity provider, which is sign-in itself.
 # Written down so that reasoning is visible to the next person to consider
 # tightening it, and so the connection page can report a value HQ chose.
-SESSION_COOKIE_SAMESITE = os.environ.get("DJANGO_SESSION_COOKIE_SAMESITE", "Lax")
-CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
-# How long a signed-in session lasts. Django's default is two weeks, and HQ
-# never spoke to Pocket ID again after `auth.login`: the group allowlist in
-# `core.oidc.verify_claims` runs at sign-in and nowhere else. Disabling an
-# account or revoking a passkey changed nothing for a fortnight. Absolute
-# rather than sliding: a write per request shows up in the flat-query budgets,
-# and SessionRefresh below is what re-checks the provider.
-SESSION_COOKIE_AGE = env_int("SEVERINO_SESSION_SECONDS", 12 * 60 * 60)
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+# How long a signed-in session lasts. Django's default is two weeks, and the
+# group allowlist in `core.oidc.verify_claims` runs at sign-in and nowhere
+# else, so disabling an account or revoking a passkey would change nothing for
+# a fortnight. Absolute rather than sliding: a write per request shows up in
+# the flat-query budgets, and SessionRefresh below is what re-checks the
+# provider.
+SESSION_COOKIE_AGE = 12 * 60 * 60
 CSRF_COOKIE_HTTPONLY = False  # Django needs JS access for the token header
 # A stale form is answered on HQ's own refusal page, in the site's frame.
 CSRF_FAILURE_VIEW = "hq.platform.core.error_views.csrf_failure"
@@ -199,14 +195,14 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if env_bool("DJANG
 # A year, on by default. HQ is HTTPS-only behind the proxy, and the header
 # costs nothing until a browser has already reached it over TLS once.
 SECURE_HSTS_SECONDS = env_int("DJANGO_HSTS_SECONDS", 31536000)
-# Subdomains included by default, because the guarantee is about the name and
-# everything under it. Nothing is served under HQ's host, so this costs nothing
-# today and forecloses a plain-HTTP sibling appearing there later.
-SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", default=True)
-# Preload stays opt-in. It is a submission to a list baked into browsers, is
-# slow to undo, and is meaningless for a name the public internet cannot
-# resolve, which is deliberately true of this deployment.
-SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD")
+# Subdomains included, because the guarantee is about the name and everything
+# under it. Nothing is served under HQ's host, so this costs nothing today and
+# forecloses a plain-HTTP sibling appearing there later.
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+# Preload stays off. It is a submission to a list baked into browsers, is slow
+# to undo, and is meaningless for a name the public internet cannot resolve,
+# which is deliberately true of HQ's.
+SECURE_HSTS_PRELOAD = False
 
 # HQ binds a plain HTTP port, and behind a TLS proxy that port stays reachable
 # by anything that can route to the host, so the browser UI has two front
@@ -229,8 +225,9 @@ SECURE_REDIRECT_EXEMPT = [r"^health/"]
 # W008 fires only where the redirect is genuinely off: a deployment with no
 # TLS proxy in front of it, which is development. Silenced conditionally rather
 # than always, so `check --deploy --fail-level WARNING` still has an opinion
-# about the production posture instead of being told not to look.
-SILENCED_SYSTEM_CHECKS = [] if SECURE_SSL_REDIRECT else ["security.W008"]
+# about the production posture instead of being told not to look. W021 asks
+# for preload, which is off by decision (above).
+SILENCED_SYSTEM_CHECKS = ["security.W021"] + ([] if SECURE_SSL_REDIRECT else ["security.W008"])
 
 # Where the browser sends a policy violation. One path, named once, because the
 # policy references it and the URLconf has to route it.
@@ -239,7 +236,7 @@ SEVERINO_CSP_REPORT_PATH = "/csp-report/"
 # (hq.platform.core.outbound): "refuse" raises before the call leaves; "report"
 # logs it as outbound.in_request and lets it go, for a composition whose
 # extensions have not yet moved such work to a job.
-SEVERINO_OUTBOUND_IN_REQUEST = os.environ.get("SEVERINO_OUTBOUND_IN_REQUEST", "refuse")
+SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 
 # Django owns the browser security boundary. Scripts are limited to same-origin
 # assets or per-response nonces; objects and framing are disabled outright.
@@ -292,10 +289,10 @@ SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
 
 # ----- Who may reach HQ at all ------------------------------------------------
 
-# HQ answers the private LAN, the tailnet, and loopback (the container
-# healthcheck). Defaults are in `core.network`; both lists are overridable for
-# a deployment whose network does not look like this one.
-SEVERINO_ENFORCE_TRUSTED_NETWORK = env_bool("SEVERINO_ENFORCE_TRUSTED_NETWORK", default=True)
+# HQ answers the networks below and refuses anything else before
+# authentication runs. Both lists are overridable for a deployment whose
+# network does not look like this one.
+SEVERINO_ENFORCE_TRUSTED_NETWORK = True
 # The tailnet and loopback, and nothing else.
 #
 # Not the private LAN ranges: a home LAN is not a trust boundary. It holds a
@@ -334,7 +331,7 @@ SEVERINO_TRUSTED_NETWORKS = env_list(
 # out by the throttle, so trusting a range corrupts the evidence and the gate
 # that reads it, together and invisibly.
 #
-# A deployment behind a proxy names that proxy explicitly; see .env.example.
+# A deployment behind a proxy names that proxy explicitly.
 SEVERINO_TRUSTED_PROXIES = env_list(
     "SEVERINO_TRUSTED_PROXIES",
     default=["127.0.0.0/8", "::1/128"],
@@ -342,8 +339,8 @@ SEVERINO_TRUSTED_PROXIES = env_list(
 
 # Sign-in throttling for the break-glass password path. Read back out of the
 # audit log by `core.throttle`; see that module for why there is no counter.
-SEVERINO_LOGIN_MAX_ATTEMPTS = env_int("SEVERINO_LOGIN_MAX_ATTEMPTS", 5)
-SEVERINO_LOGIN_WINDOW_SECONDS = env_int("SEVERINO_LOGIN_WINDOW_SECONDS", 900)
+SEVERINO_LOGIN_MAX_ATTEMPTS = 5
+SEVERINO_LOGIN_WINDOW_SECONDS = 900
 
 # ----- Apps --------------------------------------------------------------------
 
@@ -460,7 +457,7 @@ CACHES = {
 
 # ----- Database ----------------------------------------------------------------
 
-_DATABASE_PATH = os.environ.get("SEVERINO_DATABASE_PATH", "").strip()
+_DATABASE_PATH = env_str("SEVERINO_DATABASE_PATH").strip()
 if not _DATABASE_PATH:
     raise ImproperlyConfigured(f"SEVERINO_DATABASE_PATH is not set; the image sets it. {_STARTED_WRONG}")
 
@@ -507,7 +504,7 @@ DATABASES = {
             # suffix this name per worker, so they stay distinct within a run
             # too, and the next run deletes a killed run's files by the name
             # (config/sandbox.py).
-            "NAME": os.environ.get("SEVERINO_TEST_DATABASE_PATH", test_database_path()),
+            "NAME": env_str("SEVERINO_TEST_DATABASE_PATH", test_database_path()),
         },
     }
 }
@@ -559,8 +556,8 @@ LOGOUT_REDIRECT_URL = f"{LOGIN_URL}?signed_out=1"
 # The commit this build is, and the repository it came from: stamped into the
 # image by CI (and set from the checkout by the dev stack). Empty for a build
 # that did not say, which HQ reports as unknown rather than guessing.
-SEVERINO_HQ_SOURCE = os.environ.get("SEVERINO_HQ_SOURCE", "").rstrip("/")
-SEVERINO_HQ_REVISION = os.environ.get("SEVERINO_HQ_REVISION", "")
+SEVERINO_HQ_SOURCE = env_str("SEVERINO_HQ_SOURCE").rstrip("/")
+SEVERINO_HQ_REVISION = env_str("SEVERINO_HQ_REVISION")
 
 # Pocket ID / OIDC SSO is how a person signs in.
 SEVERINO_OIDC_ENABLED = env_bool("SEVERINO_OIDC_ENABLED")
@@ -573,7 +570,7 @@ if SEVERINO_OIDC_ENABLED:
         MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
         "hq.platform.core.oidc.HQSessionRefresh",
     )
-OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = env_int("SEVERINO_OIDC_RENEW_SECONDS", 15 * 60)
+OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = 15 * 60
 
 # The password form exists only where SSO does not.
 #
@@ -598,7 +595,7 @@ AUTHENTICATION_BACKENDS = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend"] 
 
 # "advanced" lists each unmet check of HQ's standard in Needs you
 # (docs/Posture.md). Any other value refuses to start.
-SEVERINO_POSTURE = os.environ.get("SEVERINO_POSTURE", "").strip()
+SEVERINO_POSTURE = env_str("SEVERINO_POSTURE").strip()
 if SEVERINO_POSTURE not in {"", "advanced"}:
     raise RuntimeError('SEVERINO_POSTURE must be "advanced" or unset.')
 
@@ -606,9 +603,9 @@ SEVERINO_OIDC_ALLOWED_EMAILS = {email.lower() for email in env_list("SEVERINO_OI
 SEVERINO_OIDC_ALLOWED_GROUPS = set(env_list("SEVERINO_OIDC_ALLOWED_GROUPS"))
 
 # Empty rejects every token: no issuer matches it.
-OIDC_ISSUER = os.environ.get("SEVERINO_OIDC_ISSUER", "").rstrip("/")
-OIDC_RP_CLIENT_ID = os.environ.get("SEVERINO_OIDC_CLIENT_ID", "")
-OIDC_RP_CLIENT_SECRET = os.environ.get("SEVERINO_OIDC_CLIENT_SECRET", "")
+OIDC_ISSUER = env_str("SEVERINO_OIDC_ISSUER").rstrip("/")
+OIDC_RP_CLIENT_ID = env_str("SEVERINO_OIDC_CLIENT_ID")
+OIDC_RP_CLIENT_SECRET = env_str("SEVERINO_OIDC_CLIENT_SECRET")
 # The `email` scope is requested only when an email allowlist is configured.
 # Without it the claim never arrives, so SEVERINO_OIDC_ALLOWED_EMAILS could be
 # set and simply never match: failing closed, but silently.
@@ -625,7 +622,7 @@ LOGIN_REDIRECT_URL_FAILURE = f"{LOGIN_URL}?sso_failed=1"
 OIDC_USE_PKCE = True
 # Signing in waits on the provider, and nothing waits without a bound: every
 # call the exchange makes (token, keys, userinfo) gives up after this long.
-OIDC_TIMEOUT = env_int("SEVERINO_OIDC_TIMEOUT_SECONDS", 10)
+OIDC_TIMEOUT = 10
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
 OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
@@ -637,14 +634,14 @@ OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
 # Empty disables the surface fail-closed, and must: without a resource to check
 # `aud` against, a token minted for any other API on the same issuer would
 # verify here on signature alone.
-SEVERINO_API_RESOURCE = os.environ.get("SEVERINO_API_RESOURCE", "")
+SEVERINO_API_RESOURCE = env_str("SEVERINO_API_RESOURCE")
 # Clock skew allowance between the phone, Pocket ID and HQ. Small on purpose:
 # the tokens are short-lived, and a generous window is a longer replay window.
-SEVERINO_API_LEEWAY_SECONDS = env_int("SEVERINO_API_LEEWAY_SECONDS", 30)
+SEVERINO_API_LEEWAY_SECONDS = 30
 # A retry key represents one machine request for this long. The record is
 # durable because a process restart is exactly when an in-memory replay cache
 # would fail the client that needs it.
-SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = env_int("SEVERINO_API_IDEMPOTENCY_TTL_SECONDS", 86400, minimum=60)
+SEVERINO_API_IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60
 
 # Encrypts the few secrets an operator deliberately hands to HQ: today, the
 # private key of an internally signed certificate that has to reach a proxy.
@@ -665,23 +662,23 @@ SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
 # first release of anything that acts unattended should be watched proposing
 # before it is trusted acting. Even on, it only ever queues: the controller
 # still pulls and claims, so no provider credential nears the web process.
-SEVERINO_FINDINGS_AUTO_REMEDY = env_bool("SEVERINO_FINDINGS_AUTO_REMEDY", False)
-# What an agent may do beyond reading, one switch each, all off by default: a
-# deployment decides each on its own. Why each stands apart is beside its grant
-# in application.security.mcp_principal.
-SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES", False)
-SEVERINO_MCP_ENABLE_DOC_SYNC = env_bool("SEVERINO_MCP_ENABLE_DOC_SYNC", False)
-SEVERINO_MCP_ENABLE_PRUNE = env_bool("SEVERINO_MCP_ENABLE_PRUNE", False)
-SEVERINO_MCP_ENABLE_DELETES = env_bool("SEVERINO_MCP_ENABLE_DELETES", False)
-SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool("SEVERINO_MCP_ENABLE_INFRASTRUCTURE", False)
-SEVERINO_MCP_ENABLE_CERT_RENEWAL = env_bool("SEVERINO_MCP_ENABLE_CERT_RENEWAL", False)
-SEVERINO_MCP_ENABLE_LOOKUP = env_bool("SEVERINO_MCP_ENABLE_LOOKUP", False)
-SEVERINO_MCP_ENABLE_CALENDAR = env_bool("SEVERINO_MCP_ENABLE_CALENDAR", False)
+SEVERINO_FINDINGS_AUTO_REMEDY = False
+# What an agent may do beyond reading, one switch each, all off unless a
+# deployment turns one on. Why each stands apart is beside its grant in
+# application.security.mcp_principal.
+SEVERINO_MCP_ENABLE_WRITES = env_bool("SEVERINO_MCP_ENABLE_WRITES")
+SEVERINO_MCP_ENABLE_DOC_SYNC = env_bool("SEVERINO_MCP_ENABLE_DOC_SYNC")
+SEVERINO_MCP_ENABLE_INFRASTRUCTURE = env_bool("SEVERINO_MCP_ENABLE_INFRASTRUCTURE")
+SEVERINO_MCP_ENABLE_PRUNE = False
+SEVERINO_MCP_ENABLE_DELETES = False
+SEVERINO_MCP_ENABLE_CERT_RENEWAL = False
+SEVERINO_MCP_ENABLE_LOOKUP = False
+SEVERINO_MCP_ENABLE_CALENDAR = False
 # How long a change held for a person's approval stands before it lapses. A day:
 # the person it waits for sleeps, and a request still clickable a month later is
 # a change nobody is looking at any more being applied on an old decision.
-SEVERINO_APPROVAL_WINDOW_HOURS = env_int("SEVERINO_APPROVAL_WINDOW_HOURS", 24)
-SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool("SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS", False)
+SEVERINO_APPROVAL_WINDOW_HOURS = 24
+SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool("SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS")
 
 
 # ----- Controller cadence ------------------------------------------------------
@@ -698,40 +695,42 @@ SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS = env_bool("SEVERINO_INFRASTRUCTURE_EN
 # again before the last has finished, every run is a sweep, and a doorbell rung
 # while it runs is not heard until it ends. The controller being idle between
 # sweeps is what lets queued work start the moment it is asked for.
-SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS = env_int("SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS", 300)
+SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS = 300
 # And while nobody is. Every sweep costs a call to each provider, and nothing
 # reads the answer until somebody opens a page.
-SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS = env_int("SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS", 12 * 60 * 60)
+SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS = 12 * 60 * 60
 # How long after a request HQ still counts as in use. Long enough to cover
 # reading a page and acting on it without the tab being open throughout.
-SEVERINO_ACTIVE_WINDOW_SECONDS = env_int("SEVERINO_ACTIVE_WINDOW_SECONDS", 900)
+SEVERINO_ACTIVE_WINDOW_SECONDS = 900
 # Days routine machine audit events (core.audit.ROUTINE_EVENTS) are kept.
 # Everything else in the audit log is kept indefinitely.
-SEVERINO_AUDIT_ROUTINE_DAYS = env_int("SEVERINO_AUDIT_ROUTINE_DAYS", 30)
+SEVERINO_AUDIT_ROUTINE_DAYS = 30
 # How often the in-use marker is rewritten. Every request checks it; only the
 # first in each interval writes.
-SEVERINO_ACTIVITY_THROTTLE_SECONDS = env_int("SEVERINO_ACTIVITY_THROTTLE_SECONDS", 60)
+SEVERINO_ACTIVITY_THROTTLE_SECONDS = 60
 # How often each source's arrival is written to HQ's request-path reading, per
-# process. Every request is counted in memory; 0 records nothing.
-SEVERINO_REQUEST_PATH_SECONDS = env_int("SEVERINO_REQUEST_PATH_SECONDS", 300)
+# process. Every request is counted in memory; 0 records nothing. Nothing under
+# test, so no test's query count depends on which request came first; the
+# tests of arrivals set their own.
+SEVERINO_REQUEST_PATH_SECONDS = 0 if RUNNING_TESTS else 300
 # Where HQ leaves each marker. The doorbell has to be somewhere the host can
-# watch; the in-use marker is read only by HQ and defaults beside the database.
-SEVERINO_CONTROLLER_DOORBELL = os.environ.get("SEVERINO_CONTROLLER_DOORBELL", "")
-SEVERINO_CONTROLLER_HEARTBEAT = os.environ.get("SEVERINO_CONTROLLER_HEARTBEAT", "")
-SEVERINO_ACTIVITY_MARKER = os.environ.get("SEVERINO_ACTIVITY_MARKER", "")
+# watch; the others are read only by HQ and default beside the database.
+SEVERINO_CONTROLLER_DOORBELL = env_str("SEVERINO_CONTROLLER_DOORBELL")
+SEVERINO_CONTROLLER_HEARTBEAT = env_str("SEVERINO_CONTROLLER_HEARTBEAT")
+SEVERINO_ACTIVITY_MARKER = env_str("SEVERINO_ACTIVITY_MARKER")
 # The Unix socket the controller bridge is served on, in a directory only this
 # account can enter. Unset, the process serves no bridge; set, it serves one or
 # does not start.
-SEVERINO_BRIDGE_SOCKET = os.environ.get("SEVERINO_BRIDGE_SOCKET", "")
+SEVERINO_BRIDGE_SOCKET = env_str("SEVERINO_BRIDGE_SOCKET")
 
 # Extra dashboard links, as a JSON list of {label, sub, href}. One deployment's
 # status page is a fact about that deployment; the consoles HQ can reach are
 # derived from the connections a controller reported and need no entry here.
-SEVERINO_DASHBOARD_LINKS = os.environ.get("SEVERINO_DASHBOARD_LINKS", "")
+SEVERINO_DASHBOARD_LINKS = env_str("SEVERINO_DASHBOARD_LINKS")
 # ----- I18N --------------------------------------------------------------------
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "America/Chicago")
+TIME_ZONE = env_str("DJANGO_TIME_ZONE", "America/Chicago")
 USE_I18N = True
 USE_TZ = True
 
@@ -743,7 +742,7 @@ FORMAT_MODULE_PATH = ["hq.config.formats"]
 
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-STATIC_ROOT = Path(os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "var" / "static")))
+STATIC_ROOT = Path(env_str("DJANGO_STATIC_ROOT", str(BASE_DIR / "var" / "static")))
 
 # /static/ has one server, the ASGI mount in hq.config.asgi (core.static), and
 # one collected tree: the image build runs collectstatic, so STATIC_ROOT is
@@ -777,10 +776,10 @@ WHITENOISE_KEEP_ONLY_HASHED_FILES = True
 
 # Media (uploaded receipts) lives OUTSIDE the app code in production.
 # Receipt files are served only through an auth-protected view, never via MEDIA_URL.
-MEDIA_ROOT = Path(os.environ.get("SEVERINO_MEDIA_ROOT", str(BASE_DIR / "var" / "media")))
+MEDIA_ROOT = Path(env_str("SEVERINO_MEDIA_ROOT", str(BASE_DIR / "var" / "media")))
 MEDIA_URL = "/_internal-media/"  # not actually exposed; receipts use protected view
 
-EXPORTS_ROOT = Path(os.environ.get("SEVERINO_EXPORTS_ROOT", str(BASE_DIR / "var" / "exports")))
+EXPORTS_ROOT = Path(env_str("SEVERINO_EXPORTS_ROOT", str(BASE_DIR / "var" / "exports")))
 
 # Upload guardrails.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -790,7 +789,7 @@ FILE_UPLOAD_PERMISSIONS = 0o640
 
 # ----- Logging -----------------------------------------------------------------
 
-SEVERINO_LOG_LEVEL = os.environ.get("SEVERINO_LOG_LEVEL", "INFO").upper()
+SEVERINO_LOG_LEVEL = env_str("SEVERINO_LOG_LEVEL", "INFO").upper()
 if SEVERINO_LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
     raise RuntimeError("SEVERINO_LOG_LEVEL must be a standard Python log level.")
 
@@ -817,40 +816,39 @@ LOGGING = {
 
 # ----- App-specific ------------------------------------------------------------
 
-SEVERINO_SITE_NAME = os.environ.get("SEVERINO_SITE_NAME", "Severino HQ")
+SEVERINO_SITE_NAME = env_str("SEVERINO_SITE_NAME", "Severino HQ")
 # True only for a saved copy of HQ's pages (the public demo): what a page says
 # about the reader's connection then describes the visit the copy was rendered
 # for. Set in code by hq.platform.core.example_estate.as_production, never from
 # the environment, so a live HQ cannot be switched into it.
 SEVERINO_RENDERED_COPY = False
-SEVERINO_FISCAL_YEAR_START_MONTH = env_int("SEVERINO_FISCAL_YEAR_START_MONTH", 1, minimum=1, maximum=12)
-SEVERINO_DOC_REVIEW_INTERVAL_DAYS = env_int("SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180, minimum=1)
+# The month the fiscal year starts, for the dashboard's expense window.
+SEVERINO_FISCAL_YEAR_START_MONTH = 1
+# Days before an active document is due for review.
+SEVERINO_DOC_REVIEW_INTERVAL_DAYS = 180
 
-# Cloudflare D1: the contact-form submissions live in a Cloudflare D1
-# database, not HQ's SQLite. The contacts app reads/writes it
-# over the D1 HTTP API.
 # Public DNS and reverse-DNS lookups. The one question HQ cannot answer from
 # the inside: a resolver on this network follows the internal rewrites and
 # reports the opposite of what the public internet sees.
 #
 # Unauthenticated by design: no credential of HQ's travels with a lookup,
 # which is what makes it acceptable for the web process to make the call
-# rather than routing it through the controller. Blanking the endpoint
-# disables every lookup surface fail-closed.
-SEVERINO_LOOKUP_ENDPOINT = os.environ.get("SEVERINO_LOOKUP_ENDPOINT", "https://dns-lookup.com")
+# rather than routing it through the controller. A blank endpoint disables
+# every lookup surface fail-closed.
+SEVERINO_LOOKUP_ENDPOINT = "https://dns-lookup.com"
 # Short on purpose. This runs in the request path of a page an operator is
 # waiting on, and a lookup that has not answered in a few seconds is one the
 # page should report as unavailable rather than keep waiting for.
-SEVERINO_LOOKUP_TIMEOUT_SECONDS = env_int("SEVERINO_LOOKUP_TIMEOUT_SECONDS", 6)
+SEVERINO_LOOKUP_TIMEOUT_SECONDS = 6
 # Who holds an address, read from the registries that allocated it rather than
 # from anyone's copy of them. `rdap.org` is the bootstrap service: it redirects
 # to whichever regional registry actually holds the block.
-SEVERINO_RDAP_ENDPOINT = os.environ.get("SEVERINO_RDAP_ENDPOINT", "https://rdap.org")
+SEVERINO_RDAP_ENDPOINT = "https://rdap.org"
 
 # Which D1 database is the contact inbox, when the controller finds the
 # contact table in more than one. Not a credential: the controller reads and
 # writes the inbox through its cloudflare_api connection.
-CLOUDFLARE_D1_DATABASE_NAME = os.environ.get("CLOUDFLARE_D1_DATABASE_NAME", "")
+CLOUDFLARE_D1_DATABASE_NAME = env_str("CLOUDFLARE_D1_DATABASE_NAME")
 
 
 # Ensure the directories HQ depends on exist at startup.
@@ -871,8 +869,8 @@ for _d in (
 # service token. See content/content_sync.py.
 # Unset turns the sync off. The project is the one whose public URL serves the
 # index, unless named here.
-CONTENT_INDEX_URL = os.environ.get("CONTENT_INDEX_URL", "")
-CONTENT_INDEX_PROJECT_SLUG = os.environ.get("CONTENT_INDEX_PROJECT_SLUG", "")
+CONTENT_INDEX_URL = env_str("CONTENT_INDEX_URL")
+CONTENT_INDEX_PROJECT_SLUG = env_str("CONTENT_INDEX_PROJECT_SLUG")
 CF_ACCESS_CLIENT_ID = env_secret("CF_ACCESS_CLIENT_ID")
 CF_ACCESS_CLIENT_SECRET = env_secret("CF_ACCESS_CLIENT_SECRET")
 

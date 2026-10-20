@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="The composed suite as the image runs it: only the files the image ships"
+#MISE description="The suite composed with the extensions mise.local.toml names, as the image runs it: only the files the image ships"
 #MISE extends="composed"
 #MISE timeout="30m"
 #USAGE arg "[arguments]..." var=#true help="Passed on to manage.py test: test labels, --tag, --parallel"
@@ -13,18 +13,20 @@
 # and says so; REQUIRE_COMPOSED=1 fails instead.
 set -eu
 
-repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 # shellcheck source=tools/lib/heavy-turn.sh
-. "${repo}/tools/lib/heavy-turn.sh"
-cd "${repo}"
+. ./tools/lib/heavy-turn.sh
 
-# shellcheck source=tools/lib/composed.sh
-. ./tools/lib/composed.sh
 # shellcheck source=tools/lib/export-tree.sh
 . ./tools/lib/export-tree.sh
 # shellcheck source=tools/lib/source-url.sh
 . ./tools/lib/source-url.sh
-composed_set || echo "No HQ_LOCAL_PLUGINS supplied: the host alone, as the image runs it (tools/dev/mise.local.example.toml)."
+if [ -z "${HQ_LOCAL_PLUGINS:-}" ]; then
+    if [ "${REQUIRE_COMPOSED:-0}" = 1 ]; then
+        echo "The composed suite is required and HQ_LOCAL_PLUGINS is unset (tools/dev/mise.local.example.toml)." >&2
+        exit 1
+    fi
+    echo "No HQ_LOCAL_PLUGINS supplied: the host alone, as the image runs it (tools/dev/mise.local.example.toml)."
+fi
 
 source_url="$(source_url)"
 # Named as a test run's scratch is, for this shell, so a copy left by a killed
@@ -45,9 +47,9 @@ export_tree "${tree}" ${admitted}
 
 # The checkout's environment, not a new one in the copy.
 environment="${UV_PROJECT_ENVIRONMENT:-.venv}"
-case "${environment}" in /*) ;; *) environment="${repo}/${environment}" ;; esac
+case "${environment}" in /*) ;; *) environment="${MISE_CONFIG_ROOT}/${environment}" ;; esac
 
-revision="$(git -C "${repo}" rev-parse HEAD)"
+revision="$(git rev-parse HEAD)"
 cd "${tree}"
 status=0
 env \

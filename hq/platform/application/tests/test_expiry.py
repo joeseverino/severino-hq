@@ -15,6 +15,7 @@ from ..expiry import days_until, renewal_opens_at, renewal_window
 from ..resource_context import resource_context
 from ..resources import get_resource
 from ..security import Capability, Principal
+from .source import source_files
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
@@ -59,12 +60,9 @@ class DaysUntilSourceTests(SimpleTestCase):
             "hq/platform/application/analytics.py",
         }
         found = []
-        for path in root.glob("*/**/*.py"):
+        for path in source_files(root, "*.py"):
             relative = path.relative_to(root).as_posix()
-            # No hidden directory is source: a virtualenv, or a worktree an agent
-            # works in under .claude/, holds another copy of this very tree.
-            hidden = any(part.startswith(".") for part in path.relative_to(root).parts)
-            if relative in allowed or "/test" in relative or hidden:
+            if relative in allowed or "/test" in relative:
                 continue
             text = path.read_text(encoding="utf-8")
             if "expir" not in text and "not_after" not in text:

@@ -8,17 +8,11 @@
 # git would push, so a local .venv or stray build output is not scanned.
 set -eu
 
-repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
-cd "${repo}"
 # shellcheck source=tools/lib/export-tree.sh
 . ./tools/lib/export-tree.sh
 
-# Keyed by checkout, so worktrees do not overwrite each other's database.
-work="${XDG_CACHE_HOME:-$HOME/.cache}/severino-hq/scan-$(printf '%s' "${repo}" | cksum | cut -d' ' -f1)"
-src="${work}/src-codeql"
-rm -rf "${src}"
-mkdir -p "${src}"
-export_tree "${src}"
+work="$(scan_tree codeql)"
+src="${work}/src"
 
 echo "[codeql] CodeQL $(codeql version --format=terse) database"
 # `--build-mode none` is what the Action uses for Python: nothing is compiled,

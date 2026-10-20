@@ -1,7 +1,7 @@
 # Copy to `mise.local.toml` in the repository root. mise reads it after
 # mise.toml, and git ignores it.
 #
-# Without it `mise run suite:composed` has no extension set to compose, and
+# Without it `mise run suite:as-image` has no extension set to compose, and
 # says so. Nothing here is committed, so the host can be told where extensions
 # live without any of it entering the source. The values below are the
 # synthetic `example.*` namespace; substitute your own checkouts.

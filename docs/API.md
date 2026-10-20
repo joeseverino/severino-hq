@@ -36,7 +36,7 @@ capabilities are *exactly* the token's granted permissions, never widened.
 | Setting | Meaning |
 |---|---|
 | `SEVERINO_API_RESOURCE` | The Pocket ID API resource URI. **Empty disables the surface.** |
-| `SEVERINO_API_LEEWAY_SECONDS` | Clock-skew allowance. Default 30. |
+| `SEVERINO_API_LEEWAY_SECONDS` | Clock-skew allowance: 30 seconds. |
 
 Empty must mean off, and does: without a resource to check `aud` against, a
 token minted for any *other* API on the same Pocket ID instance would verify
@@ -365,9 +365,8 @@ retry therefore receives the committed response without running the command a
 second time, even after a process restart. Reusing the key with different input
 returns `409 idempotency_conflict`.
 
-Records expire after 24 hours by default and expired records are pruned by the
-next machine write. Configure the window with
-`SEVERINO_API_IDEMPOTENCY_TTL_SECONDS`. Domain-level idempotency remains useful:
+Records expire after 24 hours (`SEVERINO_API_IDEMPOTENCY_TTL_SECONDS`) and
+expired records are pruned by the next machine write. Domain-level idempotency remains useful:
 it protects imports arriving through web, CLI, or MCP, while this transport
 contract protects an HTTP client that did not receive the first response.
 

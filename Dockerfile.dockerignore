@@ -4,7 +4,6 @@
 # tracked paths the image needs; a new top-level path is added here on purpose.
 *
 !.editorconfig
-!.env.example
 !.gitattributes
 !.github/
 !AGENTS.md

@@ -19,7 +19,6 @@ from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 OVERRIDES = (
     "DJANGO_DEBUG",
     "DJANGO_SECRET_KEY",
-    "DJANGO_SECRET_KEY_FILE",
     "DJANGO_ALLOWED_HOSTS",
     "DJANGO_SESSION_COOKIE_SECURE",
     "DJANGO_CSRF_COOKIE_SECURE",

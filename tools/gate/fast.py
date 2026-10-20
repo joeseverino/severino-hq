@@ -1,7 +1,8 @@
 """The inner-loop gate: only what the change can have broken.
 
 Changed files against the merge base are mapped to the test modules that reach
-them, by the import graph of the tree itself (nothing here lists an app). The
+them, by the import graph of the tree itself (nothing here lists an app), and
+a changed file that is not Python to the tests that name its path. The
 architecture tests always run. Every other check is a mise task, run here by
 name, so each exists once. A change to what extensions render through
 (templates, static, hq_sdk, the shared page and table layer) also runs the
@@ -280,7 +281,24 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
     return seen | reached, touched
 
 
-def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tuple[list[str], int]:
+def path_references(path: str) -> list[re.Pattern[str]]:
+    """How a test names a file it reads: the path, or its directory when that
+    is more than a top-level one, as one string ("a/b.yml") or as segments
+    (`root / "a" / "b.yml"`, `Path("a", "b.yml")`)."""
+
+    parts = Path(path).parts
+    named = [parts, parts[:-1]] if len(parts) > 2 else [parts]
+    between = r"""(?:/|["']\s*[/,]\s*["'])"""
+    return [re.compile(rf"""["']{between.join(map(re.escape, p))}(?![\w.-])""") for p in named]
+
+
+def test_labels(
+    files: list[Path], reached: set[str], touched: set[str], read: list[str] | tuple[str, ...] = ()
+) -> tuple[list[str], int]:
+    """The test modules to run: those the change reaches by import, those that
+    name an app it touched, those that name a file it changed that is not
+    Python (`read`), and the architecture tests."""
+
     by_module = {module_name(p): p for p in files if is_test(p)}
     tests = set(by_module)
     chosen = {t for t in tests if t in reached}
@@ -293,6 +311,7 @@ def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tupl
         )
         for app in touched
     ]
+    words += [pattern for path in read for pattern in path_references(path)]
     for name, path in by_module.items():
         text = (ROOT / path).read_text(encoding="utf-8")
         if any(word.search(text) for word in words):
@@ -323,7 +342,8 @@ def main(argv: list[str]) -> int:
     changed, deleted = changed_files(base)
     files = python_files()
     reached, touched = affected(changed, deleted, files)
-    labels, total = test_labels(files, reached, touched)
+    read = [path for path in [*changed, *deleted] if not path.endswith(".py")]
+    labels, total = test_labels(files, reached, touched, read)
     print(f"[fast] base {base[:9]}: {len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules")
     if total and len(labels) / total > WIDE:
         print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
@@ -337,11 +357,11 @@ def main(argv: list[str]) -> int:
         step("tests", [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]),
     ]
     if os.environ.get("HQ_LOCAL_PLUGINS") and touches_shared_ui([*changed, *deleted]):
-        # suite:composed hands what follows to manage.py test.
+        # suite:as-image hands what follows to manage.py test.
         steps.append(
             step(
                 "extension suites, composed (shared UI changed)",
-                ["mise", "run", "suite:composed", "--", "--installed-plugins", "--parallel", parallel],
+                ["mise", "run", "suite:as-image", "--", "--installed-plugins", "--parallel", parallel],
             )
         )
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
