@@ -742,6 +742,10 @@ class PrecompressedStaticTests(SimpleTestCase):
             "gzip;q=0": False,
             "gzip;q=nonsense": False,
             "xgzip": False,
+            "gzip;q=0, *;q=1": False,
+            "*;q=1, gzip;q=0": False,
+            "br, *;q=0.1": True,
+            "*;q=0": False,
         }
         for header, expected in cases.items():
             with self.subTest(header=header):

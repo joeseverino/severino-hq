@@ -574,9 +574,16 @@
   });
 
   // A link that names a row lands on it open: inside its fold, and showing
-  // what it holds back.
+  // what it holds back. A fragment that is not percent-encoding names no row.
+  const fragmentId = () => {
+    try {
+      return decodeURIComponent(window.location.hash.slice(1));
+    } catch {
+      return "";
+    }
+  };
   const landOnRow = () => {
-    const id = decodeURIComponent(window.location.hash.slice(1));
+    const id = fragmentId();
     const row = id && document.getElementById(id);
     if (!(row instanceof HTMLTableRowElement) || !row.closest(".data-table")) return;
     const head = row.dataset.folded && document.getElementById(row.dataset.folded);

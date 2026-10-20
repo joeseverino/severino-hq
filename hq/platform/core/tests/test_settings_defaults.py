@@ -60,7 +60,7 @@ def settings_of(**env: str) -> dict:
 
 class DebugDefaultsTests(SimpleTestCase):
     def test_debug_decides_each_default(self):
-        production = settings_of(DJANGO_SECRET_KEY="defaults-probe-key-0123456789abcdef0123456789")
+        production = settings_of(DJANGO_SECRET_KEY="defaults-probe-key-not-a-real-secret-only-for-this-test")
         development = settings_of(DJANGO_DEBUG="1")
         expected = {
             "DEBUG": (False, True),

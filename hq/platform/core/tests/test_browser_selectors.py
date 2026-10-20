@@ -79,7 +79,7 @@ def rendered(kind: str, name: str) -> bool:
         return name in classes
     if kind == "id":
         return name in ids
-    return re.search(rf"<[^>]*\s{re.escape(name)}(?:[\s=>/])", text) is not None
+    return re.search(rf"<[^>]*\s{re.escape(name)}(?:[\s=>/{{])", text) is not None
 
 
 def audit_selectors(source: str) -> set[str]:

@@ -104,6 +104,8 @@ SELECTORS = {
     "token": ":is(code, .token):not(pre code)",
     # The one box allowed to scroll sideways.
     "table_scroll": ".table-scroll",
+    # A table whose rows can be chosen, which the table script wires up last.
+    "selectable_table": "[data-selectable-table]",
     # What a row folds behind "+3" until it is opened, or until there is room.
     "row_less": ".row-less",
     "row_more": ".row-more",
@@ -2155,6 +2157,21 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertFalse(again["held"])
                 self.assertEqual(again["columns"], closed["columns"])
                 self.assertEqual(again["rows"], closed["rows"])
+
+    def test_a_fragment_that_is_not_percent_encoding_breaks_no_table(self):
+        """`#%` is a legal fragment and no encoding of a row's id: it names no
+        row, and everything the table script sets up after landing still runs."""
+
+        self.start(java_script_enabled=True)
+        errors = []
+        self.page.on("pageerror", lambda error: errors.append(str(error)))
+        self.page.goto(f"{ORIGIN}/projects/#%", wait_until="load")
+        ready = self.page.eval_on_selector_all(
+            SELECTORS["selectable_table"], "(tables) => tables.map((table) => table.dataset.selectionReady)"
+        )
+        self.assertEqual(errors, [])
+        self.assertTrue(ready)
+        self.assertEqual(set(ready), {"true"})
 
     def test_a_wide_table_on_a_desktop_keeps_every_column_and_holds_them_when_a_row_opens(self):
         self.start(java_script_enabled=True)

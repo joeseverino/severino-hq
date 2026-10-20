@@ -73,18 +73,21 @@ def content_named(path: str) -> bool:
 
 
 def accepts_gzip(scope) -> bool:
-    """Whether the request's Accept-Encoding takes gzip (RFC 9110, section 12.5.3)."""
+    """Whether the request's Accept-Encoding takes gzip (RFC 9110, section 12.5.3).
 
+    gzip named outright decides, wherever it stands; ``*`` speaks only for a
+    coding the header does not name. A weight that is not a number refuses.
+    """
+
+    weights: dict[str, float] = {}
     for offer in Headers(scope=scope).get("accept-encoding", "").lower().split(","):
         coding, _, weight = offer.partition(";")
-        if coding.strip() not in ("gzip", "*"):
-            continue
         quality = weight.strip().removeprefix("q=")
         try:
-            return float(quality or 1) > 0
+            weights[coding.strip()] = float(quality or 1)
         except ValueError:
-            return False
-    return False
+            weights[coding.strip()] = 0
+    return weights.get("gzip", weights.get("*", 0)) > 0
 
 
 class CachedStaticFiles(StaticFiles):

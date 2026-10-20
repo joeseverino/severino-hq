@@ -71,13 +71,19 @@ def git(*args: str) -> list[str]:
 
 
 def merge_base(base: str | None) -> str:
-    for candidate in (base, os.environ.get("CHECK_BASE"), "origin/main", "main"):
-        if not candidate:
-            continue
+    """The merge base with the named base, or with the first default that exists.
+
+    A base that was asked for and does not resolve fails: falling back would
+    quietly test a different change.
+    """
+
+    asked = base or os.environ.get("CHECK_BASE")
+    for candidate in (asked,) if asked else ("origin/main", "main"):
         try:
             return git("merge-base", "HEAD", candidate)[0]
         except (subprocess.CalledProcessError, IndexError):
-            continue
+            if asked:
+                sys.exit(f"fast: {asked} has no merge base with HEAD; pass a ref that exists")
     sys.exit("fast: no base found; pass one (mise run fast <ref>)")
 
 
