@@ -1,17 +1,5 @@
 "use strict";
 
-// Moving between pages fades (`@view-transition` in the stylesheet). A
-// transition the browser gives up on, because the window changed size or the
-// page was hidden, is not an error: the page is simply shown.
-["pagereveal", "pageswap"].forEach((type) =>
-  window.addEventListener(type, (event) => {
-    const transition = event.viewTransition;
-    [transition?.ready, transition?.finished, transition?.updateCallbackDone].forEach((step) =>
-      step?.catch(() => {}),
-    );
-  }),
-);
-
 // Disclosure menus that dismiss on an outside click or Escape. One selector
 // covers every such menu, so adding another is handled by construction rather
 // than by remembering to extend a hardcoded query: a menu says for itself
@@ -857,25 +845,6 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
   document.addEventListener("hq:fragment", () => resume(document));
 })();
 
-// A field shown only when another field's value calls for it:
-// data-when="repeat" for any value, data-when="repeat=weekly|daily" for those.
-// Without this script every field shows, which is still a working form.
-const hqBindWhen = (root) => {
-  root.querySelectorAll("[data-when]").forEach((field) => {
-    const [name, wanted] = field.dataset.when.split("=");
-    const control = field.closest("form")?.elements.namedItem(name);
-    if (!control || field.dataset.whenBound) return;
-    field.dataset.whenBound = "true";
-    const update = () => {
-      field.hidden = wanted === undefined ? !control.value : !wanted.split("|").includes(control.value);
-    };
-    control.addEventListener("change", update);
-    update();
-  });
-};
-hqBindWhen(document);
-document.addEventListener("hq:fragment", (event) => hqBindWhen(event.target));
-
 // An empty date, time or moment is marked, so the stylesheet can stop WebKit
 // drawing today's date in it as though it were a value.
 (() => {
@@ -1279,7 +1248,9 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
     }
   };
 
-  const render = () => {
+  // `said`: whether the status line speaks for the view. The server draws it
+  // for the page as it loads, so the first pass leaves it standing.
+  const render = ({ said = true } = {}) => {
     const selected = nodes.find((node) => node.dataset.topologyNode === focused);
     const related = new Set(selected?.dataset.topologyNeighbors.split(" ").filter(Boolean) || []);
     workspace.classList.toggle("has-focus", Boolean(selected));
@@ -1313,7 +1284,7 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       edge.classList.toggle("is-related", touchesFocus);
     });
     if (ledger) ledger.hidden = edges.length > 0 && edges.every((edge) => edge.hidden);
-    if (status) {
+    if (status && said) {
       const visible = nodes.filter((node) => !node.hidden).length;
       status.textContent = selected
         ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
@@ -1384,7 +1355,7 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       }
     }
   });
-  render();
+  render({ said: false });
   if (focused) {
     showDetail(Boolean(detail?.childElementCount));
     map?.scrollTo({ top: 0, behavior: "auto" });

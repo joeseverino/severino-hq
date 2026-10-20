@@ -14,7 +14,7 @@ from hq.platform.application.images import ImageRef
 from hq.platform.application.inventory_testing import store
 from hq.platform.application.services import CONTAINER_KIND
 
-from .names import CONTAINERS, LAN, MACHINE, PORTAINER, SOURCES, container_id, digest, hexed, iso, stamp
+from .names import CONTAINERS, LAN, MACHINE, NEWER, PORTAINER, SOURCES, container_id, digest, hexed, iso, stamp
 
 UP_FOR = timedelta(days=12)
 # How a well-run container is run: a user, no-new-privileges, a limit, a check.
@@ -170,18 +170,22 @@ def _network():
 
 def _registries():
     """Each image as its registry publishes it, its source's releases, what its
-    publisher attached to the digest that runs, and those packages checked."""
+    publisher attached to each digest it publishes, and those packages checked.
+    What runs was released three weeks ago; a newer release, where there is
+    one, four days ago."""
 
     published, upstreams, attested, checked = [], [], [], []
     for name, _port, image in CONTAINERS:
         ref = _ref(image)
         source = SOURCES[name]
-        pinned = f"{ref.name}@{running_digest(image)}"
+        releases = {ref.tag: (running_digest(image), timedelta(days=20))}
+        if name in NEWER:
+            releases[NEWER[name]] = (digest(ref.name, NEWER[name]), timedelta(days=4))
         published.append(
             {
                 "image": ref.name,
-                "tags": [ref.tag],
-                "digests": {ref.tag: running_digest(image)},
+                "tags": list(releases),
+                "digests": {tag: pin for tag, (pin, _age) in releases.items()},
                 "source": source,
                 "version": ref.tag.removeprefix("v"),
                 "read_at": stamp(timedelta(hours=3)),
@@ -192,38 +196,43 @@ def _registries():
                 "repository": source.removeprefix("https://github.com/"),
                 "url": source,
                 "releases": [
-                    {
-                        "tag": ref.tag,
-                        "url": f"{source}/releases/tag/{ref.tag}",
-                        "published_at": stamp(timedelta(days=20)),
-                    }
+                    {"tag": tag, "url": f"{source}/releases/tag/{tag}", "published_at": stamp(age)}
+                    for tag, (_pin, age) in reversed(releases.items())
                 ],
                 "advisories": [],
                 "read_at": stamp(timedelta(hours=3)),
             }
         )
-        attested.append(
-            {
-                "digest": pinned,
-                "image": ref.name,
-                "platform_digest": digest("platform", pinned),
-                "packages": list(PACKAGES),
-                "sbom": "spdx",
-                "provenance": {
-                    "format": "https://slsa.dev/provenance/v1",
-                    "source": source,
-                    "revision": hexed("revision", pinned, length=40),
-                    "builder": "https://github.com/actions/runner",
-                    "finished_at": stamp(timedelta(days=21)),
-                    "materials": [f"pkg:docker/alpine@3.20?digest={digest('alpine', '3.20')}"],
-                },
-                "read_at": stamp(timedelta(hours=3)),
-            }
-        )
-        checked.append(
-            {"digest": pinned, "checked": len(PACKAGES), "findings": [], "read_at": stamp(timedelta(hours=3))}
-        )
+        for pin, age in releases.values():
+            attested.append(_attested(f"{ref.name}@{pin}", ref.name, source, age))
+            checked.append(
+                {
+                    "digest": f"{ref.name}@{pin}",
+                    "checked": len(PACKAGES),
+                    "findings": [],
+                    "read_at": stamp(timedelta(hours=3)),
+                }
+            )
     store(IMAGE_KIND, *published)
     store(UPSTREAM_KIND, *upstreams)
     store(DIGEST_KIND, *attested)
     store(VULNERABILITY_KIND, *checked)
+
+
+def _attested(pinned, image, source, released):
+    return {
+        "digest": pinned,
+        "image": image,
+        "platform_digest": digest("platform", pinned),
+        "packages": list(PACKAGES),
+        "sbom": "spdx",
+        "provenance": {
+            "format": "https://slsa.dev/provenance/v1",
+            "source": source,
+            "revision": hexed("revision", pinned, length=40),
+            "builder": "https://github.com/actions/runner",
+            "finished_at": stamp(released + timedelta(days=1)),
+            "materials": [f"pkg:docker/alpine@3.20?digest={digest('alpine', '3.20')}"],
+        },
+        "read_at": stamp(timedelta(hours=3)),
+    }

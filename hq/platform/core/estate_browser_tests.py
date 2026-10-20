@@ -1,4 +1,5 @@
-"""The layout gate over the example estate: every page the navigation reaches.
+"""The layout gate over the example estate: every page the navigation reaches,
+and a record's page of each kind it lists.
 
 ``browser_tests.LayoutBrowserTests`` holds its invariants over the stress
 estate, which is built to break layouts and covers the pages it was built for.
@@ -13,7 +14,9 @@ that one load; a finding names its check, page, width and theme.
 
 import json
 import re
+from functools import partial
 from html import unescape
+from typing import override
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -22,6 +25,7 @@ from django.urls import reverse
 lazy from django.db import transaction
 
 from hq.platform.core.browser_tests import (
+    _ASIDE_BESIDE_ITS_HEADING,
     _AUDIT,
     _BROKEN_WORDS,
     _CELLS,
@@ -32,14 +36,17 @@ from hq.platform.core.browser_tests import (
     _NESTED_FRAMES,
     _OVERLAPS,
     _PAIRS,
+    _PAST_THE_GUTTER,
     _RAISED_LINKS,
     _READINGS,
     _ROW_HEIGHTS,
     _SETTLED,
     _SIDEWAYS,
     _SPILLED_LABELS,
+    _SQUEEZED_TITLES,
     _TABLES,
     _TABLES_THAT_DO_NOT_FIT,
+    _TOKEN_BREAKS,
     _UNEVEN_BANDS,
     _UNPADDED_CELLS,
     _UNPADDED_TILES,
@@ -48,16 +55,17 @@ from hq.platform.core.browser_tests import (
     AUDIT_RULES,
     LARGE_TEXT_CONTRAST,
     ORIGIN,
-    PHONE,
     PHONE_SCREEN,
     ROW_LINES,
     SELECTORS,
     TEXT_CONTRAST,
     BrowserGate,
     reading_problems,
+    viewport,
 )
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
+lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 
 # A phone, a tablet held upright, a laptop and a wide desktop.
 WIDTHS = (PHONE_SCREEN[0], 820, 1360, 1680)
@@ -99,6 +107,20 @@ def navigation():
     return list(dict.fromkeys(reverse(route) for route in (*routes, *_HEADER)))
 
 
+def records():
+    """A record's page of each kind the navigation lists: the machine, the
+    service with the longest name, its container (which has an upgrade to
+    make) and the zone."""
+
+    hostname, container, *_ = max(SERVICES, key=lambda service: len(service[0]))
+    return [
+        reverse("control_plane:machine", kwargs={"name": MACHINE}),
+        reverse("control_plane:service", kwargs={"hostname": hostname}),
+        reverse("control_plane:detail", kwargs={"key": f"{container}-container"}),
+        reverse("control_plane:detail", kwargs={"key": "example-zone"}),
+    ]
+
+
 def render_estate():
     """The navigation's pages, and every page and part the browser will ask
     for, rendered for the estate's owner the way production asks:
@@ -111,7 +133,7 @@ def render_estate():
     with transaction.atomic(), as_production(), override_settings(SEVERINO_POSTURE="advanced"):
         client = Client()
         client.force_login(build_showcase(), backend=SSO)
-        paths = navigation()
+        paths = navigation() + records()
         for path in paths:
             response = ask(client, path)
             if response.status_code != 200:
@@ -149,23 +171,30 @@ class ExampleEstateBrowserTests(BrowserGate):
         self.page.on("requestfinished", closed)
         self.page.on("requestfailed", closed)
 
-    def respond(self, route):
+    @override
+    def answer(self, route):
         request = route.request
         parts = urlsplit(request.url)
         address = parts.path + (f"?{parts.query}" if parts.query else "")
         part = request.headers.get("x-fragment", "")
-        if (address, part) in self.pages:
+        if request.method != "GET":
+            # What a page asks for by itself once open (a record's page asks
+            # for a fresh read) acts, and the gate only reads.
+            route.fulfill(status=405, body="The layout gate only reads")
+        elif (address, part) in self.pages:
             route.fulfill(content_type="text/html", body=self.pages[address, part])
         elif parts.path.startswith(settings.STATIC_URL):
-            super().respond(route)
+            super().answer(route)
         else:
             self.unanswered.append(f"{address} {part}".strip())
             route.fulfill(status=404, body="Not in the example estate")
 
     def visit(self, path, width):
-        height = PHONE_SCREEN[1] if width <= PHONE else 900
-        self.page.set_viewport_size({"width": width, "height": height})
+        self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}{path}", wait_until="load")
+        self.finish(path, width)
+
+    def finish(self, path, width):
         # Each frame lets a script start what an answer asked for; two quiet
         # frames in a row with nothing in flight is a page that has finished.
         quiet = 0
@@ -181,7 +210,7 @@ class ExampleEstateBrowserTests(BrowserGate):
 
         scroll = SELECTORS["table_scroll"]
         found = {
-            "sideways": self.page.evaluate(_SIDEWAYS, scroll),
+            "sideways": self.page.evaluate(_SIDEWAYS, SELECTORS["sideways"]),
             "cells": self.page.evaluate(_CELLS),
             "broken words": self.page.evaluate(_BROKEN_WORDS),
             "wrapped phrases": self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]),
@@ -197,6 +226,12 @@ class ExampleEstateBrowserTests(BrowserGate):
             "cell labels": self.page.evaluate(_SPILLED_LABELS, SELECTORS["cell_content"]),
             "raised links": self.page.evaluate(_RAISED_LINKS),
             "row disclosures": self.page.evaluate(_NESTED_DISCLOSURES),
+            "tokens": self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]),
+            "heading asides": self.page.evaluate(_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]),
+            "titles": self.page.evaluate(
+                _SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]
+            ),
+            "gutter": self.page.evaluate(_PAST_THE_GUTTER, [SELECTORS["gutter_bound"], False]),
             "audit": [v for v in self.page.evaluate(_AUDIT)["violations"] if v["rule"] in AUDIT_RULES],
         }
         if width >= WIDE:
@@ -229,7 +264,7 @@ class ExampleEstateBrowserTests(BrowserGate):
             )
         }
         self.page.evaluate(_SETTLED)
-        found["sideways, opened"] = self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"])
+        found["sideways, opened"] = self.page.evaluate(_SIDEWAYS, SELECTORS["sideways"])
         return found
 
     def test_every_navigation_page_keeps_the_layout_rules(self):
@@ -250,3 +285,15 @@ class ExampleEstateBrowserTests(BrowserGate):
                     failed = {check: said for check, said in found.items() if said}
                     if failed:
                         self.fail(json.dumps(failed, indent=1))
+
+    def test_nothing_moves_once_a_page_is_drawn(self):
+        """What the server draws is where things stay: a script and a part
+        fetched after the page fill room that was already there."""
+
+        for path in self.navigation:
+            for width in WIDTHS:
+                with self.subTest(page=path, width=width):
+                    moved = self.moved_once_drawn(f"{ORIGIN}{path}", width, partial(self.finish, path, width))
+                    if moved:
+                        self.fail("\n".join(moved))
+                    self.unanswered = []

@@ -14,16 +14,23 @@ from .names import (
     HQ,
     LAN,
     LAPTOP,
+    LAPTOP_NAME,
     MACHINE,
     OWNER,
     PHONE,
+    PHONE_NAME,
+    PUBLIC,
     SERVICES,
     TAILNET,
     TAILNET_V4,
     TAILNET_V6,
     ZONE,
+    hexed,
     iso,
+    magic_dns,
     now,
+    tailnet_v4,
+    tailnet_v6,
 )
 
 # The tailnet: the owner reaches the server on 443, and nothing else is granted.
@@ -42,12 +49,46 @@ SETTINGS = {
     "aclsExternallyManagedOn": True,
 }
 # A domain that sends and takes no mail, and says so: a null MX, an SPF that
-# allows nobody and a DMARC policy that rejects the rest.
+# allows nobody, a DKIM key revoked for every selector and a DMARC policy that
+# rejects the rest. Beside that, what a zone gathers over a few years: a
+# website behind the proxy, a status page and docs hosted elsewhere, and the
+# verifications services asked for. Only an A, AAAA or CNAME record names a
+# service, so each of those has something behind it (a proxied site, a host
+# elsewhere) and one name has one such record: two of a kind are a contradiction
+# HQ reports. The rest are policy.
+# Key, name, type, content, priority, proxied.
 PUBLIC_RECORDS = (
-    ("mx", ZONE, "MX", ".", 0),
-    ("spf", ZONE, "TXT", "v=spf1 -all", None),
-    ("dmarc", f"_dmarc.{ZONE}", "TXT", "v=DMARC1; p=reject; sp=reject", None),
-    ("caa", ZONE, "CAA", '0 issue "letsencrypt.org"', None),
+    ("apex", ZONE, "A", "203.0.113.24", None, True),
+    ("www", f"www.{ZONE}", "CNAME", ZONE, None, True),
+    ("status", f"status.{ZONE}", "CNAME", "example-status.statuspage.example.net", None, False),
+    ("docs", f"docs.{ZONE}", "CNAME", "example-docs.pages.example.net", None, False),
+    ("mx", ZONE, "MX", ".", 0, False),
+    ("spf", ZONE, "TXT", "v=spf1 -all", None, False),
+    ("dkim", f"*._domainkey.{ZONE}", "TXT", "v=DKIM1; p=", None, False),
+    (
+        "dmarc",
+        f"_dmarc.{ZONE}",
+        "TXT",
+        "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; rua=mailto:dmarc-reports@example.com",
+        None,
+        False,
+    ),
+    ("site-verification", ZONE, "TXT", "example-site-verification=Xq3vLm9aT0pR7wKc2YhN5bDf8GjE1sUo4iZ6", None, False),
+    ("atproto", f"_atproto.{ZONE}", "TXT", "did=did:plc:example7q3vlm9at0pr7wkc2yhn5bdf", None, False),
+    ("domain-verification", f"_example-verification.{ZONE}", "TXT", "example-verify=b4d1e8c27f09a3561d", None, False),
+    ("pages-challenge", f"_example-pages-challenge.{ZONE}", "TXT", "6f1c0b9e2d4a8b7c3e5f0a1d9c8b7a", None, False),
+    ("caa", ZONE, "CAA", '0 issue "letsencrypt.org"', None, False),
+    ("caa-wild", ZONE, "CAA", '0 issuewild "letsencrypt.org"', None, False),
+    ("caa-pki", ZONE, "CAA", '0 issue "ca.example.net; validationmethods=dns-01"', None, False),
+    ("caa-iodef", ZONE, "CAA", '0 iodef "mailto:security@example.com"', None, False),
+    (
+        "security",
+        f"_security.{ZONE}",
+        "TXT",
+        "security_policy=https://example.com/.well-known/security.txt",
+        None,
+        False,
+    ),
 )
 RENEWS_IN = timedelta(days=200)
 
@@ -67,20 +108,19 @@ def declare_zone():
     ManagedResource.objects.create(
         key="example-zone", kind="cloudflare.zone", spec={"zone": ZONE, "connection_ref": DNS}
     )
-    for key, name, kind, content, priority in PUBLIC_RECORDS:
-        ManagedResource.objects.create(
-            key=f"example-{key}", kind="cloudflare.dns_record", spec=_record(name, kind, content, priority)
-        )
+    for key, *fields in PUBLIC_RECORDS:
+        ManagedResource.objects.create(key=f"example-{key}", kind="cloudflare.dns_record", spec=_record(*fields))
 
 
-def _record(name, kind, content, priority):
+def _record(name, kind, content, priority, proxied):
     return {
         "zone": ZONE,
         "name": name,
         "record_type": kind,
         "content": content,
-        "ttl": 3600,
-        "proxied": False,
+        # Cloudflare sets a proxied record's TTL itself, and says 1 for it.
+        "ttl": 1 if proxied else 3600,
+        "proxied": proxied,
         "priority": priority,
         "connection_ref": DNS,
     }
@@ -160,7 +200,7 @@ def adguard():
             "anonymize_client_ip": False,
         },
     )
-    clients = (("example-laptop", LAPTOP, 3), ("example-phone", PHONE, 1))
+    clients = ((LAPTOP_NAME, LAPTOP, 3), (PHONE_NAME, PHONE, 1))
     store(
         "adguard.client",
         *(
@@ -202,14 +242,17 @@ def tailnet():
 
     at = now()
 
-    def device(name, address, os, **extra):
+    # As the controller writes a device: both addresses, the MagicDNS name
+    # without its trailing dot, the node key and the client's full version.
+    def device(name, os, **extra):
         return {
             "name": name,
-            "addresses": [address],
-            "dns_name": f"{name}.example.ts.net.",
+            "addresses": [tailnet_v4(name), tailnet_v6(name)],
+            "dns_name": magic_dns(name),
             "os": os,
             "online": True,
-            "public_key": f"example-key-{name}",
+            "public_key": hexed("node", name),
+            "client_version": "1.76.6-t3b1a6e2c4-g5e7f9a1b3",
             "last_handshake": (at - timedelta(minutes=1)).isoformat(),
             **extra,
         }
@@ -217,18 +260,24 @@ def tailnet():
     reach = [{"port": 443, "who": [OWNER], "rules": [{"who": [OWNER], "to": ["tag:server:443"], "line": 1}]}]
     store(
         "tailscale.device",
-        device(MACHINE, TAILNET, "linux", self=True, tags=["tag:server"], reach=reach, endpoints=[f"{LAN}:41641"]),
         device(
-            "example-laptop",
-            LAPTOP,
+            MACHINE,
+            "linux",
+            self=True,
+            tags=["tag:server"],
+            reach=reach,
+            endpoints=[f"{LAN}:41641", f"{PUBLIC}:41641", "[2001:db8:4f1a:2e00:5054:ff:fe12:3456]:41641"],
+        ),
+        device(
+            LAPTOP_NAME,
             "macOS",
             user=OWNER,
             active=True,
-            direct_endpoint="198.51.100.7:41641",
+            direct_endpoint=f"{PUBLIC}:41641",
             rx_bytes=48_213_904,
             tx_bytes=6_120_448,
         ),
-        device("example-phone", PHONE, "iOS", user=OWNER),
+        device(PHONE_NAME, "iOS", user=OWNER),
     )
     store(
         "tailscale.policy",

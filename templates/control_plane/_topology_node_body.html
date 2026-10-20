@@ -82,7 +82,7 @@
                 <span class="topology-relation-arrow" aria-hidden="true">{% if group.grouper == "out" %}&rarr;{% else %}&larr;{% endif %}</span>
                 <span class="visually-hidden">{% if group.grouper == "out" %}Uses:{% else %}Used by:{% endif %}</span>
                 <span class="topology-relation-verb">{{ row.label }}</span>
-                <span class="topology-relation-other">{{ row.other.label }}</span>
+                <span class="topology-relation-other">{{ row.other.label|breakable }}</span>
                 <span class="topology-relation-kind">{{ row.other_link.kind_label }}</span>
               </a>
               {% if row.status and row.status != "neutral" %}<span class="pill pill-{{ row.status }}">{{ row.status|title }}</span>{% endif %}

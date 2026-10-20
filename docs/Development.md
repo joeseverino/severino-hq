@@ -195,6 +195,26 @@ finding names its check, page, width and theme.
 browser test runs as `mise run manage -- test <label>` once
 `mise run setup:webkit` has installed the engine.
 
+The example estate's values have the shapes and lengths real providers give
+(both tailnet addresses and a MagicDNS name per device, long image tags, a
+zone with many records), so a layout that holds there holds on real data.
+Each is invented or shared by every network:
+`hq/platform/core/tests/test_example_estate_values.py` fails on an address or
+host name outside the reserved and shared ranges it names.
+
+`mise run dev:look -- <pages>` is the same browser for looking rather than
+gating: it saves a full-page screenshot of each page at each width under
+`var/look/`. `estate` names the example estate's pages; `--deep` adds every
+page they link to (each record, each command form), answered by HQ's views as
+the browser asks, every request marked as a prefetch so a page that would act
+or reach out is refused and reported instead. `--rule survey` runs every
+check the example estate's gate holds, and the ones a reader would otherwise
+catch by eye: a word of running text split across lines, anything past the
+content's gutter, text over text, a column empty in every row. `mise run dev:look --deep --rule survey estate/all` walks
+the whole estate. What a rule finds on a page is printed and written beside
+its screenshot (`<page>-<width>.txt`) as each page is looked at, so a run
+stopped part way keeps what it found.
+
 ### Debug toolbar
 
 The Django Debug Toolbar is in the `dev` group and never in the image. It is on

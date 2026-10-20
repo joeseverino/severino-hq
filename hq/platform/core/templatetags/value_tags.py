@@ -250,41 +250,52 @@ def readable(value):
     return when(value)
 
 
-# Where an address, hostname or path may wrap: after a dot or slash, before a
-# port's colon (before an IPv6 "::" as one), never inside a scheme's "://".
-# Without them a narrow box cuts "10.0.0.10:8000" mid-number.
-_BREAK_AFTER = re.compile(r"([./])(?=[^/])")
-_BREAK_BEFORE = re.compile(r"(?<=[^:\s])(:+)(?=[^/])")
+# Where an address, a hostname, a path or an image reference may wrap: after a
+# slash, after a colon run (never inside a scheme's "://" or an IPv6 "::"), and
+# after a dot unless digits stand either side of it, so a version ("2.39.8")
+# and an IPv4 address are each one piece.
+_BREAK_AFTER = re.compile(r"(/|:+|(?<!\d)\.|\.(?!\d))(?=[^/:])")
 
 
 # A part with a hyphen inside it ("nginx-proxy-manager") is kept on one line:
 # a browser breaks after a hyphen, and a name split there reads as two. A flag
 # ("-a") has nothing before its hyphen to break from.
-_PARTS = re.compile(r"(<wbr>|\s+)")
 _INNER_HYPHEN = re.compile(r"[^-\s]-")
+# A seam inside a word, between two of its letters or digits: an address, a
+# path, a host name. A dot after a bracket ("(.zip)") is punctuation.
+_INNER_SEAM = re.compile(r"\w(?:/|:+|\.)\w")
+_WORDS = re.compile(r"(\s+)")
 
 
 def _whole(part: str) -> str:
     return f'<span class="whole">{part}</span>' if _INNER_HYPHEN.search(part) else part
 
 
+def _token(word: str) -> str:
+    """A word with a seam or a hyphen inside it, as a token. A word with
+    neither reads as a word, and stays plain text."""
+
+    if not (_INNER_SEAM.search(word) or _INNER_HYPHEN.search(word)):
+        return word
+    parts = _BREAK_AFTER.sub(r"\1<wbr>", word).split("<wbr>")
+    return '<span class="token">' + "<wbr>".join(_whole(part) for part in parts) + "</span>"
+
+
 @register.filter(is_safe=True)
 def breakable(value):
-    """``value`` as a token: escaped, with a line-break opportunity where an
-    address or a path may wrap, and none inside a hyphenated part.
+    """``value`` as tokens, one per word: escaped, with a line-break
+    opportunity where an address or a path may wrap, and none inside a
+    hyphenated part.
 
     The one way a template writes an identifier (``<code>{{ x|breakable }}</code>``,
-    or bare as a link's text). The ``token`` class keeps it from breaking
-    anywhere else unless one part alone is longer than its line.
+    or bare as a link's text). A token that fits on its line moves to the next
+    one whole; one longer than its line wraps at its seams; a part longer than
+    its line alone breaks wherever it must.
     """
 
     # Escaped first, so the only markup in the result is what is added here.
     text = str(conditional_escape(value))
-    if not text:
-        return ""
-    marked = _BREAK_BEFORE.sub(r"<wbr>\1", _BREAK_AFTER.sub(r"\1<wbr>", text))
-    inner = "".join(_whole(part) for part in _PARTS.split(marked))
-    return mark_safe(f'<span class="token">{inner}</span>')
+    return mark_safe("".join(_token(word) for word in _WORDS.split(text)))
 
 
 def _is_this_page(context, url: str) -> bool:
@@ -310,7 +321,7 @@ def entity(context, link, code=False, label=""):
         return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
     if label:
         link = replace(link, label=str(label))
-    label = format_html("<code>{}</code>", breakable(link.label)) if code else link.label
+    label = format_html("<code>{}</code>", breakable(link.label)) if code else breakable(link.label)
     if link.url and not link.external and _is_this_page(context, link.url):
         return format_html('<span data-entity="{}">{}</span>', link.kind_label, label)
     if link.url and link.external:

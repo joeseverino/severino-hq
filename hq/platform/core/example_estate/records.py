@@ -144,7 +144,7 @@ def calendar():
 
 
 def money():
-    """The host as an asset, and a year of what running it cost; one receipt still to file."""
+    """The host as an asset, and a year of what running it cost, every expense with its receipt."""
 
     machine = f"machine:{MACHINE}"
     asset = Asset.objects.create(
@@ -176,13 +176,12 @@ def money():
             about=machine if about else "",
             about_name=MACHINE if about else "",
         )
-        if days > 2:
-            Receipt.objects.create(
-                file=ContentFile(_RECEIPT, name=f"example-{expense.pk}.pdf"),
-                original_filename=f"{vendor} receipt.pdf",
-                content_type="application/pdf",
-                vendor=vendor,
-                date=expense.date,
-                amount=expense.total_cost,
-                related_expense=expense,
-            )
+        Receipt.objects.create(
+            file=ContentFile(_RECEIPT, name=f"example-{expense.pk}.pdf"),
+            original_filename=f"{vendor} receipt.pdf",
+            content_type="application/pdf",
+            vendor=vendor,
+            date=expense.date,
+            amount=expense.total_cost,
+            related_expense=expense,
+        )

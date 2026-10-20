@@ -101,10 +101,7 @@ class PageTests(TestCase):
             response = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
 
         self.assertContains(response, LABEL)
-        self.assertContains(
-            response,
-            '<a href="/infrastructure/services/hq.example.com/" data-entity="Service">hq.example.com</a>',
-        )
+        self.assertContains(response, 'href="/infrastructure/services/hq.example.com/" data-entity="Service"')
         self.assertNotContains(response, "No managed services")
 
     def test_the_services_list_includes_it_with_its_health(self):

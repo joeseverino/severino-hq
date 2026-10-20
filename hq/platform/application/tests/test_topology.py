@@ -514,6 +514,7 @@ class TopologyPageTests(TestCase):
         self.assertEqual(len(cards(everything)), len(cards(shown)) + left_out)
         # "N of M shown" is out of every card, the ones left out included.
         self.assertEqual(shown.context["topology_total"], len(cards(everything)))
+        self.assertEqual(shown.context["topology_shown"], len(cards(shown)))
         self.assertTrue(select(shown, "data-topology-total", str(len(cards(everything)))))
 
     def test_a_view_shows_everything_it_holds(self):

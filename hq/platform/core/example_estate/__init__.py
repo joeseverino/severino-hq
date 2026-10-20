@@ -5,15 +5,21 @@ rendered-page and export tests, and the layout gate's realistic pass. The
 gate's stress estate (``test_browser_fixtures.build_estate``) breaks things on
 purpose so layouts are tested at their worst. This one is the opposite: an
 HQ that has run for months. Every record is read, every service is set up,
-every container is declared, running and current, scheduled work has run on
-time, and the reader arrives the way they would in production, over the
-tailnet through the proxy, on HTTPS, signed in with single sign-on. What is
-left for HQ to point out is what a real homelab would have: an expense with no
-receipt yet.
+every container is declared and running, scheduled work has run on time, and
+the reader arrives the way they would in production, over the tailnet through
+the proxy, on HTTPS, signed in with single sign-on. What is left for HQ to
+point out is what a real homelab would have: an image with a release out
+since it was pulled.
+
+Every value has the shape and length its provider really gives: tailnet
+devices with both addresses and a MagicDNS name, image references with the
+long tags some publishers use, a zone with the records years gather. A layout
+that holds here holds on a real estate.
 
 Everything is written through HQ's own models and the same helpers its tests
 use; nothing here is read by HQ itself. Names stay in the ``example.*``
-namespace and addresses in private or documentation ranges.
+namespace (and Tailscale's ``ts.net``) and addresses in private or
+documentation ranges.
 """
 
 import tempfile

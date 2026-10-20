@@ -102,11 +102,27 @@ SELECTORS = {
     "cell_content": "main td *, main th *",
     # What a control says about the work it asked for, drawn under it.
     "spoken": ".ask-said",
-    # An identifier, written through `|breakable` or in code; a code block is
-    # text laid out by its own rules.
-    "token": ":is(code, .token):not(pre code)",
-    # The one box allowed to scroll sideways.
+    # An identifier: written through `|breakable` (an entity's name is), or in
+    # code. A code block is text laid out by its own rules, and a table lays
+    # out its own identifiers.
+    "token": ":is(code, kbd, samp, .token, [data-entity]):not(pre *, .data-table *)",
+    # What a heading says beside its title: a count, an age, where it is read.
+    "heading_aside": ".heading-aside",
+    # A page's title, and the controls that share its head.
+    "page_head": ".page-head",
+    "page_title": ".page-head h1",
+    "page_actions": ".page-actions",
+    # What holds the content and so stays inside its gutter: a card, a block
+    # of code.
+    "gutter_bound": "pre, .card, .boxed-facts",
+    # The box built to scroll a table sideways.
     "table_scroll": ".table-scroll",
+    # The boxes allowed to scroll sideways: a table's, and a block of code,
+    # whose lines are as written.
+    "sideways": ".table-scroll, pre",
+    # A table the table script measures and fits to its box, which is laid out
+    # again once it has run (the one exception the nothing-moves rule allows).
+    "fitted_table": ".table-scroll:not([data-chart]) > .data-table",
     # A table whose rows can be chosen, which the table script wires up last.
     "selectable_table": "[data-selectable-table]",
     # What a row folds behind "+3" until it is opened, or until there is room.
@@ -288,14 +304,24 @@ _NESTED_FRAMES = (
 }"""
 )
 
-_HEAD_ON_ONE_LINE = """([leadSelector, titleSelector]) => {
+_HEAD_ON_ONE_LINE = """([leadSelector, titleSelector, headSelector]) => {
   // A narrow head is one line: the title and its lead control, nothing
-  // between them and the lede.
+  // between them and the lede. The control takes a row of its own only when
+  // the title's widest word or name could not sit whole beside the controls.
   const lead = document.querySelector(leadSelector);
   const title = document.querySelector(titleSelector);
   if (!lead || !title) return null;
   const a = lead.getBoundingClientRect(), t = title.getBoundingClientRect();
-  return a.top < t.bottom && a.bottom > t.top;
+  if (a.top < t.bottom && a.bottom > t.top) return true;
+  const head = title.closest(headSelector);
+  const style = getComputedStyle(head);
+  const room = head.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const kept = title.getAttribute('style');
+  title.style.flex = 'none';
+  title.style.width = 'min-content';
+  const narrowest = title.getBoundingClientRect().width;
+  if (kept === null) title.removeAttribute('style'); else title.setAttribute('style', kept);
+  return narrowest + parseFloat(style.columnGap) + lead.parentElement.getBoundingClientRect().width > room + 1;
 }"""
 
 _SIDEWAYS = (
@@ -996,6 +1022,75 @@ _SPILLED_LABELS = (
 )
 
 _SETTLED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
+# The page as the server drew it, with its scripts held back: parsed, styled
+# and in its own face, which is what a reader is shown first.
+_DRAWN = """() => document.readyState !== 'loading'
+  && [...document.querySelectorAll('link[rel=stylesheet]')].every((link) => link.sheet)
+  && document.fonts.status === 'loaded'"""
+# The scripts the parser stops for, which are drawn before the page is.
+_PARSER_SCRIPTS = "() => [...document.scripts].filter((s) => s.src && !s.defer && !s.async).map((s) => s.src)"
+# Where every element that shows stands on the page as first drawn, kept on
+# the window for _MOVED_SINCE_DRAWN to read once the scripts have run.
+_DRAWN_BOXES = """() => {
+  const boxes = new Map();
+  for (const el of document.body.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect();
+    if (!el.checkVisibility() || (!r.width && !r.height)) continue;
+    boxes.set(el, [r.left + scrollX, r.top + scrollY, r.width, r.height]);
+  }
+  window.drawnBoxes = boxes;
+  return boxes.size;
+}"""
+# Every element that still shows and no longer stands where it was drawn. A
+# child carried by its parent, the same distance and at the same size, is the
+# parent's move and is not named again.
+#
+# One exception, until table fitting moves to CSS in its own pass: a table the
+# script fits (`fitted`) is measured and laid out again by tables.js, so what
+# is inside it is not held, and what is below it or holds it may move down or
+# grow by no more than those tables changed height.
+_MOVED_SINCE_DRAWN = (
+    "(fitted) => {"
+    + _DESCRIBE
+    + """
+  const drawn = window.drawnBoxes;
+  const now = (el) => { const r = el.getBoundingClientRect();
+    return [r.left + scrollX, r.top + scrollY, r.width, r.height]; };
+  const change = (el) => now(el).map((value, index) => value - drawn.get(el)[index]);
+  const still = (moved) => moved.every((by) => Math.abs(by) < 0.5);
+  const tables = [...document.querySelectorAll(fitted)].filter((table) => drawn.has(table));
+  // How far the fitted tables could have carried an element: by as much as
+  // those above it changed height, and grown it by as much as those in it.
+  const grown = (el, was) => {
+    let above = 0;
+    let within = 0;
+    for (const table of tables) {
+      const by = Math.abs(now(table)[3] - drawn.get(table)[3]);
+      if (el.contains(table)) within += by;
+      else if (drawn.get(table)[1] + drawn.get(table)[3] <= was[1] + 0.5) above += by;
+    }
+    return [above, within];
+  };
+  const found = [];
+  for (const [el, was] of drawn) {
+    if (!el.isConnected || !el.checkVisibility()) continue;
+    if (el.closest(fitted)) continue;
+    const moved = change(el);
+    const [above, within] = grown(el, was);
+    const carried = Math.abs(moved[1]) <= above + 0.5 && Math.abs(moved[3]) <= within + 0.5;
+    if (still([moved[0], moved[2]]) && (carried || still(moved))) continue;
+    const parent = el.parentElement;
+    if (drawn.has(parent) && parent.checkVisibility() && still(moved.slice(2))) {
+      const by = change(parent);
+      if (still([moved[0] - by[0], moved[1] - by[1]])) continue;
+    }
+    const words = (el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 30);
+    const at = (box) => box.map(Math.round).join(',');
+    found.push(`${describe(el)} "${words}" ${at(was)} -> ${at(now(el))}`);
+  }
+  return found;
+}"""
+)
 # Colours transition between palettes, so contrast is measured after the
 # transition ends.
 _FINISH_TRANSITIONS = """() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } })"""
@@ -1377,50 +1472,188 @@ _CUT_WITH_ROOM = (
 }"""
 )
 
-# A token wraps at a seam (after a space, a dot, a slash or a hyphen, before a
-# colon) and inside a part only when that part alone is longer than its line.
+# Each character of an element's text with the line it is drawn on, for the
+# rules that judge where text breaks. `chars(el)` and `room(el)`: the width of
+# the box whose lines it is set in.
+_LINES = r"""
+const range = document.createRange();
+const chars = (root) => {
+  const out = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.parentElement.checkVisibility()) continue;
+    for (let i = 0; i < node.length; i++) {
+      range.setStart(node, i);
+      range.setEnd(node, i + 1);
+      const rect = [...range.getClientRects()].find((r) => r.width);
+      out.push({ch: node.data[i], top: rect ? Math.round(rect.top) : null, bottom: rect ? rect.bottom : 0, width: rect ? rect.width : 0});
+    }
+  }
+  return out;
+};
+const room = (el) => {
+  let line = el.parentElement;
+  while (getComputedStyle(line).display.startsWith('inline') || getComputedStyle(line).display === 'contents') line = line.parentElement;
+  const style = getComputedStyle(line);
+  return line.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+};
+const broke = (list, i) => list[i].top !== null && list[i - 1].top !== null && list[i].top > list[i - 1].top + 1;
+"""
+
+# An identifier (an address, a host or record name, a path, an image) that
+# fits on its line moves to the next line whole. One longer than its line
+# breaks only at a seam `|breakable` marks (value_tags._BREAK_AFTER: after a
+# slash, after a colon run, after a dot without a digit on both sides), and
+# inside the part between two seams only when that part alone is longer than
+# its line. A hyphen is no seam: a name split there reads as two names.
 _TOKEN_BREAKS = (
     "(token) => {"
     + _DESCRIBE
-    + """
+    + _LINES
+    + r"""
   const found = [];
-  const range = document.createRange();
-  const lines = (rects) => new Set([...rects].filter((r) => r.width).map((r) => Math.round(r.top)));
-  const after = /[\\s./-]/;
-  const isSeam = (prev, next) => after.test(prev) || /\\s/.test(next) || (next === ':' && prev !== ':');
+  const digit = /\d/;
+  const seamAfter = (list, i) => {
+    const prev = list[i - 1].ch, next = list[i].ch, before = i > 1 ? list[i - 2].ch : '';
+    return prev === '/' || (prev === ':' && next !== ':') || (prev === '.' && !(digit.test(before) && digit.test(next)));
+  };
+  const widthOf = (list) => list.reduce((sum, c) => sum + c.width, 0);
   for (const el of document.querySelectorAll('main ' + token)) {
     if (!el.checkVisibility() || el.parentElement.closest(token)) continue;
-    range.selectNodeContents(el);
-    if (lines(range.getClientRects()).size < 2) continue;
-    let line = el;
-    while (getComputedStyle(line).display.startsWith('inline')) line = line.parentElement;
-    const room = line.clientWidth;
-    const chars = [];
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      for (let i = 0; i < node.length; i++) {
-        range.setStart(node, i);
-        range.setEnd(node, i + 1);
-        const rect = [...range.getClientRects()].find((r) => r.width);
-        chars.push({ch: node.data[i], top: rect ? Math.round(rect.top) : null, width: rect ? rect.width : 0});
+    const all = chars(el);
+    const space = room(el);
+    const text = all.map((c) => c.ch).join('');
+    for (const word of text.matchAll(/\S+/g)) {
+      const list = all.slice(word.index, word.index + word[0].length);
+      const at = list.findIndex((c, i) => i > 0 && broke(list, i));
+      if (at < 0) continue;
+      const shown = (i) => `"${word[0].slice(0, i)}|${word[0].slice(i)}"`.slice(0, 90);
+      if (widthOf(list) <= space - 1) {
+        found.push(`${describe(el)} breaks ${shown(at)} though its ${Math.round(widthOf(list))}px fit its ${Math.round(space)}px line`);
+        continue;
+      }
+      for (let i = 1; i < list.length; i++) {
+        if (!broke(list, i) || seamAfter(list, i)) continue;
+        let start = i - 1;
+        while (start > 0 && !seamAfter(list, start)) start -= 1;
+        let end = i;
+        while (end < list.length - 1 && !seamAfter(list, end + 1)) end += 1;
+        if (widthOf(list.slice(start, end + 1)) <= space - 1) {
+          found.push(`${describe(el)} breaks ${shown(i)} inside a part that fits its ${Math.round(space)}px line`);
+          break;
+        }
       }
     }
-    const text = chars.map((c) => c.ch).join('');
-    let top = null;
-    chars.forEach((c, i) => {
-      if (c.top === null) return;
-      const broke = top !== null && c.top > top + 1;
-      top = c.top;
-      if (!broke || isSeam(chars[i - 1].ch, c.ch)) return;
-      let start = i;
-      while (start > 0 && !isSeam(chars[start - 1].ch, chars[start].ch)) start -= 1;
-      let end = i;
-      while (end < chars.length - 1 && !isSeam(chars[end].ch, chars[end + 1].ch)) end += 1;
-      const part = chars.slice(start, end + 1).reduce((sum, ch) => sum + ch.width, 0);
-      if (part + 16 < room) found.push(`${describe(el)} breaks "${text.slice(start, i)}|${text.slice(i, end + 1)}"`);
-    });
   }
   return [...new Set(found)].slice(0, 10);
+}"""
+)
+
+# A heading's aside sits beside it on one line, or starts on a line of its
+# own under it: wrapped beside the heading, its lines keep the heading's line
+# box and read as a loose paragraph set in the heading.
+_ASIDE_BESIDE_ITS_HEADING = (
+    "(aside) => {"
+    + _DESCRIBE
+    + _LINES
+    + r"""
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + aside)) {
+    const heading = el.closest('h1, h2, h3, h4');
+    if (!heading || !el.checkVisibility()) continue;
+    const own = chars(el).filter((c) => c.top !== null);
+    if (new Set(own.map((c) => c.top)).size < 2) continue;
+    const first = own[0];
+    const words = [];
+    const walker = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (el.contains(node) || !node.data.trim()) continue;
+      range.selectNodeContents(node);
+      words.push(...[...range.getClientRects()].filter((r) => r.width));
+    }
+    if (words.some((r) => r.top < first.bottom - 1 && r.bottom > first.top + 1)) {
+      found.push(`${describe(el)} wraps beside its heading "${heading.textContent.trim().slice(0, 30)}"`);
+    }
+  }
+  return found;
+}"""
+)
+
+# A page's title breaks at its spaces, or inside a word only when its
+# controls have already taken a row of their own and the word alone is
+# longer than the line: squeezed beside them, a name splits at a hyphen.
+_SQUEEZED_TITLES = (
+    "([title, actions, pageHead]) => {"
+    + _DESCRIBE
+    + _LINES
+    + r"""
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + title)) {
+    if (!el.checkVisibility()) continue;
+    const list = chars(el);
+    const breaks = list.map((c, i) => i > 0 && broke(list, i) && /\S/.test(list[i - 1].ch) && /\S/.test(c.ch));
+    const at = breaks.indexOf(true);
+    if (at < 0) continue;
+    const head = el.closest(pageHead) || el.parentElement;
+    const controls = head.querySelector(actions);
+    const t = el.getBoundingClientRect();
+    const beside = controls && controls.checkVisibility() && (() => {
+      const c = controls.getBoundingClientRect();
+      return c.top < t.bottom && c.bottom > t.top;
+    })();
+    if (beside) {
+      const text = list.map((c) => c.ch).join('');
+      found.push(`${describe(el)} breaks "${text.slice(0, at)}|${text.slice(at)}" beside its controls`.slice(0, 140));
+    }
+  }
+  return found;
+}"""
+)
+
+# Nothing reaches past the content's side gutter: drawn there, it touches the
+# edge of the screen. `text` also holds every line of text to the box that
+# holds it.
+_PAST_THE_GUTTER = (
+    "([selector, text]) => {"
+    + _DESCRIBE
+    + """
+  const main = document.querySelector('main');
+  const pad = getComputedStyle(main);
+  const edge = main.getBoundingClientRect();
+  const left = edge.left + parseFloat(pad.paddingLeft);
+  const right = edge.right - parseFloat(pad.paddingRight);
+  const found = [];
+  const inScroller = (el) => {
+    for (let up = el.parentElement; up && up !== main; up = up.parentElement) {
+      if (scrolls(up)) return true;
+    }
+    return false;
+  };
+  for (const el of main.querySelectorAll(selector)) {
+    if (!el.checkVisibility() || inScroller(el)) continue;
+    const r = box(el);
+    if (r.width < 2 || r.height < 2) continue;
+    if (r.right > right + 1 || r.left < left - 1) {
+      found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px, gutter ${Math.round(left)}..${Math.round(right)}px`);
+    }
+  }
+  if (!text) return [...new Set(found)].slice(0, 15);
+  const range = document.createRange();
+  const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const el = node.parentElement;
+    if (!node.data.trim() || !el.checkVisibility() || inScroller(el)) continue;
+    let block = el;
+    while (block !== main && getComputedStyle(block).display.startsWith('inline')) block = block.parentElement;
+    const style = getComputedStyle(block);
+    if (style.overflowX !== 'visible') continue;
+    const b = box(block);
+    const inner = b.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
+    range.selectNodeContents(node);
+    const far = Math.max(...[...range.getClientRects()].map((r) => r.right));
+    if (far > inner + 1) found.push(`${describe(block)}: "${node.data.trim().slice(0, 40)}" runs ${Math.round(far - inner)}px past its padding`);
+  }
+  return [...new Set(found)].slice(0, 15);
 }"""
 )
 
@@ -1525,6 +1758,8 @@ class BrowserGate(SimpleTestCase):
         if self.context is not None:
             self.context.close()
         options.setdefault("java_script_enabled", False)
+        # Scripts asked for while this is a list wait in it (moved_once_drawn).
+        self.held = None
         self.context = self.browser.new_context(**options)
         self.context.set_default_timeout(5000)
         self.context.route("**/*", self.respond)
@@ -1536,7 +1771,19 @@ class BrowserGate(SimpleTestCase):
         self.page.evaluate(_PAINTED)
         self.page.wait_for_function(_STILL)
 
+    def holds(self, route):
+        """Whether a script is being held back, and so not answered yet."""
+
+        if self.held is None or route.request.resource_type != "script":
+            return False
+        self.held.append(route)
+        return True
+
     def respond(self, route):
+        if not self.holds(route):
+            self.answer(route)
+
+    def answer(self, route):
         path = urlsplit(route.request.url).path
         name = path.strip("/")
         if name in self.pages:
@@ -1560,9 +1807,43 @@ class BrowserGate(SimpleTestCase):
             print(f"Browser failure screenshot: {folder / 'page.png'}")
 
     def open(self, name, width):
-        height = PHONE_SCREEN[1] if width <= PHONE else 900
-        self.page.set_viewport_size({"width": width, "height": height})
+        self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}/{name}/", wait_until="load")
+
+    def moved_once_drawn(self, url, width, settled):
+        """What moves on ``url`` after it is first drawn.
+
+        The page is drawn with its deferred scripts held back, which is what a
+        reader sees before they run, and every box that shows is noted. A
+        script the parser waits for is part of that drawing, so it is let
+        through. Then the rest run, ``settled`` waits for what they start, and
+        every element that stands somewhere else is named.
+        """
+
+        self.held = []
+        self.page.set_viewport_size(viewport(width))
+        self.page.goto(url, wait_until="commit")
+        for _frame in range(600):
+            if self.page.evaluate(_DRAWN):
+                break
+            parsing = set(self.page.evaluate(_PARSER_SCRIPTS))
+            waiting = [route for route in self.held if route.request.url in parsing]
+            for route in waiting:
+                self.held.remove(route)
+                self.answer(route)
+            self.page.evaluate(_SETTLED)
+        else:
+            raise AssertionError(f"{url} at {width}px was never drawn")
+        self.page.evaluate(_DRAWN_BOXES)
+        held, self.held = self.held, None
+        for route in held:
+            self.answer(route)
+        settled()
+        return self.page.evaluate(_MOVED_SINCE_DRAWN, SELECTORS["fitted_table"])
+
+
+def viewport(width):
+    return {"width": width, "height": PHONE_SCREEN[1] if width <= PHONE else 900}
 
 
 # Heads whose lead control is one that says what it is doing beside itself,
@@ -1709,6 +1990,9 @@ class LayoutBrowserTests(BrowserGate):
             self.a_checks_evidence_follows_its_statement,
             self.nothing_a_summary_names_is_hidden,
             self.a_token_breaks_only_where_it_may,
+            self.an_aside_wraps_only_under_its_heading,
+            self.a_title_is_not_split_beside_its_controls,
+            self.code_and_cards_keep_inside_the_gutter,
             self.controls_in_a_row_share_one_height,
             self.a_wrapped_bar_fills_its_rows,
         ]
@@ -1795,7 +2079,9 @@ class LayoutBrowserTests(BrowserGate):
 
     def a_narrow_head_keeps_its_lead_control_beside_the_title(self, _name):
         self.assertIn(
-            self.page.evaluate(_HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"]]),
+            self.page.evaluate(
+                _HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"], SELECTORS["page_head"]]
+            ),
             (None, True),
         )
 
@@ -1806,10 +2092,10 @@ class LayoutBrowserTests(BrowserGate):
     def only_a_table_scrolls_sideways(self, _name):
         """At a phone, tablet and laptop width; again with every disclosure open."""
 
-        self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+        self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["sideways"]), [])
 
     def only_a_table_scrolls_sideways_with_every_disclosure_open(self, _name):
-        self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["table_scroll"]), [])
+        self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["sideways"]), [])
 
     def nothing_runs_out_of_its_table_cell(self, _name):
         self.assertEqual(self.page.evaluate(_CELLS), [])
@@ -1920,6 +2206,18 @@ class LayoutBrowserTests(BrowserGate):
     def a_token_breaks_only_where_it_may(self, _name):
         self.assertEqual(self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]), [])
 
+    def an_aside_wraps_only_under_its_heading(self, _name):
+        self.assertEqual(self.page.evaluate(_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]), [])
+
+    def a_title_is_not_split_beside_its_controls(self, _name):
+        found = self.page.evaluate(
+            _SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]
+        )
+        self.assertEqual(found, [])
+
+    def code_and_cards_keep_inside_the_gutter(self, _name):
+        self.assertEqual(self.page.evaluate(_PAST_THE_GUTTER, [SELECTORS["gutter_bound"], False]), [])
+
     def controls_in_a_row_share_one_height(self, _name):
         self.assertEqual(self.page.evaluate(_UNEVEN_CONTROL_ROWS, [SELECTORS["line_control"], SELECTORS["field"]]), [])
 
@@ -2011,6 +2309,29 @@ class LayoutBrowserTests(BrowserGate):
         self.page.evaluate(_OPEN_AND_REFIT, SELECTORS["table_scroll"])
         self.page.wait_for_function("() => window.refitting.every((table) => 'fit' in table.dataset)")
         self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+
+    def test_nothing_moves_once_a_page_is_drawn(self):
+        """What the server draws is where things stay. The stress estate
+        answers no part a page fetches, so those requests are left waiting:
+        a placeholder stays a placeholder, and what moves is the scripts'."""
+
+        self.start(java_script_enabled=True)
+        self.page.route("**/*", self.wait_for_parts)
+        for name in ALL_PAGES:
+            for width in OVERFLOW_WIDTHS:
+                with self.subTest(page=name, width=width):
+                    moved = self.moved_once_drawn(f"{ORIGIN}/{name}/", width, self.loaded_and_still)
+                    if moved:
+                        self.fail("\n".join(moved))
+
+    def wait_for_parts(self, route):
+        if route.request.headers.get("x-requested-with") != "XMLHttpRequest":
+            route.fallback()
+
+    def loaded_and_still(self):
+        self.page.wait_for_load_state("load")
+        self.settle()
+        self.page.evaluate(_SETTLED)
 
     # Rules with a setup of their own.
 

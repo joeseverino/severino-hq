@@ -3,7 +3,12 @@ the connections HQ reads them through."""
 
 from datetime import timedelta
 
-from hq.domains.control_plane.models import DashboardMachine, ManagedResource
+from hq.domains.control_plane.models import (
+    DashboardConfiguration,
+    DashboardMachine,
+    ManagedResource,
+    WeatherObservation,
+)
 from hq.platform.application import readings
 from hq.platform.application.inventory_testing import store
 from hq.platform.application.report_testing import report_connections
@@ -19,6 +24,7 @@ from .names import (
     HQ,
     LAN,
     LAPTOP,
+    LAPTOP_NAME,
     MACHINE,
     PORTAINER,
     PROXY,
@@ -27,6 +33,7 @@ from .names import (
     SERVICES,
     SSH,
     TAILNET,
+    TAILNET6,
     TAILSCALE,
     ZONE,
     iso,
@@ -40,7 +47,9 @@ CERTIFICATE_EXPIRES = timedelta(days=61)
 
 def declare():
     ManagedResource.objects.create(
-        key=MACHINE, kind="machine", spec={"name": MACHINE, "role": "Docker host", "addresses": [LAN, TAILNET]}
+        key=MACHINE,
+        kind="machine",
+        spec={"name": MACHINE, "role": "Docker host", "addresses": [LAN, TAILNET, TAILNET6]},
     )
     network.declare_rewrites()
     for hostname, container, port, _image in SERVICES:
@@ -215,7 +224,7 @@ def host():
         "hq.request_path",
         {
             "address": LAPTOP,
-            "device": "example-laptop",
+            "device": LAPTOP_NAME,
             "channel": "tailnet",
             "carried": "direct",
             "forwarded_by": PROXY,
@@ -238,4 +247,28 @@ def host():
             ],
         },
         observed_at=now(),
+    )
+    _weather()
+
+
+def _weather():
+    """The dashboard's forecast, as the weather service words a showery afternoon."""
+
+    point = "40.0000,-90.0000"
+    DashboardConfiguration.objects.update_or_create(
+        pk=1, defaults={"weather_point": point, "weather_label": "Example City"}
+    )
+    WeatherObservation.objects.create(
+        point=point,
+        payload={
+            "status": "good",
+            "summary": "Example City, EX",
+            "metrics": [
+                {"label": "Now", "value": "Chance Light Rain Showers", "detail": "This Afternoon"},
+                {"label": "Temperature", "value": "58°F", "detail": ""},
+                {"label": "Wind", "value": "WSW 10 to 15 mph", "detail": "NWS hourly forecast"},
+                {"label": "Alerts", "value": "0", "detail": "active for this point"},
+            ],
+        },
+        observed_at=now() - timedelta(minutes=14),
     )

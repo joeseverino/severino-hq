@@ -40,6 +40,7 @@
   {% endcomment %}
   <link rel="preload" href="{% static 'fonts/inter/inter-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script src="{% static 'js/transitions.js' %}"></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body data-sign-in="{% url 'login' %}">

@@ -142,6 +142,11 @@ adding UI; grow a primitive rather than styling a page.
 
 - Server-render useful HTML first; JavaScript progressively enhances working
   links and forms.
+- The stylesheet is held to the best current practice: layout is the
+  browser's, computed by CSS (container queries, `:has()`, intrinsic sizing,
+  cascade layers, logical properties), never measured and reshaped by a
+  script. Before writing a layout mechanism, check how mature design systems
+  and the platform already solve it.
 - Prefer shared primitives over page-specific markup or scripts. Do not add a
   framework or dependency for behavior the platform already provides.
 - Keep interactions immediate, keyboard accessible, responsive, and stable
@@ -154,7 +159,10 @@ adding UI; grow a primitive rather than styling a page.
   (`hq/platform/core/speculation.py`).
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
-- Scripts are deferred and respect `prefers-reduced-motion`. No inline
+- Scripts are deferred and respect `prefers-reduced-motion`; the one
+  exception is the page-transition listener, which must run before the first
+  frame (`test_script_loading.py`). Nothing moves once a page is drawn: a
+  script fills space the server's HTML already holds. No inline
   scripts or event handlers; `style-src 'unsafe-inline'` exists only
   for a per-datum custom property on a chart mark (`style="--at: 62%"`).
 

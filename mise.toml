@@ -205,7 +205,7 @@ extends = "django-heavy"
 depends = ["setup:webkit"]
 description = "Screenshot HQ pages as the browser gates draw them at a few widths, and run one of their rules there"
 usage = '''
-arg "<pages>" help="Comma-separated pages: the gate's estate (connections,dense/services), the API reference (api/docs), the example estate's navigation (estate, estate/infrastructure), or all"
+arg "<pages>" help="Comma-separated pages: the gate's estate (connections,dense/services), the API reference (api/docs), the example estate's navigation (estate, estate/infrastructure, or estate/all for every page of it), or all"
 flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
 flag "--rule <rule>" help="A rule method of LayoutBrowserTests to run on each page"
 flag "--css <css>" help="A stylesheet added first: the defect a new rule must catch"
@@ -213,6 +213,7 @@ flag "--dark" help="In the dark palette"
 flag "--open" help="With every disclosure open"
 flag "--expand" help="With every table row opened"
 flag "--no-script" help="As the server drew it, before tables.js and the rest run"
+flag "--deep" help="Also every page the example estate pages link to: each list's records and the command forms they open"
 '''
 run = "uv run --group browser python manage.py test hq.platform.core.browser_look.Look.test_look --noinput --parallel 1"
 

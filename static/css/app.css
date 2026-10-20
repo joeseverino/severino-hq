@@ -346,14 +346,29 @@ a { color: var(--accent-2); text-decoration: none; }
 a:hover { color: var(--accent); text-decoration: underline; }
 code { font-family: var(--font-mono); font-size: .88em; background: var(--bg-tint); padding: 1px var(--space-2); border-radius: 4px; color: var(--ink-2); }
 pre code { background: transparent; padding: 0; color: inherit; }
-/* A token (`|breakable`): an address, a path, a key, an image. It wraps at
-   the seams the filter marks, and inside a part only when that part alone is
-   longer than its line, however freely the box around it breaks prose. */
-code, .token { overflow-wrap: break-word; }
+/* An identifier (`|breakable`, or code): an address, a path, a key, an image.
+   One that fits on its line moves to the next line whole; one longer than its
+   line wraps at the seams the filter marks; a hyphenated part (`.whole`) or a
+   seamless one breaks inside only when it alone is longer than its line. A
+   table lays out its own identifiers. */
+:is(code, .token, .whole):not(pre *, td *, th *) {
+  display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
+  /* Wrapped, it sits on its first line: an inline block's baseline is its
+     last, which a row aligned on baselines would lift over the rows above. */
+  baseline-source: first;
+}
+@supports not (baseline-source: first) {
+  :is(code, .token, .whole):not(pre *, td *, th *) { vertical-align: top; }
+}
+:is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
+.whole:is(td *, th *) { display: inline-block; max-width: 100%; }
+:is(td, th) [data-entity] > .token, :is(td, th) [data-entity] > .token > .whole { display: contents; }
 /* A chip that is a link reads as one: the link colour, underlined on hover. */
 a code { color: var(--accent-2); }
 a:hover code { color: var(--accent); text-decoration: underline; }
-pre { background: var(--code-bg); color: var(--code-ink); padding: var(--space-7) var(--space-8); border-radius: var(--radius); overflow-x: auto; font-size: var(--text-sm); line-height: 1.55; }
+/* A command or a file: its lines as written, scrolled inside its block, which
+   is never wider than the box it sits in. */
+pre { max-width: 100%; background: var(--code-bg); color: var(--code-ink); padding: var(--space-7) var(--space-8); border-radius: var(--radius); overflow-x: auto; font-size: var(--text-sm); line-height: 1.55; }
 ::selection { background: var(--selection); color: var(--ink); }
 pre ::selection { color: var(--code-ink); }
 
@@ -663,9 +678,12 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .page-head-copy { display: contents; }
 .page-head .page-trail { flex: 1 1 100%; order: 0; margin-bottom: calc(-1 * var(--space-2)); }
 /* The title yields width before the controls do: a long name wraps in its
-   own column rather than pushing the lead control onto a row of its own. */
-.page-head .page-title-row { flex: 1 1 0; order: 1; min-width: 0; }
-.page-head .page-title-row > h1 { overflow-wrap: anywhere; }
+   own column at its spaces and seams. The controls take a row of their own
+   only when the title's widest word or identifier would not fit beside them,
+   never splitting it. */
+.page-head .page-title-row { flex: 1 1 0; order: 1; max-width: 100%; }
+/* Its width is its whole name, so the controls give way rather than split it. */
+.page-head h1 .token { width: max-content; }
 .page-head > .page-actions { order: 2; }
 /* Full width so it always takes its own row; the reading measure is kept by
    padding rather than a width cap, which would let it fit beside the title. */
@@ -718,7 +736,10 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .dot-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin: 0; padding: 0; list-style: none; }
 :is(.dot-list > li, .glance-caption > span) + :is(li, span)::before { content: "·"; margin-right: var(--space-3); color: var(--muted-2); }
 .glance-alert { color: var(--attn); font-weight: 650; }
-.glance-freshness { color: var(--warn); font-size: var(--text-3xs); white-space: nowrap; }
+/* The one line of a reading that may take two: an age and its verdict are
+   long beside a narrow reading, and the reading stays inside the page. */
+.glance-freshness { color: var(--warn); font-size: var(--text-3xs); }
+.glance-freshness .reading-age { white-space: normal; }
 .glance-panel[data-refreshing] .glance-freshness { color: var(--muted-2); }
 .glance-expanded { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .glance-expanded-head { display: grid; gap: 1px; font-size: var(--text-xs); color: var(--muted); }
@@ -851,7 +872,11 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    control does not show. So the name is there on every phone that fits it and
    on none that does not, all of it or none of it, without a width being named. */
 .user-menu { position: relative; flex: 0 0 auto; }
-.action-badge { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-width: var(--control-size); min-height: var(--control-size); padding: var(--space-2) var(--space-4); border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm); background: var(--bar-control-bg); color: var(--ink-2); font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; text-decoration: none; white-space: nowrap; }
+/* The badge is one size whatever it counts, so the count arriving after the
+   page (a fragment on every page but the two that count it) moves nothing in
+   the bar: it is pinned to the corner, outside the flow. */
+.action-badge { position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: var(--control-size); height: var(--control-size); border: 1px solid var(--bar-control-line); border-radius: var(--radius-sm); background: var(--bar-control-bg); color: var(--ink-2); text-decoration: none; }
+.action-badge [data-action-count] { position: absolute; inset-block-start: -7px; inset-inline-end: -7px; box-sizing: border-box; min-width: 18px; height: 18px; padding: 0 var(--space-2); border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: var(--text-2xs); font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .action-badge:hover { background: var(--bar-control-bg-hover); color: var(--ink); text-decoration: none; }
 .action-badge svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .user-menu > summary {
@@ -1412,9 +1437,11 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .band-fact:is(.tone-good, .tone-attention, .tone-serious) strong { color: var(--tone-ink); }
 .band-fact small { color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
-.page-title-row > h1 { margin: 0; }
+.page-title-row > h1 { margin: 0; max-width: 100%; }
 .page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-.heading-aside { color: var(--muted); font-size: var(--text-md); font-weight: 500; letter-spacing: 0; }
+/* Beside its heading while it fits there on one line; otherwise under it, its
+   own lines at its own line height rather than the heading's. */
+.heading-aside { display: inline-block; max-width: 100%; color: var(--muted); font-size: var(--text-md); font-weight: 500; line-height: 1.5; letter-spacing: 0; }
 .band-meta { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-5) var(--space-9); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
 /* The origin reads under the facet row rather than as a fifth card in it: four
    is what a name needs to answer, and a fifth would wrap the row. */
@@ -2104,6 +2131,10 @@ a.kpi:hover { background: var(--surface-2); }
 .queue-table .queue-act > * { display: inline-flex; flex-wrap: nowrap; gap: var(--space-3); margin: 0; vertical-align: top; }
 .queue-table .queue-act > * + * { margin-inline-start: var(--space-3); }
 .queue-table .queue-act form { margin: 0; }
+/* A row with nothing to press, or whose buttons wait in the line beneath in a
+   narrow table, gives the title the room its padding would keep. */
+.queue-table .queue-act:not(:has(> *)),
+.queue-table[data-narrow] .queue-act:not(:has(> :not(.narrow-more))) { padding: 0; }
 /* A long label is cut to one line, whole again when the row is opened. */
 .queue-table .queue-act .btn { max-width: 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* What the row holds back, in the line beneath once opened. */
@@ -2794,7 +2825,13 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .form .field.is-wide { flex-basis: 100%; }
 /* A field shown only when another's value calls for it (app.js). The wrapper
    adds no box, so the fields inside keep their place in the grid. */
-.form [data-when]:not([hidden]) { display: contents; }
+/* A field shown only when another field's value calls for it: data-when names
+   the field ("repeat", any value) or the values ("repeat=weekly"). The
+   stylesheet reads the chosen option, so the form is laid out once, from its
+   first frame, with or without script. */
+.form [data-when] { display: contents; }
+.form:has([name="repeat"] option[value=""]:checked) [data-when="repeat"],
+.form:not(:has([name="repeat"] option[value="weekly"]:checked)) [data-when="repeat=weekly"] { display: none; }
 .field .help { color: var(--muted); font-size: var(--text-xs); margin: var(--space-2) 0 0; }
 .field .check-row {
   display: flex;
@@ -4948,9 +4985,10 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .policy-select.rule-deny { color: var(--danger); border-color: currentColor; }
 .policy-select.is-dormant { opacity: .5; }
 /* A save button pinned to the bottom of a long form. It shows once the form
-   has changed: app.js marks the form clean on load and the first edit clears
-   the mark. Without script the mark is never set, so the bar always shows. */
-form[data-clean] .save-bar { display: none; }
+   has changed, and holds its room until then, so showing moves nothing:
+   app.js marks the form clean on load and the first edit clears the mark.
+   Without script the mark is never set, so the bar always shows. */
+form[data-clean] .save-bar { visibility: hidden; }
 .save-bar { position: sticky; bottom: 0; z-index: 2; display: flex; justify-content: flex-end; padding: var(--space-6) 0 calc(var(--space-6) + env(safe-area-inset-bottom, 0px)); background: linear-gradient(transparent, var(--bg) 35%); }
 
 /* ── Dashboard ──────────────────────────────────────────────────────
@@ -5040,7 +5078,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
    than centred on however many lines the reading happens to have (it keeps
    its own column for the whole reading, so nothing is ever set under it); then
    the quiet lines, which start level because the leads do. */
-.dash-readings .glance-panel-head { padding-inline: var(--space-3); grid-template-columns: 22px minmax(max-content, 1fr); }
+.dash-readings .glance-panel-head { padding-inline: var(--space-3); grid-template-columns: 22px minmax(min-content, 1fr); }
 .dash-readings .glance-symbol { align-self: start; margin-top: var(--space-1); }
 .dash-readings .glance-panel-head > :not(.glance-symbol) { grid-column: 2; }
 .dash-readings .glance-lead { display: flex; align-items: baseline; gap: var(--space-3); min-height: 26px; color: var(--muted); line-height: 1; }
@@ -5130,12 +5168,14 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .upgrade-steps { margin: 0; padding-left: var(--space-10); display: grid; gap: var(--space-2); align-content: start; font-size: var(--text-sm); }
   .upgrade-install { margin-top: var(--space-4); font-size: var(--text-sm); }
   .upgrade-install > p { margin: 0 0 var(--space-3); }
-  .upgrade-install-steps { margin: 0; padding-left: var(--space-8); display: grid; gap: var(--space-4); }
+  /* One column the width of the card: a command scrolls inside its block
+     rather than widening the step, the card and the page. */
+  .upgrade-install-steps { margin: 0; padding-left: var(--space-8); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
   /* A long step label wraps beside its Copy button rather than pushing it
      onto a line of its own. */
   .upgrade-install-steps .hardening-head { flex-wrap: nowrap; align-items: flex-start; }
   .upgrade-install-steps .hardening-head strong { flex: 1 1 auto; min-width: 0; }
-  .upgrade-install-steps pre { margin: var(--space-2) 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .upgrade-install-steps pre { margin: var(--space-2) 0 0; }
   .upgrade-blockers { font-size: var(--text-sm); }
   .upgrade-blockers p { margin: 0 0 var(--space-3); }
   .upgrade-blockers ul { margin: 0; padding-left: var(--space-9); display: grid; gap: var(--space-2); }
@@ -5206,9 +5246,6 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .project-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--stack-gap); }
   /* An age or a count that reads wrong split across two lines. */
   .nowrap { white-space: nowrap; }
-  /* A hyphenated part of an address or a path (`|breakable`): moved to the
-     next line whole, and broken inside only when it is longer than a line. */
-  .whole { display: inline-block; max-width: 100%; }
   /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
   .one-line { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; }
   /* The same mark as a verified certificate: a check in a circle, one colour. */
