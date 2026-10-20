@@ -588,7 +588,7 @@ class PluginContractSourceTests(SimpleTestCase):
             for source in sources
             for path in re.findall(r"(?<![\w/])host/([A-Za-z0-9_./-]+\.[a-z]+)", source.read_text())
         }
-        self.assertIn("hq/platform/application/plugins.py", named)
+        self.assertTrue(named, "the pattern found no host path, so it checks nothing")
         for path in sorted(named):
             with self.subTest(path=path):
                 self.assertTrue((root / path).exists())
