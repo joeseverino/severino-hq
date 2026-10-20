@@ -2258,14 +2258,33 @@ REFERENCE_PHONE = PHONE_SCREEN[0]
 # The viewer is one large script: parsing it takes longer than a page's load.
 REFERENCE_READY = 30_000
 _REFERENCE_MOUNTED = "() => document.querySelector('main main h1') !== null"
-# The sidebar as drawn: each top-level entry, and what stands under a group.
-_REFERENCE_OUTLINE = """() => [...document.querySelectorAll('aside > ul > li')].map((item) => {
-  const said = (el) => el.textContent.trim();
-  const link = item.querySelector(':scope > a, :scope > div > a');
-  if (link) return [link.getAttribute('href'), said(link), []];
-  return ['', [...item.children].filter((part) => part.tagName !== 'UL').map(said).join(''),
-    [...item.querySelectorAll(':scope > ul > li > div > a')].map(said)];
-})"""
+# The sidebar is a list of entries, each named by its own link. An entry that
+# opens to show more carries the control that opens it; an operation is a leaf.
+_REFERENCE_ENTRY = """(path) => {
+  let entry = document.querySelector('aside');
+  for (const title of path) {
+    entry = [...entry.querySelectorAll(':scope > ul > li')].find((item) =>
+      item.querySelector(':scope > a, :scope > div > a').textContent.trim().startsWith(title));
+    if (!entry) return null;
+  }
+  return entry.querySelector(':scope > a, :scope > div > a');
+}"""
+# The sidebar as drawn: each top-level entry, and the entries under it that open in turn.
+_REFERENCE_OUTLINE = """() => {
+  const link = (item) => item.querySelector(':scope > a, :scope > div > a');
+  return [...document.querySelectorAll('aside > ul > li')].map((item) => [
+    link(item).getAttribute('href'), link(item).textContent.trim(),
+    [...item.querySelectorAll(':scope > ul > li')]
+      .filter((child) => child.querySelector(':scope > div > [aria-expanded]'))
+      .map((child) => link(child).textContent.trim()),
+  ]);
+}"""
+# Every top-level group opened, as a reader opens it.
+_REFERENCE_OPEN_GROUPS = """() => document
+  .querySelectorAll('aside > ul > li > div > [aria-expanded="false"]').forEach((control) => control.click())"""
+_REFERENCE_GROUPS_OPEN = """() => [...document.querySelectorAll('aside > ul > li > div > [aria-expanded]')]
+  .every((control) => control.getAttribute('aria-expanded') === 'true'
+    && control.closest('li').querySelector(':scope > ul') !== null)"""
 # What stands over HQ's header, what of the viewer's is pinned under it, and
 # any trail the viewer is showing.
 _REFERENCE_FRAME = """(root) => {
@@ -2311,13 +2330,12 @@ _REFERENCE_CHROME = """() => ({
     .map((a) => a.href),
   search: document.querySelector('aside button').innerText,
 })"""
-_REFERENCE_FOLLOW = """(title) => {
-  const link = [...document.querySelectorAll('aside a[href]')]
-    .find((a) => a.textContent.trim().startsWith(title));
+_REFERENCE_FOLLOW = f"""(path) => {{
+  const link = ({_REFERENCE_ENTRY})(path);
   if (!link) return false;
   link.click();
   return true;
-}"""
+}}"""
 _REFERENCE_HEADING = """(title) => {
   const heading = [...document.querySelectorAll('main main h2, main main h3')]
     .find((h) => h.textContent.includes(title) && h.checkVisibility());
@@ -2335,8 +2353,7 @@ _REFERENCE_AT_REST = f"""(title) => {{
   return window.resting[title].runs >= 3;
 }}"""
 _REFERENCE_OPEN_MENU = "(root) => document.querySelector(root).querySelector('header button').click()"
-_REFERENCE_LISTED = """(title) => [...document.querySelectorAll('aside a[href]')]
-  .some((a) => a.textContent.trim().startsWith(title))"""
+_REFERENCE_LISTED = f"(path) => ({_REFERENCE_ENTRY})(path) !== null"
 
 
 def reference_outline(document):
@@ -2413,6 +2430,8 @@ class ReferenceBrowserTests(BrowserGate):
         no section for the version badge, none for the schemas."""
 
         self.visit(1360)
+        self.page.evaluate(_REFERENCE_OPEN_GROUPS)
+        self.page.wait_for_function(_REFERENCE_GROUPS_OPEN)
         drawn = [
             [title, under]
             for href, title, under in self.page.evaluate(_REFERENCE_OUTLINE)
@@ -2503,11 +2522,15 @@ class ReferenceBrowserTests(BrowserGate):
             self.assertLess(heading["top"], heading["window"] * 0.6)
             return heading["hash"]
 
+        group = next(group["summary"] for group in self.document["tags"] if group["name"] == tag["parent"])
+        # A reader opens the group, then the domain in it, then the operation.
         self.visit(1360)
-        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, tag["summary"]))
-        self.page.wait_for_function(_REFERENCE_LISTED, arg=title)
+        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, [group]))
+        self.page.wait_for_function(_REFERENCE_LISTED, arg=[group, tag["summary"]])
+        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, [group, tag["summary"]]))
+        self.page.wait_for_function(_REFERENCE_LISTED, arg=[group, tag["summary"], title])
         self.page.wait_for_function(_REFERENCE_AT_REST, arg=tag["summary"], polling=100)
-        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, title))
+        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, [group, tag["summary"], title]))
         fragment = landed()
         self.assertNotEqual(fragment, "")
         self.page.reload(wait_until="load")

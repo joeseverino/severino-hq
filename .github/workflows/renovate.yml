@@ -40,7 +40,7 @@ jobs:
           permission-statuses: write
           permission-workflows: write
           permission-vulnerability-alerts: read
-      - uses: renovatebot/github-action@6d26fcf0275dc65624cbc3d51fe78bc773f98321 # v46.3.6
+      - uses: renovatebot/github-action@230ce922b08968d0a4f6f70f295601daff09ef1d # v46.3.7
         with:
           token: ${{ steps.app.outputs.token }}
           renovate-image: ghcr.io/renovatebot/renovate:44.132.5@sha256:2c801b47ce82c349453e554188abe4fa0b51bde333cfea54e67ad8a88d525087
