@@ -95,11 +95,17 @@ def as_someone(principal: capabilities.Principal) -> None:
     )
     assert_type(resources.list_resource("example.things", principal=principal), dict[str, Any])
     assert_type(resources.get_resource("example.things", 1, principal=principal), dict[str, Any])
+    assert_type(
+        resources.list_resource("example.things", principal=principal, fields=["name", "parts.name"]),
+        dict[str, Any],
+    )
+    assert_type(resources.get_resource("example.things", 1, principal=principal, fields=("name",)), dict[str, Any])
 
     # Every one of these acts as someone, and says who.
     outbound.run_now("example.work")  # type: ignore[call-arg]
     capabilities.execute_capability("example.do", {})  # type: ignore[call-arg]
     resources.get_resource("example.things", 1)  # type: ignore[call-arg]
+    resources.get_resource("example.things", 1, principal=principal, fields="name")  # type: ignore[arg-type]
     capabilities.execute_capability("example.do", ["x"], principal=principal)  # type: ignore[arg-type]
 
 

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 from .connection_contracts import GRANT_MODELS, ConnectionAbility, ConnectionSpec
 from .contracts import DJANGO_ROUTE, DOTTED_NAME, EFFECTS, SCOPE_NAME
 from .integration_specs import (
+    RESERVED_QUERY_FIELD,
     TARGET_KINDS,
     CapabilitySpec,
     ResourceSpec,
@@ -121,6 +122,17 @@ def _principal_argument(spec: ResourceSpec) -> dict[str, None]:
     return {"principal": None} if spec.pass_principal else {}
 
 
+def _query_names(query_type: type[BaseModel]) -> set[str]:
+    """Every name a caller could send a query field by: its own and its aliases."""
+
+    return {
+        key
+        for name, field in query_type.model_fields.items()
+        for key in (name, field.alias, field.validation_alias)
+        if isinstance(key, str)
+    }
+
+
 def _validate_list_contract(spec: ResourceSpec) -> None:
     if bool(spec.list_handler) != bool(spec.list_query_type):
         raise ImproperlyConfigured(f"Resource {spec.name!r} must declare its list handler and query together.")
@@ -130,6 +142,10 @@ def _validate_list_contract(spec: ResourceSpec) -> None:
         and callable(spec.list_handler)
     ):
         raise ImproperlyConfigured(f"Resource {spec.name!r} has an invalid list contract.")
+    if spec.list_query_type and RESERVED_QUERY_FIELD in _query_names(spec.list_query_type):
+        raise ImproperlyConfigured(
+            f"Resource {spec.name!r} query may not declare {RESERVED_QUERY_FIELD!r}: it selects the keys returned."
+        )
     if spec.list_handler and spec.list_query_type:
         try:
             values = spec.list_query_type().model_dump()

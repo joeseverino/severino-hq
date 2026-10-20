@@ -91,8 +91,10 @@ class DocumentTests(SimpleTestCase):
                 f"{openapi._pascal(name)}Query",
             )
             self.assertEqual(operation["x-hq-query-schema"], expected)
-            parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+            parameters = {parameter["name"]: parameter for parameter in operation["parameters"] if "name" in parameter}
             self.assertEqual(set(parameters), set(expected.get("properties", {})))
+            # The selection sits beside the query, never inside it.
+            self.assertIn({"$ref": "#/components/parameters/Fields"}, operation["parameters"])
             for field, schema in expected.get("properties", {}).items():
                 parameter = parameters[field]
                 self.assertEqual(parameter["in"], "query")
@@ -102,6 +104,16 @@ class DocumentTests(SimpleTestCase):
                 self.assertEqual(parameter["schema"], schema)
                 self.assertEqual(parameter.get("description"), schema.get("description"))
                 self.assertNotIn("content", parameter)
+
+    def test_projection_parameters_are_declared_with_the_type_the_view_reads(self):
+        from hq.platform.api import views
+
+        operation = self.document["paths"]["/api/v2/findings/"]["get"]
+        declared = {parameter["name"]: parameter["schema"] for parameter in operation["parameters"]}
+
+        self.assertEqual(declared, {name: dict(schema) for name, schema in views.findings.__hq_query_fields__.items()})
+        self.assertEqual(declared["limit"]["type"], "integer")
+        self.assertIn("400", operation["responses"])
 
     def test_detail_operations_name_the_canonical_identifier(self):
         registry = resource_registry()

@@ -113,6 +113,11 @@ class CapabilitySpec:
         return self.label or human_label(self.name)
 
 
+# What every adapter reads beside a resource query as the keys to return, so
+# no query model may declare it (integration_validation).
+RESERVED_QUERY_FIELD = "fields"
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceSpec:
     """One declaration of a readable domain and every operation it supports."""

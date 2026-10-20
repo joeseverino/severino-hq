@@ -841,6 +841,56 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(unknown.json()["error"]["message"], "projects: limti is not a known field.")
         self.assertEqual(repeated.status_code, 400)
 
+    def test_a_resource_read_keeps_only_the_fields_asked_for(self):
+        from hq.domains.projects.models import Project
+
+        project = Project.objects.create(name="Selected over the wire")
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with _serving():
+            detail = self.client.get(f"/api/v2/resources/projects/{project.slug}/?fields=slug,name", **headers)
+            listed = self.client.get("/api/v2/resources/projects/?query=wire&fields=slug", **headers)
+            unknown = self.client.get(f"/api/v2/resources/projects/{project.slug}/?fields=slgu", **headers)
+            repeated = self.client.get(f"/api/v2/resources/projects/{project.slug}/?fields=a&fields=b", **headers)
+            into_scalar = self.client.get(f"/api/v2/resources/projects/{project.slug}/?fields=slug.x", **headers)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(set(detail.json()["data"]), {"slug", "name"})
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()["data"]["items"], [{"slug": project.slug}])
+        self.assertEqual(listed.json()["data"]["count"], 1)
+        for refused in (unknown, repeated, into_scalar):
+            self.assertEqual(refused.status_code, 400)
+            self.assertEqual(refused.json()["error"]["code"], "invalid_input")
+
+    def test_a_field_path_reaches_into_each_record_a_reading_holds(self):
+        plant_credentials()
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with _serving():
+            response = self.client.get(
+                f"/api/v2/resources/readings/{SENTINEL_READING}/?fields=observed_at,items.record", **headers
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(set(data), {"observed_at", "items"})
+        self.assertTrue(data["items"])
+        self.assertTrue(all(set(item) == {"record"} for item in data["items"]))
+
+    def test_findings_narrow_by_floor_and_limit_and_refuse_what_cannot(self):
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
+        with _serving(), host_only():
+            narrowed = self.client.get("/api/v2/findings/?severity=attention&limit=1", **headers)
+            refused = {
+                value: self.client.get(f"/api/v2/findings/?{value}", **headers)
+                for value in ("limit=many", "limit=0", "severity=critical")
+            }
+        self.assertEqual(narrowed.status_code, 200)
+        self.assertLessEqual(len(narrowed.json()["data"]["findings"]), 1)
+        self.assertIn("truncated", narrowed.json()["data"]["summary"])
+        for value, response in refused.items():
+            with self.subTest(value):
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json()["error"]["code"], "invalid_input")
+                self.assertNotIn(value.split("=")[1], response.json()["error"]["message"])
+
     def test_resource_read_requires_its_declared_grant(self):
         with _serving():
             response = self.client.get(

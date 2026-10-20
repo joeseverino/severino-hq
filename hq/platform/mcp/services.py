@@ -83,14 +83,19 @@ def list_connections() -> dict[str, Any]:
     return list_application_connections(principal=current_principal())
 
 
-def get_findings(rule: str = "") -> dict[str, Any]:
+def get_findings(rule: str = "", severity: str = "", limit: int | None = None) -> dict[str, Any]:
     """What HQ currently claims is wrong, with evidence and suggested remedies.
 
     Each remedy names an existing capability and target; run one with
     `execute_capability`. A remedy absent means this principal cannot run it.
+    ``severity`` is a floor (``attention`` also returns ``serious``) and
+    ``limit`` caps how many come back, most severe first; ``summary`` still
+    counts them all and says whether any were held back.
     """
 
-    return application_findings(principal=current_principal(), rule=rule.strip())
+    return application_findings(
+        principal=current_principal(), rule=rule.strip(), severity=severity.strip(), limit=limit
+    )
 
 
 def get_topology(
@@ -115,17 +120,25 @@ def get_topology(
     )
 
 
-def list_resource(name: str, filters: dict[str, Any] | None = None) -> dict[str, Any]:
-    """List any registered resource with schema-validated filters."""
+def list_resource(name: str, filters: dict[str, Any] | None = None, fields: list[str] | None = None) -> dict[str, Any]:
+    """List any registered resource with schema-validated filters.
 
-    return list_application_resource(name, filters, principal=current_principal(), strict=True)
+    ``fields`` is a field mask read in each item: ``name`` keeps that whole value and
+    ``runs.status`` keeps only ``status`` inside it, in every element of a list.
+    """
+
+    return list_application_resource(name, filters, principal=current_principal(), strict=True, fields=fields)
 
 
-def get_resource(name: str, identifier: str | int) -> dict[str, Any]:
-    """Get one record from any registered addressable resource."""
+def get_resource(name: str, identifier: str | int, fields: list[str] | None = None) -> dict[str, Any]:
+    """Get one record from any registered addressable resource.
+
+    ``fields`` is a field mask: ``observed_at`` keeps that whole value and
+    ``items.waiting`` keeps only ``waiting`` in every element of ``items``.
+    """
 
     try:
-        return get_application_resource(name, identifier, principal=current_principal(), strict=True)
+        return get_application_resource(name, identifier, principal=current_principal(), strict=True, fields=fields)
     except ResourceNotFound as exc:
         raise NotFoundError(exc.reason) from exc
 

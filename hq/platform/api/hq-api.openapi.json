@@ -2,6 +2,21 @@
   "$self": "/api/v2/openapi.json",
   "components": {
     "parameters": {
+      "Fields": {
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "IdempotencyKey": {
         "description": "Replays the committed response when the same request is retried.",
         "in": "header",
@@ -7563,6 +7578,29 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "enum": [
+                "serious",
+                "attention",
+                "neutral",
+                "good"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -7589,6 +7627,9 @@
               }
             },
             "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -7777,6 +7818,9 @@
               "type": "string"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -7902,6 +7946,9 @@
               "type": "integer"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8035,6 +8082,9 @@
               "title": "Query"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8138,6 +8188,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8245,6 +8298,9 @@
               "type": "integer"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8345,6 +8401,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8404,7 +8463,11 @@
       "get": {
         "description": "Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.",
         "operationId": "listConnectionStandingV2",
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8475,6 +8538,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8571,6 +8637,9 @@
               "type": "string"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8660,6 +8729,9 @@
             "schema": {
               "type": "integer"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8732,6 +8804,9 @@
               "type": "integer"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8811,6 +8886,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -8870,7 +8948,11 @@
       "get": {
         "description": "What each connection's credential can read, and what it would need to read more.",
         "operationId": "listCredentialsV2",
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8941,6 +9023,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -9013,6 +9098,9 @@
               "type": "integer"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -9092,6 +9180,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -9151,7 +9242,11 @@
       "get": {
         "description": "Machines online, services, domains, next renewals and connections needing attention.",
         "operationId": "listEstateV2",
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -9266,6 +9361,9 @@
               "title": "Category"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -9362,7 +9460,11 @@
       "get": {
         "description": "HQ itself: the release it runs and whether its branch is ahead, the machine and container it runs in, its background jobs, what it can read and its open problems.",
         "operationId": "listHqV2",
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -9476,6 +9578,9 @@
               "title": "Kinds"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -9580,6 +9685,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -9652,6 +9760,9 @@
               "type": "integer"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -9731,6 +9842,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -9799,6 +9913,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -9909,6 +10026,9 @@
               "title": "Query"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -10084,6 +10204,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -10201,6 +10324,9 @@
               "title": "Provider"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -10292,6 +10418,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -10376,6 +10505,9 @@
               "type": "boolean"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -10460,6 +10592,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -10519,7 +10654,11 @@
       "get": {
         "description": "How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.",
         "operationId": "listRequestPathV2",
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10607,6 +10746,9 @@
               "type": "string"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -10683,7 +10825,11 @@
       "get": {
         "description": "Every service name and the state of its DNS, proxy and certificate.",
         "operationId": "listServicesV2",
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10754,6 +10900,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -10813,7 +10962,11 @@
       "get": {
         "description": "The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.",
         "operationId": "listTailnetV2",
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10888,6 +11041,9 @@
               "type": "integer"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -10967,6 +11123,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -11035,6 +11194,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -11109,6 +11271,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
@@ -11583,13 +11748,30 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "What HQ currently claims is wrong, with evidence and suggested remedies.\n\nEach remedy names an existing capability and target; run one with\n`execute_capability`. A remedy absent means this principal cannot run it.\n",
+      "description": "What HQ currently claims is wrong, with evidence and suggested remedies.\n\nEach remedy names an existing capability and target; run one with\n`execute_capability`. A remedy absent means this principal cannot run it.\n``severity`` is a floor (``attention`` also returns ``serious``) and\n``limit`` caps how many come back, most severe first; ``summary`` still\ncounts them all and says whether any were held back.\n",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Limit"
+          },
           "rule": {
             "default": "",
             "title": "Rule",
+            "type": "string"
+          },
+          "severity": {
+            "default": "",
+            "title": "Severity",
             "type": "string"
           }
         },
@@ -11602,10 +11784,25 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Get one record from any registered addressable resource.\nKinds:\n- `assets`: Assets and their safe cross-domain relationships. Identifier: `slug`.\n- `calendar`: Everything on the calendar over a span of days, and your own events. Identifier: `uid`.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path. Identifier: `connection_ref`.\n- `contact.submissions`: Contact requests held in Cloudflare D1, as the controller last read them, and reviewed through HQ. Identifier: `id`.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard. Identifier: `address`.\n- `credentials`: What each connection's credential can read, and what it would need to read more. Identifier: `provider`.\n- `domains`: Every domain HQ manages or has read, its services and registration. Identifier: `name`.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live. Identifier: `key`.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it. Identifier: `name`.\n- `paths`: The path a request for a hostname takes, hop by hop, with each hop's reading and certificate. Identifier: `hostname`.\n- `projects`: Projects and their safe cross-domain relationships. Identifier: `slug`.\n- `readings`: Each type of reading, when it was last read, and the records it holds. Identifier: `kind`.\n- `relationships`: One machine, service, domain or record and everything related to it. Identifier: `node`.\n- `services`: Every service name and the state of its DNS, proxy and certificate. Identifier: `hostname`.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only. Identifier: `address`.",
+      "description": "Get one record from any registered addressable resource.\n\n``fields`` is a field mask: ``observed_at`` keeps that whole value and\n``items.waiting`` keeps only ``waiting`` in every element of ``items``.\n\nKinds:\n- `assets`: Assets and their safe cross-domain relationships. Identifier: `slug`.\n- `calendar`: Everything on the calendar over a span of days, and your own events. Identifier: `uid`.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path. Identifier: `connection_ref`.\n- `contact.submissions`: Contact requests held in Cloudflare D1, as the controller last read them, and reviewed through HQ. Identifier: `id`.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard. Identifier: `address`.\n- `credentials`: What each connection's credential can read, and what it would need to read more. Identifier: `provider`.\n- `domains`: Every domain HQ manages or has read, its services and registration. Identifier: `name`.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live. Identifier: `key`.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it. Identifier: `name`.\n- `paths`: The path a request for a hostname takes, hop by hop, with each hop's reading and certificate. Identifier: `hostname`.\n- `projects`: Projects and their safe cross-domain relationships. Identifier: `slug`.\n- `readings`: Each type of reading, when it was last read, and the records it holds. Identifier: `kind`.\n- `relationships`: One machine, service, domain or record and everything related to it. Identifier: `node`.\n- `services`: Every service name and the state of its DNS, proxy and certificate. Identifier: `hostname`.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only. Identifier: `address`.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fields"
+          },
           "identifier": {
             "anyOf": [
               {
@@ -11699,10 +11896,25 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "List any registered resource with schema-validated filters.\nKinds:\n- `action.items`: The composed action queue: what needs doing, from every domain.\n- `analytics`: What the published site was asked for, by any breakdown HQ records.\n- `assets`: Assets and their safe cross-domain relationships.\n- `calendar`: Everything on the calendar over a span of days, and your own events.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.\n- `contact.submissions`: Contact requests held in Cloudflare D1, as the controller last read them, and reviewed through HQ.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard.\n- `credentials`: What each connection's credential can read, and what it would need to read more.\n- `domains`: Every domain HQ manages or has read, its services and registration.\n- `estate`: Machines online, services, domains, next renewals and connections needing attention.\n- `expenses`: Expense records with stable relationship identifiers.\n- `hq`: HQ itself: the release it runs and whether its branch is ahead, the machine and container it runs in, its background jobs, what it can read and its open problems.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it.\n- `projects`: Projects and their safe cross-domain relationships.\n- `readings`: Each type of reading, when it was last read, and the records it holds.\n- `receipts`: Receipt metadata without file contents, storage paths, or URLs.\n- `request.path`: How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.\n- `search`: Machines, services and domains, then records, matching a query.\n- `services`: Every service name and the state of its DNS, proxy and certificate.\n- `tailnet`: The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
+      "description": "List any registered resource with schema-validated filters.\n\n``fields`` is a field mask read in each item: ``name`` keeps that whole value and\n``runs.status`` keeps only ``status`` inside it, in every element of a list.\n\nKinds:\n- `action.items`: The composed action queue: what needs doing, from every domain.\n- `analytics`: What the published site was asked for, by any breakdown HQ records.\n- `assets`: Assets and their safe cross-domain relationships.\n- `calendar`: Everything on the calendar over a span of days, and your own events.\n- `connection.standing`: Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.\n- `contact.submissions`: Contact requests held in Cloudflare D1, as the controller last read them, and reviewed through HQ.\n- `containers`: Every running container: what it runs and whether that is current and safe, how it is run, and its posture against the container standard.\n- `credentials`: What each connection's credential can read, and what it would need to read more.\n- `domains`: Every domain HQ manages or has read, its services and registration.\n- `estate`: Machines online, services, domains, next renewals and connections needing attention.\n- `expenses`: Expense records with stable relationship identifiers.\n- `hq`: HQ itself: the release it runs and whether its branch is ahead, the machine and container it runs in, its background jobs, what it can read and its open problems.\n- `infrastructure.resources`: Everything HQ manages: what HQ expects and what is live.\n- `machines`: Every machine anything reported, its roles, addresses and what runs on it.\n- `projects`: Projects and their safe cross-domain relationships.\n- `readings`: Each type of reading, when it was last read, and the records it holds.\n- `receipts`: Receipt metadata without file contents, storage paths, or URLs.\n- `request.path`: How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.\n- `search`: Machines, services and domains, then records, matching a query.\n- `services`: Every service name and the state of its DNS, proxy and certificate.\n- `tailnet`: The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.\n- `upgrades`: Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fields"
+          },
           "filters": {
             "anyOf": [
               {

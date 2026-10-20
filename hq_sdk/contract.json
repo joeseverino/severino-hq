@@ -1189,7 +1189,8 @@
           "identifier",
           "*",
           "principal",
-          "strict="
+          "strict=",
+          "fields="
         ]
       },
       "list_resource": {
@@ -1199,7 +1200,8 @@
           "query=",
           "*",
           "principal",
-          "strict="
+          "strict=",
+          "fields="
         ]
       }
     },

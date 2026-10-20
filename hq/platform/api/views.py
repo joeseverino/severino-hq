@@ -33,7 +33,11 @@ from hq.platform.application.capabilities import (
 )
 from hq.platform.application.connections import describe_connections, list_connections
 from hq.platform.application.denials import record_denial
-from hq.platform.application.findings import findings as application_findings
+from hq.platform.application.findings import (
+    SEVERITIES,
+    InvalidFindingsQuery,
+    findings as application_findings,
+)
 from hq.platform.application.idempotency import (
     IdempotencyConflict,
     InvalidIdempotencyKey,
@@ -41,6 +45,7 @@ from hq.platform.application.idempotency import (
     request_fingerprint,
     validate_key,
 )
+from hq.platform.application.integration_specs import RESERVED_QUERY_FIELD
 from hq.platform.application.resources import (
     InvalidResourceInput,
     ResourceDescription,
@@ -450,28 +455,65 @@ def resources(request: APIRequest) -> HttpResponse:
     return _ok(catalog)
 
 
-def _projection(serve: Callable[..., Any], query_fields: tuple[str, ...], name: str, title: str, doc: str) -> View:
+QueryFields = Mapping[str, Mapping[str, Any]]
+_STRING: Mapping[str, Any] = {"type": "string"}
+
+
+class _UnreadableQuery(ValueError):
+    """A declared parameter whose value is not of its declared type."""
+
+
+def _narrowing(request: APIRequest, query_fields: QueryFields) -> dict[str, Any]:
+    """The declared query parameters, an integer one read as an integer.
+
+    An absent integer is left out, so the application's own default applies.
+    """
+
+    values: dict[str, Any] = {}
+    for field, schema in query_fields.items():
+        raw = request.GET.get(field, "").strip()
+        if schema["type"] != "integer":
+            values[field] = raw
+        elif raw:
+            try:
+                values[field] = int(raw)
+            except ValueError:
+                raise _UnreadableQuery(f"{field} must be an integer.") from None
+    return values
+
+
+def _projection(
+    serve: Callable[..., Any],
+    query_fields: QueryFields,
+    name: str,
+    title: str,
+    doc: str,
+    *,
+    refusals: tuple[type[ValueError], ...] = (),
+) -> View:
     """One principal-scoped projection, served with declared narrowing inputs.
 
     `topology` and `findings` are the same adapter: authorize, read one query
     parameters, hand them to the application layer, and turn a refusal into a
     403. An adapter that adds no behaviour of its own is not copied once per
-    read model.
+    read model. ``query_fields`` maps each parameter to its JSON schema, which
+    the OpenAPI document declares as is.
 
     An unrecognized filter value is the application's business, not the
     transport's: both projections answer it by returning everything and saying
     which filter they applied, so a client can tell "matched nothing" from
-    "never applied".
+    "never applied". A value that cannot narrow at all (an integer that is not
+    one, or an application error in ``refusals``) is a 400. Every refusal's
+    text is HQ's own, written for the caller, never the value sent.
     """
+
+    refused: tuple[type[ValueError], ...] = (_UnreadableQuery, *refusals)
 
     def view(request: APIRequest) -> HttpResponse:
         try:
-            return _ok(
-                serve(
-                    principal=request.principal,
-                    **{field: request.GET.get(field, "").strip() for field in query_fields},
-                )
-            )
+            return _ok(serve(principal=request.principal, **_narrowing(request, query_fields)))
+        except refused as exc:
+            return _fail(str(exc), code="invalid_input", status=400)
         except AuthorizationError as exc:
             return _fail(exc.reason, code=exc.code, status=403)
 
@@ -479,7 +521,8 @@ def _projection(serve: Callable[..., Any], query_fields: tuple[str, ...], name: 
     # route-walking security test reads them.
     view.__name__ = name
     view.__doc__ = doc
-    served = _endpoint(("GET",), title=title, data=Projection)(view)
+    can_refuse = refusals or any(schema["type"] == "integer" for schema in query_fields.values())
+    served = _endpoint(("GET",), title=title, data=Projection, errors=(400,) if can_refuse else ())(view)
     # The narrowing inputs, for the OpenAPI document's query parameters.
     served.__dict__.update(__hq_query_fields__=query_fields)
     return served
@@ -487,7 +530,7 @@ def _projection(serve: Callable[..., Any], query_fields: tuple[str, ...], name: 
 
 topology = _projection(
     application_topology,
-    ("lens", "focus", "direction", "depth"),
+    dict.fromkeys(("lens", "focus", "direction", "depth"), _STRING),
     "topology",
     "Topology",
     """The live permitted infrastructure graph and its canonical actions.
@@ -499,7 +542,11 @@ topology = _projection(
 
 findings = _projection(
     application_findings,
-    ("rule",),
+    {
+        "rule": _STRING,
+        "severity": {"type": "string", "enum": list(SEVERITIES)},
+        "limit": {"type": "integer", "minimum": 1},
+    },
     "findings",
     "Findings",
     """What HQ currently claims is wrong, with the evidence and a remedy.
@@ -507,7 +554,10 @@ findings = _projection(
     Derived from the same projection as the topology and narrowed the same way,
     so a finding can never name something the token could not already read. A
     remedy is a reference to an existing capability, never a new route.
+    `?severity=` is a floor and `?limit=` caps how many are returned, most
+    severe first; the summary still counts every finding.
     """,
+    refusals=(InvalidFindingsQuery,),
 )
 
 
@@ -548,6 +598,14 @@ def _resource_failure(exc: Exception) -> HttpResponse:
 RESOURCE_ERRORS = (400, 404, 405)
 
 
+def _selection(raw: str | None) -> list[str] | None:
+    """``?fields=a,b`` as the keys to keep; absent keeps the whole record."""
+
+    if raw is None:
+        return None
+    return [part for part in (piece.strip() for piece in raw.split(",")) if part]
+
+
 @_endpoint(("GET",), title="List a resource", data=ResourceCollection, errors=RESOURCE_ERRORS)
 def resource_list(request: APIRequest, name: str) -> HttpResponse:
     """List one resource through its declared, schema-validated query."""
@@ -561,8 +619,9 @@ def resource_list(request: APIRequest, name: str) -> HttpResponse:
                 status=400,
             )
         filters[key] = values[0]
+    fields = _selection(filters.pop(RESERVED_QUERY_FIELD, None))
     try:
-        return _ok(list_application_resource(name, filters, principal=request.principal, strict=False))
+        return _ok(list_application_resource(name, filters, principal=request.principal, strict=False, fields=fields))
     except (
         AuthorizationError,
         InvalidResourceInput,
@@ -576,8 +635,12 @@ def resource_list(request: APIRequest, name: str) -> HttpResponse:
 def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResponse:
     """Get one resource record through its declared identifier contract."""
 
+    asked = request.GET.getlist(RESERVED_QUERY_FIELD)
+    if len(asked) > 1:
+        return _fail(f"Query field {RESERVED_QUERY_FIELD!r} may appear only once.", code="invalid_input", status=400)
+    fields = _selection(asked[0] if asked else None)
     try:
-        return _ok(get_application_resource(name, identifier, principal=request.principal, strict=False))
+        return _ok(get_application_resource(name, identifier, principal=request.principal, strict=False, fields=fields))
     except (
         AuthorizationError,
         InvalidResourceInput,

@@ -510,8 +510,15 @@ def derive_findings(topology: Topology, *, principal: Principal, rule: str = "")
                 continue
             findings.append(_resolved(finding, principal, node))
 
-    order = {"serious": 0, "attention": 1, "neutral": 2, "good": 3}
-    return tuple(sorted(findings, key=lambda f: (order.get(f.severity, 9), f.rule, f.subject)))
+    return tuple(sorted(findings, key=lambda f: (_rank(f.severity), f.rule, f.subject)))
+
+
+# Most severe first: the order findings are served in and a floor reads.
+SEVERITIES = ("serious", "attention", "neutral", "good")
+
+
+def _rank(severity: str) -> int:
+    return SEVERITIES.index(severity) if severity in SEVERITIES else len(SEVERITIES)
 
 
 def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
@@ -570,14 +577,41 @@ def serialize_finding(finding: Finding) -> dict[str, Any]:
     }
 
 
-def findings(*, principal: Principal, rule: str = "") -> dict[str, Any]:
-    """The serialized claims, for machine delivery adapters."""
+class InvalidFindingsQuery(ValueError):
+    """A narrowing input the findings cannot be read by; ``reason`` says which."""
 
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _narrowing(severity: str, limit: int | None) -> int:
+    """The rank a floor of ``severity`` admits up to, refusing what names nothing."""
+
+    if severity and severity not in SEVERITIES:
+        raise InvalidFindingsQuery(f"findings: severity must be one of {', '.join(SEVERITIES)}.")
+    if limit is not None and limit < 1:
+        raise InvalidFindingsQuery("findings: limit must be at least 1.")
+    return SEVERITIES.index(severity) if severity else len(SEVERITIES)
+
+
+def findings(*, principal: Principal, rule: str = "", severity: str = "", limit: int | None = None) -> dict[str, Any]:
+    """The serialized claims, for machine delivery adapters.
+
+    ``severity`` is a floor (``attention`` also returns ``serious``) and
+    ``limit`` bounds how many are returned, most severe first. The summary
+    still counts every finding, and says how many came back and whether the
+    limit held some back.
+    """
+
+    floor = _narrowing(severity, limit)
     selected = rule_for(rule) if rule else None
     raised = estate_findings(principal=principal, rule=selected.name if selected else "")
     counts: dict[str, int] = {}
     for finding in raised:
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
+    eligible = [finding for finding in raised if _rank(finding.severity) <= floor]
+    kept = eligible[:limit]
     return {
         "ok": True,
         "schema_version": 2,
@@ -585,8 +619,13 @@ def findings(*, principal: Principal, rule: str = "") -> dict[str, Any]:
         # that asked for an unknown one is told it got everything.
         "rule": selected.name if selected else None,
         "rules": [{"name": item.name, "title": item.title, "severity": item.severity} for item in RULES],
-        "summary": {"findings": len(raised), "severities": counts},
-        "findings": [serialize_finding(finding) for finding in raised],
+        "summary": {
+            "findings": len(raised),
+            "severities": counts,
+            "returned": len(kept),
+            "truncated": len(kept) < len(eligible),
+        },
+        "findings": [serialize_finding(finding) for finding in kept],
     }
 
 

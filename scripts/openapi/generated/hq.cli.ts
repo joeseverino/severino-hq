@@ -2695,6 +2695,24 @@ export const COMMANDS: CliCommand[] = [
         "param": "rule",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "severity",
+        "param": "severity",
+        "type": "string",
+        "required": false,
+        "enum": [
+          "serious",
+          "attention",
+          "neutral",
+          "good"
+        ]
+      },
+      {
+        "name": "limit",
+        "param": "limit",
+        "type": "number",
+        "required": false
       }
     ],
     "schemas": {
@@ -2813,6 +2831,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "source",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -2864,6 +2889,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "days",
         "type": "number",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -2915,6 +2947,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "query",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -2954,7 +2993,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The slug."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3006,6 +3053,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "days",
         "type": "number",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -3045,7 +3099,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The uid."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3079,7 +3141,15 @@ export const COMMANDS: CliCommand[] = [
     "method": "GET",
     "path": "/api/v2/resources/connection.standing/",
     "positionals": [],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3117,7 +3187,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The connection_ref."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3169,6 +3247,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "query",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -3208,7 +3293,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The id."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3248,6 +3341,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "limit",
         "type": "number",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -3287,7 +3387,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The address."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3321,7 +3429,15 @@ export const COMMANDS: CliCommand[] = [
     "method": "GET",
     "path": "/api/v2/resources/credentials/",
     "positionals": [],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3359,7 +3475,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The provider."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3399,6 +3523,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "limit",
         "type": "number",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -3438,7 +3569,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The name."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3472,7 +3611,15 @@ export const COMMANDS: CliCommand[] = [
     "method": "GET",
     "path": "/api/v2/resources/estate/",
     "positionals": [],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3522,6 +3669,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "category",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -3555,7 +3709,15 @@ export const COMMANDS: CliCommand[] = [
     "method": "GET",
     "path": "/api/v2/resources/hq/",
     "positionals": [],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3605,6 +3767,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "kinds",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -3644,7 +3813,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The key."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3684,6 +3861,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "limit",
         "type": "number",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -3723,7 +3907,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The name."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3763,7 +3955,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The hostname."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3815,6 +4015,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "query",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -3854,7 +4061,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The slug."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3900,6 +4115,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "provider",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -3939,7 +4161,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The kind."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -3985,6 +4215,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "unmatched_only",
         "type": "boolean",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -4024,7 +4261,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The node."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -4058,7 +4303,15 @@ export const COMMANDS: CliCommand[] = [
     "method": "GET",
     "path": "/api/v2/resources/request.path/",
     "positionals": [],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -4102,6 +4355,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "query",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -4135,7 +4395,15 @@ export const COMMANDS: CliCommand[] = [
     "method": "GET",
     "path": "/api/v2/resources/services/",
     "positionals": [],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -4173,7 +4441,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The hostname."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -4207,7 +4483,15 @@ export const COMMANDS: CliCommand[] = [
     "method": "GET",
     "path": "/api/v2/resources/tailnet/",
     "positionals": [],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -4245,6 +4529,13 @@ export const COMMANDS: CliCommand[] = [
         "param": "limit",
         "type": "number",
         "required": false
+      },
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
       }
     ],
     "schemas": {
@@ -4284,7 +4575,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The address."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -4324,7 +4623,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "A resource name."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",
@@ -4367,7 +4674,15 @@ export const COMMANDS: CliCommand[] = [
         "description": "The record's identifier."
       }
     ],
-    "flags": [],
+    "flags": [
+      {
+        "name": "fields",
+        "param": "fields",
+        "type": "array",
+        "required": false,
+        "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record."
+      }
+    ],
     "schemas": {
       "response": {
         "kind": "object",

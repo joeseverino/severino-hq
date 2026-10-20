@@ -40,7 +40,7 @@ class DocumentToolTests(SimpleTestCase):
             async_to_sync(tool.call)({"name": "example.injected", "filters": "{}"})
         execute.assert_not_awaited()
         async_to_sync(tool.call)({"name": "example.injected"})
-        execute.assert_awaited_once_with(name="example.injected", filters=None)
+        execute.assert_awaited_once_with(name="example.injected", filters=None, fields=None)
 
     def test_unknown_and_invalid_arguments_never_invoke_execution(self):
         value = document()

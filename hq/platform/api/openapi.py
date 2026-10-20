@@ -34,6 +34,7 @@ from pydantic_core import core_schema
 
 from hq.platform.application.capabilities import capability_registry, describe_capabilities
 from hq.platform.application.domains import Domain, all_domains
+from hq.platform.application.integration_specs import RESERVED_QUERY_FIELD
 from hq.platform.application.resources import describe_resources, resource_registry
 
 from . import urls, views
@@ -354,8 +355,8 @@ class _Builder:
                 expand(self, template, method, view)
                 continue
             query = [
-                {"name": field, "in": "query", "required": False, "schema": {"type": "string"}}
-                for field in getattr(view, "__hq_query_fields__", ())
+                {"name": field, "in": "query", "required": False, "schema": dict(schema)}
+                for field, schema in getattr(view, "__hq_query_fields__", {}).items()
             ]
             self.operation(
                 template,
@@ -420,7 +421,7 @@ class _Builder:
             view,
             _camel(view.__name__),
             self.tags._use(API_TAG),
-            parameters=[_path_parameter("name", {"type": "string"}, "A resource name.")],
+            parameters=[_path_parameter("name", {"type": "string"}, "A resource name."), _FIELDS],
         )
         for spec in self.resources:
             listing = spec["operations"]["list"]
@@ -448,7 +449,8 @@ class _Builder:
                         **({"description": schema["description"]} if "description" in schema else {}),
                     }
                     for field, schema in query.get("properties", {}).items()
-                ],
+                ]
+                + [_FIELDS],
                 **{"x-hq-resource": name, "x-hq-query-schema": query},
             )
 
@@ -462,6 +464,7 @@ class _Builder:
             parameters=[
                 _path_parameter("name", {"type": "string"}, "A resource name."),
                 _path_parameter("identifier", {"type": "string"}, "The record's identifier."),
+                _FIELDS,
             ],
         )
         for spec in self.resources:
@@ -478,9 +481,12 @@ class _Builder:
                 self.tags.of_resource(name),
                 summary=f"Get one of {spec['label']}",
                 description=spec["summary"],
-                parameters=[_path_parameter("identifier", identifier, f"The {detail['identifier']}.")],
+                parameters=[_path_parameter("identifier", identifier, f"The {detail['identifier']}."), _FIELDS],
                 **{"x-hq-resource": name, "x-hq-identifier": detail["identifier"]},
             )
+
+
+_FIELDS = {"$ref": "#/components/parameters/Fields"}
 
 
 EXPANSIONS: dict[str, Callable[[_Builder, str, str, Any], None]] = {
@@ -557,7 +563,17 @@ def document() -> dict[str, Any]:
                     "required": True,
                     "description": "Replays the committed response when the same request is retried.",
                     "schema": {"type": "string", "minLength": 1},
-                }
+                },
+                "Fields": {
+                    "name": RESERVED_QUERY_FIELD,
+                    "in": "query",
+                    "required": False,
+                    "description": "Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into "
+                    "an object, or into every element of a list. Absent keeps the whole record.",
+                    "style": "form",
+                    "explode": False,
+                    "schema": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                },
             },
             "responses": responses,
             "schemas": dict(sorted(builder.components.schemas.items())),

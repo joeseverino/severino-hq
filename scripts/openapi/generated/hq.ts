@@ -1935,6 +1935,11 @@ export type FindingsV2Result = {
 
 export type FindingsV2Query = {
     rule?: string;
+    severity?: "serious" | "attention" | "neutral" | "good";
+    /**
+     * @minimum 1
+     */
+    limit?: number;
 };
 
 export type FindingsV2Variables = {
@@ -1969,6 +1974,11 @@ export type ListActionItemsV2Query = {
     query?: string;
     status?: string;
     source?: string;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListActionItemsV2Variables = {
@@ -1991,6 +2001,11 @@ export type ListAnalyticsV2Query = {
      * @maximum 184
      */
     days?: number;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListAnalyticsV2Variables = {
@@ -2009,6 +2024,11 @@ export type ListAssetsV2Query = {
     limit?: number;
     status?: string | null;
     query?: string | null;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListAssetsV2Variables = {
@@ -2027,8 +2047,17 @@ export type GetAssetsV2Path = {
     identifier: string;
 };
 
+export type GetAssetsV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetAssetsV2Variables = {
     path: GetAssetsV2Path;
+    query?: GetAssetsV2Query;
 };
 
 export type ListCalendarV2Result = {
@@ -2048,6 +2077,11 @@ export type ListCalendarV2Query = {
      * @maximum 62
      */
     days?: number;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListCalendarV2Variables = {
@@ -2066,13 +2100,34 @@ export type GetCalendarV2Path = {
     identifier: string;
 };
 
+export type GetCalendarV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetCalendarV2Variables = {
     path: GetCalendarV2Path;
+    query?: GetCalendarV2Query;
 };
 
 export type ListConnectionStandingV2Result = {
     data: ResourceCollection;
     ok: true;
+};
+
+export type ListConnectionStandingV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
+export type ListConnectionStandingV2Variables = {
+    query?: ListConnectionStandingV2Query;
 };
 
 export type GetConnectionStandingV2Result = {
@@ -2087,8 +2142,17 @@ export type GetConnectionStandingV2Path = {
     identifier: string;
 };
 
+export type GetConnectionStandingV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetConnectionStandingV2Variables = {
     path: GetConnectionStandingV2Path;
+    query?: GetConnectionStandingV2Query;
 };
 
 export type ListContactSubmissionsV2Result = {
@@ -2103,6 +2167,11 @@ export type ListContactSubmissionsV2Query = {
     limit?: number;
     status?: string;
     query?: string;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListContactSubmissionsV2Variables = {
@@ -2121,8 +2190,17 @@ export type GetContactSubmissionsV2Path = {
     identifier: number;
 };
 
+export type GetContactSubmissionsV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetContactSubmissionsV2Variables = {
     path: GetContactSubmissionsV2Path;
+    query?: GetContactSubmissionsV2Query;
 };
 
 export type ListContainersV2Result = {
@@ -2135,6 +2213,11 @@ export type ListContainersV2Query = {
      * @minimum 1
      */
     limit?: number;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListContainersV2Variables = {
@@ -2153,13 +2236,34 @@ export type GetContainersV2Path = {
     identifier: string;
 };
 
+export type GetContainersV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetContainersV2Variables = {
     path: GetContainersV2Path;
+    query?: GetContainersV2Query;
 };
 
 export type ListCredentialsV2Result = {
     data: ResourceCollection;
     ok: true;
+};
+
+export type ListCredentialsV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
+export type ListCredentialsV2Variables = {
+    query?: ListCredentialsV2Query;
 };
 
 export type GetCredentialsV2Result = {
@@ -2174,8 +2278,17 @@ export type GetCredentialsV2Path = {
     identifier: string;
 };
 
+export type GetCredentialsV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetCredentialsV2Variables = {
     path: GetCredentialsV2Path;
+    query?: GetCredentialsV2Query;
 };
 
 export type ListDomainsV2Result = {
@@ -2188,6 +2301,11 @@ export type ListDomainsV2Query = {
      * @minimum 1
      */
     limit?: number;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListDomainsV2Variables = {
@@ -2206,13 +2324,34 @@ export type GetDomainsV2Path = {
     identifier: string;
 };
 
+export type GetDomainsV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetDomainsV2Variables = {
     path: GetDomainsV2Path;
+    query?: GetDomainsV2Query;
 };
 
 export type ListEstateV2Result = {
     data: ResourceCollection;
     ok: true;
+};
+
+export type ListEstateV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
+export type ListEstateV2Variables = {
+    query?: ListEstateV2Query;
 };
 
 export type ListExpensesV2Result = {
@@ -2227,6 +2366,11 @@ export type ListExpensesV2Query = {
     limit?: number;
     year?: number | null;
     category?: string | null;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListExpensesV2Variables = {
@@ -2236,6 +2380,18 @@ export type ListExpensesV2Variables = {
 export type ListHqV2Result = {
     data: ResourceCollection;
     ok: true;
+};
+
+export type ListHqV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
+export type ListHqV2Variables = {
+    query?: ListHqV2Query;
 };
 
 export type ListInfrastructureResourcesV2Result = {
@@ -2250,6 +2406,11 @@ export type ListInfrastructureResourcesV2Query = {
     limit?: number;
     kind?: string | null;
     kinds?: string | null;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListInfrastructureResourcesV2Variables = {
@@ -2268,8 +2429,17 @@ export type GetInfrastructureResourcesV2Path = {
     identifier: string;
 };
 
+export type GetInfrastructureResourcesV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetInfrastructureResourcesV2Variables = {
     path: GetInfrastructureResourcesV2Path;
+    query?: GetInfrastructureResourcesV2Query;
 };
 
 export type ListMachinesV2Result = {
@@ -2282,6 +2452,11 @@ export type ListMachinesV2Query = {
      * @minimum 1
      */
     limit?: number;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListMachinesV2Variables = {
@@ -2300,8 +2475,17 @@ export type GetMachinesV2Path = {
     identifier: string;
 };
 
+export type GetMachinesV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetMachinesV2Variables = {
     path: GetMachinesV2Path;
+    query?: GetMachinesV2Query;
 };
 
 export type GetPathsV2Result = {
@@ -2316,8 +2500,17 @@ export type GetPathsV2Path = {
     identifier: string;
 };
 
+export type GetPathsV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetPathsV2Variables = {
     path: GetPathsV2Path;
+    query?: GetPathsV2Query;
 };
 
 export type ListProjectsV2Result = {
@@ -2332,6 +2525,11 @@ export type ListProjectsV2Query = {
     limit?: number;
     status?: string | null;
     query?: string | null;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListProjectsV2Variables = {
@@ -2350,8 +2548,17 @@ export type GetProjectsV2Path = {
     identifier: string;
 };
 
+export type GetProjectsV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetProjectsV2Variables = {
     path: GetProjectsV2Path;
+    query?: GetProjectsV2Query;
 };
 
 export type ListReadingsV2Result = {
@@ -2365,6 +2572,11 @@ export type ListReadingsV2Query = {
      */
     limit?: number;
     provider?: string | null;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListReadingsV2Variables = {
@@ -2383,8 +2595,17 @@ export type GetReadingsV2Path = {
     identifier: string;
 };
 
+export type GetReadingsV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetReadingsV2Variables = {
     path: GetReadingsV2Path;
+    query?: GetReadingsV2Query;
 };
 
 export type ListReceiptsV2Result = {
@@ -2398,6 +2619,11 @@ export type ListReceiptsV2Query = {
      */
     limit?: number;
     unmatched_only?: boolean;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListReceiptsV2Variables = {
@@ -2416,13 +2642,34 @@ export type GetRelationshipsV2Path = {
     identifier: string;
 };
 
+export type GetRelationshipsV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetRelationshipsV2Variables = {
     path: GetRelationshipsV2Path;
+    query?: GetRelationshipsV2Query;
 };
 
 export type ListRequestPathV2Result = {
     data: ResourceCollection;
     ok: true;
+};
+
+export type ListRequestPathV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
+export type ListRequestPathV2Variables = {
+    query?: ListRequestPathV2Query;
 };
 
 export type ListSearchV2Result = {
@@ -2439,6 +2686,11 @@ export type ListSearchV2Query = {
      * @maxLength 200
      */
     query?: string;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListSearchV2Variables = {
@@ -2448,6 +2700,18 @@ export type ListSearchV2Variables = {
 export type ListServicesV2Result = {
     data: ResourceCollection;
     ok: true;
+};
+
+export type ListServicesV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
+export type ListServicesV2Variables = {
+    query?: ListServicesV2Query;
 };
 
 export type GetServicesV2Result = {
@@ -2462,13 +2726,34 @@ export type GetServicesV2Path = {
     identifier: string;
 };
 
+export type GetServicesV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetServicesV2Variables = {
     path: GetServicesV2Path;
+    query?: GetServicesV2Query;
 };
 
 export type ListTailnetV2Result = {
     data: ResourceCollection;
     ok: true;
+};
+
+export type ListTailnetV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
+export type ListTailnetV2Variables = {
+    query?: ListTailnetV2Query;
 };
 
 export type ListUpgradesV2Result = {
@@ -2481,6 +2766,11 @@ export type ListUpgradesV2Query = {
      * @minimum 1
      */
     limit?: number;
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
 };
 
 export type ListUpgradesV2Variables = {
@@ -2499,8 +2789,17 @@ export type GetUpgradesV2Path = {
     identifier: string;
 };
 
+export type GetUpgradesV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type GetUpgradesV2Variables = {
     path: GetUpgradesV2Path;
+    query?: GetUpgradesV2Query;
 };
 
 export type ResourceListV2Result = {
@@ -2515,8 +2814,17 @@ export type ResourceListV2Path = {
     name: string;
 };
 
+export type ResourceListV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type ResourceListV2Variables = {
     path: ResourceListV2Path;
+    query?: ResourceListV2Query;
 };
 
 export type ResourceDetailV2Result = {
@@ -2535,8 +2843,17 @@ export type ResourceDetailV2Path = {
     identifier: string;
 };
 
+export type ResourceDetailV2Query = {
+    /**
+     * Comma-separated field paths to keep in each record (`observed_at,items.waiting`): a dot steps into an object, or into every element of a list. Absent keeps the whole record.
+     * @minItems 1
+     */
+    fields?: string[];
+};
+
 export type ResourceDetailV2Variables = {
     path: ResourceDetailV2Path;
+    query?: ResourceDetailV2Query;
 };
 
 export type TopologyV2Result = {
@@ -2898,6 +3215,7 @@ export type Ops = {
     getAssetsV2: {
         args: {
             path: GetAssetsV2Path;
+            query?: GetAssetsV2Query;
         };
         result: GetAssetsV2Result;
     };
@@ -2910,16 +3228,20 @@ export type Ops = {
     getCalendarV2: {
         args: {
             path: GetCalendarV2Path;
+            query?: GetCalendarV2Query;
         };
         result: GetCalendarV2Result;
     };
     listConnectionStandingV2: {
-        args: {};
+        args: {
+            query?: ListConnectionStandingV2Query;
+        };
         result: ListConnectionStandingV2Result;
     };
     getConnectionStandingV2: {
         args: {
             path: GetConnectionStandingV2Path;
+            query?: GetConnectionStandingV2Query;
         };
         result: GetConnectionStandingV2Result;
     };
@@ -2932,6 +3254,7 @@ export type Ops = {
     getContactSubmissionsV2: {
         args: {
             path: GetContactSubmissionsV2Path;
+            query?: GetContactSubmissionsV2Query;
         };
         result: GetContactSubmissionsV2Result;
     };
@@ -2944,16 +3267,20 @@ export type Ops = {
     getContainersV2: {
         args: {
             path: GetContainersV2Path;
+            query?: GetContainersV2Query;
         };
         result: GetContainersV2Result;
     };
     listCredentialsV2: {
-        args: {};
+        args: {
+            query?: ListCredentialsV2Query;
+        };
         result: ListCredentialsV2Result;
     };
     getCredentialsV2: {
         args: {
             path: GetCredentialsV2Path;
+            query?: GetCredentialsV2Query;
         };
         result: GetCredentialsV2Result;
     };
@@ -2966,11 +3293,14 @@ export type Ops = {
     getDomainsV2: {
         args: {
             path: GetDomainsV2Path;
+            query?: GetDomainsV2Query;
         };
         result: GetDomainsV2Result;
     };
     listEstateV2: {
-        args: {};
+        args: {
+            query?: ListEstateV2Query;
+        };
         result: ListEstateV2Result;
     };
     listExpensesV2: {
@@ -2980,7 +3310,9 @@ export type Ops = {
         result: ListExpensesV2Result;
     };
     listHqV2: {
-        args: {};
+        args: {
+            query?: ListHqV2Query;
+        };
         result: ListHqV2Result;
     };
     listInfrastructureResourcesV2: {
@@ -2992,6 +3324,7 @@ export type Ops = {
     getInfrastructureResourcesV2: {
         args: {
             path: GetInfrastructureResourcesV2Path;
+            query?: GetInfrastructureResourcesV2Query;
         };
         result: GetInfrastructureResourcesV2Result;
     };
@@ -3004,12 +3337,14 @@ export type Ops = {
     getMachinesV2: {
         args: {
             path: GetMachinesV2Path;
+            query?: GetMachinesV2Query;
         };
         result: GetMachinesV2Result;
     };
     getPathsV2: {
         args: {
             path: GetPathsV2Path;
+            query?: GetPathsV2Query;
         };
         result: GetPathsV2Result;
     };
@@ -3022,6 +3357,7 @@ export type Ops = {
     getProjectsV2: {
         args: {
             path: GetProjectsV2Path;
+            query?: GetProjectsV2Query;
         };
         result: GetProjectsV2Result;
     };
@@ -3034,6 +3370,7 @@ export type Ops = {
     getReadingsV2: {
         args: {
             path: GetReadingsV2Path;
+            query?: GetReadingsV2Query;
         };
         result: GetReadingsV2Result;
     };
@@ -3046,11 +3383,14 @@ export type Ops = {
     getRelationshipsV2: {
         args: {
             path: GetRelationshipsV2Path;
+            query?: GetRelationshipsV2Query;
         };
         result: GetRelationshipsV2Result;
     };
     listRequestPathV2: {
-        args: {};
+        args: {
+            query?: ListRequestPathV2Query;
+        };
         result: ListRequestPathV2Result;
     };
     listSearchV2: {
@@ -3060,17 +3400,22 @@ export type Ops = {
         result: ListSearchV2Result;
     };
     listServicesV2: {
-        args: {};
+        args: {
+            query?: ListServicesV2Query;
+        };
         result: ListServicesV2Result;
     };
     getServicesV2: {
         args: {
             path: GetServicesV2Path;
+            query?: GetServicesV2Query;
         };
         result: GetServicesV2Result;
     };
     listTailnetV2: {
-        args: {};
+        args: {
+            query?: ListTailnetV2Query;
+        };
         result: ListTailnetV2Result;
     };
     listUpgradesV2: {
@@ -3082,18 +3427,21 @@ export type Ops = {
     getUpgradesV2: {
         args: {
             path: GetUpgradesV2Path;
+            query?: GetUpgradesV2Query;
         };
         result: GetUpgradesV2Result;
     };
     resourceListV2: {
         args: {
             path: ResourceListV2Path;
+            query?: ResourceListV2Query;
         };
         result: ResourceListV2Result;
     };
     resourceDetailV2: {
         args: {
             path: ResourceDetailV2Path;
+            query?: ResourceDetailV2Query;
         };
         result: ResourceDetailV2Result;
     };
@@ -3156,48 +3504,48 @@ export const OPERATIONS = {
     tailnetRoutesApproveV2: { id: "tailnetRoutesApproveV2", method: "POST", path: "/api/v2/capabilities/tailnet.routes.approve/", tags: ["hq.infrastructure", "api.v2"], params: [{ name: "Idempotency-Key", in: "header" }], body: { contentType: "application/json" }, security: [[{ scheme: "bearer", kind: "bearer" }]] },
     executeV2: { id: "executeV2", method: "POST", path: "/api/v2/capabilities/{name}/", tags: ["api", "api.v2"], params: [{ name: "name", in: "path" }], body: { contentType: "application/json" }, security: [[{ scheme: "bearer", kind: "bearer" }]] },
     connectionsV2: { id: "connectionsV2", method: "GET", path: "/api/v2/connections/", tags: ["api", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    findingsV2: { id: "findingsV2", method: "GET", path: "/api/v2/findings/", tags: ["api", "api.v2"], params: [{ name: "rule", in: "query" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    findingsV2: { id: "findingsV2", method: "GET", path: "/api/v2/findings/", tags: ["api", "api.v2"], params: [{ name: "rule", in: "query" }, { name: "severity", in: "query" }, { name: "limit", in: "query" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
     openapiV2: { id: "openapiV2", method: "GET", path: "/api/v2/openapi.json", tags: ["api", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
     resourcesV2: { id: "resourcesV2", method: "GET", path: "/api/v2/resources/", tags: ["api", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listActionItemsV2: { id: "listActionItemsV2", method: "GET", path: "/api/v2/resources/action.items/", tags: ["api", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }, { name: "status", in: "query", style: "form", explode: true }, { name: "source", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listAnalyticsV2: { id: "listAnalyticsV2", method: "GET", path: "/api/v2/resources/analytics/", tags: ["hq.analytics", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "dimension", in: "query", style: "form", explode: true }, { name: "days", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listAssetsV2: { id: "listAssetsV2", method: "GET", path: "/api/v2/resources/assets/", tags: ["hq.assets", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "status", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getAssetsV2: { id: "getAssetsV2", method: "GET", path: "/api/v2/resources/assets/{identifier}/", tags: ["hq.assets", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listCalendarV2: { id: "listCalendarV2", method: "GET", path: "/api/v2/resources/calendar/", tags: ["hq.calendar", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "start", in: "query", style: "form", explode: true }, { name: "days", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getCalendarV2: { id: "getCalendarV2", method: "GET", path: "/api/v2/resources/calendar/{identifier}/", tags: ["hq.calendar", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listConnectionStandingV2: { id: "listConnectionStandingV2", method: "GET", path: "/api/v2/resources/connection.standing/", tags: ["hq.connections", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getConnectionStandingV2: { id: "getConnectionStandingV2", method: "GET", path: "/api/v2/resources/connection.standing/{identifier}/", tags: ["hq.connections", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listContactSubmissionsV2: { id: "listContactSubmissionsV2", method: "GET", path: "/api/v2/resources/contact.submissions/", tags: ["hq.contacts", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "status", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getContactSubmissionsV2: { id: "getContactSubmissionsV2", method: "GET", path: "/api/v2/resources/contact.submissions/{identifier}/", tags: ["hq.contacts", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listContainersV2: { id: "listContainersV2", method: "GET", path: "/api/v2/resources/containers/", tags: ["hq.containers", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getContainersV2: { id: "getContainersV2", method: "GET", path: "/api/v2/resources/containers/{identifier}/", tags: ["hq.containers", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listCredentialsV2: { id: "listCredentialsV2", method: "GET", path: "/api/v2/resources/credentials/", tags: ["hq.connections", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getCredentialsV2: { id: "getCredentialsV2", method: "GET", path: "/api/v2/resources/credentials/{identifier}/", tags: ["hq.connections", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listDomainsV2: { id: "listDomainsV2", method: "GET", path: "/api/v2/resources/domains/", tags: ["hq.zones", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getDomainsV2: { id: "getDomainsV2", method: "GET", path: "/api/v2/resources/domains/{identifier}/", tags: ["hq.zones", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listEstateV2: { id: "listEstateV2", method: "GET", path: "/api/v2/resources/estate/", tags: ["hq.dashboard", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listExpensesV2: { id: "listExpensesV2", method: "GET", path: "/api/v2/resources/expenses/", tags: ["hq.expenses", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "year", in: "query", style: "form", explode: true }, { name: "category", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listHqV2: { id: "listHqV2", method: "GET", path: "/api/v2/resources/hq/", tags: ["hq.self", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listInfrastructureResourcesV2: { id: "listInfrastructureResourcesV2", method: "GET", path: "/api/v2/resources/infrastructure.resources/", tags: ["hq.infrastructure", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "kind", in: "query", style: "form", explode: true }, { name: "kinds", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getInfrastructureResourcesV2: { id: "getInfrastructureResourcesV2", method: "GET", path: "/api/v2/resources/infrastructure.resources/{identifier}/", tags: ["hq.infrastructure", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listMachinesV2: { id: "listMachinesV2", method: "GET", path: "/api/v2/resources/machines/", tags: ["hq.machines", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getMachinesV2: { id: "getMachinesV2", method: "GET", path: "/api/v2/resources/machines/{identifier}/", tags: ["hq.machines", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getPathsV2: { id: "getPathsV2", method: "GET", path: "/api/v2/resources/paths/{identifier}/", tags: ["hq.services", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listProjectsV2: { id: "listProjectsV2", method: "GET", path: "/api/v2/resources/projects/", tags: ["hq.projects", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "status", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getProjectsV2: { id: "getProjectsV2", method: "GET", path: "/api/v2/resources/projects/{identifier}/", tags: ["hq.projects", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listReadingsV2: { id: "listReadingsV2", method: "GET", path: "/api/v2/resources/readings/", tags: ["hq.connections", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "provider", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getReadingsV2: { id: "getReadingsV2", method: "GET", path: "/api/v2/resources/readings/{identifier}/", tags: ["hq.connections", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listReceiptsV2: { id: "listReceiptsV2", method: "GET", path: "/api/v2/resources/receipts/", tags: ["hq.receipts", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "unmatched_only", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getRelationshipsV2: { id: "getRelationshipsV2", method: "GET", path: "/api/v2/resources/relationships/{identifier}/", tags: ["hq.topology", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listRequestPathV2: { id: "listRequestPathV2", method: "GET", path: "/api/v2/resources/request.path/", tags: ["api", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listSearchV2: { id: "listSearchV2", method: "GET", path: "/api/v2/resources/search/", tags: ["api", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listServicesV2: { id: "listServicesV2", method: "GET", path: "/api/v2/resources/services/", tags: ["hq.services", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getServicesV2: { id: "getServicesV2", method: "GET", path: "/api/v2/resources/services/{identifier}/", tags: ["hq.services", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listTailnetV2: { id: "listTailnetV2", method: "GET", path: "/api/v2/resources/tailnet/", tags: ["hq.tailnet", "api.v2"], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    listUpgradesV2: { id: "listUpgradesV2", method: "GET", path: "/api/v2/resources/upgrades/", tags: ["hq.containers", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    getUpgradesV2: { id: "getUpgradesV2", method: "GET", path: "/api/v2/resources/upgrades/{identifier}/", tags: ["hq.containers", "api.v2"], params: [{ name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    resourceListV2: { id: "resourceListV2", method: "GET", path: "/api/v2/resources/{name}/", tags: ["api", "api.v2"], params: [{ name: "name", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
-    resourceDetailV2: { id: "resourceDetailV2", method: "GET", path: "/api/v2/resources/{name}/{identifier}/", tags: ["api", "api.v2"], params: [{ name: "name", in: "path" }, { name: "identifier", in: "path" }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listActionItemsV2: { id: "listActionItemsV2", method: "GET", path: "/api/v2/resources/action.items/", tags: ["api", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }, { name: "status", in: "query", style: "form", explode: true }, { name: "source", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listAnalyticsV2: { id: "listAnalyticsV2", method: "GET", path: "/api/v2/resources/analytics/", tags: ["hq.analytics", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "dimension", in: "query", style: "form", explode: true }, { name: "days", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listAssetsV2: { id: "listAssetsV2", method: "GET", path: "/api/v2/resources/assets/", tags: ["hq.assets", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "status", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getAssetsV2: { id: "getAssetsV2", method: "GET", path: "/api/v2/resources/assets/{identifier}/", tags: ["hq.assets", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listCalendarV2: { id: "listCalendarV2", method: "GET", path: "/api/v2/resources/calendar/", tags: ["hq.calendar", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "start", in: "query", style: "form", explode: true }, { name: "days", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getCalendarV2: { id: "getCalendarV2", method: "GET", path: "/api/v2/resources/calendar/{identifier}/", tags: ["hq.calendar", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listConnectionStandingV2: { id: "listConnectionStandingV2", method: "GET", path: "/api/v2/resources/connection.standing/", tags: ["hq.connections", "api.v2"], params: [{ name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getConnectionStandingV2: { id: "getConnectionStandingV2", method: "GET", path: "/api/v2/resources/connection.standing/{identifier}/", tags: ["hq.connections", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listContactSubmissionsV2: { id: "listContactSubmissionsV2", method: "GET", path: "/api/v2/resources/contact.submissions/", tags: ["hq.contacts", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "status", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getContactSubmissionsV2: { id: "getContactSubmissionsV2", method: "GET", path: "/api/v2/resources/contact.submissions/{identifier}/", tags: ["hq.contacts", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listContainersV2: { id: "listContainersV2", method: "GET", path: "/api/v2/resources/containers/", tags: ["hq.containers", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getContainersV2: { id: "getContainersV2", method: "GET", path: "/api/v2/resources/containers/{identifier}/", tags: ["hq.containers", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listCredentialsV2: { id: "listCredentialsV2", method: "GET", path: "/api/v2/resources/credentials/", tags: ["hq.connections", "api.v2"], params: [{ name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getCredentialsV2: { id: "getCredentialsV2", method: "GET", path: "/api/v2/resources/credentials/{identifier}/", tags: ["hq.connections", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listDomainsV2: { id: "listDomainsV2", method: "GET", path: "/api/v2/resources/domains/", tags: ["hq.zones", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getDomainsV2: { id: "getDomainsV2", method: "GET", path: "/api/v2/resources/domains/{identifier}/", tags: ["hq.zones", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listEstateV2: { id: "listEstateV2", method: "GET", path: "/api/v2/resources/estate/", tags: ["hq.dashboard", "api.v2"], params: [{ name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listExpensesV2: { id: "listExpensesV2", method: "GET", path: "/api/v2/resources/expenses/", tags: ["hq.expenses", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "year", in: "query", style: "form", explode: true }, { name: "category", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listHqV2: { id: "listHqV2", method: "GET", path: "/api/v2/resources/hq/", tags: ["hq.self", "api.v2"], params: [{ name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listInfrastructureResourcesV2: { id: "listInfrastructureResourcesV2", method: "GET", path: "/api/v2/resources/infrastructure.resources/", tags: ["hq.infrastructure", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "kind", in: "query", style: "form", explode: true }, { name: "kinds", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getInfrastructureResourcesV2: { id: "getInfrastructureResourcesV2", method: "GET", path: "/api/v2/resources/infrastructure.resources/{identifier}/", tags: ["hq.infrastructure", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listMachinesV2: { id: "listMachinesV2", method: "GET", path: "/api/v2/resources/machines/", tags: ["hq.machines", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getMachinesV2: { id: "getMachinesV2", method: "GET", path: "/api/v2/resources/machines/{identifier}/", tags: ["hq.machines", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getPathsV2: { id: "getPathsV2", method: "GET", path: "/api/v2/resources/paths/{identifier}/", tags: ["hq.services", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listProjectsV2: { id: "listProjectsV2", method: "GET", path: "/api/v2/resources/projects/", tags: ["hq.projects", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "status", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getProjectsV2: { id: "getProjectsV2", method: "GET", path: "/api/v2/resources/projects/{identifier}/", tags: ["hq.projects", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listReadingsV2: { id: "listReadingsV2", method: "GET", path: "/api/v2/resources/readings/", tags: ["hq.connections", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "provider", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getReadingsV2: { id: "getReadingsV2", method: "GET", path: "/api/v2/resources/readings/{identifier}/", tags: ["hq.connections", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listReceiptsV2: { id: "listReceiptsV2", method: "GET", path: "/api/v2/resources/receipts/", tags: ["hq.receipts", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "unmatched_only", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getRelationshipsV2: { id: "getRelationshipsV2", method: "GET", path: "/api/v2/resources/relationships/{identifier}/", tags: ["hq.topology", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listRequestPathV2: { id: "listRequestPathV2", method: "GET", path: "/api/v2/resources/request.path/", tags: ["api", "api.v2"], params: [{ name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listSearchV2: { id: "listSearchV2", method: "GET", path: "/api/v2/resources/search/", tags: ["api", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "query", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listServicesV2: { id: "listServicesV2", method: "GET", path: "/api/v2/resources/services/", tags: ["hq.services", "api.v2"], params: [{ name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getServicesV2: { id: "getServicesV2", method: "GET", path: "/api/v2/resources/services/{identifier}/", tags: ["hq.services", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listTailnetV2: { id: "listTailnetV2", method: "GET", path: "/api/v2/resources/tailnet/", tags: ["hq.tailnet", "api.v2"], params: [{ name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    listUpgradesV2: { id: "listUpgradesV2", method: "GET", path: "/api/v2/resources/upgrades/", tags: ["hq.containers", "api.v2"], params: [{ name: "limit", in: "query", style: "form", explode: true }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    getUpgradesV2: { id: "getUpgradesV2", method: "GET", path: "/api/v2/resources/upgrades/{identifier}/", tags: ["hq.containers", "api.v2"], params: [{ name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    resourceListV2: { id: "resourceListV2", method: "GET", path: "/api/v2/resources/{name}/", tags: ["api", "api.v2"], params: [{ name: "name", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
+    resourceDetailV2: { id: "resourceDetailV2", method: "GET", path: "/api/v2/resources/{name}/{identifier}/", tags: ["api", "api.v2"], params: [{ name: "name", in: "path" }, { name: "identifier", in: "path" }, { name: "fields", in: "query", style: "form", explode: false }], security: [[{ scheme: "bearer", kind: "bearer" }]] },
     topologyV2: { id: "topologyV2", method: "GET", path: "/api/v2/topology/", tags: ["api", "api.v2"], params: [{ name: "lens", in: "query" }, { name: "focus", in: "query" }, { name: "direction", in: "query" }, { name: "depth", in: "query" }], security: [[{ scheme: "bearer", kind: "bearer" }]] }
 } as const satisfies Record<string, OperationDescriptor>;
 

@@ -245,6 +245,19 @@ transport, proxy identity and the caller's first hop); a read has no such
 request, so its `request` is null. Everything else is the same object the page
 renders, and a parity test holds the two equal.
 
+Every list and detail read takes `fields`, a field mask in the AIP-161
+convention: `?fields=observed_at,items.waiting` over HTTP, a list of paths to
+the MCP tools and the SDK. A name keeps its whole value; a dot steps into an
+object, or into every element of a list, so that example returns
+`{"observed_at": …, "items": [{"waiting": …}, …]}`. Paths that share a prefix
+merge, and a whole value wins over a path into it. On a list endpoint each
+path is read in each item, and the collection keeps its `count`. A segment
+that no record or element at its depth carries is refused with
+`invalid_input`, naming the names there are; so is a path into a scalar.
+Selection happens after authorization. Absent, the whole record is returned.
+Because every adapter reads it beside the query, no resource query may
+declare a field called `fields`; the registry refuses one at startup.
+
 Readings leave only through their schema: `ObservationSpec.admitted` drops any
 field the record model does not name. Node ids are the topology's:
 `machine:<name>`, `service:<hostname>`, `zone:<domain>`, `resource:<key>`.
@@ -288,7 +301,13 @@ Findings are another projection of that same authorized topology. General
 reads collapse several stale resource kinds onto their shared controller when
 the graph proves one, and expose the explained kinds in `affected_scopes`.
 Clients that need the underlying machine facts can request one declared
-`rule`; causal presentation never destroys the exact observations. Remedies
+`rule`; causal presentation never destroys the exact observations.
+`severity` is a floor on the ladder `serious`, `attention`, `neutral`, `good`
+(`attention` also returns `serious`), and `limit` caps how many are returned,
+most severe first. `summary.findings` and `summary.severities` still count
+every finding; `summary.returned` says how many came back and
+`summary.truncated` whether the limit held any back. A severity off the ladder
+or a limit below one is a 400 `invalid_input`. Remedies
 remain references to registered capabilities, while read-only "what HQ can do
 now" links come from the subject node's canonical actions rather than a second
 workflow registry.

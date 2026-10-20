@@ -9,7 +9,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 
 from ..action_links import ActionLink
-from ..findings import derive_findings, finding_rules, findings, rule_for
+from ..findings import InvalidFindingsQuery, derive_findings, finding_rules, findings, rule_for
 from ..reach import TAILNET
 from ..security import Capability, Principal
 from ..topology import derive_topology
@@ -682,6 +682,39 @@ class FindingsTests(SentinelMixin, TestCase):
 
         self.assertTrue(whole["findings"])
         self.assertNoSentinel(whole)
+
+    def test_a_floor_and_a_limit_narrow_what_is_returned_and_never_the_totals(self):
+        observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
+        observed(self.rewrite("swept"), self.now)
+        self.rewrite("never")
+
+        with host_only():
+            whole = findings(principal=MANAGE)
+            floored = findings(principal=MANAGE, severity="serious")
+            first = findings(principal=MANAGE, limit=1)
+        severities = [item["severity"] for item in whole["findings"]]
+        # The estate has something below the floor and more than one finding.
+        self.assertIn("serious", severities)
+        self.assertTrue(set(severities) - {"serious"})
+
+        for narrowed in (floored, first):
+            self.assertEqual(narrowed["summary"]["severities"], whole["summary"]["severities"])
+            self.assertEqual(narrowed["summary"]["findings"], whole["summary"]["findings"])
+            self.assertEqual(narrowed["summary"]["returned"], len(narrowed["findings"]))
+        self.assertEqual(
+            [item["id"] for item in floored["findings"]],
+            [item["id"] for item in whole["findings"] if item["severity"] == "serious"],
+        )
+        self.assertFalse(floored["summary"]["truncated"])
+        self.assertEqual([item["id"] for item in first["findings"]], [whole["findings"][0]["id"]])
+        self.assertTrue(first["summary"]["truncated"])
+        self.assertFalse(whole["summary"]["truncated"])
+
+    def test_a_severity_off_the_ladder_or_a_limit_below_one_is_refused(self):
+        for narrowing in ({"severity": "critical"}, {"limit": 0}):
+            with self.subTest(**narrowing), self.assertRaises(InvalidFindingsQuery) as refused:
+                findings(principal=MANAGE, **narrowing)
+            self.assertIn(next(iter(narrowing)), refused.exception.reason)
 
     def test_an_unknown_rule_name_does_not_resolve(self):
         self.assertIsNone(rule_for("not-a-rule"))

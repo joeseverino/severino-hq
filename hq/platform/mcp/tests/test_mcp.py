@@ -244,6 +244,15 @@ class ServiceTests(SentinelMixin, TestCase):
                 "get_resource readings": services.get_resource("readings", SENTINEL_READING),
                 **{f"list_resource {name}": self.readable(services.list_resource, name) for name in listable},
             }
+            # A selection names every key the record has, so nothing it keeps
+            # can come from anywhere but the redacted record.
+            reading = answers["get_resource readings"]
+            answers["get_resource readings fields"] = services.get_resource(
+                "readings", SENTINEL_READING, fields=list(reading)
+            )
+            answers["list_resource readings fields"] = services.list_resource(
+                "readings", None, fields=list(answers["list_resource readings"]["items"][0])
+            )
 
         for name, answer in answers.items():
             with self.subTest(name):
@@ -337,6 +346,44 @@ class ServiceTests(SentinelMixin, TestCase):
 
         self.assertIn("projects: limti is not a known field.", str(refused.exception))
         self.assertNotIn("hunter2", str(refused.exception))
+
+    def test_the_narrowing_arguments_are_in_each_schema_and_nothing_else_is_taken(self):
+        tools = {tool.name: tool for tool in mcp.tools.values()}
+
+        for name, arguments in {
+            "get_resource": {"fields"},
+            "list_resource": {"fields"},
+            "get_findings": {"severity", "limit"},
+        }.items():
+            with self.subTest(name):
+                self.assertLessEqual(arguments, set(tools[name].input_schema["properties"]))
+
+        async def call(name, arguments):
+            return await mcp.tools[name].call(arguments)
+
+        for name, arguments in {
+            "get_resource": {"name": "projects", "identifier": "x", "feilds": ["slug"]},
+            "list_resource": {"name": "projects", "fields": "slug"},
+            "get_findings": {"limit": "1"},
+        }.items():
+            with self.subTest(name), self.assertRaises(ValueError):
+                async_to_sync(call)(name, arguments)
+
+    def test_an_agent_reads_only_the_keys_it_names(self):
+        project = Project.objects.create(name="Named keys")
+
+        async def call(name, arguments):
+            return await mcp.tools[name].call(arguments)
+
+        detail = async_to_sync(call)(
+            "get_resource", {"name": "projects", "identifier": project.slug, "fields": ["slug"]}
+        )
+        with host_only():
+            found = async_to_sync(call)("get_findings", {"severity": "serious", "limit": 1})
+
+        self.assertEqual(detail, {"slug": project.slug})
+        self.assertLessEqual(len(found["findings"]), 1)
+        self.assertIn("truncated", found["summary"])
 
     def test_connection_state_is_filtered_by_the_mcp_principal(self):
         from hq.platform.application.connections import ConnectionSpec
