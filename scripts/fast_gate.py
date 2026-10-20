@@ -21,6 +21,8 @@ import sys
 import time
 from pathlib import Path
 
+from gate_verdict import Step, run, verdict
+
 ROOT = Path(__file__).resolve().parents[1]
 # The gates that run whatever changed, side by side: each is quick, and each
 # Django gate opens a database of its own (the django task template).
@@ -286,12 +288,12 @@ def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tupl
     return sorted(chosen), len(tests)
 
 
-def step(label: str, cmd: list[str]) -> bool:
+def step(label: str, cmd: list[str]) -> Step:
     print(f"[fast] {label}", flush=True)
     started = time.monotonic()
-    code = subprocess.run(cmd, cwd=ROOT).returncode
+    result = run(label, cmd)
     print(f"[fast] {label}: {time.monotonic() - started:.1f}s", flush=True)
-    return code == 0
+    return result
 
 
 def main(argv: list[str]) -> int:
@@ -312,19 +314,21 @@ def main(argv: list[str]) -> int:
         print("\n".join(labels))
         return 0
 
-    ok = step(" ".join(TASKS), tasks_command(TASKS, parallel))
-    ok &= step("tests", [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels])
+    steps = [
+        step(" ".join(TASKS), tasks_command(TASKS, parallel)),
+        step("tests", [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]),
+    ]
     if os.environ.get("HQ_LOCAL_PLUGINS") and touches_shared_ui([*changed, *deleted]):
         # suite:composed hands what follows to manage.py test.
-        ok &= step(
-            "extension suites, composed (shared UI changed)",
-            ["mise", "run", "suite:composed", "--", "--installed-plugins", "--parallel", parallel],
+        steps.append(
+            step(
+                "extension suites, composed (shared UI changed)",
+                ["mise", "run", "suite:composed", "--", "--installed-plugins", "--parallel", parallel],
+            )
         )
-    ok &= step("patch integrity", ["git", "diff", "--check", base])
-    print(
-        f"[fast] {'passed' if ok else 'FAILED'} in {time.monotonic() - started:.1f}s (full gate before push: `mise run check`)"
-    )
-    return 0 if ok else 1
+    steps.append(step("patch integrity", ["git", "diff", "--check", base]))
+    print(verdict("fast", started, steps, " (full gate before push: `mise run check`)"), flush=True)
+    return 0 if all(s.ok for s in steps) else 1
 
 
 if __name__ == "__main__":

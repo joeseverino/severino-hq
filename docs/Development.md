@@ -7,8 +7,10 @@ rules, the host/extension boundary and the definition of done.
 ## Setup
 
 Install [mise](https://mise.jdx.dev) and a `python3`; `mise install` brings uv
-with the other tools. The toolchain gate and the structural bar run `python3`
-directly.
+with the other tools `fast` and `check` run. A tool only a heavier gate needs
+(CodeQL, age) is `lazy` in `mise.toml`: its first use installs it, checked
+against `mise.lock` like the rest. The toolchain gate and the structural bar
+run `python3` directly.
 
 ```sh
 git clone https://github.com/joeseverino/severino-hq.git
@@ -141,6 +143,7 @@ composition/              the composed image
 policy/                   the extension admission policy
 demo/                     the static demo site built from HQ's own pages
 scripts/                  development, verification and deployment programs
+mise-tasks/               tasks whose body is a script, declared in its own #MISE header
 tests/                    synthetic extension fixtures and property tests
 var/                      ignored local runtime state
 ```

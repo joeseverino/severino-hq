@@ -1,6 +1,7 @@
 # The toolchain and every gate, declared once.
 #
-#   mise install        the pinned tools (versions here, checksums in mise.lock)
+#   mise install        the pinned tools (versions here, checksums in mise.lock);
+#                       a lazy one installs on its first use
 #   mise run fast       the inner loop: only what the change touches
 #   mise run check      does my change work
 #   mise run ci         will the pipeline accept it: every gate CI runs
@@ -41,8 +42,9 @@ jq = "1.8.2"
 uv = "0.13.1"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
 scorecard = "5.6.0"
-# Seals a failed Compose run's output (scripts/seal-failure-logs.sh).
-age = "1.3.2"
+# Seals a failed Compose run's output (scripts/seal-failure-logs.sh). Lazy:
+# `mise install` leaves it to its first use, held to mise.lock all the same.
+age = { version = "1.3.2", lazy = true }
 
 # The code graph the structural bar indexes with. Linux takes the portable
 # (static) build so the runner needs no matching libc.
@@ -55,11 +57,13 @@ linux-arm64 = { asset_pattern = "codebase-memory-mcp-linux-arm64-portable.tar.gz
 
 # The CodeQL bundle the pinned github/codeql-action defaults to (its
 # src/defaults.json), so the local analysis runs the queries CI runs. Bump with
-# that action.
+# that action. Lazy, as age is: only scan:codeql runs it.
 [tools."github:github/codeql-action"]
 version = "2.27.2"
 version_prefix = "codeql-bundle-v"
 bin_path = "codeql"
+lazy = true
+lazy_bins = ["codeql"]
 
 [tools."github:github/codeql-action".platforms]
 macos-arm64 = { asset_pattern = "codeql-bundle-osx64.tar.zst" }
@@ -209,7 +213,7 @@ exec uv run --locked python -u -m http.server --bind 127.0.0.1 --directory "$sit
 description = "manage.py with the development settings the gates use: mise run manage -- <command>"
 raw = true
 extends = "django"
-run = "uv run --locked python manage.py"
+run = "uv run --locked --group browser python manage.py"
 
 [tasks.regen]
 description = "Rewrite every derived file from its source; --check fails on drift instead"
@@ -278,7 +282,8 @@ description = "Does my change work: every Checks gate, the Tests gates on one Py
 # Named by aggregate and glob, so a new gate joins without an edit here. One
 # task at a time: each suite starts a worker per core, and two at once exhaust
 # a small machine's memory. CI runs each job's aggregate, never this task.
-run = "mise run -c -j 1 checks ::: 'tests:*' ::: suite:composed"
+# gate_verdict ends the output on the tasks and tests that failed.
+run = "uv run --locked python scripts/gate_verdict.py check mise run -c -j 1 checks ::: 'tests:*' ::: suite:composed"
 
 [tasks.ci]
 description = "Every gate the pipeline runs"
@@ -618,7 +623,8 @@ fi
 
 # ------------------------------------------------------------------ suite
 # The suite composed with the extensions mise.local.toml names. CI composes
-# the real set in the image (compose.yml).
+# the real set in the image (compose.yml). suite:as-image is a file task, its
+# declaration in its own header: mise-tasks/suite/as-image.
 
 [tasks."suite:composed"]
 description = "The suite composed with the extensions mise.local.toml names"
@@ -629,11 +635,6 @@ set -eu
 composed_set || { echo "Composed suite not run: no HQ_LOCAL_PLUGINS supplied (scripts/mise.local.example.toml)."; exit 0; }
 uv run --locked python manage.py test --noinput --parallel auto
 '''
-
-[tasks."suite:as-image"]
-description = "The composed suite as the image runs it: only the files the image ships"
-extends = "composed"
-run = "scripts/suite-as-image.sh"
 
 # ---------------------------------------------------------------- browser
 

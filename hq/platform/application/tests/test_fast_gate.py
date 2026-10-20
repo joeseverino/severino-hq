@@ -1,6 +1,7 @@
 """The inner-loop gate maps a change to the tests that reach it."""
 
 import importlib.util
+import io
 import json
 import os
 import re
@@ -16,10 +17,21 @@ from django.test import SimpleTestCase, tag
 from hq.config.sandbox import PREFIX, sweep_abandoned
 
 ROOT = Path(__file__).resolve().parents[4]
-spec = importlib.util.spec_from_file_location("fast_gate", ROOT / "scripts" / "fast_gate.py")
-assert spec and spec.loader
-fast_gate = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(fast_gate)
+
+
+def load(name: str):
+    """A script as a module; fast_gate imports gate_verdict by the name it has beside it."""
+
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+gate_verdict = load("gate_verdict")
+fast_gate = load("fast_gate")
 
 
 @tag("source")
@@ -161,6 +173,63 @@ class FastGateNestedLayoutTests(SimpleTestCase):
             with patch.object(fast_gate, "ROOT", root):
                 self.assertFalse(fast_gate.is_test(Path("tests/fuzz/harness.py")))
                 self.assertTrue(fast_gate.is_test(Path("tests/fuzz/properties.py")))
+
+
+# What a failing `mise run -c` and a failing test run print, as they print it.
+FAILING = r"""
+import sys
+sys.stdout.write("..F")
+sys.stdout.flush()
+sys.stderr.write("\nFAIL: test_z (hq.x.tests.test_y.Case.test_z)\n")
+sys.stderr.write("ERROR: setUpClass (hq.x.tests.test_w.Other)\n")
+print("[checks] [checks:ruff] exited with status 1")
+sys.exit(1)
+"""
+
+
+@tag("source")
+class GateVerdictTests(SimpleTestCase):
+    def gate(self, *cmd: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "gate_verdict.py"), "check", *cmd],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_the_last_line_names_the_failed_task_and_tests_after_the_output_unchanged(self):
+        result = self.gate(sys.executable, "-c", FAILING)
+        self.assertEqual(result.returncode, 1)
+        *output, last = result.stdout.splitlines()
+        self.assertIn("..F", output)
+        self.assertIn("FAIL: test_z (hq.x.tests.test_y.Case.test_z)", output)
+        self.assertTrue(last.startswith("[check] FAILED"), last)
+        for named in ("checks:ruff", "hq.x.tests.test_y.Case.test_z", "hq.x.tests.test_w.Other.setUpClass"):
+            self.assertIn(named, last)
+
+    def test_a_pass_says_passed(self):
+        result = self.gate(sys.executable, "-c", "print('FAIL: test_z (a.B.test_z)')")
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(result.stdout.splitlines()[-1].startswith("[check] passed in"))
+
+    def test_fast_names_each_failed_step_and_keeps_its_pass_line(self):
+        ruff = gate_verdict.Step("tasks", ok=False, tasks=["checks:ruff"])
+        tests = gate_verdict.Step("tests", ok=False, tests=["hq.x.tests.test_y.Case.test_z"])
+        integrity = gate_verdict.Step("patch integrity", ok=False)
+        for steps, expected in (
+            ([ruff, tests, integrity], ": checks:ruff; tests: hq.x.tests.test_y.Case.test_z; patch integrity"),
+            ([gate_verdict.Step("tests")], "passed in"),
+        ):
+            with (
+                self.subTest(expected=expected),
+                patch.object(fast_gate, "merge_base", return_value="0" * 40),
+                patch.object(fast_gate, "changed_files", return_value=([], [])),
+                patch.object(fast_gate, "step", side_effect=[*steps, *[gate_verdict.Step("more")] * 3]),
+                patch("sys.stdout", new_callable=io.StringIO) as out,
+            ):
+                code = fast_gate.main([])
+            self.assertEqual(code, 0 if expected == "passed in" else 1)
+            self.assertIn(expected, out.getvalue().splitlines()[-1])
 
 
 WRITE = """

@@ -389,7 +389,7 @@ class GateReferenceTests(SimpleTestCase):
 
     # Tasks that hand whatever follows them to manage.py, whose command line no
     # usage spec can declare: mise appends the words as they were typed.
-    PASSTHROUGH = frozenset({"manage", "suite:as-image"})
+    PASSTHROUGH = frozenset({"manage"})
 
     def test_a_task_that_takes_arguments_says_what_they_are(self):
         """``mise run <task> --help`` prints a task's ``usage``. Once one is
@@ -428,6 +428,14 @@ class GateReferenceTests(SimpleTestCase):
                         self.assertFalse(
                             reads_arguments.search(path.read_text()), f"{name} takes arguments; declare usage"
                         )
+        # A file task declares its usage in its own header.
+        file_tasks = [path for path in (ROOT / "mise-tasks").rglob("*") if path.is_file()]
+        self.assertTrue(file_tasks)
+        for path in file_tasks:
+            source = path.read_text()
+            with self.subTest(task=str(path.relative_to(ROOT))):
+                if reads_arguments.search(source):
+                    self.assertRegex(source, r"(?m)^#USAGE ", "takes arguments; declare usage")
         self.assertGreater(checked, 3)
 
 

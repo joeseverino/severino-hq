@@ -14,7 +14,7 @@
 #                                               on the composed image
 #
 # CodeQL and Scorecard are the versions mise.toml pins and mise.lock verifies,
-# installed by `mise install`. Both read an export of the files
+# CodeQL installed on its first run. Both read an export of the files
 # git would push (tracked plus untracked, less ignored), so a local .venv or
 # stray build output is not scanned.
 #

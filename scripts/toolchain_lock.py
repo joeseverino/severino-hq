@@ -14,8 +14,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 # The pipeline's runners and the machines the gates are run on by hand.
 PLATFORMS = ("linux-x64", "macos-arm64")
-# Read from another file, which is its pin; mise resolves it on install.
-UNLOCKED = {"node"}
 IMAGES = ("Dockerfile", "composition/Dockerfile")
 UV_IMAGE = re.compile(r"^FROM ghcr\.io/astral-sh/uv:(\S+)@sha256:[0-9a-f]{64}\b", re.MULTILINE)
 
@@ -27,8 +25,6 @@ def declared_version(declared: str | dict) -> str:
 def missing(config: dict, lock: dict) -> list[str]:
     found = []
     for name, declared in config.get("tools", {}).items():
-        if name in UNLOCKED:
-            continue
         version = declared_version(declared)
         entries = [entry for entry in lock.get("tools", {}).get(name, []) if entry.get("version") == version]
         found.extend(

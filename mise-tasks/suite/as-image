@@ -1,8 +1,8 @@
 #!/bin/sh
-# The composed suite as the image runs it, from a checkout.
-#
-#   mise run suite:as-image [manage.py test arguments]
-#
+#MISE description="The composed suite as the image runs it: only the files the image ships"
+#MISE extends="composed"
+#USAGE arg "[arguments]..." var=#true help="Passed on to manage.py test: test labels, --tag, --parallel"
+
 # The suite runs in a copy of only what the image is built from (the paths
 # Dockerfile.dockerignore admits, tracked or new), so a test that reads docs/,
 # .git or anything else the image leaves out fails here rather than in Compose.
@@ -12,7 +12,7 @@
 # and says so; REQUIRE_COMPOSED=1 fails instead.
 set -eu
 
-repo="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "${repo}"
 
 # shellcheck source=scripts/lib/composed.sh
@@ -24,8 +24,16 @@ cd "${repo}"
 composed_set || echo "No HQ_LOCAL_PLUGINS supplied: the host alone, as the image runs it (scripts/mise.local.example.toml)."
 
 source_url="$(source_url)"
-tree="$(mktemp -d)"
-trap 'rm -rf "${tree}"' EXIT HUP INT TERM
+# Named as a test run's scratch is, for this shell, so a copy left by a killed
+# run is swept by the next test run (hq/config/sandbox.py).
+tree="$(mktemp -d "${TMPDIR:-/tmp}/severino-test-tree-$$-XXXXXX")"
+# This shell outlives the suite so the copy goes however it ends. A signal is
+# acted on once the suite has stopped (a terminal's interrupt reaches both),
+# and the exit says which signal it was.
+trap 'rm -rf "${tree}"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 admitted="$(sed -n 's|^!\([^*]*[^/]\)/*$|\1|p' Dockerfile.dockerignore)"
 [ -n "${admitted}" ] || { echo "Dockerfile.dockerignore admits nothing." >&2; exit 1; }
@@ -36,9 +44,12 @@ export_tree "${tree}" ${admitted}
 environment="${UV_PROJECT_ENVIRONMENT:-.venv}"
 case "${environment}" in /*) ;; *) environment="${repo}/${environment}" ;; esac
 
+revision="$(git -C "${repo}" rev-parse HEAD)"
 cd "${tree}"
-exec env \
+status=0
+env \
     UV_PROJECT_ENVIRONMENT="${environment}" \
     SEVERINO_HQ_SOURCE="${source_url}" \
-    SEVERINO_HQ_REVISION="$(git -C "${repo}" rev-parse HEAD)" \
-    uv run --locked python manage.py test --noinput --parallel auto "$@"
+    SEVERINO_HQ_REVISION="${revision}" \
+    uv run --locked python manage.py test --noinput --parallel auto "$@" || status=$?
+exit "${status}"

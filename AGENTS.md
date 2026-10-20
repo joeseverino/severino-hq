@@ -20,13 +20,16 @@ authoritative for human and agentic development in this public repository.
 
 Setup is [mise](https://mise.jdx.dev) and `mise install`: the pinned tools, uv
 among them, at the versions in `mise.toml` and the checksums in `mise.lock`.
+A tool no everyday gate runs is `lazy` there and installs on its first use.
 Python dependencies come from `uv.lock` through `uv run --locked`, so no
 virtualenv is made by hand. The images take uv from its own image, pinned by
 digest in `Dockerfile` and `composition/Dockerfile` at the version `mise.toml`
 pins, which `checks:toolchain` holds. Every
 gate is a task in `mise.toml` named `<job>:<gate>`;
 `mise tasks` lists them and `mise run checks:ruff` runs one. `mise run manage --
-<command>` runs `manage.py` with the development settings the gates use.
+<command>` runs `manage.py` with the development settings the gates use and the
+browser group installed, so one browser test runs as `mise run manage -- test
+<label>` (after `mise run setup:webkit` once).
 
 `mise run fast [BASE]` is the inner loop: the changed files against the merge
 base (`BASE`, `$CHECK_BASE`, then `origin/main`, `main`) are mapped through the
@@ -46,6 +49,9 @@ seconds for a one-domain change; a change to a shared layer reaches most of the
 suite and says so. It reads Python imports and app names, so a rule tested
 only through a string or a template it cannot see needs `mise run check`. It
 never replaces `mise run check`. A new host domain: `docs/New-Domain.md`.
+`fast` and `check` close on a verdict line naming each failed task and test
+(`scripts/gate_verdict.py`), so run them plain and read that line; a pipe
+reports the filter's exit status, not the gate's.
 
 `mise run check` answers "do my changes work?". `mise run ci` answers "will the
 pipeline accept them?": the aggregates `checks` (ruff and mypy at the locked

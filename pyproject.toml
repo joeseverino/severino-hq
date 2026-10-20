@@ -109,10 +109,12 @@ max-complexity = 15
 # The editor's language server, for navigation and for an import that is
 # actually broken. Types are mypy's (checks:mypy): a second checker with its
 # own opinions only contradicts the one the gates enforce. Each checkout,
-# worktrees included, resolves against its own environment.
+# worktrees included, resolves against its own environment; an agent's
+# worktree is checked by its own gates, not by the server rooted here.
 typeCheckingMode = "off"
 venvPath = "."
 venv = ".venv"
+ignore = [".claude/worktrees"]
 
 [tool.mypy]
 python_version = "3.15"
