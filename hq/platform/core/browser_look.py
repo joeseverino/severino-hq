@@ -6,7 +6,8 @@ of each under var/look/, and, given `--rule`, runs that rule of
 first: how a new rule is shown to fail on the defect it was written for before
 it lands. Not a gate: it fails only when the rule it was asked to run fails.
 
-A page is one of the stress estate's (sparse and dense), the API reference
+A page is one of the stress estate's (sparse, dense, and every list filled
+from its model under derived/), the API reference
 (`api/docs`, `api/docs/dark`), or a page the example estate's navigation
 reaches, named for its address under `estate` (`estate`, `estate/finance`).
 `--deep` adds every page those link to: each list's records, the command forms
@@ -49,6 +50,7 @@ from hq.platform.core.browser_tests import (
 )
 from hq.platform.core.estate_browser_tests import ExampleEstateBrowserTests, navigation
 from hq.platform.core.speculation import NOT_A_NAVIGATION
+from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 
 OUT = Path(settings.BASE_DIR) / "var" / "look"
@@ -252,7 +254,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     @classmethod
     def render(cls):
         estate = [_estate_name(path) for path in navigation()]
-        known = [*ALL_PAGES, *REFERENCE_PAGES, *estate]
+        stress = [*ALL_PAGES, *derived_pages()]
+        known = [*stress, *REFERENCE_PAGES, *estate]
         pages = _listed("usage_pages")
         if pages == ["all"]:
             pages = known
@@ -265,7 +268,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         cls.addresses = {name: _estate_path(name) for name in estate}
         cls.estate_client = cls.serve_estate() if set(pages) & set(estate) else None
         rendered: dict = {}
-        if set(pages) & set(ALL_PAGES):
+        if set(pages) & set(stress):
             rendered |= LayoutBrowserTests.render()
         if set(pages) & set(REFERENCE_PAGES):
             rendered |= render_reference()

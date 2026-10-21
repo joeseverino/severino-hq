@@ -4,9 +4,11 @@ This filename does not match Django's default test*.py discovery, so the plain
 suite needs neither Playwright nor a browser. `mise run browser` runs it, and
 `mise run ci` always does.
 
-Pages render through their real views over two synthetic example.* estates,
-a sparse one (core/tests/test_browser_fixtures.py) and a dense, production-shaped
-one (core/tests/test_browser_dense_fixtures.py), then load in a browser whose every request is
+Pages render through their real views over three synthetic example.* estates,
+a sparse one (core/tests/test_browser_fixtures.py), a dense, production-shaped
+one (core/tests/test_browser_dense_fixtures.py), and every list filled with the
+longest values its model holds (core/tests/test_browser_derived_fixtures.py),
+then load in a browser whose every request is
 answered locally: nothing here can reach a real endpoint. Assertions are
 invariants rather than pixels, so a page can change and still pass as long as
 it stays readable.
@@ -34,6 +36,7 @@ lazy from django.template import Context, Template
 lazy from django.template.loader import render_to_string
 
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
+from hq.platform.core.tests.test_browser_derived_fixtures import build_derived_estate, render_derived_pages
 from hq.platform.core.tests.test_browser_fixtures import PAGES, build_estate, render_pages
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.pages import Page, PageAction
@@ -1966,7 +1969,11 @@ class LayoutBrowserTests(BrowserGate):
         with transaction.atomic():
             pages |= render_dense_pages(build_dense_estate())
             transaction.set_rollback(True)
-        return pages | speaking_heads() | shared_parts()
+        with transaction.atomic():
+            lists = render_derived_pages(build_derived_estate())
+            transaction.set_rollback(True)
+        cls.lists = tuple(lists)
+        return pages | lists | speaking_heads() | shared_parts()
 
     def loaded(self, name, width, **where):
         """Open ``name`` at ``width``; one that does not load fails once, not once per rule."""
@@ -2349,6 +2356,22 @@ class LayoutBrowserTests(BrowserGate):
         self.open_every_disclosure(name)
         self.page.evaluate(_SETTLED)
         self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+
+    def test_every_list_fits_its_box_with_the_longest_values_its_model_holds(self):
+        """Every list, its rows derived from its model's fields
+        (test_browser_derived_fixtures), as it loads and with every row open."""
+
+        self.start(java_script_enabled=True)
+        held = [self.a_table_fits_its_box_at_every_width, self.a_token_breaks_only_where_it_may]
+        for name in self.lists:
+            for width in OVERFLOW_WIDTHS:
+                if not self.loaded(name, width, script="on"):
+                    continue
+                self.page.evaluate(_SETTLED)
+                self.hold(name, width, [self.no_column_is_narrower_than_its_words, *held], script="on")
+                self.page.locator(SELECTORS["row_toggle"]).evaluate_all(_PRESS_EVERY_SHOWN)
+                self.page.evaluate(_SETTLED)
+                self.hold(name, width, [self.nothing_runs_out_of_its_table_cell, *held], script="on", rows="open")
 
     def test_nothing_moves_once_a_page_is_drawn(self):
         """What the server draws is where things stay. The stress estate
