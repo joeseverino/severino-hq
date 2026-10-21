@@ -45,7 +45,7 @@ actionlint = "1.7.12"
 yq = "4.54.1"
 jq = "1.8.2"
 # The images copy uv from its own image at this version (checks:toolchain).
-uv = "0.13.1"
+uv = "0.13.4"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
 scorecard = "5.6.0"
 # Seals a failed Compose run's output (tools/pipeline/seal-failure-logs.sh). Lazy:
