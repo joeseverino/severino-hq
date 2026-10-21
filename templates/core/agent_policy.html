@@ -45,7 +45,7 @@ its own heading. Each row is in one table only, so the form posts each rule once
     {% include "core/_policy_table.html" with groups=changed_groups %}
   {% endif %}
   {% if default_groups %}
-    <details class="section-fold">
+    <details class="section-fold" open>
       <summary><h2>{% if changed_groups %}Every other action{% else %}Every action{% endif %} <span class="heading-aside">{{ default_count }}</span></h2></summary>
       {% include "core/_policy_table.html" with groups=default_groups %}
     </details>
