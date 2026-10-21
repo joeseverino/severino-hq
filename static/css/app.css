@@ -5132,7 +5132,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .policy-dormant-note { margin-left: auto; color: var(--muted-2); }
 .agent-state-facts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 .policy-agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
-.policy-agents li { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--surface-inset, var(--space-5) var(--space-6)); font-size: var(--text-xs); }
+.policy-agents > li { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--surface-inset, var(--space-5) var(--space-6)); font-size: var(--text-xs); }
 .policy-agent-name { font-size: var(--text-md); font-weight: 600; color: var(--ink); }
 .policy-none { margin: 0; font-size: var(--text-sm); }
 .policy { display: grid; gap: var(--stack-gap); }
@@ -5144,7 +5144,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-2); }
 .policy-effect.effect-destructive { color: var(--danger); }
 .policy-effect.effect-infrastructure_change { color: var(--warn); }
-.policy-default { color: var(--muted); white-space: nowrap; }
+.policy-default { color: var(--muted); }
 .policy-unavailable { font-size: var(--text-xs); white-space: nowrap; }
 .policy-select { --chevron-inset: var(--space-4); min-width: 7.5rem; padding-inline-start: var(--space-4); color: var(--muted); font-size: var(--text-xs); }
 .policy-select.rule-allow { color: var(--ok); border-color: currentColor; }
@@ -5459,7 +5459,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
   .kv, .form,
   .auth-card, .mail-stage, .mail-editor,
   .topology-workspace, .github-list, .account-facts,
-  .boxed-facts, .policy-agents li, .relation-list,
+  .boxed-facts, .policy-agents > li, .relation-list,
   .posture-gaps, .posture-repos, .machine-telemetry, .machine-telemetry-metrics, .route,
   .dashboard-counts, .dash-links) {
     border: var(--surface-border, 1px solid var(--line));
