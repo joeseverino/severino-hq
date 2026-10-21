@@ -560,7 +560,8 @@ _OVERLAPS = (
   for (const parent of document.querySelectorAll('main *')) {
     const display = getComputedStyle(parent).display;
     if (!/grid|flex/.test(display)) continue;
-    const items = inFlow(parent);
+    // A sticky item is drawn over what scrolls under it; that is what it is for.
+    const items = inFlow(parent).filter(([, style]) => style.position !== 'sticky');
     for (let i = 0; i < items.length; i += 1) {
       for (let j = i + 1; j < items.length; j += 1) {
         const [a, , ra] = items[i];
