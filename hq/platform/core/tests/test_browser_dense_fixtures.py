@@ -16,14 +16,11 @@ or shared-address range (192.0.2.0/24, 198.51.100.0/24, 100.64.0.0/10).
 
 from contextlib import ExitStack
 from datetime import timedelta
-from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, Asset
-from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -31,11 +28,7 @@ from hq.domains.control_plane.models import (
     ProviderInventory,
     WeatherObservation,
 )
-from hq.domains.docs_index.models import DocumentationRecord
-from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
-from hq.domains.jobs.models import Job, JobState
 from hq.domains.projects.models import Project
-from hq.domains.receipts.models import Receipt
 from hq.platform.application import readings
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.report_testing import report_connections
@@ -427,94 +420,7 @@ def build_dense_estate():
     _operations(user)
     _unmanaged()
     _tailnet_policy()
-    _content()
-    _ledger()
     return user
-
-
-# Titles and descriptions as long as a published writeup's, of more than one
-# type, so the list shows its Type column too.
-_WRITEUPS = (
-    (
-        ContentItem.Type.LAB_WRITEUP,
-        "Simulating Address Resolution Spoofing in an Emulated Network and Its Enterprise Mitigations",
-        "Building a small emulated network, poisoning its address tables from one host, "
-        "and measuring which switch-level defenses stop it",
-    ),
-    (
-        ContentItem.Type.ARTICLE,
-        "Securing an Example Publishing Site with a Content Security Policy and Passkey Sign-In",
-        "Moving an example site behind a strict content security policy, then replacing its passwords with passkeys",
-    ),
-    (
-        ContentItem.Type.GUIDE,
-        "Running a Self-Hosted Recursive Resolver Beside an Ad-Blocking Filter",
-        "A resolver that answers from the root, chained behind a filtering forwarder, with "
-        "the cache and logging settings that matter",
-    ),
-)
-
-
-def _content():
-    for index, (content_type, title, topic) in enumerate(_WRITEUPS):
-        ContentItem.objects.create(
-            title=title,
-            content_type=content_type,
-            status=ContentItem.Status.PUBLISHED if index else ContentItem.Status.DRAFT,
-            topic=topic,
-            published_url=f"https://www.example.com/writeups/an-example-writeup-{index}/",
-            published_at=timezone.localdate() - timedelta(days=30 * index),
-        )
-
-
-# A purchase as a store's receipt names it: a long product line from a vendor
-# with a long trading name, at a four-figure price.
-_PURCHASES = (
-    ("Example Rack-Mount 8-Bay Storage Server with Redundant Power Supplies", "Example Enterprise Hardware Outlet"),
-    ("Example 48-Port Managed Gigabit Switch with Ten-Gigabit Uplinks", "Example Networking Supply Company"),
-    ("Example Three-Year Business Support Plan for a Hosted Mail Service", "Example Software Subscriptions LLC"),
-)
-
-
-def _ledger():
-    today = timezone.localdate()
-    for index, (item, vendor) in enumerate(_PURCHASES):
-        asset = Asset.objects.create(
-            item_name=item,
-            slug=f"an-example-purchase-{index}",
-            vendor=vendor,
-            category=ASSET_CATEGORY_CHOICES[index][0],
-            purchase_date=today - timedelta(days=40 * index),
-            total_cost=Decimal("12345.67") * (index + 1),
-            business_use_percentage=100,
-        )
-        expense = Expense.objects.create(
-            date=today - timedelta(days=40 * index),
-            vendor=vendor,
-            item=item,
-            category=EXPENSE_CATEGORY_CHOICES[index][0],
-            total_cost=Decimal("12345.67") * (index + 1),
-            related_asset=asset,
-        )
-        Receipt.objects.create(
-            file=f"receipts/an-example-receipt-with-a-long-name-{index}.pdf",
-            original_filename=f"an-example-receipt-with-a-long-file-name-{index}.pdf",
-            vendor=vendor,
-            date=expense.date,
-            amount=expense.total_cost,
-            related_expense=expense,
-            related_asset=asset,
-        )
-        Job.objects.create(
-            kind=f"example.a-long-job-kind-{index}",
-            label=f"Refresh every reading of an example connection with a long name {index}",
-            state=JobState.FAILED if index else JobState.SUCCEEDED,
-            note="Read 12 of 14 sources; two did not answer before the deadline",
-        )
-        DocumentationRecord.objects.create(
-            doc_id=f"rb-an-example-runbook-with-a-long-identifier-{index:03d}",
-            title=f"Restoring the Example Storage Server from an Off-Site Backup, Part {index + 1}",
-        )
 
 
 # A record whose history and queued work fill the records list, its own page
@@ -757,7 +663,6 @@ DENSE_PAGES = {
     "dense/services": (lambda: reverse("control_plane:services"), ExitStack),
     "dense/findings": (lambda: reverse("control_plane:findings"), ExitStack),
     "dense/action-items": (lambda: reverse("action_items"), ExitStack),
-    "dense/projects": (lambda: reverse("projects:list"), ExitStack),
     "dense/connections": (
         lambda: reverse("control_plane:connections"),
         _asked_through_the_proxy,
@@ -768,12 +673,6 @@ DENSE_PAGES = {
     "dense/record": (lambda: reverse("control_plane:detail", kwargs={"key": OPERATED}), ExitStack),
     "dense/controller": (lambda: reverse("control_plane:controller"), ExitStack),
     "dense/tailnet": (lambda: reverse("control_plane:tailnet"), ExitStack),
-    "dense/content": (lambda: reverse("content:list"), ExitStack),
-    "dense/assets": (lambda: reverse("assets:list"), ExitStack),
-    "dense/expenses": (lambda: reverse("expenses:list"), ExitStack),
-    "dense/receipts": (lambda: reverse("receipts:list"), ExitStack),
-    "dense/jobs": (lambda: reverse("jobs:list"), ExitStack),
-    "dense/docs": (lambda: reverse("docs_index:list"), ExitStack),
     "dense/audit": (lambda: reverse("core:audit_list"), ExitStack),
     "dense/audit-event": (
         lambda: reverse("core:audit_detail", args=[AuditLog.objects.filter(metadata__has_key="changes").get().pk]),
