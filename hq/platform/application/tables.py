@@ -107,9 +107,8 @@ class TableColumn:
     sort: str = ""
     ascending_label: str = ""
     descending_label: str = ""
-    # Classes for the heading. ``key-col`` keeps the column on a phone, where a
-    # table of four or more shows only the column that names each row and the
-    # ones marked key; the rest are listed when a row is expanded.
+    # Classes for the heading. ``key-col`` keeps the column at every width;
+    # what a narrow box lets go is listed when a row is expanded.
     css: str = ""
     # One of ``COLUMN_KINDS``; left empty, it follows from ``css``.
     kind: str = ""
