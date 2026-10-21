@@ -135,7 +135,22 @@ class DemoSiteTests(unittest.TestCase):
             self.assertTrue(weather.is_visible(), "the forecast is on the dashboard")
             self.assertIn("°", weather.locator(".glance-lead").inner_text())
             self.assertTrue(weather.locator(".glance-hours li").count())
+            for width in (402, 1360):
+                page.set_viewport_size({"width": width, "height": 900})
+                with self.subTest(width=width):
+                    self.assertEqual(self._lines_past_their_reading(page), [])
             browser.close()
+
+    @staticmethod
+    def _lines_past_their_reading(page) -> list[str]:
+        """Each reading's quiet line that runs past the reading it is under."""
+
+        return page.locator(".dash-readings .glance-caption").evaluate_all(
+            """lines => lines.filter(line => {
+                const own = line.closest('.glance-panel, .dash-reading').getBoundingClientRect();
+                return line.getBoundingClientRect().right > own.right + 1;
+            }).map(line => line.textContent.trim())"""
+        )
 
     def test_a_dismissal_is_kept_until_the_demo_is_reset(self):
         from playwright.sync_api import sync_playwright
