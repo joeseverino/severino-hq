@@ -3,6 +3,8 @@ the connections HQ reads them through."""
 
 from datetime import timedelta
 
+from django.utils.timezone import localtime
+
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -251,24 +253,65 @@ def host():
     _weather()
 
 
+# The hours ahead, as the controller words them: a showery afternoon that
+# clears by evening, in the order the weather service lists its periods.
+_HOURS = (
+    (58, 40, "Chance Light Rain Showers"),
+    (59, 40, "Chance Light Rain Showers"),
+    (60, 30, "Chance Light Rain Showers"),
+    (60, 20, "Slight Chance Light Rain"),
+    (58, 10, "Partly Cloudy"),
+    (56, 5, "Partly Cloudy"),
+    (54, 2, "Mostly Clear"),
+    (53, 1, "Mostly Clear"),
+    (52, 1, "Clear"),
+    (51, 0, "Clear"),
+    (50, 0, "Clear"),
+    (49, 0, "Clear"),
+)
+
+
+def _hour(at):
+    return f"{at.hour % 12 or 12} {'AM' if at.hour < 12 else 'PM'}"
+
+
 def _weather():
-    """The dashboard's forecast, as the weather service words a showery afternoon."""
+    """The dashboard's forecast, in the shape the controller reports one
+    (``controller/providers/glance.go``)."""
 
     point = "40.0000,-90.0000"
     DashboardConfiguration.objects.update_or_create(
         pk=1, defaults={"weather_point": point, "weather_label": "Example City"}
     )
+    observed = now() - timedelta(minutes=14)
+    first = localtime(observed).replace(minute=0, second=0, microsecond=0)
+    hours = [
+        {
+            "time": _hour(first + timedelta(hours=index)),
+            "temperature": f"{degrees}°",
+            "forecast": forecast,
+            "precipitation": f"{chance}%",
+        }
+        for index, (degrees, chance, forecast) in enumerate(_HOURS)
+    ]
+    temperatures = [degrees for degrees, _chance, _forecast in _HOURS]
     WeatherObservation.objects.create(
         point=point,
         payload={
             "status": "good",
             "summary": "Example City, EX",
             "metrics": [
-                {"label": "Now", "value": "Chance Light Rain Showers", "detail": "This Afternoon"},
-                {"label": "Temperature", "value": "58°F", "detail": ""},
+                {"label": "Now", "value": _HOURS[0][2], "detail": "This Afternoon"},
+                {"label": "Temperature", "value": f"{_HOURS[0][0]}°F", "detail": ""},
+                {
+                    "label": "Range",
+                    "value": f"{min(temperatures)}–{max(temperatures)}°",
+                    "detail": f"next {len(_HOURS)} hours",
+                },
+                {"label": "Rain", "value": f"Now · {_HOURS[0][1]}%", "detail": _HOURS[0][2]},
                 {"label": "Wind", "value": "WSW 10 to 15 mph", "detail": "NWS hourly forecast"},
-                {"label": "Alerts", "value": "0", "detail": "active for this point"},
             ],
+            "hours": hours,
         },
-        observed_at=now() - timedelta(minutes=14),
+        observed_at=observed,
     )

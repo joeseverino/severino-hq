@@ -3,6 +3,7 @@
 // The demo has no server, so this script:
 // - serves partial page loads from the copies in __fragments__/, and one with a
 //   query from the saved copy of that address (demo-theme.js), and stops polling;
+//   one that posts is answered with the region as it was saved;
 // - says so on a page whose query the demo has no copy of;
 // - answers the connection panel's header read with the headers HQ sent at build;
 // - saves dismissals in localStorage and shows "Demo only: nothing was saved"
@@ -50,8 +51,12 @@
     const url = new URL(typeof input === "string" ? input : input.url, location.href);
     const method = (init.method || "GET").toUpperCase();
     const headers = new Headers(init.headers || {});
-    if (method !== "GET") return new Response("", { status: 200 });
-    if (headers.has("X-Fragment") || headers.get("X-Requested-With") === "XMLHttpRequest") {
+    const partial = headers.has("X-Fragment") || headers.get("X-Requested-With") === "XMLHttpRequest";
+    // A region that posts (the dashboard asking for its due readings) is
+    // answered as it was drawn: nothing changed, and an empty answer would
+    // empty the region.
+    if (method !== "GET" && !partial) return new Response("", { status: 200 });
+    if (partial) {
       const name = headers.get("X-Fragment") || "";
       const saved = await answers();
       const found = saved[`${demo.key(url)}|${name}`];
@@ -69,6 +74,7 @@
       const copy = (await demo.routes()).variants[demo.key(url)];
       if (copy) return plainFetch(copy);
       if (url.search) return new Response("", { status: 404 });
+      if (method !== "GET") return plainFetch(url);
     }
     return plainFetch(input, init);
   };

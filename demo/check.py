@@ -119,6 +119,24 @@ class DemoSiteTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(elsewhere, [])
 
+    def test_the_dashboard_keeps_its_readings_once_it_settles(self):
+        # The strip asks for its due readings as the page opens; the demo
+        # answers, and the homelab and the forecast are still there after.
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.webkit.launch()
+            page = browser.new_page()
+            page.goto(self.origin + "/", wait_until="networkidle")
+            homelab = page.locator('.glance-panel[data-fragment-part^="machine-"]')
+            self.assertTrue(homelab.first.is_visible(), "the homelab's reading is on the dashboard")
+            self.assertTrue(homelab.first.locator('a[href="/infrastructure/containers/"]').count())
+            weather = page.locator('.glance-panel[data-fragment-part="weather"]')
+            self.assertTrue(weather.is_visible(), "the forecast is on the dashboard")
+            self.assertIn("°", weather.locator(".glance-lead").inner_text())
+            self.assertTrue(weather.locator(".glance-hours li").count())
+            browser.close()
+
     def test_a_dismissal_is_kept_until_the_demo_is_reset(self):
         from playwright.sync_api import sync_playwright
 
