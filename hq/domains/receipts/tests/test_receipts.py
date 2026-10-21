@@ -34,7 +34,8 @@ class ReceiptLinkTests(TestCase):
         response = self.client.get(reverse("receipts:list"))
 
         found = links(response)
-        self.assertIn(("Example Host · Hosting", self.expense.get_absolute_url()), found)
+        # The row names the vendor, so the expense is named by its item.
+        self.assertIn((self.expense.item, self.expense.get_absolute_url()), found)
         self.assertIn(("Example Switch", self.asset.get_absolute_url()), found)
         # A receipt with no vendor is named by its file.
         self.assertIn("scan.pdf", text(response))
@@ -47,7 +48,8 @@ class ReceiptLinkTests(TestCase):
         response = self.client.get(reverse("receipts:match", args=[receipt.pk]))
 
         self.assertContains(response, "Already linked to")
-        self.assertContains(response, f'href="{self.expense.get_absolute_url()}"')
+        # Said on its own, the expense names who was paid as well as for what.
+        self.assertIn((self.expense.label, self.expense.get_absolute_url()), links(response))
 
     def test_the_page_says_the_file_type_as_a_word(self):
         receipt = _receipt(vendor="Example Host")
