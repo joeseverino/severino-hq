@@ -156,7 +156,7 @@ func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	// The new tree and its web unit are in place before HQ restarts, so HQ
 	// comes up as the release being deployed defines it.
 	f.before(t, "docker create --pull never "+imageID, "systemctl restart "+WebUnit)
-	if _, err := os.Stat(filepath.Join(f.machine.Lib, "scripts", "synced-release")); err != nil {
+	if _, err := os.Stat(filepath.Join(f.machine.Lib, "hq", "config", "synced-release")); err != nil {
 		t.Error("the tree is not the image's")
 	}
 	if _, err := os.Stat(filepath.Join(f.machine.Systemd, WebUnit)); err != nil {
@@ -192,7 +192,7 @@ func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 	if _, err := os.Stat(marker); err != nil {
 		t.Error("the previous tree was not restored")
 	}
-	if _, err := os.Stat(filepath.Join(f.machine.Lib, "scripts", "synced-release")); err == nil {
+	if _, err := os.Stat(filepath.Join(f.machine.Lib, "hq", "config", "synced-release")); err == nil {
 		t.Error("the unhealthy release's tree was left in place")
 	}
 	if _, err := os.Stat(filepath.Join(f.machine.Systemd, WebUnit)); err == nil {
@@ -236,7 +236,7 @@ func TestAFailedInstallRollsTheTreeAndImageBack(t *testing.T) {
 	if _, err := os.Stat(marker); err != nil {
 		t.Error("the previous tree was not restored")
 	}
-	if _, err := os.Stat(filepath.Join(f.machine.Lib, "scripts", "synced-release")); err == nil {
+	if _, err := os.Stat(filepath.Join(f.machine.Lib, "hq", "config", "synced-release")); err == nil {
 		t.Error("the failed release's tree was left in place")
 	}
 }

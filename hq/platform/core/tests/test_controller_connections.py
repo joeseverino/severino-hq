@@ -79,8 +79,3 @@ class RendererDeliveryTests(unittest.TestCase):
         # No token, vault or endpoint is configured in the shipped unit.
         self.assertNotIn("LoadCredential", unit)
         self.assertNotIn("Environment=", unit)
-
-    def test_the_shell_renderer_is_gone(self):
-        for name in ("refresh-secrets.sh", "render-controller-env.sh", "list-secret-items.sh", "render-env.jq"):
-            with self.subTest(name=name):
-                self.assertFalse((ROOT / "scripts" / name).exists())

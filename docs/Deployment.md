@@ -383,10 +383,8 @@ compose workflow's signature, and stops if the image's platform is not the
 machine's. HQ does not yet queue an upgrade to another machine, so the helper
 is run by hand with the plan's values.
 
-A rule written before the helper moved into `hq-host` names
-`scripts/upgrade-container.sh`, which now only execs `hq-host upgrade`. Re-run
-the plan's allow step on each machine once to write the new rule; the script
-goes when no rule names it.
+A machine whose rule names a program other than `hq-host upgrade` admits
+nothing: re-run the plan's allow step there to write the current rule.
 
 ## Verifying
 

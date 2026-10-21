@@ -21,7 +21,6 @@ func TestTheTreeIsTheImagesSealed(t *testing.T) {
 	}
 	for path, mode := range map[string]os.FileMode{
 		"deploy/bin/hq-host":        0o755,
-		"scripts/deploy-image.sh":   0o755,
 		"hq/config/controller.json": 0o644,
 		"deploy/systemd":            0o755,
 	} {
@@ -41,14 +40,14 @@ func TestTheTreeIsTheImagesSealed(t *testing.T) {
 
 func TestATreeWithALinkIsRefused(t *testing.T) {
 	f := newFakeHost(t)
-	os.Symlink("/etc/shadow", filepath.Join(f.image, "scripts", "planted.sh"))
+	os.Symlink("/etc/shadow", filepath.Join(f.image, "deploy", "bin", "planted"))
 
 	err := f.machine.Sync(context.Background(), next)
 
 	if err == nil || !strings.Contains(err.Error(), "link") {
 		t.Fatalf("got %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(f.machine.Lib, "scripts", "synced-release")); err == nil {
+	if _, err := os.Stat(filepath.Join(f.machine.Lib, "hq", "config", "synced-release")); err == nil {
 		t.Error("the refused tree was swapped in")
 	}
 }

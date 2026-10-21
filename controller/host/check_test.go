@@ -47,7 +47,7 @@ func newCheckHost(t *testing.T) *checkHost {
 		FreeBytes: DeployFreeBytes, Free: func(string) (uint64, error) { return h.free, nil },
 		Command: h.command, Out: &h.out,
 	}
-	for _, path := range []string{"scripts/deploy-image.sh", "scripts/upgrade-container.sh", "deploy/bin/hq-host", ".source"} {
+	for _, path := range []string{"scripts/deploy-image.sh", "deploy/bin/hq-host", ".source"} {
 		h.file(filepath.Join(lib, path), 0o755)
 	}
 	for _, unit := range []string{"severino-hq-web.service", "severino-hq-backup.timer"} {
@@ -136,7 +136,7 @@ func TestACurrentHostIsReady(t *testing.T) {
 
 	h.says(out, "ok      the host is the release it runs")
 	h.says(out, "ok      every established unit is installed")
-	for _, program := range []string{"scripts/deploy-image.sh", "scripts/upgrade-container.sh", "deploy/bin/hq-host"} {
+	for _, program := range []string{"scripts/deploy-image.sh", "deploy/bin/hq-host"} {
 		h.says(out, filepath.Join(h.checker.Lib, program)+" is root's alone")
 	}
 	if strings.Contains(out, "secret-marker-example") {
@@ -158,19 +158,22 @@ func TestEachHostFaultFailsAndSaysWhatItIs(t *testing.T) {
 			os.Remove(filepath.Join(h.checker.Systemd, "severino-hq-backup.timer"))
 		}, "severino-hq-backup.timer is not installed"},
 		"a host that is not its release": {func(h *checkHost) {
-			h.verify, h.verifyErr = "drift: scripts/deploy-image.sh differs from the image's\n", true
-		}, "FAIL    scripts/deploy-image.sh differs from the image's"},
+			h.verify, h.verifyErr = "drift: deploy/bin/hq-host differs from the image's\n", true
+		}, "FAIL    deploy/bin/hq-host differs from the image's"},
 		"a sudo target others can write": {func(h *checkHost) {
-			os.Chmod(filepath.Join(h.checker.Lib, "scripts", "upgrade-container.sh"), 0o775)
-		}, "upgrade-container.sh is writable by its group or others"},
+			os.Chmod(filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host"), 0o775)
+		}, "hq-host is writable by its group or others"},
 		"a directory above a sudo target others can write": {func(h *checkHost) {
 			os.Chmod(filepath.Join(h.checker.Lib, "deploy", "bin"), 0o777)
 		}, "bin is writable by its group or others; a sudo rule runs " + "<lib>/deploy/bin/hq-host"},
 		"a sudo target that is a link": {func(h *checkHost) {
-			path := filepath.Join(h.checker.Lib, "scripts", "deploy-image.sh")
+			path := filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host")
 			os.Remove(path)
 			os.Symlink("/bin/sh", path)
-		}, "deploy-image.sh is a symlink"},
+		}, "hq-host is a symlink"},
+		"a sudo target that is missing": {func(h *checkHost) {
+			os.Remove(filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host"))
+		}, "hq-host cannot be read"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newCheckHost(t)
@@ -206,15 +209,4 @@ func TestWithoutSudoTheDriftUnitIsTheEvidence(t *testing.T) {
 	h.drift = ranAt(installed.Add(time.Minute), true)
 	os.Remove(filepath.Join(h.checker.Lib, ".source"))
 	h.says(h.check(CheckUnverified), "when this release was installed cannot be read")
-}
-
-func TestATreeWithoutTheShimsChecksWhatItHas(t *testing.T) {
-	h := newCheckHost(t)
-	os.Remove(filepath.Join(h.checker.Lib, "scripts", "upgrade-container.sh"))
-
-	out := h.check(CheckReady)
-
-	if strings.Contains(out, "upgrade-container.sh") {
-		t.Errorf("a program the tree does not have was checked:\n%s", out)
-	}
 }

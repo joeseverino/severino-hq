@@ -65,7 +65,7 @@ func (c *Checker) unknown(format string, args ...any) {
 func (c *Checker) Check(ctx context.Context) int {
 	c.runner(ctx)
 	c.verified(ctx)
-	for _, program := range []string{DeployEntry, HostProgram, Lib + "/scripts/upgrade-container.sh"} {
+	for _, program := range []string{DeployEntry, HostProgram} {
 		c.rootsAlone(strings.TrimPrefix(program, Lib+"/"))
 	}
 	c.units()
@@ -188,9 +188,6 @@ func (c *Checker) lastVerify(ctx context.Context, since int64) string {
 // else. A program this release does not have is not checked.
 func (c *Checker) rootsAlone(relative string) {
 	program := filepath.Join(c.Lib, relative)
-	if _, err := os.Lstat(program); err != nil {
-		return
-	}
 	alone := true
 	path := c.Lib
 	for _, part := range append([]string{""}, strings.Split(relative, "/")...) {

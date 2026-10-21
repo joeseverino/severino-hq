@@ -20,9 +20,8 @@
 !mise.toml
 !policy/
 !pyproject.toml
-# scripts/ is synced to the deploy host whole: only the shims its sudo rules name.
+# scripts/ is synced to the deploy host whole: only the shim its sudo rule names.
 !scripts/deploy-image.sh
-!scripts/upgrade-container.sh
 !static/
 !templates/
 !tests/

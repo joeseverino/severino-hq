@@ -135,7 +135,7 @@ func newFakeHost(t *testing.T) *fakeHost {
 	for name, body := range map[string]string{
 		"deploy/bin/hq-host":        "#!/bin/sh\n",
 		"scripts/deploy-image.sh":   "#!/bin/sh\n",
-		"scripts/synced-release":    "",
+		"hq/config/synced-release":  "",
 		"hq/config/controller.json": "{}\n",
 	} {
 		path := filepath.Join(f.image, name)

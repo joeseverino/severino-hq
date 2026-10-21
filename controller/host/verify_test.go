@@ -43,8 +43,8 @@ func TestAHostThatIsItsReleaseHasNoDrift(t *testing.T) {
 
 func TestEveryKindOfDriftIsNamed(t *testing.T) {
 	f := synced(t)
-	os.WriteFile(filepath.Join(f.machine.Lib, "scripts", "deploy-image.sh"), []byte("#!/bin/sh\necho edited\n"), 0o755)
-	os.WriteFile(filepath.Join(f.machine.Lib, "scripts", "planted.sh"), nil, 0o755)
+	os.WriteFile(filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host"), []byte("#!/bin/sh\necho edited\n"), 0o755)
+	os.WriteFile(filepath.Join(f.machine.Lib, "deploy", "bin", "planted"), nil, 0o755)
 	os.Remove(filepath.Join(f.machine.Lib, "hq", "config", "controller.json"))
 	os.WriteFile(filepath.Join(f.machine.Systemd, "severino-hq-web.service"), []byte("edited\n"), 0o644)
 	os.WriteFile(filepath.Join(f.machine.Systemd, "severino-hq-old.timer"), nil, 0o644)
@@ -53,8 +53,8 @@ func TestEveryKindOfDriftIsNamed(t *testing.T) {
 	drift := strings.Join(f.verify(t), "\n")
 
 	for _, want := range []string{
-		"scripts/deploy-image.sh differs from the image's",
-		"scripts/planted.sh is not the image's",
+		"deploy/bin/hq-host differs from the image's",
+		"deploy/bin/planted is not the image's",
 		"hq/config/controller.json is missing from the tree",
 		"severino-hq-web.service is not the release's",
 		"severino-hq-old.timer is not shipped by the release",
