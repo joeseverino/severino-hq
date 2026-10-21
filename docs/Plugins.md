@@ -136,16 +136,16 @@ signed.
 
 The same checks run from an extension's checkout with nothing to pass:
 `../severino-hq/tools/pipeline/check-plugin.sh`, or `mise run plugin:check -- --plugin-root PATH`
-from the host checkout. It syncs and lints the package,
-enforces SDK-only imports, runs Django checks, migration drift checks and the
-plugin's tests, then builds the wheel and installs it with `--no-deps` into a
-clean host environment. That last step reproduces production's dependency
-boundary and catches a missing host pin before composition. A package that
-declares `[tool.mypy]` in its `pyproject.toml` has its own mypy (from its dev
-group) run against the host's typed `hq_sdk`, with django-stubs pointed at
+from the host checkout. It syncs the package against its lock and lints it,
+enforces SDK-only imports, type checks it, runs Django checks, migration drift
+checks and the plugin's tests, then installs the package (built as a wheel)
+with `--no-deps` into a clean host environment. That last step reproduces
+production's dependency boundary and catches a missing host pin before
+composition. Every package declares `[tool.mypy]` in its `pyproject.toml`, and
+the check refuses one that does not: its own mypy (from its dev group) runs
+against the host's typed `hq_sdk`, with django-stubs pointed at
 `hq.config.settings_typecheck`, the host's settings with that package
-installed; one without the table is
-told so and not type checked. In CI it runs
+installed. In CI it runs
 against host `main`, or the host branch named like the extension's branch when
 one exists ([Coordinated changes](#coordinated-changes)).
 

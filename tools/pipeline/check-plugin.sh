@@ -22,61 +22,52 @@ while [ "$#" -gt 0 ]; do
 done
 
 hq_root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
-plugin_root=$(cd -- "$plugin_root" && pwd)
-identity=$(PYTHONPATH="$hq_root" python3 -P -m tools.pipeline.plugin_identity "$plugin_root" ${PLUGIN_REPOSITORY:+--repository "$PLUGIN_REPOSITORY"})
+cd "$plugin_root"
+identity=$(PYTHONPATH="$hq_root" python3 -P -m tools.pipeline.plugin_identity . ${PLUGIN_REPOSITORY:+--repository "$PLUGIN_REPOSITORY"})
 plugin_reference=$(printf '%s\n' "$identity" | sed -n 's/^plugin-reference=//p')
 django_app=$(printf '%s\n' "$identity" | sed -n 's/^django-app=//p')
+if ! grep -q '^\[tool\.mypy\]' pyproject.toml; then
+    echo "pyproject.toml declares no [tool.mypy]: every extension declares its type check there (docs/Plugins.md)." >&2
+    exit 1
+fi
 
-env_path=${UV_PROJECT_ENVIRONMENT:-.venv}
-case "$env_path" in
-    /*) virtualenv=$env_path ;;
-    *) virtualenv=$plugin_root/$env_path ;;
-esac
-
-cd "$plugin_root"
-uv sync --frozen --group dev
-host_requirements=$(mktemp "${TMPDIR:-/tmp}/hq-runtime.XXXXXX")
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-check.XXXXXX")
-trap 'rm -rf -- "$host_requirements" "$scratch"' EXIT HUP INT TERM
+work=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-check.XXXXXX")
+trap 'rm -rf -- "$work"' EXIT HUP INT TERM
+host_requirements=$work/host-requirements.txt
 uv export --project "$hq_root" --locked --no-default-groups --no-emit-project \
     --output-file "$host_requirements" > /dev/null
-uv pip install --python "$virtualenv/bin/python" --require-hashes -r "$host_requirements"
-uv lock --check
-"$virtualenv/bin/ruff" check src
-PYTHONPATH="$hq_root" "$virtualenv/bin/python" -m hq_sdk.validation src
+
+uv sync --locked --group dev
+python=$(uv run --no-sync python -c 'import sys; print(sys.executable)')
+uv pip install --python "$python" --require-hashes -r "$host_requirements"
+"$python" -m ruff check src
+PYTHONPATH="$hq_root" "$python" -m hq_sdk.validation src
 
 export DJANGO_DEBUG=true
 export DJANGO_SETTINGS_MODULE=hq.config.settings
 # A check never opens the host checkout's own database.
-export SEVERINO_DATABASE_PATH="$scratch/check.sqlite3"
+export SEVERINO_DATABASE_PATH="$work/check.sqlite3"
 # The settings refuse to load without a signing key. A check signs nothing, and
 # this one exists for its processes alone.
 DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 export DJANGO_SECRET_KEY
 export PYTHONPATH="$hq_root"
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
-"$hq_root/tools/pipeline/plugin-typecheck.sh" "$virtualenv/bin/python"
-"$virtualenv/bin/python" "$hq_root/manage.py" check
-"$virtualenv/bin/python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
+# The package's own mypy against the host's typed hq_sdk; its django-stubs
+# settings are hq.config.settings_typecheck, with this package installed.
+MYPYPATH="$hq_root" "$python" -m mypy
+"$python" "$hq_root/manage.py" check
+"$python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
 # InterfaceTextTests reads the plugin's wording and markup with the host's.
-"$virtualenv/bin/python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
+"$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
     hq.platform.application.tests.test_architecture.InterfaceTextTests
 
 # Production installs admitted wheels with --no-deps. Recreate that exact
 # dependency boundary in an isolated environment so an undeclared host pin
-# fails here instead of after composition.
-runtime_root=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-runtime.XXXXXX")
-trap 'rm -rf -- "$runtime_root" "$scratch"; rm -f -- "$host_requirements"' EXIT HUP INT TERM
-uv build --wheel --out-dir "$runtime_root/dist"
-set -- "$runtime_root"/dist/*.whl
-if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
-    echo "Expected exactly one plugin wheel." >&2
-    exit 2
-fi
-wheel=$1
-uv venv --python "$virtualenv/bin/python" "$runtime_root/venv"
-uv pip install --python "$runtime_root/venv/bin/python" \
-    --require-hashes -r "$host_requirements"
-uv pip install --python "$runtime_root/venv/bin/python" --no-deps "$wheel"
-uv pip check --python "$runtime_root/venv/bin/python"
-"$runtime_root/venv/bin/python" "$hq_root/manage.py" check
+# fails here instead of after composition. Installing the package directory
+# builds and installs its wheel, as `uv build` would.
+uv venv --python "$python" "$work/venv"
+uv pip install --python "$work/venv/bin/python" --require-hashes -r "$host_requirements"
+uv pip install --python "$work/venv/bin/python" --no-deps .
+uv pip check --python "$work/venv/bin/python"
+"$work/venv/bin/python" "$hq_root/manage.py" check
