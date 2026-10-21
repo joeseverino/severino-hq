@@ -33,12 +33,10 @@ Thumbs.db
 # stage); a copy built here must never be committed or baked in from a checkout.
 deploy/bin/
 
-# Agent worktrees. An isolated checkout an agent works in, which git already
-# tracks as a worktree, so it needs no second record here, and being
-# untracked rather than ignored is a trap: a `git add -A` commits an entire
-# nested copy of the repository into the repository. Scoped to this one
-# directory because the settings file beside it is committed on purpose.
-.claude/worktrees/
+# Claude Code's local state, never published: its settings, and agent
+# worktrees, where being untracked rather than ignored is a trap (a `git add
+# -A` commits a nested copy of the repository into the repository).
+.claude/
 # Which local files a new agent worktree copies in (mise.local.toml).
 .worktreeinclude
 
@@ -51,7 +49,6 @@ deploy/bin/
 /hq-pass.json
 
 # Personal agent settings and guidance; never published.
-.claude/*.local.json
 CLAUDE.local.md
 
 # Type checker
