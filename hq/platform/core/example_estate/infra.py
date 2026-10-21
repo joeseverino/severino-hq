@@ -276,8 +276,8 @@ def _hour(at):
 
 
 def _weather():
-    """The dashboard's forecast, in the shape the controller reports one
-    (``controller/providers/glance.go``)."""
+    """The dashboard's forecast, in the shape the controller's weather
+    reading reports one."""
 
     point = "40.0000,-90.0000"
     DashboardConfiguration.objects.update_or_create(
