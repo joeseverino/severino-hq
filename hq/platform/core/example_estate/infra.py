@@ -44,7 +44,8 @@ from .names import (
 )
 
 CERTIFICATE = "example-wildcard"
-CERTIFICATE_EXPIRES = timedelta(days=61)
+# Inside its renewal window, so renewing it is one of the things to do.
+CERTIFICATE_EXPIRES = timedelta(days=24)
 
 
 def declare():

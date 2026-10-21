@@ -22,9 +22,10 @@ _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
 # What a healthy homelab never says on its dashboard.
 _ALARMS = ("No reading yet", "Not set up yet", "not fully set up", "not answering", " failed", "not confirmed")
-# The showcase leaves one thing to do on purpose (an image update);
-# anything more is the seed missing a reading.
-_MOST_ITEMS = 1
+# The showcase leaves three things to do on purpose (an image update, a
+# certificate to renew, a route to approve); anything more is the seed missing
+# a reading.
+_MOST_ITEMS = 3
 
 
 def _exists(path: str) -> bool:
@@ -70,6 +71,16 @@ class DemoSiteTests(unittest.TestCase):
         self.assertLessEqual(items, _MOST_ITEMS)
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
         self.assertEqual(re.findall(r'class="conn-layer conn-layer-(?!holds")(\w+)"', connection), [])
+
+    def test_each_thing_to_do_offers_a_way_to_do_it(self):
+        queue = (OUT / "action-items" / "index.html").read_text(encoding="utf-8")
+        rows = re.split(r"<tr [^>]*data-attention-item", queue)[1:]
+        self.assertEqual(len(rows), _MOST_ITEMS)
+        for row in rows:
+            title = re.search(r'class="attention-title"[^>]*>([^<]*)', row)
+            with self.subTest(item=title.group(1) if title else row[:80]):
+                actions = re.search(r'class="attention-actions[^"]*">(.*?)</div>', row, re.DOTALL)
+                self.assertTrue(actions and re.search(r"<(?:a|button)\b", actions.group(1)))
 
     def test_what_describes_the_reader_says_it_is_an_example(self):
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")

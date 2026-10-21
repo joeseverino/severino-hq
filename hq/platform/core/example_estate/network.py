@@ -13,6 +13,7 @@ from .names import (
     DNS,
     HQ,
     LAN,
+    LAN_SUBNET,
     LAPTOP,
     LAPTOP_NAME,
     MACHINE,
@@ -267,6 +268,9 @@ def tailnet():
             self=True,
             tags=["tag:server"],
             reach=reach,
+            # Its LAN offered as a subnet route that nobody has approved yet.
+            advertised_routes=[LAN_SUBNET],
+            enabled_routes=[],
             endpoints=[f"{LAN}:41641", f"{PUBLIC}:41641", "[2001:db8:4f1a:2e00:5054:ff:fe12:3456]:41641"],
         ),
         device(

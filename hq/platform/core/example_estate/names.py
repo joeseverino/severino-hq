@@ -10,6 +10,7 @@ from hq.platform.application import reach
 MACHINE = "example-docker-host-01"
 # Made up, at the length a home LAN's addresses run to.
 LAN = "10.100.200.214"
+LAN_SUBNET = "10.100.200.0/24"
 HQ = "hq.example.com"
 ZONE = "example.com"
 PROXY = "172.18.0.2"
