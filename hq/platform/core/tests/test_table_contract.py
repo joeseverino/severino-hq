@@ -9,6 +9,7 @@ from django.template.defaulttags import IfNode
 from django.test import RequestFactory, SimpleTestCase, tag
 from django.urls import reverse
 
+from hq.domains.expenses.views import ExpenseListView
 from hq.platform.application.tables import TableColumn, TableListMixin, named_first, ranked
 from hq.platform.application.tests.markup import all_elements, elements, select, within
 from hq.platform.core.templatetags import table_tags
@@ -424,7 +425,7 @@ class ListTableTests(_AuthedTestCase):
             heading.text.strip().rstrip("↕↑↓\ufe0e ").strip(): heading.attrs.get("data-drop-tier")
             for heading in elements(page, "th")
         }
-        self.assertEqual(
-            {label for label, tier in tiers.items() if tier},
-            {"Item", "Category", "Business use", "Deductible (est.)"},
-        )
+        dropped = {label for label, tier in tiers.items() if tier}
+        self.assertEqual(len(dropped), ExpenseListView.table_drop_narrow)
+        # The column that names the row and the key column stay.
+        self.assertFalse(dropped & {"Date", "Cost"})

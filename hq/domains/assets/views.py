@@ -37,7 +37,8 @@ class AssetListView(PageMixin, TableListMixin, ListView):
         TableFilter("status", "Status", "status", Asset.Status.choices),
         TableFilter("category", "Category", "category", ASSET_CATEGORY_CHOICES),
     )
-    table_drop_mid, table_drop_narrow = 3, 5
+    # An item and its vendor each run to a sentence, so a phone keeps the item and its cost.
+    table_drop_mid, table_drop_narrow = 3, 6
     table_columns = (
         TableColumn("Item", "item_name", "Name A–Z", "Name Z–A"),
         TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),

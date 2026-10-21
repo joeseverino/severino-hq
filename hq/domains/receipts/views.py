@@ -59,12 +59,14 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
     page_title = "Receipts"
     table_search_scope = "receipts"
     table_selectable = True
-    table_drop_narrow = 3
+    # A vendor and the expense a receipt is for each run to a sentence, so a
+    # phone keeps the vendor and the amount.
+    table_drop_narrow = 4
     table_columns = (
         TableColumn("Vendor", "vendor"),
         TableColumn("Date", "date", "Oldest receipt date", "Newest receipt date"),
         TableColumn("Amount", "amount", "Lowest amount", "Highest amount", css="key-col"),
-        TableColumn("For", css="key-col"),
+        TableColumn("For"),
         TableColumn("File", "original_filename"),
         TableColumn("Uploaded", "uploaded_at", "Least recently uploaded", "Recently uploaded"),
     )
