@@ -1,11 +1,8 @@
 #!/bin/sh
-#MISE description="One extension package's contract check against this host, as its CI runs it"
-#MISE dir="{{cwd}}"
-#USAGE flag "--plugin-root <path>" help="The package to check; the current directory by default"
-
-# Runs by path where there is no mise (the installer image, the reusable
-# workflow), so it parses its own arguments, which mise passes through.
-#   mise-tasks/plugin/check [--plugin-root PATH]
+# One extension package's contract check against this host, as its CI runs
+# it. Run by path where there is no mise (the installer image, the reusable
+# workflow); `mise run plugin:check` is the same program.
+#   tools/pipeline/check-plugin.sh [--plugin-root PATH]
 # The plugin reference and Django app are read from the package
 # (tools/pipeline/plugin_identity.py), where they are declared once.
 set -eu
@@ -58,7 +55,7 @@ DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 export DJANGO_SECRET_KEY
 export PYTHONPATH="$hq_root"
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
-"$hq_root/mise-tasks/plugin/typecheck" "$virtualenv/bin/python"
+"$hq_root/tools/pipeline/plugin-typecheck.sh" "$virtualenv/bin/python"
 "$virtualenv/bin/python" "$hq_root/manage.py" check
 "$virtualenv/bin/python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
 # InterfaceTextTests reads the plugin's wording and markup with the host's.

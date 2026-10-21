@@ -121,7 +121,7 @@ jobs:
           HQ_ROOT: host
           PACKAGE_DIR: ${{ inputs.package-dir }}
           PLUGIN_REPOSITORY: ${{ github.repository }}
-        run: host/mise-tasks/plugin/check --plugin-root "$PACKAGE_DIR"
+        run: host/tools/pipeline/check-plugin.sh --plugin-root "$PACKAGE_DIR"
 
   secret-scan:
     name: Secret scan

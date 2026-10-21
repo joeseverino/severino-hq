@@ -1,11 +1,8 @@
 #!/bin/sh
-#MISE description="The type check an extension declares in its [tool.mypy], with its own mypy against the host's typed hq_sdk"
-#MISE dir="{{cwd}}"
-#USAGE arg "<python>" help="The package's interpreter, with its dev group"
-
-# From the package root, in plugin:check's environment (SEVERINO_HQ_PLUGINS
-# names the package), which runs it by path.
-#   mise-tasks/plugin/typecheck PYTHON
+# The type check an extension declares in its pyproject.toml's [tool.mypy],
+# run with its own mypy against the host's typed hq_sdk. From the package root,
+# in check-plugin.sh's environment (SEVERINO_HQ_PLUGINS names the package).
+#   tools/pipeline/plugin-typecheck.sh PYTHON
 # django-stubs settings: the package names `hq.config.settings_typecheck`.
 set -eu
 unset CDPATH

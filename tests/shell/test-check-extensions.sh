@@ -9,7 +9,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 bin="$work/bin"
 checkout="$work/checkout"
-mkdir -p "$bin" "$checkout/mise-tasks/plugin"
+mkdir -p "$bin" "$checkout/tools/pipeline"
 
 # docker run: reads the mounts and the package it was handed, prints what an
 # extension's check would (its repository), leaves a mark in its copy, and
@@ -26,7 +26,7 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
-[ -f "$host/mise-tasks/plugin/check" ] || { echo "no host checker mounted" >&2; exit 3; }
+[ -f "$host/tools/pipeline/check-plugin.sh" ] || { echo "no host checker mounted" >&2; exit 3; }
 [ -f "$src/${root#/src/}/pyproject.toml" ] || { echo "no package at $root" >&2; exit 3; }
 touch "$src/checked"
 echo "checking $repository"
@@ -34,7 +34,7 @@ case " $TEST_FAILING " in *" $repository "*) exit 1 ;; esac
 STUB
 chmod +x "$bin/docker"
 
-printf '#!/bin/sh\n' >"$checkout/mise-tasks/plugin/check"
+printf '#!/bin/sh\n' >"$checkout/tools/pipeline/check-plugin.sh"
 git -C "$checkout" init -q
 git -C "$checkout" add .
 git -C "$checkout" -c user.name=example -c user.email=ci@example.com -c commit.gpgsign=false \

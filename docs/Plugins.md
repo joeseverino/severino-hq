@@ -135,7 +135,7 @@ underscores. It fails when the two disagree, before anything is built or
 signed.
 
 The same checks run from an extension's checkout with nothing to pass:
-`../severino-hq/mise-tasks/plugin/check`, or `mise run plugin:check -- --plugin-root PATH`
+`../severino-hq/tools/pipeline/check-plugin.sh`, or `mise run plugin:check -- --plugin-root PATH`
 from the host checkout. It syncs and lints the package,
 enforces SDK-only imports, runs Django checks, migration drift checks and the
 plugin's tests, then builds the wheel and installs it with `--no-deps` into a

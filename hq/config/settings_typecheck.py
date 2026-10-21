@@ -3,7 +3,7 @@
 django-stubs imports a settings module to learn the installed apps and models.
 These are the host's settings, given the throwaway key and the database path
 they refuse to load without; type checking opens no database. The host's mypy gate gives no extension set, so its result describes
-this repository alone; an extension's type check (mise-tasks/plugin/typecheck)
+this repository alone; an extension's type check (tools/pipeline/plugin-typecheck.sh)
 runs with that extension named, so its models are known.
 """
 

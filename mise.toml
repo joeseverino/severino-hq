@@ -486,3 +486,8 @@ run = 'tools/pipeline/image-health.sh "${IMAGE:-severino-hq:ci-local}"'
 description = "It boots under its unit: waits for its environment, survives a crash and a reboot"
 depends = ["image:build"]
 run = 'tools/pipeline/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'
+
+[tasks."plugin:check"]
+description = "One extension package's contract check against this host, as its CI runs it"
+dir = "{{cwd}}"
+run = "{{config_root}}/tools/pipeline/check-plugin.sh"
