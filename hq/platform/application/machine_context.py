@@ -276,13 +276,28 @@ _NETWORKS = {"tailnet": "Tailnet", "network": "LAN", "public": "Public"}
 
 def labeled_addresses(machine) -> tuple[tuple[str, str], ...]:
     """``(label, address)`` for each address the machine is reached at, by the
-    network it is on. A loopback address is left out: it places no machine."""
+    network it is on, each once.
 
+    An endpoint's port belongs to the connection that reaches it there, so
+    only its host is listed. A loopback address places no machine, and the
+    machine's own names say nothing about where it is.
+    """
+
+    own = {str(name).lower() for name in (getattr(machine, "name", ""), *(getattr(machine, "aliases", ()) or ()))}
+    hosts = dict.fromkeys(host_of(address) for address in getattr(machine, "addresses", ()) or ())
     return tuple(
-        (_NETWORKS.get(network, ""), address)
-        for address in getattr(machine, "addresses", ()) or ()
-        if (network := network_of(host_of(address))) != "loopback"
+        (_label(host), host) for host in hosts if host and host.lower() not in own and network_of(host) != "loopback"
     )
+
+
+def _label(host: str) -> str:
+    """The network an address is on, and IPv6 said, since a device has one of
+    each on the same network; a name is a name."""
+
+    network = network_of(host)
+    if not network:
+        return "Name"
+    return f"{_NETWORKS[network]} IPv6" if ":" in host else _NETWORKS[network]
 
 
 def header_addresses(machine) -> tuple[tuple[str, str, str], ...]:

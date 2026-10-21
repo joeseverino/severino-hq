@@ -63,6 +63,16 @@
     {% endif %}
   </div>
   <dl class="kv">
+        {% comment %}
+        Every address, here and nowhere else. A machine on a tailnet has a LAN
+        address, a tailnet address and a v6 address; which is the right one to
+        point a record at depends on where the client is, so they belong
+        together in one place rather than crowding the top of the page. One
+        per line, each beside its network, on a row of its own: a v6 address
+        is wider than a column of facts.
+        {% endcomment %}
+        <dt class="kv-whole">Addresses</dt>
+          <dd>{% if labeled_addresses %}<ul class="address-list">{% for label, address in labeled_addresses %}<li><span>{{ label }}</span> <code>{{ address|breakable }}</code></li>{% endfor %}</ul>{% else %}{% empty_value %}{% endif %}</dd>
         <dt>Device</dt>
           <dd>{% entity device_link %}</dd>
         {% if magic_dns_link %}
@@ -152,17 +162,6 @@
           <dt>Tags</dt>
           <dd>{% for tag in machine.presence.tags %}<code>{{ tag|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</dd>
         {% endif %}
-        {% comment %}
-        Every address, here and nowhere else. A machine on a tailnet has a LAN
-        address, a tailnet address and a v6 address; which is the right one to
-        point a record at depends on where the client is, so they belong
-        together in one place rather than crowding the top of the page.
-        {% endcomment %}
-        <dt>Addresses</dt>
-          {% comment %}
-          One per line: three addresses are three answers, not a phrase.
-          {% endcomment %}
-          <dd>{% for label, address in labeled_addresses %}{% if label %}<span class="muted">{{ label }}</span> {% endif %}<code>{{ address|breakable }}</code>{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}</dd>
               {% comment %}
         Who the policy lets in, per port: the answer the policy test gives,
         shown without having to ask. A policy alias names a machine's address

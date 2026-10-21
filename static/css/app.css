@@ -2907,6 +2907,14 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(5rem, 8rem) minmax(min(13rem, 100% - 5rem - var(--space-6)), 1fr)); gap: var(--space-4) var(--space-6); padding: var(--surface-inset, var(--space-6) var(--space-8)); font-size: var(--text-sm); }
 .kv dt { color: var(--muted); font-weight: 500; }
 .kv dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+/* A pair whose value is wider than a column of facts takes a row of its own. */
+.kv > .kv-whole { grid-column: 1; }
+.kv > .kv-whole + dd { grid-column: 2 / -1; }
+/* Addresses, one to a line, each beside its network: the networks in one
+   column and the addresses in the next. */
+.address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; margin: 0; padding: 0; list-style: none; }
+.address-list li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+.address-list span { color: var(--muted); }
 .eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 
 /* Until the readings are one row (their own container says when), a popover

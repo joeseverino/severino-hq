@@ -152,6 +152,53 @@ class DemoSiteTests(unittest.TestCase):
             }).map(line => line.textContent.trim())"""
         )
 
+    def test_a_machine_s_addresses_read_as_one_list_that_fits(self):
+        from playwright.sync_api import sync_playwright
+
+        machines = sorted(
+            {
+                f"/infrastructure/machines/{page.parent.name}/"
+                for page in (OUT / "infrastructure" / "machines").glob("*/index.html")
+            }
+        )
+        self.assertTrue(machines)
+        with sync_playwright() as playwright:
+            browser = playwright.webkit.launch()
+            for width in (402, 1360):
+                page = browser.new_page(viewport={"width": width, "height": 900})
+                for path in machines:
+                    page.goto(self.origin + path, wait_until="load")
+                    addresses = page.locator("dt:text-is('Addresses') + dd")
+                    if not addresses.count():
+                        continue
+                    with self.subTest(path=path, width=width):
+                        self._assert_one_list(addresses, whole=width > 900)
+                page.close()
+            browser.close()
+
+    def _assert_one_list(self, addresses, *, whole: bool):
+        """Every address named by its network, the networks in one column and
+        the addresses in the next, each inside its value; on a wide page, each
+        on one line."""
+
+        rows = addresses.evaluate(
+            """dd => [...dd.querySelectorAll('li')].map(li => {
+                const [label, code] = [li.querySelector('span'), li.querySelector('code')];
+                const box = code.getBoundingClientRect();
+                return {label: label?.textContent.trim(), labelX: label?.getBoundingClientRect().left,
+                        x: box.left, overrun: box.right - dd.getBoundingClientRect().right,
+                        lines: code.getClientRects().length, address: code.textContent};
+            })"""
+        )
+        self.assertTrue(rows, "the addresses are a list")
+        self.assertTrue(all(row["label"] for row in rows), rows)
+        self.assertEqual(len({round(row["labelX"]) for row in rows}), 1, rows)
+        self.assertEqual(len({round(row["x"]) for row in rows}), 1, rows)
+        self.assertTrue(all(row["overrun"] <= 1 for row in rows), rows)
+        self.assertEqual(len({row["address"] for row in rows}), len(rows), rows)
+        if whole:
+            self.assertTrue(all(row["lines"] == 1 for row in rows), rows)
+
     def test_a_dismissal_is_kept_until_the_demo_is_reset(self):
         from playwright.sync_api import sync_playwright
 
