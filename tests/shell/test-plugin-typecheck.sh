@@ -37,7 +37,7 @@ django_settings_module = "hq.config.settings_typecheck"
 TOML
 }
 typecheck() {
-  (cd "$1" && "$repo_dir/scripts/plugin-typecheck.sh" "$python")
+  (cd "$1" && "$repo_dir/mise-tasks/plugin/typecheck" "$python")
 }
 
 typed="$(package typed)"

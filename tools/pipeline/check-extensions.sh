@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Every extension's admission checks (scripts/check-plugin.sh), run against
+# Every extension's admission checks (mise-tasks/plugin/check), run against
 # this checkout's host.
 #   tools/pipeline/check-extensions.sh SET INSTALLER
 # SET is the composition set; each extension is read from
@@ -34,7 +34,7 @@ while IFS=$'\t' read -r id repository package; do
     --env HOME=/tmp --env UV_PYTHON_DOWNLOADS=never --env PLUGIN_REPOSITORY="$repository" \
     --volume "$host:/host" --volume "$work:/src" \
     --entrypoint sh "$installer" \
-    /host/scripts/check-plugin.sh --plugin-root "/src/$package" \
+    /host/mise-tasks/plugin/check --plugin-root "/src/$package" \
     >"$withheld/extension-check-$id.log" 2>&1; then
     echo "extension $total: passed"
   else

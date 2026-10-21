@@ -635,7 +635,7 @@ class ExtensionCallerTests(SimpleTestCase):
             with self.subTest(name=name):
                 self.assertNotIn(f"\n  {name}", admit.split("\nruns:")[0])
                 self.assertNotIn(f"\n      {name}", checks.split("\npermissions:")[0])
-        self.assertIn('check-plugin.sh --plugin-root "$PACKAGE_DIR"', checks)
+        self.assertIn('mise-tasks/plugin/check --plugin-root "$PACKAGE_DIR"', checks)
         self.assertIn("tools.pipeline.plugin_identity", admit)
 
 

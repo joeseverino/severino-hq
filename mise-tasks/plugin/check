@@ -1,6 +1,11 @@
 #!/bin/sh
-# One local and CI contract check for every trusted HQ plugin.
-#   check-plugin.sh [--plugin-root PATH]     # default: the current directory
+#MISE description="One extension package's contract check against this host, as its CI runs it"
+#MISE dir="{{cwd}}"
+#USAGE flag "--plugin-root <path>" help="The package to check; the current directory by default"
+
+# Runs by path where there is no mise (the installer image, the reusable
+# workflow), so it parses its own arguments, which mise passes through.
+#   mise-tasks/plugin/check [--plugin-root PATH]
 # The plugin reference and Django app are read from the package
 # (tools/pipeline/plugin_identity.py), where they are declared once.
 set -eu
@@ -19,7 +24,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-hq_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
+hq_root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 plugin_root=$(cd -- "$plugin_root" && pwd)
 identity=$(PYTHONPATH="$hq_root" python3 -P -m tools.pipeline.plugin_identity "$plugin_root" ${PLUGIN_REPOSITORY:+--repository "$PLUGIN_REPOSITORY"})
 plugin_reference=$(printf '%s\n' "$identity" | sed -n 's/^plugin-reference=//p')
@@ -53,7 +58,7 @@ DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 export DJANGO_SECRET_KEY
 export PYTHONPATH="$hq_root"
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
-"$hq_root/scripts/plugin-typecheck.sh" "$virtualenv/bin/python"
+"$hq_root/mise-tasks/plugin/typecheck" "$virtualenv/bin/python"
 "$virtualenv/bin/python" "$hq_root/manage.py" check
 "$virtualenv/bin/python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
 # InterfaceTextTests reads the plugin's wording and markup with the host's.

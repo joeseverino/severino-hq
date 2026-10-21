@@ -135,7 +135,8 @@ underscores. It fails when the two disagree, before anything is built or
 signed.
 
 The same checks run from an extension's checkout with nothing to pass:
-`../severino-hq/scripts/check-plugin.sh`. It syncs and lints the package,
+`../severino-hq/mise-tasks/plugin/check`, or `mise run plugin:check -- --plugin-root PATH`
+from the host checkout. It syncs and lints the package,
 enforces SDK-only imports, runs Django checks, migration drift checks and the
 plugin's tests, then builds the wheel and installs it with `--no-deps` into a
 clean host environment. That last step reproduces production's dependency
@@ -297,7 +298,7 @@ before either merges:
   published, signed or deployed. Extensions without such a branch are reused
   from their verified admissions; the app's Contents read covers reading the
   branches.
-- Before composing, the host pull request runs its own `check-plugin.sh`
+- Before composing, the host pull request runs its own `plugin:check`
   against every extension in the set, from its same-named branch or else its
   default branch, so a host change that breaks an extension fails the pull
   request rather than the next admission. Which extension failed is only in
@@ -455,7 +456,7 @@ topology template, route, callback or host edit.
 
 An extension renders HQ's design system and ships no stylesheet or script of
 its own. Its templates use only the public pieces below, and
-`python -m hq_sdk.validation src` (part of `scripts/check-plugin.sh`) reads
+`python -m hq_sdk.validation src` (part of `plugin:check`) reads
 every file under a `templates` directory and refuses anything else: a frame or
 block not listed, a private partial, an include named at render time, a
 parameter a partial does not read, a required one left to whatever the page has
