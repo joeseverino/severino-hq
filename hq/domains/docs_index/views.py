@@ -44,7 +44,9 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     page_title = "Docs"
     table_search_scope = "documentation"
     table_selectable = True
-    table_drop_mid, table_drop_narrow = 1, 6
+    table_drop_mid, table_drop_narrow = 2, 6
+    # The ID sits beside a title of a dozen words, which it leaves the room.
+    table_room = "shared"
     table_columns = (
         TableColumn("Title", "title", css="key-col"),
         TableColumn("ID", "doc_id"),

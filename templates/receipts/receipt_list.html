@@ -3,7 +3,7 @@
   <td class="row-gutter"><a href="{{ row.get_absolute_url }}"><strong>{{ row.label }}</strong></a>{% row_toggle %}</td>
   <td>{{ row.date|when }}</td>
   <td>{{ row.amount|money }}</td>
-  <td>{% if row.related_expense or row.related_asset %}{% include "receipts/_linked_to.html" with receipt=row %}{% else %}{% empty_value %}{% endif %}</td>
+  <td>{% if row.related_expense or row.related_asset %}{% include "receipts/_linked_to.html" with receipt=row expense_label=row.related_expense.item %}{% else %}{% empty_value %}{% endif %}</td>
   <td class="muted">{{ row.original_filename|or_empty }}</td>
   <td class="muted">{{ row.uploaded_at|when:"ago" }}</td>
 {% endblock %}
