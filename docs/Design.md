@@ -326,9 +326,11 @@ has one: "Last read 3 hours ago", and "out of date" beside it past the line
 
 **A frame is filled.** Facts are `.kv`: each label beside its value, as many
 pairs to a row as the width holds, never a two-column table stretched to the
-page. A thing's state sits on its title's line (`page_aside`), as words; the
-facts about it at a glance are a band under the head, as a service, a machine
-and HQ's own page open. A line that dates or sources a section goes beside its
+page. A pair whose value is wider than a column (a machine's addresses, as
+`.address-list`) takes a row of its own: `.kv-whole` on its `dt`. A thing's
+state sits on its title's line (`page_aside`), as words; the facts about it
+at a glance are a band under the head, as a service, a machine and HQ's own
+page open. A line that dates or sources a section goes beside its
 heading (`.heading-aside`), not loose under it. The sections that
 close a thing's page are `.section-flow`: each a card holding its own heading,
 two to a row at one height, with a wide one (four columns or more, or folded)
