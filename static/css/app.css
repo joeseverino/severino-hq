@@ -755,7 +755,9 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .glance-metrics dd { margin: 0; overflow: hidden; color: var(--ink); font-size: var(--text-sm); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .glance-metrics dd.glance-metric-detail { color: var(--muted); font-size: var(--text-3xs); font-weight: 400; }
 /* The hours ahead, one column each, scrolling sideways in the popover. */
-.glance-hours { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(2.6rem, 1fr); margin: 0; padding: var(--space-4) 0 0; overflow-x: auto; overflow-y: hidden; list-style: none; border-top: 1px solid var(--line-2); }
+/* Every hour in view: as many to a row as the popover holds, the rest on the
+   rows under them. */
+.glance-hours { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: var(--space-4) 0; margin: 0; padding: var(--space-4) 0 0; list-style: none; border-top: 1px solid var(--line-2); }
 .glance-hours li { display: grid; justify-items: center; gap: 1px; font-size: var(--text-3xs); color: var(--muted); }
 .glance-hours strong { color: var(--ink); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .glance-hours small { color: var(--muted-2); }
@@ -5252,9 +5254,9 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 .dash-readings .glance-lead-empty { color: var(--ink); font-size: var(--text-4xl); font-weight: 650; line-height: 1.15; letter-spacing: -.01em; }
 .dash-reading { color: inherit; }
 .dash-reading:hover { color: inherit; text-decoration: none; }
-/* A quiet line longer than its reading gives way at its end, inside the
-   reading, never over the one beside it. */
-.dash-readings .glance-caption { overflow: hidden; text-overflow: ellipsis; }
+/* A quiet line longer than its reading takes another, between its parts first,
+   so all of it is read inside the reading and none runs over the one beside it. */
+.dash-readings .glance-caption { flex-wrap: wrap; white-space: normal; }
 .dash-controller.is-silent .glance-caption { color: var(--attn); font-weight: 650; }
 .dash-controller.is-arriving .conn-dot { background: var(--ok); }
 .dash-controller.is-silent .conn-dot { background: var(--attn); }
