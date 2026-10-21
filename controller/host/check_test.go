@@ -32,7 +32,7 @@ type checkHost struct {
 	free  uint64
 }
 
-const goodRules = "Matching Defaults entries:\n    env_reset, secret-marker-example\nUser deployer may run the following commands:\n    (root) NOPASSWD: %s/scripts/deploy-image.sh\n"
+const goodRules = "Matching Defaults entries:\n    env_reset, secret-marker-example\nUser deployer may run the following commands:\n    (root) NOPASSWD: %s/deploy/bin/hq-host deploy *\n"
 
 func newCheckHost(t *testing.T) *checkHost {
 	t.Helper()
@@ -47,7 +47,7 @@ func newCheckHost(t *testing.T) *checkHost {
 		FreeBytes: DeployFreeBytes, Free: func(string) (uint64, error) { return h.free, nil },
 		Command: h.command, Out: &h.out,
 	}
-	for _, path := range []string{"scripts/deploy-image.sh", "deploy/bin/hq-host", ".source"} {
+	for _, path := range []string{"deploy/bin/hq-host", ".source"} {
 		h.file(filepath.Join(lib, path), 0o755)
 	}
 	for _, unit := range []string{"severino-hq-web.service", "severino-hq-backup.timer"} {
@@ -136,9 +136,7 @@ func TestACurrentHostIsReady(t *testing.T) {
 
 	h.says(out, "ok      the host is the release it runs")
 	h.says(out, "ok      every established unit is installed")
-	for _, program := range []string{"scripts/deploy-image.sh", "deploy/bin/hq-host"} {
-		h.says(out, filepath.Join(h.checker.Lib, program)+" is root's alone")
-	}
+	h.says(out, filepath.Join(h.checker.Lib, "deploy/bin/hq-host")+" is root's alone")
 	if strings.Contains(out, "secret-marker-example") {
 		t.Error("the check printed the sudo rules")
 	}
@@ -151,9 +149,12 @@ func TestEachHostFaultFailsAndSaysWhatItIs(t *testing.T) {
 	}{
 		"a runner with unrestricted sudo": {func(h *checkHost) { h.rules = "    (ALL : ALL) ALL\n" }, "may run any command"},
 		"a runner without the rule":       {func(h *checkHost) { h.rules = "    (root) NOPASSWD: /usr/bin/true\n" }, "has no NOPASSWD sudo rule"},
-		"a runner that runs as root":      {func(h *checkHost) { h.account = "root" }, "the Actions runner runs as 'root'"},
-		"two runners":                     {func(h *checkHost) { h.runners = append(h.runners, "actions.runner.other.service") }, "expected one Actions runner unit"},
-		"a full disk":                     {func(h *checkHost) { h.free = 1 << 20 }, "the deploy needs 512 MiB"},
+		"a runner whose rule runs another subcommand": {func(h *checkHost) {
+			h.rules = fmt.Sprintf("    (root) NOPASSWD: %[1]s/deploy/bin/hq-host deployed, %[1]s/deploy/bin/hq-host upgrade *\n", h.checker.Lib)
+		}, "has no NOPASSWD sudo rule"},
+		"a runner that runs as root": {func(h *checkHost) { h.account = "root" }, "the Actions runner runs as 'root'"},
+		"two runners":                {func(h *checkHost) { h.runners = append(h.runners, "actions.runner.other.service") }, "expected one Actions runner unit"},
+		"a full disk":                {func(h *checkHost) { h.free = 1 << 20 }, "the deploy needs 512 MiB"},
 		"an established unit missing": {func(h *checkHost) {
 			os.Remove(filepath.Join(h.checker.Systemd, "severino-hq-backup.timer"))
 		}, "severino-hq-backup.timer is not installed"},

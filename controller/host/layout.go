@@ -62,9 +62,6 @@ const (
 	Lib = "/usr/local/lib/severino-hq"
 	// HostProgram is this program, in the tree.
 	HostProgram = Lib + "/deploy/bin/hq-host"
-	// DeployEntry is what the runner's sudo rules have named; it execs
-	// `HostProgram deploy`, which the rule also admits.
-	DeployEntry = Lib + "/scripts/deploy-image.sh"
 
 	// SecretDir is the root-only, noswap tmpfs the renderer installs into.
 	SecretDir = "/run/severino-hq-secrets"

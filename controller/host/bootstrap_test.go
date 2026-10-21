@@ -68,7 +68,7 @@ func TestBootstrapWritesWhatOnlyTheHostKnows(t *testing.T) {
 		estate:   `Environment="SEVERINO_SECRETS_VAULT=Example Vault"`,
 		connect:  "After=example-connect.service",
 		identity: "User=deployer",
-		rule:     "deployer ALL=(root) NOPASSWD: /usr/local/lib/severino-hq/scripts/deploy-image.sh, /usr/local/lib/severino-hq/deploy/bin/hq-host deploy *\n",
+		rule:     "deployer ALL=(root) NOPASSWD: /usr/local/lib/severino-hq/deploy/bin/hq-host deploy *\n",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("%q not in\n%s", want, text)

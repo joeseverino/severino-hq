@@ -12,15 +12,6 @@ for f in $sources; do
 done
 # shellcheck disable=SC2086  # one path per word
 shellcheck -x $sources
-# scripts/ is synced to the deploy host, so a suite there ships a test to
-# production and is refused rather than run.
-strays=0
-for stray in scripts/test-*.sh; do
-    [ -e "$stray" ] || continue
-    echo "$stray is a shell suite in the host tree: it belongs in tests/shell/" >&2
-    strays=1
-done
-[ "$strays" = 0 ] || exit 1
 # Suites run in parallel (each uses its own temporary directory); a failed
 # suite's output is printed whole, not interleaved.
 logs="$(mktemp -d)"

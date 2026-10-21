@@ -425,16 +425,16 @@ class DeployTests(SimpleTestCase):
             if path.name != "deploy.yml":
                 with self.subTest(workflow=path.name):
                     self.assertNotIn("self-hosted", code(path.read_text()))
-                    self.assertNotIn("deploy-image.sh", code(path.read_text()))
+                    self.assertNotIn("hq-host deploy", code(path.read_text()))
 
     def test_the_runner_holds_no_registry_credential_and_verifies_nothing_root_does_not(self):
-        deploying = [job for job in self.jobs.values() if "deploy-image.sh" in job]
+        deploying = [job for job in self.jobs.values() if "hq-host deploy" in job]
         self.assertTrue(deploying)
         for job in deploying:
             for absent in ("cosign", ".docker/config.json", "actions/checkout", "contents: read"):
                 with self.subTest(absent=absent):
                     self.assertNotIn(absent, code(job))
-            self.assertIn("| sudo /usr/local/lib/severino-hq/scripts/deploy-image.sh", job)
+            self.assertIn("| sudo /usr/local/lib/severino-hq/deploy/bin/hq-host deploy ", job)
 
     def test_a_candidate_is_never_deployed(self):
         text = code(workflow("deploy.yml"))

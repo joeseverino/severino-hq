@@ -156,7 +156,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s\n%s\n' "$REGISTRY_USER" "$REGISTRY_TOKEN" \
-            | sudo /usr/local/lib/severino-hq/scripts/deploy-image.sh "$IMAGE"
+            | sudo /usr/local/lib/severino-hq/deploy/bin/hq-host deploy "$IMAGE"
 
   report:
     name: Report

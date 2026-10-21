@@ -136,8 +136,8 @@ User=%s
 // signature before it pulls. The rule is checked by visudo before it is
 // installed: a broken file in sudoers.d stops sudo for every account.
 func (m *Machine) sudoRule(ctx context.Context, user string) error {
-	rule := fmt.Sprintf("# Rendered by hq-host bootstrap: the runner deploys, and may do nothing else as root.\n%s ALL=(root) NOPASSWD: %s, %s deploy *\n",
-		user, DeployEntry, HostProgram)
+	rule := fmt.Sprintf("# Rendered by hq-host bootstrap: the runner deploys, and may do nothing else as root.\n%s ALL=(root) NOPASSWD: %s deploy *\n",
+		user, HostProgram)
 	staged, err := os.CreateTemp(m.Sudoers, ".severino-hq-deploy.")
 	if err != nil {
 		return err

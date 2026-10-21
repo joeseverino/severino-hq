@@ -65,9 +65,7 @@ func (c *Checker) unknown(format string, args ...any) {
 func (c *Checker) Check(ctx context.Context) int {
 	c.runner(ctx)
 	c.verified(ctx)
-	for _, program := range []string{DeployEntry, HostProgram} {
-		c.rootsAlone(strings.TrimPrefix(program, Lib+"/"))
-	}
+	c.rootsAlone(hostRelative)
 	c.units()
 	c.room()
 	switch {
@@ -85,6 +83,9 @@ func (c *Checker) output(ctx context.Context, name string, args ...string) (stri
 }
 
 var unrestricted = regexp.MustCompile(`(?m)(^|[\s:])ALL\s*$`)
+
+// hostRelative is HostProgram's path in the tree.
+var hostRelative = strings.TrimPrefix(HostProgram, Lib+"/")
 
 // runner: the runner deploys through one sudo rule, and may do nothing
 // broader.
@@ -106,15 +107,16 @@ func (c *Checker) runner(ctx context.Context) {
 		return
 	}
 	rules, err := c.output(ctx, "sudo", "-n", "-l", "-U", user)
+	deploy := filepath.Join(c.Lib, hostRelative) + " deploy *"
 	switch {
 	case err != nil:
 		c.bad("could not list %s's sudo rules", user)
 	case unrestricted.MatchString(rules):
 		c.bad("%s may run any command through sudo", user)
-	case regexp.MustCompile(`NOPASSWD:.*` + regexp.QuoteMeta(c.Lib+"/scripts/deploy-image.sh")).MatchString(rules):
-		c.ok("%s may run %s through sudo", user, c.Lib+"/scripts/deploy-image.sh")
+	case regexp.MustCompile(`(?m)NOPASSWD:(.*,)?\s*` + regexp.QuoteMeta(deploy) + `\s*(,|$)`).MatchString(rules):
+		c.ok("%s may run %s through sudo", user, deploy)
 	default:
-		c.bad("%s has no NOPASSWD sudo rule for %s", user, c.Lib+"/scripts/deploy-image.sh")
+		c.bad("%s has no NOPASSWD sudo rule for %s", user, deploy)
 	}
 }
 
@@ -185,7 +187,7 @@ func (c *Checker) lastVerify(ctx context.Context, since int64) string {
 
 // rootsAlone: a program a sudo rule runs as root is root's, and so is every
 // directory above it in the tree, none a link and none writable by anyone
-// else. A program this release does not have is not checked.
+// else.
 func (c *Checker) rootsAlone(relative string) {
 	program := filepath.Join(c.Lib, relative)
 	alone := true

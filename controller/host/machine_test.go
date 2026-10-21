@@ -134,7 +134,6 @@ func newFakeHost(t *testing.T) *fakeHost {
 	exec.Command("cp", "-R", filepath.Join(lib, "deploy"), filepath.Join(f.image, "deploy")).Run()
 	for name, body := range map[string]string{
 		"deploy/bin/hq-host":        "#!/bin/sh\n",
-		"scripts/deploy-image.sh":   "#!/bin/sh\n",
 		"hq/config/synced-release":  "",
 		"hq/config/controller.json": "{}\n",
 	} {

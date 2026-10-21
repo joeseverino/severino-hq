@@ -13,9 +13,9 @@ import (
 )
 
 // TreeItems are what the root-owned tree holds, as paths under /app in the
-// image: the scripts and configuration root's units run and read, the units
-// themselves, and the programs the image built.
-var TreeItems = []string{"scripts", "hq/config", "deploy"}
+// image: the configuration root's units read, the units themselves, and the
+// programs the image built.
+var TreeItems = []string{"hq/config", "deploy"}
 
 // unitPath is a path under the tree that a unit names.
 var unitPath = regexp.MustCompile(regexp.QuoteMeta(Lib+"/") + `[A-Za-z0-9_./-]+`)
@@ -75,7 +75,7 @@ func (m *Machine) extract(ctx context.Context, image, dir string) error {
 }
 
 // seal makes everything under dir root's, directories and data 0755/0644,
-// and executable only what is meant to run: scripts and the built programs.
+// and executable only what is meant to run: the built programs.
 // Links are refused: the tree holds files, and a link would let something
 // outside it decide what root runs.
 func seal(dir string, own func(string) error) error {
@@ -91,7 +91,7 @@ func seal(dir string, own func(string) error) error {
 		switch {
 		case entry.IsDir():
 			mode = 0o755
-		case strings.HasSuffix(path, ".sh"), strings.HasPrefix(rel, "deploy/bin/"):
+		case strings.HasPrefix(rel, "deploy/bin/"):
 			mode = 0o755
 		}
 		if err := own(path); err != nil {

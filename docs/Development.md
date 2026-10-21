@@ -259,7 +259,6 @@ composition/              the composed image
 policy/                   the extension admission policy
 demo/                     the static demo site built from HQ's own pages
 tools/                    development and CI programs, never in the image (tools/README.md)
-scripts/                  the deploy host's shim, called by path by its sudo rule
 mise-tasks/               tasks whose body is a script, declared in its own #MISE header
 tests/                    synthetic extension fixtures, the SDK consumer, property and shell suites
 var/                      ignored local runtime state

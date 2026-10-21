@@ -132,11 +132,11 @@ fingerprint, then delete the old key on GitHub.
 
 | Path | Holds | Written by |
 | :--- | :--- | :--- |
-| `/usr/local/lib/severino-hq/` | the root-owned tree: `scripts/`, `hq/config/`, `deploy/` (units, `bin/hq-host`, `bin/hq-secrets`) | `hq-host sync`, from the image |
+| `/usr/local/lib/severino-hq/` | the root-owned tree: `hq/config/`, `deploy/` (units, `bin/hq-host`, `bin/hq-secrets`) | `hq-host sync`, from the image |
 | `/usr/local/lib/severino-hq-verifier/cosign` | root's pinned cosign, outside the tree a deploy replaces | `hq-host install` |
 | `/etc/severino-hq/host.json` | the host's own values ([`deploy/host.example.json`](../deploy/host.example.json)) | the operator |
 | `/etc/systemd/system/` | every unit and drop-in under `deploy/systemd`, plus the drop-ins `hq-host bootstrap` renders | `hq-host install`, `hq-host bootstrap` |
-| `/etc/sudoers.d/severino-hq-deploy` | the runner's one rule: `hq-host deploy *`, and `scripts/deploy-image.sh`, which execs it, until the deploy job calls `hq-host` itself. sudo-rs matches no pattern inside an argument, so root checks the image: exactly one argument, a digest-pinned composition of this repository, signed by its compose workflow | `hq-host bootstrap` |
+| `/etc/sudoers.d/severino-hq-deploy` | the runner's one rule: `hq-host deploy *`. sudo-rs matches no pattern inside an argument, so root checks the image: exactly one argument, a digest-pinned composition of this repository, signed by its compose workflow | `hq-host bootstrap` |
 | `/etc/credstore.encrypted/` | the Connect token, as an encrypted systemd credential | the operator ([Secrets](Secrets.md)) |
 | `/var/lib/severino-hq/release` | the digest-pinned image the web unit runs | a deploy |
 | `/run/severino-hq-secrets/` | rendered credentials, on a root-only `noswap` tmpfs (`run-severino\x2dhq\x2dsecrets.mount`) | `hq-secrets` |
@@ -193,10 +193,10 @@ holds the shipped units to those rules.
 ## A deploy
 
 The Deploy job pipes the registry token to `sudo
-/usr/local/lib/severino-hq/scripts/deploy-image.sh IMAGE`, the one command the
-runner may run as root. The runner checks nothing itself and keeps no
+/usr/local/lib/severino-hq/deploy/bin/hq-host deploy IMAGE`, the one command
+the runner may run as root. The runner checks nothing itself and keeps no
 checkout or credential: root does not trust it, so a check there would protect
-nothing. That script runs `hq-host deploy`, which:
+nothing. `hq-host deploy`:
 
 1. Refuses anything but a digest-pinned reference to the composition, and
    verifies its signature as root, against the Compose workflow on `main`
