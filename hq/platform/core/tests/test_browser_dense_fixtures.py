@@ -444,8 +444,7 @@ _WRITEUPS = (
     (
         ContentItem.Type.ARTICLE,
         "Securing an Example Publishing Site with a Content Security Policy and Passkey Sign-In",
-        "Moving an example site behind a strict content security policy, then replacing "
-        "its passwords with passkeys",
+        "Moving an example site behind a strict content security policy, then replacing its passwords with passkeys",
     ),
     (
         ContentItem.Type.GUIDE,
