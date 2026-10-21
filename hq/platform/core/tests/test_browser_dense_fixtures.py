@@ -21,6 +21,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -420,7 +421,44 @@ def build_dense_estate():
     _operations(user)
     _unmanaged()
     _tailnet_policy()
+    _content()
     return user
+
+
+# Titles and descriptions as long as a published writeup's, of more than one
+# type, so the list shows its Type column too.
+_WRITEUPS = (
+    (
+        ContentItem.Type.LAB_WRITEUP,
+        "Simulating Address Resolution Spoofing in an Emulated Network and Its Enterprise Mitigations",
+        "Building a small emulated network, poisoning its address tables from one host, "
+        "and measuring which switch-level defenses stop it",
+    ),
+    (
+        ContentItem.Type.ARTICLE,
+        "Securing an Example Publishing Site with a Content Security Policy and Passkey Sign-In",
+        "Moving an example site behind a strict content security policy, then replacing "
+        "its passwords with passkeys",
+    ),
+    (
+        ContentItem.Type.GUIDE,
+        "Running a Self-Hosted Recursive Resolver Beside an Ad-Blocking Filter",
+        "A resolver that answers from the root, chained behind a filtering forwarder, with "
+        "the cache and logging settings that matter",
+    ),
+)
+
+
+def _content():
+    for index, (content_type, title, topic) in enumerate(_WRITEUPS):
+        ContentItem.objects.create(
+            title=title,
+            content_type=content_type,
+            status=ContentItem.Status.PUBLISHED if index else ContentItem.Status.DRAFT,
+            topic=topic,
+            published_url=f"https://www.example.com/writeups/an-example-writeup-{index}/",
+            published_at=timezone.localdate() - timedelta(days=30 * index),
+        )
 
 
 # A record whose history and queued work fill the records list, its own page
@@ -674,6 +712,7 @@ DENSE_PAGES = {
     "dense/record": (lambda: reverse("control_plane:detail", kwargs={"key": OPERATED}), ExitStack),
     "dense/controller": (lambda: reverse("control_plane:controller"), ExitStack),
     "dense/tailnet": (lambda: reverse("control_plane:tailnet"), ExitStack),
+    "dense/content": (lambda: reverse("content:list"), ExitStack),
     "dense/audit": (lambda: reverse("core:audit_list"), ExitStack),
     "dense/audit-event": (
         lambda: reverse("core:audit_detail", args=[AuditLog.objects.filter(metadata__has_key="changes").get().pk]),

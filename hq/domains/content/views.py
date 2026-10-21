@@ -87,20 +87,22 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     def types_held(self) -> frozenset[str]:
         return frozenset(content_type for content_type, _url in self._held)
 
-    table_drop_narrow = 3
+    # A title runs to a dozen words, so a tablet lets the description and the
+    # last edit go, and a phone keeps only the title and its status.
+    table_drop_mid, table_drop_narrow = 2, 6
 
     @cached_property
     def table_columns(self) -> tuple[TableColumn, ...]:
-        typed = (TableColumn("Type", "content_type"),) if len(self.types_held) > 1 else ()
+        typed = (TableColumn("Type", "content_type", drop=6),) if len(self.types_held) > 1 else ()
         return (
             TableColumn("Title", "title"),
             *typed,
             TableColumn("Status", "status", css="key-col"),
-            TableColumn("Description"),
-            TableColumn(f"Views ({CONTENT_TRAFFIC_DAYS} days)", css="num-col"),
-            TableColumn("Published", "published_at", "Oldest published", "Recently published"),
-            TableColumn("Updated", "updated_at", "Least recently updated", "Recently updated"),
-            TableColumn("Live page", css="actions-col"),
+            TableColumn("Description", drop=1),
+            TableColumn(f"Views ({CONTENT_TRAFFIC_DAYS} days)", css="num-col", drop=5),
+            TableColumn("Published", "published_at", "Oldest published", "Recently published", drop=3),
+            TableColumn("Updated", "updated_at", "Least recently updated", "Recently updated", drop=2),
+            TableColumn("Live page", css="actions-col", drop=4),
         )
 
     @override
