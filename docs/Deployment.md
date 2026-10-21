@@ -136,7 +136,7 @@ fingerprint, then delete the old key on GitHub.
 | `/usr/local/lib/severino-hq-verifier/cosign` | root's pinned cosign, outside the tree a deploy replaces | `hq-host install` |
 | `/etc/severino-hq/host.json` | the host's own values ([`deploy/host.example.json`](../deploy/host.example.json)) | the operator |
 | `/etc/systemd/system/` | every unit and drop-in under `deploy/systemd`, plus the drop-ins `hq-host bootstrap` renders | `hq-host install`, `hq-host bootstrap` |
-| `/etc/sudoers.d/severino-hq-deploy` | the runner's one rule: `hq-host deploy` with one digest-pinned composition, and `scripts/deploy-image.sh`, which execs it, until the deploy job calls `hq-host` itself | `hq-host bootstrap` |
+| `/etc/sudoers.d/severino-hq-deploy` | the runner's one rule: `hq-host deploy *`, and `scripts/deploy-image.sh`, which execs it, until the deploy job calls `hq-host` itself. sudo-rs matches no pattern inside an argument, so root checks the image: exactly one argument, a digest-pinned composition of this repository, signed by its compose workflow | `hq-host bootstrap` |
 | `/etc/credstore.encrypted/` | the Connect token, as an encrypted systemd credential | the operator ([Secrets](Secrets.md)) |
 | `/var/lib/severino-hq/release` | the digest-pinned image the web unit runs | a deploy |
 | `/run/severino-hq-secrets/` | rendered credentials, on a root-only `noswap` tmpfs (`run-severino\x2dhq\x2dsecrets.mount`) | `hq-secrets` |
@@ -373,9 +373,11 @@ and the data. It is idempotent by operation id and prints one JSON result:
 exit 0 kept, 3 rolled back, 2 refused or unchanged, 1 failed and not put back.
 It needs Docker Compose 2.24.4 or later, `tar`, and Linux.
 
-A machine runs it only through a sudo rule for that one program with an
-upgrade's arguments, as a regular expression (sudo 1.9.10 or later); the plan
-shows the rule and how to check it. The rule is only worth having if that
+A machine runs it only through a sudo rule for that one program,
+`hq-host upgrade *`; the plan shows the rule and how to check it. sudo-rs
+matches no pattern inside an argument, so the helper's parser, run as root, is
+the boundary: each flag once, every value whole by its pattern, the stack
+directly under `/opt/apps`. The rule is only worth having if that
 account cannot already reach Docker. HQ's own host has `hq-host` in its tree.
 Any other machine needs its own root-owned copy: the plan's fetch step takes
 it from the composed image HQ runs, by digest, after `cosign` verifies the

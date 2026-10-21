@@ -91,7 +91,7 @@ const (
 )
 
 // patterns are what each argument must match whole. The sudo rule HQ renders
-// admits each argument by the same pattern (upgrades.ARGUMENTS).
+// admits any arguments, so these, checked as root, are the boundary.
 var patterns = map[string]*regexp.Regexp{
 	"operation": regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`),
 	"service":   regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`),

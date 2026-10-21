@@ -65,11 +65,6 @@ const (
 	// DeployEntry is what the runner's sudo rules have named; it execs
 	// `HostProgram deploy`, which the rule also admits.
 	DeployEntry = Lib + "/scripts/deploy-image.sh"
-	// DeployArgument is the one argument the rule lets the runner give
-	// `hq-host deploy`, as a sudoers regular expression (sudo 1.9.10 or
-	// later; an older sudo reads it literally and admits nothing): a
-	// digest-pinned composition. Deploy checks the source it names.
-	DeployArgument = `^ghcr[.]io/[a-z0-9_.-]+/[a-z0-9_.-]+/composition@sha256\:[0-9a-f]{64}$`
 
 	// SecretDir is the root-only, noswap tmpfs the renderer installs into.
 	SecretDir = "/run/severino-hq-secrets"

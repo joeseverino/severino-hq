@@ -390,19 +390,8 @@ SUDOERS = "/etc/sudoers.d/severino-hq-upgrade"
 # holds the same constant, and nothing a sudo caller passes can move it.
 STACKS_ROOT = "/opt/apps"
 
-# The arguments the sudo rule admits, in the helper's order and its own
-# patterns: a regular expression, which sudo matches from 1.9.10. An older sudo
-# reads it as a literal and admits nothing, so it fails closed.
-ARGUMENTS = (
-    "^upgrade --operation [A-Za-z0-9-]{1,64}"
-    f" --project-dir {STACKS_ROOT}/[A-Za-z0-9][A-Za-z0-9_.-]{{0,127}}"
-    " --service [A-Za-z0-9][A-Za-z0-9_.-]{0,62}"
-    " --from [A-Za-z0-9][A-Za-z0-9_./:@-]{0,254}"
-    " --to [A-Za-z0-9][A-Za-z0-9_./:-]{0,200}@sha256:[0-9a-f]{64}"
-    "( --tag [A-Za-z0-9_.-]{1,128})?( --wait [0-9]{1,4})?$"
-)
-# An empty digest: a request the rule admits and the helper refuses harmlessly
-# (no such stack), which is how the check below asks sudo without running it.
+# An empty digest: a request the helper refuses harmlessly (no such stack),
+# which is how the check below asks sudo without running it.
 _PROBE = (
     f"upgrade --operation sudo-check --project-dir {STACKS_ROOT}/example --service example "
     f"--from example/app:1 --to example/app@sha256:{'0' * 64}"
@@ -415,12 +404,12 @@ _PINNED = re.compile(r"^[a-z0-9][a-z0-9_./:-]*@sha256:[0-9a-f]{64}$")
 
 
 def sudoers_command() -> str:
-    """The helper and its arguments, escaped the way sudoers reads a command's
-    arguments: a comma, colon, equals sign or backslash is literal only
-    behind a backslash."""
+    """The helper with any arguments. sudo-rs matches no pattern inside an
+    argument, so the helper's own parser, run as root, is the boundary
+    (controller/host/upgrade: each flag once, every value whole by its
+    pattern, the stack directly under STACKS_ROOT)."""
 
-    escaped = "".join("\\" + char if char in ",:=\\" else char for char in ARGUMENTS)
-    return f"{HELPER} {escaped}"
+    return f"{HELPER} upgrade *"
 
 
 def signer(source: str) -> str:
