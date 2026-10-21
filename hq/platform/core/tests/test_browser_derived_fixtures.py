@@ -26,11 +26,12 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator
 from django.db import models
 from django.test import TestCase
-from django.urls import URLPattern, URLResolver, get_resolver, reverse
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
 from hq.platform.application.references import ReferenceField
+from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableListMixin
 from hq.platform.application.tests.markup import elements
 from hq.platform.core.tests.test_browser_fixtures import render_pages
@@ -139,7 +140,9 @@ def _smaller(number: int | Decimal) -> int | Decimal:
 
 def _admitted(model, values, exclude):
     """``values`` with each number its model's rules refuse made a digit shorter
-    until they admit it: a rule can bound a number its field does not."""
+    until they admit it: a rule can bound a number its field does not. Text a
+    rule refuses has a format no length can stand in for (a VIN), so a field
+    that may be blank is left blank."""
 
     while True:
         try:
@@ -149,6 +152,10 @@ def _admitted(model, values, exclude):
                 name: _smaller(values[name])
                 for name in error.message_dict
                 if isinstance(values.get(name), (int, Decimal)) and values[name] > 9
+            } | {
+                name: ""
+                for name in error.message_dict
+                if isinstance(values.get(name), str) and values[name] and model._meta.get_field(name).blank
             }
             if not refused:
                 raise
@@ -232,20 +239,23 @@ class _Fill:
 
 
 def list_views():
-    """Every routed view that draws its rows through TableListMixin, by URL name."""
+    """Every routed view that draws its rows from a model through TableListMixin,
+    by URL name. An extension's list may draw from its own query instead, and is
+    its own to fill; every host list names its model."""
 
-    def walk(resolver, namespaces):
-        for pattern in resolver.url_patterns:
-            if isinstance(pattern, URLResolver):
-                yield from walk(pattern, (*namespaces, pattern.namespace) if pattern.namespace else namespaces)
-            elif isinstance(pattern, URLPattern):
-                view = getattr(pattern.callback, "view_class", None)
-                if view is not None and issubclass(view, TableListMixin):
-                    if pattern.pattern.regex.groups:
-                        raise AssertionError(f"{pattern.name} takes arguments a derived page cannot fill")
-                    yield ":".join((*namespaces, pattern.name)), view
-
-    return dict(walk(get_resolver(), ()))
+    found = {}
+    for route in routed():
+        view = route.view
+        if not (isinstance(view, type) and issubclass(view, TableListMixin)):
+            continue
+        if getattr(view, "model", None) is None:
+            if view.__module__.startswith("hq."):
+                raise AssertionError(f"{route.name} names no model, so no row can be derived for it")
+            continue
+        if route.pattern.pattern.regex.groups:
+            raise AssertionError(f"{route.name} takes arguments a derived page cannot fill")
+        found[route.name] = view
+    return found
 
 
 def build_derived_estate():
