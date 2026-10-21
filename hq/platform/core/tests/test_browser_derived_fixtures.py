@@ -7,8 +7,11 @@ gives it. Here every view in the URLconf that draws its rows through
 model's own fields: text at its ``max_length`` in words that must wrap with one
 unbroken identifier among them, a paragraph for free text, an address as long
 as the field takes, a number at the largest its field and validators allow,
-and the longest label of every choice. A new list view is covered the day it is
-routed, and a new field the day it is declared.
+and the longest label of every choice. One more row leaves every field that
+may be empty empty, since a list can show only the rows where a field (a
+removal time, say) is unset. Every row has a row of each model that points
+back at it, since a list can show only the rows something hangs off. A new list
+view is covered the day it is routed, and a new field the day it is declared.
 
 Every row passes the model's own ``full_clean`` (its validators and its
 ``Meta.constraints``), so the rows are ones HQ could store. Every value is
@@ -16,10 +19,11 @@ invented: names are under example.com.
 """
 
 import re
+from collections import defaultdict
 from contextlib import ExitStack
 from datetime import datetime, time
 from decimal import Decimal
-from itertools import product
+from itertools import count, product
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -178,30 +182,86 @@ def _filled(field: models.Field) -> bool:
     )
 
 
+def _required(field: models.Field) -> bool:
+    """Whether ``field`` is a relation a row cannot be stored without."""
+
+    return field.is_relation and field.concrete and field.editable and not field.null and not field.primary_key
+
+
+def _pointing_back(model: type[models.Model]):
+    """Each one-to-many relation another model points at ``model`` through."""
+
+    return [relation for relation in model._meta.related_objects if relation.one_to_many and not relation.hidden]
+
+
 class _Fill:
-    """Rows for each model a list shows, and one for each model they relate to."""
+    """Rows for each model a list shows, one for each model they relate to, and
+    one of each model pointing back at every row."""
 
     def __init__(self, user):
         self.user = user
         self.rows: dict[type[models.Model], list[models.Model]] = {}
+        self.index: defaultdict[type[models.Model], count] = defaultdict(count)
+        # Models whose rows are being written, so a required relation that
+        # leads back to one is a cycle no row can be stored in.
+        self.building: set[type[models.Model]] = set()
+        # Rows still owed their children, each with the models above it.
+        self.waiting: list[tuple[models.Model, frozenset[type[models.Model]]]] = []
 
     def rows_for(self, model: type[models.Model]) -> list[models.Model]:
-        """Enough rows that every choice of every field is shown at least once."""
+        """Enough rows that every choice of every field is shown at least once,
+        and one more with every field that may be empty left empty."""
 
         if model not in self.rows:
+            if model in self.building:
+                raise AssertionError(f"{model.__name__} needs a row of its own to be stored")
+            self.building.add(model)
             choices = [_longest_first(field) for field in model._meta.concrete_fields if field.choices]
-            count = max([3, *(len(each) for each in choices)])
-            self.rows[model] = [self._row(model, index) for index in range(count)]
-            for row in self.rows[model]:
+            full = [self._row(model) for _ in range(max([3, *(len(each) for each in choices)]))]
+            self.rows[model] = [*full, self._row(model, sparse=True)]
+            self.building.discard(model)
+            for row in full:
                 self._relate(row)
+            self.waiting += [(row, frozenset({model})) for row in self.rows[model]]
+            if not self.building:
+                self._fill_children()
         return self.rows[model]
 
-    def _row(self, model, index):
-        fields = [field for field in model._meta.concrete_fields if _filled(field)]
+    def _fill_children(self):
+        """A row of each model pointing back at every waiting row, and so on
+        down, never to a model already above it."""
+
+        while self.waiting:
+            parent, above = self.waiting.pop()
+            for relation in _pointing_back(type(parent)):
+                if relation.related_model in above:
+                    continue
+                child = self._row(relation.related_model, {relation.field.name: parent})
+                self._relate(child)
+                self.waiting.append((child, above | {relation.related_model}))
+
+    def _row(self, model, given=None, sparse=False):
+        """A row of ``model`` holding ``given``, each required relation pointed
+        at a row of its own; a sparse one leaves every field that may be empty."""
+
+        index = next(self.index[model])
+        given = given or {}
+        given |= {
+            field.name: self._target(field.related_model)
+            for field in model._meta.concrete_fields
+            if _required(field) and field.name not in given
+        }
+        fields = [field for field in model._meta.concrete_fields if _filled(field) and not (sparse and field.null)]
         chosen = [field for field in fields if field.choices]
         plain = _admitted(
             model,
-            {field.name: value for field in fields if not field.choices if (value := _value(field, index)) is not None},
+            given
+            | {
+                field.name: value
+                for field in fields
+                if not field.choices
+                if (value := _value(field, index)) is not None
+            },
             exclude=[field.name for field in chosen],
         )
         # Row `index` starts each choice field `index` places down its longest-first list.
@@ -222,10 +282,10 @@ class _Fill:
         raise AssertionError(f"no {model.__name__} row its own rules admit: {last}")
 
     def _relate(self, row):
-        """Each optional relation pointed at a row of its own."""
+        """Each optional relation still empty pointed at a row of its own."""
 
         for field in row._meta.concrete_fields:
-            if field.is_relation and field.null:
+            if field.is_relation and field.null and getattr(row, field.attname) is None:
                 setattr(row, field.name, self._target(field.related_model))
         row.full_clean()
         row.save()
