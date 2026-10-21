@@ -33,7 +33,7 @@ from django.test import override_settings
 from hq.domains.receipts.models import Receipt
 from hq.platform.application import cadence
 
-from . import docker, infra, network, records, work
+from . import agents, docker, infra, network, records, work
 from .names import HQ, HQ_REVISION, HQ_SOURCE, LAN, LAPTOP, OWNER, PROXY, SSO, container_id
 
 __all__ = ("REQUEST", "SSO", "as_production", "build_showcase", "seed", "throwaway_media")
@@ -119,3 +119,4 @@ def seed():
     work.jobs()
     records.calendar()
     records.money()
+    agents.seen()

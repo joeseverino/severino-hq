@@ -25,7 +25,11 @@
       {% for agent in agents %}
         <li>
           <span class="policy-agent-name">{{ agent.label }}</span>
-          <span class="muted">Uses {{ agent.detail }} · {{ agent.identity.granted|length|counted:"permission from your sign-in,permissions from your sign-in" }} · last seen {{ agent.identity.last_seen|ago }}</span>
+          <ul class="dot-list muted">
+            <li>Uses {{ agent.detail }}</li>
+            <li>{{ agent.identity.granted|length|counted:"permission from your sign-in,permissions from your sign-in" }}</li>
+            <li>Last seen {{ agent.identity.last_seen|ago }}</li>
+          </ul>
         </li>
       {% endfor %}
     </ul>

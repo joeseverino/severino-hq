@@ -86,6 +86,14 @@ class DemoSiteTests(unittest.TestCase):
                     dangling.add(f"{page.parent.relative_to(OUT)}: {line[:80]}")
         self.assertEqual(sorted(dangling)[:20], [])
 
+    def test_the_agents_page_shows_an_agent_at_work(self):
+        page = (OUT / "agents" / "index.html").read_text(encoding="utf-8")
+        seen = [line for line in _visible_lines(page) if "last seen" in line.lower()]
+        self.assertTrue(seen, "an agent is listed")
+        self.assertRegex(seen[0].lower(), r"last seen (?:\d+ (?:second|minute)s?|just now)")
+        refused = re.search(r"<strong>(\d+)</strong> refused in the last day", page)
+        self.assertTrue(refused and int(refused.group(1)) > 0, "a refusal is counted")
+
     def test_every_page_is_drawn_in_the_reader_s_scheme(self):
         # A page without it is painted white first, a flash in dark mode.
         plain = []
