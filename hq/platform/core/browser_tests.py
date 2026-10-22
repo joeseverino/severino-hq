@@ -1,4 +1,4 @@
-"""Real-browser layout checks: manage.py test core.browser_tests --parallel=1.
+"""Real-browser layout checks, run by the browser:* tasks (`mise run browser`).
 
 This filename does not match Django's default test*.py discovery, so the plain
 suite needs neither Playwright nor a browser. `mise run browser` runs it, and
@@ -23,7 +23,11 @@ import mimetypes
 import os
 import re
 import tempfile
+from functools import cache, wraps
+from itertools import islice, takewhile
 from pathlib import Path
+from types import MappingProxyType
+from typing import override
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -31,23 +35,88 @@ from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.db import transaction
 from django.test import Client, SimpleTestCase
+from django.test.testcases import is_pickable
 from django.urls import reverse
 lazy from django.template import Context, Template
 lazy from django.template.loader import render_to_string
+lazy from playwright.sync_api import Error as BrowserError, TimeoutError as LoadTimeout
 
+from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
 from hq.platform.core.tests.test_browser_derived_fixtures import build_derived_estate, render_derived_pages
 from hq.platform.core.tests.test_browser_fixtures import PAGES, build_estate, render_pages
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.pages import Page, PageAction
+lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 
+# The widths the gates read a page at, declared once. A set that reads more
+# says why beside it; a test with a width of its own (a dashboard's pairs, a
+# wide table on a desktop) names it where it is read.
+#
 # The phone HQ is read on: its viewport in CSS pixels.
 PHONE_SCREEN = (402, 874)
-WIDTHS = (320, PHONE_SCREEN[0], 768, 1280)
-# A phone, a tablet held upright, a laptop: where only a table may scroll sideways.
-OVERFLOW_WIDTHS = (PHONE_SCREEN[0], 820, 1360)
+# Where a frame across most of the page has the room to be judged empty.
+WIDE = 1360
+# A phone, a tablet held upright, a laptop: the screens every sweep reads.
+WIDTHS = (PHONE_SCREEN[0], 820, WIDE)
+# The narrowest phone a page must still fit.
+NARROWEST = 320
+# The sparse estate is read across the stylesheet's media queries as well: at
+# the narrowest phone, a tablet's short side, and the widest window the
+# `max-width: 1280px` rules hold, which WIDE is past.
+SPARSE_WIDTHS = (NARROWEST, PHONE_SCREEN[0], 768, 1280)
+# What a pressed control says is read where a head has the least room beside
+# its title, on the phones, and where it has the most.
+SPEAKING_WIDTHS = (NARROWEST, PHONE_SCREEN[0], WIDE)
+# The least a control is hit through, either way, in CSS pixels (WCAG 2.5.8),
+# which the stylesheet's `--target-min` is held to.
+TARGET_MIN = 24
+
+
+def _found(pattern, css, what):
+    match = re.search(pattern, css)
+    if not match:
+        raise AssertionError(f"The stylesheet no longer says {what} the way the browser gate reads it ({pattern})")
+    return match
+
+
+def wide_tables(css):
+    """Where a table's region is wide, and the narrowest viewports that make
+    it so: the page's own region, inside the content's padding
+    (`--content-pad: clamp(a, b vw, c)`), and one in a card, which adds its
+    border and inline padding. Just past the breakpoint the columns that keep
+    their line take what they need from the least room the wide rules get;
+    narrower, columns drop by tier instead."""
+
+    region = int(_found(r"@container table-region \(width >= (\d+)px\)", css, "where a region is wide").group(1))
+    low, share, high = map(
+        float, _found(r"--content-pad: clamp\((\d+)px, ([\d.]+)vw, (\d+)px\)", css, "the content's padding").groups()
+    )
+    space = _found(
+        r"\.card \{ padding: var\(--surface-inset, var\(--space-\d+\) var\((--space-\d+)\)\)", css, "a card's padding"
+    ).group(1)
+    padding = float(_found(rf"{space}: (\d+)px;", css, "a card's inline padding").group(1))
+    border = float(_found(r"border: var\(--surface-border, (\d+)px solid", css, "a surface's border").group(1))
+
+    def first(inset):
+        width = region
+        while width - 2 * (min(max(low, share * width / 100), high) + inset) < region:
+            width += 1
+        return width
+
+    page, card = first(0), first(padding + border)
+    # Two viewports this close stretch the same columns, so the wider holds both.
+    return region, (card,) if card - page <= 50 else (page, card)
+
+
+# Where a table region is wide (tables.css's `width >= 1000px` queries), its
+# columns that wrap have room to give, so a name there is never cut as a
+# whole; only a part past its cap (figures.css) is cut, inside itself. And the
+# laptop windows where a table's region has only just become wide, which a
+# sweep that judges a table's columns reads besides WIDTHS.
+WIDE_REGION, WIDE_TABLES = wide_tables(stylesheet())
 # Every page, from the sparse estate and the dense one. The overflow and
-# density checks run all of them at OVERFLOW_WIDTHS.
+# density checks run all of them at WIDTHS.
 ALL_PAGES = (*PAGES, *DENSE_PAGES)
 # The pages that draw a route, sparse and dense.
 ROUTE_PAGES = ("service", "connections", "dense/service", "dense/connections")
@@ -59,7 +128,13 @@ ROUTE_PAGES = ("service", "connections", "dense/service", "dense/connections")
 # row past six is a list put in a cell (a machine's every hostname, a
 # container's every port) that belongs on the record's own page, with a count
 # or the first few in the row. Half a line of slack absorbs the smaller type
-# the secondary lines are set in.
+# the secondary lines are set in. A row's text can be more than six lines of
+# its width hold (a name at its field's full length beside a paragraph of
+# notes), so a cell is held to the larger of this and the row at its best:
+# its wrapping text shared evenly over the room its one-line cells leave, no
+# column narrower than its longest word, and a line of slack for each column
+# that wraps. A cell past both is a column starved while another has room to
+# give.
 ROW_LINES = 6
 # The stylesheet's phone breakpoint: `@media (max-width: 640px)`.
 PHONE = 640
@@ -77,9 +152,13 @@ SELECTORS = {
     "calendar_period": "#calendar-period",
     "calendar_next": '#calendar a[rel="next"]',
     "decisions": "[data-attention-item]",
+    # What a page says of the readings it asked for on opening.
+    "ask_note": "[data-ask-note]",
     # A family's toggle, the row toggle, and a row's own dismiss.
     "decision_family": "[data-queue-family] [data-fold-toggle]",
     "row_toggle": "[data-row-toggle]",
+    # A row opened to show all it holds, with every cut in it lifted.
+    "open_row": 'tr:has(> * > [data-row-toggle][aria-expanded="true"])',
     "decision_dismiss": "[data-triage] button",
     "decision_title": ".attention-title",
     "decision_steps": ".resolution-workflow",
@@ -106,8 +185,8 @@ SELECTORS = {
     "readings": ".dash-readings .glance-panel-head",
     "patterns": ".dashboard-patterns > .card",
     # What reads as one unit and so never breaks across lines: a state, a
-    # time.
-    "one_line": ".pill, td time",
+    # time, one part of a value told in several ("Up 1 week", "healthy").
+    "one_line": '.pill, td time, td .cell-part, td[data-kind="control"] :is(.btn, button)',
     # A control one line tall, drawn on its own rather than inside a label
     # that is the control a reader sees.
     "line_control": (
@@ -116,10 +195,15 @@ SELECTORS = {
     ),
     # A form's field: one label, its control and its help.
     "field": ".field",
+    # A control a reader fills in or picks from, whose edge is what shows it.
+    "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A row of controls that wraps when its screen is narrow.
     "wrapping_bar": ".filter-bar, .table-toolbar, .table-filters",
     # Everything pressed: a button, a link drawn as one, a disclosure's handle.
     "control": "button, .btn, .icon-link, summary",
+    # Everything a pointer presses: a link, a form's control, a disclosure,
+    # and whatever else takes focus.
+    "target": "a[href], button, summary, select, textarea, input:not([type=hidden]), [tabindex]:not([tabindex='-1'])",
     # Anything in a table cell: its words stay inside its own box, or they are
     # drawn across the next column while every box measures as in place.
     "cell_content": "main td *, main th *",
@@ -129,8 +213,49 @@ SELECTORS = {
     # code. A code block is text laid out by its own rules, and a table lays
     # out its own identifiers.
     "token": ":is(code, kbd, samp, .token, [data-entity]):not(pre *, .data-table *)",
+    # A name in a table cell that is not the row's own: cut, never broken
+    # inside a hyphenated part. Code in a cell is cut to one line on its own,
+    # and a label of several words wraps as prose.
+    "cell_name": ".data-table td [data-entity]:not(:has(code), strong > *, .row-gutter > *):has(> .token[data-sole])",
+    # A hyphenated part of a token, which a cell cuts and never breaks.
+    "token_part": ".whole",
+    # Where `|breakable` lets a token's line break (value_tags._SEAM).
+    "seam": ".seam",
+    # A part of a phrase: a box the cell cuts on its own (figures.css).
+    "phrase_part": ".token:not([data-sole]) :is(.whole, .part)",
+    # A box a cell cuts a value in, holding out for a few characters of it
+    # (`--cut-floor`): a name, a line, an identifier's code, a service's name.
+    "cut_box": ".data-table td :is([data-entity], .cell-line, code, .service-name strong)",
+    # Prose, whose words wrap as a sentence's do: a paragraph, the blocks the
+    # stylesheet holds to `--measure` (Design.md: "prose keeps `--measure`"),
+    # and a cell's free text (`cell-data`). A code block lays out by its own
+    # rules. Muted text is not prose: `.muted` is a tone, and the line it
+    # dresses is as often a name ("on example-host") as a sentence.
+    "prose": (
+        "p, .page-lede, .empty, .attention-body, .queue-meaning, .resolution-workflow li,"
+        " .cell-data, pre, script, style, template"
+    ),
+    # A row's own name, which wraps at its hyphens by design rather than being
+    # cut (figures.css: "it wraps at its hyphens, and the names beside it give
+    # way instead"). A hyphen is no seam `|breakable` can mark, so the token
+    # rule leaves it to that design: bare, as the row's link, or alone in the
+    # row's gutter (figures.css exempts `.row-gutter > *` from the cut), or a
+    # queue row's title.
+    "row_name": "td > strong:first-child, td > a:first-child > strong, td.row-gutter > [data-entity], td .attention-title",
+    # Any token, in a table or not: none leaves a scrap of itself on a line.
+    "any_token": ".token",
+    # A cell name's own token, the box that cuts it. A name in a muted line
+    # is context, cut at the cell's edge by design.
+    "sole_token": ":scope > .token[data-sole]",
+    "context_line": ".muted",
+    # A figure in a band or card: its label, and the value it answers.
+    "figure": ".kpi",
+    "figure_label": ".label",
+    "figure_value": ".value",
     # What a heading says beside its title: a count, an age, where it is read.
     "heading_aside": ".heading-aside",
+    # The same, in a heading or beside it in a section's head.
+    "any_aside": ".heading-aside, .section-head .count",
     # A page's title, and the controls that share its head.
     "page_head": ".page-head",
     "page_title": ".page-head h1",
@@ -172,9 +297,13 @@ SELECTORS = {
     "disclosure": "main details:not([data-menu])",
     # Where the API reference mounts its viewer.
     "reference": "#api-reference-root",
+    # Where a vendored script draws markup HQ does not write: the API
+    # reference's viewer, which ReferenceBrowserTests holds to its own rules.
+    "vendored": "#api-reference-root",
     # A band, and what in it is not a cell: a dialog a cell opens, its note.
     "band": (
-        ":is(.control-summary, .service-band, .fact-band, .insight-grid, .sweep-grid, .machine-telemetry-metrics)"
+        ":is(.control-summary, .service-band, .fact-band, .insight-grid, .sweep-grid, .machine-telemetry-metrics,"
+        " .kpi-grid:not(.highlight-card > *))"
     ),
     "band_aside": "dialog, .band-meta",
     # A route's hops, and the map's lanes and the box that holds them.
@@ -192,6 +321,8 @@ SELECTORS = {
     "check_evidence": ".conn-layer-evidence",
     # A value a disclosure's handle names.
     "summary_value": "main summary code",
+    # Sections paired two to a row, at one height.
+    "paired": ".section-flow",
     "map": ".topology-map",
     "map_lane": ".topology-lane",
     "map_node": ".topology-node",
@@ -210,6 +341,8 @@ LARGE_TEXT_CONTRAST = 3.0
 # on a card is 1.15:1, the plain one on a tinted panel 1.08:1; below this a
 # line is the surface's own color.
 LINE_CONTRAST = 1.07
+# WCAG 1.4.11: what identifies a control, a field's edge, clears 3:1.
+FIELD_CONTRAST = 3.0
 
 # Structural rules from browser_audit.js that hold on every page at
 # every width. A card with a band of empty frame under its last line
@@ -256,6 +389,52 @@ const inFlow = (parent) => {
   };
   walk(parent);
   return found;
+};
+"""
+
+# The part of a rect held by `el` that a reader sees: cut by `el` and every
+# box above it that clips what it holds (overflow, `clip-path`), and null when
+# nothing is left or one of them is not drawn at all. An absolutely placed box
+# escapes the overflow of every box up to the one it is placed against;
+# `clip-path` cuts all a box paints. A `display: contents` box has no box to
+# clip with.
+_PAINTED_PART = r"""
+const painted = (el, rect) => {
+  let shown = el;
+  while (shown.parentElement && getComputedStyle(shown).display === 'contents') shown = shown.parentElement;
+  if (!shown.checkVisibility({opacityProperty: true, visibilityProperty: true})) return null;
+  let {left, top, right, bottom} = rect;
+  const cut = (r) => {
+    left = Math.max(left, r.left); right = Math.min(right, r.right);
+    top = Math.max(top, r.top); bottom = Math.min(bottom, r.bottom);
+  };
+  const length = (value, size) => (value.endsWith('%') ? (parseFloat(value) / 100) * size : parseFloat(value)) || 0;
+  let placed = null;
+  for (let up = el; up && up !== document.documentElement; up = up.parentElement) {
+    const style = getComputedStyle(up);
+    if (style.display === 'contents') continue;
+    const b = up.getBoundingClientRect();
+    const transformed = style.transform !== 'none';
+    const holds = placed === null
+      || (placed === 'absolute' && (style.position !== 'static' || transformed))
+      || (placed === 'fixed' && transformed);
+    if (holds) placed = null;
+    // Overflow clips what a box holds, and a run of inline text holds nothing.
+    if (holds && style.display !== 'inline') {
+      const inner = {left: b.left + up.clientLeft, top: b.top + up.clientTop};
+      if (style.overflowX !== 'visible') cut({left: inner.left, right: inner.left + up.clientWidth, top: -Infinity, bottom: Infinity});
+      if (style.overflowY !== 'visible') cut({top: inner.top, bottom: inner.top + up.clientHeight, left: -Infinity, right: Infinity});
+    }
+    if (style.clipPath !== 'none') {
+      const inset = /^inset\(([^)]*?)(?:\s+round\b[^)]*)?\)$/.exec(style.clipPath);
+      const [t, r = t, bo = t, l = r] = inset ? inset[1].trim().split(/\s+/) : ['0px'];
+      cut({left: b.left + length(l, b.width), right: b.right - length(r, b.width),
+           top: b.top + length(t, b.height), bottom: b.bottom - length(bo, b.height)});
+    }
+    if (placed === null && ['absolute', 'fixed'].includes(style.position)) placed = style.position;
+    if (right - left <= 0 || bottom - top <= 0) return null;
+  }
+  return {left, top, right, bottom, width: right - left, height: bottom - top};
 };
 """
 
@@ -375,14 +554,21 @@ _CELLS = (
     + """
   // A cell's content stays in the cell. Inside a table that scrolls, running
   // past the edge is not caught by anything else: it lands under the next
-  // column, readable in neither.
+  // column, readable in neither. What a box inside the cell cuts (a line cut
+  // with an ellipsis) shows only as far as that box, which is held on its own.
   const found = [];
+  const cut = (el, cell) => {
+    for (let b = el.parentElement; b && b !== cell; b = b.parentElement) {
+      if (getComputedStyle(b).overflowX !== 'visible') return true;
+    }
+    return false;
+  };
   for (const cell of document.querySelectorAll('main td, main th')) {
     const edge = box(cell).right;
     for (const el of cell.querySelectorAll('*')) {
       const r = box(el);
       if (r.width < 2 || r.height < 2 || !el.checkVisibility()) continue;
-      if (r.right > edge + 1) {
+      if (r.right > edge + 1 && !cut(el, cell)) {
         found.push(`${describe(el)} runs ${Math.round(r.right - edge)}px past its cell: ${el.textContent.trim().slice(0, 40)}`);
       }
     }
@@ -408,7 +594,14 @@ _RAISED_LINKS = (
     const before = link.previousSibling;
     if (!before || before.nodeType !== Node.TEXT_NODE || !before.textContent.trim()) continue;
     const words = rects(before).at(-1);
-    const linked = rects(link.firstChild)[0];
+    // The link's own words, however deep: a box around them (a capped part)
+    // also holds the line's leading, which is not where the words sit.
+    // Walked without a filter callback, which an engine with script off
+    // refuses to call back into.
+    const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+    let text = walker.nextNode();
+    while (text && !text.textContent.trim()) text = walker.nextNode();
+    const linked = text && rects(text)[0];
     if (!words || !linked) continue;
     // Wrapped onto a line of its own: nothing beside it to sit off.
     if (linked.top >= words.bottom || linked.bottom <= words.top) continue;
@@ -417,6 +610,170 @@ _RAISED_LINKS = (
     }
   }
   return [...new Set(found)].slice(0, 10);
+}"""
+)
+
+# A target a pointer cannot reliably hit: under 24 by 24 CSS px (WCAG 2.5.8)
+# and none of the criterion's exceptions it can be measured for. The area a
+# target is hit through is its box, grown by a pseudo-element it positions
+# over the space beside it, and for a tick box by the labels that tick it.
+_SMALL_TARGETS = (
+    "([selector, least]) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  // What the stylesheet sizes hit areas from is the criterion's size.
+  const token = getComputedStyle(document.documentElement).getPropertyValue('--target-min').trim();
+  if (token && token !== `${least}px`) found.push(`--target-min is ${token}, not ${least}px`);
+  const px = (value) => parseFloat(value);
+  const tick = (el) => el.matches('input[type=checkbox], input[type=radio]');
+  const union = (a, b) => ({left: Math.min(a.left, b.left), top: Math.min(a.top, b.top),
+    right: Math.max(a.right, b.right), bottom: Math.max(a.bottom, b.bottom)});
+  const hung = (el, r, pseudo) => {
+    const style = getComputedStyle(el);
+    const after = getComputedStyle(el, pseudo);
+    if (style.position === 'static' || after.position !== 'absolute' || after.content === 'none'
+        || after.display === 'none' || after.pointerEvents === 'none') return r;
+    const inset = [after.top, after.right, after.bottom, after.left].map(px);
+    if (inset.some(Number.isNaN)) return r;
+    return union(r, {
+      top: r.top + px(style.borderTopWidth) + inset[0],
+      right: r.right - px(style.borderRightWidth) - inset[1],
+      bottom: r.bottom - px(style.borderBottomWidth) - inset[2],
+      left: r.left + px(style.borderLeftWidth) + inset[3],
+    });
+  };
+  const area = (el) => {
+    let r = hung(el, hung(el, box(el), '::before'), '::after');
+    if (tick(el)) for (const label of el.labels) if (label.checkVisibility()) r = union(r, box(label));
+    return {...r, width: r.right - r.left, height: r.bottom - r.top};
+  };
+  // A control drawn as the browser draws it: no author style changed its
+  // look, and it is the size a copy with no author style is.
+  const host = document.createElement('div');
+  host.style.setProperty('position', 'absolute');
+  host.style.setProperty('visibility', 'hidden');
+  document.body.append(host);
+  const bare = host.attachShadow({mode: 'open'});
+  const pristine = new Map();
+  const browsers = (el, r) => {
+    if (!el.matches('input, select') || getComputedStyle(el).appearance === 'none') return false;
+    const key = `${el.tagName} ${el.type}`;
+    if (!pristine.has(key)) {
+      const copy = document.createElement(el.tagName);
+      if (el.type && el.tagName === 'INPUT') copy.type = el.type;
+      bare.append(copy);
+      pristine.set(key, box(copy));
+    }
+    const p = pristine.get(key);
+    return Math.abs(p.width - r.width) < .5 && Math.abs(p.height - r.height) < .5;
+  };
+  // In a sentence: set on a line of text, among words that are no target's.
+  // Walked without a filter callback, which an engine with script off
+  // refuses to call back into.
+  const words = document.createRange();
+  const inSentence = (el) => {
+    if (!/^(inline|-webkit-inline)/.test(getComputedStyle(el).display)) return false;
+    let block = el.parentElement;
+    while (block.parentElement && ['inline', 'contents'].includes(getComputedStyle(block).display)) {
+      block = block.parentElement;
+    }
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (!text.textContent.trim()) continue;
+      // Text hidden from the accessibility tree inside a link is no part of
+      // its name: a sentence's mark held there (value_tags.breakable) is the
+      // sentence's.
+      if (!text.parentElement.closest('[aria-hidden="true"]')) {
+        if (el.contains(text)) continue;
+        const owner = text.parentElement.closest(selector);
+        if (owner && block.contains(owner)) continue;
+      }
+      words.selectNodeContents(text);
+      if ([...words.getClientRects()].some((r) => r.width > 1 && r.height > 1)) return true;
+    }
+    return false;
+  };
+  try {
+    const targets = [];
+    for (const el of new Set([...document.querySelectorAll(selector)])) {
+      if (el.matches(':disabled') || !el.checkVisibility({visibilityProperty: true})) continue;
+      const drawn = box(el);
+      // Out of sight until focused (a skip link), or drawn by its label.
+      if (drawn.width <= 1 || drawn.height <= 1) continue;
+      targets.push({el, drawn, r: area(el)});
+    }
+    const nested = (a, b) => a.el.contains(b.el) || b.el.contains(a.el);
+    const meet = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > .5
+      && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > .5;
+    // An area two targets share is neither's: one hung over another
+    // target's area counts only the box it draws.
+    const grown = new Map(targets.map((t) => [t, t.r]));
+    for (const t of targets) {
+      if (targets.some((o) => o !== t && !nested(o, t) && meet(grown.get(t), grown.get(o)))) t.r = t.drawn;
+    }
+    const center = ({r}) => [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
+    const small = new Set(targets.filter(({r}) => r.width < least - .5 || r.height < least - .5));
+    // Spacing: a 24px circle on the target crosses no other target and no
+    // other undersized target's circle.
+    const spaced = (t) => {
+      const [x, y] = center(t);
+      return !targets.some((o) => {
+        if (o === t || nested(o, t)) return false;
+        const [ox, oy] = center(o);
+        if (small.has(o) && Math.hypot(ox - x, oy - y) < least) return true;
+        const dx = Math.max(o.r.left - x, 0, x - o.r.right);
+        const dy = Math.max(o.r.top - y, 0, y - o.r.bottom);
+        return Math.hypot(dx, dy) < least / 2;
+      });
+    };
+    const unmet = [...small].filter((t) => !browsers(t.el, t.drawn) && !inSentence(t.el) && !spaced(t));
+    // Equivalent: the control it names as doing the same job is 24px square
+    // and in the same cell or region.
+    const sized = new Map(targets.filter((t) => !small.has(t)).map((t) => [t.el, t]));
+    const region = (el) => el.closest('td, th, section, [role=region]');
+    const standIn = (el) => {
+      const named = document.getElementById(el.dataset.targetEquivalent || '');
+      return Boolean(named && sized.has(named) && region(named) === region(el));
+    };
+    for (const t of unmet) {
+      if (standIn(t.el)) continue;
+      const said = (t.el.textContent.trim() || t.el.getAttribute('aria-label') || t.el.title || '').slice(0, 30);
+      found.push(`${describe(t.el)} in ${describe(t.el.parentElement)} is hit through ${Math.round(t.r.width)}x${Math.round(t.r.height)}px: ${said}`);
+    }
+  } finally {
+    host.remove();
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+)
+
+# A summary says it opens with one mark: the disclosure primitive's
+# (surfaces.css), or its own where its details opts out of that one. A second
+# reads as a second control. A mark is the browser's own marker, or a glyph a
+# pseudo-element draws on the summary or anything in it.
+_SUMMARY_MARKS = (
+    "() => {"
+    + _DESCRIBE
+    + r"""
+  const found = [];
+  const glyph = (el, pseudo) => {
+    const match = /^"([^"]*)"$/.exec(getComputedStyle(el, pseudo).content);
+    return match && /^\s*[▸▹▶►▾▿▼⌄⌃›»+−＋]\s*$/u.test(match[1]) ? match[1].trim() : '';
+  };
+  for (const summary of document.querySelectorAll('main summary')) {
+    if (!summary.checkVisibility()) continue;
+    const style = getComputedStyle(summary);
+    const marks = style.display === 'list-item' && style.listStyleType !== 'none' ? ['its marker'] : [];
+    for (const el of [summary, ...summary.querySelectorAll('*')]) {
+      for (const pseudo of ['::before', '::after']) {
+        const mark = glyph(el, pseudo);
+        if (mark) marks.push(mark);
+      }
+    }
+    if (marks.length > 1) found.push(`${describe(summary)} "${summary.textContent.trim().slice(0, 30)}" draws ${marks.join(' and ')}`);
+  }
+  return found;
 }"""
 )
 
@@ -486,8 +843,9 @@ _TABLES = (
                  || getComputedStyle(head).position === 'absolute')) {
       found.push(`${name} hides its column headings`);
     }
+    // A row folded away is not drawn at all, which is not drawn as a card.
     for (const row of table.querySelectorAll('tbody tr')) {
-      if (getComputedStyle(row).display !== 'table-row') {
+      if (!['table-row', 'none'].includes(getComputedStyle(row).display)) {
         found.push(`${name} stacks its rows`); break;
       }
     }
@@ -505,15 +863,17 @@ _TABLES = (
 }"""
 )
 
+# A grid whose items stretch ends each row together, and so does one the
+# stylesheet pairs, whatever its own alignment says.
 _PAIRS = (
-    "() => {"
+    "(paired) => {"
     + _DESCRIBE
     + """
   const found = [];
   for (const grid of document.querySelectorAll('main *')) {
     const style = getComputedStyle(grid);
     if (!['grid', 'inline-grid'].includes(style.display)) continue;
-    if (!['normal', 'stretch'].includes(style.alignItems)) continue;
+    if (!grid.matches(paired) && !['normal', 'stretch'].includes(style.alignItems)) continue;
     const rows = new Map();
     for (const [item, own, r] of inFlow(grid)) {
       if (!['auto', 'normal', 'stretch'].includes(own.alignSelf)) continue;
@@ -592,23 +952,76 @@ _ROW_HEIGHTS = (
     }
     return bottom;
   };
+  const height = (cell) => {
+    const top = box(cell).top + parseFloat(getComputedStyle(cell).paddingTop);
+    let bottom = top;
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (!text.textContent.trim() || !text.parentElement.checkVisibility()) continue;
+      bottom = Math.max(bottom, shown(text, cell));
+    }
+    return bottom - top;
+  };
+  const lineOf = (style) => (style.lineHeight === 'normal' ? parseFloat(style.fontSize) * 1.2 : parseFloat(style.lineHeight));
+  const hold = (el, property, value) => {
+    const was = [el.style.getPropertyValue(property), el.style.getPropertyPriority(property)];
+    el.style.setProperty(property, value, 'important');
+    return () => (was[0] ? el.style.setProperty(property, ...was) : el.style.removeProperty(property));
+  };
+  // Each cell's narrowest: its column's width with the table laid out at
+  // min-content, the page left as it was. A table holding its columns while
+  // a row is open (tables.js) cannot lay them out again, so each is as
+  // narrow as it is held, and the row is judged at those widths.
+  const narrowest = (table, cells) => {
+    if (table.hasAttribute('data-rows-held')) return cells.map(({cell}) => box(cell).width);
+    const released = ['table-layout:auto', 'width:min-content', 'min-width:0', 'max-width:none']
+      .map((pair) => hold(table, ...pair.split(':')));
+    const widths = cells.map(({cell}) => box(cell).width);
+    released.reverse().forEach((release) => release());
+    return widths;
+  };
+  // The row at its best: the height at which the text of its cells that wrap
+  // fits the room the cells that keep one line leave, each cell as tall as
+  // the next unless its column is already at its narrowest. A cell's text is
+  // the area it covers (its content width by its height), which no share of
+  // the room makes smaller. The browser shares the room in proportion to
+  // each column's longest line, a word at a time, so a column that wraps can
+  // stand a line past its exact share: one line each. Past what any layout of
+  // the row can reach, it is no measure, and the row is judged by the budget
+  // alone.
+  const balanced = (row, cells) => {
+    const least = narrowest(row.closest('table'), cells);
+    let room = box(row).width;
+    const wrapping = [];
+    cells.forEach(({cell, style, tall}, i) => {
+      const width = box(cell).width;
+      if (tall <= 1.5 * lineOf(style)) { room -= width; return; }
+      const inset = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      room -= inset;
+      wrapping.push({area: (width - inset) * tall, least: least[i] - inset});
+    });
+    const needs = (height) => wrapping.reduce((sum, c) => sum + Math.max(c.least, c.area / height), 0);
+    let low = 0, high = Math.max(...cells.map((c) => c.tall)) * 4;
+    if (needs(high) > room) return {height: 0, columns: 0};
+    for (let step = 0; step < 30; step++) {
+      const mid = (low + high) / 2;
+      if (needs(mid) > room) low = mid; else high = mid;
+    }
+    return {height: high, columns: wrapping.length};
+  };
   const found = [];
   for (const row of document.querySelectorAll('main tbody tr')) {
     if (!row.getClientRects().length || row.cells.length === 1) continue;
-    for (const cell of row.cells) {
-      const style = getComputedStyle(cell);
-      const size = parseFloat(style.fontSize);
-      const line = style.lineHeight === 'normal' ? size * 1.2 : parseFloat(style.lineHeight);
-      const top = box(cell).top + parseFloat(style.paddingTop);
-      let bottom = top;
-      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
-      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-        if (!text.textContent.trim() || !text.parentElement.checkVisibility()) continue;
-        bottom = Math.max(bottom, shown(text, cell));
-      }
-      const height = bottom - top;
-      if (height > (lines + 0.5) * line) {
-        found.push(`${describe(row.closest('table'))} row ${row.rowIndex}: ${describe(cell)} is ${(height / line).toFixed(1)} lines: ${cell.textContent.trim().replace(/\\s+/g, ' ').slice(0, 60)}`);
+    const cells = [...row.cells].filter((cell) => cell.getClientRects().length)
+      .map((cell) => ({cell, style: getComputedStyle(cell), tall: height(cell)}));
+    let best = null;
+    for (const {cell, style, tall} of cells) {
+      const line = lineOf(style);
+      if (tall <= (lines + 0.5) * line) continue;
+      best ??= balanced(row, cells);
+      const shared = best.height + best.columns * line;
+      if (tall > Math.max(lines * line, shared) + 0.5 * line) {
+        found.push(`${describe(row.closest('table'))} row ${row.rowIndex}: ${describe(cell)} is ${(tall / line).toFixed(1)} lines, ${(shared / line).toFixed(1)} at its row's best: ${cell.textContent.trim().replace(/\\s+/g, ' ').slice(0, 60)}`);
       }
     }
   }
@@ -738,6 +1151,112 @@ _FAINT_LINES = (
 }"""
 )
 
+# A field is found by its edge: the border it draws, or, for a control drawn
+# bare inside one that acts as the field (a search box's frame, a drop zone),
+# the nearest frame around it. That edge, or the frame's own fill, stands out
+# from what is behind the frame. A disabled field is exempt, as WCAG exempts it.
+_FIELD_EDGES = (
+    "([fillable, least]) => {"
+    + _DESCRIBE
+    + _COLOR
+    + """
+  const edged = (style) => ['Top', 'Right', 'Bottom', 'Left'].some((side) =>
+    parseFloat(style[`border${side}Width`]) >= 1 && !['none', 'hidden'].includes(style[`border${side}Style`])
+    && rgba(style[`border${side}Color`])[3] > 0);
+  const found = [];
+  for (const field of document.querySelectorAll(fillable)) {
+    if (field.closest(':disabled, [aria-disabled="true"], [hidden]')) continue;
+    let frame = field;
+    while (frame && !edged(getComputedStyle(frame))) frame = frame.parentElement;
+    if (!frame || !frame.parentElement || !frame.checkVisibility()) continue;
+    const style = getComputedStyle(frame);
+    const behind = background(frame.parentElement);
+    const fill = rgba(style.backgroundColor);
+    const sides = ['Top', 'Right', 'Bottom', 'Left'].filter((side) => parseFloat(style[`border${side}Width`]) >= 1);
+    const measured = Math.max(
+      ...sides.map((side) => ratio(over(rgba(style[`border${side}Color`]), behind), behind)),
+      fill[3] > 0 ? ratio(over(fill, behind), behind) : 0,
+    );
+    if (measured < least) found.push(`${describe(frame)} ${measured.toFixed(2)}:1 on ${behind.slice(0, 3).map(Math.round)}`);
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+)
+
+# How far each box that paints a fill (a chip, a code span, the item a menu is
+# at, a group's heading row) steps from the surface behind it: by its fill or
+# by its edge, whichever shows more. Keyed by the box's place in the document,
+# so the same box can be read again in the other palette. A vendored widget
+# carries its own two palettes, and is not HQ's to hold.
+_FILL_STEPS = (
+    "([scope, vendored]) => {"
+    + _DESCRIBE
+    + _COLOR
+    + """
+  const place = new Map([...document.querySelectorAll('*')].map((el, at) => [el, at]));
+  const steps = {};
+  for (const root of document.querySelectorAll(scope)) {
+    for (const el of root.querySelectorAll('*')) {
+      if (!el.parentElement || el.closest(vendored) || !el.checkVisibility()) continue;
+      const r = box(el);
+      if (r.width < 2 || r.height < 2) continue;
+      const style = getComputedStyle(el);
+      const fill = rgba(style.backgroundColor);
+      if (fill[3] === 0) continue;
+      const behind = background(el.parentElement);
+      const edges = ['Top', 'Right', 'Bottom', 'Left']
+        .filter((side) => parseFloat(style[`border${side}Width`]) >= 1 && !['none', 'hidden'].includes(style[`border${side}Style`]))
+        .map((side) => ratio(over(rgba(style[`border${side}Color`]), behind), behind));
+      const painted = over(fill, behind);
+      const words = el.textContent.trim().replace(/\\s+/g, ' ').slice(0, 30);
+      steps[place.get(el)] = [Math.max(ratio(painted, behind), ...edges), `${describe(el)} (${painted.slice(0, 3).map(Math.round)} on ${behind.slice(0, 3).map(Math.round)}): ${words}`];
+    }
+  }
+  return steps;
+}"""
+)
+
+
+def lost_fills(steps, least):
+    """The boxes a fill sets apart in one palette and not in the other, from
+    each palette's ``_FILL_STEPS``: the two palettes are one set of
+    distinctions, so a fill one shows and the other loses is a token whose
+    other half was never checked. A fill as faint in both is passed: its
+    faintness was chosen."""
+
+    found = []
+    for at in sorted(steps["light"].keys() | steps["dark"].keys(), key=int):
+        read = {palette: steps[palette].get(at, (1, "")) for palette in ("light", "dark")}
+        light, dark = read["light"][0], read["dark"][0]
+        if min(light, dark) < least <= max(light, dark):
+            lost = "dark" if dark < light else "light"
+            said = read[lost][1] or read["light" if lost == "dark" else "dark"][1]
+            found.append(f"{lost} loses {said}: {light:.2f}:1 in light, {dark:.2f}:1 in dark")
+    return found[:10]
+
+
+# Every color each element is painted in, and the element, in document order:
+# what a theme decides. A theme reaches a page two ways, the system's
+# preference and the operator's choice (`data-theme`), and the two must paint
+# the same page. Autofocus lands in the first frame after a load, which one load
+# reaches before it is read and another does not, and a page without script
+# runs no frame callback to wait on. So each reading puts focus where autofocus
+# would, and a focused page takes no autofocus after it: both loads read the
+# same focus, and the focus ring stays among the colors compared.
+_PAINT = (
+    "() => {"
+    + _DESCRIBE
+    + """
+  if (document.activeElement === document.body) document.querySelector('[autofocus]')?.focus();
+  document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } });
+  return [...document.querySelectorAll('body, body *')].map((el) => {
+    const s = getComputedStyle(el);
+    return [describe(el), [s.color, s.backgroundColor, s.borderTopColor, s.borderBottomColor,
+      s.outlineColor, s.fill, s.stroke, s.boxShadow].join(' ')];
+  });
+}"""
+)
+
 
 # A route's mark (a hop's icon, a check's tick) holds its glyph in its middle.
 # A glyph keeps the line height of the row around it unless its mark sets its
@@ -842,8 +1361,8 @@ _EMPTY_FRAMES = (
 # Every style rule's selector the browser kept, nested rules included. A rule
 # whose selector does not parse is dropped whole and silently: the stylesheet
 # still loads and nothing reports it.
-_KEPT_SELECTORS = """() => {
-  const sheet = [...document.styleSheets].find((s) => s.href && s.href.includes('/css/app.css'));
+_KEPT_SELECTORS = """(directory) => {
+  const sheets = [...document.styleSheets].filter((s) => s.href && new URL(s.href).pathname.includes(directory));
   const found = [];
   const walk = (rules) => {
     for (const rule of rules) {
@@ -851,13 +1370,13 @@ _KEPT_SELECTORS = """() => {
       if (rule.cssRules) walk(rule.cssRules);
     }
   };
-  walk(sheet.cssRules);
+  sheets.forEach((sheet) => walk(sheet.cssRules));
   return found;
 }"""
 
 
 def authored_selectors(css: str) -> list[str]:
-    """Every style rule's selector as ``app.css`` writes it, nested rules
+    """Every style rule's selector as the stylesheet writes it, nested rules
     included: the text before each ``{`` that does not open an at-rule."""
 
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
@@ -1029,14 +1548,43 @@ _SPILLED_LABELS = (
     + """
   // A control is at least as wide as what it says. One sized for a glyph and
   // given a word draws the word over whatever stands beside it. One with no
-  // words has no label to spill: what reaches past it is a hit area.
+  // words has no label to spill. The label is what the control lays out in
+  // flow: its words and boxes, and what those spill in turn. A box placed
+  // out of flow (the hit area hung beside a small control) is no label,
+  // though it widens the control's scrollable overflow.
   const found = [];
+  const words = document.createRange();
+  const reach = (el) => {
+    let right = -Infinity;
+    const take = (r) => { if (r.width > 0) right = Math.max(right, r.right); };
+    const text = (parent) => {
+      for (const node of parent.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+          words.selectNodeContents(node);
+          [...words.getClientRects()].forEach(take);
+        } else if (node.nodeType === Node.ELEMENT_NODE && getComputedStyle(node).display === 'contents') {
+          text(node);
+        }
+      }
+    };
+    const walk = (parent) => {
+      text(parent);
+      for (const [child, style, r] of inFlow(parent)) {
+        take(r);
+        if (style.overflowX === 'visible') walk(child);
+      }
+    };
+    walk(el);
+    return right;
+  };
   for (const el of document.querySelectorAll(selector)) {
     if (!el.checkVisibility() || !el.textContent.trim()) continue;
     const style = getComputedStyle(el);
     if (style.overflowX !== 'visible' || style.display === 'inline') continue;
-    if (el.scrollWidth > el.clientWidth + 1) {
-      found.push(`${describe(el)} holds ${el.scrollWidth}px of label in ${el.clientWidth}px`);
+    const start = el.getBoundingClientRect().left + parseFloat(style.borderLeftWidth);
+    const held = Math.round(reach(el) - start + parseFloat(style.paddingRight));
+    if (held > el.clientWidth + 1) {
+      found.push(`${describe(el)} holds ${held}px of label in ${el.clientWidth}px`);
     }
   }
   return found.slice(0, 10);
@@ -1044,8 +1592,12 @@ _SPILLED_LABELS = (
 )
 
 _SETTLED = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
+# Every face the page asked for has arrived (see _LATE_FACE).
+_FONTS_READY = "() => document.fonts.ready.then(() => document.fonts.status)"
 # The page as the server drew it, with its scripts held back: parsed, styled
-# and in its own face, which is what a reader is shown first.
+# and in its own face, which is what a reader is shown first. An image a sheet
+# fetched would arrive after this, unwaited, so no sheet fetches one
+# (test_a_sheet_fetches_nothing_but_its_faces).
 _DRAWN = """() => document.readyState !== 'loading'
   && [...document.querySelectorAll('link[rel=stylesheet]')].every((link) => link.sheet)
   && document.fonts.status === 'loaded'"""
@@ -1063,6 +1615,13 @@ _DRAWN_BOXES = """() => {
   window.drawnBoxes = boxes;
   return boxes.size;
 }"""
+# One frame's look at a page being drawn: until it is, the scripts its parser
+# waits for; once it is, where everything stands (null), in the same task.
+_UNTIL_DRAWN = f"""() => {{
+  if (!({_DRAWN})()) return ({_PARSER_SCRIPTS})();
+  ({_DRAWN_BOXES})();
+  return null;
+}}"""
 # Every element that still shows and no longer stands where it was drawn. A
 # child carried by its parent, the same distance and at the same size, is the
 # parent's move and is not named again.
@@ -1095,6 +1654,28 @@ _MOVED_SINCE_DRAWN = (
 # Colors transition between palettes, so contrast is measured after the
 # transition ends.
 _FINISH_TRANSITIONS = """() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } })"""
+# The disclosures a page loads closed, and closing them again: a rule opens
+# them to lay out what they hold, and the page read at its next width is the
+# page as it loaded.
+_KEEP_CLOSED = "() => { window.hqLoadedClosed = [...document.querySelectorAll('details:not([open])')]; }"
+_CLOSE_AGAIN = "() => window.hqLoadedClosed.forEach((details) => { details.open = false; })"
+
+_CELLS_OFF_THE_FIRST_LINE = (
+    "(scroll) => {"
+    + _DESCRIBE
+    + """
+  // A row reads from its first line: its toggle is placed there, so every
+  // cell of the row starts there too, whatever page the table is on.
+  const found = [];
+  for (const table of document.querySelectorAll('main ' + scroll + ' > table')) {
+    for (const cell of table.querySelectorAll(':scope > * > tr > *')) {
+      const align = getComputedStyle(cell).verticalAlign;
+      if (align !== 'top') found.push(`${describe(cell)} in ${describe(table)} is set ${align}`);
+    }
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+)
 
 _UNSEEN_COLUMNS = (
     "(scroll) => {"
@@ -1128,8 +1709,9 @@ _MOVED_BY_SPEAKING = (
   // is the size it was, and the words themselves are on the screen.
   const asks = [...document.querySelectorAll('[data-ask]:has([data-ask-note])')].filter((ask) => ask.checkVisibility());
   if (!asks.length) return null;
+  // A note already showing is one of the things being made to speak.
   const others = [...document.querySelectorAll('body *')]
-    .filter((el) => el.checkVisibility() && !el.closest(spoken));
+    .filter((el) => el.checkVisibility() && !el.closest(spoken) && !el.closest('[data-ask-note]'));
   const page = document.documentElement;
   const size = () => [page.scrollWidth, page.scrollHeight];
   const place = (el) => { const r = box(el); return [r.left, r.top, r.width, r.height].map(Math.round).join(' '); };
@@ -1245,7 +1827,9 @@ def reading_problems(readings):
 
 
 # A band of up to six cells lays out as whole even rows: every row it wraps
-# to holds as many cells as the first (Design.md, "One band").
+# to holds as many cells as the first (Design.md, "One band"). A band of more
+# lays out in even columns: every row but its last holds as many cells as the
+# first, and every cell is as wide as the others.
 _UNEVEN_BANDS = (
     "([band, aside]) => {"
     + _DESCRIBE
@@ -1254,14 +1838,17 @@ _UNEVEN_BANDS = (
   for (const el of document.querySelectorAll('main ' + band)) {
     if (!el.checkVisibility()) continue;
     const cells = [...el.children].filter((cell) => !cell.matches(aside) && cell.checkVisibility());
-    if (cells.length < 2 || cells.length > 6) continue;
+    if (cells.length < 2) continue;
     const rows = new Map();
     for (const cell of cells) {
       const top = Math.round(box(cell).top);
       rows.set(top, (rows.get(top) || 0) + 1);
     }
     const counts = [...rows.values()];
-    if (new Set(counts).size > 1) found.push(`${describe(el)}: ${counts.join(' + ')}`);
+    const full = cells.length > 6 ? counts.slice(0, -1) : counts;
+    const widths = cells.map((cell) => box(cell).width);
+    const uneven = new Set(full).size > 1 || (cells.length > 6 && Math.max(...widths) - Math.min(...widths) > 1);
+    if (uneven) found.push(`${describe(el)}: ${counts.join(' + ')}, cells ${Math.round(Math.min(...widths))}..${Math.round(Math.max(...widths))}px`);
   }
   return found;
 }"""
@@ -1441,25 +2028,53 @@ _RAGGED_QUEUES = (
 )
 
 # Each character of an element's text with the line it is drawn on, for the
-# rules that judge where text breaks.
+# rules that judge where text breaks. A rule asking whether a part fits its
+# line cannot judge a table cell: the column's width is settled after the
+# browser chose where the cell's text breaks, so the line it measures is the
+# break's outcome. And `checkVisibility()` on a `display: contents` box is
+# false, which would skip the text inside it; its text is judged by the box
+# it lays out in.
 _LINES = r"""
 const range = document.createRange();
+const charsOf = (node) => {
+  // A box with no box of its own (`display: contents`) is never "visible":
+  // its text is, as far as the box it lays out in is.
+  let box = node.parentElement;
+  while (box.parentElement && getComputedStyle(box).display === 'contents') box = box.parentElement;
+  if (!box.checkVisibility()) return [];
+  const out = [];
+  for (let i = 0; i < node.length; i++) {
+    range.setStart(node, i);
+    range.setEnd(node, i + 1);
+    const rect = [...range.getClientRects()].find((r) => r.width);
+    out.push({ch: node.data[i], top: rect ? Math.round(rect.top) : null, bottom: rect ? rect.bottom : 0, node, at: i});
+  }
+  return out;
+};
 const chars = (root) => {
   const out = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (!node.parentElement.checkVisibility()) continue;
-    for (let i = 0; i < node.length; i++) {
-      range.setStart(node, i);
-      range.setEnd(node, i + 1);
-      const rect = [...range.getClientRects()].find((r) => r.width);
-      out.push({ch: node.data[i], top: rect ? Math.round(rect.top) : null, bottom: rect ? rect.bottom : 0, node, at: i});
-    }
-  }
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) out.push(...charsOf(node));
   return out;
 };
 const broke = (list, i) => list[i].top !== null && list[i - 1].top !== null && list[i].top > list[i - 1].top + 1;
 """
+
+# A figure reads with its label: a value under the label it answers, never
+# left at the foot of a box grown to its neighbor's height. The budget is a
+# wrapped label's second line and the row's gap.
+_FIGURE_UNDER_LABEL = r"""([figure, label_, value_]) => {
+  const found = [];
+  for (const kpi of document.querySelectorAll('main ' + figure)) {
+    const label = kpi.querySelector(':scope > ' + label_), value = kpi.querySelector(':scope ' + value_);
+    if (!label || !value || !kpi.checkVisibility()) continue;
+    // The words, not their boxes: a grid stretches a box to its track.
+    const words = (el) => { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect(); };
+    const gap = words(value).top - words(label).bottom;
+    if (gap > 32) found.push(`"${label.textContent.trim()}": its value stands ${Math.round(gap)}px under its label`);
+  }
+  return found;
+}"""
 
 # An identifier (an address, a host or record name, a path, an image) that
 # fits on its line moves to the next line whole. One longer than its line
@@ -1468,7 +2083,7 @@ const broke = (list, i) => list[i].top !== null && list[i - 1].top !== null && l
 # inside the part between two seams only when that part alone is longer than
 # its line. A hyphen is no seam: a name split there reads as two names.
 _TOKEN_BREAKS = (
-    "(token) => {"
+    "([token, cellName, tokenPart, free, openRow]) => {"
     + _DESCRIBE
     + _LINES
     + r"""
@@ -1566,13 +2181,485 @@ _TOKEN_BREAKS = (
       }
     }
   }
+  // A name in a table cell is judged by its hyphenated parts alone: whether
+  // it fits its line is the column's outcome, but a part broken across lines
+  // is never one, since a cell cuts such a part instead. An open row lifts
+  // the cut with its columns held (surfaces.css), and the line beneath it
+  // shows each value whole (tables.css), so there a part breaks only when it
+  // alone is longer than its line.
+  const opened = (el) => el.closest(openRow) || el.closest('[data-row-detail]');
+  const whole = (c) => c.node.parentElement.closest(tokenPart);
+  const mustBreak = (el, part) => {
+    const run = chars(part);
+    return !fits(widthOf(el, run), lineOf(run).width);
+  };
+  for (const el of document.querySelectorAll('main ' + cellName)) {
+    if (!el.checkVisibility()) continue;
+    const all = chars(el);
+    const open = opened(el);
+    const at = all.findIndex((c, i) => i > 0 && broke(all, i) && whole(c) && whole(c) === whole(all[i - 1])
+      && !(open && mustBreak(el, whole(c))));
+    if (at < 0) continue;
+    const text = all.map((c) => c.ch).join('');
+    found.push(`${describe(el)} breaks "${text.slice(0, at)}|${text.slice(at)}" inside a hyphenated part`.slice(0, 140));
+  }
+  // Every other word in the page that is not prose (a cell, a link, a chip, a
+  // heading, a label, a meta line) and has a hyphen or a seam inside it is a
+  // name, however it was printed, and breaks only at a seam. Outside a table
+  // a part longer than its line alone breaks where it must; a cell cuts a
+  // hyphenated one.
+  // `free` is prose and a row's own name, which wrap by rules of their own.
+  const named = /\w(?:-|\/|:+|\.)\w/;
+  const text = document.createTreeWalker(document.querySelector('main'), NodeFilter.SHOW_TEXT);
+  for (let node = text.nextNode(); node; node = text.nextNode()) {
+    const el = node.parentElement;
+    if (!named.test(node.data) || el.closest(free) || el.closest(token)) continue;
+    const all = charsOf(node);
+    const cell = el.closest('td, th');
+    // A hyphenated part runs on past this text node where a scrap of it is
+    // held in a box of its own (value_tags._held), so it is measured whole.
+    const held = el.closest(tokenPart);
+    const partOf = (run, i) => {
+      let start = i - 1;
+      while (start > 0 && !seamAfter(run, start)) start -= 1;
+      let end = i;
+      while (end < run.length - 1 && !seamAfter(run, end + 1)) end += 1;
+      return run.slice(start, end + 1);
+    };
+    for (const word of all.length ? node.data.matchAll(/\S+/g) : []) {
+      if (!named.test(word[0])) continue;
+      const list = all.slice(word.index, word.index + word[0].length);
+      const at = list.findIndex((c, i) => {
+        if (i === 0 || !broke(list, i) || seamAfter(list, i)) return false;
+        const part = partOf(list, i);
+        // A cell's width is the outcome of where its text broke, so a part
+        // there is judged by what it is: a hyphenated one is cut, never
+        // broken; one with no hyphen breaks where it must (Design.md). An open
+        // row and the line beneath it show every value whole, so there a part
+        // breaks as it would outside a table: only when it must.
+        if (cell && !opened(cell)) return part.some((c) => c.ch === '-');
+        if (!held) return fits(widthOf(el, part), lineOf(part).width);
+        const run = chars(held);
+        const unit = partOf(run, run.findIndex((d) => d.node === c.node && d.at === c.at));
+        return fits(widthOf(held, unit), lineOf(unit).width);
+      });
+      if (at > 0) found.push(`${describe(el)} breaks "${word[0].slice(0, at)}|${word[0].slice(at)}" where it has no seam`.slice(0, 140));
+    }
+  }
   return [...new Set(found)].slice(0, 10);
+}"""
+)
+_TOKEN_SELECTORS = [
+    SELECTORS["token"],
+    SELECTORS["cell_name"],
+    SELECTORS["token_part"],
+    f"{SELECTORS['prose']}, {SELECTORS['row_name']}",
+    SELECTORS["open_row"],
+]
+
+# A piece of a token shorter than three characters, alone on a line where the
+# token broke at a seam or a hyphen ("portainer-agent-" over "1"), reads as a
+# stray mark. Only what shows counts: a cut name's lines past its clamp are
+# hidden, and a part broken inside itself, where it had to be, is a run of
+# letters with no seam to begin at.
+_SCRAP = 3
+_SCRAPS = (
+    "([token, scrap]) => {"
+    + _DESCRIBE
+    + _LINES
+    + r"""
+  const found = [];
+  const seam = /[-/.:]/;
+  const clips = new Map();
+  const clipped = (box) => {
+    if (!clips.has(box)) clips.set(box, getComputedStyle(box).overflowX !== 'visible');
+    return clips.get(box);
+  };
+  const shows = (c) => {
+    range.setStart(c.node, c.at);
+    range.setEnd(c.node, c.at + 1);
+    const r = range.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    for (let box = c.node.parentElement; box && box !== document.body; box = box.parentElement) {
+      if (!clipped(box)) continue;
+      const b = box.getBoundingClientRect();
+      if (x < b.left || x > b.right || y < b.top || y > b.bottom) return false;
+    }
+    return true;
+  };
+  for (const el of document.querySelectorAll('main ' + token)) {
+    if (!el.checkVisibility() || el.parentElement.closest(token)) continue;
+    const all = chars(el).filter((c) => c.top !== null && /\S/.test(c.ch) && shows(c));
+    const lines = [];
+    for (const c of all) {
+      if (!lines.length || Math.abs(c.top - lines[lines.length - 1][0].top) > 1) lines.push([]);
+      lines[lines.length - 1].push(c);
+    }
+    if (lines.length < 2) continue;
+    const text = all.map((c) => c.ch).join('');
+    lines.forEach((line, i) => {
+      if (line.length >= scrap) return;
+      const before = i ? lines[i - 1][lines[i - 1].length - 1].ch : '';
+      if (i && !seam.test(before)) return;
+      const end = line[line.length - 1].ch;
+      if (i < lines.length - 1 && !seam.test(end)) return;
+      found.push(`${describe(el)} leaves "${line.map((c) => c.ch).join('')}" alone on a line of "${text}"`.slice(0, 160));
+    });
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+)
+# A mark that closes what it follows (".", ",", ")") or opens what follows it
+# ("("), on a different line from it. A line may break on either side of a box
+# drawn inline (a token, code), even beside punctuation, so a mark written
+# outside the box is held to it only by markup that says so (`.held-mark`,
+# value_tags.breakable). A mark after a seam begins the piece the seam lets
+# the line break before.
+_STRANDED_MARKS = (
+    "(seam) => {"
+    + _DESCRIBE
+    + r"""
+  const found = [];
+  const range = document.createRange();
+  const charBox = (node, at) => {
+    range.setStart(node, at);
+    range.setEnd(node, at + 1);
+    return range.getBoundingClientRect();
+  };
+  const rects = (el) => [...el.getClientRects()].filter((r) => r.width || r.height);
+  const beside = (node, way) => {
+    let next = node[way];
+    while (next && next.nodeType === Node.COMMENT_NODE) next = next[way];
+    return next && next.nodeType === Node.ELEMENT_NODE && next.checkVisibility() ? next : null;
+  };
+  const walker = document.createTreeWalker(document.querySelector('main') || document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.data;
+    if (!text.trim() || !node.parentElement.checkVisibility()) continue;
+    const before = /^[.,;:!?)\]]/.test(text) && beside(node, 'previousSibling');
+    if (before && !before.matches(seam)) {
+      const last = rects(before).at(-1);
+      if (last && charBox(node, 0).top >= last.bottom - 1) {
+        found.push(`"${text.trim().slice(0, 12)}" starts a line apart from ${describe(before)} "${before.textContent.trim().slice(-30)}"`);
+      }
+    }
+    const after = /[(\[]$/.test(text) && beside(node, 'nextSibling');
+    if (after) {
+      const first = rects(after)[0];
+      if (first && first.top >= charBox(node, text.length - 1).bottom - 1) {
+        found.push(`"${text.trim().slice(-12)}" ends a line apart from ${describe(after)} "${after.textContent.trim().slice(0, 30)}"`);
+      }
+    }
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+)
+
+_CUT_NAMES = (
+    "([region, name, soleToken, context, wide]) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const scroll of document.querySelectorAll('main ' + region)) {
+    if (scroll.clientWidth < wide) continue;
+    for (const el of scroll.querySelectorAll(name)) {
+      if (!el.checkVisibility() || el.closest(context)) continue;
+      const token = el.querySelector(soleToken);
+      if (token.scrollWidth > token.clientWidth + 1 || token.scrollHeight > token.clientHeight + 1) {
+        found.push(`${describe(el)} "${el.textContent.trim()}" is cut in a ${scroll.clientWidth}px region`);
+      }
+    }
+  }
+  return found.slice(0, 10);
+}"""
+)
+# A name of plain parts there that fits within the length it holds out for
+# (the table's --name-hold, read in the name's own font) is on one line:
+# "hq.example." over "com" means a column that could wrap gave nothing. A name
+# with a hyphenated part holds out for that part, which the rule above holds.
+_SPLIT_NAMES = (
+    "([region, name, context, wide, part]) => {"
+    + _DESCRIBE
+    + _LINES
+    + """
+  const found = [];
+  for (const scroll of document.querySelectorAll('main ' + region)) {
+    if (scroll.clientWidth < wide) continue;
+    for (const el of scroll.querySelectorAll(name)) {
+      if (!el.checkVisibility() || el.closest(context) || el.querySelector(part)) continue;
+      if (!getComputedStyle(el).getPropertyValue('--name-hold').trim()) {
+        found.push(`${describe(el)} has no --name-hold to hold out for`);
+        continue;
+      }
+      const all = chars(el).filter((c) => c.top !== null);
+      if (new Set(all.map((c) => c.top)).size < 2) continue;
+      const held = [el, ...el.querySelectorAll('*')].map((box) => {
+        const was = box.style.getPropertyValue('white-space');
+        box.style.setProperty('white-space', 'nowrap', 'important');
+        return () => (was ? box.style.setProperty('white-space', was) : box.style.removeProperty('white-space'));
+      });
+      range.selectNodeContents(el);
+      const width = range.getBoundingClientRect().width;
+      held.forEach((release) => release());
+      const probe = el.appendChild(document.createElement('span'));
+      probe.style.cssText = 'display: block; width: var(--name-hold)';
+      const cap = probe.getBoundingClientRect().width;
+      probe.remove();
+      if (width <= cap) {
+        found.push(`${describe(el)} "${el.textContent.trim()}" (${width.toFixed(1)}px, holds out for ${cap.toFixed(1)}px) `
+          + `is split in a ${scroll.clientWidth}px region`);
+      }
+    }
+  }
+  return found.slice(0, 10);
+}"""
+)
+
+# A value a cell cuts with an ellipsis is cut only while its table has no room
+# for two more characters of it. Room is width no content uses: the table
+# narrower than its box, or a column wider than its widest line, its header's
+# included. Space a wrapping cell leaves at the end of a shorter line is not
+# room: the cell's widest line still needs its column. What a cell draws is
+# its text, its inline boxes (a link's arrow, a chip's padding) and its atomic
+# ones (a control, an icon, a floor a value holds out for), each as far as the
+# boxes above it let it show. A name in a context line (`.muted`: "on
+# example-host") is not judged: the line says what the row shares with its
+# neighbors, asks its column for nothing, and is cut at the column's edge by
+# design (figures.css), so the row's own values get the room first.
+# A box that holds out for a few characters of a value shorter than that:
+# the floor pads it past its last character, a gulf before the words after it
+# on its line ("app-host        · another-host").
+_PADDED_CUTS = (
+    "(selector) => {"
+    + _DESCRIBE
+    + r"""
+  const found = [];
+  const range = document.createRange();
+  for (const el of document.querySelectorAll(selector)) {
+    const style = getComputedStyle(el);
+    if (!/grid/.test(style.display) || !el.firstElementChild || !el.checkVisibility()) continue;
+    // Its words, and the boxes it holds (a chip's padding is the chip's).
+    range.selectNodeContents(el);
+    const value = Math.max(range.getBoundingClientRect().right, ...[...el.children].map((child) => child.getBoundingClientRect().right));
+    const end = el.getBoundingClientRect().right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
+    const gap = end - value;
+    if (gap > 2) found.push(`${describe(el)} "${el.textContent.trim()}": ${Math.round(gap)}px of floor past its end`);
+  }
+  return found;
+}"""
+)
+_CUT_WITH_ROOM = (
+    "([region, openRow, context, phrasePart]) => {"
+    + _DESCRIBE
+    + _PAINTED_PART
+    + r"""
+  const found = [];
+  const range = document.createRange();
+  const atomic = (el) => /^inline-/.test(getComputedStyle(el).display)
+    || ['IMG', 'svg', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'CANVAS'].includes(el.tagName);
+  const drawn = (cell) => {
+    const rects = [];
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    // An atomic box is drawn whole; what it holds lies inside it.
+    let whole = null;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (whole && whole.contains(node)) continue;
+      let own, holder;
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (!node.data.trim()) continue;
+        range.selectNodeContents(node);
+        own = [...range.getClientRects()];
+        holder = node.parentElement;
+      } else {
+        const display = getComputedStyle(node).display;
+        if (display === 'inline') own = [...node.getClientRects()];
+        else if (atomic(node)) { own = [node.getBoundingClientRect()]; whole = node; }
+        else continue;
+        holder = node;
+      }
+      for (const rect of own) {
+        const seen = rect.width > 0 && painted(holder, rect);
+        if (seen) rects.push(seen);
+      }
+    }
+    return rects;
+  };
+  // Whether any line of the cell goes on to a second: its words and its
+  // atomic boxes (a chip) are measured line by line, grouped by the block
+  // they lay out in. Words in an element with no box of its own (`display:
+  // contents`: a token's parts in code) are shown by the box around it.
+  const wraps = (cell) => {
+    const lines = new Map();
+    const blockOf = (el) => {
+      let block = el;
+      while (block !== cell && ['inline', 'contents'].includes(getComputedStyle(block).display)) block = block.parentElement;
+      return block;
+    };
+    const boxed = (el) => {
+      while (el !== cell && getComputedStyle(el).display === 'contents') el = el.parentElement;
+      return el;
+    };
+    const add = (block, rects) => lines.set(block, [...(lines.get(block) || []), ...rects.filter((r) => r.width > 0)]);
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (atomic(node) && node.checkVisibility()) add(blockOf(node.parentElement), [node.getBoundingClientRect()]);
+        continue;
+      }
+      if (!node.data.trim() || !boxed(node.parentElement).checkVisibility()) continue;
+      range.selectNodeContents(node);
+      add(blockOf(node.parentElement), [...range.getClientRects()]);
+    }
+    return [...lines.values()].some((rects) => rects.some((r) => rects.some((o) => o.top >= r.bottom - 1)));
+  };
+  // The width of the cell's content box its widest line leaves unused: none
+  // in a cell that wraps, whose next word did not fit; null when the cell
+  // draws nothing.
+  const edges = (cell) => {
+    const style = getComputedStyle(cell), b = cell.getBoundingClientRect();
+    return [b.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+      b.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight)];
+  };
+  const inside = (cell) => { const [left, right] = edges(cell); return right - left; };
+  const spare = (cell) => {
+    const rects = drawn(cell);
+    if (!rects.length) return null;
+    if (wraps(cell)) return 0;
+    const [left, right] = edges(cell);
+    const from = Math.max(left, Math.min(...rects.map((r) => r.left)));
+    const to = Math.min(right, Math.max(...rects.map((r) => r.right)));
+    return Math.max(0, right - left - Math.max(0, to - from));
+  };
+  // How far the value runs past the box that cuts it, measured on its words:
+  // scrollWidth and clientWidth are rounded to whole pixels, and a value
+  // past its box by a fraction of one still loses its last character to the
+  // ellipsis.
+  const wordsOf = (el) => { range.selectNodeContents(el); return range.getBoundingClientRect().width; };
+  const cutBy = (el) => {
+    const style = getComputedStyle(el);
+    const words = wordsOf(el);
+    const inner = el.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
+    return Math.max(el.scrollWidth - el.clientWidth - 1, words - inner);
+  };
+  // A heading's own words, without its sort glyph.
+  const label = (th) => [...th.querySelectorAll('[aria-hidden="true"]')]
+    .reduce((words, el) => words.replace(el.textContent, ''), th.textContent).trim();
+  for (const scroll of document.querySelectorAll('main ' + region)) {
+    const table = scroll.querySelector(':scope > table');
+    if (!table || !table.checkVisibility()) continue;
+    const slack = scroll.clientWidth - table.getBoundingClientRect().width;
+    if (slack < -1) continue;
+    const cut = [...table.querySelectorAll(':scope > tbody > tr > td:not([colspan]) *')].filter((el) =>
+      !el.closest(openRow) && !el.closest(context) && el.checkVisibility() && el.clientWidth > 0
+      && getComputedStyle(el).textOverflow === 'ellipsis' && cutBy(el) > 0.05);
+    const innermost = cut.filter((el) => !cut.some((other) => other !== el && el.contains(other)));
+    if (!innermost.length) continue;
+    const columns = new Map();
+    for (const row of table.querySelectorAll(':scope > thead > tr, :scope > tbody > tr')) {
+      if (row.querySelector(':scope > [colspan]')) continue;
+      [...row.children].forEach((cell, at) => {
+        if (!cell.checkVisibility()) return;
+        const unused = spare(cell);
+        if (unused === null) return;
+        const column = columns.get(at);
+        if (!column) columns.set(at, {name: (table.tHead && label(table.tHead.rows[0].cells[at] || table.tHead)) || `column ${at + 1}`, unused});
+        else column.unused = Math.min(column.unused, unused);
+      });
+    }
+    const unused = [...columns.values()].filter((column) => column.unused >= 1);
+    const room = Math.max(0, slack) + unused.reduce((sum, column) => sum + column.unused, 0);
+    for (const el of innermost) {
+      const text = el.textContent.trim();
+      // A part of a phrase held to one line is cut with room when its cell's
+      // line, less what the boxes around it (a chip) keep for their own
+      // edges, would hold its words whole, measured as finely as they are
+      // drawn: it was held short of its cell, not by it.
+      // A box between that cuts (a control's label, cut as one line) bounds
+      // that line at its own. A name alone is held by the rules for names
+      // above, and a line clamped to a preview is cut at its end by design.
+      const clamped = (cell) => {
+        for (let box = el.parentElement; box && box !== cell; box = box.parentElement) {
+          if (getComputedStyle(box).webkitLineClamp !== 'none') return true;
+        }
+        return false;
+      };
+      const line = (cell) => {
+        let width = inside(cell);
+        for (let box = el.parentElement; box && box !== cell; box = box.parentElement) {
+          const style = getComputedStyle(box);
+          if (style.display === 'contents') continue;
+          const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+          width -= padding + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)
+            + parseFloat(style.marginLeft) + parseFloat(style.marginRight);
+          if (style.overflowX !== 'visible') width = Math.min(width, box.clientWidth - padding);
+        }
+        return width;
+      };
+      const cell = el.closest('td');
+      if (el.matches(phrasePart) && !clamped(cell) && getComputedStyle(el).whiteSpace === 'nowrap' && wordsOf(el) <= line(cell)) {
+        found.push(`${describe(el)} "${text.slice(0, 40)}" is cut by ${cutBy(el).toFixed(1)}px `
+          + `while its line in its cell holds ${Math.round(line(cell))}px`);
+        continue;
+      }
+      const grow = 2 * el.scrollWidth / Math.max(text.length, 1);
+      if (room < grow) continue;
+      const where = unused.map((column) => `${column.name} ${Math.round(column.unused)}px`);
+      if (slack >= 1) where.push(`the table ${Math.round(slack)}px`);
+      found.push(`${describe(el)} "${text.slice(0, 40)}" is cut by ${cutBy(el).toFixed(1)}px `
+        + `while its table leaves ${Math.round(room)}px unused (${where.join(', ')}; ${Math.round(scroll.clientWidth)}px region)`);
+    }
+  }
+  return found.slice(0, 10);
 }"""
 )
 
 # A heading's aside sits beside it on one line, or starts on a line of its
 # own under it: wrapped beside the heading, its lines keep the heading's line
 # box and read as a loose paragraph set in the heading.
+# What a heading says beside it, wrapped, leaves no word alone on its last
+# line: a word that could share it reads as cut from the line above.
+# A box the stylesheet clamps to some lines shows those lines and no more: a
+# line past its clamp that is still drawn (a box of its own on it, which a
+# browser may leave out of the clamp) reads as a row that grew.
+_PAST_THE_CLAMP = (
+    "() => {"
+    + _DESCRIBE
+    + _LINES
+    + r"""
+  const found = [];
+  for (const el of document.querySelectorAll('main *')) {
+    const clamp = parseInt(getComputedStyle(el).webkitLineClamp, 10);
+    if (!clamp || !el.checkVisibility()) continue;
+    const box = el.getBoundingClientRect();
+    const shown = chars(el).filter((c) => c.top !== null && c.ch.trim() && c.top >= box.top - 1 && c.bottom <= box.bottom + 1)
+      .sort((a, b) => a.top - b.top);
+    let lines = 0, bottom = -Infinity;
+    for (const c of shown) {
+      if (c.top >= bottom - 1) { lines += 1; bottom = c.bottom; } else bottom = Math.max(bottom, c.bottom);
+    }
+    if (lines > clamp) found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" shows ${lines} lines, clamped to ${clamp}`);
+  }
+  return found;
+}"""
+)
+_LONE_ASIDE_WORDS = (
+    "(aside) => {"
+    + _DESCRIBE
+    + _LINES
+    + r"""
+  const found = [];
+  for (const el of document.querySelectorAll(aside)) {
+    if (!el.closest('main') || !el.checkVisibility()) continue;
+    const own = chars(el).filter((c) => c.top !== null);
+    const last = Math.max(...own.map((c) => c.top));
+    if (!own.some((c) => c.top < last)) continue;
+    const words = own.filter((c) => c.top === last).map((c) => c.ch).join('').trim();
+    if (words && !/\s/.test(words)) found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" leaves "${words}" alone on its last line`);
+  }
+  return found;
+}"""
+)
 _ASIDE_BESIDE_ITS_HEADING = (
     "(aside) => {"
     + _DESCRIBE
@@ -1637,6 +2724,7 @@ _SQUEEZED_TITLES = (
 _PAST_THE_GUTTER = (
     "([selector, text]) => {"
     + _DESCRIBE
+    + _PAINTED_PART
     + """
   const main = document.querySelector('main');
   const pad = getComputedStyle(main);
@@ -1652,8 +2740,9 @@ _PAST_THE_GUTTER = (
   };
   for (const el of main.querySelectorAll(selector)) {
     if (!el.checkVisibility() || inScroller(el)) continue;
-    const r = box(el);
-    if (r.width < 2 || r.height < 2) continue;
+    // A box's own overflow clips what it holds, never the box.
+    const r = painted(el.parentElement, box(el));
+    if (!r || r.width < 2 || r.height < 2) continue;
     if (r.right > right + 1 || r.left < left - 1) {
       found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px, gutter ${Math.round(left)}..${Math.round(right)}px`);
     }
@@ -1663,20 +2752,129 @@ _PAST_THE_GUTTER = (
   const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const el = node.parentElement;
-    if (!node.data.trim() || !el.checkVisibility() || inScroller(el)) continue;
+    if (!node.data.trim() || inScroller(el)) continue;
     let block = el;
-    while (block !== main && getComputedStyle(block).display.startsWith('inline')) block = block.parentElement;
+    while (block !== main && /^(inline|contents)/.test(getComputedStyle(block).display)) block = block.parentElement;
     const style = getComputedStyle(block);
     if (style.overflowX !== 'visible') continue;
     const b = box(block);
     const inner = b.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
     range.selectNodeContents(node);
-    const far = Math.max(...[...range.getClientRects()].map((r) => r.right));
+    const lines = [...range.getClientRects()].map((r) => painted(el, r)).filter(Boolean);
+    if (!lines.length) continue;
+    const far = Math.max(...lines.map((r) => r.right));
     if (far > inner + 1) found.push(`${describe(block)}: "${node.data.trim().slice(0, 40)}" runs ${Math.round(far - inner)}px past its padding`);
   }
   return [...new Set(found)].slice(0, 15);
 }"""
 )
+
+# What is an identifier, held to its own rule (`a_token_breaks_only_where_it_may`)
+# rather than a word's.
+_IDENTIFIER = "code, kbd, samp, time, .token, [data-entity]"
+
+# A word of running text broken across lines: a word never breaks.
+_BROKEN_WORDS_IN_TEXT = (
+    "(identifier) => {"
+    + _DESCRIBE
+    + r"""
+  const main = document.querySelector('main');
+  const range = document.createRange();
+  const found = [];
+  const words = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
+  for (let node = words.nextNode(); node; node = words.nextNode()) {
+    const el = node.parentElement;
+    if (el.closest(identifier) || el.closest('pre, script, style, template') || !el.checkVisibility()) continue;
+    for (const word of node.data.matchAll(/[A-Za-z]{4,}/g)) {
+      range.setStart(node, word.index);
+      range.setEnd(node, word.index + word[0].length);
+      const lines = new Set([...range.getClientRects()].filter((r) => r.width).map((r) => Math.round(r.top)));
+      if (lines.size > 1) found.push(`${describe(el)} breaks the word "${word[0]}"`);
+    }
+  }
+  return [...new Set(found)].slice(0, 15);
+}"""
+)
+
+# Two lines of text drawn over each other, each as much of it as is painted.
+_OVERLAPPING_TEXT = (
+    "() => {"
+    + _DESCRIBE
+    + _PAINTED_PART
+    + """
+  const rects = [];
+  const range = document.createRange();
+  const walker = document.createTreeWalker(document.querySelector('main'), NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.data.trim()) continue;
+    range.selectNodeContents(node);
+    for (const line of range.getClientRects()) {
+      const r = painted(node.parentElement, line);
+      if (r && r.width > 2 && r.height > 2) rects.push([node, r]);
+    }
+  }
+  rects.sort((a, b) => a[1].top - b[1].top);
+  const found = [];
+  for (let i = 0; i < rects.length; i++) {
+    const [one, a] = rects[i];
+    for (let j = i + 1; j < rects.length && rects[j][1].top < a.bottom - 2; j++) {
+      const [other, b] = rects[j];
+      if (one === other) continue;
+      const x = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const y = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (x > 2 && y > 2) {
+        found.push(`"${one.data.trim().slice(0, 30)}" (${describe(one.parentElement)}) over "${other.data.trim().slice(0, 30)}" (${describe(other.parentElement)})`);
+      }
+    }
+  }
+  return [...new Set(found)].slice(0, 10);
+}"""
+)
+
+# A column no row has anything in.
+_EMPTY_COLUMNS = (
+    "() => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  const shown = (cell) => cell.textContent.trim()
+    || [...cell.querySelectorAll('img, svg, button, input, select, a')].some((el) => el.checkVisibility());
+  for (const table of document.querySelectorAll('main table')) {
+    if (!table.checkVisibility()) continue;
+    const rows = [...table.querySelectorAll(':scope > tbody > tr:not([data-row-detail])')]
+      .filter((row) => row.checkVisibility());
+    if (!rows.length) continue;
+    const width = Math.max(...rows.map((row) => row.cells.length));
+    for (let column = 0; column < width; column++) {
+      const cells = rows.map((row) => row.cells[column]).filter((cell) => cell && cell.colSpan === 1 && cell.checkVisibility());
+      if (cells.length === rows.length && !cells.some(shown)) {
+        const head = table.tHead?.rows[0]?.cells[column];
+        found.push(`${describe(table)} column ${column + 1} ("${head ? head.textContent.trim() : ''}") is empty in every row`);
+      }
+    }
+  }
+  return found;
+}"""
+)
+
+# What a vendored script draws is not HQ's markup, so the layout rules judge
+# the page with it taken out of the box HQ wrote for it, and an empty block as
+# tall in its place: the box keeps its own rules and the page its height. The
+# script's own tests hold what it draws. Put back by `_PUT_BACK`.
+_STAND_IN = """(selector) => {
+  window.hqStandIns = [...document.querySelectorAll(selector)].map((box) => {
+    const stand = document.createElement('div');
+    stand.style.blockSize = `${box.getBoundingClientRect().height}px`;
+    const drawn = document.createDocumentFragment();
+    drawn.append(...box.childNodes);
+    box.append(stand);
+    return [box, stand, drawn];
+  });
+}"""
+_PUT_BACK = """() => (window.hqStandIns || []).forEach(([box, stand, drawn]) => {
+  stand.remove();
+  box.append(drawn);
+})"""
 
 # The map scrolls with the page, and draws no lane with nothing in it.
 _MAP = """([map, lane, node]) => {
@@ -1692,9 +2890,9 @@ _MAP = """([map, lane, node]) => {
 
 # A probe page: a table drawn through the table tags, as a template draws one,
 # with the stylesheet and the table script.
-_PROBE_PAGE = """{% load table_tags %}<!doctype html><html><head><meta charset="utf-8">
+_PROBE_PAGE = """{% load table_tags stylesheet_tags %}<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="{{ static }}css/app.css">
+{% stylesheets %}
 <script defer src="{{ static }}js/tables.js"></script>
 </head><body><main>"""
 
@@ -1752,14 +2950,335 @@ _ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr')].map((row) => 
 }))"""
 
 
+# Probes read by more than one rule or check, with their arguments.
+_CUT_NAMES_READ = (
+    _CUT_NAMES,
+    [
+        SELECTORS["table_scroll"],
+        SELECTORS["cell_name"],
+        SELECTORS["sole_token"],
+        SELECTORS["context_line"],
+        WIDE_REGION,
+    ],
+)
+_CUT_WITH_ROOM_READ = (
+    _CUT_WITH_ROOM,
+    [SELECTORS["table_scroll"], SELECTORS["open_row"], SELECTORS["context_line"], SELECTORS["phrase_part"]],
+)
+_SPLIT_NAMES_READ = (
+    _SPLIT_NAMES,
+    [
+        SELECTORS["table_scroll"],
+        SELECTORS["cell_name"],
+        SELECTORS["context_line"],
+        WIDE_REGION,
+        SELECTORS["token_part"],
+    ],
+)
+_FRAMES_READ = (_NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]])
+_CONTRAST_READ = (_CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST])
+_LINES_READ = (_FAINT_LINES, [SELECTORS["contrast_scope"], LINE_CONTRAST])
+_FIELDS_READ = (_FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST])
+# Every check whose verdict depends on the palette the page is drawn in.
+_PALETTE = {"frames": _FRAMES_READ, "contrast": _CONTRAST_READ, "lines": _LINES_READ, "fields": _FIELDS_READ}
+_SIDEWAYS_READ = (_SIDEWAYS, SELECTORS["sideways"])
+_SPILLED_CONTROLS = (_SPILLED_LABELS, SELECTORS["control"])
+_SPILLED_CELLS = (_SPILLED_LABELS, SELECTORS["cell_content"])
+_PHRASES_READ = (_WRAPPED_PHRASES, SELECTORS["one_line"])
+_ROUTE_ENDS_READ = (_ROUTE_LINE_ENDS, [SELECTORS["route_line"], SELECTORS["route_mark"]])
+_EVIDENCE_READ = (_STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
+_SUMMARIES_READ = (_HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
+_SMALL_TARGETS_READ = (_SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN])
+_EMPTY_FRAMES_READ = (_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]])
+_READINGS_OF = f"(selector) => ({_READINGS})([...document.querySelectorAll(selector)])"
+
+# Every probe the layout invariants read on a page, by the check it answers.
+_GEOMETRY = {
+    "sideways": _SIDEWAYS_READ,
+    "cells": _CELLS,
+    "broken words": _BROKEN_WORDS,
+    "words broken in text": (_BROKEN_WORDS_IN_TEXT, _IDENTIFIER),
+    "wrapped phrases": _PHRASES_READ,
+    "overlaps": _OVERLAPS,
+    "overlapping text": _OVERLAPPING_TEXT,
+    "grid rows": (_PAIRS, SELECTORS["paired"]),
+    "bands": (_UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]),
+    "band padding": (_UNPADDED_CELLS, SELECTORS["band_cell"]),
+    "tables": _TABLES,
+    "tables fit": (_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
+    "unseen columns": (_UNSEEN_COLUMNS, SELECTORS["table_scroll"]),
+    "empty columns": _EMPTY_COLUMNS,
+    "row heights": (_ROW_HEIGHTS, ROW_LINES),
+    "row alignment": (_CELLS_OFF_THE_FIRST_LINE, SELECTORS["table_scroll"]),
+    "names cut whole": _CUT_NAMES_READ,
+    "short names split": _SPLIT_NAMES_READ,
+    "cut with room": _CUT_WITH_ROOM_READ,
+    "padded cuts": (_PADDED_CUTS, SELECTORS["cut_box"]),
+    "control labels": _SPILLED_CONTROLS,
+    "cell labels": _SPILLED_CELLS,
+    "raised links": _RAISED_LINKS,
+    "small targets": _SMALL_TARGETS_READ,
+    "row disclosures": _NESTED_DISCLOSURES,
+    "summary marks": _SUMMARY_MARKS,
+    "tokens": (_TOKEN_BREAKS, _TOKEN_SELECTORS),
+    "stranded marks": (_STRANDED_MARKS, SELECTORS["seam"]),
+    "heading asides": (_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]),
+    "lone aside words": (_LONE_ASIDE_WORDS, SELECTORS["any_aside"]),
+    "past the clamp": _PAST_THE_CLAMP,
+    "titles": (_SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]),
+    # Every box and every line of text, not only a card's or code's.
+    "gutter": (_PAST_THE_GUTTER, ["*", True]),
+    "audit": _AUDIT,
+}
+
+
+def geometry_probes(path, width):
+    """The geometry's probes on ``path`` at ``width``, as ``(source, arg)``
+    by check: a wide frame is judged only where it has the room, and the
+    dashboard's readings only on the dashboard."""
+
+    probes = {check: _probe(probe) for check, probe in _GEOMETRY.items()}
+    if width >= WIDE:
+        probes["wide frames"] = _EMPTY_FRAMES_READ
+    if path == "/":
+        probes["readings"] = (_READINGS_OF, SELECTORS["readings"])
+    return probes
+
+
+def survey_checks(path, width):
+    """The checks the survey runs on ``path`` at ``width``, by name."""
+
+    return [*geometry_probes(path, width), *_PALETTE, "fills"]
+
+
+def _as_is(value):
+    return value
+
+
+# What turns a probe's value into its check's findings, where that is not the
+# value itself.
+_AS_FINDINGS = {
+    "tables": lambda report: report["found"],
+    "audit": lambda report: [v for v in report["violations"] if v["rule"] in AUDIT_RULES],
+    "contrast": lambda report: report["found"] if report["sampled"] else ["no text sampled"],
+    "readings": reading_problems,
+}
+
+
+def failure_name(params):
+    """A failed subtest's screenshot name: its page, width and rule, then
+    whatever else names it, as one file name."""
+
+    first = [key for key in ("page", "width", "rule") if key in params]
+    keys = [*first, *sorted(key for key in params if key not in first)]
+    name = "-".join(str(params[key]) for key in keys)
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")[:150] or "subtest"
+
+
+class _Watched:
+    """A test's result, marking the test ``failed`` when it fails outside a
+    subtest, and having a failed subtest's page shot as it fails.
+
+    A parallel worker's result keeps no list of failures to look in: it
+    sends each one to the parent as it happens. The mark is a plain flag on
+    the test, which a worker pickles with a failed subtest.
+    """
+
+    def __init__(self, result, test):
+        self.result = result
+        self.test = test
+
+    def __getattr__(self, name):
+        return getattr(self.result, name)
+
+    def addError(self, test, err):
+        self.test.failed = True
+        self.result.addError(test, err)
+
+    def addFailure(self, test, err):
+        self.test.failed = True
+        self.result.addFailure(test, err)
+
+    def addSubTest(self, test, subtest, err):
+        # Reported as the subtest ends, so the page is still the one it failed on.
+        if err is not None:
+            self.test.subtest_failed(subtest.params)
+        self.result.addSubTest(test, subtest, err)
+
+
+# A face the stylesheet lets the browser skip when it is late (`font-display:
+# optional`). A late face is drawn in the fallback for the page's whole life,
+# so on a loaded machine a wrapping check would read one page in either face
+# from run to run. The gate's copy waits for its face instead, and every
+# measure waits for the fonts (`_FONTS_READY`): each page is read in the face
+# a reader whose font arrived in time sees.
+_LATE_FACE = re.compile(rb"font-display:\s*optional")
+# A reader whose Inter came late reads the page in the next face of the
+# stylesheet's own stack (`--font`, tokens.css): the platform's system face.
+# `HQ_BROWSER_FACE=fallback` (the browser tasks' `--fallback-face`) withholds
+# Inter's face, so every page is drawn that way and a layout that holds only
+# at Inter's widths fails.
+_INTER = re.compile(rb"@font-face\s*\{[^}]*font-family:\s*Inter;[^}]*\}")
+
+
+def in_the_face(css):
+    """``css`` as the gate draws it: in Inter, waited for, or with Inter's
+    face withheld, in the next face of the stack."""
+
+    face = os.environ.get("HQ_BROWSER_FACE") or "inter"
+    if face not in {"inter", "fallback"}:
+        raise ValueError("HQ_BROWSER_FACE must be inter or fallback.")
+    if face == "fallback":
+        css = _INTER.sub(b"", css)
+    return _LATE_FACE.sub(b"font-display: block", css)
+
+
+# A loaded machine runs a page's frames late and its idle work later still, and
+# a check that reads a page before a script's frame or idle callback has run
+# fails only there. `HQ_BROWSER_SLOW=<ms>` (dev:look's `--slow`) draws every
+# page that way on an idle machine: each animation frame comes that many
+# milliseconds late, and an idle callback waits three times its timeout (or
+# its frame's delay, given none), so a timing flake reproduces at will.
+_SLOW = """(late) => {
+  const frame = window.requestAnimationFrame.bind(window);
+  const unframe = window.cancelAnimationFrame.bind(window);
+  const pending = new Map();
+  let last = 0;
+  window.requestAnimationFrame = (callback) => {
+    last += 1;
+    const id = last;
+    const timer = setTimeout(() => {
+      pending.set(id, { frame: frame((time) => { pending.delete(id); callback(time); }) });
+    }, late);
+    pending.set(id, { timer });
+    return id;
+  };
+  window.cancelAnimationFrame = (id) => {
+    const waiting = pending.get(id);
+    pending.delete(id);
+    if (waiting?.timer !== undefined) clearTimeout(waiting.timer);
+    if (waiting?.frame !== undefined) unframe(waiting.frame);
+  };
+  if (!window.requestIdleCallback) return;
+  window.requestIdleCallback = (callback, options) => setTimeout(
+    () => callback({ didTimeout: true, timeRemaining: () => 0 }), 3 * (options?.timeout ?? late),
+  );
+  window.cancelIdleCallback = (id) => clearTimeout(id);
+}"""
+
+
+def slow_frames():
+    """The script that slows every page's frames and idle callbacks, when
+    ``HQ_BROWSER_SLOW`` asks for it, else None."""
+
+    late = os.environ.get("HQ_BROWSER_SLOW", "")
+    if not late:
+        return None
+    if not late.isdigit() or int(late) == 0:
+        raise ValueError("HQ_BROWSER_SLOW is how late each frame comes, a positive number of milliseconds.")
+    return f"({_SLOW})({int(late)});"
+
+
+@cache
+def static_file(name):
+    """A static file's type and body, read once a process: routing a request
+    turns the browser's own cache off, so every load asks for each again."""
+
+    asset = finders.find(name)
+    if not asset:
+        return None
+    content_type = mimetypes.guess_type(asset)[0] or "application/octet-stream"
+    body = Path(asset).read_bytes()
+    if content_type == "text/css":
+        body = in_the_face(body)
+    return content_type, body
+
+
+def add_css(page, css):
+    """``css`` added to ``page`` after its own sheets, with script on or off.
+
+    Playwright's ``add_style_tag`` waits, with no timeout, for the style's
+    load event on a handler of the page's, which never runs with script off.
+    """
+
+    page.evaluate(
+        "(css) => document.head.append(Object.assign(document.createElement('style'), { textContent: css }))", css
+    )
+
+
+def with_script(test):
+    """Run ``test`` in a context with script on: it checks the enhancement."""
+
+    test.scripted = True
+    return test
+
+
+class ProbeThrew(Exception):
+    """A probe threw in the page, so its rule could not be judged."""
+
+
+@cache
+def _in_one_trip(sources):
+    """One function that runs each probe in turn, each on its own, and says
+    what each returned or threw: ``[[true, value] | [false, error], ...]``.
+    A round trip to the page costs milliseconds, a probe often less."""
+
+    probes = ",\n".join(f"({source})" for source in sources)
+    return f"""async (args) => {{
+  const probes = [{probes}];
+  const out = [];
+  for (let at = 0; at < probes.length; at += 1) {{
+    try {{ out.push([true, await probes[at](args[at])]); }}
+    catch (error) {{ out.push([false, String(error)]); }}
+  }}
+  return out;
+}}"""
+
+
+def _probe(probe):
+    return probe if isinstance(probe, tuple) else (probe, None)
+
+
+def taken(outcome):
+    """A probe's value, or what it threw raised as ProbeThrew."""
+
+    returned, value = outcome
+    if not returned:
+        raise ProbeThrew(value)
+    return value
+
+
+def reads(*probes):
+    """A rule that judges only what its probes return: a probe is its source,
+    or its source and argument. ``hold`` reads the probes of a run of such
+    rules in one round trip; a rule called alone reads its own."""
+
+    probes = tuple(map(_probe, probes))
+
+    def rule(judge):
+        @wraps(judge)
+        def held(self, name, *found):
+            return judge(self, name, *(found or self.read(probes)))
+
+        held.probes = probes
+        return held
+
+    return rule
+
+
 class BrowserGate(SimpleTestCase):
     """A browser over pages rendered once, every request answered locally.
 
     A subclass says what it renders (``render``); the browser then asks only
     for those paths and for static files.
+
+    Layout must hold before progressive enhancement, so script is off unless
+    the class (``scripted``) or the test (``@with_script``) checks the enhancement
+    itself; ``setUp`` starts the context the test runs in.
     """
 
     databases = {"default"}
+    scripted = False
 
     @classmethod
     def render(cls):
@@ -1795,19 +3314,18 @@ class BrowserGate(SimpleTestCase):
         self.addCleanup(self.capture_failure)
 
     def start(self, **options):
-        """A fresh browser context, replacing any the test already has.
-
-        Layout must hold before progressive enhancement, so script is off
-        unless a test is checking the enhancement itself.
-        """
+        """A fresh browser context, replacing any the test already has."""
 
         if self.context is not None:
             self.context.close()
-        options.setdefault("java_script_enabled", False)
+        test = getattr(self, self._testMethodName, None)
+        options.setdefault("java_script_enabled", getattr(test, "scripted", self.scripted))
         # Scripts asked for while this is a list wait in it (moved_once_drawn).
         self.held = None
         self.context = self.browser.new_context(**options)
         self.context.set_default_timeout(5000)
+        if slow := slow_frames():
+            self.context.add_init_script(slow)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
 
@@ -1825,6 +3343,20 @@ class BrowserGate(SimpleTestCase):
         self.held.append(route)
         return True
 
+    def outcomes(self, probes):
+        """What each of ``probes`` returned or threw, in one round trip:
+        ``[(True, value) | (False, error), ...]``."""
+
+        if not probes:
+            return []
+        sources, args = zip(*probes, strict=True)
+        return [tuple(outcome) for outcome in self.page.evaluate(_in_one_trip(sources), list(args))]
+
+    def read(self, probes):
+        """What each of ``probes`` returned, in one round trip."""
+
+        return [taken(outcome) for outcome in self.outcomes(probes)]
+
     def respond(self, route):
         if not self.holds(route):
             self.answer(route)
@@ -1835,26 +3367,57 @@ class BrowserGate(SimpleTestCase):
         if name in self.pages:
             route.fulfill(content_type=mimetypes.guess_type(name)[0] or "text/html", body=self.pages[name])
             return
-        if path.startswith(settings.STATIC_URL):
-            asset = finders.find(path.removeprefix(settings.STATIC_URL))
-            if asset:
-                route.fulfill(
-                    content_type=mimetypes.guess_type(asset)[0] or "application/octet-stream",
-                    body=Path(asset).read_bytes(),
-                )
-                return
+        if path.startswith(settings.STATIC_URL) and (asset := static_file(path.removeprefix(settings.STATIC_URL))):
+            content_type, body = asset
+            route.fulfill(content_type=content_type, body=body)
+            return
         route.fulfill(status=404, body="Not in the synthetic fixture")
 
+    @override
+    def run(self, result=None):
+        self.failed = False
+        self.failures = None
+        return super().run(result if result is None else _Watched(result, self))
+
+    @override
+    def __getstate__(self):
+        # A parallel worker sends a failed subtest to the parent with its test,
+        # once the test has finished, when Django no longer leaves out what
+        # cannot be pickled: the browser it drove and its cleanups stay here.
+        return {key: value for key, value in super().__getstate__().items() if is_pickable(value)}
+
+    def shoot(self, name):
+        """The page as it stands, saved as ``name``.png in this test's own
+        hq-browser-failure-* folder in the temporary directory, every one of
+        which CI keeps when a gate fails."""
+
+        if self.failures is None:
+            self.failures = Path(tempfile.mkdtemp(prefix=f"hq-browser-failure-{self._testMethodName}-"))
+        path = self.failures / f"{name}.png"
+        self.page.screenshot(path=str(path), full_page=True)
+        print(f"Browser failure screenshot: {path}")
+
+    def subtest_failed(self, params):
+        """A failed subtest's page, shot while it is still in the browser and
+        named for its page, width and rule. A browser that has gone with the
+        failure is said instead."""
+
+        name = failure_name(params)
+        try:
+            self.shoot(name)
+        except BrowserError as gone:
+            print(f"No browser failure screenshot of {name}: {str(gone).splitlines()[0]}")
+
     def capture_failure(self):
-        result = self._outcome.result
-        if any(getattr(test, "test_case", test) is self for test, _ in result.failures + result.errors):
-            folder = Path(tempfile.mkdtemp(prefix="hq-browser-failure-"))
-            self.page.screenshot(path=str(folder / "page.png"), full_page=True)
-            print(f"Browser failure screenshot: {folder / 'page.png'}")
+        """A test that failed outside its subtests, shot as it ended."""
+
+        if self.failed:
+            self.shoot("page")
 
     def open(self, name, width):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}/{name}/", wait_until="load")
+        self.page.evaluate(_FONTS_READY)
 
     def moved_once_drawn(self, url, width, settled):
         """What moves on ``url`` after it is first drawn.
@@ -1870,22 +3433,79 @@ class BrowserGate(SimpleTestCase):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(url, wait_until="commit")
         for _frame in range(600):
-            if self.page.evaluate(_DRAWN):
+            parsing = self.page.evaluate(_UNTIL_DRAWN)
+            if parsing is None:
                 break
-            parsing = set(self.page.evaluate(_PARSER_SCRIPTS))
-            waiting = [route for route in self.held if route.request.url in parsing]
+            waiting = [route for route in self.held if route.request.url in set(parsing)]
             for route in waiting:
                 self.held.remove(route)
                 self.answer(route)
             self.page.evaluate(_SETTLED)
         else:
             raise AssertionError(f"{url} at {width}px was never drawn")
-        self.page.evaluate(_DRAWN_BOXES)
         held, self.held = self.held, None
         for route in held:
             self.answer(route)
         settled()
         return self.page.evaluate(_MOVED_SINCE_DRAWN)
+
+    def geometry(self, path, width):
+        """What the layout invariants find on the page as loaded, by check:
+        every one the gates hold on a page as a reader has it."""
+
+        return self.checked(geometry_probes(path, width))
+
+    def scheme(self):
+        """The palette the system asks the page for."""
+
+        return "dark" if self.page.evaluate("() => matchMedia('(prefers-color-scheme: dark)').matches") else "light"
+
+    def lost_fills(self):
+        """The fills one palette shows and the other loses, read in each on
+        this load; the page is left in the palette it was in."""
+
+        was = self.scheme()
+        steps = {}
+        for palette in ("light", "dark"):
+            self.page.emulate_media(color_scheme=palette)
+            self.page.evaluate(_FINISH_TRANSITIONS)
+            steps[palette] = self.page.evaluate(_FILL_STEPS, [SELECTORS["contrast_scope"], SELECTORS["vendored"]])
+        self.page.emulate_media(color_scheme=was)
+        self.page.evaluate(_FINISH_TRANSITIONS)
+        return lost_fills(steps, LINE_CONTRAST)
+
+    def palette(self):
+        """What depends on the palette: frames drawn by a border, text, lines
+        and fills against what they sit on."""
+
+        return self.checked(_PALETTE)
+
+    def findings(self, path, width):
+        """What the layout rules find in HQ's own markup, checks that found
+        nothing left out: the geometry and the frames in the palette loaded.
+        The vendored markup is stood in for while they read, and put back
+        however they end: each probe runs on its own."""
+
+        found = self.checked(
+            {
+                "stand in": (_STAND_IN, SELECTORS["vendored"]),
+                **geometry_probes(path, width),
+                **_PALETTE,
+                "put back": (_PUT_BACK, None),
+            }
+        )
+        found["fills"] = self.lost_fills()
+        return {check: said for check, said in found.items() if said}
+
+    def checked(self, probes):
+        """Each check's findings, read in one round trip; a probe that threw
+        is a finding of its own check, so it hides no other."""
+
+        outcomes = self.outcomes(list(probes.values()))
+        return {
+            check: _AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"]
+            for check, (returned, value) in zip(probes, outcomes, strict=True)
+        }
 
 
 def viewport(width):
@@ -1905,9 +3525,8 @@ SPEAKING_HEADS = {
     "head/words": "Two words",
     "head/name": "example-host.example.com",
 }
-# What a pressed control says about its work, short to long, and where.
+# What a pressed control says about its work, short to long.
 SAYINGS = ("Reading", "Reading example-host", "That could not be done. Try again in a minute.")
-SPEAKING_WIDTHS = (320, PHONE_SCREEN[0], 1360)
 
 
 # A shared component filled the way an extension's page fills it, which no host
@@ -1928,7 +3547,7 @@ def shared_parts():
         name: (
             '<!doctype html><html><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            f'<link rel="stylesheet" href="{settings.STATIC_URL}css/app.css"></head>'
+            f"{stylesheets()}</head>"
             f'<body><main class="content">{markup}</main></body></html>'
         )
         for name, markup in SHARED_PARTS.items()
@@ -1944,12 +3563,31 @@ def speaking_heads():
     return {
         name: (
             f'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-            f'<link rel="stylesheet" href="{settings.STATIC_URL}css/app.css"></head><body><main>'
+            f"{stylesheets()}</head><body><main>"
             + render_to_string("partials/_page_head.html", {"page": Page(title=title, actions=actions)})
             + "</main></body></html>"
         )
         for name, title in SPEAKING_HEADS.items()
     }
+
+
+@cache
+def stress_estate():
+    """Every page of the three stress estates, the derived lists' names, and
+    the probes beside them: ``(pages, lists)``. Rendered once a process, so a
+    worker handed a second layout class does not build the estates again;
+    each estate is rolled back once rendered, so nothing else sees it."""
+
+    with transaction.atomic():
+        pages = render_pages(build_estate())
+        transaction.set_rollback(True)
+    with transaction.atomic():
+        pages |= render_dense_pages(build_dense_estate())
+        transaction.set_rollback(True)
+    with transaction.atomic():
+        lists = render_derived_pages(build_derived_estate())
+        transaction.set_rollback(True)
+    return MappingProxyType(pages | lists | speaking_heads() | shared_parts()), tuple(lists)
 
 
 class LayoutBrowserTests(BrowserGate):
@@ -1960,21 +3598,16 @@ class LayoutBrowserTests(BrowserGate):
     each in a subtest named for the rule, the page and the width. The rules
     that change the page (open its disclosures, dispatch a resize) run after
     the ones that only read it.
+
+    The tests are the classes below, a sweep or a share of one each: Django
+    hands a parallel worker a whole class, so they run side by side, and a
+    run lasts as long as its longest class.
     """
 
     @classmethod
     def render(cls):
-        with transaction.atomic():
-            pages = render_pages(build_estate())
-            transaction.set_rollback(True)
-        with transaction.atomic():
-            pages |= render_dense_pages(build_dense_estate())
-            transaction.set_rollback(True)
-        with transaction.atomic():
-            lists = render_derived_pages(build_derived_estate())
-            transaction.set_rollback(True)
-        cls.lists = tuple(lists)
-        return pages | lists | speaking_heads() | shared_parts()
+        pages, cls.lists = stress_estate()
+        return pages
 
     def loaded(self, name, width, **where):
         """Open ``name`` at ``width``; one that does not load fails once, not once per rule."""
@@ -1987,15 +3620,32 @@ class LayoutBrowserTests(BrowserGate):
         return opened
 
     def hold(self, name, width, rules, **where):
-        """Hold each rule on the page as it stands, one subtest each, in order."""
+        """Hold each rule on the page as it stands, one subtest each, in
+        order. The probes of a run of rules that only read are read in one
+        round trip before the first of them is judged; a probe that threw
+        fails its own rule only."""
 
-        for rule in rules:
+        read = {}
+        for at, rule in enumerate(rules):
+            if hasattr(rule, "probes") and at not in read:
+                read |= self.read_ahead(rules, at)
             with self.subTest(rule=rule.__name__, page=name, width=width, **where):
-                rule(name)
+                if at in read:
+                    rule(name, *map(taken, read[at]))
+                else:
+                    rule(name)
+
+    def read_ahead(self, rules, at):
+        """The outcomes of each rule's probes, by its place in ``rules``, for
+        the run of reading rules that starts at ``at``."""
+
+        run = list(takewhile(lambda rule: hasattr(rule, "probes"), rules[at:]))
+        outcomes = iter(self.outcomes([probe for rule in run for probe in rule.probes]))
+        return {at + offset: list(islice(outcomes, len(rule.probes))) for offset, rule in enumerate(run)}
 
     def in_scheme(self, scheme):
-        """The same load in the other palette. Without script no animation
-        frame runs, so the colors are not waited for: they are finished."""
+        """The same load in the other palette. Its colors are finished rather
+        than waited for: without script no animation frame runs."""
 
         self.page.emulate_media(color_scheme=scheme)
         self.page.evaluate(_FINISH_TRANSITIONS)
@@ -2005,10 +3655,10 @@ class LayoutBrowserTests(BrowserGate):
 
     def unscripted_reads(self, name, width):
         """The rules that only read the page: on the sparse estate's pages at
-        every WIDTHS width, and on every page at every OVERFLOW_WIDTHS width."""
+        every SPARSE_WIDTHS width, and on every page at every WIDTHS width."""
 
         rules = []
-        if name in PAGES and width in WIDTHS:
+        if name in PAGES and width in SPARSE_WIDTHS:
             rules += [
                 self.every_stylesheet_loads,
                 self.nothing_escapes_the_page_sideways,
@@ -2018,11 +3668,11 @@ class LayoutBrowserTests(BrowserGate):
                 self.nothing_overlaps,
                 self.layout_audit_structural_rules,
             ]
-        if width in OVERFLOW_WIDTHS:
+        if width in WIDTHS:
             rules += self.overflow_reads(name)
         if width == PHONE_SCREEN[0]:
             rules.append(self.a_narrow_head_keeps_its_lead_control_beside_the_title)
-        if width == OVERFLOW_WIDTHS[-1]:
+        if width == WIDTHS[-1]:
             rules.append(self.a_wide_frame_is_filled)
         return rules
 
@@ -2035,9 +3685,11 @@ class LayoutBrowserTests(BrowserGate):
             self.nothing_runs_out_of_its_table_cell,
             self.a_table_frame_spans_its_box,
             self.a_table_row_stays_within_its_height_budget,
+            self.a_row_reads_from_its_first_line,
             self.no_column_is_narrower_than_its_words,
             self.a_link_sits_on_the_line_it_continues,
             self.a_row_has_one_disclosure,
+            self.a_summary_draws_one_mark,
             self.a_band_cell_keeps_its_padding,
             self.a_band_lays_out_as_whole_rows,
             self.a_queue_ends_its_cards_at_one_edge,
@@ -2046,7 +3698,15 @@ class LayoutBrowserTests(BrowserGate):
             self.a_checks_evidence_follows_its_statement,
             self.nothing_a_summary_names_is_hidden,
             self.a_token_breaks_only_where_it_may,
+            self.no_token_leaves_a_scrap_on_a_line,
+            self.a_mark_keeps_to_the_words_it_punctuates,
+            self.a_name_in_a_wide_table_is_whole,
+            self.a_short_name_in_a_wide_table_is_one_line,
+            self.nothing_is_held_back_while_its_table_has_room,
+            self.a_figure_sits_under_its_label,
             self.an_aside_wraps_only_under_its_heading,
+            self.an_aside_leaves_no_word_alone,
+            self.a_clamped_box_shows_only_its_lines,
             self.a_title_is_not_split_beside_its_controls,
             self.code_and_cards_keep_inside_the_gutter,
             self.controls_in_a_row_share_one_height,
@@ -2062,144 +3722,141 @@ class LayoutBrowserTests(BrowserGate):
         """The rules that open the page's disclosures, after every read."""
 
         rules = []
-        if width in OVERFLOW_WIDTHS:
+        if width in WIDTHS:
             rules.append(self.a_filled_box_keeps_its_padding)
         rules.append(self.open_every_disclosure)
-        if name in PAGES and width in WIDTHS:
+        if name in PAGES and width in SPARSE_WIDTHS:
             rules.append(self.nothing_escapes_the_page_sideways_with_every_disclosure_open)
-        if width in OVERFLOW_WIDTHS:
+        if width in WIDTHS:
             rules += [
                 self.only_a_table_scrolls_sideways_with_every_disclosure_open,
                 self.a_route_line_runs_from_its_first_stop_to_its_last,
                 self.a_checks_evidence_follows_its_statement,
                 self.nothing_a_summary_names_is_hidden,
                 self.a_line_shows_on_its_surface,
+                self.a_fill_shows_in_both_palettes,
             ]
         return rules
 
-    def test_every_page_keeps_the_layout_rules_without_script(self):
-        for name in ALL_PAGES:
-            for width in sorted({*OVERFLOW_WIDTHS, *(WIDTHS if name in PAGES else ())}):
-                if not self.loaded(name, width):
-                    continue
-                self.hold(name, width, self.unscripted_reads(name, width))
-                if width in OVERFLOW_WIDTHS:
-                    self.in_scheme("dark")
-                    self.hold(name, width, [self.text_reads_in_the_dark_theme, self.a_line_shows_on_its_surface])
-                    self.in_scheme("light")
-                self.hold(name, width, self.unscripted_openings(name, width))
-
-    def test_a_shared_part_escapes_nothing_sideways(self):
-        """A component filled the way an extension fills it, closed and opened."""
-
-        for name in SHARED_PARTS:
-            for width in WIDTHS:
-                if self.loaded(name, width):
-                    self.hold(
-                        name,
-                        width,
-                        [
-                            self.nothing_escapes_the_page_sideways,
-                            self.open_every_disclosure,
-                            self.nothing_escapes_the_page_sideways_with_every_disclosure_open,
-                        ],
-                    )
-
-    def every_stylesheet_loads(self, _name):
-        sheets = self.page.evaluate(_STYLESHEETS)
+    @reads(_STYLESHEETS)
+    def every_stylesheet_loads(self, _name, sheets):
         self.assertGreater(sheets["links"], 0)
         self.assertEqual(sheets["loaded"], sheets["links"])
         self.assertEqual(sheets["empty"], [])
 
-    def nothing_escapes_the_page_sideways(self, _name):
-        self.assertEqual(self.page.evaluate(_ESCAPES), [])
+    @reads(_ESCAPES)
+    def nothing_escapes_the_page_sideways(self, _name, found):
+        self.assertEqual(found, [])
 
     def open_every_disclosure(self, _name):
         """Every disclosure and popover open, for the rules that follow."""
 
         self.page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
 
-    def nothing_escapes_the_page_sideways_with_every_disclosure_open(self, _name):
-        self.assertEqual(self.page.evaluate(_ESCAPES), [])
+    @reads(_ESCAPES)
+    def nothing_escapes_the_page_sideways_with_every_disclosure_open(self, _name, found):
+        self.assertEqual(found, [])
 
     def no_block_breaks_a_paragraph(self, _name):
         # A block written inside a <p> closes it early and leaves an empty <p>
         # where its end tag was: the rest of the line falls out of it.
         self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0)
 
-    def nothing_is_framed_inside_a_frame(self, _name):
-        self.assertEqual(
-            self.page.evaluate(_NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]]),
-            [],
-        )
+    @reads(_FRAMES_READ)
+    def nothing_is_framed_inside_a_frame(self, _name, found):
+        self.assertEqual(found, [])
 
-    def a_narrow_head_keeps_its_lead_control_beside_the_title(self, _name):
-        self.assertIn(
-            self.page.evaluate(
-                _HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"], SELECTORS["page_head"]]
-            ),
-            (None, True),
-        )
+    @reads((_HEAD_ON_ONE_LINE, [SELECTORS["head_lead"], SELECTORS["head_title"], SELECTORS["page_head"]]))
+    def a_narrow_head_keeps_its_lead_control_beside_the_title(self, _name, beside):
+        self.assertIn(beside, (None, True))
 
-    def words_stay_inside_the_box_that_holds_them(self, _name):
-        self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["control"]), [])
-        self.assertEqual(self.page.evaluate(_SPILLED_LABELS, SELECTORS["cell_content"]), [])
+    @reads(_SPILLED_CONTROLS, _SPILLED_CELLS)
+    def words_stay_inside_the_box_that_holds_them(self, _name, controls, cells):
+        self.assertEqual(controls, [])
+        self.assertEqual(cells, [])
 
-    def only_a_table_scrolls_sideways(self, _name):
+    @reads(_SIDEWAYS_READ)
+    def only_a_table_scrolls_sideways(self, _name, found):
         """At a phone, tablet and laptop width; again with every disclosure open."""
 
-        self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["sideways"]), [])
+        self.assertEqual(found, [])
 
-    def only_a_table_scrolls_sideways_with_every_disclosure_open(self, _name):
-        self.assertEqual(self.page.evaluate(_SIDEWAYS, SELECTORS["sideways"]), [])
+    @reads(_SIDEWAYS_READ)
+    def only_a_table_scrolls_sideways_with_every_disclosure_open(self, _name, found):
+        self.assertEqual(found, [])
 
-    def nothing_runs_out_of_its_table_cell(self, _name):
-        self.assertEqual(self.page.evaluate(_CELLS), [])
+    @reads(_CELLS)
+    def nothing_runs_out_of_its_table_cell(self, _name, found):
+        self.assertEqual(found, [])
 
-    def a_table_row_stays_within_its_height_budget(self, _name):
-        self.assertEqual(self.page.evaluate(_ROW_HEIGHTS, ROW_LINES), [])
+    @reads((_ROW_HEIGHTS, ROW_LINES))
+    def a_table_row_stays_within_its_height_budget(self, _name, found):
+        self.assertEqual(found, [])
 
-    def dense_pages_keep_to_their_boxes(self, _name):
+    @reads((_CELLS_OFF_THE_FIRST_LINE, SELECTORS["table_scroll"]))
+    def a_row_reads_from_its_first_line(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_ESCAPES, _OVERLAPS, _PHRASES_READ)
+    def dense_pages_keep_to_their_boxes(self, _name, escapes, overlaps, phrases):
         """Nothing escapes, overlaps, or wraps a pill with production-sized data."""
 
-        self.assertEqual(self.page.evaluate(_ESCAPES), [])
-        self.assertEqual(self.page.evaluate(_OVERLAPS), [])
-        self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), [])
+        self.assertEqual(escapes, [])
+        self.assertEqual(overlaps, [])
+        self.assertEqual(phrases, [])
 
-    def tables_scroll_inside_their_own_container(self, name):
+    @reads(_TABLES)
+    def tables_scroll_inside_their_own_container(self, name, tables):
         """On a phone a wide table scrolls sideways; it never stacks into cards."""
 
-        tables = self.page.evaluate(_TABLES)
         self.assertEqual(tables["found"], [])
         if "<table" in self.pages[name]:
             self.assertGreater(tables["seen"], 0, "the probe measured nothing")
 
-    def grid_rows_end_together(self, _name):
-        self.assertEqual(self.page.evaluate(_PAIRS), [])
+    @reads((_PAIRS, SELECTORS["paired"]))
+    def grid_rows_end_together(self, _name, found):
+        self.assertEqual(found, [])
 
-    def a_pill_never_wraps(self, _name):
-        self.assertEqual(self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]), [])
+    @reads(_PHRASES_READ)
+    def a_pill_never_wraps(self, _name, found):
+        self.assertEqual(found, [])
 
-    def nothing_overlaps(self, _name):
-        self.assertEqual(self.page.evaluate(_OVERLAPS), [])
+    @reads(_OVERLAPS)
+    def nothing_overlaps(self, _name, found):
+        self.assertEqual(found, [])
 
-    def layout_audit_structural_rules(self, _name):
-        report = self.page.evaluate(_AUDIT)
-        self.assertEqual([v for v in report["violations"] if v["rule"] in AUDIT_RULES], [])
+    @reads(_AUDIT)
+    def layout_audit_structural_rules(self, _name, report):
+        self.assertEqual(_AS_FINDINGS["audit"](report), [])
 
-    def a_table_frame_spans_its_box(self, _name):
-        self.assertEqual(self.page.evaluate(_NARROW_FRAMES, SELECTORS["table_scroll"]), [])
+    @reads((_NARROW_FRAMES, SELECTORS["table_scroll"]))
+    def a_table_frame_spans_its_box(self, _name, found):
+        self.assertEqual(found, [])
 
-    def a_mark_holds_its_glyph_in_its_middle(self, _name):
-        self.assertEqual(self.page.evaluate(_OFF_CENTER_MARKS, SELECTORS["route_mark"]), [])
+    @reads((_OFF_CENTER_MARKS, SELECTORS["route_mark"]))
+    def a_mark_holds_its_glyph_in_its_middle(self, _name, found):
+        self.assertEqual(found, [])
 
-    def opening_a_disclosure_moves_nothing_before_it(self, _name):
-        self.assertEqual(self.page.evaluate(_MOVING_SUMMARIES), [])
+    @reads(_MOVING_SUMMARIES)
+    def opening_a_disclosure_moves_nothing_before_it(self, _name, found):
+        self.assertEqual(found, [])
 
-    def a_line_shows_on_its_surface(self, _name):
-        self.assertEqual(self.page.evaluate(_FAINT_LINES, [SELECTORS["contrast_scope"], LINE_CONTRAST]), [])
+    @reads(_LINES_READ)
+    def a_line_shows_on_its_surface(self, _name, found):
+        self.assertEqual(found, [])
 
-    def text_reads_in_the_dark_theme(self, _name):
+    def a_fill_shows_in_both_palettes(self, _name):
+        self.assertEqual(self.lost_fills(), [])
+
+    def every_palette_check_holds(self, _name):
+        """Text, lines, fills and frames against what they sit on, in the
+        palette the page is drawn in."""
+
+        if found := {check: said for check, said in self.palette().items() if said}:
+            self.fail(json.dumps(found, indent=1))
+
+    @reads("() => matchMedia('(prefers-color-scheme: dark)').matches", _CONTRAST_READ)
+    def text_reads_in_the_dark_theme(self, _name, dark, report):
         """Text clears WCAG AA on whatever it sits on, in the dark palette.
 
         Color lives in tokens and each token carries both palettes, so a
@@ -2209,130 +3866,245 @@ class LayoutBrowserTests(BrowserGate):
         another) by measuring what the browser actually paints.
         """
 
-        self.assertEqual(self.page.evaluate("() => matchMedia('(prefers-color-scheme: dark)').matches"), True)
-        report = self.page.evaluate(_CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST])
+        self.assertEqual(dark, True)
         self.assertGreater(report["sampled"], 0)
         self.assertEqual(report["found"], [])
 
-    def a_filled_box_keeps_its_padding(self, _name):
+    def a_chosen_theme_paints_as_the_systems(self, name):
+        """The operator's choice of theme paints what the system's preference
+        does: each palette chosen against the other system palette paints
+        every element as that palette does when the system asks for it. A
+        rule written under `prefers-color-scheme` rather than through the
+        tokens' `light-dark()` reaches only one of the two. The server writes
+        the choice into the page it renders, so the page is loaded with it,
+        and left as it was found."""
+
+        was, differ, html = self.scheme(), [], self.page.content()
+        try:
+            for theme, other in (("dark", "light"), ("light", "dark")):
+                self.page.emulate_media(color_scheme=theme)
+                self.load_as(name, html, None)
+                system = self.page.evaluate(_PAINT)
+                self.page.emulate_media(color_scheme=other)
+                self.load_as(name, html, theme)
+                chosen = self.page.evaluate(_PAINT)
+                differ += [
+                    f"{theme} chosen paints {el} {mine}, the system's {its}"
+                    for (el, mine), (_, its) in zip(chosen, system, strict=True)
+                    if mine != its
+                ]
+        finally:
+            self.page.emulate_media(color_scheme=was)
+            self.load_as(name, html, None)
+        self.assertEqual(differ[:10], [])
+
+    # How long, in milliseconds, a page loaded again from its own HTML may
+    # take: every part of it is answered from memory.
+    reload_within = 5_000
+
+    def load_as(self, name, html, theme):
+        """Page ``name`` loaded again from ``html``, as the server renders it
+        for an operator who chose ``theme`` (none: the system's), or a failure
+        naming it once the load outlasts ``reload_within``."""
+
+        if theme:
+            html = re.sub(r"<html\b", f'<html data-theme="{theme}"', html, count=1)
+        address = self.page.url.split("#")[0]
+
+        def answer(route):
+            route.fulfill(content_type="text/html", body=html)
+
+        self.page.route(address, answer)
+        try:
+            self.page.reload(wait_until="load", timeout=self.reload_within)
+        except LoadTimeout:
+            chosen = f"{theme} chosen" if theme else "no theme chosen"
+            self.fail(f"{name} did not load again with {chosen} within {self.reload_within} ms")
+        finally:
+            self.page.unroute(address, answer)
+        self.page.evaluate(_FINISH_TRANSITIONS)
+
+    @reads(
+        (
+            _UNPADDED_TILES,
+            [SELECTORS["tile_exempt"], SELECTORS["tile_control"], SELECTORS["tile_detached"], SELECTORS["disclosure"]],
+        )
+    )
+    def a_filled_box_keeps_its_padding(self, _name, found):
         """It opens every disclosure in the page to lay out what they hold."""
 
-        self.assertEqual(
-            self.page.evaluate(
-                _UNPADDED_TILES,
-                [
-                    SELECTORS["tile_exempt"],
-                    SELECTORS["tile_control"],
-                    SELECTORS["tile_detached"],
-                    SELECTORS["disclosure"],
-                ],
-            ),
-            [],
-        )
-
-    def no_column_is_narrower_than_its_words(self, _name):
-        self.assertEqual(self.page.evaluate(_BROKEN_WORDS), [])
-
-    def a_link_sits_on_the_line_it_continues(self, _name):
-        self.assertEqual(self.page.evaluate(_RAISED_LINKS), [])
-
-    def a_wide_frame_is_filled(self, _name):
-        self.assertEqual(self.page.evaluate(_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]]), [])
-
-    def a_row_has_one_disclosure(self, _name):
-        self.assertEqual(self.page.evaluate(_NESTED_DISCLOSURES), [])
-
-    def a_band_cell_keeps_its_padding(self, _name):
-        self.assertEqual(self.page.evaluate(_UNPADDED_CELLS, SELECTORS["band_cell"]), [])
-
-    def a_band_lays_out_as_whole_rows(self, _name):
-        self.assertEqual(self.page.evaluate(_UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]), [])
-
-    def a_route_is_one_row_or_one_column(self, _name):
-        self.assertEqual(self.page.evaluate(_WRAPPED_ROUTES, SELECTORS["route"]), [])
-
-    def a_token_breaks_only_where_it_may(self, _name):
-        self.assertEqual(self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]), [])
-
-    def an_aside_wraps_only_under_its_heading(self, _name):
-        self.assertEqual(self.page.evaluate(_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]), [])
-
-    def a_title_is_not_split_beside_its_controls(self, _name):
-        found = self.page.evaluate(
-            _SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]
-        )
         self.assertEqual(found, [])
 
-    def code_and_cards_keep_inside_the_gutter(self, _name):
-        self.assertEqual(self.page.evaluate(_PAST_THE_GUTTER, [SELECTORS["gutter_bound"], False]), [])
-
-    def controls_in_a_row_share_one_height(self, _name):
-        self.assertEqual(self.page.evaluate(_UNEVEN_CONTROL_ROWS, [SELECTORS["line_control"], SELECTORS["field"]]), [])
-
-    def a_wrapped_bar_fills_its_rows(self, _name):
-        self.assertEqual(self.page.evaluate(_RAGGED_BARS, SELECTORS["wrapping_bar"]), [])
-
-    def a_queue_ends_its_cards_at_one_edge(self, _name):
-        self.assertEqual(self.page.evaluate(_RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]), [])
-
-    def a_route_across_spaces_its_hops_evenly(self, _name):
-        self.assertEqual(self.page.evaluate(_UNEVEN_ROUTES, [SELECTORS["route"], SELECTORS["route_icon"]]), [])
-
-    def a_route_line_runs_from_its_first_stop_to_its_last(self, _name):
-        self.assertEqual(self.page.evaluate(_ROUTE_LINE_ENDS, [SELECTORS["route_line"], SELECTORS["route_mark"]]), [])
-
-    def a_checks_evidence_follows_its_statement(self, _name):
-        found = self.page.evaluate(_STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
+    @reads(_BROKEN_WORDS)
+    def no_column_is_narrower_than_its_words(self, _name, found):
         self.assertEqual(found, [])
 
-    def nothing_a_summary_names_is_hidden(self, _name):
-        self.assertEqual(self.page.evaluate(_HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"]), [])
+    @reads(_RAISED_LINKS)
+    def a_link_sits_on_the_line_it_continues(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_SMALL_TARGETS_READ)
+    def every_control_is_big_enough_to_hit(self, _name, found):
+        """A target is hit through at least 24 by 24 CSS px (`TARGET_MIN`,
+        WCAG 2.5.8 Target Size Minimum), counting the area its `::before` or
+        `::after` hangs over the space beside it, unless one of the
+        criterion's exceptions holds:
+
+        - Spacing: "if a 24 CSS pixel diameter circle is centered on the
+          bounding box of each, the circles do not intersect another target or
+          the circle for another undersized target". An area a target hangs
+          over another target's is shared, and counts for neither.
+        - Equivalent: "The function can be achieved through a different
+          control on the same page that meets this criterion": the control
+          a target names in `data-target-equivalent` (by its id) is at least
+          24 by 24 and in the same cell or region.
+        - Inline: "The target is in a sentence or its size is otherwise
+          constrained by the line-height of non-target text": set inline
+          among words that are no target's.
+        - User agent control: "The size of the target is determined by the
+          user agent and is not modified by the author": a control the browser
+          draws, the size of a copy no author style reaches. One HQ draws or
+          sizes, a styled tick box included, is held to the size.
+
+        A tick box is hit through its labels too. The stylesheet's
+        `--target-min` is held to the same size. Held on every page and width
+        the layout checks read (`every_layout_check_holds`).
+        """
+
+        if found:
+            self.fail("\n".join(found))
+
+    @reads(_EMPTY_FRAMES_READ)
+    def a_wide_frame_is_filled(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_NESTED_DISCLOSURES)
+    def a_row_has_one_disclosure(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_SUMMARY_MARKS)
+    def a_summary_draws_one_mark(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_UNPADDED_CELLS, SELECTORS["band_cell"]))
+    def a_band_cell_keeps_its_padding(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]))
+    def a_band_lays_out_as_whole_rows(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_WRAPPED_ROUTES, SELECTORS["route"]))
+    def a_route_is_one_row_or_one_column(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_FIGURE_UNDER_LABEL, [SELECTORS[key] for key in ("figure", "figure_label", "figure_value")]))
+    def a_figure_sits_under_its_label(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_TOKEN_BREAKS, _TOKEN_SELECTORS))
+    def a_token_breaks_only_where_it_may(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_SCRAPS, [SELECTORS["any_token"], _SCRAP]))
+    def no_token_leaves_a_scrap_on_a_line(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_STRANDED_MARKS, SELECTORS["seam"]))
+    def a_mark_keeps_to_the_words_it_punctuates(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_CUT_NAMES_READ)
+    def a_name_in_a_wide_table_is_whole(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_SPLIT_NAMES_READ)
+    def a_short_name_in_a_wide_table_is_one_line(self, _name, found):
+        """A wide table is squeezed most just past WIDE_REGION: at WIDE_TABLES."""
+
+        self.assertEqual(found, [])
+
+    @reads(_CUT_WITH_ROOM_READ)
+    def nothing_is_held_back_while_its_table_has_room(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_PADDED_CUTS, SELECTORS["cut_box"]))
+    def a_cut_value_ends_where_its_words_end(self, _name, found):
+        self.assertEqual(found, [])
+
+    def every_layout_check_holds(self, name):
+        """Every check the layout rules make, on the page as a reader has it:
+        what `dev:look --rule survey` reports, held."""
+
+        if found := self.findings(name, self.page.viewport_size["width"]):
+            self.fail(json.dumps(found, indent=1))
+
+    @reads((_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]))
+    def an_aside_wraps_only_under_its_heading(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_LONE_ASIDE_WORDS, SELECTORS["any_aside"]))
+    def an_aside_leaves_no_word_alone(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_PAST_THE_CLAMP)
+    def a_clamped_box_shows_only_its_lines(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]))
+    def a_title_is_not_split_beside_its_controls(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_PAST_THE_GUTTER, [SELECTORS["gutter_bound"], False]))
+    def code_and_cards_keep_inside_the_gutter(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_UNEVEN_CONTROL_ROWS, [SELECTORS["line_control"], SELECTORS["field"]]))
+    def controls_in_a_row_share_one_height(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_RAGGED_BARS, SELECTORS["wrapping_bar"]))
+    def a_wrapped_bar_fills_its_rows(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]))
+    def a_queue_ends_its_cards_at_one_edge(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_UNEVEN_ROUTES, [SELECTORS["route"], SELECTORS["route_icon"]]))
+    def a_route_across_spaces_its_hops_evenly(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_ROUTE_ENDS_READ)
+    def a_route_line_runs_from_its_first_stop_to_its_last(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_EVIDENCE_READ)
+    def a_checks_evidence_follows_its_statement(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_SUMMARIES_READ)
+    def nothing_a_summary_names_is_hidden(self, _name, found):
+        self.assertEqual(found, [])
 
     # With script: the page a person reads, sorted, selectable and with its
     # cut values marked.
 
-    def test_every_page_keeps_the_layout_rules_once_its_script_has_run(self):
-        """The rules that hold without script hold there too; pressing a
-        control moves nothing; a table fits its box with every disclosure open."""
-
-        self.start(java_script_enabled=True)
-        self.spoke = 0
-        for name in (*ALL_PAGES, *SPEAKING_HEADS):
-            widths = SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*OVERFLOW_WIDTHS, *SPEAKING_WIDTHS)
-            for width in sorted(set(widths)):
-                if not self.loaded(name, width, script="on"):
-                    continue
-                self.page.evaluate(_SETTLED)
-                if width in OVERFLOW_WIDTHS and name in ALL_PAGES:
-                    self.hold(name, width, self.scripted_reads(), script="on")
-                if width in SPEAKING_WIDTHS:
-                    self.pressing_a_control_moves_nothing(name, width)
-                if width in OVERFLOW_WIDTHS and name in ALL_PAGES:
-                    self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
-        self.assertGreater(self.spoke, len(SPEAKING_HEADS), "no page in the fixture has a control that speaks")
-
     def scripted_reads(self):
+        """What a scripted page holds beside `every_layout_check_holds`."""
+
         return [
-            self.only_a_table_scrolls_sideways,
-            self.nothing_runs_out_of_its_table_cell,
             self.opening_a_disclosure_moves_nothing_before_it,
-            self.no_column_is_narrower_than_its_words,
-            self.a_pill_never_wraps,
-            self.a_table_shares_its_width_only_with_columns_that_show,
-            self.words_stay_inside_the_box_that_holds_them,
             self.a_tables_names_share_one_edge_whether_or_not_a_row_opens,
-            self.a_token_breaks_only_where_it_may,
         ]
 
-    def a_table_shares_its_width_only_with_columns_that_show(self, _name):
-        self.assertEqual(self.page.evaluate(_UNSEEN_COLUMNS, SELECTORS["table_scroll"]), [])
-
-    def a_tables_names_share_one_edge_whether_or_not_a_row_opens(self, _name):
+    @reads((_NAME_EDGES, SELECTORS["table_scroll"]))
+    def a_tables_names_share_one_edge_whether_or_not_a_row_opens(self, _name, tables):
         """A row with a toggle and a row without start their names on the same
         line down the column: the toggle has a gutter every row keeps.
         """
 
-        for edges in self.page.evaluate(_NAME_EDGES, SELECTORS["table_scroll"]):
+        for edges in tables:
             self.assertEqual(edges, 1)
 
     def pressing_a_control_moves_nothing(self, name, width):
@@ -2358,36 +4130,6 @@ class LayoutBrowserTests(BrowserGate):
         self.page.evaluate(_SETTLED)
         self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
-    def test_every_list_fits_its_box_with_the_longest_values_its_model_holds(self):
-        """Every list, its rows derived from its model's fields
-        (test_browser_derived_fixtures), as it loads and with every row open."""
-
-        self.start(java_script_enabled=True)
-        held = [self.a_table_fits_its_box_at_every_width, self.a_token_breaks_only_where_it_may]
-        for name in self.lists:
-            for width in OVERFLOW_WIDTHS:
-                if not self.loaded(name, width, script="on"):
-                    continue
-                self.page.evaluate(_SETTLED)
-                self.hold(name, width, [self.no_column_is_narrower_than_its_words, *held], script="on")
-                self.page.locator(SELECTORS["row_toggle"]).evaluate_all(_PRESS_EVERY_SHOWN)
-                self.page.evaluate(_SETTLED)
-                self.hold(name, width, [self.nothing_runs_out_of_its_table_cell, *held], script="on", rows="open")
-
-    def test_nothing_moves_once_a_page_is_drawn(self):
-        """What the server draws is where things stay. The stress estate
-        answers no part a page fetches, so those requests are left waiting:
-        a placeholder stays a placeholder, and what moves is the scripts'."""
-
-        self.start(java_script_enabled=True)
-        self.page.route("**/*", self.wait_for_parts)
-        for name in ALL_PAGES:
-            for width in OVERFLOW_WIDTHS:
-                with self.subTest(page=name, width=width):
-                    moved = self.moved_once_drawn(f"{ORIGIN}/{name}/", width, self.loaded_and_still)
-                    if moved:
-                        self.fail("\n".join(moved))
-
     def wait_for_parts(self, route):
         if route.request.headers.get("x-requested-with") != "XMLHttpRequest":
             route.fallback()
@@ -2397,13 +4139,200 @@ class LayoutBrowserTests(BrowserGate):
         self.settle()
         self.page.evaluate(_SETTLED)
 
-    # Rules with a setup of their own.
+    def card_rows(self, key):
+        """The cards of one dashboard grid, grouped by the row they sit on."""
+        rows = {}
+        for box in self.page.locator(SELECTORS[key]).evaluate_all(
+            "elements => elements.map(e => { const r = e.getBoundingClientRect(), "
+            "edge = e.parentElement.getBoundingClientRect().right; "
+            "return {top: r.top, bottom: r.bottom, left: r.left, right: r.right, edge}; })"
+        ):
+            rows.setdefault(round(box["top"]), []).append(box)
+        return list(rows.values())
+
+    def assert_rows_filled(self, key):
+        # Cards in a row are the same height, and the last one reaches the
+        # grid's right edge.
+        for row in self.card_rows(key):
+            self.assertEqual({round(box["bottom"]) for box in row}, {round(row[0]["bottom"])}, row)
+            self.assertAlmostEqual(row[-1]["right"], row[-1]["edge"], delta=1)
+
+
+class UnscriptedLayoutTests(LayoutBrowserTests):
+    """Every page without script: the page as the server drew it.
+
+    Without script nothing on a page reads the width it was loaded at, so a
+    page is loaded once, at its narrowest width, and resized for the rest
+    (``across``): what a rule opened is closed again before the next width.
+    The sweep is split between the classes below.
+    """
+
+    def sweep(self, names):
+        for name in names:
+            for width in self.across(name, {*WIDTHS, *(SPARSE_WIDTHS if name in PAGES else ())}):
+                self.hold(name, width, self.unscripted_reads(name, width))
+                if width in WIDTHS:
+                    self.in_scheme("dark")
+                    self.hold(name, width, [self.text_reads_in_the_dark_theme, self.a_line_shows_on_its_surface])
+                    self.in_scheme("light")
+                if width == WIDE:
+                    self.hold(name, width, [self.a_chosen_theme_paints_as_the_systems])
+                self.hold(name, width, self.unscripted_openings(name, width))
+
+    def across(self, name, widths):
+        """``name`` at each of ``widths``, narrowest first, from one load; a
+        page that does not load fails once."""
+
+        first, *rest = sorted(widths)
+        if not self.loaded(name, first):
+            return
+        self.page.evaluate(_KEEP_CLOSED)
+        yield first
+        for width in rest:
+            self.page.evaluate(_CLOSE_AGAIN)
+            self.page.set_viewport_size(viewport(width))
+            # A rule the new width changes may transition; the load it stands
+            # for would have drawn it finished.
+            self.page.evaluate(_FINISH_TRANSITIONS)
+            yield width
+
+
+class UnscriptedSparseLayoutTests(UnscriptedLayoutTests):
+    def test_every_sparse_page_keeps_the_layout_rules_without_script(self):
+        self.sweep(PAGES)
+
+    def test_a_shared_part_escapes_nothing_sideways(self):
+        """A component filled the way an extension fills it, closed and opened."""
+
+        for name in SHARED_PARTS:
+            for width in self.across(name, SPARSE_WIDTHS):
+                self.hold(
+                    name,
+                    width,
+                    [
+                        self.nothing_escapes_the_page_sideways,
+                        self.open_every_disclosure,
+                        self.nothing_escapes_the_page_sideways_with_every_disclosure_open,
+                    ],
+                )
+
+
+class UnscriptedDenseLayoutTests(UnscriptedLayoutTests):
+    def test_every_dense_page_keeps_the_layout_rules_without_script(self):
+        self.sweep(DENSE_PAGES)
+
+    def test_every_list_keeps_its_rows_to_their_height_without_script(self):
+        """Every list filled with the longest values its model holds, as the
+        server drew it."""
+
+        for name in self.lists:
+            for width in self.across(name, {*WIDTHS, *WIDE_TABLES}):
+                self.hold(name, width, [self.a_table_row_stays_within_its_height_budget])
+
+
+class ScriptedLayoutTests(LayoutBrowserTests):
+    """Every page once its script has run. The sweep is split between the
+    classes below, so two workers run it side by side."""
+
+    scripted = True
+
+    def sweep(self, names):
+        """Every layout check holds, at a laptop window's width too; pressing
+        a control moves nothing; a table fits its box with every disclosure
+        open. Script reads the width a page loads at, so each width is a load."""
+
+        self.spoke = 0
+        for name in names:
+            widths = SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES)
+            for width in sorted(set(widths)):
+                if not self.loaded(name, width, script="on"):
+                    continue
+                self.page.evaluate(_SETTLED)
+                read = name in ALL_PAGES and width in (*WIDTHS, *WIDE_TABLES)
+                if read and width in WIDTHS:
+                    self.hold(name, width, self.scripted_reads(), script="on")
+                    # Light is held by every layout check below.
+                    self.in_scheme("dark")
+                    self.hold(name, width, [self.every_palette_check_holds], script="on", scheme="dark")
+                    self.in_scheme("light")
+                if read:
+                    self.hold(name, width, [self.every_layout_check_holds], script="on")
+                if width in SPEAKING_WIDTHS:
+                    self.pressing_a_control_moves_nothing(name, width)
+                if read:
+                    self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
+
+
+class ScriptedSparseLayoutTests(ScriptedLayoutTests):
+    def test_every_sparse_page_keeps_the_layout_rules_once_its_script_has_run(self):
+        self.sweep(PAGES)
+
+
+class ScriptedDenseLayoutTests(ScriptedLayoutTests):
+    def test_every_dense_page_and_head_keeps_the_layout_rules_once_its_script_has_run(self):
+        self.sweep((*DENSE_PAGES, *SPEAKING_HEADS))
+        self.assertGreater(self.spoke, len(SPEAKING_HEADS), "no page in the fixture has a control that speaks")
+
+
+class SettledLayoutTests(LayoutBrowserTests):
+    """What the scripts leave once a page is drawn: nothing moved. The sweep
+    is split between the classes below."""
+
+    scripted = True
+
+    def sweep(self, names):
+        """What the server draws is where things stay. The stress estate
+        answers no part a page fetches, so those requests are left waiting:
+        a placeholder stays a placeholder, and what moves is the scripts'."""
+
+        self.page.route("**/*", self.wait_for_parts)
+        for name in names:
+            for width in WIDTHS:
+                with self.subTest(page=name, width=width):
+                    moved = self.moved_once_drawn(f"{ORIGIN}/{name}/", width, self.loaded_and_still)
+                    if moved:
+                        self.fail("\n".join(moved))
+
+
+class SettledSparseLayoutTests(SettledLayoutTests):
+    def test_nothing_moves_once_a_sparse_page_is_drawn(self):
+        self.sweep(PAGES)
+
+
+class SettledDenseLayoutTests(SettledLayoutTests):
+    def test_nothing_moves_once_a_dense_page_is_drawn(self):
+        self.sweep(DENSE_PAGES)
+
+
+class LongestValueLayoutTests(LayoutBrowserTests):
+    """Every list in its box with the longest values its model holds."""
+
+    scripted = True
+
+    def test_every_list_fits_its_box_with_the_longest_values_its_model_holds(self):
+        """Every list, its rows derived from its model's fields
+        (test_browser_derived_fixtures), as it loads and with every row open."""
+
+        held = [self.a_table_fits_its_box_at_every_width, self.a_token_breaks_only_where_it_may]
+        for name in self.lists:
+            for width in (*WIDTHS, *WIDE_TABLES):
+                if not self.loaded(name, width, script="on"):
+                    continue
+                self.page.evaluate(_SETTLED)
+                self.hold(name, width, [self.every_layout_check_holds, *held], script="on")
+                self.page.locator(SELECTORS["row_toggle"]).evaluate_all(_PRESS_EVERY_SHOWN)
+                self.page.evaluate(_SETTLED)
+                self.hold(name, width, [self.nothing_runs_out_of_its_table_cell, *held], script="on", rows="open")
+
+
+class ComponentLayoutTests(LayoutBrowserTests):
+    """Rules with a setup of their own: one page, probe or control each."""
 
     def test_with_no_script_every_queue_row_shows_its_face(self):
         """No toggle to press: every row of every family, what is wrong, what
         it means and its buttons are on the page."""
 
-        for width in OVERFLOW_WIDTHS:
+        for width in WIDTHS:
             with self.subTest(width=width):
                 self.open("action-items", width)
                 rows = self.page.locator(SELECTORS["decisions"])
@@ -2413,13 +4342,13 @@ class LayoutBrowserTests(BrowserGate):
                         for shown in row.locator(SELECTORS[part]).all():
                             self.assertTrue(shown.is_visible(), part)
 
+    @with_script
     def test_a_queue_row_is_its_words_and_buttons_and_opens_to_its_steps(self):
         """Closed, a row is what is wrong, what it means and how to dismiss it;
         its steps are a press away, beneath it, and a family is a press away
         from its rows."""
 
-        self.start(java_script_enabled=True)
-        for width in (PHONE_SCREEN[0], OVERFLOW_WIDTHS[-1]):
+        for width in (PHONE_SCREEN[0], WIDTHS[-1]):
             with self.subTest(width=width):
                 self.open("action-items", width)
                 families = self.page.locator(SELECTORS["decision_family"])
@@ -2443,12 +4372,12 @@ class LayoutBrowserTests(BrowserGate):
                     opened += 1
                 self.assertGreater(opened, 0)
 
+    @with_script
     def test_a_family_opens_to_its_rows_and_closes_them(self):
         """A family's toggle shows the rows folded under it and says so, and a
         second press folds them away again."""
 
-        self.start(java_script_enabled=True)
-        for width in (PHONE_SCREEN[0], OVERFLOW_WIDTHS[-1]):
+        for width in (PHONE_SCREEN[0], WIDTHS[-1]):
             with self.subTest(width=width):
                 self.open("action-items", width)
                 toggle = self.page.locator(SELECTORS["decision_family"]).first
@@ -2467,43 +4396,60 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertEqual(toggle.get_attribute("aria-expanded"), "false")
                 self.assertNotIn(True, shown())
 
+    @with_script
     def test_an_opened_row_keeps_its_words_in_their_cells(self):
         """Opening a row lifts every cut in it, and what was cut breaks inside
         its column rather than running under the next one."""
 
-        self.start(java_script_enabled=True)
         for name in ALL_PAGES:
             for width in (PHONE_SCREEN[0], 820):
                 with self.subTest(page=name, width=width):
                     self.open(name, width)
-                    self.page.locator(SELECTORS["row_toggle"]).evaluate_all(_PRESS_EVERY_SHOWN)
+                    # A family first, so the rows it folds show their own toggles.
+                    self.page.locator(SELECTORS["decision_family"]).evaluate_all(_PRESS_EVERY_SHOWN)
+                    self.page.locator(SELECTORS["row_toggle"] + ":not([data-fold-toggle])").evaluate_all(
+                        _PRESS_EVERY_SHOWN
+                    )
                     self.page.evaluate(_SETTLED)
                     self.assertEqual(self.page.evaluate(_CELLS), [])
+                    self.assertEqual(self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+
+    def test_a_probe_that_throws_hides_no_other(self):
+        """Probes read in one round trip each run on their own."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        found = self.outcomes([("() => 1", None), ("() => { throw new Error('example'); }", None), ("(n) => n + 1", 2)])
+        self.assertEqual([returned for returned, _value in found], [True, False, True])
+        self.assertIn("example", found[1][1])
+        self.assertEqual(found[2][1], 3)
+
+    def test_a_hit_area_hung_past_a_control_is_no_label_and_a_word_past_it_is(self):
+        """The hit area a small control hangs beside itself widens what it
+        scrolls, never what it says; a word wider than its control spills."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        widened = self.page.evaluate("""() => {
+          const star = document.createElement('button');
+          star.className = 'pin-toggle example-star';
+          star.textContent = '☆';
+          const word = document.createElement('button');
+          word.className = 'example-word';
+          word.textContent = 'example label';
+          word.style.setProperty('width', '2rem');
+          word.style.setProperty('white-space', 'nowrap');
+          document.querySelector('main').append(star, word);
+          return star.scrollWidth > star.clientWidth;
+        }""")
+        self.assertTrue(widened)
+        found = self.page.evaluate(_SPILLED_LABELS, "main :is(.example-star, .example-word)")
+        self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
 
     def test_every_selector_parses(self):
-        authored = authored_selectors(Path(finders.find("css/app.css")).read_text())
-        self.open(next(iter(PAGES)), OVERFLOW_WIDTHS[-1])
-        kept = {_plain_selector(selector) for selector in self.page.evaluate(_KEPT_SELECTORS)}
+        authored = authored_selectors(stylesheet())
+        self.open(next(iter(PAGES)), WIDTHS[-1])
+        kept = {_plain_selector(selector) for selector in self.page.evaluate(_KEPT_SELECTORS, f"/{DIRECTORY}/")}
 
         self.assertEqual([selector for selector in authored if _plain_selector(selector) not in kept], [])
-
-    def card_rows(self, key):
-        """The cards of one dashboard grid, grouped by the row they sit on."""
-        rows = {}
-        for box in self.page.locator(SELECTORS[key]).evaluate_all(
-            "elements => elements.map(e => { const r = e.getBoundingClientRect(), "
-            "edge = e.parentElement.getBoundingClientRect().right; "
-            "return {top: r.top, bottom: r.bottom, left: r.left, right: r.right, edge}; })"
-        ):
-            rows.setdefault(round(box["top"]), []).append(box)
-        return list(rows.values())
-
-    def assert_rows_filled(self, key):
-        # Cards in a row are the same height, and the last one reaches the
-        # grid's right edge.
-        for row in self.card_rows(key):
-            self.assertEqual({round(box["bottom"]) for box in row}, {round(row[0]["bottom"])}, row)
-            self.assertAlmostEqual(row[-1]["right"], row[-1]["edge"], delta=1)
 
     def test_the_dashboard_pairs_its_cards_on_a_wide_screen(self):
         self.open("dashboard", 1280)
@@ -2513,7 +4459,7 @@ class LayoutBrowserTests(BrowserGate):
                 self.assert_rows_filled(key)
 
     def test_the_dashboard_stacks_its_cards_on_a_phone(self):
-        for width in (320, PHONE_SCREEN[0]):
+        for width in (NARROWEST, PHONE_SCREEN[0]):
             self.open("dashboard", width)
             for key in ("highlights", "patterns"):
                 with self.subTest(cards=key, width=width):
@@ -2529,6 +4475,7 @@ class LayoutBrowserTests(BrowserGate):
             with self.subTest(cards=key):
                 self.assert_rows_filled(key)
 
+    @with_script
     def test_a_row_toggle_is_owed_only_to_what_a_reader_cannot_see(self):
         """Every row the server made openable has its toggle in the HTML, in
         the cell that names it, and shows it only while the row holds
@@ -2542,7 +4489,6 @@ class LayoutBrowserTests(BrowserGate):
         withholds. Whether a value is cut is measured, so script is on.
         """
 
-        self.start(java_script_enabled=True)
         self.pages = {**self.pages, "row-toggle-probe": probe(_ROW_TOGGLE_TABLES)}
         shown_at = {
             PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter"},
@@ -2556,6 +4502,7 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertEqual({(row["toggles"], row["beside_name"]) for row in rows}, {(1, True)})
                 self.assertEqual({row["probe"] for row in rows if row["shown"]}, expected)
 
+    @with_script
     def test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing(self):
         """A table of four columns or more keeps the column that names each row
         and the ones marked key, and fits the screen; it does not stack into
@@ -2564,7 +4511,6 @@ class LayoutBrowserTests(BrowserGate):
         no other row's height: the reader's place in the table holds.
         """
 
-        self.start(java_script_enabled=True)
         for name in ("connections", "services", "containers", "projects"):
             with self.subTest(page=name):
                 self.open(name, PHONE_SCREEN[0])
@@ -2588,11 +4534,11 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertEqual(again["columns"], closed["columns"])
                 self.assertEqual(again["rows"], closed["rows"])
 
+    @with_script
     def test_a_fragment_that_is_not_percent_encoding_breaks_no_table(self):
         """`#%` is a legal fragment and no encoding of a row's id: it names no
         row, and everything the table script sets up after landing still runs."""
 
-        self.start(java_script_enabled=True)
         errors = []
         self.page.on("pageerror", lambda error: errors.append(str(error)))
         self.page.goto(f"{ORIGIN}/projects/#%", wait_until="load")
@@ -2603,8 +4549,8 @@ class LayoutBrowserTests(BrowserGate):
         self.assertTrue(ready)
         self.assertEqual(set(ready), {"true"})
 
+    @with_script
     def test_a_wide_table_on_a_desktop_keeps_every_column_and_holds_them_when_a_row_opens(self):
-        self.start(java_script_enabled=True)
         self.open("connections", 1440)
         closed = self.page.evaluate(_PHONE_TABLE, SELECTORS["table_scroll"])
         self.assertEqual(len(closed["columns"]), closed["headings"])
@@ -2615,12 +4561,12 @@ class LayoutBrowserTests(BrowserGate):
             self.assertEqual(opened["columns"], closed["columns"])
             self.assertEqual(others(opened["rows"], pressed), others(closed["rows"], pressed))
 
+    @with_script
     def test_any_table_sorts_by_a_heading(self):
         """A table whose server does not sort it sorts on the page: ascending,
         then descending, then as it came, each section keeping its own rows.
         """
 
-        self.start(java_script_enabled=True)
         self.open("services", 1440)
         came = self.page.evaluate(
             "(scroll) => [...document.querySelectorAll('main ' + scroll + ' > table tbody')]"
@@ -2654,8 +4600,21 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertGreaterEqual(len(readings), 3)
                 self.assertEqual(reading_problems(readings), [])
 
+    @with_script
+    def test_what_the_dashboard_says_of_its_readings_covers_none_of_them(self):
+        """Opened while a reading is due, the dashboard asks for it and says it
+        is waiting for the controller. That line stands where a trail would,
+        and the dashboard's readings stand there instead: it is said on a line
+        no other text is drawn on, whichever row the readings take."""
+
+        for width in WIDTHS:
+            with self.subTest(width=width):
+                self.open("dense/dashboard", width)
+                self.page.locator(SELECTORS["ask_note"]).wait_for(state="visible")
+                self.assertEqual(self.page.evaluate(_OVERLAPPING_TEXT), [])
+
     def test_the_map_scrolls_with_the_page_and_draws_no_empty_lane(self):
-        for width in OVERFLOW_WIDTHS:
+        for width in WIDTHS:
             with self.subTest(width=width):
                 self.open("topology", width)
                 found = self.page.evaluate(_MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]])
@@ -2663,10 +4622,40 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertFalse(found["scrolls"])
                 self.assertEqual(found["empty"], [])
 
+    def test_a_palette_only_the_systems_preference_reaches_is_caught(self):
+        """A rule written under `prefers-color-scheme` paints a page whose
+        operator chose the other palette as the system's, which the rule on
+        chosen themes names; without it the same page passes."""
+
+        name = next(iter(PAGES))
+        self.open(name, WIDE)
+        was = self.scheme()
+        self.a_chosen_theme_paints_as_the_systems(name)
+        add_css(self.page, "@media (prefers-color-scheme: dark) { body { background: rgb(1, 2, 3) } }")
+        with self.assertRaises(AssertionError) as caught:
+            self.a_chosen_theme_paints_as_the_systems(name)
+        for chosen in ("dark", "light"):
+            self.assertIn(f"{chosen} chosen paints body", str(caught.exception))
+        self.assertEqual(self.scheme(), was)
+
+    @with_script
+    def test_a_page_that_never_loads_again_fails_the_chosen_theme_naming_it(self):
+        """A reload that never reaches its load event fails the rule within
+        its bound, naming the page, rather than holding the gate."""
+
+        name = next(iter(PAGES))
+        self.open(name, WIDE)
+        # Every script asked for from here on waits unanswered, and the load
+        # event waits for them.
+        self.held, self.reload_within = [], 500
+        with self.assertRaises(AssertionError) as caught:
+            self.a_chosen_theme_paints_as_the_systems(name)
+        self.assertIn(f"{name} did not load again", str(caught.exception))
+
+    @with_script
     def test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split(self):
-        self.start(java_script_enabled=True)
         self.pages = {**self.pages, "blank-column-probe": probe(_BLANK_TABLE)}
-        for width in (PHONE_SCREEN[0], 820, 1360):
+        for width in WIDTHS:
             with self.subTest(width=width):
                 self.open("blank-column-probe", width)
                 self.page.evaluate(_SETTLED)
@@ -2682,7 +4671,7 @@ class LayoutBrowserTests(BrowserGate):
 REFERENCE = "api/docs"
 REFERENCE_DARK = "api/docs/dark"
 # Where the viewer keeps its sidebar open beside the content.
-REFERENCE_DESKTOP = (1024, 1360)
+REFERENCE_DESKTOP = (1024, WIDE)
 REFERENCE_PHONE = PHONE_SCREEN[0]
 # The viewer is one large script: parsing it takes longer than a page's load.
 REFERENCE_READY = 30_000
@@ -2768,27 +4757,35 @@ _REFERENCE_CHROME = """() => ({
     .map((a) => a.href),
   search: document.querySelector('aside button').innerText,
 })"""
+# Follows a sidebar entry, as a click, and answers the address it sends the page to.
 _REFERENCE_FOLLOW = f"""(path) => {{
   const link = ({_REFERENCE_ENTRY})(path);
-  if (!link) return false;
+  if (!link) return null;
   link.click();
-  return true;
+  return link.hash;
 }}"""
-_REFERENCE_HEADING = """(title) => {
-  const heading = [...document.querySelectorAll('main main h2, main main h3')]
-    .find((h) => h.textContent.includes(title) && h.checkVisibility());
-  if (!heading) return null;
-  return {top: Math.round(heading.getBoundingClientRect().top),
+# Where the page stands on an address: the heading of the section it names, once
+# the page is at that address. The viewer names a section by the address under
+# its document's slug, so the section is found by the end of its id.
+_REFERENCE_HEADING = """(address) => {
+  if (location.hash !== address) return null;
+  const name = '/' + decodeURIComponent(address.slice(1));
+  const section = [...document.querySelectorAll('main main section[id]')].find((s) => s.id.endsWith(name));
+  const heading = section && section.querySelector('h2, h3');
+  if (!heading || !heading.checkVisibility()) return null;
+  return {top: Math.round(heading.getBoundingClientRect().top), title: heading.textContent,
     floor: Math.round(document.querySelector('header').getBoundingClientRect().bottom),
-    window: innerHeight, hash: location.hash};
+    window: innerHeight};
 }"""
-# The heading has been scrolled to and has stopped moving: the same place on three polls running.
-_REFERENCE_AT_REST = f"""(title) => {{
-  const found = ({_REFERENCE_HEADING})(title);
-  if (!found || !found.hash) return false;
-  const last = (window.resting ??= {{}})[title] ?? {{runs: 0}};
-  window.resting[title] = {{top: found.top, runs: last.top === found.top ? last.runs + 1 : 0}};
-  return window.resting[title].runs >= 3;
+# The page is at the address and its heading has stopped moving: the same place
+# on three polls running. A busy browser can take longer than that to act on a
+# click, and until it does the page is still at the address it had before.
+_REFERENCE_AT_REST = f"""(address) => {{
+  const found = ({_REFERENCE_HEADING})(address);
+  if (!found) return false;
+  const last = (window.resting ??= {{}})[address] ?? {{runs: 0}};
+  window.resting[address] = {{top: found.top, runs: last.top === found.top ? last.runs + 1 : 0}};
+  return window.resting[address].runs >= 3;
 }}"""
 _REFERENCE_OPEN_MENU = "(root) => document.querySelector(root).querySelector('header button').click()"
 _REFERENCE_LISTED = f"(path) => ({_REFERENCE_ENTRY})(path) !== null"
@@ -2829,6 +4826,8 @@ def render_reference():
 class ReferenceBrowserTests(BrowserGate):
     """The API reference reads as a page of HQ's, at every width and in both themes."""
 
+    scripted = True
+
     @classmethod
     def render(cls):
         pages = render_reference()
@@ -2836,7 +4835,6 @@ class ReferenceBrowserTests(BrowserGate):
         return pages
 
     def start(self, **options):
-        options.setdefault("java_script_enabled", True)
         super().start(**options)
         self.errors = []
         self.requests = []
@@ -2873,7 +4871,7 @@ class ReferenceBrowserTests(BrowserGate):
         """The groups and domains the document declares, in its order, and nothing else:
         no section for the version badge, none for the schemas."""
 
-        self.visit(1360)
+        self.visit(WIDE)
         self.page.evaluate(_REFERENCE_OPEN_GROUPS)
         self.page.wait_for_function(_REFERENCE_GROUPS_OPEN)
         drawn = [
@@ -2919,7 +4917,7 @@ class ReferenceBrowserTests(BrowserGate):
         for scheme in ("light", "dark"):
             with self.subTest(scheme=scheme):
                 self.start(color_scheme=scheme)
-                self.visit(1360)
+                self.visit(WIDE)
                 painted[scheme] = self.page.evaluate(_REFERENCE_PAINT)
                 self.assert_painted_as_hq(painted[scheme], f"{scheme}-mode")
                 report = self.page.evaluate(
@@ -2930,7 +4928,7 @@ class ReferenceBrowserTests(BrowserGate):
         self.assertNotEqual(painted["light"]["page"], painted["dark"]["page"])
         with self.subTest(chosen="dark", system="light"):
             self.start(color_scheme="light")
-            self.visit(1360, REFERENCE_DARK)
+            self.visit(WIDE, REFERENCE_DARK)
             self.assertEqual(self.page.evaluate(_REFERENCE_PAINT), painted["dark"])
 
     def test_the_viewer_offers_only_what_works_here(self):
@@ -2941,7 +4939,7 @@ class ReferenceBrowserTests(BrowserGate):
         self.page.evaluate(_REFERENCE_OPEN_MENU, SELECTORS["reference"])
         self.settle()
         self.assertEqual(self.page.evaluate(_REFERENCE_CHROME)["leaves"], [])
-        self.visit(1360)
+        self.visit(WIDE)
         chrome = self.page.evaluate(_REFERENCE_CHROME)
         for words in ("Test Request", "Bearer Token", "Open API Client", "Powered by", "Client Libraries"):
             with self.subTest(words=words):
@@ -2962,28 +4960,29 @@ class ReferenceBrowserTests(BrowserGate):
             if operation["tags"][0] == tag["name"]
         )
 
-        def landed():
-            self.page.wait_for_function(_REFERENCE_AT_REST, arg=title, polling=100)
-            heading = self.page.evaluate(_REFERENCE_HEADING, title)
-            self.assertIsNotNone(heading)
+        def landed(address):
+            self.page.wait_for_function(_REFERENCE_AT_REST, arg=address, polling=100)
+            heading = self.page.evaluate(_REFERENCE_HEADING, address)
+            self.assertIn(title, heading["title"])
             self.assertGreaterEqual(heading["top"], heading["floor"])
             self.assertLess(heading["top"], heading["window"] * 0.6)
-            return heading["hash"]
 
         group = next(group["summary"] for group in self.document["tags"] if group["name"] == tag["parent"])
         # A reader opens the group, then the domain in it, then the operation.
-        self.visit(1360)
+        self.visit(WIDE)
         self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, [group]))
         self.page.wait_for_function(_REFERENCE_LISTED, arg=[group, tag["summary"]])
-        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, [group, tag["summary"]]))
+        domain = self.page.evaluate(_REFERENCE_FOLLOW, [group, tag["summary"]])
+        self.assertTrue(domain)
         self.page.wait_for_function(_REFERENCE_LISTED, arg=[group, tag["summary"], title])
-        self.page.wait_for_function(_REFERENCE_AT_REST, arg=tag["summary"], polling=100)
-        self.assertTrue(self.page.evaluate(_REFERENCE_FOLLOW, [group, tag["summary"], title]))
-        fragment = landed()
-        self.assertNotEqual(fragment, "")
+        self.page.wait_for_function(_REFERENCE_AT_REST, arg=domain, polling=100)
+        fragment = self.page.evaluate(_REFERENCE_FOLLOW, [group, tag["summary"], title])
+        self.assertTrue(fragment)
+        landed(fragment)
         self.page.reload(wait_until="load")
         wait_for_reference(self.page)
-        self.assertEqual(landed(), fragment)
+        self.assertEqual(self.page.evaluate("() => location.hash"), fragment)
+        landed(fragment)
         self.assertEqual(self.refused, [])
         self.assertEqual(self.errors, [])
 
@@ -3020,6 +5019,8 @@ _PROBE_STATE = """(failure) => ({
 class FragmentBrowserTests(BrowserGate):
     """The fragment primitive, in a browser: what it swaps, keeps and stops."""
 
+    scripted = True
+
     @classmethod
     def render(cls):
         with transaction.atomic():
@@ -3038,7 +5039,6 @@ class FragmentBrowserTests(BrowserGate):
         return answers
 
     def start(self, **options):
-        options.setdefault("java_script_enabled", True)
         super().start(**options)
         self.errors = []
         self.asked = []

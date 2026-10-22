@@ -142,6 +142,21 @@ def _smaller(number: int | Decimal) -> int | Decimal:
     return nines + (number - int(number)) if isinstance(number, Decimal) else nines
 
 
+def _stop_clocks(row):
+    """Every moment the row's save read off the clock (a `created_at`, an
+    `updated_at`) set to the one `_when` gives: read off the clock, a list's
+    dates and times are as long as the hour the run happens to reach it, and
+    so are the widths its columns are drawn at."""
+
+    clocks = {
+        field.name: _when() if isinstance(field, models.DateTimeField) else _when().date()
+        for field in row._meta.concrete_fields
+        if isinstance(field, models.DateField) and not _filled(field)
+    }
+    if clocks:
+        type(row)._base_manager.filter(pk=row.pk).update(**clocks)
+
+
 def _admitted(model, values, exclude):
     """``values`` with each number its model's rules refuse made a digit shorter
     until they admit it: a rule can bound a number its field does not. Text a
@@ -278,6 +293,7 @@ class _Fill:
                 last = error
                 continue
             row.save()
+            _stop_clocks(row)
             return row
         raise AssertionError(f"no {model.__name__} row its own rules admit: {last}")
 
@@ -289,6 +305,7 @@ class _Fill:
                 setattr(row, field.name, self._target(field.related_model))
         row.full_clean()
         row.save()
+        _stop_clocks(row)
         for field in row._meta.many_to_many:
             getattr(row, field.name).add(self._target(field.related_model))
 

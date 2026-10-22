@@ -27,12 +27,19 @@ async (page) => {
     // card is stretching to a neighbor it should not match, or padding has
     // outlived the content it held.
     const CARD_SLACK = 28;
-    // A pair's cards are each as tall as what they hold, so nothing in a pair
-    // is forgiven. A grid of cards that ends its rows together on purpose
-    // (the dashboard's) owes a card the difference between what it holds and
+    // A row that stretches its cards to end together (a section pair, the
+    // dashboard's grid) owes a card the difference between what it holds and
     // what the fullest card on its row holds, and only that: slack beyond it
-    // is still a fault.
+    // is still a fault. Whether a row stretches is read from its computed
+    // style, so the audit and the stylesheet cannot disagree about it.
     const PAIRS = '.two-col, .section-flow';
+    const stretches = (card, row) => {
+      const display = getComputedStyle(row).display;
+      if (!/grid|flex/.test(display)) return false;
+      const own = getComputedStyle(card).alignSelf;
+      const align = ['auto', 'normal'].includes(own) ? getComputedStyle(row).alignItems : own;
+      return ['normal', 'stretch'].includes(align);
+    };
     const shown = (el) => [...el.children].filter((c) => c.getBoundingClientRect().height > 0);
     const filled = (el) => {
       const kids = shown(el);
@@ -44,7 +51,7 @@ async (page) => {
     };
     const owed = (card) => {
       const row = card.parentElement;
-      if (!row || row.matches(PAIRS)) return 0;
+      if (!row || !stretches(card, row)) return 0;
       const top = round(card.getBoundingClientRect().top);
       // Compared by *content*, not by box: stretched, the boxes are equal by
       // construction, and what a card was stretched by is how much less it
