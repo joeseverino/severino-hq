@@ -51,13 +51,28 @@ admitting() {
   fi
 }
 
-latest() {
-  gh run list --repo "$1" --workflow "${2##*/}" --branch main --status "$3" \
-    --limit 1 --json databaseId -q '.[0].databaseId'
+# REPOSITORY's WORKFLOW runs on main among its newest 100, as three words: how
+# many there are, the newest successful one and the newest finished one, `-`
+# for none. Filtered here: the API's status and branch parameters can answer an
+# empty list with success for runs that exist. gh retries nothing, so a failed
+# call fails here with its own error, the repository and URLs taken out.
+main_runs() {
+  local repository=$1 workflow=$2 error
+  if gh api "repos/$repository/actions/workflows/${workflow##*/}/runs?per_page=100" --jq '
+        [.workflow_runs[] | select(.head_branch == "main" and .event != "pull_request")] |
+        "\(length) \(map(select(.conclusion == "success"))[0].id // "-") \(map(select(.status == "completed"))[0].id // "-")"' \
+        2>"$withheld/runs.err"; then
+    return
+  fi
+  { echo "listing the runs of $repository:"; cat "$withheld/runs.err"; } >>"$log"
+  error=$(head -n 1 "$withheld/runs.err")
+  error=${error//"$repository"/an extension repository}
+  error=$(sed -E 's#https?://[^ )]+#<url>#g' <<<"$error")
+  fail "the GitHub API failed listing an extension repository's admission runs: ${error:-gh said nothing}"
 }
 
 find_admissions() {
-  local set=$1 out=$2 repository workflow run newest started=${ADMISSION_RUN:-} claimed
+  local set=$1 out=$2 repository workflow listed count run newest started=${ADMISSION_RUN:-} claimed
   [[ -z "$started" || "$started" =~ ^[0-9]+$ ]] || fail "the admission run that started this composition is not a run id"
   jq -e '.extensions | type == "array"' "$set" >/dev/null 2>&1 ||
     fail "the composition set has no extensions list"
@@ -65,11 +80,17 @@ find_admissions() {
     fail "extensions that share a repository must name the same admission workflow: one repository is one signer"
   : >"$out"
   while IFS=$'\t' read -r repository workflow; do
-    run=$(latest "$repository" "$workflow" success)
+    # A failed call stops the script here, with the API's error.
+    listed=$(main_runs "$repository" "$workflow")
+    read -r count run newest <<<"$listed"
     claimed=false
     if [ -n "$started" ] && admitting "$repository" "$workflow" "$started" &&
        { [[ ! "$run" =~ ^[0-9]+$ ]] || [ "$started" -gt "$run" ]; }; then
       run=$started claimed=true
+    fi
+    if [[ ! "$run" =~ ^[0-9]+$ ]] && [ "$count" = 0 ]; then
+      echo "$repository has no admission run on main among its newest 100" >>"$log"
+      fail "an extension repository has no admission run on main among its newest 100, so whether one succeeded is unknown"
     fi
     if [[ ! "$run" =~ ^[0-9]+$ ]]; then
       echo "$repository has no successful admission on main" >>"$log"
@@ -79,7 +100,6 @@ find_admissions() {
     # extensions: the composed suite runs every extension's tests against this
     # host, so an older wheel is proven before it ships. One still running
     # starts its own composition when it ends.
-    newest=$(latest "$repository" "$workflow" completed)
     if [ "$claimed" = false ] && [ "$newest" != "$run" ]; then
       echo "::warning::an extension repository's newest admission on main failed; composing its last successful one"
     fi

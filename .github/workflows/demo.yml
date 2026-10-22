@@ -21,6 +21,10 @@ jobs:
     name: Build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # In Playwright's image, with its browsers, as CI's Browser job runs.
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.64.0-noble@sha256:684df257a1fa0ef3fa288239819984008f560e8f8db5b635ee9e2a50cbcd2e23
+      options: --user 1001 --ipc=host
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

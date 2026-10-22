@@ -27,6 +27,8 @@ runs:
         version: ${{ steps.read.outputs.mise }}
         working_directory: ${{ inputs.host }}
         install_args: uv
+        # Saved from the default branch only, which every branch reads.
+        cache_save: ${{ github.ref_name == github.event.repository.default_branch }}
         env: false
         add_shims_to_path: false
     - shell: bash

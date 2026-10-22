@@ -6,9 +6,10 @@ name: CI
 # Release starts Compose once the gates pass; Deploy (deploy.yml) is never
 # reached from a pull request.
 #
-# The gates themselves are declared once, in mise.toml: each job below runs the
-# aggregate of its name, and `mise run ci` runs the same list on a developer's
-# machine. A gate is added there, never here.
+# The gates themselves are declared once, as mise tasks in their job's file
+# under tasks/ (or mise-tasks/): each job below runs the aggregate of its name,
+# and `mise run ci` runs the same list on a developer's machine. A gate is
+# added there, never here.
 #
 # The file keeps its name: the host image is signed by it, and what verifies
 # that signature (Compose, and the deploy script on the host) pins this path.
@@ -104,20 +105,16 @@ jobs:
         run: >-
           python3 -m tools.pipeline.ci_report check "Severino HQ · Review" "$HEAD_SHA" in_progress "Checking"
           "CI, CodeQL and the build of HQ are running. This becomes the verdict when they finish."
-      # The structural bar builds its Go inspector from the controller's module.
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: controller/go.mod
-          cache-dependency-path: controller/go.sum
       - uses: ./.github/actions/toolchain
-      # Node itself is mise's, from mise.lock; only npm's downloads are cached.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('tools/clients/package-lock.json') }}
+          # The structural bar builds its Go inspector from the controller's
+          # module, and checks:openapi lints with Redocly from npm.
+          go: true
+          npm: true
       - name: Checks
-        # Every gate named checks:* in mise.toml. Each runs to the end, and the
-        # last lines of this step name every one that failed.
+        # Every gate named checks:* (tasks/checks.toml, mise-tasks/checks/)
+        # and drift:*. Each runs to the end, and the last lines of this step
+        # name every one that failed.
         run: mise run -c checks
       - name: Dependency review
         if: github.event_name == 'pull_request'
@@ -145,8 +142,10 @@ jobs:
       - uses: ./.github/actions/toolchain
         with:
           python: ${{ matrix.python }}
+          # The live bridge tests build the controller.
+          go: true
       - name: Tests
-        # Every gate named tests:* in mise.toml.
+        # Every gate named tests:* (tasks/tests.toml, mise-tasks/tests/).
         run: mise run tests
 
   # Real-browser layout invariants over synthetic example.* pages
@@ -159,25 +158,36 @@ jobs:
     if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Playwright's image for the release uv.lock pins carries its browsers and
+    # their system libraries, so a leg installs nothing from apt or a browser
+    # CDN (BrowserInstallTests holds the two versions together). As its CI
+    # guide runs it: the runner's user, which owns the workspace, and the
+    # host's IPC namespace, without which Chromium runs out of shared memory.
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.64.0-noble@sha256:684df257a1fa0ef3fa288239819984008f560e8f8db5b635ee9e2a50cbcd2e23
+      options: --user 1001 --ipc=host
     strategy:
       fail-fast: false
       matrix:
-        gate: [layout, navigation, demo]
+        gate: [layout, layout-chromium, navigation, demo]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/toolchain
-      # Keyed on the hashed lock: Playwright pins its browser build, so a new
-      # pin is a new browser and a new cache entry.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
       - name: Browser
         # This leg's browser:* gate. GateReferenceTests holds the legs to the
-        # gates mise.toml declares, so the matrix cannot fall behind it.
+        # gates tasks/browser.toml declares, so the matrix cannot fall behind it.
         env:
           GATE: browser:${{ matrix.gate }}
         run: mise run "$GATE"
+      # A failed rule saves the page as it stood (browser_tests.py writes each
+      # into its own hq-browser-failure-* folder in the runner's temp).
+      - name: Failure screenshots
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-failures-${{ matrix.gate }}
+          path: /tmp/hq-browser-failure-*
+          if-no-files-found: ignore
 
   # The Go controller: format, generated types against their specs, vet, and
   # the unit tests under the race detector.
@@ -189,14 +199,51 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: controller/go.mod
-          cache-dependency-path: controller/go.sum
       - uses: ./.github/actions/toolchain
+        with:
+          go: true
       - name: Controller
-        # Every gate named controller:* in mise.toml.
+        # Every gate named controller:* (tasks/controller.toml).
         run: mise run -c controller
+
+  # The one writer of the caches the jobs above restore, on every push to main
+  # so it runs when they stand on their pull request's run. A branch reads
+  # main's caches and writes none, so a pull request adds no entries. Release
+  # does not wait for it.
+  caches:
+    name: Caches
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: toolchain
+        uses: ./.github/actions/toolchain
+        with:
+          go: true
+          npm: true
+          save: true
+      - name: Fill the caches
+        if: >-
+          steps.toolchain.outputs.uv-hit != 'true' ||
+          steps.toolchain.outputs.go-hit != 'true' ||
+          steps.toolchain.outputs.npm-hit != 'true'
+        run: mise run ci:caches
+      - if: steps.toolchain.outputs.uv-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.toolchain.outputs.uv-path }}
+          key: ${{ steps.toolchain.outputs.uv-key }}
+      - if: steps.toolchain.outputs.go-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.toolchain.outputs.go-path }}
+          key: ${{ steps.toolchain.outputs.go-key }}
+      - if: steps.toolchain.outputs.npm-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.toolchain.outputs.npm-path }}
+          key: ${{ steps.toolchain.outputs.npm-key }}
 
   # Code scanning, on every pull request and push to main: main's analysis is
   # what a pull request's is compared with. Release does not wait for it.
@@ -276,7 +323,7 @@ jobs:
       # On main only: a pull request's image is checked by Image checks,
       # alongside its composition.
       - name: Every check an image must pass
-        # Every gate named image:verify:* in mise.toml, against the image just built.
+        # Every gate named image:verify:* (tasks/image.toml), against the image just built.
         if: env.PROVEN == '' && github.event_name == 'push'
         env:
           IMAGE: ${{ steps.build.outputs.image }}
@@ -357,7 +404,7 @@ jobs:
         run: docker pull --quiet "$IMAGE"
       - uses: ./.github/actions/toolchain
       - name: Every check an image must pass
-        # Every gate named image:verify:* in mise.toml.
+        # Every gate named image:verify:* (tasks/image.toml).
         run: mise run -c image
 
   # A pull request's composition: this image plus every admitted extension,

@@ -169,9 +169,9 @@ runs:
         test "$(find dist -maxdepth 1 -name '*.whl' | wc -l)" -eq 1
 
     - name: Audit locked dependencies
-      uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
-      with:
-        inputs: ${{ inputs.package-dir }}
+      shell: bash
+      # The host's own audit, pip-audit pinned in its lock.
+      run: host/tools/pipeline/audit.sh "$PACKAGE_DIR"
 
     - name: Generate wheel SBOM
       uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3

@@ -1,0 +1,13 @@
+[Unit]
+Description=Start a Severino HQ dependency run when the controller hands one off
+# Root moves a handoff here only after validating it, and only root can write
+# the directory, so its presence is root's own decision to run.
+
+[Path]
+PathExistsGlob=/run/severino-hq-renovate/handoff.json
+MakeDirectory=yes
+DirectoryMode=0700
+Unit=severino-hq-renovate.service
+
+[Install]
+WantedBy=paths.target

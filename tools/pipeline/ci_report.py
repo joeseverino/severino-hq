@@ -148,7 +148,7 @@ class Job:
         started, completed = raw.get("started_at"), raw.get("completed_at")
         seconds = None
         if started and completed:
-            seconds = int((_moment(completed) - _moment(started)).total_seconds())
+            seconds = int((github_instant(completed) - github_instant(started)).total_seconds())
         return cls(
             id=int(raw["id"]),
             name=str(raw["name"]),
@@ -159,7 +159,7 @@ class Job:
         )
 
 
-def _moment(text: str) -> datetime:
+def github_instant(text: str) -> datetime:
     # GitHub's one shape of instant; HQ's own parser is not importable here.
     return datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ")
 

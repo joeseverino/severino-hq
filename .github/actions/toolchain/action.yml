@@ -7,12 +7,49 @@ description: >-
 # A step, not a job: every job that needs the toolchain reads the same files
 # itself, so a pull request's checks list carries no row that only passes
 # values along. A local run reads the same files through `mise run`.
+#
+# The caches are restored here and written by one job, CI's Caches on main,
+# which every branch can read: a job that only restores leaves no entry of its
+# own behind. That job saves each cache this action missed, from the keys and
+# paths below.
 
 inputs:
   python:
     description: The Python version to set up. Blank sets up the oldest the matrix runs.
     required: false
     default: ""
+  go:
+    description: Restore Go's module and build caches, for a job that builds the controller.
+    required: false
+    default: "false"
+  npm:
+    description: Restore npm's downloads, for a job that installs tools/openapi.
+    required: false
+    default: "false"
+  save:
+    description: Save mise's tools at the end of the job when they were not cached. Only the Caches job does.
+    required: false
+    default: "false"
+
+outputs:
+  uv-path:
+    value: ${{ steps.caches.outputs.uv-path }}
+  uv-key:
+    value: ${{ steps.caches.outputs.uv-key }}
+  uv-hit:
+    value: ${{ steps.uv.outputs.cache-hit }}
+  go-path:
+    value: ${{ steps.caches.outputs.go-path }}
+  go-key:
+    value: ${{ steps.caches.outputs.go-key }}
+  go-hit:
+    value: ${{ steps.go.outputs.cache-hit }}
+  npm-path:
+    value: ${{ steps.caches.outputs.npm-path }}
+  npm-key:
+    value: ${{ steps.caches.outputs.npm-key }}
+  npm-hit:
+    value: ${{ steps.npm.outputs.cache-hit }}
 
 runs:
   using: composite
@@ -38,9 +75,49 @@ runs:
     - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
       with:
         version: ${{ steps.read.outputs.mise }}
+        cache_save: ${{ inputs.save }}
         cache_save_post: true
-    # uv verifies every artifact against uv.lock; the cache only saves the download.
-    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+
+    # What decides each cache: uv's downloads by the Python and uv.lock (uv
+    # verifies every artifact against the lock), Go's modules and compiled
+    # packages by its release (mise's, from mise.lock) and go.sum, npm's
+    # downloads by the OpenAPI lint's lock.
+    - id: caches
+      shell: bash
+      env:
+        PYTHON: ${{ inputs.python || steps.read.outputs.oldest-python }}
+        UV_LOCK: ${{ hashFiles('uv.lock') }}
+        GO_SUM: ${{ hashFiles('controller/go.sum') }}
+        NPM_LOCK: ${{ hashFiles('tools/openapi/package-lock.json') }}
+        GO: ${{ inputs.go }}
+      run: |
+        set -euo pipefail
+        {
+          echo "uv-path=$HOME/.cache/uv"
+          echo "uv-key=uv-$RUNNER_OS-$PYTHON-$UV_LOCK"
+          echo "npm-path=$HOME/.npm"
+          echo "npm-key=npm-$RUNNER_OS-$NPM_LOCK"
+          if [ "$GO" = true ]; then
+            echo "go-key=go-$RUNNER_OS-$(go env GOVERSION)-$GO_SUM"
+            echo "go-path<<EOF"
+            go env GOMODCACHE GOCACHE
+            echo "EOF"
+          fi
+        } >> "$GITHUB_OUTPUT"
+    - id: uv
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/.cache/uv
-        key: uv-${{ runner.os }}-${{ inputs.python || steps.read.outputs.oldest-python }}-${{ hashFiles('uv.lock') }}
+        path: ${{ steps.caches.outputs.uv-path }}
+        key: ${{ steps.caches.outputs.uv-key }}
+    - id: go
+      if: inputs.go == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.caches.outputs.go-path }}
+        key: ${{ steps.caches.outputs.go-key }}
+    - id: npm
+      if: inputs.npm == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.caches.outputs.npm-path }}
+        key: ${{ steps.caches.outputs.npm-key }}
