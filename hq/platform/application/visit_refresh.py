@@ -178,7 +178,7 @@ def request_visit_refresh(subject: str, name: str, *, principal: Principal) -> d
 
     Silent for a principal who cannot ask: the page still renders, and nothing
     is read, or said to be being read, for somebody who could not have pressed
-    Read now.
+    Refresh.
     """
 
     reads = reads_of(subject, name)

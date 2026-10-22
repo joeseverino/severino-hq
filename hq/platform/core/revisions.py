@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from django.apps import apps
 from django.conf import settings
 from django.db import DatabaseError, connection as default_connection, connections
-lazy from django.core.cache import caches
 lazy from django.core.management import call_command
 
 lazy from .models import Revision
@@ -143,16 +142,9 @@ def read(connection=default_connection) -> Revisions | None:
 
 
 def after_migrate(sender, using="default", **kwargs) -> None:
-    """Create the cache table, count every table, and forget what was derived.
-
-    Runs once per migrate, after the last app. What was derived by the code
-    that ran before the migrate is dropped, so no process reads a value an
-    older version of a derivation stored.
-    """
+    """Create the cache table and count every table, once per migrate, after
+    the last app. A value older code stored is never read: the cache's key
+    carries the code's identity (``code_identity``)."""
 
     call_command("createcachetable", database=using, verbosity=0)
     install(connections[using])
-    try:
-        caches[CACHE_ALIAS].clear()
-    except DatabaseError:
-        logger.exception("The derived cache could not be cleared after migrate.")
