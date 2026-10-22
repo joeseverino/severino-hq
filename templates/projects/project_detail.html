@@ -1,16 +1,15 @@
 {% extends "page.html" %}
 {% block page %}
 
-{% if project.tech_list %}<p class="project-tags">{% for t in project.tech_list %}<span class="tag">{{ t }}</span>{% endfor %}</p>{% endif %}
+{% if project.tech_list %}<p class="project-tags">{% for t in project.tech_list %}<span class="tag">{{ t|breakable }}</span>{% endfor %}</p>{% endif %}
 
 {% include "partials/_runs_on.html" with runs_on=project.public_url|where_it_runs %}
 
 {% if github %}{% include "projects/_github_panel.html" with repo=github %}{% endif %}
 
-{% if project.description %}<h2>Description</h2><p>{{ project.description|linebreaksbr }}</p>{% endif %}
 {% if project.deployment_notes %}<h2>Deployment notes</h2>{% include "partials/_linked_text.html" with parts=project.deployment_notes|named_links %}{% endif %}
-{% if project.security_notes %}<h2>Security notes</h2><p>{{ project.security_notes|linebreaksbr }}</p>{% endif %}
-{% if project.notes %}<h2>Notes</h2><p>{{ project.notes|linebreaksbr }}</p>{% endif %}
+{% if project.security_notes %}<h2>Security notes</h2><p>{{ project.security_notes|breakable|linebreaksbr }}</p>{% endif %}
+{% if project.notes %}<h2>Notes</h2><p>{{ project.notes|breakable|linebreaksbr }}</p>{% endif %}
 
 <div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
 {% endblock %}

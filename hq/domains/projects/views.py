@@ -1,7 +1,6 @@
-from typing import override
+from typing import ClassVar, override
 
 from django.db.models import Case, IntegerField, Value, When
-from django.http import Http404
 from django.urls import reverse, reverse_lazy
 from django.utils.functional import cached_property
 from django.views.generic import (
@@ -14,20 +13,22 @@ from django.views.generic import (
     View,
 )
 lazy from django.template.loader import render_to_string
+lazy from django.utils import timezone
 
 from hq.domains.projects.github import github_repository
 from hq.platform.application import related
+from hq.platform.application.action_links import READ_NOW_CAPABILITY, capability_action_link, command_url
+from hq.platform.application.capabilities import capability_registry, capability_words, execute_capability
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin, record_trail
 from hq.platform.application.projects import (
-    REFRESH_JOB,
+    DEPENDENCY_UPDATES,
+    REFRESH,
     hq_sections,
     projects_by_repository,
     repository_key,
-    request_project_refresh,
 )
-from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import AuthorizationError, web_principal
 from hq.platform.application.services import service_url_for
 from hq.platform.application.tables import (
@@ -39,22 +40,21 @@ from hq.platform.application.tables import (
 )
 from hq.platform.application.timestamps import moment
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
-lazy from hq.domains.jobs.models import Job
-lazy from hq.domains.jobs.runner import JobConflict
 lazy from hq.platform.application.asks import (
     FAILED,
     Ask,
     Standing,
     answer,
-    job_standing,
     read_standing,
     read_status_url,
 )
 lazy from hq.platform.application.connection_setup import docs_url
+lazy from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at, last_run
 lazy from hq.platform.application.github_estate import repositories, repository_for
 lazy from hq.platform.application.github_posture import STANDARD, posture_of, postures
 lazy from hq.platform.application.github_profile import KIND, profile, request_read, standing
 lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
+lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
 lazy from hq.platform.application.standards import MET, UNMET
 
@@ -73,12 +73,14 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
     table_search_scope = "projects"
     table_selectable = True
     # A technology list runs to a sentence, so a phone keeps the name and its status.
-    table_drop_narrow = 3
+    table_drop_narrow = 5
     table_columns = (
         TableColumn("Name", "name"),
         TableColumn("Status", "status", css="key-col"),
+        TableColumn("Updates"),
         TableColumn("Technologies", "technologies_used"),
-        TableColumn("Last push"),
+        TableColumn("Repository", kind="status"),
+        TableColumn("Edited", "updated_at"),
         TableColumn("", css="row-actions"),
     )
     table_filters = (
@@ -105,6 +107,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         TableToggle("needs_output", "Active, nothing written yet"),
         TableToggle("no_content", "No writeup"),
         TableToggle("no_docs", "No documents"),
+        TableToggle("updates_on", "Updates on"),
     )
     table_default_sort = "-updated_at"
     table_search_placeholder = "Search projects, technology, and notes…"
@@ -140,38 +143,44 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         return context
 
 
-class ProjectRefreshView(View):
-    """Start a refresh of the project's outside metadata. The request answers
-    once the job is recorded; the job reads GitHub and the published site."""
+# The fact a run is shown in, fetched again when the run is handed off.
+UPDATES_REGION = "#updates-state"
+
+
+def run_now_ask(project, principal, asked) -> Ask | None:
+    """The page's Update dependencies control, standing as the ask made at
+    ``asked`` does. None for a principal the capability does not permit."""
+
+    if capability_action_link(RUN_NOW, principal=principal) is None:
+        return None
+    return Ask(
+        capability_words(RUN_NOW),
+        reverse("projects:updates_run", args=[project.slug]),
+        standing=read_standing((RUN_KIND,), asked) if asked is not None else Standing(),
+        status_url=read_status_url((RUN_KIND,), asked) if asked is not None else "",
+        refresh=UPDATES_REGION,
+    )
+
+
+class ProjectUpdatesRunView(View):
+    """Ask for a dependency update run now. Nothing runs here: the request
+    answers once the ask is stored, and the controller's next pass hands off."""
+
+    http_method_names: ClassVar[list[str]] = ["post"]
 
     def post(self, request, slug: str):
         back = reverse("projects:detail", args=[slug])
-        try:
-            job = request_project_refresh(slug, principal=web_principal(request.user), requested_by=request.user)
-        except RecordNotFound as exc:
-            raise Http404(str(exc)) from exc
-        except JobConflict:
-            return answer(request, Standing(FAILED, "GitHub is already being read for a project."), fallback=back)
+        asked = timezone.now()
+        result = execute_capability(RUN_NOW, {}, principal=web_principal(request.user))
+        if not result.get("ok"):
+            return answer(request, Standing(FAILED, result["error"]["message"]), fallback=back)
         return answer(
             request,
-            job_standing(job),
+            read_standing((RUN_KIND,), asked),
             fallback=back,
-            status_url=reverse("jobs:status", args=[job.pk]),
-            message="Reading GitHub. This page updates when it finishes.",
+            status_url=read_status_url((RUN_KIND,), asked),
+            message=capability_registry()[RUN_NOW].requested(),
         )
-
-
-def refresh_ask(project):
-    """The project's Read now control, standing as its last read does."""
-
-    job = Job.objects.filter(kind=REFRESH_JOB, state__in=("queued", "running")).first()
-    mine = job is not None and job.request.get("project") == project.slug
-    return Ask(
-        "Read now",
-        reverse("projects:refresh", args=[project.slug]),
-        standing=job_standing(job) if mine else Standing(),
-        status_url=reverse("jobs:status", args=[job.pk]) if mine else "",
-    )
 
 
 class ProjectPage(PageMixin):
@@ -196,6 +205,13 @@ class ProjectDetailView(PageMixin, DetailView):
 
         return repository_for(self.object.repository_url)
 
+    @cached_property
+    def run_asked(self):
+        """When an update run was asked for and not yet handed off. Only an
+        opted-in repository's page asks: the run covers every one of them."""
+
+        return asked_at() if self.object.dependency_updates and self.repository is not None else None
+
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -215,6 +231,8 @@ class ProjectDetailView(PageMixin, DetailView):
         )
         if context["github"] is not None:
             context["posture"] = posture_of(context["github"])
+            context["updates_run"] = last_run(project.repository_url)
+            context["run_asked"] = self.run_asked
 
         # Its state beside its name, as a service shows its reach; the category
         # leads the one line under it.
@@ -253,7 +271,13 @@ class ProjectDetailView(PageMixin, DetailView):
         project = self.object
         actions = []
         if github_repository(project.repository_url):
-            actions.append(refresh_ask(project))
+            actions.append(ask(REFRESH, project.slug))
+        if project.repository_url and (updates := command_url(DEPENDENCY_UPDATES, project.slug)):
+            switch = "off" if project.dependency_updates else "on"
+            actions.append(PageAction(capability_words(DEPENDENCY_UPDATES, switch), updates))
+        if project.dependency_updates and self.repository is not None:
+            run_now = run_now_ask(project, web_principal(self.request.user), self.run_asked)
+            actions += [run_now] if run_now is not None else []
         actions += [
             PageAction("Edit", reverse("projects:edit", args=[project.slug])),
             PageAction("Delete", reverse("projects:delete", args=[project.slug]), danger=True),
@@ -305,7 +329,7 @@ class WatchingView(PageMixin, TemplateView):
         found = standing()
         return [
             Ask(
-                "Read now",
+                capability_words(READ_NOW_CAPABILITY),
                 reverse("watching_refresh"),
                 standing=found,
                 status_url=_profile_status(found.since),
@@ -368,7 +392,7 @@ class WatchingRefreshView(View):
             read_standing((KIND,), asked),
             fallback=back,
             status_url=_profile_status(asked),
-            message=f"Reading @{login} from GitHub. This page updates when it finishes.",
+            message=capability_registry()[READ_NOW_CAPABILITY].requested(f"@{login}"),
         )
 
 

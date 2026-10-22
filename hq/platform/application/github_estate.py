@@ -7,12 +7,19 @@ few things on GitHub that wait on a person: a deploy held for approval, a
 default branch failing, a serious alert, an admission about to lapse.
 """
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any
 
-from hq.domains.control_plane.observations.github import REPOSITORY_KIND, RepositoryRecord
+from hq.domains.control_plane.observations.contract import ReadingPart
+from hq.domains.control_plane.observations.github import (
+    CODE_SCANNING,
+    DEPENDABOT,
+    LEAKED_CREDENTIALS,
+    REPOSITORY_KIND,
+    RepositoryRecord,
+)
 
 from .containers import SERIOUS
 from .derivations import reached, whole
@@ -26,7 +33,7 @@ from .ui import Insight, counted
 from .workflow_contracts import ActionLink
 lazy from .facts import snapshots_of
 lazy from .images import GHCR, ImageRef
-lazy from .projects import repository_key
+lazy from .projects import projects_by_repository, repository_key
 
 # An admission artifact that lapses stops the composition admitting its
 # extension, and nothing else says so until a deploy fails.
@@ -37,6 +44,26 @@ ARTIFACT_SERIOUS_DAYS = 3
 WAITING_SERIOUS_AFTER = timedelta(hours=1)
 # A run's conclusions that fail it, as the reading's checks count them.
 FAILED = frozenset({"failure", "timed_out", "action_required", "startup_failure"})
+# The one severity secret scanning reports: a credential found in the code.
+LEAKED = "leaked"
+# Alert severities, worst first, across every part that reports them.
+SEVERITY_ORDER = ("critical", "high", "medium", "moderate", "low", "note", "warning", "error", LEAKED, "unknown")
+# The alerts that put a repository in the action queue: a leaked credential is
+# usable by whoever reads the code, whatever its scanner calls it.
+SERIOUS_ALERTS = (*SERIOUS, LEAKED)
+# GitHub's list of each part's open alerts, under the repository's
+# ``/security``: the overview there leads with a security policy, not alerts.
+ALERT_PAGES: Mapping[ReadingPart, str] = {
+    CODE_SCANNING: "code-scanning",
+    DEPENDABOT: "dependabot",
+    LEAKED_CREDENTIALS: "secret-scanning",
+}
+# The branches Renovate opens its pull requests from.
+UPDATE_BRANCH = "renovate/"
+
+
+def _severity_rank(level: str) -> int:
+    return SEVERITY_ORDER.index(level) if level in SEVERITY_ORDER else len(SEVERITY_ORDER)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,25 +114,92 @@ class Repository:
 
     @property
     def serious_alerts(self) -> int:
-        return sum(counts.get(level, 0) for counts in (self.record.get("alerts") or {}).values() for level in SERIOUS)
+        return sum(self.alerts_at(level) for level in SERIOUS_ALERTS)
+
+    @property
+    def leaked_credentials(self) -> int:
+        return self.alerts_at(LEAKED)
+
+    def alerts_at(self, level: str) -> int:
+        return sum(counts.get(level, 0) for counts in (self.record.get("alerts") or {}).values())
 
     @property
     def severities(self) -> list[tuple[int, str]]:
         """Open alerts by severity, worst first: ``[(2, "high"), (1, "low")]``."""
 
-        order = ("critical", "high", "medium", "moderate", "low", "note", "warning", "error", "leaked", "unknown")
         totals: dict[str, int] = {}
         for counts in (self.record.get("alerts") or {}).values():
             for level, n in counts.items():
                 totals[level] = totals.get(level, 0) + n
-        return sorted(
-            ((n, level) for level, n in totals.items()),
-            key=lambda item: order.index(item[1]) if item[1] in order else len(order),
-        )
+        return sorted(((n, level) for level, n in totals.items()), key=lambda item: _severity_rank(item[1]))
+
+    @property
+    def update_pulls(self) -> list[dict[str, Any]]:
+        """Open pull requests Renovate opened, newest first, each with when it
+        was opened (``opened``) and its age in whole days (``age_days``)."""
+
+        found = []
+        for pull in self.record.get("pull_requests") or ():
+            if str(pull.get("branch") or "").startswith(UPDATE_BRANCH):
+                opened = moment(pull.get("created_at", ""))
+                age = max(0, whole(opened, timedelta(days=1))) if opened else None
+                found.append({**pull, "opened": opened, "age_days": age})
+        return found
+
+    @property
+    def other_pulls(self) -> list[dict[str, Any]]:
+        """Open pull requests a person or another tool opened."""
+
+        return [
+            pull
+            for pull in self.record.get("pull_requests") or ()
+            if not str(pull.get("branch") or "").startswith(UPDATE_BRANCH)
+        ]
+
+    @property
+    def oldest_update_days(self) -> int | None:
+        return max((pull["age_days"] for pull in self.update_pulls if pull["age_days"] is not None), default=None)
+
+    @property
+    def unmatched_alerts(self) -> list[dict[str, Any]]:
+        """Open Dependabot alerts no open update pull request answers, worst first.
+
+        A name match: the reading does not say which package a pull request
+        updates, so an alert is answered when its package's name appears in an
+        update's branch or title, ignoring case.
+        """
+
+        updates = [f"{pull.get('branch') or ''} {pull.get('title') or ''}".lower() for pull in self.update_pulls]
+        found = []
+        for alert in self.record.get("dependabot_alerts") or ():
+            package = str(alert.get("package") or "").lower()
+            if not package or not any(package in text for text in updates):
+                found.append(alert)
+        return sorted(found, key=lambda alert: _severity_rank(str(alert.get("severity") or "")))
 
     @property
     def open_alerts(self) -> int:
         return sum(sum(counts.values()) for counts in (self.record.get("alerts") or {}).values())
+
+    def alert_links(self, levels: Collection[str] = ()) -> tuple[ActionLink, ...]:
+        """A link to GitHub's list of each part's open alerts, the part holding
+        the worst first; with ``levels``, only the parts holding one of those."""
+
+        found = []
+        for part, page in ALERT_PAGES.items():
+            held = [level for level, n in ((self.record.get("alerts") or {}).get(part.name) or {}).items() if n]
+            if held and (not levels or any(level in levels for level in held)):
+                link = ActionLink(f"alerts-{part.name}", part.label, "read", f"{self.url}/security/{page}")
+                found.append((min(map(_severity_rank, held)), link))
+        return tuple(link for _, link in sorted(found, key=lambda item: item[0]))
+
+    @property
+    def alerts_url(self) -> str:
+        """Where the open alerts are listed: the worst part's list, or the
+        security overview when none is open."""
+
+        links = self.alert_links()
+        return links[0].url if links else f"{self.url}/security"
 
     @property
     def unrequired_checks(self) -> list[str]:
@@ -235,7 +329,7 @@ def _failing(repo: Repository) -> list[tuple[Insight, str]]:
         title=f"{repo.short} is failing on {repo.default_branch}",
         value=str(len(failing) or 1),
         body=", ".join(failing[:4]) + (f" and {len(failing) - 4} more" if len(failing) > 4 else ""),
-        action="Open the failing run" if one else "Open checks",
+        action="Open run" if one else "Open checks",
         url=one.url if one else f"{repo.url}/commit/{repo.head.get('sha', '')}",
         workflow=_failing_help(repo, runs),
         observed_at=repo.observed_at,
@@ -256,7 +350,7 @@ def _unverified(repo: Repository) -> list[tuple[Insight, str]]:
         title=f"{repo.short}'s last deploy did not pass its own verification",
         value=str(len(failed)),
         body=", ".join(failed),
-        action="Open the deploy",
+        action="Open deploy",
         url=web_url(repo.production.get("url")) or repo.url,
         workflow=cannot_help(
             f"github-unverified:{repo.name}",
@@ -269,26 +363,52 @@ def _unverified(repo: Repository) -> list[tuple[Insight, str]]:
 
 
 def _alerts(repo: Repository) -> list[tuple[Insight, str]]:
-    if not repo.serious_alerts:
+    kinds = repo.alert_links(SERIOUS_ALERTS)
+    if not kinds:
         return []
-    alerts = counted(repo.serious_alerts, "serious alert", "serious alerts")
+    one, many, body = _alerts_said(repo)
+    alerts = counted(repo.serious_alerts, one, many)
+    unmatched = sum(1 for alert in repo.unmatched_alerts if alert.get("severity") in SERIOUS_ALERTS)
+    updates = _updates_url(repo) if unmatched else ""
+    if unmatched:
+        body += f" {counted(unmatched, 'has', 'have')} no update pull request."
     item = Insight(
-        status="serious" if _has(repo, "critical") else "attention",
+        status="serious" if repo.leaked_credentials or repo.alerts_at("critical") else "attention",
         eyebrow="GitHub",
         family="Security alerts",
         key=f"github-alerts:{repo.name}",
         title=f"{alerts} in {repo.short}",
         value=str(repo.serious_alerts),
-        body="High or critical, open.",
-        action="Open security",
-        url=f"{repo.url}/security",
+        body=body,
+        action="Open updates" if updates else "Open alerts",
+        url=updates or kinds[0].url,
+        links=kinds if updates or len(kinds) > 1 else (),
         workflow=cannot_help(
             f"github-alerts:{repo.name}",
             "An alert closes when the code is upgraded. HQ never writes to the repository.",
         ),
         observed_at=repo.observed_at,
     )
-    return [(item, f"{alerts} were open in {repo.short}")]
+    return [(item, f"{counted(repo.serious_alerts, f'{one} was', f'{many} were')} open in {repo.short}")]
+
+
+def _alerts_said(repo: Repository) -> tuple[str, str, str]:
+    """What the alert item counts, as one and as many, and what kind they are."""
+
+    leaked = repo.leaked_credentials
+    if leaked == repo.serious_alerts:
+        return "leaked credential", "leaked credentials", "Found by secret scanning, open."
+    body = "High or critical, open."
+    if leaked:
+        body += f" {counted(leaked, 'is a leaked credential', 'are leaked credentials')}."
+    return "serious alert", "serious alerts", body
+
+
+def _updates_url(repo: Repository) -> str:
+    """The Updates section of the project the repository is, when one is."""
+
+    project = projects_by_repository().get(repository_key(repo.name))
+    return f"{project.get_absolute_url()}#updates" if project else ""
 
 
 def _lapsing(repo: Repository) -> list[tuple[Insight, str]]:
@@ -359,10 +479,6 @@ def _waiting(repo: Repository) -> list[tuple[Insight, str]]:
         )
         items.append((item, f"{name} was waiting for your approval to deploy to {where}"))
     return items
-
-
-def _has(repo: Repository, level: str) -> bool:
-    return any(counts.get(level, 0) for counts in (repo.record.get("alerts") or {}).values())
 
 
 def build_of(image: str) -> dict[str, Any] | None:

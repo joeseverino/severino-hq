@@ -1,8 +1,10 @@
 {% extends "list_page.html" %}
 {% block row %}
-  <td class="row-gutter"><a href="{{ row.get_absolute_url }}"><strong>{{ row.name }}</strong></a>{% if row.slug != row.name|lower %}<br><span class="muted">{{ row.slug }}</span>{% endif %}{% row_toggle %}</td>
-  <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
-  <td>{% for t in row.tech_list|slice:":3" %}<span class="tag">{{ t }}</span>{% endfor %}{% if row.tech_list|length > 3 %}<span class="muted row-less">+{{ row.tech_list|length|add:"-3" }}</span><span class="row-more">{% for t in row.tech_list|slice:"3:" %}<span class="tag">{{ t }}</span>{% endfor %}</span>{% endif %}</td>
-  <td class="muted">{% if row.pushed_at %}{{ row.pushed_at|when:"ago" }}{% else %}Edited {{ row.updated_at|when:"ago" }}{% endif %}{% if row.repository.failing %}<br><span class="pill pill-serious">Checks failing</span>{% endif %}{% if row.repository.open_alerts %}<br><span class="pill pill-attention">{{ row.repository.open_alerts|counted:"open alert,open alerts" }}</span>{% endif %}</td>
+  <td class="row-gutter"><a href="{{ row.get_absolute_url }}"><strong>{{ row.name|breakable }}</strong></a>{% if row.slug != row.name|slugify %}<br><span class="muted">{{ row.slug|breakable }}</span>{% endif %}{% row_toggle %}</td>
+  <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display|breakable }}</span></td>
+  <td>{% if row.repository_url %}{% if row.dependency_updates %}<span class="pill pill-good">On</span>{% else %}<span class="muted">Off</span>{% endif %}{% with pulls=row.repository.update_pulls|length %}{% if pulls %}<br><a class="muted" href="{{ row.get_absolute_url }}#updates">{{ pulls|counted:"open update,open updates" }}</a>{% endif %}{% endwith %}{% endif %}{% if row.repository.open_alerts %}<br><span class="figure tone-attention">{{ row.repository.open_alerts|counted:"open alert,open alerts" }}</span>{% endif %}</td>
+  <td>{% for t in row.tech_list|slice:":3" %}<span class="tag">{{ t|breakable }}</span>{% endfor %}{% if row.tech_list|length > 3 %}<span class="muted row-less">+{{ row.tech_list|length|add:"-3"|breakable }}</span><span class="row-more">{% for t in row.tech_list|slice:"3:" %}<span class="tag">{{ t|breakable }}</span>{% endfor %}</span>{% endif %}</td>
+  <td class="muted">{% if row.pushed_at %}Pushed {{ row.pushed_at|when:"ago" }}{% elif row.repository_url %}Not read yet{% endif %}{% if row.repository.failing %}<br><span class="pill pill-serious">Checks failing</span>{% endif %}</td>
+  <td class="muted">{{ row.updated_at|when:"ago" }}</td>
   <td class="row-actions"><a href="{% url 'projects:edit' row.slug %}">Edit</a></td>
 {% endblock %}

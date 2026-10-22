@@ -39,6 +39,11 @@ class ProjectQuerySet(models.QuerySet["Project"]):
 
         return self.filter(self._without("documentation_records"))
 
+    def updates_on(self) -> ProjectQuerySet:
+        """Projects HQ's dependency update run covers."""
+
+        return self.filter(dependency_updates=True)
+
     def needs_output(self) -> ProjectQuerySet:
         """Active projects still missing a writeup or a document."""
 
@@ -73,6 +78,9 @@ class Project(TimestampedModel):
     )
     repository_url = models.URLField(blank=True)
     last_push_at = models.DateTimeField(null=True, blank=True)
+    # Whether HQ's dependency update run covers the repository. Set only by the
+    # `project.dependency_updates` capability, which holds its precondition.
+    dependency_updates = models.BooleanField(default=False)
     public_url = models.URLField(blank=True)
     deployment_notes = models.TextField(blank=True)
     security_notes = models.TextField(blank=True)
