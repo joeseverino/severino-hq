@@ -66,25 +66,25 @@
   "when": [
     {
       "input": "a morning this year",
-      "output": "Oct 3, 9:29 AM"
+      "output": "Oct\u00a03, 9:29\u00a0AM"
     },
     {
       "input": "an evening another year",
-      "output": "Oct 3, 2025, 9:05 PM"
+      "output": "Oct\u00a03,\u00a02025, 9:05\u00a0PM"
     },
     {
       "input": "a bare date",
-      "output": "Oct 3"
+      "output": "Oct\u00a03"
     }
   ],
   "when_day": [
     {
       "input": "a day this year",
-      "output": "Oct 3"
+      "output": "Oct\u00a03"
     },
     {
       "input": "a day another year",
-      "output": "Oct 3, 2025"
+      "output": "Oct\u00a03,\u00a02025"
     }
   ]
 }

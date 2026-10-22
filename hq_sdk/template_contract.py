@@ -30,6 +30,8 @@ lazy from django.template.library import import_library
 lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
 
+lazy from hq.platform.core.stylesheets import stylesheet
+
 lazy from .contract import _parameters
 
 # The frames a page may extend, and the blocks of each it may fill. Every
@@ -416,8 +418,7 @@ def _django(engine: Any) -> dict[str, Any]:
 
 
 def _defined_classes() -> set[str]:
-    css = ROOT / "static" / "css" / "app.css"
-    return set(re.findall(r"\.([a-z][a-z0-9-]*)", css.read_text(encoding="utf-8")))
+    return set(re.findall(r"\.([a-z][a-z0-9-]*)", stylesheet()))
 
 
 def _scripts() -> str:
