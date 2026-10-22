@@ -6,8 +6,8 @@
       <li>
         <label>
           <input type="checkbox" name="href" value="{{ choice.href }}"{% if choice.chosen %} checked{% endif %}>
-          <span class="ext-choice-label">{{ choice.label }}</span>
-          <span class="ext-choice-sub muted">{{ choice.sub }}</span>
+          <span class="ext-choice-label">{{ choice.label|breakable }}</span>
+          <span class="ext-choice-sub muted">{{ choice.sub|breakable }}</span>
         </label>
       </li>
     {% endfor %}

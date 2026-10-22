@@ -1,5 +1,5 @@
 {% if cell.unavailable %}
-  <span class="muted policy-unavailable">{{ cell.unavailable }}</span>
+  <span class="muted policy-unavailable">{{ cell.unavailable|breakable }}</span>
 {% else %}
   <select class="policy-select rule-{{ cell.rule|default:'default' }}{% if cell.dormant %} is-dormant{% endif %}" name="{{ cell.field }}" aria-label="{{ row.label }}, {{ group.label }}, for {{ cell.column }}"{% if cell.dormant %} title="Does nothing until HQ's settings let MCP agents do this"{% endif %}>
     {% for value, label in cell.options %}

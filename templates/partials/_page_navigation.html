@@ -4,10 +4,10 @@ and put the matching id on each section; this remains useful fragment navigation
 when JavaScript is unavailable.
 {% endcomment %}
 <nav class="page-nav" aria-label="{{ navigation.label }}" data-page-navigation>
-  <span class="page-nav-label">{{ navigation.label }}</span>
+  <span class="page-nav-label">{{ navigation.label|breakable }}</span>
   <ol class="page-nav-list">
     {% for item in navigation.items %}
-      <li><a href="{{ item.url }}" data-page-nav-link>{{ item.label }}</a></li>
+      <li><a href="{{ item.url }}" data-page-nav-link>{{ item.label|breakable }}</a></li>
     {% endfor %}
   </ol>
 </nav>

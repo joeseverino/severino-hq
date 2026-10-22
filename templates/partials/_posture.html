@@ -7,13 +7,13 @@ heading links to. An unread check says what would read it.
 <section class="posture{% if card %} card{% endif %}" aria-labelledby="posture-heading">
   <div class="section-head">
     <h2 id="posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</h2>
-    <span class="count">{{ posture.count_line }}{% if posture.guide %} · <a href="{{ posture.guide }}" rel="noopener">How the checks work</a>{% endif %}</span>
+    <span class="count">{{ posture.count_line|breakable }}{% if posture.guide %} · <a href="{{ posture.guide }}" rel="noopener">How the checks work</a>{% endif %}</span>
   </div>
   <ol class="step-list posture-checks">
     {% for standing in posture.standings %}
       <li class="tone-{{ standing.state }}"{% if standing.met %} title="{{ standing.check.holds }}"{% endif %}>
         <span class="band-icon">{% include "partials/_icon.html" with name=standing.icon %}</span>
-        <span><strong>{{ standing.check.label }}</strong> <span class="muted">{% if standing.reading.evidence %}{{ standing.reading.evidence }}{% if standing.reading.remedy %}: {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy }}</a>{% else %}{{ standing.reading.remedy }}{% endif %}{% endif %}. {% endif %}Stops {{ standing.check.stops }}.</span></span>
+        <span><strong>{{ standing.check.label|breakable }}</strong> <span class="muted">{% if standing.reading.evidence %}{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %} {% endif %}Stops {{ standing.check.stops|breakable:"." }}</span></span>
       </li>
     {% endfor %}
   </ol>

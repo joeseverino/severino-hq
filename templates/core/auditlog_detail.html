@@ -5,16 +5,16 @@
 {% else %}
 
 <section class="card">
-  <div class="section-head"><h2>{{ event.get_action_display }}{% if event.object_type %} · {{ event.type_label }}{% endif %}</h2></div>
+  <div class="section-head"><h2>{{ event.get_action_display|breakable }}{% if event.object_type %} · {{ event.type_label|breakable }}{% endif %}</h2></div>
   {% table_region "Event" %}
     <table class="data-table compact-table">
       <tbody>
         <tr><th>When</th><td>{{ event.created_at|when:"exact" }}</td></tr>
-        <tr><th>Who</th><td>{{ event.actor_label }}</td></tr>
-        <tr><th>Action</th><td>{{ event.get_action_display }}</td></tr>
-        {% if event.object_type %}<tr><th>Object</th><td>{{ event.object_repr|default:event.type_label }}{% if event.object_id %} <span class="muted">#{{ event.object_id }}</span>{% endif %}</td></tr>{% endif %}
-        {% if event.operation_id %}<tr><th>Operation</th><td><code>{{ event.operation_id }}</code></td></tr>{% endif %}
-        {% if event.message %}<tr><th>Message</th><td>{{ event.message }}</td></tr>{% endif %}
+        <tr><th>Who</th><td>{{ event.actor_label|breakable }}</td></tr>
+        <tr><th>Action</th><td>{{ event.get_action_display|breakable }}</td></tr>
+        {% if event.object_type %}<tr><th>Object</th><td>{{ event.object_repr|default:event.type_label|or_empty }}{% if event.object_id %} <span class="muted">#{{ event.object_id|breakable }}</span>{% endif %}</td></tr>{% endif %}
+        {% if event.operation_id %}<tr><th>Operation</th><td><code>{{ event.operation_id|breakable }}</code></td></tr>{% endif %}
+        {% if event.message %}<tr><th>Message</th><td class="cell-data">{{ event.message|breakable }}</td></tr>{% endif %}
       </tbody>
     </table>
   {% endtable_region %}
@@ -47,7 +47,7 @@
     <table class="data-table compact-table">
       <tbody>
         {% for key, value in extra.items %}
-        <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+        <tr><th>{{ key|breakable }}</th><td>{{ value|or_empty }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -67,9 +67,9 @@
         {% for row in siblings %}
         <tr>
           <td class="row-gutter"><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a>{% row_toggle %}</td>
-          <td>{{ row.get_action_display }}</td>
+          <td>{{ row.get_action_display|breakable }}</td>
           <td>{{ row.object_repr|default:row.type_label|or_empty }}</td>
-          <td>{% if row.message %}{{ row.message|truncatewords:12 }}{% else %}{% empty_value %}{% endif %}</td>
+          <td class="cell-data">{% if row.message %}{{ row.message|truncatewords:12|breakable }}{% else %}{% empty_value %}{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -88,9 +88,9 @@
         {% for row in history %}
         <tr>
           <td class="row-gutter"><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a>{% row_toggle %}</td>
-          <td>{{ row.get_action_display }}</td>
-          <td>{{ row.actor_label }}</td>
-          <td>{% if row.message %}{{ row.message|truncatewords:12 }}{% else %}{% empty_value %}{% endif %}</td>
+          <td>{{ row.get_action_display|breakable }}</td>
+          <td>{{ row.actor_label|breakable }}</td>
+          <td class="cell-data">{% if row.message %}{{ row.message|truncatewords:12|breakable }}{% else %}{% empty_value %}{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

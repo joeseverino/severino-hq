@@ -7,9 +7,9 @@
     to the figure's page instead, and each dot to its own.
     {% endcomment %}
     {% if item.url and not drawing.links %}<a class="kpi{% if item.is_zero %} is-zero{% endif %}" href="{{ item.url }}">{% else %}<div class="kpi{% if item.is_zero %} is-zero{% endif %}">{% endif %}
-      <span class="label">{% if item.icon %}{% include "partials/_icon.html" with name=item.icon only %}{% endif %}{{ item.label }}</span>
+      <span class="label">{% if item.icon %}{% include "partials/_icon.html" with name=item.icon only %}{% endif %}{{ item.label|breakable }}</span>
       <span class="kpi-figure">
-        {% if item.url and drawing.links %}<a class="value" href="{{ item.url }}">{{ item.value }}</a>{% else %}<span class="value">{{ item.value }}</span>{% endif %}
+        {% if item.url and drawing.links %}<a class="value" href="{{ item.url }}">{{ item.value|breakable }}</a>{% else %}<span class="value">{{ item.value|breakable }}</span>{% endif %}
         {% comment %}
         What the figure looks like: dots for a part of a whole, a line for a
         direction. Either repeats what the value and its note already say, so a
@@ -30,7 +30,7 @@
           <svg class="kpi-trend" viewBox="-5 -3 110 30" preserveAspectRatio="none" aria-hidden="true" focusable="false"><polyline points="{{ drawing.points }}"></polyline>{% for mark in drawing.marks %}<rect class="kpi-trend-hit" x="{{ mark.left }}" y="0" width="{{ mark.width }}" height="24" data-tip="{{ mark.tip }}"></rect><line class="kpi-trend-dot{% if mark.latest %} is-latest{% endif %}" x1="{{ mark.x }}" y1="{{ mark.y }}" x2="{{ mark.x }}" y2="{{ mark.y }}"></line>{% endfor %}</svg>
         {% endif %}
       </span>
-      {% if item.detail %}<span class="muted">{{ item.detail }}</span>{% endif %}
+      {% if item.detail %}<span class="muted">{{ item.detail|breakable }}</span>{% endif %}
     {% if item.url and not drawing.links %}</a>{% else %}</div>{% endif %}
     {% endwith %}
   {% endfor %}

@@ -2,9 +2,9 @@
 {% if reading %}
   <div class="conn-row">
     <code>{{ reading.address|breakable }}</code>
-    <span class="conn-kind">IPv{{ reading.version }}</span>
+    <span class="conn-kind">IPv{{ reading.version|breakable }}</span>
     <span class="conn-row-note">
-      {% if reading.note %}{{ reading.note }}{% endif %}
+      {% if reading.note %}{{ reading.note|breakable }}{% endif %}
     </span>
   </div>
   {% for hostname in reading.hostnames %}
@@ -22,15 +22,15 @@
     </div>
     {% if reading.allocation.prefixes %}
       <div class="conn-row">
-        <code>{% for prefix in reading.allocation.prefixes %}{{ prefix }} {% endfor %}</code>
+        <code>{% for prefix in reading.allocation.prefixes %}{{ prefix|breakable }} {% endfor %}</code>
         <span class="conn-kind">block</span>
-        <span class="conn-row-note">{% if reading.allocation.country %}{{ reading.allocation.country }}{% endif %}</span>
+        <span class="conn-row-note">{% if reading.allocation.country %}{{ reading.allocation.country|breakable }}{% endif %}</span>
       </div>
     {% endif %}
   {% endif %}
 {% elif failure %}
   <div class="conn-row">
-    <span class="conn-row-note">{{ failure }}</span>
+    <span class="conn-row-note">{{ failure|breakable }}</span>
   </div>
 {% else %}
   <div class="conn-row">

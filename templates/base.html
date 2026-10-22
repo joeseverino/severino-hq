@@ -1,5 +1,6 @@
 {% load static %}
 {% load humanize %}
+{% load stylesheet_tags %}
 <!doctype html>
 <html lang="en"{% if THEME == "light" or THEME == "dark" %} data-theme="{{ THEME }}"{% endif %}>
 <head>
@@ -20,7 +21,7 @@
   paints on the first frame without a script. `color-scheme` tells the browser
   which canvas to clear to while it waits; the theme colors tint its chrome
   and repeat the header surface in each palette (`--accent` light, `--surface`
-  dark in app.css).
+  dark in css/app/tokens.css).
   {% endcomment %}
   {% if THEME == "light" %}
   <meta name="color-scheme" content="light">
@@ -39,7 +40,7 @@
   text never changes face, and therefore never moves, after it is drawn.
   {% endcomment %}
   <link rel="preload" href="{% static 'fonts/inter/inter-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% stylesheets %}
   <script src="{% static 'js/transitions.js' %}"></script>
   {% block head_extra %}{% endblock %}
 </head>
@@ -51,7 +52,7 @@
   {% endcomment %}
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="site-header" id="sections">
-    <a class="brand" href="{% url 'dashboard' %}">{{ SITE_NAME }}</a>
+    <a class="brand" href="{% url 'dashboard' %}">{{ SITE_NAME|breakable }}</a>
     {% if user.is_authenticated %}
       {% comment %}
       The sections menu is a link and an `:target` rule, not a scripted or
@@ -90,18 +91,18 @@
             <details class="nav-group" name="nav-group" data-menu>
               <summary{% if entry.active %} class="active"{% endif %}>
                 <span class="nav-group-label">
-                  {{ entry.label }}
+                  {{ entry.label|breakable }}
                   <svg class="nav-caret" viewBox="0 0 10 6" width="9" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg>
                 </span>
               </summary>
               <div class="nav-group-panel">
                 {% for item in entry.items %}
-                  <a href="{% url item.url %}"{% if item.active %} class="active"{% endif %}>{{ item.label }}</a>
+                  <a href="{% url item.url %}"{% if item.active %} class="active"{% endif %}>{{ item.label|breakable }}</a>
                 {% endfor %}
               </div>
             </details>
           {% else %}
-            <a href="{% url entry.url %}"{% if entry.active %} class="active"{% endif %}>{{ entry.label }}</a>
+            <a href="{% url entry.url %}"{% if entry.active %} class="active"{% endif %}>{{ entry.label|breakable }}</a>
           {% endif %}
         {% endfor %}
       </nav>
@@ -132,7 +133,7 @@
         it already asks for the count once it is up rather than while rendering.
         {% endcomment %}
         {% partialdef action_count inline %}
-        <span id="action-count" data-action-count{% if not show_action_count %} data-fragment="{% url 'action_item_count' %}" data-fragment-load{% endif %}{% if not profile_action_count %} hidden{% endif %}>{{ profile_action_count|default_if_none:"" }}</span>
+        <span id="action-count" data-action-count{% if not show_action_count %} data-fragment="{% url 'action_item_count' %}" data-fragment-load{% endif %}{% if not profile_action_count %} hidden{% endif %}>{{ profile_action_count|default_if_none:""|breakable }}</span>
         {% endpartialdef %}
         <span class="visually-hidden">Needs you</span>
       </a>
@@ -154,7 +155,7 @@
             <path d="M5.4 19.4c0-3.7 3-5.9 6.6-5.9s6.6 2.2 6.6 5.9"/>
           </svg>
           {% endif %}
-          <span class="user-name">{{ user.get_username }}</span>
+          <span class="user-name">{{ user.get_username|breakable }}</span>
         </summary>
         <div class="user-menu-panel">
           {% comment %}
@@ -165,10 +166,10 @@
           <div class="menu-identity">
             {% if avatar %}<img class="menu-identity-picture" src="{% url 'avatar' avatar %}" alt="" width="36" height="36" decoding="async">{% endif %}
             <div class="menu-identity-who">
-              <strong>{{ user.get_full_name|default:user.get_username }}</strong>
+              <strong>{{ user.get_full_name|default:user.get_username|breakable }}</strong>
               {% if user.is_superuser %}<span class="role-mark">Admin</span>{% elif user.is_staff %}<span class="role-mark">Staff</span>{% endif %}
             </div>
-            {% with when=request|signed_in %}{% if when %}<span class="menu-identity-when">{{ when }}</span>{% endif %}{% endwith %}
+            {% with when=request|signed_in %}{% if when %}<span class="menu-identity-when">{{ when|breakable }}</span>{% endif %}{% endwith %}
           </div>
           {% endwith %}
           {% comment %}
@@ -226,7 +227,7 @@
                href="{% url 'connection' %}"
                data-modal-open="connection">
               <span>Connection</span>
-              <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label }}</span></span>
+              <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label|breakable }}</span></span>
             </a>
             <form action="{% url 'logout' %}" method="post">
               {% csrf_token %}
@@ -249,7 +250,7 @@
     {% if messages %}
       <ul class="messages">
         {% for message in messages %}
-          <li class="msg msg-{{ message.tags|default:'info' }}">{{ message }}</li>
+          <li class="msg msg-{{ message.tags|default:'info' }}">{{ message|breakable }}</li>
         {% endfor %}
       </ul>
     {% endif %}
@@ -277,6 +278,9 @@
 
   <script src="{% static 'js/fragment.js' %}" defer></script>
   <script src="{% static 'js/app.js' %}" defer></script>
+  <script src="{% static 'js/ask.js' %}" defer></script>
+  <script src="{% static 'js/connection.js' %}" defer></script>
+  <script src="{% static 'js/topology.js' %}" defer></script>
   <script src="{% static 'js/tables.js' %}" defer></script>
   {% block scripts_extra %}{% endblock %}
 </body>

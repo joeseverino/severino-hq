@@ -5,7 +5,7 @@
   <p class="notice-code">500</p>
   <h1>Something broke</h1>
   <p class="notice-body">
-    The error is in the log{% if request_id %}, under request id <code>{{ request_id|breakable }}</code>{% endif %}. Trying again is safe.
+    The error is in the log{% if request_id %}, under request id <code>{{ request_id|breakable:"." }}</code>{% else %}.{% endif %} Trying again is safe.
   </p>
   <p class="page-actions">
     <a class="btn primary" href="{% url 'dashboard' %}">Back to the dashboard</a>

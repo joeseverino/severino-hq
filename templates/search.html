@@ -22,12 +22,12 @@
 
   {% if total %}
   <div class="search-summary">
-    <p class="muted">{{ total|counted:"record" }} for <strong>{{ q }}</strong></p>
+    <p class="muted">{{ total|counted:"record" }} for <strong>{{ q|breakable }}</strong></p>
     <nav class="search-scopes" aria-label="Result groups">
       {% for group in groups %}{% if group.count %}
-      <a class="scope-chip" href="#scope-{{ group.scope }}">{{ group.label }} <span class="count">{{ group.count }}</span></a>
+      <a class="scope-chip" href="#scope-{{ group.scope }}">{{ group.label|breakable }}</a>
       {% endif %}{% endfor %}
-      {% if contacts %}<a class="scope-chip" href="#scope-contacts">Messages <span class="count">{{ contacts|length }}</span></a>{% endif %}
+      {% if contacts %}<a class="scope-chip" href="#scope-contacts">Messages</a>{% endif %}
     </nav>
   </div>
   {% endif %}
@@ -35,8 +35,8 @@
   {% for group in groups %}{% if group.count %}
   <section class="card search-group" id="scope-{{ group.scope }}">
     <div class="section-head">
-      <h2>{{ group.label }}</h2>
-      <span class="count">{{ group.count }}</span>
+      <h2>{{ group.label|breakable }}</h2>
+      <span class="count">{{ group.count|breakable }}</span>
     </div>
     <ul class="search-hits">
       {% for item in group.items %}
@@ -44,14 +44,14 @@
         <div class="search-hit-main">
           <p class="search-hit-title">
             {% if item.url %}
-            <a href="{{ item.url }}"><strong>{{ item.title }}</strong></a>
+            <a href="{{ item.url }}"><strong>{{ item.title|breakable }}</strong></a>
             {% else %}
-            <a href="{% url 'core:audit_list' %}?q={{ q|urlencode }}"><strong>{{ item.title }}</strong></a>
+            <a href="{% url 'core:audit_list' %}?q={{ q|urlencode }}"><strong>{{ item.title|breakable }}</strong></a>
             {% endif %}
             {% if item.badge %}<code class="search-badge">{{ item.badge|breakable }}</code>{% endif %}
           </p>
           {% if item.snippet %}
-          <p class="search-snippet">{% for text, hit in item.snippet %}{% if hit %}<mark>{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}</p>
+          <p class="search-snippet">{% for text, hit in item.snippet %}{% if hit %}<mark>{{ text|breakable }}</mark>{% else %}{{ text|breakable }}{% endif %}{% endfor %}</p>
           {% endif %}
         </div>
         {% if item.timestamp %}<span class="row-meta">{{ item.timestamp|when }}</span>{% endif %}
@@ -72,8 +72,8 @@
       <li class="search-hit">
         <div class="search-hit-main">
           <p class="search-hit-title">
-            <a href="{% url 'contacts:detail' item.id %}"><strong>{{ item.name }}</strong></a>
-            {% if item.status %}<span class="muted">· {{ item.status|capfirst }}</span>{% endif %}
+            <a href="{% url 'contacts:detail' item.id %}"><strong>{{ item.name|breakable }}</strong></a>
+            {% if item.status %}<span class="muted">· {{ item.status|capfirst|breakable }}</span>{% endif %}
           </p>
         </div>
         <span class="row-meta">{{ item.created_at|when }}</span>

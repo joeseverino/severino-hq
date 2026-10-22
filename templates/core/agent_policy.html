@@ -16,17 +16,17 @@
   </div>
   <p class="agent-state-facts">
     <span>{{ rule_count|counted:"rule changed from the default,rules changed from the default" }}</span>
-    {% if awaiting_count %}<a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count }}</strong> waiting for your approval</a>{% endif %}
-    <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count }}</strong> refused in the last day</a>
+    {% if awaiting_count %}<a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count|breakable }}</strong> waiting for your approval</a>{% endif %}
+    <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count|breakable }}</strong> refused in the last day</a>
     {% if any_dormant %}<span class="policy-dormant-note">A grayed-out rule does nothing until HQ's settings let agents do that action.</span>{% endif %}
   </p>
   {% if agents %}
     <ul class="policy-agents">
       {% for agent in agents %}
         <li>
-          <span class="policy-agent-name">{{ agent.label }}</span>
+          <span class="policy-agent-name">{{ agent.label|breakable }}</span>
           <ul class="dot-list muted">
-            <li>Uses {{ agent.detail }}</li>
+            <li>Uses {{ agent.detail|breakable }}</li>
             <li>{{ agent.identity.granted|length|counted:"permission from your sign-in,permissions from your sign-in" }}</li>
             <li>Last seen {{ agent.identity.last_seen|ago }}</li>
           </ul>
@@ -50,7 +50,7 @@ its own heading. Each row is in one table only, so the form posts each rule once
   {% endif %}
   {% if default_groups %}
     <details class="section-fold" open>
-      <summary><h2>{% if changed_groups %}Every other action{% else %}Every action{% endif %} <span class="heading-aside">{{ default_count }}</span></h2></summary>
+      <summary><h2>{% if changed_groups %}Every other action{% else %}Every action{% endif %} <span class="heading-aside">{{ default_count|breakable }}</span></h2></summary>
       {% include "core/_policy_table.html" with groups=default_groups %}
     </details>
   {% endif %}

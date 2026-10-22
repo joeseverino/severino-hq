@@ -22,7 +22,7 @@ id, which is what keeps the visual grouping without nesting the controls.
   {% endfor %}
   <div class="chart-tablist" role="tablist">
     {% for chart in charts %}
-      <label class="chart-tab" for="tab-{{ group }}-{{ forloop.counter }}">{{ chart.title }}</label>
+      <label class="chart-tab" for="tab-{{ group }}-{{ forloop.counter }}">{{ chart.title|breakable }}</label>
     {% endfor %}
   </div>
   {% for chart in charts %}

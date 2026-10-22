@@ -5,7 +5,7 @@
   {% else %}
     <span class="muted">&larr; Prev</span>
   {% endif %}
-  <span class="muted">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+  <span class="muted">Page {{ page_obj.number|breakable }} of {{ paginator.num_pages|breakable }}</span>
   {% if page_obj.has_next %}
     <a href="?{% if table.querystring %}{{ table.querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Next &rarr;</a>
   {% else %}

@@ -10,11 +10,11 @@ can be linked to directly and works without JavaScript.
 <figure class="chart-card card calendar-card" id="{{ calendar_id|default:'training-calendar' }}" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
   <figcaption class="calendar-head">
     <div class="calendar-head-copy">
-      <h2>{{ calendar.title }}</h2>
-      <p class="calendar-description">{{ calendar.description }}</p>
+      <h2>{{ calendar.title|breakable }}</h2>
+      <p class="calendar-description">{{ calendar.description|breakable }}</p>
     </div>
     <div class="calendar-controls">
-      {% if calendar.period_label %}<span class="calendar-period">{{ calendar.period_label }}</span>{% endif %}
+      {% if calendar.period_label %}<span class="calendar-period">{{ calendar.period_label|breakable }}</span>{% endif %}
       {% if calendar.previous_url or calendar.next_url %}
         <nav class="calendar-nav" aria-label="Change month">
           {% if calendar.previous_url %}<a href="{{ calendar.previous_url }}" rel="prev" aria-label="Previous month">&lsaquo;</a>{% else %}<span aria-hidden="true">&lsaquo;</span>{% endif %}
@@ -27,19 +27,19 @@ can be linked to directly and works without JavaScript.
   <div class="calendar-legend">
     {% if calendar.series %}
       <div class="chart-legend" aria-label="Legend">
-        {% for series in calendar.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label }}</span>{% endfor %}
+        {% for series in calendar.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}
         <span><i class="calendar-key-missed" aria-hidden="true"></i>Missed</span>
       </div>
     {% endif %}
-    {% if calendar.kept %}<span class="count">{{ calendar.kept }} planned days kept</span>{% endif %}
+    {% if calendar.kept %}<span class="count">{{ calendar.kept|breakable }} planned days kept</span>{% endif %}
   </div>
   {% comment %}A chart for the layout audit: each day's tip repeats what its hidden text already says.{% endcomment %}
   <table class="activity-calendar" data-chart>
-    <caption class="visually-hidden">{{ calendar.title }}{% if calendar.period_label %}, {{ calendar.period_label }}{% endif %}. {{ calendar.description }}</caption>
+    <caption class="visually-hidden">{% if calendar.period_label %}{{ calendar.title|breakable:"," }} {{ calendar.period_label|breakable:"." }}{% else %}{{ calendar.title|breakable:"." }}{% endif %} {{ calendar.description|breakable }}</caption>
     <thead>
       <tr>
         {% comment %}Two letters: single ones give two T's and two S's.{% endcomment %}
-        {% for day in calendar.weeks.0 %}<th scope="col" class="calendar-weekday"><span aria-hidden="true">{{ day.when|date:"D"|slice:":2" }}</span><span class="visually-hidden">{{ day.when|date:"l" }}</span></th>{% endfor %}
+        {% for day in calendar.weeks.0 %}<th scope="col" class="calendar-weekday"><span aria-hidden="true">{{ day.when|date:"D"|slice:":2"|breakable }}</span><span class="visually-hidden">{{ day.when|date:"l" }}</span></th>{% endfor %}
       </tr>
     </thead>
     <tbody>
@@ -52,7 +52,7 @@ can be linked to directly and works without JavaScript.
               <td class="calendar-day is-{{ day.state }}"{% if day.detail %} data-tip="{{ day.when|date:'D M j' }} · {{ day.detail }}"{% endif %}>
                 <span class="calendar-date" aria-hidden="true">{{ day.when|date:"j" }}</span>
                 {% comment %}Without this a screen reader gets a grid of bare numbers.{% endcomment %}
-                <span class="visually-hidden">{{ day.when|date:"F j" }}: {{ day.detail|default:"nothing logged" }}</span>
+                <span class="visually-hidden">{{ day.when|date:"F j" }}: {{ day.detail|default:"nothing logged"|breakable }}</span>
                 <span class="calendar-marks" aria-hidden="true">
                   {% for slot in day.slots %}<i class="calendar-dot chart-series-{{ slot }}"></i>{% endfor %}
                   {% if day.state == "missed" %}<i class="calendar-dot is-missed"></i>{% endif %}

@@ -1,16 +1,16 @@
 <section class="command-center-group" aria-labelledby="command-center-group-{{ group.key }}">
-  <h3 id="command-center-group-{{ group.key }}">{{ group.label }}</h3>
+  <h3 id="command-center-group-{{ group.key }}">{{ group.label|breakable }}</h3>
   {% for item in group.items %}
     <a id="command-center-option-{{ group.key }}-{{ forloop.counter }}"
        class="command-center-option" href="{{ item.url }}" role="option"
        aria-selected="false" tabindex="-1" data-command-center-option>
       <span class="command-center-copy">
-        <span class="command-center-title"><strong>{{ item.label }}</strong></span>
-        {% if item.summary and group.key != "resources" %}<span class="muted">{{ item.summary }}</span>{% endif %}
+        <span class="command-center-title"><strong>{{ item.label|breakable }}</strong></span>
+        {% if item.summary and group.key != "resources" %}<span class="muted">{{ item.summary|breakable }}</span>{% endif %}
       </span>
       <span class="command-center-evidence">
-        {% if item.destination_label %}<span class="command-center-destination">{{ item.destination_label }}</span>{% endif %}
-        {% for badge in item.badges %}{% if badge %}<span class="scope-chip">{{ badge }}</span>{% endif %}{% endfor %}
+        {% if item.destination_label %}<span class="command-center-destination">{{ item.destination_label|breakable }}</span>{% endif %}
+        {% for badge in item.badges %}{% if badge %}<span class="scope-chip">{{ badge|breakable }}</span>{% endif %}{% endfor %}
       </span>
       <span class="command-center-arrow" aria-hidden="true">→</span>
     </a>

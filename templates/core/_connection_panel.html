@@ -7,7 +7,7 @@ page it falls back to. Nothing here knows which one it is in.
   {% if request_path.findings %}
     <section class="conn-findings" aria-label="Where this request disagrees with what HQ read">
       {% for hop in request_path.findings %}
-        <p class="conn-agree conn-agree-no"><strong>{{ hop.label }}:</strong> {{ hop.check.detail }} {{ hop.check.step }}</p>
+        <p class="conn-agree conn-agree-no"><strong>{{ hop.label|breakable:":" }}</strong> {{ hop.check.detail|breakable }} {{ hop.check.step|breakable }}</p>
       {% endfor %}
     </section>
   {% endif %}
@@ -19,32 +19,32 @@ page it falls back to. Nothing here knows which one it is in.
     <div class="conn-peer">
       <span class="conn-peer-role">You</span>
       {% if connection.machine_url %}
-        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.peer_label }}</a>
+        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.peer_label|breakable }}</a>
       {% else %}
-        <strong>{{ connection.peer_label }}</strong>
+        <strong>{{ connection.peer_label|breakable }}</strong>
       {% endif %}
       <code>{{ connection.peer_address|breakable }}</code>
       {% if connection.reported_device %}
         <span class="conn-row-note">reported by the proxy that forwarded it</span>
       {% elif connection.identity.tailnet_user %}
-        <span class="conn-row-note">{{ connection.identity.tailnet_user }}</span>
+        <span class="conn-row-note">{{ connection.identity.tailnet_user|breakable }}</span>
       {% endif %}
     </div>
     <div class="conn-link conn-link-{{ connection.path }}">
-      <p class="conn-headline"><span class="conn-dot" aria-hidden="true"></span>{{ connection.channel.label }}</p>
+      <p class="conn-headline"><span class="conn-dot" aria-hidden="true"></span>{{ connection.channel.label|breakable }}</p>
       <span class="conn-link-line" aria-hidden="true"></span>
-      <p class="conn-sub">This request: {{ connection.summary|lower }} · {{ connection.path_label }} · {{ connection.transport }}</p>
-      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a> · {{ posture.count_line }}</p>{% endif %}
+      <p class="conn-sub">This request: {{ connection.tally|lower|breakable }} · {{ connection.path_label|breakable }} · {{ connection.transport|breakable }}</p>
+      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a> · {{ posture.count_line|breakable }}</p>{% endif %}
     </div>
     <div class="conn-peer">
       <span class="conn-peer-role">HQ</span>
       {% if connection.serves_url %}
-        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.label|default:connection.host }}</a>
+        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.label|default:connection.host|breakable }}</a>
       {% else %}
-        <strong>{{ connection.serves.label|default:connection.host }}</strong>
+        <strong>{{ connection.serves.label|default:connection.host|breakable }}</strong>
       {% endif %}
-      {% if connection.serves %}<code>{{ connection.serves.addresses.0 }}</code>{% endif %}
-      <span class="conn-row-note">{{ connection.host }}</span>
+      {% if connection.serves %}<code>{{ connection.serves.addresses.0|breakable }}</code>{% endif %}
+      <span class="conn-row-note">{{ connection.host|breakable }}</span>
     </div>
   </section>
 
@@ -53,19 +53,19 @@ page it falls back to. Nothing here knows which one it is in.
     <dl class="kv">
       <dt>Signed in</dt>
       <dd>
-        <strong>{{ connection.identity.full_name|default:connection.identity.username }}</strong>
-        {% if connection.identity.email %}<code>{{ connection.identity.email }}</code>{% endif %}
+        <strong>{{ connection.identity.full_name|default:connection.identity.username|breakable }}</strong>
+        {% if connection.identity.email %}<code>{{ connection.identity.email|breakable }}</code>{% endif %}
       </dd>
       {% comment %}A row is drawn only when it has a value: the strip above already says why there is no device.{% endcomment %}
       {% if connection.identity.tailnet_user %}
         <dt>Tailnet account</dt>
-        <dd><code>{{ connection.identity.tailnet_user }}</code></dd>
+        <dd><code>{{ connection.identity.tailnet_user|breakable }}</code></dd>
       {% endif %}
       {% if connection.caller_device %}
         <dt>Device</dt>
         <dd>
-          <strong>{{ connection.caller_device.label }}</strong>
-          {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os }}</span>{% endif %}
+          <strong>{{ connection.caller_device.label|breakable }}</strong>
+          {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os|breakable }}</span>{% endif %}
           {% if connection.untrusted_forwarding and connection.reported_device %}<span class="conn-row-note">matched from what the proxy forwarded; not used to let you in</span>{% endif %}
         </dd>
       {% endif %}
@@ -74,16 +74,16 @@ page it falls back to. Nothing here knows which one it is in.
       {% endif %}
       {% if connection.caller_device.tags %}
         <dt>Tags</dt>
-        <dd>{% for tag in connection.caller_device.tags %}<code>{{ tag }}</code> {% endfor %}</dd>
+        <dd>{% for tag in connection.caller_device.tags %}<code>{{ tag|breakable }}</code> {% endfor %}</dd>
       {% endif %}
       <dt>Signed in via</dt>
       <dd>
-        {{ connection.identity.route }}
-        {% if connection.identity.provider %}<code>{{ connection.identity.provider }}</code>{% endif %}
+        {{ connection.identity.route|breakable }}
+        {% if connection.identity.provider %}<code>{{ connection.identity.provider|breakable }}</code>{% endif %}
       </dd>
       {% if connection.identity.groups %}
         <dt>Groups</dt>
-        <dd>{% for group in connection.identity.groups %}<code>{{ group }}</code> {% endfor %}</dd>
+        <dd>{% for group in connection.identity.groups %}<code>{{ group|breakable }}</code> {% endfor %}</dd>
       {% endif %}
       <dt>Rights</dt>
       <dd>
@@ -122,25 +122,25 @@ page it falls back to. Nothing here knows which one it is in.
     <dl class="kv">
       <dt>Path</dt>
       <dd>
-        <strong>{{ connection.path_label }}</strong>
+        <strong>{{ connection.path_label|breakable }}</strong>
       </dd>
       {% if connection.observer %}
         <dt>Measured by</dt>
         <dd>
-          <strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label }}</strong>
+          <strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label|breakable }}</strong>
         </dd>
       {% endif %}
       <dt>Carried over</dt>
       <dd class="conn-carriage conn-carriage-{{ connection.peering.id }}">
-        <strong>{{ connection.peering.label }}</strong>
+        <strong>{{ connection.peering.label|breakable }}</strong>
         <details class="conn-more conn-why">
           <summary aria-label="Why this says that">Why</summary>
-          <p class="conn-row-note">{{ connection.peering.detail }}</p>
+          <p class="conn-row-note">{{ connection.peering.detail|breakable }}</p>
         </details>
         {% if connection.peering.public %}
           <details class="conn-more" data-peering-detail>
             <summary>
-              About <code>{{ connection.peering.address }}</code>
+              About <code>{{ connection.peering.address|breakable }}</code>
             </summary>
             <div class="conn-rows"
                  data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
@@ -161,17 +161,17 @@ page it falls back to. Nothing here knows which one it is in.
       {% endif %}
       {% if connection.presence %}
         <dt>Last handshake</dt>
-        <dd>{{ connection.handshake }}</dd>
+        <dd>{{ connection.handshake|breakable }}</dd>
       {% endif %}
       {% if connection.carried %}
-        <dt>Node traffic</dt><dd>{{ connection.carried }}</dd>
+        <dt>Node traffic</dt><dd>{{ connection.carried|breakable }}</dd>
       {% endif %}
       <dt>Browser round trip</dt>
       <dd>
         <span data-rtt>{% empty_value %}</span>
         <span hidden data-rtt-measure="{% url 'health_live' %}"></span>
       </dd>
-      <dt>Encryption</dt><dd>{{ connection.transport_path }}</dd>
+      <dt>Encryption</dt><dd>{{ connection.transport_path|breakable }}</dd>
       {% if connection.peer_keys %}
         {% comment %}
         The evidence the rest of this section is describing. An endpoint, a
@@ -188,8 +188,8 @@ page it falls back to. Nothing here knows which one it is in.
             {% comment %}Stacked: a key is longer than any value column beside a label.{% endcomment %}
             <dl class="conn-keys">
               {% for label, key in connection.peer_keys %}
-                <dt>{{ label }}</dt>
-                <dd><code>{{ key }}</code></dd>
+                <dt>{{ label|breakable }}</dt>
+                <dd><code>{{ key|breakable }}</code></dd>
               {% endfor %}
             </dl>
             <p class="conn-row-note">
@@ -206,7 +206,7 @@ page it falls back to. Nothing here knows which one it is in.
   <section class="card conn-path" aria-label="Path to HQ" data-connection-layers>
     <div class="conn-path-head">
       <h3>Path to HQ</h3>
-      <span>{{ request_path.proof }}</span>
+      <span>{{ request_path.proof|breakable }}</span>
     </div>
     <ol class="conn-layers">
       {% for hop in request_path.hops %}
@@ -214,23 +214,23 @@ page it falls back to. Nothing here knows which one it is in.
           <details data-connection-hop="{{ hop.step }}"{% if hop.check.state == 'contradicted' %} open{% endif %}>
             <summary>
               <span class="conn-tick" aria-hidden="true">{% if hop.check.state == 'proven' %}&check;{% elif hop.check.state == 'contradicted' %}&times;{% else %}?{% endif %}</span>
-              <span class="conn-layer-boundary">{{ hop.label }}</span>
-              <span class="conn-layer-label">{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name }}{% elif hop.detail %}{{ hop.detail }}{% else %}{% empty_value %}{% endif %}{% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}<span class="conn-hop-detail">{{ hop.detail }}</span>{% elif hop.link.url and hop.name and hop.name != hop.link.label %}<span class="conn-hop-detail">{{ hop.name }}</span>{% endif %}</span>
+              <span class="conn-layer-boundary">{{ hop.label|breakable }}</span>
+              <span class="conn-layer-label">{% if hop.link and hop.link.url %}{% entity hop.link %}{% elif hop.name %}{{ hop.name|breakable }}{% elif hop.detail %}{{ hop.detail|breakable }}{% else %}{% empty_value %}{% endif %}{% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}<span class="conn-hop-detail">{{ hop.detail|breakable }}</span>{% elif hop.link.url and hop.name and hop.name != hop.link.label %}<span class="conn-hop-detail">{{ hop.name|breakable }}</span>{% endif %}</span>
               <span class="conn-hop-more">{% if hop.layers %}{{ hop.layers|length|counted:"check,checks" }}{% else %}Details{% endif %}</span>
             </summary>
             <div class="conn-layer-body">
-              {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label }}. {{ hop.check.detail }}{% endif %}{% if hop.source %} Read from {{ hop.source.phrase }}{% if hop.source.observed_at %}, {{ hop.source.observed_at|when }}{% endif %}.{% endif %}</p>{% endif %}
-              {% if hop.check.step %}<p class="conn-agree conn-agree-no">{{ hop.check.step }}</p>{% endif %}
-              {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement }}</p>{% endif %}
-              {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst }}</p>{% endif %}
-              {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation }} {% entity link %}</p>{% endfor %}
+              {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}</p>{% endif %}
+              {% if hop.check.step %}<p class="conn-agree conn-agree-no">{{ hop.check.step|breakable }}</p>{% endif %}
+              {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement|breakable }}</p>{% endif %}
+              {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst|breakable }}</p>{% endif %}
+              {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation|breakable }} {% entity link %}</p>{% endfor %}
               {% if hop.evidence %}
                 <ol class="conn-rows">
                   {% for item in hop.evidence %}
                     <li class="conn-row{% if item.role %} conn-row-{{ item.role }}{% endif %}">
                       <code>{{ item.value|breakable }}</code>
-                      <span class="conn-kind{% if item.role %} conn-kind-hop-{{ item.role }}{% endif %}">{{ item.role|default:item.label }}</span>
-                      <span class="conn-row-note">{{ item.detail }}</span>
+                      <span class="conn-kind{% if item.role %} conn-kind-hop-{{ item.role }}{% endif %}">{{ item.role|default:item.label|breakable }}</span>
+                      <span class="conn-row-note">{{ item.detail|breakable }}</span>
                     </li>
                   {% endfor %}
                 </ol>
@@ -242,13 +242,13 @@ page it falls back to. Nothing here knows which one it is in.
                       <details data-connection-layer="{{ layer.id }}">
                         <summary>
                           <span class="conn-tick" aria-hidden="true">{% if layer.state == 'unknown' %}?{% elif layer.holds %}&check;{% else %}&times;{% endif %}</span>
-                          <span class="conn-check"><span class="conn-layer-label">{{ layer.label }}</span>{% if layer.evidence %} <code class="conn-layer-evidence">{{ layer.evidence|breakable }}</code>{% endif %}</span>
+                          <span class="conn-check"><span class="conn-layer-label">{{ layer.label|breakable }}</span>{% if layer.evidence %} <code class="conn-layer-evidence">{{ layer.evidence|breakable }}</code>{% endif %}</span>
                         </summary>
                         <div class="conn-layer-body">
-                          <p class="muted">{{ layer.detail }}</p>
+                          <p class="muted">{{ layer.detail|breakable }}</p>
                           {% if layer.rules %}
                             <div class="conn-rules">
-                              {% for rule in layer.rules %}<code>{{ rule }}</code>{% endfor %}
+                              {% for rule in layer.rules %}<code>{{ rule|breakable }}</code>{% endfor %}
                             </div>
                           {% endif %}
                         </div>
@@ -280,8 +280,8 @@ page it falls back to. Nothing here knows which one it is in.
           {% for address in request_path.addresses %}
             <div class="conn-row{% if address.current %} conn-current{% endif %}">
               <code>{{ address.value|breakable }}</code>
-              <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
-              <span class="conn-row-note">{{ address.source }}</span>
+              <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label|breakable }}</span>
+              <span class="conn-row-note">{{ address.source|breakable }}</span>
             </div>
           {% endfor %}
         </div>
@@ -297,8 +297,8 @@ page it falls back to. Nothing here knows which one it is in.
             {% for address in request_path.hq_addresses %}
               <div class="conn-row">
                 <code>{{ address.value|breakable }}</code>
-                <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label }}</span>
-                <span class="conn-row-note">{{ address.source }}</span>
+                <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label|breakable }}</span>
+                <span class="conn-row-note">{{ address.source|breakable }}</span>
               </div>
             {% endfor %}
           </div>
@@ -323,9 +323,9 @@ page it falls back to. Nothing here knows which one it is in.
         <div class="conn-rows">
           {% for header in request_path.headers %}{% if header.used %}
             <div class="conn-row conn-row-used">
-              <code>{{ header.name }}: {{ header.value|breakable }}</code>
+              <code>{{ header.name|breakable:":" }} {{ header.value|breakable }}</code>
               <span class="conn-kind conn-kind-read">read</span>
-              <span class="conn-row-note">{{ header.purpose }}</span>
+              <span class="conn-row-note">{{ header.purpose|breakable }}</span>
             </div>
           {% endif %}{% endfor %}
         </div>
@@ -335,9 +335,9 @@ page it falls back to. Nothing here knows which one it is in.
             <div class="conn-rows">
               {% for header in request_path.unread_headers %}
                 <div class="conn-row">
-                  <code>{{ header.name }}: {{ header.value|breakable }}</code>
-                  <span class="conn-kind conn-kind-{{ header.state }}">{{ header.state }}</span>
-                  <span class="conn-row-note">{{ header.declined }}</span>
+                  <code>{{ header.name|breakable:":" }} {{ header.value|breakable }}</code>
+                  <span class="conn-kind conn-kind-{{ header.state }}">{{ header.state|breakable }}</span>
+                  <span class="conn-row-note">{{ header.declined|breakable }}</span>
                 </div>
               {% endfor %}
             </div>

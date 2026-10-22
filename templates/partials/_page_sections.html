@@ -19,7 +19,7 @@
   mark beside it says it opens. A separate "Show all" under the heading reads as
   a control belonging to nothing.
   {% endcomment %}
-  {% if section.folded %}<details class="section-fold"><summary><h2>{{ section.label }} <span class="heading-aside">{{ section.records|length }}</span></h2></summary>{% else %}<h2>{{ section.label }}</h2>{% endif %}
+  {% if section.folded %}<details class="section-fold"><summary><h2>{{ section.label|breakable }} <span class="heading-aside">{{ section.records|length }}</span></h2></summary>{% else %}<h2>{{ section.label|breakable }}</h2>{% endif %}
   {% table_region section.label narrow=section.columns|length|add:-2 %}
     <table class="data-table{% if section.compact %} compact-table{% endif %}">
       <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=section.records|sortable gutter=True %}{% elif section.columns|length > 2 %}{% table_heading column local_sort=section.records|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=section.records|sortable %}{% endif %}{% endfor %}</tr></thead>
@@ -31,11 +31,11 @@
                 {% if cell.link %}
                   {% entity cell.link %}
                 {% elif cell.url %}
-                  <a href="{{ cell.url }}"{% if cell.external %} target="_blank" rel="noopener"{% endif %}>{{ cell.text }}</a>
+                  <a href="{{ cell.url }}"{% if cell.external %} target="_blank" rel="noopener"{% endif %}>{{ cell.text|breakable }}</a>
                 {% elif cell.muted %}
-                  <span class="muted">{{ cell.text }}</span>
+                  <span class="muted">{{ cell.text|breakable }}</span>
                 {% else %}
-                  {{ cell.text }}
+                  {{ cell.text|breakable }}
                 {% endif %}
                 {% if forloop.first %}{% row_toggle %}{% endif %}
               </td>
@@ -48,12 +48,12 @@
   {% if section.folded %}</details>{% endif %}
   {% for label, text in section.readouts %}
     <details class="section-readout">
-      <summary>{{ label }}</summary>
-      <pre>{{ text }}</pre>
+      <summary>{{ label|breakable }}</summary>
+      <pre>{{ text|breakable }}</pre>
     </details>
   {% endfor %}
   {% for label, url in section.actions %}
-    <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label }} &rarr;</a></p>
+    <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label|breakable }} &rarr;</a></p>
   {% endfor %}
 </section>
 {% endfor %}

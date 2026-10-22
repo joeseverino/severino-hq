@@ -12,5 +12,5 @@ the same rows under their domains. The dashboard's short list is
   </table>
 {% endtable_region %}
 {% else %}
-<p class="attention-clear">{{ empty|default:"Nothing needs you." }}</p>
+<p class="attention-clear">{{ empty|default:"Nothing needs you."|breakable }}</p>
 {% endif %}

@@ -9,13 +9,13 @@ glance (how it is doing, where it runs), beside its name rather than under it.
 {% endcomment %}
 <header class="page-head">
   <div class="page-head-copy">
-    {% if page.trail %}<p class="page-trail">{% for label, url in page.trail %}<a href="{{ url }}">{{ label }}</a> / {% endfor %}</p>{% endif %}
+    {% if page.trail %}<p class="page-trail">{% for label, url in page.trail %}<a href="{{ url }}">{{ label|breakable }}</a>{% endfor %}</p>{% endif %}
     <div class="page-title-row">
       <h1>{{ page.title|breakable }}</h1>
-      {% for badge in page_badges %}<span class="pill{% if badge.tone %} pill-{{ badge.tone }}{% endif %}"{% if badge.title %} title="{{ badge.title }}"{% endif %}>{{ badge.label }}</span>{% endfor %}
+      {% for badge in page_badges %}<span class="pill{% if badge.tone %} pill-{{ badge.tone }}{% endif %}"{% if badge.title %} title="{{ badge.title }}"{% endif %}>{{ badge.label|breakable }}</span>{% endfor %}
       {% if page_aside %}{% include page_aside %}{% endif %}
     </div>
-    {% if page.lede %}<p class="page-lede">{{ page.lede }}</p>{% endif %}
+    {% if page.lede %}<p class="page-lede">{{ page.lede|breakable }}</p>{% endif %}
   </div>
   {% if page.actions %}
     {% comment %}

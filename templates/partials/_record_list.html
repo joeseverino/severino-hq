@@ -10,13 +10,13 @@ entry needs interpreting rather than just identifying.
   {% for row in rows %}
     <li>
       <span class="row-main">
-        {% if row.url %}<a href="{{ row.url }}"{% if row.external %} target="_blank" rel="noopener"{% endif %}><strong>{{ row.title }}</strong></a>{% else %}<strong>{{ row.title }}</strong>{% endif %}
-        {% if row.detail %}<span class="muted">{{ row.detail }}</span>{% endif %}
-        {% if row.badge %}<span class="pill pill-{{ row.status|default:'neutral' }}">{{ row.badge }}</span>{% endif %}
+        {% if row.url %}<a href="{{ row.url }}"{% if row.external %} target="_blank" rel="noopener"{% endif %}><strong>{{ row.title|breakable }}</strong></a>{% else %}<strong>{{ row.title|breakable }}</strong>{% endif %}
+        {% if row.detail %}<span class="muted">{{ row.detail|breakable }}</span>{% endif %}
+        {% if row.badge %}<span class="pill pill-{{ row.status|default:'neutral' }}">{{ row.badge|breakable }}</span>{% endif %}
       </span>
-      {% if row.meta %}<span class="row-meta">{{ row.meta }}</span>{% endif %}
+      {% if row.meta or row.at %}<span class="row-meta">{% if row.meta %}{{ row.meta|breakable }}{% endif %}{% if row.meta and row.at %} · {% endif %}{% if row.at %}{{ row.at|when:"day" }}{% endif %}</span>{% endif %}
     </li>
   {% empty %}
-    <li class="row-empty"><span class="muted">{{ empty|default:"Nothing here yet." }}</span></li>
+    <li class="row-empty"><span class="muted">{{ empty|default:"Nothing here yet."|breakable }}</span></li>
   {% endfor %}
 </ul>

@@ -4,8 +4,8 @@
   {% for section in dashboard_highlights %}
     <article class="highlight-card card">
       <div class="section-head">
-        <h2>{{ section.label }}{% if section.overview.period %} <span class="section-period">{{ section.overview.period }}</span>{% endif %}</h2>
-        <a class="subtle-link" href="{% if section.overview.url %}{{ section.overview.url }}{% else %}{{ section.cards.0.url }}{% endif %}">View {{ section.label }} &rarr;</a>
+        <h2>{{ section.label|breakable }}{% if section.overview.period %} <span class="section-period">{{ section.overview.period|breakable }}</span>{% endif %}</h2>
+        <a class="subtle-link" href="{% if section.overview.url %}{{ section.overview.url }}{% else %}{{ section.cards.0.url }}{% endif %}">View {{ section.label|breakable }} &rarr;</a>
       </div>
       {% if section.overview.kpis %}
         {% include "partials/_kpi_grid.html" with items=section.overview.kpis label=section.label featured=True %}

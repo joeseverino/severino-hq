@@ -17,37 +17,37 @@ button named for what it does. How it is built belongs to the API reference.
   {% endcomment %}
   {% if result_facts %}
     <dl class="command-result-facts">
-      {% for label, value in result_facts %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+      {% for label, value in result_facts %}<div><dt>{{ label|breakable }}</dt><dd>{{ value|breakable }}</dd></div>{% endfor %}
     </dl>
   {% endif %}
   {% if result_table %}
     {% table_region result_table.label narrow=result_table.columns|length|add:-2 %}
       <table class="data-table command-result-table">
-        <caption>{{ result_table.label }} · {{ result_table.rows|length }}</caption>
+        <caption>{{ result_table.label|breakable }} · {{ result_table.rows|length }}</caption>
         <thead><tr>{% for column in result_table.columns %}{% if forloop.first %}{% table_heading column local_sort=result_table.rows|sortable gutter=True %}{% elif result_table.columns|length > 2 %}{% table_heading column local_sort=result_table.rows|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=result_table.rows|sortable %}{% endif %}{% endfor %}</tr></thead>
         <tbody>
-          {% for row in result_table.rows %}<tr>{% for cell in row %}{% if forloop.first %}<td class="row-gutter">{{ cell }}{% row_toggle %}</td>{% else %}<td>{{ cell }}</td>{% endif %}{% endfor %}</tr>{% endfor %}
+          {% for row in result_table.rows %}<tr>{% for cell in row %}{% if forloop.first %}<td class="row-gutter">{{ cell|breakable }}{% row_toggle %}</td>{% else %}<td>{{ cell|breakable }}</td>{% endif %}{% endfor %}</tr>{% endfor %}
         </tbody>
       </table>
     {% endtable_region %}
   {% endif %}
   <details class="command-result-json"{% if not result_facts and not result_table %} open{% endif %}>
     <summary>Full result, as JSON</summary>
-    <pre><code>{{ result_json }}</code></pre>
+    <pre><code>{{ result_json|breakable }}</code></pre>
   </details>
   <div class="form-actions">
     {% if return_url %}<a class="btn" href="{{ return_url }}">Back</a>{% endif %}
-    {% if resource_url %}<a class="btn ghost" href="{{ resource_url }}">Open {{ resource_label }}</a>{% endif %}
+    {% if resource_url %}<a class="btn ghost" href="{{ resource_url }}">Open {{ resource_label|breakable }}</a>{% endif %}
   </div>
 </section>
 {% endif %}
 
 <section class="card command-runner">
-  {% if command.effect == "destructive" %}
-    <div class="notice notice-serious"><strong>This deletes data</strong><p>It runs only with the confirmation below, and only once.</p></div>
-  {% elif command.effect == "infrastructure_change" %}
-    <div class="notice notice-attention"><strong>This changes a live system</strong><p>Pressing the button twice does not run it twice.</p></div>
-  {% elif command.effect == "remote_write" %}
+  {% comment %}
+  A command that changes a live system or deletes data says so once, in the
+  confirmation beside its button.
+  {% endcomment %}
+  {% if command.effect == "remote_write" %}
     <p class="muted command-effect-note">This changes HQ only. It is recorded in the audit log.</p>
   {% endif %}
 
@@ -60,27 +60,27 @@ button named for what it does. How it is built belongs to the API reference.
   {% if command.target_kind and command.effect == "remote_write" and writes_record and not hydrates_target %}
     <div class="notice notice-attention">
       <strong>This replaces the whole record</strong>
-      <p>Every field is saved as you submit it, including blanks. To change one field, use the record's own edit page{% if resource_url %}, from <a href="{{ resource_url }}">{{ resource_label }}</a>{% endif %}.</p>
+      <p>Every field is saved as you submit it, including blanks. To change one field, use the record's own edit page{% if resource_url %}, from <a href="{{ resource_url }}">{{ resource_label|breakable:"." }}</a>{% else %}.{% endif %}</p>
     </div>
   {% endif %}
 
   {% if unoffered_target %}
     <div class="notice notice-attention">
-      <strong>{{ unoffered_target }} cannot be used here</strong>
+      <strong>{{ unoffered_target|breakable }} cannot be used here</strong>
       <p>Pick another below.</p>
     </div>
   {% endif %}
 
   <form method="post" class="stack-form command-form" data-command-form{% if hydrates_target %} data-command-hydrate-target{% endif %} data-submit-busy data-submit-label="Working…">
     {% csrf_token %}
-    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+    {% for hidden in form.hidden_fields %}{{ hidden|breakable }}{% endfor %}
     {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors }}</div>{% endif %}
     <div class="command-fields">
       {% for field in form.primary_fields %}
         {% if chosen_target and field.name == "__target" %}
           <div class="field command-target">
-            <span class="field-label">{{ chosen_target.field }}</span>
-            <p><strong>{{ chosen_target.label }}</strong> <a class="subtle-link" href="{{ chosen_target.change_url }}">Change</a></p>
+            <span class="field-label">{{ chosen_target.field|breakable }}</span>
+            <p><strong>{{ chosen_target.label|breakable }}</strong> <a class="subtle-link" href="{{ chosen_target.change_url }}">Change</a></p>
             {{ field }}
             {{ field.errors }}
           </div>
@@ -91,7 +91,7 @@ button named for what it does. How it is built belongs to the API reference.
     </div>
     {% for field in form.confirmation_fields %}{% include "partials/_command_field.html" %}{% endfor %}
     <div class="form-actions">
-      <button class="btn primary" type="submit">{{ command_label }}</button>
+      <button class="btn primary" type="submit">{{ command_label|breakable }}</button>
       <span class="muted" data-submit-status hidden role="status">Working…</span>
     </div>
   </form>

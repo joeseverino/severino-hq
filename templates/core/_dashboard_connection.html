@@ -10,10 +10,10 @@ link has the rest, and works without script.
    href="{% url 'connection' %}"
    data-modal-open="connection">
   <span class="glance-symbol">{% include "partials/_icon.html" with name="network" %}</span>
-  <span class="glance-lead"><span class="conn-dot" aria-hidden="true"></span><strong>{{ connection.channel.label }}</strong></span>
+  <span class="glance-lead"><span class="conn-dot" aria-hidden="true"></span><strong>{{ connection.channel.label|breakable }}</strong></span>
   <span class="glance-caption">
-    <span>{{ connection.transport }}</span>
+    <span>{{ connection.transport|breakable }}</span>
     {% include "partials/_example_connection.html" %}
   </span>
-  {% if not connection.holds %}<span class="dash-connection-checks{% if connection.failing %} is-attention{% endif %}">{{ connection.summary }}</span>{% endif %}
+  {% if not connection.holds %}<span class="dash-connection-checks{% if connection.failing %} is-attention{% endif %}">{{ connection.summary|breakable }}</span>{% endif %}
 </a>

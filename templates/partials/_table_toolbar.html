@@ -1,18 +1,18 @@
 <form class="table-toolbar" method="get" data-table-toolbar>
-  <input class="table-search" type="search" name="q" value="{{ table.query }}" placeholder="{{ table.search_placeholder }}" aria-label="{{ table.search_placeholder }}">
+  <input class="table-search" type="search" name="q" value="{{ table.query }}" placeholder="{{ table.search_placeholder }}" size="{{ table.search_placeholder|length }}" aria-label="{{ table.search_placeholder }}">
   <div class="table-filters" aria-label="Table filters">
     {% for filter in table.filters %}
       <details class="table-filter-menu" data-menu>
-        <summary>{{ filter.label }}{% if filter.selected_count %} <span class="filter-count">{{ filter.selected_count }}</span>{% endif %}</summary>
+        <summary>{{ filter.label|breakable }}{% if filter.selected_count %} <span class="filter-count">{{ filter.selected_count|breakable }}</span>{% endif %}</summary>
         <div class="table-filter-options">
           {% for option in filter.options %}
-            <label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}"{% if option.selected %} checked{% endif %}> {{ option.label }}</label>
+            <label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}"{% if option.selected %} checked{% endif %}> {{ option.label|breakable }}</label>
           {% endfor %}
         </div>
       </details>
     {% endfor %}
     {% for toggle in table.toggles %}
-      <label class="table-toggle"><input type="checkbox" name="{{ toggle.name }}" value="1"{% if toggle.selected %} checked{% endif %}> {{ toggle.label }}</label>
+      <label class="table-toggle"><input type="checkbox" name="{{ toggle.name }}" value="1"{% if toggle.selected %} checked{% endif %}> {{ toggle.label|breakable }}</label>
     {% endfor %}
     {% if table.sorts %}
       <label class="table-sort">Sort
@@ -22,12 +22,12 @@
         </select>
       </label>
     {% endif %}
-    <button class="btn" type="submit">Apply</button>
-    {% if table.active_count %}<a class="btn ghost" href="?">Clear {{ table.active_count }}</a>{% endif %}
+    <button class="btn" type="submit">Filter</button>
+    {% if table.active_count %}<a class="btn ghost" href="?">Clear filters</a>{% endif %}
   </div>
 </form>
 <div class="table-selection" data-table-selection aria-live="polite" hidden>
   <strong><span data-selection-count>0</span> selected</strong>
   <button class="btn ghost" type="button" data-copy-selected>Copy IDs</button>
-  <button class="btn ghost" type="button" data-clear-selected>Clear</button>
+  <button class="btn ghost" type="button" data-clear-selected>Clear selection</button>
 </div>

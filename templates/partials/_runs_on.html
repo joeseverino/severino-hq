@@ -6,7 +6,7 @@ is drawn when no service HQ knows answers there.
 {% endcomment %}
 {% if runs_on %}
 <p class="runs-on">
-  {% if runs_on.machine %}Runs on {% entity runs_on.machine %}{% if runs_on.container %}, container {% entity runs_on.container %}{% endif %}.{% endif %}
+  {% if runs_on.machine %}Runs on {% if runs_on.container %}{% entity runs_on.machine mark="," %} container {% entity runs_on.container mark="." %}{% else %}{% entity runs_on.machine mark="." %}{% endif %}{% endif %}
   <span class="muted">Served as {% entity runs_on.service %}</span>
 </p>
 {% endif %}

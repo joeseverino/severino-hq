@@ -1,26 +1,26 @@
 {% comment %}Expects `entry` from approvals.review(). Decisions only while pending.{% endcomment %}{% load humanize %}
 <article class="card approval-card{% if entry.held.state == 'pending' %} is-pending{% endif %}">
   <header class="approval-head">
-    <h2><code>{{ entry.held.requested_actor|breakable }}</code> wants to run <span class="approval-what">{{ entry.title }}</span>{% if entry.held.target %} on {% if entry.resource_url %}<a href="{{ entry.resource_url }}">{{ entry.held.target }}</a>{% else %}<code>{{ entry.held.target|breakable }}</code>{% endif %}{% endif %}</h2>
+    <h2><code>{{ entry.held.requested_actor|breakable }}</code> wants to run <span class="approval-what">{{ entry.title|breakable }}</span>{% if entry.held.target %} on {% if entry.resource_url %}<a href="{{ entry.resource_url }}">{{ entry.held.target|breakable }}</a>{% else %}<code>{{ entry.held.target|breakable }}</code>{% endif %}{% endif %}</h2>
     <p class="muted">
-      {{ entry.held.requested_interface|upper }} · asked {{ entry.held.created_at|ago }}
+      {{ entry.held.requested_interface|upper|breakable }} · asked {{ entry.held.created_at|ago }}
       {% if entry.held.state == 'pending' %}
         · expires {{ entry.held.expires_at|naturaltime }}
       {% else %}
-        · <strong>{{ entry.held.get_state_display }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor|breakable }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
+        · <strong>{{ entry.held.get_state_display|breakable }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor|breakable }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
       {% endif %}
     </p>
-    {% if entry.held.reason %}<blockquote class="approval-reason">{{ entry.held.reason }}</blockquote>{% endif %}
-    {% if entry.held.decision_note %}<p class="approval-reason">{{ entry.held.decision_note }}</p>{% endif %}
+    {% if entry.held.reason %}<blockquote class="approval-reason">{{ entry.held.reason|breakable }}</blockquote>{% endif %}
+    {% if entry.held.decision_note %}<p class="approval-reason">{{ entry.held.decision_note|breakable }}</p>{% endif %}
   </header>
 
   {% if entry.warnings %}
     <div class="notice notice-attention">
       <strong>What this affects</strong>
-      <ul>{% for warning in entry.warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
+      <ul>{% for warning in entry.warnings %}<li>{{ warning|breakable }}</li>{% endfor %}</ul>
     </div>
   {% endif %}
-  <h3 class="approval-label">{{ entry.preview.label }}</h3>
+  <h3 class="approval-label">{{ entry.preview.label|breakable }}</h3>
   {% if entry.preview.rows %}
     {% table_region entry.preview.label %}
       <table class="data-table compact-table">
@@ -28,9 +28,9 @@
         <tbody>
           {% for row in entry.preview.rows %}
             <tr>
-              <th><code>{{ row.path|breakable }}</code></th>
-              {% if entry.preview.compares %}<td>{% if row.before %}{{ row.before }}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
-              <td>{% if row.after %}{{ row.after }}{% else %}{% empty_value %}{% endif %}</td>
+              <th>{{ row.label|breakable }}</th>
+              {% if entry.preview.compares %}<td>{% if row.before %}{{ row.before|breakable }}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
+              <td>{% if row.after %}{{ row.after|breakable }}{% else %}{% empty_value %}{% endif %}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -38,7 +38,7 @@
     {% endtable_region %}
   {% endif %}
   {% if entry.preview.lines %}
-    <pre><code>{% for line in entry.preview.lines %}{{ line }}
+    <pre><code>{% for line in entry.preview.lines %}{{ line|breakable }}
 {% endfor %}</code></pre>
   {% endif %}
 

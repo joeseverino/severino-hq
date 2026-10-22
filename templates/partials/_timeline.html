@@ -15,8 +15,8 @@ band of page spent on the absence of news.
 <section class="timeline{% if not plain %} card{% endif %}" aria-label="{{ timeline.title }}">
   <div class="section-head timeline-head">
     <div>
-      <h2>{{ timeline.title }}</h2>
-      {% if timeline.description %}<p class="timeline-description">{{ timeline.description }}</p>{% endif %}
+      <h2>{{ timeline.title|breakable }}</h2>
+      {% if timeline.description %}<p class="timeline-description">{{ timeline.description|breakable }}</p>{% endif %}
     </div>
     {% if timeline.items %}<span class="count">{{ timeline.items|length|counted:"event" }}</span>{% endif %}
   </div>
@@ -37,10 +37,10 @@ band of page spent on the absence of news.
             {% if item.when|date:"Y" != current_year %}<span class="timeline-year">{{ item.when|date:"Y" }}</span>{% endif %}
           </time>
           <span class="timeline-copy">
-            {% if item.url %}<a href="{{ item.url }}"><strong>{{ item.title }}</strong></a>{% else %}<strong>{{ item.title }}</strong>{% endif %}
-            {% if item.detail %}<span class="muted">{{ item.detail }}</span>{% endif %}
+            {% if item.url %}<a href="{{ item.url }}"><strong>{{ item.title|breakable }}</strong></a>{% else %}<strong>{{ item.title|breakable }}</strong>{% endif %}
+            {% if item.detail %}<span class="muted">{{ item.detail|breakable }}</span>{% endif %}
           </span>
-          {% if item.badge %}<span class="pill pill-{{ item.status }}">{{ item.badge }}</span>{% endif %}
+          {% if item.badge %}<span class="pill pill-{{ item.status }}">{{ item.badge|breakable }}</span>{% endif %}
         </li>
       {% endfor %}
     </ol>

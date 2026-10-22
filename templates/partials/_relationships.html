@@ -26,11 +26,11 @@
     {% for group in relationships.groups %}
     {% with shared=group.shared %}
     <div class="relation-group">
-      <dt>{{ group.phrase }}</dt>
+      <dt>{{ group.phrase|breakable }}</dt>
       <dd>
         <ul class="relation-ends">
           {% for item in group.items %}
-          <li>{% entity item.entity %}{% if item.entity.detail %} <span class="muted">{{ item.entity.detail }}</span>{% endif %}{% if not shared %}{% if item.source or item.observed_at %} <span class="muted">({% if item.source %}through {% entity item.source %}{% endif %}{% if item.source and item.observed_at %} · {% endif %}{% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %})</span>{% endif %}{% endif %}{% if item.stale %} <span class="pill pill-attention">Out of date</span>{% endif %}</li>
+          <li>{% entity item.entity %}{% if item.entity.detail %} <span class="muted">{{ item.entity.detail|breakable }}</span>{% endif %}{% if not shared %}{% if item.source or item.observed_at %} <span class="muted">({% if item.source %}through {% entity item.source %}{% endif %}{% if item.source and item.observed_at %} · {% endif %}{% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %})</span>{% endif %}{% endif %}{% if item.stale %} <span class="pill pill-attention">Out of date</span>{% endif %}</li>
           {% endfor %}
         </ul>
         {% if shared %}<p class="relation-source">From {% entity shared.source %}{% if shared.observed_at %} · {% include "partials/_reading_age.html" with at=shared.observed_at only %}{% endif %}</p>{% endif %}
@@ -41,17 +41,17 @@
   </dl>
   {% endif %}
   {% comment %}What the page was read with, when it names that, as the card's last line.{% endcomment %}
-  {% if read_with %}<p class="muted relation-source">Read with {% for link in read_with %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+  {% if read_with %}<p class="muted relation-source">Read with {% for link in read_with %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>{% endif %}
   {% if relationships.unreadable %}
-    <p class="muted">Could not be read: {{ relationships.unreadable|join:", " }}. This list may be incomplete. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections &rarr;</a></p>
+    <p class="muted">Could not be read: {{ relationships.unreadable|join:", "|breakable:"." }} This list may be incomplete. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections &rarr;</a></p>
   {% endif %}
   {% if relationships.readouts %}
     <details class="section-readout">
       <summary>Raw readings</summary>
       {% for label, source, text in relationships.readouts %}
         <details class="section-readout">
-          <summary>{{ label }}{% if source %} through {% entity source %}{% endif %}</summary>
-          <pre>{{ text }}</pre>
+          <summary>{{ label|breakable }}{% if source %} through {% entity source %}{% endif %}</summary>
+          <pre>{{ text|breakable }}</pre>
         </details>
       {% endfor %}
     </details>

@@ -7,7 +7,7 @@ A group with nothing in it is not drawn.
 {% if items %}
 <section class="card discovery-group">
   <div class="section-head">
-    <h2>{{ title }}</h2>
+    <h2>{{ title|breakable }}</h2>
     <span class="count">{{ items|length }}</span>
   </div>
   <ul class="discovery-list">
@@ -15,12 +15,12 @@ A group with nothing in it is not drawn.
     <li>
       {% if item.url %}<a class="discovery-link" href="{{ item.url }}">{% else %}<div class="discovery-link">{% endif %}
         <span class="discovery-main">
-          <strong>{{ item.label }}</strong>
-          {% if item.summary and not plain %}<span class="muted">{{ item.summary }}</span>{% endif %}
+          <strong>{{ item.label|breakable }}</strong>
+          {% if item.summary and not plain %}<span class="muted">{{ item.summary|breakable }}</span>{% endif %}
         </span>
         {% if item.badges %}
         <span class="discovery-meta">
-          {% for badge in item.badges %}{% if badge %}<span class="scope-chip">{{ badge }}</span>{% endif %}{% endfor %}
+          {% for badge in item.badges %}{% if badge %}<span class="scope-chip">{{ badge|breakable }}</span>{% endif %}{% endfor %}
         </span>
         {% endif %}
       {% if item.url %}</a>{% else %}</div>{% endif %}
