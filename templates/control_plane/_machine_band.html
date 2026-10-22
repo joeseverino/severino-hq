@@ -9,7 +9,8 @@ for: one band under the head, as a service's and HQ's own page open.
     <span class="band-icon">{% include "partials/_icon.html" with name="network" %}</span>
     <div>
       <span class="band-label">Read through</span>
-      {% with found=reached_links.0 %}<strong>{% entity found.0 code=True %}</strong>{% endwith %}
+      {% comment %}A connection named for this machine is named by its kind, a word rather than an identifier.{% endcomment %}
+      {% with found=reached_links.0 %}<strong>{% if found.0.title %}{% entity found.0 %}{% else %}{% entity found.0 code=True %}{% endif %}</strong>{% endwith %}
       {% for link, unanswered in reached_links %}{% if not forloop.first or unanswered %}<small>{% if not forloop.first %}{% entity link %}{% endif %}{% if unanswered %} not answering{% endif %}</small>{% endif %}{% endfor %}
     </div>
   </div>
@@ -19,8 +20,8 @@ for: one band under the head, as a service's and HQ's own page open.
     <span class="band-icon">{% include "partials/_icon.html" with name="container" %}</span>
     <div>
       <span class="band-label">Containers</span>
-      <strong>{{ machine.running }} of {{ machine.containers|length }} running</strong>
-      <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known vulnerabilities,have known vulnerabilities" }} · {% endif %}{% if container_counts.update %}{{ container_counts.update|counted:"has an update,have an update" }}{% elif container_counts.up_to_date == standings|length %}All up to date{% elif container_counts.up_to_date %}{{ container_counts.up_to_date }} up to date{% else %}Updates not checked yet{% endif %}</small>
+      <strong>{{ machine.running|breakable }} of {{ machine.containers|length }} running</strong>
+      <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known vulnerabilities,have known vulnerabilities" }} · {% endif %}{% if container_counts.update %}{{ container_counts.update|counted:"has an update,have an update" }}{% elif container_counts.up_to_date == standings|length %}All up to date{% elif container_counts.up_to_date %}{{ container_counts.up_to_date|breakable }} up to date{% else %}Updates not checked yet{% endif %}</small>
     </div>
   </div>
   {% endif %}
@@ -29,8 +30,17 @@ for: one band under the head, as a service's and HQ's own page open.
     <span class="band-icon">{% include "partials/_icon.html" with name="globe" %}</span>
     <div>
       <span class="band-label">Serves</span>
-      <strong>{% if serves_links %}{{ serves_links|length|counted:"name" }}{% else %}{{ machine.roles.0.label }}{% endif %}</strong>
-      <small>{% for link in serves_links %}{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label }}</a>){% endif %}{% if not forloop.last or machine.roles %} · {% endif %}{% endfor %}{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</small>
+      {% comment %}
+      Where the page lists its names in a table, the band counts them and
+      leads there; the names themselves are said once, in the table.
+      {% endcomment %}
+      {% if names_listed %}
+      <strong><a href="#names">{{ names_listed|counted:"name" }}</a></strong>
+      {% if machine.roles %}<small>{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</small>{% endif %}
+      {% else %}
+      <strong>{% if serves_links %}{{ serves_links|length|counted:"name" }}{% else %}{{ machine.roles.0.label|breakable }}{% endif %}</strong>
+      <small>{% for link in serves_links %}{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label|breakable:")" }}</a>{% endif %}{% if not forloop.last or machine.roles %} · {% endif %}{% endfor %}{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</small>
+      {% endif %}
     </div>
   </div>
   {% endif %}

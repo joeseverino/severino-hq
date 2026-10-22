@@ -1,7 +1,7 @@
 {% comment %}What a removal does: delete at the provider, or forget the declaration.{% endcomment %}
 {% if forget %}
   <p>
-    HQ stops tracking {{ resource.key }}{% if holds_records %} and the records in it{% endif %}.
+    HQ stops tracking {{ resource.key|breakable }}{% if holds_records %} and the records in it{% endif %}.
     Nothing live is deleted.
     HQ leaves it alone until you manage it again.
   </p>
@@ -15,7 +15,7 @@
 What this one costs, said by the provider. "Are you sure" about a table of
 fields has no honest answer without knowing which record it is.
 {% endcomment %}
-{% if removal_note %}<p class="msg msg-warning">{{ removal_note }}</p>{% endif %}
+{% if removal_note %}<p class="msg msg-warning">{{ removal_note|breakable }}</p>{% endif %}
 {% comment %}
 What this is, then the tuning underneath. At equal weight, defaults nobody
 chose ("Hsts subdomains: No", "Access list: 0") crowd the rows that say what
@@ -23,7 +23,7 @@ is about to be deleted.
 {% endcomment %}
 <dl class="kv compact">
   {% for label, value in spec_rows.primary %}
-    <dt>{{ label }}</dt><dd><code>{{ value|breakable }}</code></dd>
+    <dt>{{ label|breakable }}</dt><dd><code>{{ value|breakable }}</code></dd>
   {% endfor %}
 </dl>
 {% if spec_rows.advanced %}
@@ -31,7 +31,7 @@ is about to be deleted.
     <summary>Other settings ({{ spec_rows.advanced|length }})</summary>
     <dl class="kv compact">
       {% for label, value in spec_rows.advanced %}
-        <dt>{{ label }}</dt><dd><code>{{ value|breakable }}</code></dd>
+        <dt>{{ label|breakable }}</dt><dd><code>{{ value|breakable }}</code></dd>
       {% endfor %}
     </dl>
   </details>

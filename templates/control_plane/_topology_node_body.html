@@ -1,10 +1,10 @@
 <div class="topology-node-body" data-topology-body-of="{{ item.node.id }}">
   <header class="topology-detail-head">
     <h2>{% entity item.link %}</h2>
-    <span class="muted">{{ item.node.subtitle }} · {{ item.degree|counted:"link" }}</span>
-    {% if item.node.status_label %}<span class="pill pill-{{ item.node.status }}">{{ item.node.status_label }}</span>{% endif %}
+    <span class="muted">{{ item.node.subtitle|breakable }} · {{ item.degree|counted:"link" }}</span>
+    {% if item.node.status_label %}<span class="pill pill-{{ item.node.status }}">{{ item.node.status_label|breakable }}</span>{% endif %}
   </header>
-  {% if item.node.detail %}<p class="muted">{{ item.node.detail }}</p>{% endif %}
+  {% if item.node.detail %}<p class="muted">{{ item.node.detail|breakable }}</p>{% endif %}
 
   {% comment %}
     Triage, in the order an operator asks it: is anyone converging this,
@@ -16,8 +16,8 @@
       <div class="topology-fact">
         <dt>Traffic · {{ traffic_window_days|counted:"day" }}</dt>
         <dd>
-          <strong>{{ item.node.pageviews }}</strong> pageviews from
-          <strong>{{ item.node.visits }}</strong> visits.
+          <strong>{{ item.node.pageviews|breakable }}</strong> pageviews from
+          <strong>{{ item.node.visits|breakable }}</strong> visits.
         </dd>
       </div>
     {% endif %}
@@ -81,22 +81,22 @@
               <a class="topology-relation-link" href="{{ row.url }}" data-entity="{{ row.other_link.kind_label }}">
                 <span class="topology-relation-arrow" aria-hidden="true">{% if group.grouper == "out" %}&rarr;{% else %}&larr;{% endif %}</span>
                 <span class="visually-hidden">{% if group.grouper == "out" %}Uses:{% else %}Used by:{% endif %}</span>
-                <span class="topology-relation-verb">{{ row.label }}</span>
+                <span class="topology-relation-verb">{{ row.label|breakable }}</span>
                 <span class="topology-relation-other">{{ row.other.label|breakable }}</span>
-                <span class="topology-relation-kind">{{ row.other_link.kind_label }}</span>
+                <span class="topology-relation-kind">{{ row.other_link.kind_label|breakable }}</span>
               </a>
-              {% if row.status and row.status != "neutral" %}<span class="pill pill-{{ row.status }}">{{ row.status|title }}</span>{% endif %}
+              {% if row.status and row.status != "neutral" %}<span class="pill pill-{{ row.status }}">{{ row.status|title|breakable }}</span>{% endif %}
               {% if row.entities %}
                 <ul class="topology-relation-values">
                   {% for link in row.entities %}
                     <li>
                       <span class="topology-relation-value">{% entity link %}</span>
-                      <span class="topology-relation-source muted">{{ link.kind_label }}{% if row.observed_age %} · {% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</span>
+                      <span class="topology-relation-source muted">{{ link.kind_label|breakable }}{% if row.observed_age %} · {% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</span>
                     </li>
                   {% endfor %}
                 </ul>
               {% elif row.detail or row.observed_age %}
-                <p class="topology-relation-source muted">{{ row.detail }}{% if row.detail and row.observed_age %} · {% endif %}{% if row.observed_age %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</p>
+                <p class="topology-relation-source muted">{{ row.detail|breakable }}{% if row.detail and row.observed_age %} · {% endif %}{% if row.observed_age %}{% include "partials/_reading_age.html" with at=row.observed_at only %}{% endif %}</p>
               {% endif %}
             </li>
           {% endfor %}
@@ -107,23 +107,9 @@
     <p class="muted">Connected to nothing.</p>
   {% endif %}
 
-  {% if topology_trace and item.hop %}<p class="topology-hop"><span class="pill">{{ item.hop|counted:"step" }}</span> from {{ topology_trace_focus.label }}</p>{% endif %}
+  {% if topology_trace and item.hop %}<p class="topology-hop">{{ item.hop|counted:"step" }} from {{ topology_trace_focus.label|breakable }}</p>{% endif %}
   {% if item.node.actions %}
-    <div class="topology-node-actions">
-      {% for action in item.node.actions %}
-        {% if action.method == "POST" %}
-          {% if action.effect == "destructive" %}
-            {% post_button action.label action.url css="btn compact danger" title=action.reason %}
-          {% elif action.effect == "infrastructure_change" or action.recommended %}
-            {% post_button action.label action.url css="btn compact primary" title=action.reason %}
-          {% else %}
-            {% post_button action.label action.url css="btn compact" title=action.reason %}
-          {% endif %}
-        {% else %}
-          <a class="btn compact{% if action.effect == 'destructive' %} danger{% elif action.recommended %} primary{% endif %}" href="{{ action.url }}"{% if action.reason %} title="{{ action.reason }}"{% endif %}>{{ action.label }}</a>
-        {% endif %}
-      {% endfor %}
-    </div>
+    <div class="topology-node-actions">{% include "partials/_action_links.html" with actions=item.node.actions only %}</div>
   {% endif %}
   <div class="topology-node-actions" aria-label="Follow links from {{ item.node.label }}">
     <a class="btn ghost compact" href="{{ item.inbound_url }}">What depends on this</a>

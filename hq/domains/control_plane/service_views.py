@@ -19,8 +19,8 @@ from hq.platform.application.inventory import inventory_state
 from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
-    VERB_LABELS,
     resource_capabilities,
+    verb_words,
 )
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
@@ -199,8 +199,8 @@ class ServiceDetailView(PageMixin, TemplateView):
                     verb,
                     watcher.key,
                     allowed,
-                    label=VERB_LABELS[verb],
-                    title=allowed.reason or f"{VERB_LABELS[verb]} {container.name}",
+                    label=verb_words(verb),
+                    title=allowed.reason or f"{verb_words(verb)} {container.name}",
                     origin=self.request.get_full_path(),
                 )
                 for verb, allowed in capabilities.page_actions

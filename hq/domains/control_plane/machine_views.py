@@ -7,12 +7,13 @@ from django.http import Http404
 from django.shortcuts import redirect
 from django.views.generic import TemplateView
 
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.connections import machines_once
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
 from hq.platform.application.machine_context import header_addresses, machine_links, sections_for as machine_sections
 from hq.platform.application.machines import declaration_seed, machine
 from hq.platform.application.pages import PageAction, PageDialog, PageMixin
-from hq.platform.application.resource_capabilities import resource_capabilities
+from hq.platform.application.resource_capabilities import REMOVAL_CAPABILITY, resource_capabilities
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.application.tailnet_context import tailnet_context
@@ -176,7 +177,9 @@ class MachineDetailView(PageMixin, TemplateView):
             key = self.found.declaration
             actions = [
                 PageAction("Edit machine", reverse("control_plane:edit", args=[key])),
-                PageAction("Remove", reverse("control_plane:remove", args=[key]), danger=True),
+                PageAction(
+                    capability_words(REMOVAL_CAPABILITY), reverse("control_plane:remove", args=[key]), danger=True
+                ),
             ]
         else:
             # Seeded with what HQ knows, and back here after saving. A machine the
@@ -221,6 +224,10 @@ class MachineDetailView(PageMixin, TemplateView):
         context["docker"] = docker_line(found) if found.containers else None
         context["sections"] = tuple(
             section for section in sections if not (context["docker"] and section.id == "docker-environment")
+        )
+        # How many names the page's own table lists, which the band then counts.
+        context["names_listed"] = next(
+            (len(section.records) for section in context["sections"] if section.id == "names"), 0
         )
         # The load reading counts running containers at its own moment. The
         # page states one count, the container list's, so the two cannot differ.

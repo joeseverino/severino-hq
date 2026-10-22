@@ -62,7 +62,7 @@ class PublishedImageRecord(ObservationRecord):
     unread: str = ""
 
 
-class UpstreamRecord(ObservationRecord):
+class UpstreamReleasesRecord(ObservationRecord):
     # ``owner/repository`` on GitHub, as an image names its source.
     repository: str
     url: str = ""
@@ -174,7 +174,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         UPSTREAM_KIND,
         "upstream",
         "Upstream releases",
-        UpstreamRecord,
+        UpstreamReleasesRecord,
         title=lambda record: str(record.get("repository", "")),
         relation="Built from",
         read_by="hq",

@@ -3,10 +3,10 @@
 {% block page %}
 <div class="connection-summary" role="group" aria-label="Connection summary">
   <span><strong>{{ connections.connection_count|counted:"connection" }}</strong></span>
-  {% for count, state in connections.attention_states %}<span class="is-attention"><strong>{{ count }} {{ state }}</strong></span>{% endfor %}
+  {% for count, state in connections.attention_states %}<span class="is-attention"><strong>{{ count|breakable }} {{ state|breakable }}</strong></span>{% endfor %}
   {% if connections.all_custodied %}<span>No secrets stored in HQ</span>{% endif %}
-  {% if connections.oldest %}<span>Oldest reading <a href="#{{ connections.oldest.label|connection_anchor }}">{{ connections.oldest.label }}</a> · {% include "partials/_reading_age.html" with at=connections.oldest.observed_at only %}</span>{% endif %}
-  {% if connections.reading_everything_since %}<span>Read all asked {{ connections.reading_everything_since|ago }}, waiting for the controller</span>{% endif %}
+  {% if connections.oldest %}<span>Oldest reading <a href="#{{ connections.oldest.label|connection_anchor }}">{{ connections.oldest.label|breakable }}</a> · {% include "partials/_reading_age.html" with at=connections.oldest.observed_at only %}</span>{% endif %}
+  {% if connections.reading_everything_since %}<span>{% words "infrastructure.controller.refresh" "all" %} asked {{ connections.reading_everything_since|ago }}. {% waiting %}</span>{% endif %}
 </div>
 
 {% comment %}
@@ -29,30 +29,30 @@ part's heading shows only when there is more than one.
       </thead>
       {% for purpose, purpose_rows in connections.purposes %}
       <tbody>
-        {% if connections.purposes|length > 1 %}<tr class="row-group"><th colspan="5" scope="rowgroup">{{ purpose }} <span class="count">{{ purpose_rows|length }}</span></th></tr>{% endif %}
+        {% if connections.purposes|length > 1 %}<tr class="row-group"><th colspan="5" scope="rowgroup">{{ purpose|breakable }} <span class="count">{{ purpose_rows|length }}</span></th></tr>{% endif %}
         {% for row in purpose_rows %}
           {% with connection=row.connection group=row.group %}
           <tr id="{{ connection.instance.label|connection_anchor }}">
             <td class="row-gutter">
               <strong>{% entity connection.name_link %}</strong>
-              {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code>{% endif %}
+              {% if connection.instance.endpoint %}<br><code class="connection-endpoint" title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint|breakable }}</code>{% endif %}
               {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
               {% ifchanged group.spec.label group.spec.secret_store %}<span class="connection-row-meta narrow-more">
-                {% if group.spec.label != connection.instance.label %}{{ group.spec.label }} · {% endif %}{% if group.spec.secret_store %}Secrets in {{ group.spec.secret_store }}{% elif connection.instance.credential_model == "none" %}No key needed{% else %}Does not say where its secret is kept{% endif %}
+                {% if group.spec.label != connection.instance.label %}{{ group.spec.label|breakable }} · {% endif %}{% if group.spec.secret_store %}Secrets in {{ group.spec.secret_store|breakable }}{% elif connection.instance.credential_model == "none" %}No key needed{% else %}Does not say where its secret is kept{% endif %}
                 {% if group.spec.documentation_url %} · <a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}
                 {% if group.spec.management_route %} · <a href="{% url group.spec.management_route %}">Manage</a>{% endif %}
               </span>{% endifchanged %}
-              {% if row.reach.summary %}<span class="connection-row-meta connection-reach narrow-more">{{ row.reach.label }}{% if row.reach.machine %} {{ row.reach.machine_word }} {% entity row.reach.machine %}{% endif %}{% if row.reach.relay %}, {{ row.reach.relay }}{% endif %}</span>{% endif %}
-              {% if connection.instance.facts %}<span class="connection-row-meta narrow-more">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
+              {% if row.reach.summary %}<span class="connection-row-meta connection-reach muted narrow-more">{% with mark=row.reach.relay|then:"," %}{% if row.reach.machine %}{{ row.reach.label|breakable }} {{ row.reach.machine_word|breakable }} {% entity row.reach.machine mark=mark %}{% else %}{{ row.reach.label|breakable:mark }}{% endif %}{% endwith %}{% if row.reach.relay %} {{ row.reach.relay|breakable }}{% endif %}</span>{% endif %}
+              {% if connection.instance.facts %}<span class="connection-row-meta narrow-more">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value|breakable }}{% else %}{{ fact.label|breakable:":" }} {{ fact.value|breakable }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
               {% with sight=row.sight %}
-              {% if sight.credential_refusal %}<p class="connection-sight-refusal">{{ sight.label }} refused this credential: {{ sight.credential_refusal }}</p>{% endif %}
+              {% if sight.credential_refusal %}<p class="connection-sight-refusal">{{ sight.label|breakable }} refused this credential: {{ sight.credential_refusal|breakable }}</p>{% endif %}
               {% if sight.sights %}
                 {% include "control_plane/_connection_sight.html" with sight=sight %}
               {% endif %}
               {% endwith %}
               {% if row.more_scope %}
                 <div class="connection-more-scope row-below" data-label="Also sees">
-                  <ul class="connection-sight-list">{% for line in row.more_scope %}<li>{{ line }}</li>{% endfor %}</ul>
+                  <ul class="connection-sight-list">{% for line in row.more_scope %}<li>{{ line|breakable }}</li>{% endfor %}</ul>
                 </div>
               {% endif %}
               {% if row.fix %}{% include "control_plane/_credential_fix.html" with fix=row.fix %}{% endif %}
@@ -75,7 +75,7 @@ part's heading shows only when there is more than one.
                   {% for state in connection.abilities %}{% if forloop.counter <= 3 or folded <= 0 %}{% include "control_plane/_connection_ability.html" %}{% endif %}{% endfor %}
                 </ul>
                 {% if folded > 0 %}
-                  <span class="connection-ability-more row-less">+{{ connection.abilities|length|add:"-3" }} more</span>
+                  <span class="connection-ability-more cell-part row-less">+{{ connection.abilities|length|add:"-3"|breakable }} more</span>
                   <ul class="connection-ability-list connection-ability-all row-below" data-label="Also reads">
                     {% for state in connection.abilities|slice:"3:" %}{% include "control_plane/_connection_ability.html" %}{% endfor %}
                   </ul>
@@ -96,7 +96,7 @@ part's heading shows only when there is more than one.
               {% endcomment %}
               <span class="connection-depends">
               {% with targets=connection.instance.targets dependencies=connection.instance.dependencies %}
-              {% for link in targets %}{% if forloop.counter == 4 and targets|length > 4 %}<span class="muted row-less">+{{ targets|length|add:"-3" }}</span>{% endif %}<span{% if forloop.counter > 3 and targets|length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %} · {% endif %}{% entity link|declared_link %}</span>{% endfor %}
+              {% for link in targets %}{% if forloop.counter == 4 and targets|length > 4 %}<span class="muted row-less">+{{ targets|length|add:"-3"|breakable }}</span>{% endif %}<span{% if forloop.counter > 3 and targets|length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %} · {% endif %}{% entity link|declared_link %}</span>{% endfor %}
               {% if targets and dependencies %}<br>{% endif %}
               {% if dependencies|length > 4 %}<span class="muted row-less">{{ dependencies|length|counted:"record" }}</span>{% endif %}
               {% for link in dependencies %}<span{% if dependencies|length > 4 %} class="row-more"{% endif %}>{% if not forloop.first %} · {% endif %}{% entity link|declared_link code=True %}</span>{% endfor %}
@@ -116,20 +116,16 @@ part's heading shows only when there is more than one.
               together off the edge of a phone.
               {% endcomment %}
               <span class="connection-standing">
-                <span class="connection-state connection-state-{{ row.lifecycle }}">{{ row.state_label }}</span>
+                <span class="connection-state connection-state-{{ row.lifecycle }}">{{ row.state_label|breakable }}</span>
                 {% if row.read_requested_at %}<span class="muted narrow-more">Read asked {{ row.read_requested_at|ago }}</span>
-                {% elif row.state_line %}<span class="connection-authority connection-authority-{{ connection.authority }} {% if row.state_line_quiet %}row-more{% else %}narrow-more{% endif %}">{{ row.state_line }}</span>
+                {% elif row.state_line %}<span class="connection-authority connection-authority-{{ connection.authority }} {% if row.state_line_quiet %}row-more{% else %}narrow-more{% endif %}">{{ row.state_line|breakable }}</span>
                 {% elif not row.sight.sights and connection.instance.observed_at %}<span class="muted narrow-more">{% include "partials/_reading_age.html" with at=connection.instance.observed_at only %}</span>{% endif %}
                 {% if row.problems %}<a class="connection-problems" href="{{ row.problems_url }}">{{ row.problems|counted:"problem" }}</a>{% endif %}
               </span>
             </td>
             <td class="connection-next">
-              {% if connection.recommended_action %}
-                <a class="btn compact primary" href="{{ connection.recommended_action.url }}" aria-label="{{ connection.recommended_action.label }}: {{ connection.recommended_action.reason }}">{{ connection.recommended_action.label }}</a>
-              {% endif %}
-              {% for action in connection.row_actions %}
-                <a class="connection-direct-action{% if action.effect == 'destructive' %} is-destructive{% endif %}" href="{{ action.url }}"{% if action.reason %} aria-label="{{ action.label }}: {{ action.reason }}"{% endif %}>{{ action.label }}</a>
-              {% endfor %}
+              {% if connection.recommended_action %}{% include "partials/_page_action.html" with action=connection.recommended_action|workflow_action extra="compact" only %}{% endif %}
+              {% include "partials/_action_links.html" with actions=connection.row_actions extra="connection-direct-action" only %}
               {% if row.read_now %}{% include "partials/_ask.html" with ask=row.read_now|as_ask %}{% endif %}
               {% if not connection.recommended_action and not connection.row_actions and not row.read_now %}{% empty_value %}{% endif %}
             </td>
@@ -151,7 +147,7 @@ part's heading shows only when there is more than one.
 {% if connections.unlabeled %}
   <div class="notice notice-attention">
     <strong>HQ does not know what these are</strong>
-    <p>{% for view in connections.unlabeled %}{{ view.instance.label }}{% if not forloop.last %}, {% endif %}{% endfor %}. Add a <code>provider</code> field to the item in 1Password, then press Read all now.</p>
+    <p>{% for view in connections.unlabeled %}{% with mark=forloop.last|then:".|," %}{{ view.instance.label|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Add a <code>provider</code> field to the item in 1Password, then press {% words "infrastructure.controller.refresh" "all" %}.</p>
   </div>
 {% endif %}
 
@@ -161,7 +157,7 @@ part's heading shows only when there is more than one.
   <summary>
     <span>
       <strong>Security checks</strong>
-      <small>This request and each connection's credentials: {{ connections.posture.check_summary }}</small>
+      <small>This request and each connection's credentials: {{ connections.posture.check_summary|breakable }}</small>
     </span>
   </summary>
   <section class="connection-trust-path" aria-labelledby="connection-trust-path-title">
@@ -178,11 +174,11 @@ part's heading shows only when there is more than one.
     {% for control in connections.posture.controls %}
       <article class="connection-control connection-control-{{ control.state }}">
         <header>
-          <h3>{{ control.label }}</h3>
-          <span class="pill pill-{{ control.state }}">{{ control.answer }}</span>
+          <h3>{{ control.label|breakable }}</h3>
+          <span class="pill pill-{{ control.state }}">{{ control.answer|breakable }}</span>
         </header>
-        <strong>{{ control.evidence }}</strong>
-        <p>{{ control.detail }}</p>
+        <strong>{{ control.evidence|breakable }}</strong>
+        <p>{{ control.detail|breakable }}</p>
         {% if control.id == "edge" %}<a href="{% url 'connection' %}" data-modal-open="connection">How I am connected</a>{% endif %}
       </article>
     {% endfor %}

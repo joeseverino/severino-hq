@@ -58,7 +58,7 @@ class CertificateRecord(ObservationRecord):
     serves: tuple[str, ...] = ()
 
 
-class RedirectRecord(ObservationRecord):
+class RedirectionHostRecord(ObservationRecord):
     connection_ref: str = ""
     id: int
     hostnames: tuple[str, ...] = ()
@@ -164,7 +164,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         REDIRECT_KIND,
         PROVIDER,
         "NPM redirect",
-        RedirectRecord,
+        RedirectionHostRecord,
         requires=("redirection_hosts: view",),
         hostnames=_enabled_names,
         title=lambda record: str(record.get("target_host") or record.get("target") or ""),

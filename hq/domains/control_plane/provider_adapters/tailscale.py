@@ -173,7 +173,7 @@ DEVICE = ProviderSpec(
     change_effects=(
         (
             "key_expiry_disabled",
-            "Applied on the controller's next run. Turning it off restores key expiry.",
+            "Turning it off restores key expiry.",
         ),
     ),
     removal_note=lambda spec: (

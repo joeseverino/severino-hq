@@ -6,7 +6,9 @@ the two cannot drift into looking like different things.
 
 Expects `rows`, `zone`, `public_dns_enabled`, and the region's `label`. A state is said only where
 it is not healthy, and a TTL only where it is not automatic: seventeen rows
-that each say "Healthy" and "Auto" say nothing.
+that each say "Healthy" and "Auto" say nothing. Where the Value column has
+left, a record that shares its name and type with another says its value
+under its name (`record.summary`), so the two still read as two.
 {% endcomment %}
 {% table_region label|default:"Records" mid=drop_mid narrow=4 %}
   <table class="data-table zone-record-table">
@@ -26,16 +28,17 @@ that each say "Healthy" and "Auto" say nothing.
             {% if record.service_url %}
               <strong>{% entity "service"|entity_of:record.name %}</strong>
             {% else %}
-              <strong>{{ record.name }}</strong>
+              <strong>{{ record.name|breakable }}</strong>
             {% endif %}
             {% row_toggle %}
+            {% if record.summary %}<span class="narrow-only"><br><span class="muted cell-data">{{ record.summary|breakable }}</span></span>{% endif %}
           </td>
-          <td><code>{{ record.record_type }}</code></td>
+          <td><code>{{ record.record_type|breakable }}</code></td>
           <td>
-            <span class="zone-value">{{ record.value }}</span>
+            <span class="zone-value">{{ record.value|breakable }}</span>
             {% if record.proxied %}<span class="pill pill-neutral">Proxied</span>{% endif %}
           </td>
-          <td>{% if record.ttl != 1 %}{{ record.ttl }} s{% endif %}</td>
+          <td>{% if record.ttl != 1 %}{{ record.ttl|breakable }} s{% endif %}</td>
           {% if zone.managed %}
             <td>
               {% comment %}
@@ -46,9 +49,9 @@ that each say "Healthy" and "Auto" say nothing.
               ought to act on it.
               {% endcomment %}
               {% if not record.manageable %}
-                <span class="pill pill-neutral">{{ record.record_type }} not managed</span>
+                <span class="pill pill-neutral">{{ record.record_type|breakable }} not managed</span>
               {% elif record.managed %}
-                {% if record.health.state != "healthy" %}<span class="pill control-{{ record.health.state }}">{{ record.health.label }}</span>{% endif %}
+                {% if record.health.state != "healthy" %}<span class="pill control-{{ record.health.state }}">{{ record.health.label|breakable }}</span>{% endif %}
               {% else %}
                 <span class="pill pill-attention">New</span>
               {% endif %}
@@ -57,7 +60,7 @@ that each say "Healthy" and "Auto" say nothing.
               {% if record.managed %}
                 <span class="row-actions">
                   <a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">Edit</a>
-                  <a class="subtle-link" href="{{ record.remove_url }}">Remove</a>
+                  <a class="subtle-link" href="{{ record.remove_url }}">{% words "infrastructure.resource.remove" %}</a>
                 </span>
               {% endif %}
             </td>

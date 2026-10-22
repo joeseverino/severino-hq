@@ -4,5 +4,5 @@ state's own sentence, then each reason HQ cannot do something here, each a
 sentence of its own. The state itself is on the title's line
 (`control_plane/_record_status.html`).
 {% endcomment %}
-{% if status.detail %}<p>{{ status.detail }}</p>{% endif %}
-{% for line in controller.lines %}<p class="muted">{{ line }}</p>{% endfor %}
+{% if status.detail %}<p>{{ status.detail|breakable }}</p>{% endif %}
+{% for line in controller.lines %}<p class="muted">{{ line|breakable }}</p>{% endfor %}

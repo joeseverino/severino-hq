@@ -9,7 +9,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import DetailView, ListView
 
-from hq.platform.application.action_links import command_url
+from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.infrastructure import (
     PolicyError,
@@ -19,26 +20,28 @@ from hq.platform.application.infrastructure import (
     serialize_public_status,
     serialize_resource,
 )
+from hq.platform.application.integration_specs import requested as requested_note
 from hq.platform.application.inventory import service_hostnames
+from hq.platform.application.labels import field_label
 from hq.platform.application.pages import PageAction, PageMixin, page_context
+from hq.platform.application.payload_words import value_words
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
     DESTRUCTIVE_VERBS,
-    VERB_LABELS,
     Allowed,
     resource_capabilities,
+    verb_words,
 )
 from hq.platform.application.resource_context import (
     controller_summary,
     newest_reading,
     origin_machine,
-    readout_rows,
     record_list,
     record_status,
+    record_summary,
     resource_context,
 )
 from hq.platform.application.resource_operations import (
-    ACTION_LABELS,
     HISTORY_WINDOW,
     OperationCommand,
     changes,
@@ -62,7 +65,7 @@ lazy from hq.platform.application.page_relations import for_container
 from .models import ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
-from .providers import PROVIDERS, describe_providers, shown_spec
+from .providers import PROVIDERS, describe_providers, readout_rows, shown_spec
 lazy from .container_views import container_detail
 
 # Which use case serves which verb. A table rather than a fall-through, so a
@@ -93,16 +96,6 @@ def _json(value: Any) -> str:
     """A stored document as JSON a person can read and paste, or "" for none."""
 
     return json.dumps(value, indent=2, sort_keys=True, default=str) if value else ""
-
-
-def _spec_value(value: Any) -> str:
-    """One spec field as a person reads it: a list as its items, not its repr."""
-
-    if isinstance(value, (list, tuple)):
-        return ", ".join(str(item) for item in value)
-    if isinstance(value, bool):
-        return "Yes" if value else "No"
-    return str(value)
 
 
 def _spec_rows(resource, *, beside_readout: bool = False) -> dict[str, tuple[tuple[str, str], ...]]:
@@ -138,10 +131,10 @@ def _spec_rows(resource, *, beside_readout: bool = False) -> dict[str, tuple[tup
         # A reported field's setting is the fixed goal its readout already states.
         if value is None or name in provider.reported_fields:
             continue
-        label = fields[name].title or name.replace("_", " ").capitalize() if name in fields else name
+        label = field_label(name, fields[name].title) if name in fields else name
         if label.strip().casefold() in shown:
             continue
-        rendered = _spec_value(value)
+        rendered = value_words(value)
         # And not the thing the page is already titled. A machine's name is its
         # identifier here, so the last row left after the readout would be the
         # heading repeated inside a disclosure offering more.
@@ -265,11 +258,7 @@ class ResourceRemoveView(View):
                 + ". Nothing live was changed.",
             )
             return redirect("control_plane:list")
-        verb = "Queued" if result["queued"] else "Already queued"
-        messages.success(
-            request,
-            f"{verb} removal of “{resource.key}”. HQ forgets it once it is confirmed gone.",
-        )
+        messages.success(request, requested(OperationRequest.Action.DELETE, resource.key, queued=result["queued"]))
         return redirect("control_plane:detail", key=key)
 
 
@@ -282,7 +271,9 @@ class InfrastructureListView(PageMixin, ListView):
     @override
     def get_page_actions(self):
         return (
-            PageAction("Add a record", reverse("control_plane:create"), primary=True),
+            PageAction(
+                capability_words("infrastructure.resource.create"), reverse("control_plane:create"), primary=True
+            ),
             PageAction("Services", reverse("control_plane:services")),
             PageAction("Setting reference", reverse("control_plane:providers")),
         )
@@ -306,18 +297,13 @@ class InfrastructureListView(PageMixin, ListView):
             # Where it sends traffic, named rather than addressed, matching
             # what the resource's own page has always said.
             resource.origin_machine = origin_machine(resource, machines, at, targets)
-            # What it is, in the provider's own words.
-            rows = readout_rows(resource)
-            # The name the row's link shows, and the line under it only when it
-            # adds something: "a → 10.0.0.10:80" needs no "http://10.0.0.10:80".
+            # The name the row's link shows, and the line under it.
             resource.shown_name = record_name(resource.kind, resource.spec, resource.key)
-            summary = rows[0][1] or rows[0][2] if rows else ""
-            bare = summary.rpartition("://")[2]
-            resource.summary = "" if bare in resource.shown_name else summary
+            resource.summary = record_summary(resource, resource.shown_name)
         context["changes"] = [
             {
                 "resource": operation.resource.key,
-                "action": ACTION_LABELS.get(operation.action, operation.get_action_display()),
+                "action": operation.get_action_display(),
                 "summary": operation_summary(operation),
                 "by": requested_by(operation),
                 "at": operation.created_at,
@@ -431,18 +417,17 @@ class InfrastructureDetailView(PageMixin, DetailView):
         capabilities = self.capabilities
         drifted = is_drifted(self.object)
         provider = PROVIDERS[self.object.kind]
-        # Applying a record that only reports on itself reads it again.
-        labels = {
-            **VERB_LABELS,
-            **({"reconcile": "Read now"} if provider.reported_fields else {}),
-            **({"reconcile": "Restore HQ's version"} if drifted else {}),
-        }
         actions = [
             verb_action(
                 verb,
                 key,
                 allowed,
-                label=labels[verb],
+                # Applying a record that only reports on itself reads it again.
+                label=(
+                    capability_words(READ_NOW_CAPABILITY)
+                    if verb == "reconcile" and provider.reported_fields
+                    else verb_words(verb)
+                ),
                 title="" if allowed.enabled else allowed.reason,
                 origin=self.request.get_full_path(),
                 primary=verb == "renew",
@@ -455,7 +440,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
             actions.insert(
                 0,
                 PageAction(
-                    "Keep the live version",
+                    capability_words("infrastructure.resource.accept_observed"),
                     returning_to(
                         command_url("infrastructure.resource.accept_observed", key),
                         self.request.get_full_path(),
@@ -472,7 +457,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
             actions.insert(0, PageAction(provider.console_label, console, primary=not drifted))
         actions.append(
             PageAction(
-                "Change what HQ expects",
+                capability_words("infrastructure.resource.update"),
                 returning_to(
                     reverse("control_plane:edit", args=[key]),
                     self.request.get_full_path(),
@@ -490,7 +475,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         if capabilities.removal != "unavailable":
             actions.append(
                 PageAction(
-                    "Stop tracking in HQ" if capabilities.removal == "forget" else "Remove",
+                    capabilities.removal_words,
                     reverse("control_plane:remove", args=[key]),
                     danger=True,
                 )
@@ -502,9 +487,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         context = super().get_context_data(**kwargs)
         capabilities = self.capabilities
         context["capabilities"] = capabilities
-        context["controller"] = controller_summary(
-            capabilities.actions, lambda verb: VERB_LABELS.get(verb, verb.replace("-", " ").capitalize())
-        )
+        context["controller"] = controller_summary(capabilities.actions, verb_words)
         derived = self.derived
         context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))
         # A running container is summarized by what it runs, in its own band.
@@ -556,17 +539,10 @@ class InfrastructureDetailView(PageMixin, DetailView):
         return context
 
 
-# What each controller verb is called in a sentence. One entry per verb, so a
-# new verb needs no new view class.
-OPERATION_PHRASE = {
-    OperationRequest.Action.RECONCILE: "applying HQ's settings",
-    OperationRequest.Action.RENEW: "certificate renewal",
-    OperationRequest.Action.DELETE: "removal",
-    OperationRequest.Action.RESTART: "a restart",
-    OperationRequest.Action.START: "a start",
-    OperationRequest.Action.STOP: "a stop",
-    OperationRequest.Action.APPROVE_ROUTES: "route approval",
-}
+def requested(action: str, key: str, *, queued: bool) -> str:
+    """What a press of one of a resource's verbs says, in the verb's own words."""
+
+    return requested_note(verb_words(action), key, again=not queued)
 
 
 def verb_action(
@@ -598,7 +574,7 @@ class OperationView(View):
             return HttpResponseNotAllowed(["POST"])
         resource = get_object_or_404(ManagedResource, key=key)
         name = record_name(resource.kind, resource.spec, resource.key)
-        label = f"{VERB_LABELS[self.action]} {name}"
+        label = f"{verb_words(self.action)} {name}"
         return render(
             request,
             "control_plane/resource_confirm_verb.html",
@@ -625,9 +601,7 @@ class OperationView(View):
         except PolicyError as exc:
             messages.error(request, str(exc))
             return redirect(destination)
-        verb = "Queued" if result["queued"] else "Already queued"
-        phrase = OPERATION_PHRASE.get(self.action, self.action)
-        messages.success(request, f"{verb} {phrase} for “{resource.key}”.")
+        messages.success(request, requested(self.action, resource.key, queued=result["queued"]))
         return redirect(destination)
 
 

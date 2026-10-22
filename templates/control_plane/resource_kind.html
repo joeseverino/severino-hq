@@ -7,8 +7,8 @@ its own name and description: no edit to this page.
 <div class="control-summary">
   {% for provider in providers %}
     <a class="control-card kind-choice" href="{% url 'control_plane:create' %}?kind={{ provider.kind }}">
-      <strong>{{ provider.label }}</strong>
-      <span class="kind-choice-summary">{{ provider.summary }}</span>
+      <strong>{{ provider.label|breakable }}</strong>
+      <span class="kind-choice-summary">{{ provider.summary|breakable }}</span>
       {% if provider.public_effect %}
         <span class="pill pill-attention">Visible on the internet</span>
       {% endif %}

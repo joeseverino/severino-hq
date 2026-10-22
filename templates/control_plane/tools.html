@@ -7,10 +7,10 @@
         {% for entry in tabs %}
           <a href="?tab={{ entry.id }}"
              class="tool-tab{% if entry.id == tab.id %} tool-tab-current{% endif %}"
-             {% if entry.id == tab.id %}aria-current="page"{% endif %}>{{ entry.label }}</a>
+             {% if entry.id == tab.id %}aria-current="page"{% endif %}>{{ entry.label|breakable }}</a>
         {% endfor %}
       </nav>
-      <p class="muted tool-summary">{{ tab.summary }}</p>
+      <p class="muted tool-summary">{{ tab.summary|breakable }}</p>
     {% endif %}
     {% include tab.template %}
   {% else %}

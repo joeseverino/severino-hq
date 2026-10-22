@@ -24,7 +24,7 @@ alphabetical is the order and there is nothing to move.
     </thead>
     {% for group_label, rows, reorderable in groups %}
     <tbody>
-      {% if groups|length > 1 %}<tr class="row-group"><th colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}" scope="rowgroup">{{ group_label }}</th></tr>{% endif %}
+      {% if groups|length > 1 %}<tr class="row-group"><th colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}" scope="rowgroup">{{ group_label|breakable }}</th></tr>{% endif %}
       {% for service in rows %}
         <tr>
           <td class="row-gutter">
@@ -33,7 +33,7 @@ alphabetical is the order and there is nothing to move.
               {% if service.pinned %}
                 {% post_button "★" pin_url css="pin-toggle pinned" title="Remove "|add:service.hostname|add:" from favorites" %}
               {% else %}
-                {% post_button "★" pin_url css="pin-toggle" title="Add "|add:service.hostname|add:" to favorites" %}
+                {% post_button "☆" pin_url css="pin-toggle" title="Add "|add:service.hostname|add:" to favorites" %}
               {% endif %}
               <strong>{% entity "service"|entity_of:service.hostname %}</strong>
               {% if reorderable %}
@@ -51,7 +51,7 @@ alphabetical is the order and there is nothing to move.
             {% row_toggle %}
           </td>
           {% with exposure=service.exposure %}
-            <td><span class="exposure exposure-{{ exposure.level }}" title="{{ exposure.sentence }}">{{ exposure.short }}</span></td>
+            <td><span class="exposure exposure-{{ exposure.level }}" title="{{ exposure.sentence }}">{{ exposure.short|breakable }}</span></td>
           {% endwith %}
           {% for facet in service.facets %}
             {% if facet.id != runtime_facet %}
@@ -68,11 +68,11 @@ alphabetical is the order and there is nothing to move.
                 {% endfor %}
                 {% if facet.id == certificate_facet %}
                   {% with certificate=service.path.certificate %}
-                    {% if certificate %}<span title="{{ certificate.statement }}">{{ certificate.role }}{% if certificate.issuer %} <span class="muted">· {{ certificate.issuer }}</span>{% elif certificate.name and not facet.claims %} <span class="muted">· {{ certificate.name }}</span>{% elif certificate.unread %} <span class="muted">· not read</span>{% endif %}</span>{% elif not facet.claims %}{% empty_value %}{% endif %}
+                    {% if certificate %}<span title="{{ certificate.statement }}">{{ certificate.role|breakable }}{% if certificate.issuer %} <span class="muted">· {{ certificate.issuer|breakable }}</span>{% elif certificate.name and not facet.claims %} <span class="muted">· {{ certificate.name|breakable }}</span>{% elif certificate.unread %} <span class="muted">· not read</span>{% endif %}</span>{% elif not facet.claims %}{% empty_value %}{% endif %}
                   {% endwith %}
                 {% else %}
                   {% for line in facet.reading_lines %}
-                    <span title="{{ line.hint }}">{{ line.label }}{% if line.detail %} <span class="muted">· {{ line.detail }}</span>{% endif %}</span>{% if not forloop.last %}<br>{% endif %}
+                    <span title="{{ line.hint }}">{{ line.label|breakable }}{% if line.detail %} <span class="muted">· {{ line.detail|breakable }}</span>{% endif %}</span>{% if not forloop.last %}<br>{% endif %}
                   {% endfor %}
                   {% if not facet.claims and not facet.readings %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}<span class="muted">No record</span>{% else %}{% empty_value %}{% endif %}{% endif %}
                 {% endif %}
@@ -90,12 +90,12 @@ alphabetical is the order and there is nothing to move.
             {% elif service.path.redirects_to %}
               Redirects to {% entity "service"|entity_of:service.path.redirects_to %}
             {% elif service.path.ends_at.step == "origin" %}
-              {{ service.path.ends_at.label }}{% if service.path.ends_at.unread %} <span class="muted">· redirect not read</span>{% endif %}
+              {{ service.path.ends_at.label|breakable }}{% if service.path.ends_at.unread %} <span class="muted">· redirect not read</span>{% endif %}
             {% elif service.origin %}
-              {% for facet in service.facets %}{% if facet.id == runtime_facet %}{% for claim in facet.claims %}{% if forloop.first %}<a class="cell-line" href="{{ claim.url }}" title="{{ service.origin.headline }}">{{ service.origin.headline }}</a>{% endif %}{% empty %}<span class="cell-line" title="{{ service.origin.headline }}">{{ service.origin.headline }}</span>{% endfor %}{% endif %}{% endfor %}
-              {% if service.origin.qualifier %}<span class="muted">{{ service.origin.qualifier }}</span>{% endif %}
+              {% for facet in service.facets %}{% if facet.id == runtime_facet %}{% for claim in facet.claims %}{% if forloop.first %}{% cell_line service.origin.headline claim.url %}{% endif %}{% empty %}{% cell_line service.origin.headline %}{% endfor %}{% endif %}{% endfor %}
+              {% if service.origin.qualifier %}<span class="muted">{{ service.origin.qualifier|breakable }}</span>{% endif %}
             {% elif service.served_by %}
-              {% for name in service.served_by %}<span class="cell-line" title="{{ name }}">{{ name }}</span>{% if not forloop.last %}<br>{% endif %}{% endfor %}
+              {% for name in service.served_by %}{% cell_line name %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
             {% elif service.path.machine %}
               {% entity "machine"|entity_of:service.path.machine %}
             {% else %}
@@ -103,7 +103,7 @@ alphabetical is the order and there is nothing to move.
             {% endif %}
           </td>
           {% if show_service_projects %}<td>{% if service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
-          <td><span class="pill pill-{{ service.status }}"{% if service.health.detail %} title="{{ service.health.detail }}"{% endif %}>{{ service.status_label }}</span></td>
+          <td><span class="pill pill-{{ service.status }}"{% if service.health.detail %} title="{{ service.health.detail }}"{% endif %}>{{ service.status_label|breakable }}</span></td>
         </tr>
       {% endfor %}
     </tbody>

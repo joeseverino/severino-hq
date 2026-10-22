@@ -5,7 +5,7 @@ from typing import override
 from django.views.generic import TemplateView
 
 from hq.platform.application.attention import finding_insight
-from hq.platform.application.dashboard import queue_item
+from hq.platform.application.dashboard import queue_item, waiting
 from hq.platform.application.findings import coverage, estate_findings, finding_rules, rule_for
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
@@ -57,6 +57,9 @@ class FindingsView(PageMixin, TemplateView):
                 "finding_counts": counts,
                 # How far a page with none goes: a clean page over nothing read is not clean.
                 "finding_coverage": coverage() if not raised and not active_rule else None,
+                # The checks are one source of the queue; what else waits is
+                # named beside their verdict, so the two pages never disagree.
+                "waiting_elsewhere": waiting(self.request.user.pk) if not raised and not active_rule else 0,
             }
         )
         return context

@@ -12,7 +12,7 @@ four domains behind a click and then need a second one to go anywhere.
   <nav class="zone-switch" aria-label="Domains">
     {% for other in zones %}
       <a href="{{ other.url }}"{% if other.zone == zone.zone %} class="active" aria-current="page"{% endif %}>
-        {% if other.pinned %}<span aria-hidden="true">★</span> {% endif %}{{ other.zone }}{% if not other.managed %} <span class="zone-switch-note">not managed</span>{% endif %}
+        {% if other.pinned %}<span aria-hidden="true">★</span> {% endif %}{{ other.zone|breakable }}{% if not other.managed %} <span class="zone-switch-note">not managed</span>{% endif %}
       </a>
     {% endfor %}
   </nav>
@@ -33,7 +33,7 @@ four domains behind a click and then need a second one to go anywhere.
 {% if not zone.managed %}
   <section class="msg msg-warning">
     <p>
-      <strong>{{ zone.zone }} is not managed.</strong>
+      <strong>{{ zone.zone|breakable }} is not managed.</strong>
       HQ shows its records but will not change them.
     </p>
     {% if zone.adopt_token %}
@@ -57,7 +57,7 @@ four domains behind a click and then need a second one to go anywhere.
   {% endcomment %}
   {% for insight in zone.cards %}
     <div class="control-metric">
-      <span class="control-label">{{ insight.label }}</span>
+      <span class="control-label">{{ insight.label|breakable }}</span>
       <strong{% if insight.concern %} class="control-warn"{% endif %}>
         {% if insight.url %}
           {% comment %}
@@ -65,16 +65,16 @@ four domains behind a click and then need a second one to go anywhere.
           the href reaches a page that answers the same question, so the card
           still works if the dialog does not open.
           {% endcomment %}
-          <a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="{{ insight.modal_id }}"{% endif %}>{{ insight.value }}</a>
-        {% else %}{{ insight.value }}{% endif %}
+          <a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="{{ insight.modal_id }}"{% endif %}>{{ insight.value|breakable }}</a>
+        {% else %}{{ insight.value|breakable }}{% endif %}
       </strong>
       {% if insight.concern %}<span class="readout"><span class="pill pill-attention">Needs attention</span></span>{% endif %}
-      {% if insight.detail %}<span>{{ insight.detail }}</span>{% endif %}
+      {% if insight.detail %}<span>{{ insight.detail|breakable }}</span>{% endif %}
       {% for label, links in insight.links %}
-        <span class="readout"><span class="readout-label">{{ label }}</span> {% for link in links %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+        <span class="readout"><span class="readout-label">{{ label|breakable }}</span> {% for link in links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</span>
       {% endfor %}
       {% if insight.lines %}{% include "partials/_record_list.html" with rows=insight.lines label=insight.label %}{% endif %}
-      {% if insight.note %}<span class="muted"{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note }}</span>{% endif %}
+      {% if insight.note %}<span class="muted"{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note|breakable }}</span>{% endif %}
     </div>
     {% if insight.rows %}
       {% include "partials/_modal.html" with id=insight.modal_id title=insight.label lede=insight.detail body_template="partials/_record_list.html" rows=insight.rows %}
@@ -84,12 +84,12 @@ four domains behind a click and then need a second one to go anywhere.
 
 {% for notice in zone.notices %}
   <section class="msg msg-warning">
-    <p><strong>{{ notice.label }}: {{ notice.value }}.</strong> {{ notice.detail }}</p>
+    <p><strong>{{ notice.label|breakable:":" }} {{ notice.value|breakable:"." }}</strong> {{ notice.detail|breakable }}</p>
   </section>
 {% endfor %}
 
 <div class="section-head">
-  <h2>Records <span class="heading-aside">{{ records_lede }}{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind inline=True %}</span></h2>
+  <h2>Records <span class="heading-aside">{{ records_lede|breakable }}{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind inline=True %}</span></h2>
   {% comment %}
   No "adopt" button: the sweep adopts records in a managed domain
   (``zones.adopt_discovered_records``).
@@ -124,7 +124,7 @@ What it is read with is how HQ knows: the relationships card's last line.
 {% referenced_by "zone" zone.zone cards=True %}
 </div>
 {% if read_with and not relationships %}
-  <p class="muted relation-source">Read with {% for link in read_with %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+  <p class="muted relation-source">Read with {% for link in read_with %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
 {% endif %}
 {% comment %}Reads what is due from the public registries once the page is up.{% endcomment %}
 {% endblock %}

@@ -31,8 +31,8 @@
     <h2>Settings</h2>
     <dl class="kv">
       {% for setting in tailnet.settings %}
-        <dt>{{ setting.label }}</dt>
-        <dd>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value }}{% endif %}{% if setting.problem_url %} <a class="pill pill-attention" href="{{ setting.problem_url }}">Problem</a>{% endif %}</dd>
+        <dt>{{ setting.label|breakable }}</dt>
+        <dd>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value|breakable }}{% endif %}{% if setting.problem_url %} <a class="pill pill-attention" href="{{ setting.problem_url }}">Problem</a>{% endif %}</dd>
       {% endfor %}
     </dl>
   {% endif %}
@@ -48,7 +48,7 @@
           <tr>
             <td class="row-gutter">{% include "control_plane/_policy_names.html" with names=grant.sources %}{% row_toggle %}</td>
             <td>{% include "control_plane/_policy_names.html" with names=grant.destinations %}</td>
-            <td><span class="code-list">{% for ip, name in grant.rule.ports %}<code>{{ ip|breakable }}{% if name %} · {{ name }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
+            <td><span class="code-list">{% for ip, name in grant.rule.ports %}<code>{{ ip|breakable }}{% if name %} · {{ name|breakable }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
           </tr>
         {% endfor %}
       </tbody>
@@ -63,15 +63,15 @@
         {% for group in tailnet.policy.groups %}
           <tr>
             <td><code>{{ group.name|breakable }}</code></td>
-            <td>{{ group.members|join:", " }}</td>
+            <td>{{ group.members|join:", "|breakable }}</td>
             <td></td>
           </tr>
         {% endfor %}
         {% for row in tailnet.tags %}
           <tr>
             <td><code>{{ row.tag.name|breakable }}</code></td>
-            <td><span class="muted">owned by</span> {{ row.tag.owners|join:", " }}</td>
-            <td>{% for link in row.devices %}{% entity link %}{% if not forloop.last %}, {% endif %}{% empty %}{% if row.unworn %}<span class="muted">no device has this tag</span>{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
+            <td><span class="muted">owned by</span> {{ row.tag.owners|join:", "|breakable }}</td>
+            <td>{% for link in row.devices %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% empty %}{% if row.unworn %}<span class="muted">no device has this tag</span>{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -124,7 +124,7 @@
               <td class="row-gutter">{% include "control_plane/_policy_names.html" with names=row.sources %}{% row_toggle %}</td>
               <td>{% include "control_plane/_policy_names.html" with names=row.destinations %}</td>
               <td>{% for user in row.rule.users %}<code>{{ user|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-              <td>{% if row.rule.action == "check" %}Yes{% elif row.rule.action == "accept" %}<strong>No</strong>{% else %}{{ row.rule.action }}{% endif %}</td>
+              <td>{% if row.rule.action == "check" %}Yes{% elif row.rule.action == "accept" %}<strong>No</strong>{% else %}{{ row.rule.action|breakable }}{% endif %}</td>
             </tr>
           {% endfor %}
         </tbody>

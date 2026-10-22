@@ -1,14 +1,14 @@
 {% comment %}
-One container's standing as two table cells (application.containers.Standing):
+One container's standing as two table cells (application.containers.ImageStanding):
 what is known against the version that runs, and whether a newer one is
 published. Shared by the containers page and a machine's container table so
 the two cannot drift.
 {% endcomment %}
 <td class="container-standing{% if standing.state == "vulnerable" %} is-vulnerable{% endif %}">
-  {% if standing.state == "vulnerable" %}{% include "partials/_icon.html" with name="shield" %} {% endif %}{% if standing.vulnerabilities_note %}<span{% if standing.state != "vulnerable" %} class="muted"{% endif %} tabindex="0" data-tip="{{ standing.vulnerabilities_note }}">{{ standing.vulnerabilities|capfirst }}</span>{% else %}<span class="muted">{{ standing.vulnerabilities|capfirst }}</span>{% endif %}
+  {% if standing.state == "vulnerable" %}{% include "partials/_icon.html" with name="shield" %} {% endif %}{% if standing.vulnerabilities_note %}<span{% if standing.state != "vulnerable" %} class="muted"{% endif %} tabindex="0" data-tip="{{ standing.vulnerabilities_note }}">{{ standing.vulnerabilities|capfirst|breakable }}</span>{% else %}<span class="muted">{{ standing.vulnerabilities|capfirst|breakable }}</span>{% endif %}
 </td>
 <td class="container-standing{% if standing.update_state == "available" %} is-behind{% elif standing.update_state == "current" %} is-current{% endif %}">
-  {% if standing.update_state == "available" %}{% include "partials/_icon.html" with name="deploy" %} {{ standing.update }}
-  {% elif standing.update_state == "current" %}{% include "partials/_icon.html" with name="check-circle" %} {{ standing.update|capfirst }}
-  {% else %}<span class="muted" tabindex="0" data-tip="{{ standing.update_note }}">{{ standing.update|capfirst }}</span>{% endif %}
+  {% if standing.update_state == "available" %}{% include "partials/_icon.html" with name="deploy" %} {{ standing.update|breakable }}
+  {% elif standing.update_state == "current" %}{% include "partials/_icon.html" with name="check-circle" %} {{ standing.update|capfirst|breakable }}
+  {% else %}<span class="muted" tabindex="0" data-tip="{{ standing.update_note }}">{{ standing.update|capfirst|breakable }}</span>{% endif %}
 </td>

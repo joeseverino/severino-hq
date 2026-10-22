@@ -13,7 +13,7 @@ one situation it is ever seen in.
   <div class="control-summary">
     {% for zone in zones %}
       <div class="control-metric">
-        <span class="control-label">{{ zone.zone }}</span>
+        <span class="control-label">{{ zone.zone|breakable }}</span>
         <strong>{{ zone.records|length|counted:"record" }}</strong>
         <span class="readout">
           <a class="subtle-link" href="{{ zone.url }}">View records &rarr;</a>

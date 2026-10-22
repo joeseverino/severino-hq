@@ -16,7 +16,7 @@ class VisitRefreshView(View):
     """Ask for what one page is assembled from.
 
     The page says which page it is; what that means is HQ's to work out. A POST
-    asks, behind the session, the CSRF token and the capability Read now
+    asks, behind the session, the CSRF token and the capability Refresh
     needs, and answers as every ask does: how the read stands, and the signed
     address that says so while it is live (``ReadStatusView``). There is no
     GET, so opening or prefetching a link reads nothing.

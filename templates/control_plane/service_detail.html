@@ -13,14 +13,14 @@ readings. The path is the next section, drawn once.
     <div class="band-fact{% if item.pill %} tone-{{ item.tone }}{% endif %}">
       <span class="band-icon">{% include "partials/_icon.html" with name=item.icon %}</span>
       <div>
-        <span class="band-label">{{ item.label }}</span>
-        <strong>{% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value }}{% endif %}</strong>
-        {% if item.detail %}<small>{{ item.detail }}</small>{% endif %}
+        <span class="band-label">{{ item.label|breakable }}</span>
+        <strong>{% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}</strong>
+        {% if item.detail %}<small>{{ item.detail|breakable }}</small>{% endif %}
       </div>
     </div>
   {% endfor %}
   {% if service.aliases %}
-    <p class="band-meta"><span>Also at {% for alias in service.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</span></p>
+    <p class="band-meta"><span>Also at {% for alias in service.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></p>
   {% endif %}
 </div>
 {% comment %}
@@ -36,26 +36,26 @@ is open.
 
 <section id="path" class="page-section" data-page-section>
 <div class="section-head">
-  <h2>Path{% if routes|length == 1 %} <span class="heading-aside">via {{ routes.0.via_phrase }}</span>{% endif %}</h2>
+  <h2>Path{% if routes|length == 1 %} <span class="heading-aside">via {{ routes.0.via_phrase|breakable }}</span>{% endif %}</h2>
   {% if topology_url %}<a class="btn ghost compact" href="{{ topology_url }}">See on the map</a>{% endif %}
 </div>
-<p class="path-reach"><span class="exposure exposure-{{ exposure.level }}">{{ exposure.label }}</span>{% if exposure.worst.path_gates %} <span class="muted">· login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</p>
+<p class="path-reach"><span class="exposure exposure-{{ exposure.level }}">{{ exposure.label|breakable }}</span>{% if exposure.worst.path_gates %} <span class="muted">· login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}</p>
 {% if gate_fixes and not read_only %}
   <div class="notice notice-attention">
     <strong>Anyone on the internet can open this without signing in</strong>
-    <p>{% for fix in gate_fixes %}<a class="btn compact" href="{{ fix.url }}" title="{{ fix.reason }}">{{ fix.label }}</a> {% endfor %}</p>
+    <p>{% for fix in gate_fixes %}<a class="btn compact" href="{{ fix.url }}" title="{{ fix.reason }}">{{ fix.label|breakable }}</a> {% endfor %}</p>
   </div>
 {% endif %}
 {% for route, parts in route_parts %}
-  {% if routes|length > 1 %}<h3 class="section-heading">Via {{ route.via_phrase }}</h3>{% endif %}
+  {% if routes|length > 1 %}<h3 class="section-heading">Via {{ route.via_phrase|breakable }}</h3>{% endif %}
   {% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}
   <h3 class="section-heading">Each step</h3>
   {% include "control_plane/_service_parts.html" %}
 {% empty %}
   {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
-  <p class="muted">{% for gap in service.path.gaps %}{{ gap|capfirst }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+  <p class="muted">{% for gap in service.path.gaps %}{{ gap|capfirst|breakable }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
   {% for hop in service.path.observed %}
-    <p>{{ hop.phrase }}: {% entity hop.link %}{% if hop.source %} <span class="muted">· {{ hop.source.phrase }}{% if hop.source.observed_at %} · {% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}</span>{% endif %}</p>
+    <p>{{ hop.phrase|breakable:":" }} {% entity hop.link %}{% if hop.source %} <span class="muted">· {{ hop.source.phrase|breakable }}{% if hop.source.observed_at %} · {% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}</span>{% endif %}</p>
   {% endfor %}
 {% endfor %}
 </section>
@@ -71,7 +71,7 @@ is open.
   {% endcomment %}
   {% for facet in missing_facets %}
     <div class="control-metric">
-      <span class="control-label">{{ facet.label }}</span>
+      <span class="control-label">{{ facet.label|breakable }}</span>
       {% comment %}
       A facet HQ both declares and watches says it once. The container's key is
       its machine and its name joined, so printing it under them repeats both,
@@ -80,7 +80,7 @@ is open.
       {% endcomment %}
       {% if facet.present and facet.observed %}
         {% with claim=facet.claims.0 %}
-          <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst }}</strong>
+          <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst|breakable }}</strong>
           <span class="readout">
             {% entity claim.link code=True label=facet.observed.name %}
             {% if facet.machine %}on {% entity facet.machine.link %}{% endif %}
@@ -89,8 +89,8 @@ is open.
             <summary>What is running</summary>
             <dl class="kv compact">
               {% if facet.observed.image %}<dt>Image</dt><dd><code>{{ facet.observed.image_label|breakable }}</code></dd>{% endif %}
-              {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
-              {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
+              {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published|breakable }}</dd>{% endif %}
+              {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status|breakable }}</dd>{% endif %}
               {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}<dt>Compose project</dt><dd><code>{{ facet.observed.stack|breakable }}</code></dd>{% endif %}
               <dt>Reading</dt><dd>{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}</dd>
             </dl>
@@ -101,17 +101,17 @@ is open.
         {% for claim in facet.claims %}
           {% for reading in claim.readings %}
             {% if forloop.parentloop.first and forloop.first %}
-              <strong>{{ reading.value }}</strong>
-              {% if reading.drifted %}<span class="pill pill-serious">Changed outside HQ: HQ expects {{ reading.desired }}</span>{% endif %}
+              <strong>{{ reading.value|breakable }}</strong>
+              {% if reading.drifted %}<span class="pill pill-serious">Changed outside HQ: HQ expects {{ reading.desired|breakable }}</span>{% endif %}
             {% else %}
-              <span class="readout"><span class="readout-label">{{ reading.label }}</span> {{ reading.value }}{% if reading.drifted %} <span class="pill pill-serious">HQ expects {{ reading.desired }}</span>{% endif %}</span>
+              <span class="readout"><span class="readout-label">{{ reading.label|breakable }}</span> {{ reading.value|breakable }}{% if reading.drifted %} <span class="pill pill-serious">HQ expects {{ reading.desired|breakable }}</span>{% endif %}</span>
             {% endif %}
           {% empty %}
             <strong>In HQ</strong>
           {% endfor %}
           <span class="readout">
             {% entity claim.within_service code=True %}
-            <span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span>
+            <span class="pill control-{{ claim.health.state }}">{{ claim.health.label|breakable }}</span>
             <a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">Edit</a>
           </span>
         {% endfor %}
@@ -124,7 +124,7 @@ is open.
         {% endif %}
       {% elif facet.readings %}
         {% comment %}Observed through a reading joined to the name. Not a declaration. Its lines follow.{% endcomment %}
-        <strong>{{ facet.reading_lines.0.label }}</strong>
+        <strong>{{ facet.reading_lines.0.label|breakable }}</strong>
       {% elif service.origin.external and facet.routes %}
         {% comment %}
         Not a gap. A name resolving straight to something outside is already
@@ -142,10 +142,10 @@ is open.
         {% endcomment %}
         <strong class="control-unknown">Not needed</strong>
         {% for kind, label in facet.declarable %}
-          <span class="readout">No {{ label }} needed.</span>
+          <span class="readout">No {{ label|breakable }} needed.</span>
         {% endfor %}
         {% if facet.id == runtime_facet and not service.provider_answers %}
-          <span class="readout">Served by <strong>{{ service.origin.headline }}</strong> from <code>{{ service.origin.address|breakable }}</code></span>
+          <span class="readout">Served by <strong>{{ service.origin.headline|breakable }}</strong> from <code>{{ service.origin.address|breakable }}</code></span>
         {% endif %}
       {% elif facet.observed %}
         {% comment %}
@@ -155,14 +155,14 @@ is open.
 
         Never an Edit link. HQ does not manage this and must not imply it could.
         {% endcomment %}
-        <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst }}</strong>
-        <span class="readout"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host }}{% endif %}</span>
+        <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst|breakable }}</strong>
+        <span class="readout"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</span>
         <details class="control-diagnostics">
           <summary>What is running</summary>
           <dl class="kv compact">
             {% if facet.observed.image %}<dt>Image</dt><dd><code>{{ facet.observed.image_label|breakable }}</code></dd>{% endif %}
-            {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published }}</dd>{% endif %}
-            {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status }}</dd>{% endif %}
+            {% if facet.observed.published %}<dt>Publishes</dt><dd>{{ facet.observed.published|breakable }}</dd>{% endif %}
+            {% if facet.observed.status %}<dt>Status</dt><dd>{{ facet.observed.status|breakable }}</dd>{% endif %}
             {% comment %}
             Only when it differs from the container's own name.
             {% endcomment %}
@@ -188,28 +188,28 @@ is open.
             <dd>
               {% if facet.observed.portainer_managed %}
                 Portainer.
-                {% for kind, label in facet.declarable %}<a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label }} &rarr;</a>{% endfor %}
+                {% for kind, label in facet.declarable %}<a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label|breakable }} &rarr;</a>{% endfor %}
               {% else %}
-                A compose file on {{ facet.observed.host }}. HQ cannot read it.
+                A compose file on {{ facet.observed.host|breakable:"." }} HQ cannot read it.
               {% endif %}
             </dd>
           </dl>
         </details>
       {% elif read_only and facet.id == runtime_facet and hq_machine %}
         {% comment %}HQ's own service: derived, never declared, never offered anything.{% endcomment %}
-        <strong>{{ hq_label }}</strong>
+        <strong>{{ hq_label|breakable }}</strong>
         <span class="readout"><span class="readout-label">Runs on</span> {% entity hq_machine %}</span>
       {% elif facet.not_visible and not facet.reading_lines %}
         <strong class="control-unknown">Not visible</strong>
-        <span>{{ facet.not_visible }}</span>
+        <span>{{ facet.not_visible|breakable }}</span>
         {% if not read_only %}{% for kind, label in facet.declarable %}
-          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label }} &rarr;</a></span>
+          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }} &rarr;</a></span>
         {% endfor %}{% endif %}
       {% elif read_only %}
         <strong class="control-unknown">Not set up</strong>
       {% else %}
         <strong class="control-unknown">Not set up</strong>
-        <span>HQ has none for {{ service.hostname }}.</span>
+        <span>HQ has none for {{ service.hostname|breakable:"." }}</span>
         {% comment %}
         Named by the provider's own label. The bare kind reads as
         "Add cloudflare.dns_record": an identifier where a sentence belongs.
@@ -217,7 +217,7 @@ is open.
         it is being asked about.
         {% endcomment %}
         {% for kind, label in facet.declarable %}
-          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label }} &rarr;</a></span>
+          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }} &rarr;</a></span>
         {% endfor %}
         {% comment %}
         Named, not silently dropped. An option disappearing without explanation
@@ -225,12 +225,12 @@ is open.
         each one names the alternative that does work.
         {% endcomment %}
         {% for label, reason in facet.unavailable %}
-          <span class="readout muted"><span class="readout-label">{{ label }}</span> {{ reason }}</span>
+          <span class="readout muted"><span class="readout-label">{{ label|breakable }}</span> {{ reason|breakable }}</span>
         {% endfor %}
       {% endif %}
       {% comment %}One line per reading kind. The kind is named unless the headline above already is it.{% endcomment %}
       {% for line in facet.reading_lines %}
-        <span class="readout">{% if facet.present or facet.observed or not forloop.first %}<span class="readout-label">{{ line.label }}</span> {% endif %}{% if line.issued %}{{ line.detail }}{% else %}{% for link in line.entities %}{% entity link %}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% if line.expiry %} · expires {{ line.expiry }}{% endif %}{% if line.stale %} <span class="pill pill-attention">Out of date</span>{% endif %}</span>
+        <span class="readout">{% if facet.present or facet.observed or not forloop.first %}<span class="readout-label">{{ line.label|breakable }}</span> {% endif %}{% if line.issued %}{{ line.detail|breakable }}{% else %}{% for link in line.entities %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% if line.expiry %} · expires {{ line.expiry|breakable }}{% endif %}{% if line.stale %} <span class="pill pill-attention">Out of date</span>{% endif %}</span>
       {% endfor %}
     </div>
 
@@ -243,11 +243,11 @@ card can say them: the name points at a documentation address where nothing
 answers, or at an address no known machine holds.
 {% endcomment %}
 {% if service.origin.parked and not service.provider_answers %}
-  <p class="control-origin">Parked. The name resolves to <code>{{ service.origin.address|breakable }}</code>, where nothing answers.</p>
+  <p class="control-origin">Parked. The name resolves to <code>{{ service.origin.address|breakable:"," }}</code> where nothing answers.</p>
 {% elif service.origin and not service.origin.external and not service.origin.known %}
   <p class="control-origin">
     {% if service.origin.routed %}The proxy forwards to{% else %}The name resolves to{% endif %}
-    <code>{{ service.origin.address|breakable }}</code>, which <strong>matches no known machine</strong>.
+    <code>{{ service.origin.address|breakable:"," }}</code> which <strong>matches no known machine</strong>.
     If it belongs to one, add it to that machine's addresses.
   </p>
 {% endif %}
@@ -258,12 +258,13 @@ answers, or at an address no known machine holds.
 What else HQ holds about this name. Each band is a section the registry produced,
 rendered through the shared renderer, so a section HQ gains later appears here
 without this template learning anything about it, and the machine page renders
-the same shape from the same file.
+the same shape from the same file. How it relates comes last, as on the
+machine page.
 {% endcomment %}
 <div class="section-flow">
 {% include "partials/_page_sections.html" %}
-{% include "partials/_relationships.html" %}
 {% referenced_by "service" service.hostname cards=True %}
+{% include "partials/_relationships.html" %}
 </div>
 
 {% if service.alias_claims %}
@@ -281,7 +282,7 @@ So: present, attached to the service it belongs to, and out of the way, because
 it is not what anyone opens this page to read.
 {% endcomment %}
   <details class="control-diagnostics">
-    <summary>{{ service.alias_summary }}</summary>
+    <summary>{{ service.alias_summary|breakable }}</summary>
     {% table_region "Other names" narrow=2 %}
       <table class="data-table">
         <thead><tr>{% table_heading "Record" "identifier" gutter=True local_sort=service.alias_claims|sortable %}{% table_heading "Type" drop=2 local_sort=service.alias_claims|sortable %}{% table_heading "For" "identifier" drop=1 local_sort=service.alias_claims|sortable %}{% table_heading "State" "status" css="key-col" local_sort=service.alias_claims|sortable %}</tr></thead>
@@ -289,9 +290,9 @@ it is not what anyone opens this page to read.
           {% for alias, claim in service.alias_claims %}
             <tr>
               <td class="row-gutter"><strong>{% entity claim.link %}</strong>{% row_toggle %}</td>
-              <td>{{ claim.kind|kind_label }}</td>
-              <td>{{ alias }}</td>
-              <td><span class="pill control-{{ claim.health.state }}">{{ claim.health.label }}</span></td>
+              <td>{{ claim.kind|kind_label|breakable }}</td>
+              <td>{{ alias|breakable }}</td>
+              <td><span class="pill control-{{ claim.health.state }}">{{ claim.health.label|breakable }}</span></td>
             </tr>
           {% endfor %}
         </tbody>

@@ -4,7 +4,7 @@
   <section class="control-card">
     <h2>Current certificate</h2>
     <dl class="kv compact">
-      <dt>Covers</dt><dd>{% for domain in material.domains %}<span class="tag">{{ domain }}</span>{% endfor %}</dd>
+      <dt>Covers</dt><dd>{% for domain in material.domains %}<span class="tag">{{ domain|breakable }}</span>{% endfor %}</dd>
       <dt>Expires</dt><dd>{{ material.not_after|expiry }}</dd>
       <dt>Fingerprint</dt><dd><code>{{ material.fingerprint_sha256|slice:":16"|breakable }}…</code></dd>
     </dl>
