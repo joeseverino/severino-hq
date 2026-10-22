@@ -6,12 +6,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from hq.platform.application.capability_policy import Cell, Column, Group, Row, Scope
+from hq.platform.application.capability_policy import Column, Group, PolicyCell, Row, Scope
 from hq.platform.application.tests.markup import with_class
 
 
-def _cell(column: Column, *, dormant: bool) -> Cell:
-    return Cell(
+def _cell(column: Column, *, dormant: bool) -> PolicyCell:
+    return PolicyCell(
         field=f"rule:{column.scope}:{column.subject}:example.capability",
         scope=column.scope,
         column=column.label,

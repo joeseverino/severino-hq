@@ -157,6 +157,52 @@
               },
               "category": {
                 "default": "other",
+                "oneOf": [
+                  {
+                    "const": "networking",
+                    "title": "Networking gear"
+                  },
+                  {
+                    "const": "server_hardware",
+                    "title": "Server hardware"
+                  },
+                  {
+                    "const": "software",
+                    "title": "Software"
+                  },
+                  {
+                    "const": "subscription",
+                    "title": "Subscription"
+                  },
+                  {
+                    "const": "domain",
+                    "title": "Domain"
+                  },
+                  {
+                    "const": "hosting",
+                    "title": "Hosting"
+                  },
+                  {
+                    "const": "camera_audio",
+                    "title": "Camera / audio"
+                  },
+                  {
+                    "const": "office",
+                    "title": "Office equipment"
+                  },
+                  {
+                    "const": "tools",
+                    "title": "Tools"
+                  },
+                  {
+                    "const": "training",
+                    "title": "Training"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Category",
                 "type": "string"
               },
@@ -179,11 +225,42 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
               "payment_method": {
                 "default": "",
+                "oneOf": [
+                  {
+                    "const": "",
+                    "title": "Not set"
+                  },
+                  {
+                    "const": "cash",
+                    "title": "Cash"
+                  },
+                  {
+                    "const": "debit",
+                    "title": "Debit card"
+                  },
+                  {
+                    "const": "credit",
+                    "title": "Credit card"
+                  },
+                  {
+                    "const": "ach",
+                    "title": "ACH / bank transfer"
+                  },
+                  {
+                    "const": "paypal",
+                    "title": "PayPal"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Payment Method",
                 "type": "string"
               },
@@ -220,6 +297,28 @@
               },
               "status": {
                 "default": "active",
+                "oneOf": [
+                  {
+                    "const": "active",
+                    "title": "Active"
+                  },
+                  {
+                    "const": "retired",
+                    "title": "Retired"
+                  },
+                  {
+                    "const": "sold",
+                    "title": "Sold"
+                  },
+                  {
+                    "const": "returned",
+                    "title": "Returned"
+                  },
+                  {
+                    "const": "replaced",
+                    "title": "Replaced"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -320,6 +419,52 @@
               },
               "category": {
                 "default": "other",
+                "oneOf": [
+                  {
+                    "const": "networking",
+                    "title": "Networking gear"
+                  },
+                  {
+                    "const": "server_hardware",
+                    "title": "Server hardware"
+                  },
+                  {
+                    "const": "software",
+                    "title": "Software"
+                  },
+                  {
+                    "const": "subscription",
+                    "title": "Subscription"
+                  },
+                  {
+                    "const": "domain",
+                    "title": "Domain"
+                  },
+                  {
+                    "const": "hosting",
+                    "title": "Hosting"
+                  },
+                  {
+                    "const": "camera_audio",
+                    "title": "Camera / audio"
+                  },
+                  {
+                    "const": "office",
+                    "title": "Office equipment"
+                  },
+                  {
+                    "const": "tools",
+                    "title": "Tools"
+                  },
+                  {
+                    "const": "training",
+                    "title": "Training"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Category",
                 "type": "string"
               },
@@ -342,11 +487,42 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
               "payment_method": {
                 "default": "",
+                "oneOf": [
+                  {
+                    "const": "",
+                    "title": "Not set"
+                  },
+                  {
+                    "const": "cash",
+                    "title": "Cash"
+                  },
+                  {
+                    "const": "debit",
+                    "title": "Debit card"
+                  },
+                  {
+                    "const": "credit",
+                    "title": "Credit card"
+                  },
+                  {
+                    "const": "ach",
+                    "title": "ACH / bank transfer"
+                  },
+                  {
+                    "const": "paypal",
+                    "title": "PayPal"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Payment Method",
                 "type": "string"
               },
@@ -383,6 +559,28 @@
               },
               "status": {
                 "default": "active",
+                "oneOf": [
+                  {
+                    "const": "active",
+                    "title": "Active"
+                  },
+                  {
+                    "const": "retired",
+                    "title": "Retired"
+                  },
+                  {
+                    "const": "sold",
+                    "title": "Sold"
+                  },
+                  {
+                    "const": "returned",
+                    "title": "Returned"
+                  },
+                  {
+                    "const": "replaced",
+                    "title": "Replaced"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -450,6 +648,52 @@
               },
               "category": {
                 "default": "other",
+                "oneOf": [
+                  {
+                    "const": "networking",
+                    "title": "Networking gear"
+                  },
+                  {
+                    "const": "server_hardware",
+                    "title": "Server hardware"
+                  },
+                  {
+                    "const": "software",
+                    "title": "Software"
+                  },
+                  {
+                    "const": "subscription",
+                    "title": "Subscription"
+                  },
+                  {
+                    "const": "domain",
+                    "title": "Domain"
+                  },
+                  {
+                    "const": "hosting",
+                    "title": "Hosting"
+                  },
+                  {
+                    "const": "camera_audio",
+                    "title": "Camera / audio"
+                  },
+                  {
+                    "const": "office",
+                    "title": "Office equipment"
+                  },
+                  {
+                    "const": "tools",
+                    "title": "Tools"
+                  },
+                  {
+                    "const": "training",
+                    "title": "Training"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Category",
                 "type": "string"
               },
@@ -472,11 +716,42 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
               "payment_method": {
                 "default": "",
+                "oneOf": [
+                  {
+                    "const": "",
+                    "title": "Not set"
+                  },
+                  {
+                    "const": "cash",
+                    "title": "Cash"
+                  },
+                  {
+                    "const": "debit",
+                    "title": "Debit card"
+                  },
+                  {
+                    "const": "credit",
+                    "title": "Credit card"
+                  },
+                  {
+                    "const": "ach",
+                    "title": "ACH / bank transfer"
+                  },
+                  {
+                    "const": "paypal",
+                    "title": "PayPal"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Payment Method",
                 "type": "string"
               },
@@ -513,6 +788,28 @@
               },
               "status": {
                 "default": "active",
+                "oneOf": [
+                  {
+                    "const": "active",
+                    "title": "Active"
+                  },
+                  {
+                    "const": "retired",
+                    "title": "Retired"
+                  },
+                  {
+                    "const": "sold",
+                    "title": "Sold"
+                  },
+                  {
+                    "const": "returned",
+                    "title": "Returned"
+                  },
+                  {
+                    "const": "replaced",
+                    "title": "Replaced"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -995,11 +1292,24 @@
             },
             "title": "Target Query",
             "type": "object"
+          },
+          "variants": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Variants",
+            "type": "object"
+          },
+          "verb": {
+            "title": "Verb",
+            "type": "string"
           }
         },
         "required": [
           "name",
           "label",
+          "verb",
+          "variants",
           "summary",
           "effect",
           "required_capabilities",
@@ -1234,6 +1544,44 @@
             "properties": {
               "content_type": {
                 "default": "article",
+                "oneOf": [
+                  {
+                    "const": "article",
+                    "title": "Article"
+                  },
+                  {
+                    "const": "video",
+                    "title": "Video"
+                  },
+                  {
+                    "const": "lab_writeup",
+                    "title": "Lab writeup"
+                  },
+                  {
+                    "const": "guide",
+                    "title": "Guide"
+                  },
+                  {
+                    "const": "review",
+                    "title": "Review"
+                  },
+                  {
+                    "const": "portfolio_page",
+                    "title": "Portfolio page"
+                  },
+                  {
+                    "const": "service_page",
+                    "title": "Service page"
+                  },
+                  {
+                    "const": "case_study",
+                    "title": "Case study"
+                  },
+                  {
+                    "const": "page",
+                    "title": "Page"
+                  }
+                ],
                 "title": "Content Type",
                 "type": "string"
               },
@@ -1247,6 +1595,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -1307,6 +1656,20 @@
               },
               "status": {
                 "default": "draft",
+                "oneOf": [
+                  {
+                    "const": "draft",
+                    "title": "Draft"
+                  },
+                  {
+                    "const": "published",
+                    "title": "Published"
+                  },
+                  {
+                    "const": "archived",
+                    "title": "Archived"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -1386,6 +1749,44 @@
             "properties": {
               "content_type": {
                 "default": "article",
+                "oneOf": [
+                  {
+                    "const": "article",
+                    "title": "Article"
+                  },
+                  {
+                    "const": "video",
+                    "title": "Video"
+                  },
+                  {
+                    "const": "lab_writeup",
+                    "title": "Lab writeup"
+                  },
+                  {
+                    "const": "guide",
+                    "title": "Guide"
+                  },
+                  {
+                    "const": "review",
+                    "title": "Review"
+                  },
+                  {
+                    "const": "portfolio_page",
+                    "title": "Portfolio page"
+                  },
+                  {
+                    "const": "service_page",
+                    "title": "Service page"
+                  },
+                  {
+                    "const": "case_study",
+                    "title": "Case study"
+                  },
+                  {
+                    "const": "page",
+                    "title": "Page"
+                  }
+                ],
                 "title": "Content Type",
                 "type": "string"
               },
@@ -1399,6 +1800,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -1459,6 +1861,20 @@
               },
               "status": {
                 "default": "draft",
+                "oneOf": [
+                  {
+                    "const": "draft",
+                    "title": "Draft"
+                  },
+                  {
+                    "const": "published",
+                    "title": "Published"
+                  },
+                  {
+                    "const": "archived",
+                    "title": "Archived"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -1509,11 +1925,83 @@
               },
               "doc_type": {
                 "default": "runbook",
+                "oneOf": [
+                  {
+                    "const": "runbook",
+                    "title": "Runbook"
+                  },
+                  {
+                    "const": "architecture_note",
+                    "title": "Architecture note"
+                  },
+                  {
+                    "const": "deployment_guide",
+                    "title": "Deployment guide"
+                  },
+                  {
+                    "const": "troubleshooting_guide",
+                    "title": "Troubleshooting guide"
+                  },
+                  {
+                    "const": "recovery_procedure",
+                    "title": "Recovery procedure"
+                  },
+                  {
+                    "const": "public_article_draft",
+                    "title": "Public article draft"
+                  },
+                  {
+                    "const": "decision_record",
+                    "title": "Decision record"
+                  },
+                  {
+                    "const": "task",
+                    "title": "Task"
+                  }
+                ],
                 "title": "Doc Type",
                 "type": "string"
               },
               "environment": {
                 "default": "other",
+                "oneOf": [
+                  {
+                    "const": "homelab",
+                    "title": "Homelab"
+                  },
+                  {
+                    "const": "vps",
+                    "title": "VPS"
+                  },
+                  {
+                    "const": "wordpress",
+                    "title": "WordPress"
+                  },
+                  {
+                    "const": "cloudflare",
+                    "title": "Cloudflare"
+                  },
+                  {
+                    "const": "tailscale",
+                    "title": "Tailscale"
+                  },
+                  {
+                    "const": "adguard",
+                    "title": "AdGuard"
+                  },
+                  {
+                    "const": "unifi",
+                    "title": "UniFi"
+                  },
+                  {
+                    "const": "local_mac",
+                    "title": "Local Mac"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Environment",
                 "type": "string"
               },
@@ -1550,6 +2038,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -1597,11 +2086,63 @@
               },
               "sensitivity": {
                 "default": "internal",
+                "oneOf": [
+                  {
+                    "const": "public",
+                    "title": "Public"
+                  },
+                  {
+                    "const": "internal",
+                    "title": "Internal"
+                  },
+                  {
+                    "const": "sensitive",
+                    "title": "Sensitive"
+                  },
+                  {
+                    "const": "restricted",
+                    "title": "Restricted"
+                  }
+                ],
                 "title": "Sensitivity",
                 "type": "string"
               },
               "status": {
                 "default": "draft",
+                "oneOf": [
+                  {
+                    "const": "draft",
+                    "title": "Draft"
+                  },
+                  {
+                    "const": "active",
+                    "title": "Active"
+                  },
+                  {
+                    "const": "deprecated",
+                    "title": "Deprecated"
+                  },
+                  {
+                    "const": "archived",
+                    "title": "Archived"
+                  },
+                  {
+                    "const": "open",
+                    "title": "Open"
+                  },
+                  {
+                    "const": "parked",
+                    "title": "Parked"
+                  },
+                  {
+                    "const": "done",
+                    "title": "Done"
+                  },
+                  {
+                    "const": "wontfix",
+                    "title": "Won't fix"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -1738,11 +2279,83 @@
               },
               "doc_type": {
                 "default": "runbook",
+                "oneOf": [
+                  {
+                    "const": "runbook",
+                    "title": "Runbook"
+                  },
+                  {
+                    "const": "architecture_note",
+                    "title": "Architecture note"
+                  },
+                  {
+                    "const": "deployment_guide",
+                    "title": "Deployment guide"
+                  },
+                  {
+                    "const": "troubleshooting_guide",
+                    "title": "Troubleshooting guide"
+                  },
+                  {
+                    "const": "recovery_procedure",
+                    "title": "Recovery procedure"
+                  },
+                  {
+                    "const": "public_article_draft",
+                    "title": "Public article draft"
+                  },
+                  {
+                    "const": "decision_record",
+                    "title": "Decision record"
+                  },
+                  {
+                    "const": "task",
+                    "title": "Task"
+                  }
+                ],
                 "title": "Doc Type",
                 "type": "string"
               },
               "environment": {
                 "default": "other",
+                "oneOf": [
+                  {
+                    "const": "homelab",
+                    "title": "Homelab"
+                  },
+                  {
+                    "const": "vps",
+                    "title": "VPS"
+                  },
+                  {
+                    "const": "wordpress",
+                    "title": "WordPress"
+                  },
+                  {
+                    "const": "cloudflare",
+                    "title": "Cloudflare"
+                  },
+                  {
+                    "const": "tailscale",
+                    "title": "Tailscale"
+                  },
+                  {
+                    "const": "adguard",
+                    "title": "AdGuard"
+                  },
+                  {
+                    "const": "unifi",
+                    "title": "UniFi"
+                  },
+                  {
+                    "const": "local_mac",
+                    "title": "Local Mac"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Environment",
                 "type": "string"
               },
@@ -1779,6 +2392,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -1826,11 +2440,63 @@
               },
               "sensitivity": {
                 "default": "internal",
+                "oneOf": [
+                  {
+                    "const": "public",
+                    "title": "Public"
+                  },
+                  {
+                    "const": "internal",
+                    "title": "Internal"
+                  },
+                  {
+                    "const": "sensitive",
+                    "title": "Sensitive"
+                  },
+                  {
+                    "const": "restricted",
+                    "title": "Restricted"
+                  }
+                ],
                 "title": "Sensitivity",
                 "type": "string"
               },
               "status": {
                 "default": "draft",
+                "oneOf": [
+                  {
+                    "const": "draft",
+                    "title": "Draft"
+                  },
+                  {
+                    "const": "active",
+                    "title": "Active"
+                  },
+                  {
+                    "const": "deprecated",
+                    "title": "Deprecated"
+                  },
+                  {
+                    "const": "archived",
+                    "title": "Archived"
+                  },
+                  {
+                    "const": "open",
+                    "title": "Open"
+                  },
+                  {
+                    "const": "parked",
+                    "title": "Parked"
+                  },
+                  {
+                    "const": "done",
+                    "title": "Done"
+                  },
+                  {
+                    "const": "wontfix",
+                    "title": "Won't fix"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -1910,6 +2576,56 @@
               },
               "category": {
                 "default": "miscellaneous",
+                "oneOf": [
+                  {
+                    "const": "hosting",
+                    "title": "Hosting"
+                  },
+                  {
+                    "const": "domains",
+                    "title": "Domains"
+                  },
+                  {
+                    "const": "software",
+                    "title": "Software"
+                  },
+                  {
+                    "const": "hardware",
+                    "title": "Hardware"
+                  },
+                  {
+                    "const": "networking",
+                    "title": "Networking gear"
+                  },
+                  {
+                    "const": "office",
+                    "title": "Office equipment"
+                  },
+                  {
+                    "const": "education",
+                    "title": "Education / training"
+                  },
+                  {
+                    "const": "subscriptions",
+                    "title": "Subscriptions"
+                  },
+                  {
+                    "const": "content_production",
+                    "title": "Content production"
+                  },
+                  {
+                    "const": "consulting_tools",
+                    "title": "Consulting tools"
+                  },
+                  {
+                    "const": "professional_services",
+                    "title": "Professional services"
+                  },
+                  {
+                    "const": "miscellaneous",
+                    "title": "Miscellaneous"
+                  }
+                ],
                 "title": "Category",
                 "type": "string"
               },
@@ -1932,6 +2648,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -1942,6 +2659,36 @@
               },
               "payment_method": {
                 "default": "",
+                "oneOf": [
+                  {
+                    "const": "",
+                    "title": "Not set"
+                  },
+                  {
+                    "const": "cash",
+                    "title": "Cash"
+                  },
+                  {
+                    "const": "debit",
+                    "title": "Debit card"
+                  },
+                  {
+                    "const": "credit",
+                    "title": "Credit card"
+                  },
+                  {
+                    "const": "ach",
+                    "title": "ACH / bank transfer"
+                  },
+                  {
+                    "const": "paypal",
+                    "title": "PayPal"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Payment Method",
                 "type": "string"
               },
@@ -2095,6 +2842,56 @@
               },
               "category": {
                 "default": "miscellaneous",
+                "oneOf": [
+                  {
+                    "const": "hosting",
+                    "title": "Hosting"
+                  },
+                  {
+                    "const": "domains",
+                    "title": "Domains"
+                  },
+                  {
+                    "const": "software",
+                    "title": "Software"
+                  },
+                  {
+                    "const": "hardware",
+                    "title": "Hardware"
+                  },
+                  {
+                    "const": "networking",
+                    "title": "Networking gear"
+                  },
+                  {
+                    "const": "office",
+                    "title": "Office equipment"
+                  },
+                  {
+                    "const": "education",
+                    "title": "Education / training"
+                  },
+                  {
+                    "const": "subscriptions",
+                    "title": "Subscriptions"
+                  },
+                  {
+                    "const": "content_production",
+                    "title": "Content production"
+                  },
+                  {
+                    "const": "consulting_tools",
+                    "title": "Consulting tools"
+                  },
+                  {
+                    "const": "professional_services",
+                    "title": "Professional services"
+                  },
+                  {
+                    "const": "miscellaneous",
+                    "title": "Miscellaneous"
+                  }
+                ],
                 "title": "Category",
                 "type": "string"
               },
@@ -2117,6 +2914,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -2127,6 +2925,36 @@
               },
               "payment_method": {
                 "default": "",
+                "oneOf": [
+                  {
+                    "const": "",
+                    "title": "Not set"
+                  },
+                  {
+                    "const": "cash",
+                    "title": "Cash"
+                  },
+                  {
+                    "const": "debit",
+                    "title": "Debit card"
+                  },
+                  {
+                    "const": "credit",
+                    "title": "Credit card"
+                  },
+                  {
+                    "const": "ach",
+                    "title": "ACH / bank transfer"
+                  },
+                  {
+                    "const": "paypal",
+                    "title": "PayPal"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Payment Method",
                 "type": "string"
               },
@@ -2698,16 +3526,68 @@
             "properties": {
               "category": {
                 "default": "other",
+                "oneOf": [
+                  {
+                    "const": "wordpress_security",
+                    "title": "WordPress security"
+                  },
+                  {
+                    "const": "cloudflare",
+                    "title": "Cloudflare"
+                  },
+                  {
+                    "const": "dns_email_security",
+                    "title": "DNS / email security"
+                  },
+                  {
+                    "const": "homelab",
+                    "title": "Homelab"
+                  },
+                  {
+                    "const": "vps",
+                    "title": "VPS"
+                  },
+                  {
+                    "const": "tailscale",
+                    "title": "Tailscale"
+                  },
+                  {
+                    "const": "adguard",
+                    "title": "AdGuard"
+                  },
+                  {
+                    "const": "networking",
+                    "title": "UniFi / networking"
+                  },
+                  {
+                    "const": "tls_certificates",
+                    "title": "TLS / certificates"
+                  },
+                  {
+                    "const": "automation",
+                    "title": "Automation / scripts"
+                  },
+                  {
+                    "const": "cybersecurity_labs",
+                    "title": "Cybersecurity labs"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Category",
                 "type": "string"
               },
               "deployment_notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Deployment Notes",
                 "type": "string"
               },
               "description": {
                 "default": "",
+                "format": "textarea",
                 "title": "Description",
                 "type": "string"
               },
@@ -2725,6 +3605,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -2740,6 +3621,7 @@
               },
               "security_notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Security Notes",
                 "type": "string"
               },
@@ -2750,6 +3632,32 @@
               },
               "status": {
                 "default": "idea",
+                "oneOf": [
+                  {
+                    "const": "idea",
+                    "title": "Idea"
+                  },
+                  {
+                    "const": "active",
+                    "title": "Active"
+                  },
+                  {
+                    "const": "paused",
+                    "title": "Paused"
+                  },
+                  {
+                    "const": "completed",
+                    "title": "Completed"
+                  },
+                  {
+                    "const": "published",
+                    "title": "Published"
+                  },
+                  {
+                    "const": "archived",
+                    "title": "Archived"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -2808,7 +3716,7 @@
         ],
         "type": "object"
       },
-      "ProjectRefreshRequest": {
+      "ProjectDependencyUpdatesRequest": {
         "additionalProperties": false,
         "properties": {
           "expected_updated_at": {
@@ -2817,7 +3725,47 @@
           },
           "payload": {
             "additionalProperties": false,
-            "description": "A targeted refresh has no free-form payload beyond its project target.",
+            "description": "Whether HQ's dependency update run covers the project's repository.",
+            "properties": {
+              "enabled": {
+                "title": "Enabled",
+                "type": "boolean"
+              },
+              "idempotency_key": {
+                "description": "Optional. A repeat carrying the same key returns the first result instead of acting a second time.",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "title": "Idempotency Key",
+                "type": "string"
+              }
+            },
+            "required": [
+              "enabled"
+            ],
+            "title": "DependencyUpdatesCommand",
+            "type": "object"
+          },
+          "target": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "ProjectDependencyUpdatesRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "A run of every opted-in repository now.",
             "properties": {
               "idempotency_key": {
                 "description": "Optional. A repeat carrying the same key returns the first result instead of acting a second time.",
@@ -2828,7 +3776,34 @@
                 "type": "string"
               }
             },
-            "title": "ProjectRefreshCommand",
+            "title": "DependencyRunCommand",
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "ProjectRefreshRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "What is acted on is the target; there is nothing else to say.",
+            "properties": {
+              "idempotency_key": {
+                "description": "Optional. A repeat carrying the same key returns the first result instead of acting a second time.",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "title": "Idempotency Key",
+                "type": "string"
+              }
+            },
+            "title": "_NoArguments",
             "type": "object"
           },
           "target": {
@@ -2853,16 +3828,68 @@
             "properties": {
               "category": {
                 "default": "other",
+                "oneOf": [
+                  {
+                    "const": "wordpress_security",
+                    "title": "WordPress security"
+                  },
+                  {
+                    "const": "cloudflare",
+                    "title": "Cloudflare"
+                  },
+                  {
+                    "const": "dns_email_security",
+                    "title": "DNS / email security"
+                  },
+                  {
+                    "const": "homelab",
+                    "title": "Homelab"
+                  },
+                  {
+                    "const": "vps",
+                    "title": "VPS"
+                  },
+                  {
+                    "const": "tailscale",
+                    "title": "Tailscale"
+                  },
+                  {
+                    "const": "adguard",
+                    "title": "AdGuard"
+                  },
+                  {
+                    "const": "networking",
+                    "title": "UniFi / networking"
+                  },
+                  {
+                    "const": "tls_certificates",
+                    "title": "TLS / certificates"
+                  },
+                  {
+                    "const": "automation",
+                    "title": "Automation / scripts"
+                  },
+                  {
+                    "const": "cybersecurity_labs",
+                    "title": "Cybersecurity labs"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Category",
                 "type": "string"
               },
               "deployment_notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Deployment Notes",
                 "type": "string"
               },
               "description": {
                 "default": "",
+                "format": "textarea",
                 "title": "Description",
                 "type": "string"
               },
@@ -2880,6 +3907,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -2895,6 +3923,7 @@
               },
               "security_notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Security Notes",
                 "type": "string"
               },
@@ -2905,6 +3934,32 @@
               },
               "status": {
                 "default": "idea",
+                "oneOf": [
+                  {
+                    "const": "idea",
+                    "title": "Idea"
+                  },
+                  {
+                    "const": "active",
+                    "title": "Active"
+                  },
+                  {
+                    "const": "paused",
+                    "title": "Paused"
+                  },
+                  {
+                    "const": "completed",
+                    "title": "Completed"
+                  },
+                  {
+                    "const": "published",
+                    "title": "Published"
+                  },
+                  {
+                    "const": "archived",
+                    "title": "Archived"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -2942,16 +3997,68 @@
             "properties": {
               "category": {
                 "default": "other",
+                "oneOf": [
+                  {
+                    "const": "wordpress_security",
+                    "title": "WordPress security"
+                  },
+                  {
+                    "const": "cloudflare",
+                    "title": "Cloudflare"
+                  },
+                  {
+                    "const": "dns_email_security",
+                    "title": "DNS / email security"
+                  },
+                  {
+                    "const": "homelab",
+                    "title": "Homelab"
+                  },
+                  {
+                    "const": "vps",
+                    "title": "VPS"
+                  },
+                  {
+                    "const": "tailscale",
+                    "title": "Tailscale"
+                  },
+                  {
+                    "const": "adguard",
+                    "title": "AdGuard"
+                  },
+                  {
+                    "const": "networking",
+                    "title": "UniFi / networking"
+                  },
+                  {
+                    "const": "tls_certificates",
+                    "title": "TLS / certificates"
+                  },
+                  {
+                    "const": "automation",
+                    "title": "Automation / scripts"
+                  },
+                  {
+                    "const": "cybersecurity_labs",
+                    "title": "Cybersecurity labs"
+                  },
+                  {
+                    "const": "other",
+                    "title": "Other"
+                  }
+                ],
                 "title": "Category",
                 "type": "string"
               },
               "deployment_notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Deployment Notes",
                 "type": "string"
               },
               "description": {
                 "default": "",
+                "format": "textarea",
                 "title": "Description",
                 "type": "string"
               },
@@ -2969,6 +4076,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -2984,6 +4092,7 @@
               },
               "security_notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Security Notes",
                 "type": "string"
               },
@@ -2994,6 +4103,32 @@
               },
               "status": {
                 "default": "idea",
+                "oneOf": [
+                  {
+                    "const": "idea",
+                    "title": "Idea"
+                  },
+                  {
+                    "const": "active",
+                    "title": "Active"
+                  },
+                  {
+                    "const": "paused",
+                    "title": "Paused"
+                  },
+                  {
+                    "const": "completed",
+                    "title": "Completed"
+                  },
+                  {
+                    "const": "published",
+                    "title": "Published"
+                  },
+                  {
+                    "const": "archived",
+                    "title": "Archived"
+                  }
+                ],
                 "title": "Status",
                 "type": "string"
               },
@@ -3104,6 +4239,7 @@
               },
               "notes": {
                 "default": "",
+                "format": "textarea",
                 "title": "Notes",
                 "type": "string"
               },
@@ -5127,7 +6263,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Sync documentation",
+        "summary": "Update docs from an export",
         "tags": [
           "hq.docs",
           "api.v2"
@@ -5228,7 +6364,7 @@
     },
     "/api/v2/capabilities/expense.create/": {
       "post": {
-        "description": "Create an HQ expense.\n\nRequires: write_expenses.",
+        "description": "Add a new expense.\n\nRequires: write_expenses.",
         "operationId": "expenseCreateV2",
         "parameters": [
           {
@@ -5650,7 +6786,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Sync the vault",
+        "summary": "Update docs from the vault",
         "tags": [
           "hq.docs",
           "api.v2"
@@ -5737,7 +6873,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Read everything now",
+        "summary": "Refresh",
         "tags": [
           "api",
           "api.v2"
@@ -6657,6 +7793,181 @@
         "x-hq-effect": "destructive",
         "x-hq-required-capabilities": [
           "delete_projects"
+        ]
+      }
+    },
+    "/api/v2/capabilities/project.dependency_updates.run/": {
+      "post": {
+        "description": "Update dependencies in every opted-in repository.\n\nRequires: write_projects, manage_infrastructure.",
+        "operationId": "projectDependencyUpdatesRunV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDependencyUpdatesRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "ok": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Update dependencies",
+        "tags": [
+          "hq.projects",
+          "api.v2"
+        ],
+        "x-hq-capability": "project.dependency_updates.run",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "write_projects",
+          "manage_infrastructure"
+        ]
+      }
+    },
+    "/api/v2/capabilities/project.dependency_updates/": {
+      "post": {
+        "description": "Turn dependency updates on or off for a project's repository.\n\nRequires: write_projects.",
+        "operationId": "projectDependencyUpdatesV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDependencyUpdatesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "ok": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Dependency updates",
+        "tags": [
+          "hq.projects",
+          "api.v2"
+        ],
+        "x-hq-capability": "project.dependency_updates",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "write_projects"
         ]
       }
     },
@@ -10028,6 +11339,25 @@
             "style": "form"
           },
           {
+            "explode": true,
+            "in": "query",
+            "name": "updates",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Updates"
+            },
+            "style": "form"
+          },
+          {
             "$ref": "#/components/parameters/Fields"
           }
         ],
@@ -10183,6 +11513,18 @@
               ],
               "default": null,
               "title": "Status"
+            },
+            "updates": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Updates"
             }
           },
           "title": "ProjectQuery",

@@ -35,7 +35,9 @@ def options(page) -> list[str]:
 
 
 def chosen_options(page) -> list[str]:
-    return [option.attrs["value"] for option in elements(page, "option") if "selected" in option.attrs]
+    """The target's chosen option."""
+
+    return [option.attrs["value"] for option in within(page, "name", "__target") if "selected" in option.attrs]
 
 
 def result_title(page) -> str | None:
@@ -90,7 +92,6 @@ class CommandViewTests(TestCase):
         response = self.client.get("/commands/project.create/")
 
         self.assertEqual([button.words for button in submits(response)], ["Create project"])
-        self.assertIn("Add a new project.", text(response))
         self.assertNotIn("project.create", text(response))
         for built in (
             "manage_projects",
@@ -102,6 +103,28 @@ class CommandViewTests(TestCase):
             "additionalProperties",
         ):
             self.assertNotContains(response, built)
+
+    def test_a_lede_says_what_the_title_does_not(self):
+        restated = self.client.get("/commands/project.create/")
+        declared = self.client.get("/commands/certificate.renew/")
+
+        self.assertFalse(with_class(restated, "page-lede"))
+        self.assertIn(capability_registry()["certificate.renew"].summary, text(declared))
+
+    def test_the_trail_names_where_the_form_lives(self):
+        response = self.client.get("/commands/project.create/")
+
+        trail = [(link.words, link.attrs["href"]) for link in within(response, "class", "page-trail")]
+        self.assertEqual(trail, [("Projects", "/projects/")])
+
+    def test_a_field_reads_as_its_model_declares_it(self):
+        response = self.client.get("/commands/project.create/")
+
+        (status,) = select(response, "name", "status")
+        self.assertEqual(status.tag, "select")
+        self.assertIn(Project.Status.ACTIVE.label, [option.words for option in within(response, "name", "status")])
+        (notes,) = select(response, "name", "notes")
+        self.assertEqual(notes.tag, "textarea")
 
     def test_a_page_opened_for_one_thing_names_it_instead_of_listing_every_other(self):
         ManagedResource.objects.create(key="example-certificate", kind="tls.certificate", spec={})

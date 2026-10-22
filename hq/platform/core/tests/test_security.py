@@ -990,9 +990,12 @@ class SourceBoundaryTests(SimpleTestCase):
         sources = {path.name: path.read_text("utf-8") for path in root.glob("*.js")}
 
         self.assertEqual(sources["fragment.js"].count("window.fetch("), 1)
-        for name in ("app.js", "tables.js"):
-            self.assertNotIn("window.fetch(", sources[name], name)
-            self.assertNotRegex(sources[name], r"(?<![\w.])fetch\(", name)
+        self.assertGreater(len(sources), 2)
+        for name, source in sources.items():
+            if name == "fragment.js":
+                continue
+            self.assertNotIn("window.fetch(", source, name)
+            self.assertNotRegex(source, r"(?<![\w.])fetch\(", name)
 
 
 class CookiePrefixTests(SimpleTestCase):

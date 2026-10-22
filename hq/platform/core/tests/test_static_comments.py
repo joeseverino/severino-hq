@@ -9,6 +9,7 @@ from django.core.files.base import ContentFile
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core.static import HashedStaticStorage, without_comments
+from hq.platform.core.stylesheets import SHEETS, sheet_paths
 
 
 class WithoutCommentsTests(SimpleTestCase):
@@ -33,12 +34,14 @@ class StylesheetSourceTests(SimpleTestCase):
     """The shipped stylesheet keeps every rule once its comments go."""
 
     def test_the_stylesheet_keeps_every_rule(self):
-        source = (Path(settings.BASE_DIR) / "static/css/app.css").read_text()
-        served = without_comments(source)
+        for path in sheet_paths():
+            with self.subTest(sheet=path.name):
+                source = path.read_text(encoding="utf-8")
+                served = without_comments(source)
 
-        self.assertNotIn("/*", served)
-        self.assertEqual(served.count("{"), source.count("{") - _in_comments(source, "{"))
-        self.assertLess(len(served), len(source))
+                self.assertNotIn("/*", served)
+                self.assertEqual(served.count("{"), source.count("{") - _in_comments(source, "{"))
+                self.assertLess(len(served), len(source))
 
 
 def _in_comments(css: str, mark: str) -> int:
@@ -93,13 +96,17 @@ class CollectedStylesheetTests(SimpleTestCase):
                     (Path(root) / paths[name]).read_bytes(),
                     gzip.decompress((Path(root) / f"{paths[name]}.gz").read_bytes()),
                 )
-                for name in ("css/app.css", "js/app.js")
+                for name in (*SHEETS, "js/app.js")
             }
 
-        stylesheet, stylesheet_gzipped = collected["css/app.css"]
-        self.assertGreater(len(stylesheet), 100_000)
-        self.assertNotIn(b"/*", stylesheet)
-        self.assertEqual(stylesheet_gzipped, stylesheet)
+        for sheet, path in zip(SHEETS, sheet_paths(), strict=True):
+            with self.subTest(sheet=sheet):
+                stylesheet, stylesheet_gzipped = collected[sheet]
+                source = path.read_text(encoding="utf-8")
+                # Whole: every rule the source writes, outside its comments.
+                self.assertEqual(stylesheet.count(b"{"), source.count("{") - _in_comments(source, "{"))
+                self.assertNotIn(b"/*", stylesheet)
+                self.assertEqual(stylesheet_gzipped, stylesheet)
         script, script_gzipped = collected["js/app.js"]
         source = (Path(settings.BASE_DIR) / "static/js/app.js").read_bytes()
         self.assertGreater(len(script), len(source) // 3)

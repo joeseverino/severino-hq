@@ -26,7 +26,6 @@ from hq.platform.application.glance import (
     request_stale_panel_refresh,
     save_dashboard_settings,
 )
-from hq.platform.application.moments import when_day
 from hq.platform.application.outward_links import link_choices, outward_links
 from hq.platform.application.pages import page_context
 from hq.platform.application.request_path import request_path
@@ -148,7 +147,8 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         content_rows = [
             ListRow(
                 title=item["title"],
-                meta=f"{item['content_type_label']} · {when_day(item['updated_at'])}",
+                meta=item["content_type_label"],
+                at=item["updated_at"],
                 url=reverse("content:detail", args=[item["slug"]]),
             )
             for item in snapshot["draft_content"]
@@ -156,7 +156,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         published_rows = [
             ListRow(
                 title=item["title"],
-                meta=when_day(item["published_at"] or item["updated_at"]),
+                at=item["published_at"] or item["updated_at"],
                 url=item["published_url"] or reverse("content:detail", args=[item["slug"]]),
                 external=bool(item["published_url"]),
             )
@@ -181,7 +181,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
                 ListRow(
                     title=submission.get("name", ""),
                     detail=submission.get("status", ""),
-                    meta=submission.get("created_at", ""),
+                    at=moment(submission.get("created_at")),
                     url=reverse("contacts:detail", args=[submission["id"]]),
                 )
                 for submission in inbox.recent()
@@ -189,8 +189,9 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             unread_contacts_count=inbox.unread()[0],
             content_rows=content_rows,
             published_rows=published_rows,
-            active_project_count=snapshot["kpis"]["active_projects"],
             active_projects=snapshot["active_projects"],
+            active_project_count=snapshot["kpis"]["active_projects"],
+            projects_needing_output=snapshot["kpis"]["projects_needing_output"],
             draft_content_count=snapshot["kpis"]["draft_content"],
             action_queue_count=action_queue_count,
             needs_you=serious if len(serious) <= NEEDS_YOU_IN_PLACE else [],

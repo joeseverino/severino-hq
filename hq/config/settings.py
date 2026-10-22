@@ -440,6 +440,10 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
         "LOCATION": "hq_derived",
         "TIMEOUT": 24 * 60 * 60,
+        # A value is pickled, and the table outlives the process, so it is
+        # served only to the code that stored it: every key starts with the
+        # identity of the host and extensions this process runs.
+        "KEY_PREFIX": import_module("hq.platform.application.code_identity").running_code(),
         # A fact is stored once per revision it was derived at, and an old
         # revision is never asked for again: a small table, culled by halves.
         "OPTIONS": {"MAX_ENTRIES": 120, "CULL_FREQUENCY": 2},

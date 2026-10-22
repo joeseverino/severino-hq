@@ -232,6 +232,8 @@ def json_mutated_past_what_the_log_shows():
     resource = ManagedResource.objects.get(pk=RESOURCE_ID)
     resource.spec["tail"] = "after"
     resource.save()
+    resource.spec["padding"] = "p" * 399 + "q"
+    resource.save()
 
 
 def json_replaced_and_restored():
@@ -527,18 +529,27 @@ class RecordedChangeTests(TestCase):
         rows, _ = run(register_audit, options, script)
         return [row[6].get("changes", {}) for row in rows if row[0] == AuditLog.Action.UPDATED]
 
-    def test_an_in_place_json_change_is_reported(self):
+    def test_an_in_place_json_change_is_reported_in_words(self):
         first, second, third = self.changes(AS_REGISTERED, json_mutated_in_place)
-        self.assertEqual(set(first), {"spec", "conditions", "status"})
-        self.assertIn("192.0.2.10", first["spec"][0])
-        self.assertIn("192.0.2.99", first["spec"][1])
-        self.assertEqual(set(second), {"spec"})
-        self.assertEqual(set(third), {"spec"})
-        self.assertIn("[1, 2, 3]", third["spec"][0])
-        self.assertIn("[1, 2, 3, 4]", third["spec"][1])
+        self.assertEqual(
+            first,
+            {
+                "spec": {"Answer": ["192.0.2.10", "192.0.2.99"]},
+                "conditions": {"Entry 2 › Type": ["", "Synced"], "Entry 2 › Status": ["", "False"]},
+                "status": {"Phase": ["", "pending"]},
+            },
+        )
+        # A record added inside a record, then a list in it grown.
+        self.assertEqual(second, {"spec": {"Nested › Deep": ["", "1, 2, 3"]}})
+        self.assertEqual(third, {"spec": {"Nested › Deep": ["1, 2, 3", "1, 2, 3, 4"]}})
 
-    def test_a_json_change_past_the_shown_length_is_not_an_event(self):
-        self.assertEqual(self.changes(AS_REGISTERED, json_mutated_past_what_the_log_shows), [])
+    def test_a_json_change_past_the_shown_length_is_an_event_said_as_far_as_it_fits(self):
+        tail, padding = self.changes(AS_REGISTERED, json_mutated_past_what_the_log_shows)
+        self.assertEqual(tail, {"spec": {"Tail": ["before", "after"]}})
+        before, after = padding["spec"]["Padding"]
+        self.assertEqual(len(before), audit.VALUE_CHARS)
+        self.assertTrue(before.endswith("…"))
+        self.assertEqual(before, after)
 
     def test_a_second_save_reports_only_its_own_changes(self):
         self.assertEqual(
@@ -575,7 +586,7 @@ class RecordedChangeTests(TestCase):
             [
                 {"kind": ["example.rewrite", "example.record"]},
                 {
-                    "status": ["{}", "{'phase': 'ready'}"],
+                    "status": {"Phase": ["", "ready"]},
                     "last_observed_at": ["2026-01-02 03:04:05+00:00", "2026-01-03 03:04:05+00:00"],
                 },
             ],
@@ -654,7 +665,8 @@ class ReadCostTests(TestCase):
         resource = ManagedResource.objects.get(pk=RESOURCE_ID)
         held = resource._audit_snapshot
         for name in ("spec", "status", "conditions"):
-            self.assertIsInstance(held[name], str, name)
+            self.assertEqual(held[name], getattr(resource, name), name)
+            self.assertIsNot(held[name], getattr(resource, name), name)
         # A value that cannot is held as it is, and converted on a save.
         self.assertIs(held["id"], resource.id)
         self.assertIs(held["created_at"], resource.created_at)
@@ -666,7 +678,7 @@ class ReadCostTests(TestCase):
         resource = ManagedResource(key="k", kind=Text("example.kind"), conditions=("a",))
         held = resource._audit_snapshot
         self.assertIs(type(held["kind"]), str)
-        self.assertEqual(held["conditions"], "('a',)")
+        self.assertEqual(held["conditions"], ["a"])
 
     def test_the_clock_field_is_not_tracked(self):
         self.assertNotIn("updated_at", _tracked(Expense))

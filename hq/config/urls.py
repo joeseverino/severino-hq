@@ -28,7 +28,7 @@ from hq.platform.core.views import (
     AgentAccessView,
     AgentPolicyView,
     AvatarView,
-    ConnectionView,
+    ConnectionPageView,
     DemoModeView,
     HQView,
     PublicAddressView,
@@ -98,7 +98,7 @@ urlpatterns = [
     path("theme/", ThemeView.as_view(), name="theme"),
     path("avatar/<str:digest>/", AvatarView.as_view(), name="avatar"),
     path("agents/", AgentPolicyView.as_view(), name="agent_policy"),
-    path("connection/", ConnectionView.as_view(), name="connection"),
+    path("connection/", ConnectionPageView.as_view(), name="connection"),
     path("hq/", HQView.as_view(), name="hq_self"),
     path(
         "connection/address/",

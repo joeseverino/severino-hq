@@ -32,5 +32,5 @@ class EmptyListTests(TestCase):
         response = self.client.get(reverse("assets:list"), {"q": "no such asset"})
 
         self.assertContains(response, "Nothing matches.")
-        self.assertTrue(offers(response, "Clear the search and filters", "?"))
+        self.assertTrue(offers(response, "Clear filters", "?"))
         self.assertNotContains(response, "No assets yet.")

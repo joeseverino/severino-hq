@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.tests.markup import select
+from hq.platform.core.stylesheets import stylesheet
 
 STATIC = Path(settings.BASE_DIR) / "static"
 VENDOR = STATIC / "vendor" / "scalar"
@@ -103,8 +104,8 @@ class ReferenceStyleTests(SimpleTestCase):
         self.assertNotIn("font-family", self.sheet)
         self.assertEqual(re.findall(r"font-size:\s*[\d.]", self.sheet), [])
 
-    def test_every_token_it_reads_is_one_app_css_defines(self):
-        tokens = set(re.findall(r"^\s*(--[\w-]+):", _source("css", "app.css"), flags=re.MULTILINE))
+    def test_every_token_it_reads_is_one_the_stylesheet_defines(self):
+        tokens = set(re.findall(r"^\s*(--[\w-]+):", stylesheet(), flags=re.MULTILINE))
         read = set(re.findall(r"var\((--[\w-]+)", self.sheet))
         self.assertGreater(len(read), 20)
         self.assertEqual(read - tokens, set())
