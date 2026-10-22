@@ -8,8 +8,11 @@ from django.utils import timezone
 from hq.platform.core.models import LinkedAccount
 
 from .. import github_profile
+from ..action_links import READ_NOW_CAPABILITY
+from ..asks import READ_WAITING
+from ..capabilities import capability_registry
 from ..security import AuthorizationError, Principal
-from .markup import hrefs, select
+from .markup import hrefs, select, text
 from .sentinel import SENTINEL
 
 PROFILE = {
@@ -231,10 +234,10 @@ class PageTests(TestCase):
         response = self.client.post(reverse("watching_refresh"), follow=True)
 
         self.assertRedirects(response, reverse("watching"))
-        self.assertContains(response, "Reading @example-user from GitHub.")
+        self.assertIn(capability_registry()[READ_NOW_CAPABILITY].requested("@example-user"), text(response))
         self.assertContains(response, "data-ask-status=")
         self.assertTrue(select(response, "aria-disabled", "true"))
-        self.assertContains(response, "Waiting for the controller.")
+        self.assertContains(response, READ_WAITING)
 
     def test_the_status_says_when_the_read_landed_or_was_refused(self):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
@@ -260,7 +263,7 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("watching"))
 
-        self.assertContains(response, "@example-user")
+        self.assertIn("@example-user", text(response))
         self.assertContains(response, "This is your GitHub account, according to your sign-in.")
         self.assertIn("https://github.com/example-user?tab=followers", hrefs(response))
         self.assertContains(response, "v1.2.0")

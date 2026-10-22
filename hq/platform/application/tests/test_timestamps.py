@@ -7,6 +7,8 @@ from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.markup import text
+
 from ..timestamps import moment
 from .source import parsed, source_files
 
@@ -123,7 +125,7 @@ class CorrectedCallSiteTests(SimpleTestCase):
         from hq.platform.core.templatetags.value_tags import readable
 
         self.assertEqual(readable("nope T"), "nope T")
-        self.assertEqual(readable("0001-01-01T00:00:00"), "0001-01-01T00:00:00")
+        self.assertEqual(text(readable("0001-01-01T00:00:00")), "0001-01-01T00:00:00")
         self.assertNotEqual(readable("2026-07-25T10:00:00Z"), "2026-07-25T10:00:00Z")
 
     def test_content_dates_ignore_the_zero_time(self):
@@ -159,4 +161,9 @@ class OneParserTests(SimpleTestCase):
                 and isinstance(node.value, ast.Name)
                 and node.value.id == "datetime"
             )
-        self.assertEqual(offenders, [])
+        self.assertEqual(
+            offenders,
+            [],
+            "parse through hq.platform.application.timestamps.moment, or "
+            "tools/pipeline/ci_report.github_instant outside the app",
+        )

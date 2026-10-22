@@ -31,7 +31,7 @@ from ..glance import (
     select_dashboard_machine,
 )
 from ..security import cli_principal
-from .markup import hrefs, select, text
+from .markup import hrefs, select, text, with_class
 
 
 class DashboardGlanceTests(TestCase):
@@ -61,6 +61,21 @@ class DashboardGlanceTests(TestCase):
         shown = text(render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [panel]}))
         self.assertIn("583 MB of 16 GB", shown)
         self.assertIn("8 cores · 16 GB memory", shown)
+
+    def test_a_machines_head_names_it_beside_another_machines(self):
+        other = ManagedResource.objects.create(key="db-server", kind="machine", spec={"name": "db"})
+        DashboardMachine.objects.create(machine=other, position=1)
+        for machine in (self.machine, other):
+            readings.record(
+                readings.machine_telemetry(machine.key),
+                {"metrics": [{"label": "CPU", "value": "37%"}, {"label": "Memory", "value": "81%"}]},
+            )
+        html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": dashboard_panels()})
+
+        for machine, name in ((self.machine, "app"), (other, "db")):
+            (part,) = select(html, "data-fragment-part", f"machine-{machine.pk}")
+            (head,) = (element for element in with_class(html, "glance-caption") if part in element.ancestors)
+            self.assertIn(name, head.text)
 
     def test_compact_summary_preserves_full_readings_in_native_details(self):
         readings.record(

@@ -8,8 +8,9 @@ from django.test import SimpleTestCase
 from hq.domains.control_plane.zone_views import _page_relationships, _records_lede
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
+from hq.platform.application.zones import Zone, ZoneRecord
 
-from .markup import text, texts
+from .markup import elements, text, texts
 
 
 def group(phrase: str, *ends: EntityLink) -> RelationGroup:
@@ -131,3 +132,16 @@ class RecordTableTests(SimpleTestCase):
     def test_an_empty_half_says_where_the_records_are(self):
         self.assertIn("No records.", self.table())
         self.assertIn("They are all below.", self.table(empty_message="They are all below."))
+
+    def test_two_records_of_one_name_and_type_say_what_tells_them_apart_where_their_value_has_left(self):
+        records = (
+            ZoneRecord("example.com", "MX", "mx1.example.net", priority=10),
+            ZoneRecord("example.com", "MX", "mx2.example.net", priority=20),
+            ZoneRecord("mail.example.com", "MX", "mx1.example.net", priority=10),
+        )
+        found = Zone("example.com", records=records)
+        rows = found.routing + found.policy
+        html = self.table(*rows)
+
+        said = {row.words for row in elements(html, "span") if "narrow-only" in row.classes}
+        self.assertEqual(said, {"10 mx1.example.net", "20 mx2.example.net"})

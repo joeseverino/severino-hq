@@ -8,7 +8,7 @@ from hq.domains.control_plane.credential_reads import observer_permissions
 
 from ..connection_setup import setups
 from .host_only import host_only
-from .markup import hrefs
+from .markup import hrefs, text
 
 
 class DeclarationTests(TestCase):
@@ -78,7 +78,7 @@ class PageTests(TestCase):
 
         self.assertContains(response, "Connect a service")
         for kind in CONNECTION_KINDS.values():
-            self.assertContains(response, escape(kind.create))
+            self.assertIn(kind.create, text(response))
         self.assertIn("https://github.com/example/hq/blob/main/docs/Secrets.md#connections", hrefs(response))
 
     def test_a_connected_provider_is_listed_above_not_offered_below(self):

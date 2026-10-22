@@ -7,6 +7,7 @@ its own names, and what it correctly refuses to say.
 
 from datetime import timedelta
 from types import SimpleNamespace
+from unittest import mock
 
 from django.test import TestCase
 from django.utils import timezone
@@ -177,6 +178,11 @@ class IdentityTests(TestCase):
     def test_a_machine_with_no_declaration_grows_no_band(self):
         self.assertNotIn("identity", by_id(a_machine(name="box")))
 
+    def test_a_machine_declared_once_is_its_own_page_and_grows_no_band(self):
+        declare("box", "machine", name="box")
+
+        self.assertNotIn("identity", by_id(a_machine(name="box", declaration="box")))
+
 
 class RegistryTests(TestCase):
     def test_the_registry_is_the_only_list_of_sections(self):
@@ -198,3 +204,27 @@ class RegistryTests(TestCase):
 
     def test_a_section_with_nothing_to_say_does_not_appear(self):
         self.assertEqual(sections_for(a_machine()), ())
+
+
+class ReachedThroughTests(TestCase):
+    """A connection named for the machine it reaches is not the machine reading itself."""
+
+    def test_a_connection_named_for_its_machine_is_named_by_its_kind(self):
+        from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+
+        from ..adoption_testing import connection
+        from ..machine_context import machine_links
+
+        provider, kind = next(iter(CONNECTION_LABELS.items()))
+        connection(provider, "box")
+        connection(provider, "example-other")
+        machine = SimpleNamespace(
+            name="box", aliases=(), reached_by=("box", "example-other"), unanswered=(), other_declarations=()
+        )
+
+        with mock.patch("hq.platform.application.machine_context.serves_links", return_value=()):
+            (own, _), (other, _) = machine_links(machine, None)["reached_links"]
+
+        self.assertEqual((own.label, own.title), (kind, "box"))
+        self.assertTrue(own.url)
+        self.assertEqual(other.label, "example-other")

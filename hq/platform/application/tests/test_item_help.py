@@ -10,7 +10,7 @@ from pathlib import Path
 from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone
 
-from ..finding_model import Finding, FindingRule, OperatorStep, Remedy
+from ..finding_model import Finding, FindingRemedy, FindingRule, OperatorStep
 from ..findings import RULES, _no_help_reason
 from ..item_help import (
     COMMAND,
@@ -114,7 +114,7 @@ class FindingHelpTests(SimpleTestCase):
         self.assertEqual(_no_help_reason(_finding(no_help_reason="Specific.")), "Specific.")
 
     def test_a_remedy_or_a_command_needs_no_reason(self):
-        remedied = _finding(remedies=(Remedy("example.fix", "example", "Fix", ""),))
+        remedied = _finding(remedies=(FindingRemedy("example.fix", "example", "Fix", ""),))
         commanded = _finding(steps=(OperatorStep("Run it", command="example --fix"),))
 
         self.assertEqual((_no_help_reason(remedied), _no_help_reason(commanded)), ("", ""))
@@ -156,14 +156,14 @@ class ItemHelpTests(SimpleTestCase):
         self.assertEqual(item_help(_item(workflow=commands("k", (("Here", "example --fix"),)))), COMMAND)
         self.assertEqual(item_help(_item(workflow=cannot_help("k", "Because."))), REASON)
         self.assertEqual(item_help(_item(workflow=instructions("k", "Sign in again."))), INSTRUCTION)
-        self.assertEqual(item_help(_item(action="Fill them in", url="/assets/")), PLACE)
+        self.assertEqual(item_help(_item(action="Fill in details", url="/assets/")), PLACE)
 
     def test_a_link_to_look_at_or_an_empty_reason_is_not_help(self):
         look = ActionLink("subject", "Open", "read", "/thing/")
 
         self.assertEqual(item_help(_item(actions=(look,))), "")
         self.assertEqual(item_help(_item(workflow=cannot_help("k", " "))), "")
-        self.assertEqual(item_help(_item(action="Fill them in")), "")
+        self.assertEqual(item_help(_item(action="Fill in details")), "")
         self.assertEqual(item_help(_item()), "")
 
 

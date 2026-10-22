@@ -7,10 +7,11 @@ from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from unittest import mock
 
+from django.conf import settings
 from django.core.cache import caches
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection, transaction
-from django.test import SimpleTestCase, TestCase, TransactionTestCase
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -19,12 +20,14 @@ from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.platform.application import derivations
+from hq.platform.application.code_identity import code_identity
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import DERIVATIONS, counting, derivation
 from hq.platform.application.expiry import days_until
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import cli_principal, web_principal
 from hq.platform.application.tests.host_only import host_only
+from hq.platform.application.tests.test_code_identity import FIRST, PACKAGE, SECOND, importable
 from hq.platform.core import revisions
 from hq.platform.core.bench import seed
 from hq.platform.core.models import ActionItemRead, Revision, UpstreamReading
@@ -190,6 +193,30 @@ class DerivationTests(TestCase):
             UpstreamReading.objects.create(key="one", value={}, observed_at=MOMENT)
             self.assertEqual((count(), count(), len(calls)), (1, 1, 2))
 
+    def test_a_value_stored_by_other_code_is_never_served_to_this_code(self):
+        def running(code: str):
+            derived = {**settings.CACHES[revisions.CACHE_ALIAS], "KEY_PREFIX": code}
+            return override_settings(CACHES={**settings.CACHES, revisions.CACHE_ALIAS: derived})
+
+        with (
+            declared("test.code", reads=("core.UpstreamReading",)) as (register, calls),
+            importable({"nodes.py": FIRST}) as root,
+        ):
+            count = register(_readings)
+            before = code_identity([PACKAGE])
+            (root / "nodes.py").write_text(SECOND)
+            after = code_identity([PACKAGE])
+
+            with running(before):
+                count()
+            with running(after):
+                count()
+                self.assertEqual(len(calls), 2)
+            with running(before):
+                count()
+            # Each identity keeps an entry of its own.
+            self.assertEqual(len(calls), 2)
+
     def test_one_projection_asks_the_cache_once(self):
         with declared("test.scope", reads=("core.UpstreamReading",)) as (register, _calls):
             count = register(_readings)
@@ -336,7 +363,7 @@ class DerivationTests(TestCase):
             with projection_scope():
                 self.assertIsNone(derivations.standing(due))
                 due()
-                self.assertEqual(derivations.standing(due), derivations.Standing(first, deadline))
+                self.assertEqual(derivations.standing(due), derivations.DerivedKey(first, deadline))
             with projection_scope():
                 due()
                 self.assertEqual(derivations.standing(due).until, deadline)

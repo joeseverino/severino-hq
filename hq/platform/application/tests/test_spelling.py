@@ -62,7 +62,7 @@ TEXT = {
     ".example",
     ".cfg",
 }
-NOT_OURS = ("static/vendor/", "controller/api/vendor/", "tools/clients/generated/")
+NOT_OURS = ("static/vendor/", "controller/api/vendor/")
 # What `mise run regen` writes; its source carries the words.
 GENERATED = {"docs/Connections.md", "hq_sdk/contract.json"}
 

@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.platform.application.tests.markup import text
 
 from ..derived_reads import get_reading, serialize_path
 from ..findings import findings
@@ -279,7 +280,7 @@ class DeliveryTests(TestCase):
         response = self.client.get(reverse("control_plane:service", args=["app.example.com"]))
 
         self.assertContains(response, "Who is allowed")
-        self.assertContains(response, "allow 100.64.0.0/10; deny all")
+        self.assertIn("allow 100.64.0.0/10; deny all", text(response))
         self.assertContains(response, "Address or login")
 
     def test_key_material_never_reaches_the_api(self):

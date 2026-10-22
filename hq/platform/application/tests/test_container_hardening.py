@@ -237,7 +237,7 @@ class PageTests(TestCase):
 
         self.assertTrue(select(page, "id", "hardening"))
         self.assertIn("/opt/example/web/docker-compose.yml", text(page))
-        self.assertContains(page, "user: &quot;1000:1000&quot;", html=False)
+        self.assertIn('user: "1000:1000"', text(page))
         self.assertContains(page, command_url("infrastructure.resource.update", "example-box-web"))
 
     def test_a_container_meeting_every_check_has_no_block(self):

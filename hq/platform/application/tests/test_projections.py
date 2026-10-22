@@ -464,13 +464,9 @@ class CadenceStyleTests(SimpleTestCase):
     """The no-data mark has a style in the stylesheet."""
 
     def test_the_no_data_mark_is_styled(self):
-        from pathlib import Path
+        from hq.platform.core.stylesheets import stylesheet
 
-        from django.conf import settings
-
-        css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
-
-        self.assertIn(".cadence-mark.is-no-data", css)
+        self.assertIn(".cadence-mark.is-no-data", stylesheet())
 
 
 class SharedPartialLabelTests(TestCase):

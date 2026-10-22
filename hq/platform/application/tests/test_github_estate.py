@@ -1,14 +1,15 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from unittest import mock
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
-from hq.domains.control_plane.observations.github import REPOSITORY_KIND
+from hq.domains.control_plane.observations.github import PARTS, REPOSITORY_KIND
 
 from ..dashboard import work_queue
 from ..freshness import stale_after
-from ..github_estate import attention, repository_for
+from ..github_estate import ALERT_PAGES, Repository, attention, repository_for
 from ..item_help import RUN
 
 
@@ -192,3 +193,168 @@ class ReadingAgeTests(TestCase):
         self.assertIsNotNone(item.observed_at)
         # Still in the queue, as a notice: an old reading does not vanish.
         self.assertEqual([(entry["notice"], bool(entry["observed_at"])) for entry in queued], [(True, True)])
+
+
+# A record as the controller writes it: one update, one pull request a person
+# opened, and Dependabot alerts, one of which the update answers.
+UPDATE = {
+    "number": 6,
+    "title": "Update example-lib to v2",
+    "url": "https://github.com/example/alpha/pull/6",
+    "author": "renovate[bot]",
+    "draft": False,
+    "created_at": "2030-01-03T00:00:00Z",
+    "updated_at": "2030-01-04T00:00:00Z",
+    "head": "eeee",
+    "branch": "renovate/example-lib-2.x",
+    "labels": ["dependencies", "security"],
+    "checks": {"state": "failure", "total": 2, "failing": ["test"], "running": 0, "names": ["build", "test"]},
+}
+BUMP = {
+    "number": 5,
+    "title": "Bump",
+    "url": "https://github.com/example/alpha/pull/5",
+    "author": "octo",
+    "draft": True,
+    "created_at": "2030-01-01T00:00:00Z",
+    "updated_at": "2030-01-02T00:00:00Z",
+    "head": "bbbb",
+    "branch": "bump",
+    "labels": [],
+    "checks": None,
+}
+ANSWERED = {
+    "number": 3,
+    "package": "Example-Lib",
+    "ecosystem": "npm",
+    "manifest_path": "web/package.json",
+    "severity": "critical",
+    "first_patched_version": "2.0.1",
+    "url": "https://github.com/example/alpha/security/dependabot/3",
+}
+UNANSWERED = {
+    "number": 2,
+    "package": "example.com/unfixed",
+    "ecosystem": "go",
+    "manifest_path": "go.mod",
+    "severity": "high",
+    "first_patched_version": None,
+    "url": "https://github.com/example/alpha/security/dependabot/2",
+}
+LOW = {**UNANSWERED, "number": 1, "package": "example-low", "severity": "low"}
+
+
+def repository(**record) -> Repository:
+    return Repository("example/alpha", {"repository": "example/alpha", **record}, None)
+
+
+class UpdateTests(SimpleTestCase):
+    def test_an_update_is_a_pull_request_from_a_renovate_branch_with_its_age(self):
+        found = repository(pull_requests=[UPDATE, BUMP])
+        opened = datetime(2030, 1, 3, tzinfo=UTC)
+
+        with mock.patch("hq.platform.application.derivations._clock", return_value=opened + timedelta(days=4, hours=2)):
+            (update,) = found.update_pulls
+            oldest = found.oldest_update_days
+
+        self.assertEqual((update["number"], update["opened"], update["age_days"]), (6, opened, 4))
+        self.assertEqual(oldest, 4)
+        self.assertEqual([pull["number"] for pull in found.other_pulls], [5])
+
+    def test_an_alert_is_unmatched_unless_an_update_names_its_package(self):
+        found = repository(pull_requests=[UPDATE, BUMP], dependabot_alerts=[LOW, ANSWERED, UNANSWERED])
+
+        self.assertEqual([alert["number"] for alert in found.unmatched_alerts], [2, 1])
+
+    def test_without_an_update_every_alert_is_unmatched(self):
+        found = repository(pull_requests=[BUMP], dependabot_alerts=[ANSWERED])
+
+        self.assertEqual([alert["number"] for alert in found.unmatched_alerts], [3])
+
+    def test_a_record_with_no_rows_or_none_read_has_nothing_unmatched(self):
+        for record in ({}, {"dependabot_alerts": []}, {"dependabot_alerts": None}):
+            with self.subTest(record=record):
+                found = repository(**record)
+                self.assertEqual((found.update_pulls, found.unmatched_alerts, found.oldest_update_days), ([], [], None))
+
+
+class UnmatchedAlertItemTests(TestCase):
+    def test_the_alert_item_counts_the_serious_alerts_no_update_answers_and_opens_the_projects_updates(self):
+        from hq.domains.projects.models import Project
+
+        Project.objects.create(name="Alpha", slug="alpha", repository_url="https://github.com/example/alpha")
+        store(
+            alerts={"dependabot": {"critical": 1, "high": 1, "low": 1}},
+            pull_requests=[UPDATE],
+            dependabot_alerts=[ANSWERED, UNANSWERED, LOW],
+        )
+
+        (item,) = attention()
+
+        self.assertIn("1 has no update pull request", item.body)
+        self.assertEqual(item.url, "/projects/alpha/#updates")
+        self.assertEqual([link.url for link in item.links], [f"{ALPHA}/security/dependabot"])
+
+    def test_with_every_serious_alert_answered_the_item_opens_that_parts_alerts(self):
+        store(alerts={"dependabot": {"critical": 1}}, pull_requests=[UPDATE], dependabot_alerts=[ANSWERED])
+
+        (item,) = attention()
+
+        self.assertNotIn("update pull request", item.body)
+        self.assertEqual((item.url, item.links), (f"{ALPHA}/security/dependabot", ()))
+
+    def test_serious_alerts_in_several_parts_link_each_parts_list_the_worst_first(self):
+        store(alerts={"dependabot": {"high": 1}, "code_scanning": {"critical": 1}, "leaked_credentials": {"leaked": 1}})
+
+        (item,) = attention()
+
+        self.assertEqual(item.url, f"{ALPHA}/security/code-scanning")
+        self.assertEqual(
+            [link.url for link in item.links],
+            [f"{ALPHA}/security/code-scanning", f"{ALPHA}/security/dependabot", f"{ALPHA}/security/secret-scanning"],
+        )
+
+
+class LeakedCredentialItemTests(TestCase):
+    def test_a_leaked_credential_alone_is_a_serious_item_that_opens_secret_scanning(self):
+        store(alerts={"leaked_credentials": {"leaked": 1}})
+
+        (item,) = attention()
+
+        self.assertEqual(item.status, "serious")
+        self.assertEqual(item.title, "1 leaked credential in alpha")
+        self.assertEqual(item.url, f"{ALPHA}/security/secret-scanning")
+
+    def test_a_leaked_credential_beside_a_high_alert_is_one_item_linking_each_kind(self):
+        store(alerts={"leaked_credentials": {"leaked": 1}, "dependabot": {"high": 1}})
+
+        (item,) = attention()
+
+        self.assertEqual(item.value, "2")
+        self.assertIn("1 is a leaked credential", item.body)
+        self.assertEqual(
+            {link.url for link in item.links}, {f"{ALPHA}/security/dependabot", f"{ALPHA}/security/secret-scanning"}
+        )
+
+    def test_no_open_alert_raises_no_item(self):
+        store(alerts={"leaked_credentials": {"leaked": 0}, "dependabot": {}})
+
+        self.assertEqual(attention(), ())
+
+
+ALPHA = "https://github.com/example/alpha"
+
+
+class AlertPageTests(SimpleTestCase):
+    def test_every_part_that_reads_alerts_has_its_list_on_github(self):
+        self.assertEqual(set(ALERT_PAGES), {part for part in PARTS if part.label.endswith(" alerts")})
+
+    def test_a_repository_lists_its_alerts_where_the_worst_are_or_its_overview_when_clear(self):
+        cases = (
+            ({"leaked_credentials": {"leaked": 1}, "dependabot": {"low": 2}}, f"{ALPHA}/security/dependabot"),
+            ({"leaked_credentials": {"leaked": 1}, "dependabot": {"low": 0}}, f"{ALPHA}/security/secret-scanning"),
+            ({}, f"{ALPHA}/security"),
+        )
+        for alerts, url in cases:
+            with self.subTest(alerts=alerts):
+                self.assertEqual(repository(url=ALPHA, alerts=alerts).alerts_url, url)

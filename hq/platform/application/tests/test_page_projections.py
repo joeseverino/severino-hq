@@ -235,9 +235,9 @@ class ConnectionProjectionTests(TestCase):
     def test_the_page_renders_the_projection(self):
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Would also see Tailnet user with users:read")
+        self.assertIn("Would also see Tailnet user with users:read", text(response))
         self.assertContains(response, "Reached over the internet")
-        self.assertContains(response, "Read all now")
+        self.assertContains(response, "Refresh all")
         self.assertTrue(select(response, "formaction", "/infrastructure/connections/read/?connection_ref=example-host"))
 
     def test_a_read_asked_for_shows_on_its_row(self):

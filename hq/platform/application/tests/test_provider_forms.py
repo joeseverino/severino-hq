@@ -16,6 +16,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.tests.markup import text
 
 from ..provider_forms import spec_form_class
 
@@ -316,8 +317,8 @@ class ResourceFormViewTests(TestCase):
             follow=True,
         )
 
-        self.assertContains(created, f"Added “{key}”")
-        self.assertContains(updated, f"Updated “{key}”")
+        self.assertIn(f"Added “{key}”", text(created))
+        self.assertIn(f"Updated “{key}”", text(updated))
 
     def test_a_refused_save_rerenders_the_form_with_the_reason(self):
         from unittest import mock

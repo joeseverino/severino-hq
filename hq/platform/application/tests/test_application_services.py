@@ -1087,6 +1087,22 @@ class ListRowTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             ListRow(title="Import", status="warning", badge="Warning")
 
+    def test_a_moment_is_a_value_the_row_says_in_words(self):
+        from django.template.loader import render_to_string
+        from django.utils import timezone
+
+        from ..moments import when_day
+        from ..ui import ListRow
+        from .markup import text
+
+        today = timezone.localdate()
+        for stamp in ("2026-10-22 09:36:47", "2026-10-22T09:36:47Z", "2026-10-22", today):
+            with self.subTest(stamp=stamp), self.assertRaises(ValueError):
+                ListRow(title="Message", meta=stamp)
+        row = ListRow(title="Message", meta="Draft", at=today)
+        shown = text(render_to_string("partials/_record_list.html", {"rows": [row]}))
+        self.assertIn(" ".join(f"Draft · {when_day(today)}".split()), shown)
+
 
 class TableTotalsTests(TestCase):
     """Totals describe the filtered set, not the page you happen to be on."""

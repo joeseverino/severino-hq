@@ -24,28 +24,30 @@ def this_year(month: int, day: int, hour: int = 0, minute: int = 0, second: int 
 @override_settings(TIME_ZONE="America/Chicago")
 class PhrasingTests(SimpleTestCase):
     def test_a_moment_is_a_day_and_a_twelve_hour_clock(self):
-        self.assertEqual(when(this_year(10, 3, 9, 29)), "Oct 3, 9:29 AM")
-        self.assertEqual(when(this_year(10, 3, 22, 33)), "Oct 3, 10:33 PM")
-        self.assertEqual(when(this_year(1, 9, 0, 5)), "Jan 9, 12:05 AM")
+        self.assertEqual(when(this_year(10, 3, 9, 29)), "Oct\xa03, 9:29\xa0AM")
+        self.assertEqual(when(this_year(10, 3, 22, 33)), "Oct\xa03, 10:33\xa0PM")
+        self.assertEqual(when(this_year(1, 9, 0, 5)), "Jan\xa09, 12:05\xa0AM")
 
     def test_the_year_is_said_only_when_it_is_not_this_one(self):
-        self.assertEqual(when(datetime(2019, 10, 3, 9, 29, tzinfo=CHICAGO)), "Oct 3, 2019, 9:29 AM")
-        self.assertEqual(when_day(date(2019, 10, 3)), "Oct 3, 2019")
-        self.assertEqual(when_day(date(timezone.localdate().year, 10, 3)), "Oct 3")
+        self.assertEqual(when(datetime(2019, 10, 3, 9, 29, tzinfo=CHICAGO)), "Oct\xa03,\xa02019, 9:29\xa0AM")
+        self.assertEqual(when_day(date(2019, 10, 3)), "Oct\xa03,\xa02019")
+        self.assertEqual(when_day(date(timezone.localdate().year, 10, 3)), "Oct\xa03")
 
     def test_a_moment_is_read_in_the_timezone_hq_is_read_in(self):
         late = datetime(timezone.localdate().year, 7, 4, 3, 0, tzinfo=UTC)
 
-        self.assertEqual(when(late), "Jul 3, 10:00 PM")
-        self.assertEqual(when_day(late), "Jul 3")
+        self.assertEqual(when(late), "Jul\xa03, 10:00\xa0PM")
+        self.assertEqual(when_day(late), "Jul\xa03")
 
     def test_a_bare_date_has_no_time_of_day(self):
-        self.assertEqual(when(date(2019, 10, 3)), "Oct 3, 2019")
-        self.assertEqual(when_exact(date(2019, 10, 3)), "Oct 3, 2019")
+        self.assertEqual(when(date(2019, 10, 3)), "Oct\xa03,\xa02019")
+        self.assertEqual(when_exact(date(2019, 10, 3)), "Oct\xa03,\xa02019")
 
     def test_the_exact_form_always_says_the_year_the_seconds_and_the_zone(self):
-        self.assertEqual(when_exact(this_year(10, 3, 9, 29, 15)), f"Oct 3, {timezone.localdate().year}, 9:29:15 AM CDT")
-        self.assertEqual(when_exact(datetime(2019, 1, 3, 9, 29, 15)), "Jan 3, 2019, 9:29:15 AM")
+        self.assertEqual(
+            when_exact(this_year(10, 3, 9, 29, 15)), f"Oct\xa03,\xa0{timezone.localdate().year}, 9:29:15\xa0AM\xa0CDT"
+        )
+        self.assertEqual(when_exact(datetime(2019, 1, 3, 9, 29, 15)), "Jan\xa03,\xa02019, 9:29:15\xa0AM")
 
     def test_an_age_is_one_unit(self):
         now = timezone.now()
@@ -57,22 +59,24 @@ class PhrasingTests(SimpleTestCase):
     def test_a_run_of_days_says_a_shared_year_once(self):
         year = timezone.localdate().year
 
-        self.assertEqual(when_range(date(year, 10, 3), date(year, 10, 9)), "Oct 3 – Oct 9")
-        self.assertEqual(when_range(date(2019, 10, 3), date(2019, 11, 2)), "Oct 3 – Nov 2, 2019")
-        self.assertEqual(when_range(date(2018, 12, 29), date(2019, 1, 4)), "Dec 29, 2018 – Jan 4, 2019")
-        self.assertEqual(when_range(date(2019, 10, 3), date(2019, 10, 3)), "Oct 3, 2019")
+        self.assertEqual(when_range(date(year, 10, 3), date(year, 10, 9)), "Oct\xa03 – Oct\xa09")
+        self.assertEqual(when_range(date(2019, 10, 3), date(2019, 11, 2)), "Oct\xa03 – Nov\xa02,\xa02019")
+        self.assertEqual(when_range(date(2018, 12, 29), date(2019, 1, 4)), "Dec\xa029,\xa02018 – Jan\xa04,\xa02019")
+        self.assertEqual(when_range(date(2019, 10, 3), date(2019, 10, 3)), "Oct\xa03,\xa02019")
 
     def test_a_run_of_days_is_read_in_the_timezone_hq_is_read_in(self):
         year = timezone.localdate().year
         late = datetime(year, 7, 4, 3, 0, tzinfo=UTC)
 
-        self.assertEqual(when_range(late, datetime(year, 7, 9, 12, 0, tzinfo=UTC)), "Jul 3 – Jul 9")
+        self.assertEqual(when_range(late, datetime(year, 7, 9, 12, 0, tzinfo=UTC)), "Jul\xa03 – Jul\xa09")
 
     def test_a_date_printed_bare_reads_the_same_way(self):
         """Django's own formats are the owner's, so a template that forgot the filter agrees."""
 
-        self.assertEqual(formats.date_format(date(2019, 10, 3)), "Oct 3, 2019")
-        self.assertEqual(formats.date_format(datetime(2019, 10, 3, 9, 29), "DATETIME_FORMAT"), "Oct 3, 2019, 9:29 AM")
+        self.assertEqual(formats.date_format(date(2019, 10, 3)), "Oct\xa03,\xa02019")
+        self.assertEqual(
+            formats.date_format(datetime(2019, 10, 3, 9, 29), "DATETIME_FORMAT"), "Oct\xa03,\xa02019, 9:29\xa0AM"
+        )
 
 
 @override_settings(TIME_ZONE="America/Chicago")
@@ -90,7 +94,7 @@ class WhenFilterTests(SimpleTestCase):
     def test_a_moment_is_a_time_element_a_table_can_sort_on(self):
         moment = this_year(10, 3, 9, 29, 15)
 
-        self.assertEqual(self.moment(moment), (moment.isoformat(), when_exact(moment), "Oct 3, 9:29 AM"))
+        self.assertEqual(self.moment(moment), (moment.isoformat(), when_exact(moment), "Oct\xa03, 9:29\xa0AM"))
 
     def test_an_age_keeps_the_exact_moment_behind_it(self):
         moment = timezone.now() - timedelta(days=5, hours=15)
@@ -98,14 +102,14 @@ class WhenFilterTests(SimpleTestCase):
         self.assertEqual(self.moment(moment, "ago"), (moment.isoformat(), when_exact(moment), "5\xa0days ago"))
 
     def test_a_date_is_a_date(self):
-        self.assertEqual(self.moment(date(2019, 10, 3)), ("2019-10-03", "Oct 3, 2019", "Oct 3, 2019"))
-        self.assertEqual(self.moment(date(2019, 10, 3), "ago")[2], "Oct 3, 2019")
+        self.assertEqual(self.moment(date(2019, 10, 3)), ("2019-10-03", "Oct\xa03,\xa02019", "Oct\xa03,\xa02019"))
+        self.assertEqual(self.moment(date(2019, 10, 3), "ago")[2], "Oct\xa03,\xa02019")
 
     def test_the_day_and_exact_forms(self):
         moment = datetime(2019, 10, 3, 9, 29, 15, tzinfo=CHICAGO)
 
-        self.assertEqual(self.moment(moment, "day")[2], "Oct 3, 2019")
-        self.assertEqual(self.moment(moment, "exact")[2], "Oct 3, 2019, 9:29:15 AM CDT")
+        self.assertEqual(self.moment(moment, "day")[2], "Oct\xa03,\xa02019")
+        self.assertEqual(self.moment(moment, "exact")[2], "Oct\xa03,\xa02019, 9:29:15\xa0AM\xa0CDT")
 
     def test_an_iso_stamp_reads_like_the_instant_it_names(self):
         moment = this_year(10, 3, 9, 29, 15)

@@ -130,6 +130,39 @@ class IntegrationGraphTests(TestCase):
         self.assertIn("example.missing", str(raised.exception))
         self.assertIn("example.unknown", str(raised.exception))
 
+    def test_two_commands_one_connection_offers_may_not_say_the_same_words(self):
+        capabilities = tuple(
+            CapabilitySpec(
+                f"example.lookup.{name}",
+                "Look something up.",
+                "read",
+                Capability.READ,
+                SyntheticCommand,
+                execute_synthetic,
+                label=f"Look up {name}",
+                verb="Look up",
+            )
+            for name in ("name", "address")
+        )
+        connection = ConnectionSpec(
+            "example.resolver",
+            "Resolver",
+            "Synthetic resolver.",
+            Capability.READ,
+            lambda: (),
+            abilities=tuple(
+                ConnectionAbility(f"lookup.{name}", f"Look up {name}", "Look it up.", capability=spec.name)
+                for name, spec in zip(("name", "address"), capabilities, strict=True)
+            ),
+        )
+
+        with self.assertRaises(IntegrationGraphError) as raised:
+            compile_integration_graph(capabilities=capabilities, resources=(), connections=(connection,))
+
+        (violation,) = raised.exception.violations
+        self.assertEqual(violation.code, "connection.repeated_words")
+        self.assertEqual(set(violation.subjects), {"example.resolver", *(spec.name for spec in capabilities)})
+
     def test_compilation_reports_intrinsic_and_duplicate_violations_together(self):
         valid = CapabilitySpec(
             "example.read",

@@ -8,6 +8,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource
 from hq.domains.projects.models import Project
+from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AgentIdentity, AuditLog
 
 from ..approvals import DELETING_FLAGS, approve
@@ -385,7 +386,7 @@ class PageTests(PolicyTestCase):
 
         response = self.client.post(reverse("agent_policy"), {field: Rule.ALLOW}, follow=True)
 
-        self.assertContains(response, "Pocket ID does not allow example-agent to use Delete project.")
+        self.assertIn("Pocket ID does not allow example-agent to use Delete project.", text(response))
         self.assertFalse(CapabilityRule.objects.exists())
 
     def test_signed_out_it_cannot_be_reached(self):

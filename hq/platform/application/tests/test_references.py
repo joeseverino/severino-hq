@@ -389,9 +389,20 @@ class ReferencedByTests(TestCase):
         self.assertEqual(set(found), {"Assets", "On the calendar", "Expenses"})
         (asset,) = found["Assets"]
         self.assertEqual((asset.link.label, asset.link.url), ("A server", self.asset.get_absolute_url()))
-        self.assertEqual(asset.note, "Bought Jan 5, 2025")
-        self.assertEqual(found["On the calendar"][0].note, "Mar 1")
-        self.assertEqual(found["Expenses"][0].note, "Mar 1 · $12.00")
+        self.assertEqual(asset.note, "Bought Jan\xa05,\xa02025")
+        self.assertEqual(found["On the calendar"][0].note, "Mar\xa01")
+        self.assertEqual(found["Expenses"][0].note, "Mar\xa01 · $12.00")
+
+    def test_a_row_that_names_a_thing_is_listed_by_the_name_it_has_everywhere(self):
+        expense = an_expense(about="machine:lab-1")
+
+        found = {
+            group.heading: group.items
+            for group in references.referenced_by("machine", "lab-1", principal=self.principal)
+        }
+
+        # Its date is its note, written as HQ writes a date; never part of its name.
+        self.assertEqual(found["Expenses"][0].link.label, expense.label)
 
     def test_it_costs_the_same_however_many_models_hold_a_reference(self):
         Entry.objects.create(title="Replace the fan", starts_on=date(2026, 3, 1), about="machine:lab-1")

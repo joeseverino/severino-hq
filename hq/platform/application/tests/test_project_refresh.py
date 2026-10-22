@@ -1,7 +1,7 @@
 """A project's Refresh asks the GitHub App for a fresh read of its repository.
 
 Where the App reads the repository, Refresh makes the same request the
-Connections page's Read now makes, through the same capability, so the pull
+Connections page's Refresh makes, through the same capability, so the pull
 requests, checks and workflows on the project page follow on the controller's
 next pass. Where it does not, the anonymous public read is the fallback.
 """
@@ -16,12 +16,16 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
+from hq.domains.jobs.models import Job
+from hq.domains.jobs.testing import held_jobs
 from hq.domains.projects.models import Project
 from hq.platform.core.models import AuditLog
 
-from ..projects import refresh_project
+from ..capabilities import execute_capability
+from ..outbound_work import ANOTHER_RUNNING
+from ..projects import REFRESH, refresh_project
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal
-from .markup import select
+from .markup import select, within
 
 DIRECTORY = Path(tempfile.mkdtemp())
 MARKERS = override_settings(
@@ -149,51 +153,98 @@ class RefreshButtonTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_user(username="operator", password="x"))
         Project.objects.create(name="Alpha", slug="alpha", repository_url="https://github.com/example/alpha")
+        Project.objects.create(name="Beta", slug="beta", repository_url="https://github.com/example/beta")
+
+    def page(self, slug="alpha"):
+        return self.client.get(reverse("projects:detail", args=[slug]))
+
+    def press(self, page, **headers):
+        """Post the page's Refresh control as the browser would, with the
+        page's own form."""
+
+        (button,) = select(page, "formaction", reverse("jobs:ask", args=[REFRESH]))
+        (back,) = (field.attrs["value"] for field in within(page, "id", "hq-post") if field.attrs.get("name") == "next")
+        data = {button.attrs["name"]: button.attrs["value"], "next": back}
+        return self.client.post(button.attrs["formaction"], data, headers=headers, follow=True)
 
     def test_the_button_starts_a_job_and_answers_before_any_of_it_runs(self):
-        from hq.domains.jobs.models import Job
-        from hq.domains.jobs.testing import held_jobs
-
         read_by_app()
 
         with held_jobs() as jobs:
-            response = self.client.post(
-                reverse("projects:refresh", args=["alpha"]), headers={"x-requested-with": "XMLHttpRequest"}
-            )
+            response = self.press(self.page(), x_requested_with="XMLHttpRequest")
             answer = response.json()
             # Answered with the work still to do: nothing was asked of anyone.
             self.assertEqual((response.status_code, answer["state"], answer["live"]), (202, "queued", True))
             self.assertFalse(ReadRequest.objects.exists())
-            page = self.client.get(reverse("projects:detail", args=["alpha"]))
-            self.assertContains(page, f'data-ask-status="{answer["status"]}"')
+            self.assertContains(self.page(), f'data-ask-status="{answer["status"]}"')
             jobs.run()
 
         self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", flat=True)), [REF])
         ended = self.client.get(answer["status"]).json()
         self.assertEqual((ended["state"], ended["live"]), ("done", False))
+        # The job's last note is what the refresh did.
         self.assertIn(REF, ended["note"])
-        self.assertEqual(Job.objects.get().request, {"project": "alpha"})
+        job = Job.objects.get()
+        self.assertEqual((job.kind, job.requested_by.username, job.actor), (REFRESH, "operator", "operator"))
 
-    def test_without_script_the_button_returns_to_a_page_that_says_it_is_in_hand(self):
-        from hq.domains.jobs.testing import held_jobs
-
+    def test_without_script_the_button_returns_to_the_page_it_was_pressed_on(self):
         with held_jobs():
-            response = self.client.post(reverse("projects:refresh", args=["alpha"]), follow=True)
+            response = self.press(self.page())
 
         self.assertRedirects(response, reverse("projects:detail", args=["alpha"]))
-        shown = [str(message) for message in response.context["messages"]]
-        self.assertTrue(any("Reading GitHub." in message for message in shown), shown)
+        self.assertTrue(response.context["messages"])
         self.assertTrue(select(response, "aria-disabled", "true"))
 
-    def test_a_second_refresh_while_one_runs_is_refused_and_says_why(self):
-        from hq.domains.jobs.testing import held_jobs
+    def test_a_refresh_of_another_project_while_one_runs_is_refused_and_says_why(self):
+        with held_jobs():
+            self.press(self.page("alpha"))
+            again = self.press(self.page("beta"), x_requested_with="XMLHttpRequest")
+
+        self.assertEqual((again.status_code, again.json()["state"]), (200, "failed"))
+        self.assertEqual(again.json()["note"], ANOTHER_RUNNING)
+        self.assertEqual(Job.objects.count(), 1)
+
+    def test_pressing_again_while_its_own_refresh_runs_follows_that_one(self):
+        with held_jobs():
+            first = self.press(self.page(), x_requested_with="XMLHttpRequest").json()
+            again = self.press(self.page(), x_requested_with="XMLHttpRequest").json()
+
+        self.assertEqual((again["state"], again["status"]), ("queued", first["status"]))
+        self.assertEqual(Job.objects.count(), 1)
+
+
+@MARKERS
+class RefreshCapabilityTests(TestCase):
+    """``project.refresh`` over the API, MCP and a command line is the same ask."""
+
+    def setUp(self):
+        Project.objects.create(name="Alpha", slug="alpha", repository_url="https://github.com/example/alpha")
+
+    def test_it_starts_the_job_and_answers_at_once(self):
+        with held_jobs():
+            answer = execute_capability(REFRESH, {}, principal=OPERATOR, target="alpha")
+
+        self.assertEqual((answer["ok"], answer["started"]), (True, True))
+        self.assertEqual(str(Job.objects.get(kind=REFRESH).pk), answer["job"])
+
+    def test_a_principal_that_may_not_write_projects_is_refused_and_nothing_is_recorded(self):
+        reader = Principal("agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 
         with held_jobs():
-            self.client.post(reverse("projects:refresh", args=["alpha"]))
-            again = self.client.post(
-                reverse("projects:refresh", args=["alpha"]), headers={"x-requested-with": "XMLHttpRequest"}
-            )
+            answer = execute_capability(REFRESH, {}, principal=reader, target="alpha")
 
-        self.assertEqual(again.status_code, 200)
-        self.assertEqual(again.json()["state"], "failed")
-        self.assertIn("already being read", again.json()["note"])
+        self.assertEqual(answer["error"]["code"], "forbidden")
+        self.assertFalse(Job.objects.exists())
+
+    def test_an_unknown_project_is_not_found_before_any_job(self):
+        with held_jobs():
+            answer = execute_capability(REFRESH, {}, principal=OPERATOR, target="missing")
+
+        self.assertEqual(answer["error"]["code"], "not_found")
+        self.assertFalse(Job.objects.exists())
+
+    def test_it_takes_nothing_but_its_project(self):
+        answer = execute_capability(REFRESH, {"slug": "alpha"}, principal=OPERATOR, target="alpha")
+
+        self.assertEqual(answer["error"]["code"], "invalid_input")
+        self.assertFalse(Job.objects.exists())

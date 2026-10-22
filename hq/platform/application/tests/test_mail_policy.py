@@ -17,12 +17,14 @@ from ..mail_policy import (
     SPF_LOOKUP_LIMIT,
     _receiving,
     _senders,
+    _signing,
     compose_dmarc,
     compose_spf,
     describe_dmarc,
     parse_dmarc,
     parse_spf,
 )
+from .markup import select, with_class
 
 
 class DmarcReadingTests(SimpleTestCase):
@@ -102,7 +104,8 @@ class SpfTests(SimpleTestCase):
             ("v=spf1 include:a.example -all", "rejected"),
             ("v=spf1 include:a.example ~all", "soft"),
             ("v=spf1 +all", "forgeries get through"),
-            ("v=spf1 include:a.example", "`all`"),
+            ("v=spf1 include:a.example", "says nothing"),
+            ("v=spf1 -all", "any sender is rejected"),
         )
         for record, said in cases:
             with self.subTest(record):
@@ -150,12 +153,16 @@ class ReceivingTests(SimpleTestCase):
 
         self.assertEqual(section.answer, "Nobody, on purpose")
         self.assertNotIn("mail server", section.detail)
+        self.assertTrue(section.null_mx)
+        # No mail service set a record that says there is none.
+        self.assertEqual(section.source, "")
 
     def test_mail_servers_are_named_and_counted(self):
         section = _receiving((self.mx("mx1.example.net", 10), self.mx("mx2.example.net", 20)))
 
         self.assertEqual(section.answer, "mx1.example.net, mx2.example.net")
         self.assertIn("2 mail servers", section.detail)
+        self.assertFalse(section.null_mx)
 
     def test_no_mx_says_mail_goes_nowhere(self):
         self.assertEqual(_receiving(()).answer, "Nobody")
@@ -235,3 +242,33 @@ class MailPageTests(TestCase):
         self.client.post(self.url, {"section": "spf", "rule": ["include:example.net"], "default": "-"})
 
         self.assertIn("-all", ManagedResource.objects.get(key="spf").spec["content"])
+
+    def test_only_a_sender_that_is_there_can_be_removed(self):
+        response = self.client.get(self.url)
+
+        # The one sender the record lists, then the blank row for adding one.
+        self.assertEqual(len(with_class(response, "name-list-row")), 2)
+        self.assertEqual(len(select(response, "data-name-list-remove")), 1)
+
+
+class SigningTests(SimpleTestCase):
+    def dkim(self, selector, key="MIIBIjANBg"):
+        return SimpleNamespace(
+            name=f"{selector}._domainkey.example.com", record_type="TXT", content=f'"v=DKIM1; k=rsa; p={key}"'
+        )
+
+    def test_the_keys_that_sign_are_named(self):
+        answer, detail = _signing((self.dkim("s1"), self.dkim("s2")))
+
+        self.assertEqual(answer, "2 keys")
+        self.assertIn("s1", detail)
+        self.assertIn("s2", detail)
+
+    def test_an_empty_key_signs_nothing_and_is_not_counted_as_one(self):
+        answer, detail = _signing((self.dkim("*", key=""),))
+
+        self.assertEqual(answer, "Nothing, on purpose")
+        self.assertNotIn("*", detail)
+
+    def test_no_record_says_nothing_signs(self):
+        self.assertEqual(_signing(())[0], "Nothing")

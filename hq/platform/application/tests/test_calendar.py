@@ -31,6 +31,7 @@ from ..calendar_entries import (
 )
 from ..deletion import DeleteCommand, delete_calendar_entry
 from ..domains import Domain, domain_navigation, host_domains
+from ..moments import when_day
 from ..plugins import NavigationItem, PluginIntegration
 from ..record_errors import RecordNotFound
 from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal
@@ -359,6 +360,17 @@ class PageTests(TestCase):
             entry.get_absolute_url(),
             fetch_redirect_response=False,
         )
+
+    def test_the_day_panel_writes_its_days_as_hq_writes_a_day(self):
+        """A day there never breaks inside itself ("Oct" over "14")."""
+
+        today = timezone.localdate()
+        entry = _entry(title="Standup", starts_on=today, repeat=Entry.Repeat.WEEKLY)
+
+        (panel,) = select(self.client.get(entry.get_absolute_url()), "id", "day-panel")
+
+        for day in (today, today + timedelta(weeks=1)):
+            self.assertIn(when_day(day), panel.chunks)
 
     def test_each_calendar_says_what_it_shows_on_the_page(self):
         response = self.client.get(reverse("calendar:month"))

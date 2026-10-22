@@ -5,6 +5,7 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from django.test import SimpleTestCase, tag
 
@@ -49,7 +50,8 @@ def condition(step: str) -> str:
     """A step's ``if:`` expression, folded onto one line; empty when it has none."""
     lines = step.splitlines()
     for index, line in enumerate(lines):
-        match = re.match(r"^(\s*)if:\s*(.*)$", line)
+        # A step's key sits at indent 8, or follows its "- " when it is the step's first key.
+        match = re.match(r"^(\s*(?:- )?)if:\s*(.*)$", line)
         if not match or len(match.group(1)) != 8:
             continue
         value = match.group(2)
@@ -111,11 +113,10 @@ def code(text: str) -> str:
 
 @tag("source")
 class ActionPinTests(SimpleTestCase):
-    def test_every_action_is_local_or_pinned_to_a_commit(self):
-        found = [
-            (path.name, action) for path in [*workflows(), *composite_actions()] for action in uses(path.read_text())
-        ]
-        self.assertGreater(len(found), 10)
+    def test_every_composite_action_step_is_local_or_pinned_to_a_commit(self):
+        """checks:scorecard holds the workflows to this; its Pinned-Dependencies never reads a composite action."""
+        found = [(path.name, action) for path in composite_actions() for action in uses(path.read_text())]
+        self.assertTrue(found)
         for name, action in found:
             with self.subTest(file=name, action=action):
                 self.assertRegex(action, r"^(\./.+|[\w.-]+/[\w./-]+@[0-9a-f]{40}|docker://.+@sha256:[0-9a-f]{64})$")
@@ -140,6 +141,87 @@ class ActionPinTests(SimpleTestCase):
         for name, line in pinned:
             with self.subTest(file=name, line=line):
                 self.assertRegex(line, r"@[0-9a-f]{40} # v\d+(\.\d+){0,2}$")
+
+
+@tag("source")
+class CacheWriterTests(SimpleTestCase):
+    """A branch reads the default branch's caches and writes none, so a pull request adds no entries."""
+
+    def test_no_cache_is_saved_by_the_action_that_saves_on_every_run(self):
+        for path in [*workflows(), *composite_actions()]:
+            with self.subTest(file=path.name):
+                self.assertNotIn("actions/cache", [action.split("@")[0] for action in uses(path.read_text())])
+
+    def test_a_cache_is_saved_only_from_the_default_branch(self):
+        """A job that runs only on a push is on main: ci.yml pushes nowhere else."""
+        saves = [
+            (path.name, block(job, "if", 4), step)
+            for path in workflows()
+            for job in jobs(path.read_text()).values()
+            for step in steps(job)
+            if "uses: actions/cache/save@" in step
+        ]
+        self.assertGreater(len(saves), 1)
+        for name, job_condition, step in saves:
+            with self.subTest(file=name, step=step.splitlines()[0]):
+                where = " ".join([*job_condition, condition(step)])
+                self.assertRegex(where, r"github\.event\.repository\.default_branch|github\.event_name == 'push'")
+
+
+BROWSER_SETUP = frozenset({"setup:webkit", "setup:chromium"})
+
+
+def step_tasks(step: str) -> list[re.Pattern[str]]:
+    """The tasks a step runs, each as a pattern: a ``$NAME`` is read from the
+    step's ``env:``, where a ``${{ }}`` expression stands for any text."""
+    found = []
+    for task in re.findall(r"mise run\s+(?:-\S+\s+)*(\S+)", code(step)):
+        name = task.strip("'\"")
+        if name.startswith("$"):
+            env = re.search(rf"(?m)^\s+{re.escape(name.strip('${}'))}:\s*(\S.*?)\s*$", step)
+            name = env.group(1) if env else name
+        parts = re.split(r"\$\{\{.*?\}\}", name)
+        found.append(re.compile(".*".join(re.escape(part) for part in parts)))
+    return found
+
+
+def needs_a_browser(task: dict[str, Any]) -> bool:
+    # A dependency given with arguments is listed as [name, *arguments].
+    depends = {each if isinstance(each, str) else each[0] for each in task["depends"]}
+    return bool(BROWSER_SETUP & {*depends, *re.findall(r"mise run (setup:\w+)", body(task))})
+
+
+def locked_version(package: str) -> str:
+    """The version uv.lock pins for ``package``."""
+    lock = tomllib.loads((ROOT / "uv.lock").read_text())
+    (version,) = [entry["version"] for entry in lock["package"] if entry["name"] == package]
+    return version
+
+
+@tag("source")
+class BrowserInstallTests(SimpleTestCase):
+    def test_every_job_that_runs_a_browser_gate_runs_in_the_playwright_image_the_lock_pins(self):
+        """Playwright's image carries the browsers of one Playwright release and their
+        system libraries, so a job installs nothing from apt or a browser download only
+        while that release is the one uv.lock pins. A bump of one without the other
+        fails here rather than downloading at run time. Pinned by digest, which
+        Renovate moves with the tag."""
+        tasks = mise_tasks()
+        gates = {name for name, task in tasks.items() if name not in BROWSER_SETUP and needs_a_browser(task)}
+        image = f"mcr.microsoft.com/playwright/python:v{locked_version('playwright')}-noble"
+        checked = 0
+        for path, name, job in all_jobs():
+            ran = {task for step in steps(job) for task in tasks if any(p.fullmatch(task) for p in step_tasks(step))}
+            if not gates & ran:
+                continue
+            checked += 1
+            with self.subTest(workflow=path, job=name):
+                container = [line.removeprefix("image:").strip() for line in block(job, "container", 4)]
+                self.assertTrue(
+                    any(re.fullmatch(rf"{re.escape(image)}@sha256:[0-9a-f]{{64}}", each) for each in container),
+                    f"{container} is not {image} pinned by digest",
+                )
+        self.assertGreater(checked, 1)
 
 
 def toolchain() -> dict[str, str]:
@@ -242,17 +324,9 @@ class JobConditionTests(SimpleTestCase):
 
 @tag("source")
 class LeastPrivilegeTests(SimpleTestCase):
-    def test_no_workflow_grants_a_write_to_every_job(self):
-        for path in workflows():
-            with self.subTest(workflow=path.name):
-                granted = block(path.read_text(), "permissions", 0)
-                self.assertTrue(granted, "a workflow states its default permissions")
-                self.assertTrue(
-                    granted in (["read-all"], ["{}"]) or all(re.fullmatch(r"[\w-]+: (read|none)", g) for g in granted),
-                    granted,
-                )
-
-    def test_no_workflow_runs_a_pull_requests_code_with_the_repositorys_secrets(self):
+    def test_no_workflow_runs_with_the_repositorys_secrets_for_a_pull_request(self):
+        # Scorecard flags this trigger only beside a checkout of the pull
+        # request; HQ needs it nowhere, so a privileged run is never one edit away.
         for path in workflows():
             with self.subTest(workflow=path.name):
                 self.assertNotIn("pull_request_target", code(path.read_text()))
@@ -276,6 +350,50 @@ class LeastPrivilegeTests(SimpleTestCase):
                         or any("cosign sign" in text for text in called)
                     )
         self.assertGreater(holders, 0)
+
+
+LEVELS = {"read": 1, "write": 2, "admin": 3}
+
+
+def app_token_mints(path: Path) -> list[tuple[str, dict[str, str]]]:
+    """Each ``create-github-app-token`` step in a workflow or composite action, by its first line, with what it asks for."""
+    text = path.read_text()
+    found = action_steps(text) if path.name == "action.yml" else [s for job in jobs(text).values() for s in steps(job)]
+    return [
+        (
+            f"{path.parent.name if path.name == 'action.yml' else path.name}: {step.splitlines()[0]}",
+            {
+                name.replace("-", "_"): level.strip("'\"")
+                for name, level in re.findall(r"(?m)^\s*permission-([a-z-]+):\s*(\S+)", code(step))
+            },
+        )
+        for step in found
+        if any(action.startswith("actions/create-github-app-token@") for action in uses(step))
+    ]
+
+
+def beyond_declaration(requested: dict[str, str], declared: dict[str, str]) -> list[str]:
+    """What a mint asks for past the App's declaration; asking for nothing named asks for every permission it holds."""
+    if not requested:
+        return ["no permission-* input, so the token holds everything the installation grants"]
+    return [
+        f"{name}: {level}"
+        for name, level in requested.items()
+        if LEVELS.get(level, len(LEVELS) + 1) > LEVELS.get(declared.get(name, ""), 0)
+    ]
+
+
+@tag("source")
+class AppTokenScopeTests(SimpleTestCase):
+    """The App's declaration is the one record of what it can do, so no workflow asks it for more."""
+
+    def test_every_app_token_asks_only_for_what_the_app_declares(self):
+        declared = json.loads((ROOT / "deploy" / "github-apps.json").read_text())["apps"]["hq"]["permissions"]
+        mints = [mint for path in [*workflows(), *composite_actions()] for mint in app_token_mints(path)]
+        self.assertGreater(len(mints), 5)
+        for step, requested in mints:
+            with self.subTest(step=step):
+                self.assertEqual(beyond_declaration(requested, declared), [])
 
 
 @tag("source")
@@ -585,6 +703,19 @@ class GateReferenceTests(SimpleTestCase):
                     self.assertTrue((task["shell"] or "").startswith("tools/lib/heavy.sh "))
                 self.assertTrue(task["timeout"], "a hung suite would hold the turn forever")
 
+    def test_a_task_declared_outside_mise_toml_names_no_file_in_its_env(self):
+        """mise reads an env file, and renders ``config_root`` inside env, from the
+        directory of the file that declares the task: in tasks/ or mise-tasks/ a
+        checkout path would point beneath that directory instead."""
+        declared_elsewhere = {
+            name: task for name, task in mise_tasks().items() if Path(task["config_sources"][0]) != ROOT / "mise.toml"
+        }
+        self.assertGreater(len(declared_elsewhere), 10)
+        for name, task in declared_elsewhere.items():
+            paths = [entry for entry in task["env"] if entry.startswith("_.") or "config_root" in entry]
+            with self.subTest(task=name):
+                self.assertEqual(paths, [])
+
 
 @tag("source")
 class ScriptInputTests(SimpleTestCase):
@@ -637,6 +768,12 @@ class ExtensionCallerTests(SimpleTestCase):
                 self.assertNotIn(f"\n      {name}", checks.split("\npermissions:")[0])
         self.assertIn('tools/pipeline/check-plugin.sh --plugin-root "$PACKAGE_DIR"', checks)
         self.assertIn("tools.pipeline.plugin_identity", admit)
+
+    def test_an_admission_audits_its_lock_as_the_host_audits_its_own(self):
+        admit = (ROOT / ".github" / "actions" / "admit-plugin" / "action.yml").read_text()
+        (audit,) = [step for step in action_steps(admit) if "Audit locked dependencies" in step]
+        self.assertIn('host/tools/pipeline/audit.sh "$PACKAGE_DIR"', code(audit))
+        self.assertIn("tools/pipeline/audit.sh", body(mise_tasks()["checks:audit"]))
 
 
 def action_steps(text: str) -> list[str]:

@@ -75,7 +75,7 @@ class GettingStartedTests(TestCase):
         response = self.client.get("/")
 
         self.assertContains(response, "Get started")
-        self.assertContains(response, "Run the controller")
+        self.assertContains(response, "Start the controller")
 
 
 class GettingStartedRowTests(TestCase):

@@ -5,6 +5,10 @@ from html.parser import HTMLParser
 from typing import override
 
 _VOID = frozenset({"area", "br", "col", "hr", "img", "input", "link", "meta", "source", "wbr"})
+# The spans `|breakable` writes for a token, which are no edge in its text.
+_TOKEN_PARTS = frozenset({"token", "cut", "whole", "part", "joined", "seam", "mark"})
+# Elements whose text is their name or their value: a mark held inside one is the sentence's.
+_NAMED = frozenset({"a", "button", "code"})
 
 
 @dataclass
@@ -33,11 +37,15 @@ class _Page(HTMLParser):
         self.words: list[str] = []
         self._open: list[Element] = []
         self._token: Element | None = None
+        # Whether an element's edge, other than a token's own, stands between
+        # this data and the last.
+        self._edge = True
 
     @override
     def handle_starttag(self, tag, attrs):
         element = Element(tag, {name: value or "" for name, value in attrs}, ancestors=tuple(self._open))
         self.elements.append(element)
+        self._edge = self._edge or not _TOKEN_PARTS & element.classes
         if tag not in _VOID:
             self._open.append(element)
 
@@ -45,26 +53,44 @@ class _Page(HTMLParser):
     def handle_endtag(self, tag):
         for depth in range(len(self._open) - 1, -1, -1):
             if self._open[depth].tag == tag:
+                self._edge = self._edge or not _TOKEN_PARTS & self._open[depth].classes
                 del self._open[depth:]
                 return
 
     @override
     def handle_data(self, data):
         # A token (`|breakable`) marks where it may wrap with markup; read, it
-        # is one word.
-        token = next((element for element in self._open if "token" in element.classes), None)
-        joined = token is not None and token is self._token
+        # is one word, with any text it touches.
+        # The mark it holds to a value is read with the word it ends.
+        token = next((element for element in self._open if {"token", "mark"} & element.classes), None)
+        joined = self._joins(token, data)
         self._token = token
+        self._edge = False
         if joined:
             self.words[-1] += data
         else:
             self.words.append(data)
-        for element in self._open:
+        # Text hidden from the accessibility tree is no part of the name of a
+        # link or a button around it (a mark held to its name), though a
+        # reader sees it.
+        hidden = next((at for at, element in enumerate(self._open) if element.attrs.get("aria-hidden") == "true"), None)
+        for at, element in enumerate(self._open):
+            if hidden is not None and at < hidden and element.tag in _NAMED:
+                continue
             element.text += data
             if joined and element.chunks:
                 element.chunks[-1] += data
             else:
                 element.chunks.append(data)
+
+    def _joins(self, token: Element | None, data: str) -> bool:
+        """Whether ``data`` continues the last word: the same token, or text touching one."""
+
+        if token is not None and token is self._token:
+            return True
+        if token is None and self._token is None:
+            return False
+        return not (self._edge or not self.words or self.words[-1][-1:].isspace() or data[:1].isspace())
 
 
 def _page(html) -> _Page:

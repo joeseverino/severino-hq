@@ -22,7 +22,7 @@ from ..github_posture import (
 )
 from ..item_help import COMMAND, item_help
 from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
-from .markup import hrefs
+from .markup import hrefs, within
 from .test_github_estate import store
 
 # What a well-kept repository reads as: only its owner, one read-only key in
@@ -198,6 +198,10 @@ class PostureViewTests(TestCase):
         self.assertIn("only-you", [check.id for check in response.context["everywhere"]])
         self.assertContains(response, "6 of 8")
         self.assertContains(response, "HQ_IMAGE")
+        # A failing check is titled by what is wrong, never by what passing is.
+        titles = [element.words for element in within(response, "class", "posture-gaps") if element.tag == "strong"]
+        self.assertEqual(titles, [gap["check"].unmet for gap in response.context["unmet"]])
+        self.assertFalse(set(titles) & {check.label for check in STANDARD})
 
     def test_a_repository_joins_its_project(self):
         from hq.domains.projects.models import Project

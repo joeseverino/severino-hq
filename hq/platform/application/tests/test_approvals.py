@@ -41,6 +41,8 @@ from .markup import text
 POLICY_KEY = "access-policy"
 GATED_KIND = "tailscale.policy"
 UNGATED_KIND = "adguard.rewrite"
+# Where the one grant's sources are in the policy, as a reader is shown it.
+GRANT_SOURCES = "Document › Grants › Entry 1 › Src"
 
 
 def policy_document(who: str = "group:example") -> str:
@@ -613,11 +615,26 @@ class PreviewTests(TestCase):
 
         shown = compare(before, after, label="Declaration would change")
 
-        paths = {row.path: (row.before, row.after) for row in shown.rows}
-        self.assertEqual(paths["document.grants[0].src[0]"], ("group:example", "group:elsewhere"))
-        # Everything that did not move stays out of it.
-        self.assertEqual(len(shown.rows), 1)
+        said = {row.label: (row.before, row.after) for row in shown.rows}
+        self.assertEqual(said, {GRANT_SOURCES: ("group:example", "group:elsewhere")})
         self.assertEqual(shown.lines, ())
+
+    def test_a_list_that_grows_is_said_as_the_entry_it_gains(self):
+        grown = json.loads(policy_document())
+        grown["grants"].append({"src": ["group:example", "group:other"], "dst": ["tag:example"], "ip": ["443"]})
+        grown["grants"][0]["dst"].append("tag:other")
+
+        shown = compare(
+            {"document": policy_document()}, {"document": json.dumps(grown)}, label="Declaration would change"
+        )
+
+        said = {row.label: (row.change, row.before, row.after) for row in shown.rows}
+        self.assertEqual(
+            said["Document › Grants › Entry 1 › Dst"], ("changed", "tag:example", "tag:example, tag:other")
+        )
+        self.assertEqual(said["Document › Grants › Entry 2 › Src"], ("added", "", "group:example, group:other"))
+        self.assertEqual(said["Document › Grants › Entry 2 › Ip"], ("added", "", "443"))
+        self.assertEqual(len(said), 4)
 
     def test_content_that_will_not_parse_falls_back_to_a_line_diff(self):
         """A policy document may carry comments, and then it is text.
@@ -635,6 +652,15 @@ class PreviewTests(TestCase):
         self.assertEqual(shown.rows, ())
         self.assertTrue(any(line.startswith("-second line") for line in shown.lines))
         self.assertTrue(any(line.startswith("+changed line") for line in shown.lines))
+
+    def test_a_one_line_value_is_said_as_its_before_and_after(self):
+        before = {"domain": "photos.example.com", "answer": "192.0.2.10"}
+        after = {"domain": "photos.example.com", "answer": "192.0.2.20"}
+
+        shown = compare(before, after, label="Declaration would change")
+
+        self.assertEqual([(row.before, row.after) for row in shown.rows], [("192.0.2.10", "192.0.2.20")])
+        self.assertEqual(shown.lines, ())
 
     @override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
     def test_applying_a_declaration_is_compared_against_what_is_live(self):
@@ -658,8 +684,8 @@ class PreviewTests(TestCase):
 
         shown = preview(ApprovalRequest.objects.get())
 
-        paths = {row.path: (row.before, row.after) for row in shown.rows}
-        self.assertEqual(paths["document.grants[0].src[0]"], ("group:live", "group:example"))
+        said = {row.label: (row.before, row.after) for row in shown.rows}
+        self.assertEqual(said[GRANT_SOURCES], ("group:live", "group:example"))
 
 
 @override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True)
@@ -698,7 +724,10 @@ class SurfaceTests(TestCase):
         amendment = self._entry(self.held)
         self.assertContains(amendment, "mcp-service-account")
         # An amendment's command has no reason field; the diff is the reason.
-        self.assertIn("document.grants[0].src[0]", text(amendment))
+        shown = text(amendment)
+        self.assertIn(GRANT_SOURCES, shown)
+        self.assertIn("group:elsewhere", shown)
+        self.assertNotIn("grants[0]", shown)
         self.assertContains(self._entry(reconcile), "Stated reason for the change.")
 
     def test_a_held_record_change_shows_what_would_be_written(self):

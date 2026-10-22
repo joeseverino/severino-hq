@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.application.tests.markup import text
 
 from ..connection_catalog import connection_catalog
 from ..inventory_testing import store
@@ -202,8 +203,9 @@ class PageTests(TestCase):
         self.assertContains(response, "HQ's standard")
         # How to enforce it is the docs', not a call to action on the page.
         self.assertNotContains(response, "SEVERINO_POSTURE=advanced")
+        said = text(response)
         for check in STANDARD:
-            self.assertContains(response, check.label)
+            self.assertIn(check.label, said)
             # A met check's sentence is its tooltip, never a paragraph over the list.
             self.assertNotContains(response, f"{check.holds} ")
 
@@ -263,9 +265,9 @@ class ScopeTests(TestCase):
 
 class ToneTests(TestCase):
     def standing(self, met, enforced):
-        from ..posture import Reading, Standing
+        from ..posture import CheckOutcome, CheckStanding
 
-        return Standing(STANDARD[0], Reading(met, ""), enforced)
+        return CheckStanding(STANDARD[0], CheckOutcome(met, ""), enforced)
 
     def test_without_advanced_posture_an_unmet_check_is_quiet(self):
         self.assertEqual(self.standing(False, enforced=False).state, "neutral")
@@ -279,8 +281,8 @@ class ToneTests(TestCase):
         self.assertEqual(self.standing(None, enforced=True).icon, "clock")
 
     def test_a_qualified_pass_is_ticked_but_not_green(self):
-        from ..posture import Reading, Standing
+        from ..posture import CheckOutcome, CheckStanding
 
-        found = Standing(STANDARD[0], Reading(True, "", qualified=True))
+        found = CheckStanding(STANDARD[0], CheckOutcome(True, "", qualified=True))
 
         self.assertEqual((found.state, found.icon), ("neutral", "check-circle"))
