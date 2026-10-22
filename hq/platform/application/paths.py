@@ -35,11 +35,11 @@ from .facts import Joined, Subject, readings, refusals_about, snapshots_of
 from .infrastructure import enabled_resources
 from .labels import lower_first
 from .locate import host_of, split_endpoint
-from .path_model import NETWORK_LABELS, Certificate, Hop, Route, ServicePath, Source, dns_label, pointing_at
+from .path_model import NETWORK_LABELS, Certificate, Hop, HopSource, Route, ServicePath, dns_label, pointing_at
 from .projection import read_once
 from .reach import is_documentation, network_of
 lazy from . import connections, request_path, services
-lazy from .containers import container_watchers, standing_of, uptime_of
+lazy from .containers import container_watchers, standing_of, started_at, up_for
 lazy from .expiry import days_until
 lazy from .hq_self import hq_service, scoped_served_at, scoped_served_port
 lazy from .inventory import record_identity
@@ -61,7 +61,7 @@ class _Row:
     kind: str
     record: Mapping[str, Any]
     spec: Mapping[str, Any]
-    source: Source
+    source: HopSource
     # The declaration this record is, when HQ declares it: a read record and
     # its declaration are one thing, and the page names and links it as that.
     declaration: str = ""
@@ -90,7 +90,7 @@ def why_unread(kind: str) -> str:
     """ "not read: <kind>, because <reason>", or "" when a connection read it."""
 
     rows = snapshots_of(kind)
-    label = Source(kind).label
+    label = HopSource(kind).label
     if not rows:
         return f"not read: {label}, because no connection reads it"
     if any(row.reachable for row in rows):
@@ -121,7 +121,7 @@ def _swept(kind: str) -> dict[str, list[_Row]]:
                 spec = provider.from_record(record)
             except KeyError, TypeError, ValueError:
                 continue
-            source = Source(kind, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
+            source = HopSource(kind, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
             declaration = declared.get(record_identity(kind, spec), "")
             for name in _names(provider, spec):
                 found.setdefault(name, []).append(_Row(kind, record, spec, source, declaration))
@@ -134,7 +134,7 @@ def _declared(kind: str) -> dict[str, list[_Row]]:
     for resource in enabled_resources():
         if resource.kind != kind:
             continue
-        source = Source(kind, str(resource.spec.get("connection_ref", "") or ""), declared=resource.key)
+        source = HopSource(kind, str(resource.spec.get("connection_ref", "") or ""), declared=resource.key)
         for name in _names(provider, resource.spec):
             found.setdefault(name, []).append(_Row(kind, {}, resource.spec, source))
     return found
@@ -171,8 +171,8 @@ def _about(hostname: str, **filters: Any) -> tuple[Joined, ...]:
     return readings().about(Subject.of(hostnames=(hostname,)), **filters)
 
 
-def _reading_source(joined: Joined) -> Source:
-    return Source(joined.kind, joined.connection_ref, joined.observed_at)
+def _reading_source(joined: Joined) -> HopSource:
+    return HopSource(joined.kind, joined.connection_ref, joined.observed_at)
 
 
 def _reading_kinds(test) -> tuple[str, ...]:
@@ -217,7 +217,7 @@ def _no_route() -> tuple[str, ...]:
 
     kinds = _kinds("dns")
     gaps = tuple(reason for kind in kinds if (reason := why_unread(kind)))
-    read = [Source(kind).label for kind in kinds if not why_unread(kind)]
+    read = [HopSource(kind).label for kind in kinds if not why_unread(kind)]
     if not read:
         return gaps
     if not gaps:
@@ -592,7 +592,7 @@ def _machine(address: str) -> Hop | None:
     return Hop("machine", "Machine", link.name, link.link, detail=address, source=_machine_source(link.name))
 
 
-def _machine_source(name: str) -> Source | None:
+def _machine_source(name: str) -> HopSource | None:
     """Where HQ knows a machine from: its tailnet reading, else its declaration."""
 
     machine = next((item for item in connections.machines_once() if item.name == name), None)
@@ -600,18 +600,18 @@ def _machine_source(name: str) -> Source | None:
         return None
     presence = machine.presence
     if presence is not None:
-        return Source(TAILNET_KIND, presence.connection_ref, presence.observed_at)
-    return Source("machine", declared=machine.declaration) if machine.declaration else None
+        return HopSource(TAILNET_KIND, presence.connection_ref, presence.observed_at)
+    return HopSource("machine", declared=machine.declaration) if machine.declaration else None
 
 
-def _container_reading(name: str, host: str) -> tuple[Source | None, tuple[tuple[str, str], ...]]:
+def _container_reading(name: str, host: str) -> tuple[HopSource | None, tuple[tuple[str, str], ...]]:
     """The container reading that reports ``name`` on ``host``, and what it says
     is running: Docker's status, and the commit the image was built from."""
 
     for snapshot in snapshots_of(CONTAINER_KIND):
         for record in snapshot.records or ():
             if record.get("name") == name and record.get("host") == host:
-                source = Source(CONTAINER_KIND, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
+                source = HopSource(CONTAINER_KIND, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
                 return source, _running_facts(record)
     return None, ()
 
@@ -621,7 +621,10 @@ def _running_facts(record: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
     from (linked where the image names its repository), and whether what it
     runs is current and safe."""
 
-    uptime = uptime_of(str(record.get("status", "") or ""))
+    host, name = str(record.get("host", "") or ""), str(record.get("name", "") or "")
+    uptime = up_for(
+        str(record.get("status", "") or ""), started_at(host, name), running=record.get("state") == "running"
+    )
     revision = str(record.get("revision", "") or "")
     repository = str(record.get("source", "") or "").rstrip("/")
     facts = [(uptime, "")] if uptime else []
@@ -632,7 +635,7 @@ def _running_facts(record: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
     if image:
         # The standing says what the signature said and more: verified before
         # deploying, a newer release out, or an advisory against this version.
-        facts.append((standing_of(image, str(record.get("host", "")), str(record.get("name", ""))).summary, ""))
+        facts.append((standing_of(image, host, name).summary, ""))
     return tuple(facts)
 
 
@@ -714,7 +717,7 @@ def _declared_served(name: str, role: str) -> Certificate | None:
     if resource is None:
         return None
     status = resource.status or {}
-    source = Source(resource.kind, observed_at=resource.last_observed_at)
+    source = HopSource(resource.kind, observed_at=resource.last_observed_at)
     checked = next(
         (
             check

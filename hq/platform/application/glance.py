@@ -162,7 +162,7 @@ def panel_specs(
             DashboardPanelSpec(
                 "weather",
                 configuration.weather_label,
-                "Press Read now to fetch the forecast.",
+                "The forecast appears here once it is read.",
                 icon="weather",
                 head_labels=False,
                 alert_metric="Alerts",
@@ -288,8 +288,10 @@ def _panel(
     observed_at: Any,
     refreshing: bool,
     refreshable: bool,
+    subject: str = "",
 ) -> dict[str, Any]:
-    """One panel as the glance template reads it, from its spec and reading."""
+    """One panel as the glance template reads it, from its spec and reading.
+    ``subject`` is what its head names, where panels alike stand side by side."""
 
     payload = dict(payload)
     if spec.alert_metric and payload.get("metrics"):
@@ -305,6 +307,7 @@ def _panel(
     return {
         "id": spec.id,
         "label": spec.label,
+        "subject": subject,
         "empty": spec.empty,
         "icon": condition_icon(next((str(r["value"]) for r in shown if r["label"] == spec.icon_from), ""), spec.icon)
         if spec.icon_from
@@ -361,16 +364,14 @@ def dashboard_panels(
     for resource in machine_resources:
         panel_id = f"machine-{resource.pk}"
         reading = telemetry.get(readings.machine_telemetry(resource.key))
+        # Several machines' readings read alike, so each head names its own.
+        name = str(resource.spec.get("name") or resource.key) if len(machine_resources) > 1 else ""
         spec = replace(
             specs["infrastructure"],
             id=panel_id,
-            label=(
-                specs["infrastructure"].label
-                if len(machine_resources) == 1
-                else str(resource.spec.get("name") or resource.key)
-            ),
+            label=name or specs["infrastructure"].label,
             empty=(
-                "Press Read now to read this machine."
+                "Its readings appear here once it is read."
                 if resource.pk in routes
                 else "HQ has no way to read this machine yet."
             ),
@@ -383,6 +384,7 @@ def dashboard_panels(
                 # A request nothing can answer is not a refresh in progress.
                 refreshing=panel_id in pending and resource.pk in routes,
                 refreshable=resource.pk in routes,
+                subject=name,
             )
         )
     # Nothing empty takes space: with no machine chosen there is no machine

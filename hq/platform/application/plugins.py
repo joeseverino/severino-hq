@@ -25,7 +25,7 @@ from .demo import showing_demo
 from .derivations import derivation, forget
 from .ui import STATUS_VALUES, DomainOverview
 lazy from .integrations import clear_integration_graph_cache
-lazy from .outbound_work import capability_for, clear_outbound_work_cache
+lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
 
@@ -709,13 +709,7 @@ def plugin_outbound_work() -> tuple[Any, ...]:
 
 
 def plugin_capability_specs() -> tuple[Any, ...]:
-    """What every extension declares, and the capability each piece of its
-    outbound work is asked for through."""
-
-    return (
-        *_provided("capabilities"),
-        *(capability_for(work) for work in plugin_outbound_work()),
-    )
+    return _provided("capabilities")
 
 
 def plugin_resource_specs() -> tuple[Any, ...]:

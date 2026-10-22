@@ -40,15 +40,35 @@ def dashboard_highlights() -> dict[str, Any]:
     domains = {domain.id: domain for domain in all_domains()}
     highlights, compact = [], []
     for section in domain_dashboard_sections():
-        if len(section["cards"]) == 1:
+        overview = _overview(domains[section["id"]]) if len(section["cards"]) > 1 else None
+        if not _holds_a_card(section["cards"], overview):
             compact.extend(section["cards"])
             continue
-        provider = domains[section["id"]].integration.overview
-        overview = provider() if provider else None
-        if overview is not None and not isinstance(overview, DomainOverview):
-            raise ImproperlyConfigured("Domain overview must return DomainOverview.")
         highlights.append({**section, "overview": overview})
     return {"highlights": highlights, "compact": compact}
+
+
+# A highlight card pairs with the one beside it. Fewer figures than this leave
+# it a line beside that card's rows, so they read in the strip instead.
+CARD_FIGURES = 3
+
+
+def _overview(domain) -> DomainOverview | None:
+    provider = domain.integration.overview
+    overview = provider() if provider else None
+    if overview is not None and not isinstance(overview, DomainOverview):
+        raise ImproperlyConfigured("Domain overview must return DomainOverview.")
+    return overview
+
+
+def _holds_a_card(cards, overview: DomainOverview | None) -> bool:
+    """Whether a section fills a card of its own: a chart to lead with, or
+    figures enough to stand level with the card beside it."""
+
+    if overview is not None and overview.charts:
+        return True
+    figures = overview.kpis if overview is not None and overview.kpis else cards
+    return len(figures) >= CARD_FIGURES
 
 
 @derivation("attention.work", reads=QUEUE_READS, vary=composed_variant)

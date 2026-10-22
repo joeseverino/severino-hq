@@ -20,7 +20,7 @@ from .integration_validation import (
     validate_resource_spec,
 )
 from .search_contracts import SearchDefinition
-lazy from . import plugins
+lazy from . import outbound_work, plugins
 lazy from .core_capabilities import CORE_CAPABILITY_SPECS
 lazy from .domains import host_specs
 lazy from .plugins import plugin_capability_specs, plugin_search_definitions
@@ -194,6 +194,30 @@ def _validate_connection_edges(
         )
 
 
+def _validate_connection_words(
+    connections: Mapping[str, ConnectionSpec],
+    capabilities: Mapping[str, CapabilitySpec],
+    violations: list[IntegrationViolation],
+) -> None:
+    """A connection's row offers a button for each command its abilities run,
+    each saying the command's words, so two commands there may not say the same."""
+
+    for connection in connections.values():
+        named = {ability.capability for ability in connection.abilities if ability.capability in capabilities}
+        saying: dict[str, list[str]] = {}
+        for name in sorted(named):
+            saying.setdefault(capabilities[name].words(), []).append(name)
+        for words, names in saying.items():
+            if len(names) > 1:
+                violations.append(
+                    IntegrationViolation(
+                        "connection.repeated_words",
+                        f"Connection {connection.name!r} offers {', '.join(names)}, whose buttons all say {words!r}.",
+                        (connection.name, *names),
+                    )
+                )
+
+
 def _index_search(
     resources: Mapping[str, ResourceSpec],
     standalone: Iterable[Any],
@@ -268,6 +292,7 @@ def compile_integration_graph(
     search_index = _index_search(resource_index, search, violations)
     _validate_capability_resources(capability_index, resource_index, violations)
     _validate_connection_edges(connection_index, capability_index, resource_index, violations)
+    _validate_connection_words(connection_index, capability_index, violations)
     if violations:
         raise IntegrationGraphError(violations)
     return IntegrationGraph(capability_index, resource_index, connection_index, search_index)
@@ -281,6 +306,7 @@ def _compiled_integration_graph() -> IntegrationGraph:
             *record_capability_specs(),
             *host_specs("capabilities"),
             *plugin_capability_specs(),
+            *outbound_work.capability_specs(),
         ),
         resources=(*CORE_RESOURCE_SPECS, *host_specs("resources"), *plugins.plugin_resource_specs()),
         connections=(*host_specs("connections"), *plugins.plugin_connection_specs()),

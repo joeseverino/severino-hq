@@ -24,7 +24,7 @@ lazy from ..unit_findings import unit_state
 
 
 @dataclass(frozen=True, slots=True)
-class Job:
+class WorkUnit:
     """One unit HQ ships, as its own work: what it runs, when and how it last
     ran, and when it runs next."""
 
@@ -34,6 +34,8 @@ class Job:
     result: str
     tone: str
     next_run: datetime | None = None
+    # Whether ``runs`` is a unit's name, an identifier, rather than words.
+    runs_unit: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +71,7 @@ class Work:
     """The ``host.unit`` and ``host.render_status`` readings, or why not, and
     the work done on a cadence."""
 
-    jobs: tuple[Job, ...] = ()
+    jobs: tuple[WorkUnit, ...] = ()
     renderers: tuple[Renderer, ...] = ()
     scheduled: tuple[Scheduled, ...] = ()
     read_at: datetime | None = None
@@ -78,7 +80,7 @@ class Work:
     renderers_unread: str = ""
 
     @property
-    def services(self) -> tuple[Job, ...]:
+    def services(self) -> tuple[WorkUnit, ...]:
         """What keeps running rather than running on a schedule: the unit that
         serves HQ is one of these."""
 
@@ -122,7 +124,7 @@ def _unread(snapshot: Any, noun: str) -> str:
     return ""
 
 
-def _jobs(snapshot: Any) -> tuple[tuple[Job, ...], str]:
+def _jobs(snapshot: Any) -> tuple[tuple[WorkUnit, ...], str]:
     unread = _unread(snapshot, "HQ's background jobs")
     if unread:
         return (), unread
@@ -134,21 +136,25 @@ def _jobs(snapshot: Any) -> tuple[tuple[Job, ...], str]:
     return tuple(sorted(jobs, key=lambda job: job.unit)), ""
 
 
-def _runs(unit: str) -> str:
+def _runs(unit: str) -> tuple[str, bool]:
     """What a unit runs, in the words HQ has for it: the scheduled work an
-    instance of the job template names, else the unit's own name."""
+    instance of the job template names, else the unit's own name; and whether
+    it is that name."""
 
     instance = unit.partition("@")[2].rpartition(".")[0]
-    return next((work.label for work in scheduled_work.SCHEDULED if instance and work.name == instance), unit)
+    label = next((work.label for work in scheduled_work.SCHEDULED if instance and work.name == instance), "")
+    return (label, False) if label else (unit, True)
 
 
-def _scheduled(starter: Any, target: Any) -> Job:
+def _scheduled(starter: Any, target: Any) -> WorkUnit:
     """A timer or path, as the work it starts."""
 
     result, tone = _result(starter) if target is None or starter.absent else _result(target)
-    return Job(
+    runs, runs_unit = _runs(starter.activates) if starter.activates else ("Nothing", False)
+    return WorkUnit(
         unit=starter.unit,
-        runs=_runs(starter.activates) if starter.activates else "Nothing",
+        runs=runs,
+        runs_unit=runs_unit,
         last_run=moment(starter.last_trigger_at) or (moment(target.started_at) if target is not None else None),
         result=result,
         tone=tone,
@@ -156,9 +162,12 @@ def _scheduled(starter: Any, target: Any) -> Job:
     )
 
 
-def _standing(unit: Any) -> Job:
+def _standing(unit: Any) -> WorkUnit:
     result, tone = _result(unit)
-    return Job(unit=unit.unit, runs=_runs(unit.unit), last_run=moment(unit.started_at), result=result, tone=tone)
+    runs, runs_unit = _runs(unit.unit)
+    return WorkUnit(
+        unit=unit.unit, runs=runs, runs_unit=runs_unit, last_run=moment(unit.started_at), result=result, tone=tone
+    )
 
 
 def _result(unit: Any) -> tuple[str, str]:
@@ -169,15 +178,15 @@ def _result(unit: Any) -> tuple[str, str]:
     if unit.failed:
         return f"Failed: {unit.result or 'unknown'}", SERIOUS
     if unit.active in ("activating", "reloading"):
-        return "Running now", NEUTRAL
+        return JobRow.State.RUNNING.label, NEUTRAL
     if unit.active == "active" and unit.sub == "running":
-        return "Running", GOOD
+        return JobRow.State.RUNNING.label, GOOD
     if unit.condition == "no":
-        return "Skipped: its condition did not hold", NEUTRAL
+        return "Skipped", NEUTRAL
     if unit.result == "success":
-        return "Succeeded", GOOD
+        return JobRow.State.SUCCEEDED.label, GOOD
     if unit.result:
-        return f"Ended: {unit.result}", ATTENTION
+        return JobRow.State.LOST.label, ATTENTION
     return ("Waiting", GOOD) if unit.starter else ("Not run since the machine started", NEUTRAL)
 
 
@@ -200,7 +209,7 @@ def _renderers(snapshot: Any) -> tuple[tuple[Renderer, ...], str]:
     return tuple(found), ""
 
 
-def _plain(row: Job | Renderer) -> dict[str, Any]:
+def _plain(row: WorkUnit | Renderer) -> dict[str, Any]:
     """A row of words and moments as JSON: every field, each moment in ISO 8601."""
 
     return {name: iso(value) if isinstance(value, datetime) else value for name, value in asdict(row).items()}
@@ -219,19 +228,20 @@ def _every(span: timedelta) -> str:
     return f"Every {counted(hours, 'hour')}" if hours else f"Every {counted(int(span.total_seconds() // 60), 'minute')}"
 
 
-# How a job of a piece of scheduled work ended, in words, with its tone.
-_ENDED = {
-    "succeeded": ("Succeeded", GOOD),
-    "failed": ("Failed", SERIOUS),
-    "queued": ("Running now", NEUTRAL),
-    "running": ("Running now", NEUTRAL),
-}
+# The tone of each job state; the words are the state's own.
+_TONES = {"succeeded": GOOD, "failed": SERIOUS, "queued": NEUTRAL, "running": NEUTRAL, "lost": ATTENTION}
 # Recent runs shown per piece of work: as many dots as Dots draws.
 RECENT = Dots.LIMIT
 
 
+def _ended(state: str) -> tuple[str, str]:
+    """How a job of a piece of scheduled work stands, in words, with its tone."""
+
+    return JobRow.State(state).label, _TONES[state]
+
+
 def _run_dot(job: Any) -> Dot:
-    result, _tone = _ENDED.get(job.state, ("Did not finish", ATTENTION))
+    result, _tone = _ended(job.state)
     return Dot(
         filled=job.state == "succeeded",
         tip=f"{result}, {timezone.localtime(job.created_at):%b %-d %H:%M}",
@@ -271,7 +281,7 @@ def _scheduled_work() -> tuple[Scheduled, ...]:
     for name, label, every in declared:
         runs = recent.get(name, [])[:RECENT]
         if runs:
-            result, tone = _ENDED.get(runs[0].state, ("Did not finish", ATTENTION))
+            result, tone = _ended(runs[0].state)
         else:
             result, tone = ("Not run lately", ATTENTION) if name in last_seen else ("Not done yet", NEUTRAL)
         last = succeeded.get(name)

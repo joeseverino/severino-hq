@@ -20,22 +20,22 @@ from hq.domains.control_plane.providers import (
 
 from .adoption import OBSERVES_ONLY, observes_only as observes_through
 lazy from . import resource_operations
+lazy from .capabilities import capability_words
 lazy from .machines import container_context
 
 # Actions a person starts from a resource's page, in the order they lead.
 PAGE_VERBS = ("start", "stop", "restart", "reconcile", "renew")
-VERB_LABELS = {
-    "start": "Start",
-    "stop": "Stop",
-    "restart": "Restart",
-    "reconcile": "Apply again",
-    "renew": "Request renewal",
-    "approve-routes": "Approve routes",
-}
 LIFECYCLE_VERBS = frozenset({"start", "stop", "restart"})
+REMOVAL_CAPABILITY = "infrastructure.resource.remove"
 # Verbs that take something away from whoever is using it: asked for by name
 # on a page of their own, never pressed straight from a head.
 DESTRUCTIVE_VERBS = frozenset({"stop"})
+
+
+def verb_words(verb: str) -> str:
+    """What a resource's verb is called: the words its operation declares."""
+
+    return OperationRequest.Action(verb).label
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +56,13 @@ class ResourceCapabilities:
     unobserved_reason: str
     home: str
     removal_pending: bool = False
+
+    @property
+    def removal_words(self) -> str:
+        """What the removal button says: forgetting a record HQ only watches
+        is the removal command's own "forget" words."""
+
+        return capability_words(REMOVAL_CAPABILITY, "forget" if self.removal == "forget" else "")
 
     @property
     def converges(self) -> bool:

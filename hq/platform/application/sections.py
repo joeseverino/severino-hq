@@ -34,6 +34,7 @@ from .derivations import passed, today as local_today
 from .money import money
 from .projection import read_once
 from .ui import counted
+lazy from .github_estate import repository_for
 lazy from .github_profile import accounts, profile, profiles
 lazy from .timestamps import moment
 
@@ -80,20 +81,37 @@ def projects_reading() -> dict[str, int]:
     )
 
 
+def updates_reading() -> dict[str, int]:
+    """The update pull requests open across the projects HQ updates, and the
+    alerts none of them answers."""
+
+    def load() -> dict[str, int]:
+        opted = list(Project.objects.updates_on().exclude(repository_url="").only("repository_url"))
+        read = [repo for project in opted if (repo := repository_for(project.repository_url)) is not None]
+        return {
+            "projects": len(opted),
+            "open": sum(len(repo.update_pulls) for repo in read),
+            "unmatched": sum(len(repo.unmatched_alerts) for repo in read),
+        }
+
+    return read_once("sections.updates", load)
+
+
 def projects() -> tuple[Card, ...]:
-    reading = projects_reading()
-    if not reading["active"]:
+    """The updates waiting across the projects HQ updates. How many projects
+    are active is said once, over the dashboard's list of them."""
+
+    reading = updates_reading()
+    if not reading["projects"]:
         return ()
     return _card(
-        id="hq.projects.active",
-        label="Active projects",
-        value=str(reading["active"]),
-        url=reverse("projects:list"),
-        detail=(
-            counted(reading["needing_output"], "has no writeup or doc", "have no writeup or doc")
-            if reading["needing_output"]
-            else ""
-        ),
+        id="hq.projects.updates",
+        label="Open updates",
+        value=str(reading["open"]),
+        url=f"{reverse('projects:list')}?updates_on=1",
+        detail=counted(reading["unmatched"], "security alert with no fix open", "security alerts with no fix open")
+        if reading["unmatched"]
+        else "",
     )
 
 
@@ -221,9 +239,9 @@ def _deductible(reading: dict[str, Any]) -> str:
 # read, so a field added to a summary is one edit in the section that owns it.
 
 ROW_LIMIT = 4
-# The Projects card sits beside the calendar, which always shows six weeks,
-# so six rows fill the card.
-PROJECT_ROWS = 6
+# The Projects and Publishing cards sit beside the calendar, which always
+# shows six weeks, so six rows fill each card.
+CALENDAR_ROWS = 6
 
 
 def _project(project: Project) -> dict[str, Any]:
@@ -258,15 +276,15 @@ def _documentation(record: DocumentationRecord) -> dict[str, Any]:
 
 
 def recent_active_projects() -> list[dict[str, Any]]:
-    return [_project(project) for project in active_projects().order_by("-updated_at")[:PROJECT_ROWS]]
+    return [_project(project) for project in active_projects().order_by("-updated_at")[:CALENDAR_ROWS]]
 
 
 def recent_draft_content() -> list[dict[str, Any]]:
-    return [_content(item) for item in draft_content().order_by("-updated_at")[:ROW_LIMIT]]
+    return [_content(item) for item in draft_content().order_by("-updated_at")[:CALENDAR_ROWS]]
 
 
 def recently_published() -> list[dict[str, Any]]:
-    return [_content(item) for item in published_content().order_by("-published_at", "-updated_at")[:ROW_LIMIT]]
+    return [_content(item) for item in published_content().order_by("-published_at", "-updated_at")[:CALENDAR_ROWS]]
 
 
 def docs_awaiting_review() -> list[dict[str, Any]]:

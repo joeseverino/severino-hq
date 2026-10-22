@@ -30,7 +30,7 @@ from .reach import network_of, on_link_networks
 from .request_channel import Channel, channel_for_request, displayed_client_ip, forwarded_chain, socket_peer
 from .request_identity import Identity, identity_of
 from .request_layers import Layer, ServingDeviceResolution, admission_layers
-from .ui import MISSING
+from .ui import MISSING, counted
 lazy from . import connections
 lazy from .entity_links import entity_link
 lazy from .hq_self import hq_machine, hq_service, own_addresses, served_at
@@ -215,6 +215,16 @@ class Connection:
         if self.unverified:
             parts.append(f"{len(self.unverified)} not confirmed")
         return " · ".join(parts)
+
+    @property
+    def tally(self) -> str:
+        """The summary with the checks named and counted, for the panel, where
+        the path beside it counts steps ("6 of 7 steps confirmed") and a bare
+        "3 failed" reads as three of those."""
+
+        if self.holds:
+            return self.summary
+        return f"{counted(len(self.layers), 'check')}, {self.summary}"
 
     @property
     def transport(self) -> str:

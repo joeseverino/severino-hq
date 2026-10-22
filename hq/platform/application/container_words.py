@@ -1,7 +1,7 @@
 """A container's standing in the words its row and its page show.
 
 Split by column: what is known against the version that runs, and whether a
-newer one is published. ``containers.Standing`` carries the facts and takes
+newer one is published. ``containers.ImageStanding`` carries the facts and takes
 these from here, so each phrase has one owner.
 """
 
@@ -13,8 +13,8 @@ UP_TO_DATE = "current"
 UPDATE_UNKNOWN = "unknown"
 
 
-class StandingWords:
-    """The reading of a standing's facts; mixed into ``containers.Standing``."""
+class ImageStandingWords:
+    """The reading of a standing's facts; mixed into ``containers.ImageStanding``."""
 
     @property
     def checkable(self) -> bool:

@@ -2,7 +2,7 @@
 
 from hq.domains.control_plane.providers import PROVIDERS
 
-from .action_links import command_url
+from .action_links import command_action, command_url
 from .container_attention import UPDATE_CAPABILITY
 from .workflow_contracts import ActionLink
 
@@ -18,13 +18,12 @@ def gate_links(service) -> tuple[ActionLink, ...]:
             if provider is None or provider.ingress_policy is None:
                 continue
             found.append(
-                ActionLink(
+                command_action(
                     "gate",
-                    f"Put an access list in front of {claim.resource_key}",
-                    "remote_write",
+                    UPDATE_CAPABILITY,
                     command_url(UPDATE_CAPABILITY, claim.resource_key),
-                    capability=UPDATE_CAPABILITY,
                     target=claim.resource_key,
+                    intent=f"Put an access list in front of {claim.resource_key}",
                     reason="Set its access list, so the proxy admits only whom the list allows.",
                 )
             )

@@ -381,9 +381,7 @@ def _controller_connection_spec() -> ConnectionSpec:
         secret_store="1Password",
         # The one family fed by sweeps rather than by its own configuration,
         # so the one whose emptiness means a report has not arrived.
-        empty_message=(
-            "Each is a vault item the controller is given; it appears here after the controller's next pass."
-        ),
+        empty_message="Each is a vault item the controller is given; it appears here once the controller reports.",
         documentation_url=guide_url(),
     )
 

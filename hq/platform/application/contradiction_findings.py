@@ -34,9 +34,9 @@ from .finding_model import (
     CANNOT_EDIT_COMPOSE,
     Finding,
     FindingEstate,
+    FindingRemedy,
     FindingRule,
     OperatorStep,
-    Remedy,
     fact_values,
     on_machine,
 )
@@ -53,13 +53,9 @@ FACT = "contradiction"
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 
 
-def _update(key: str, label: str) -> Remedy:
-    return Remedy(
-        capability=UPDATE_CAPABILITY,
-        target=key,
-        label=label,
-        effect="",
-        url=command_url(UPDATE_CAPABILITY, key),
+def _update(key: str, intent: str) -> FindingRemedy:
+    return FindingRemedy(
+        capability=UPDATE_CAPABILITY, target=key, intent=intent, url=command_url(UPDATE_CAPABILITY, key)
     )
 
 
@@ -370,11 +366,10 @@ def _served_not_held() -> tuple[Finding, ...]:
                     for item in wrong
                 ),
                 remedies=(
-                    Remedy(
+                    FindingRemedy(
                         capability="infrastructure.reconcile",
                         target=resource.key,
-                        label=f"Install {resource.key} again",
-                        effect="",
+                        intent=f"Install {resource.key} again",
                     ),
                 ),
             )
@@ -419,7 +414,10 @@ def _encoded(finding: Finding) -> str:
             "severity": finding.severity,
             "explanation": finding.explanation,
             "evidence": [list(pair) for pair in finding.evidence],
-            "remedies": [[remedy.capability, remedy.target, remedy.label, remedy.url] for remedy in finding.remedies],
+            "remedies": [
+                [remedy.capability, remedy.target, remedy.intent, remedy.variant, remedy.url]
+                for remedy in finding.remedies
+            ],
             "steps": [[step.label, step.command, list(step.notes)] for step in finding.steps],
         }
     )
@@ -435,8 +433,8 @@ def _decoded(value: str) -> Finding:
         explanation=item["explanation"],
         evidence=tuple(tuple(pair) for pair in item["evidence"]),
         remedies=tuple(
-            Remedy(capability=capability, target=target, label=label, effect="", url=url)
-            for capability, target, label, url in item["remedies"]
+            FindingRemedy(capability=capability, target=target, intent=intent, variant=variant, url=url)
+            for capability, target, intent, variant, url in item["remedies"]
         ),
         steps=tuple(
             OperatorStep(label=label, command=command, notes=tuple(notes)) for label, command, notes in item["steps"]

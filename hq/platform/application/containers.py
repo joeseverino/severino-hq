@@ -33,7 +33,7 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, StandingWords
+from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
 from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
 from .projection import projection_scope, read_once
@@ -85,6 +85,28 @@ def uptime_of(status: str) -> str:
     """Docker's status without its health check: ``Up 11 hours``."""
 
     return _CHECK.sub("", str(status or "")).strip()
+
+
+def up_for(status: str, started_at: object, *, running: bool) -> str:
+    """How long a container has been up, as HQ writes an age, when Docker's
+    inspect gave its start time; Docker's own phrase otherwise.
+
+    The one way any page says it. Docker's phrase is fixed at the moment it
+    was read and rounds its own way, so beside an age HQ counts from the start
+    time it would say the same fact twice, differently.
+    """
+
+    started = moment(str(started_at or ""))
+    if started is None or not running:
+        return uptime_of(status)
+    age = ago(started)
+    return "Just started" if age == "just now" else f"Up {age.removesuffix(' ago')}"
+
+
+def started_at(machine: str, container: str) -> str:
+    """When Docker's inspect says a container on ``machine`` started, or ""."""
+
+    return str((_runtimes().get((machine, container)) or {}).get("started_at", "") or "")
 
 
 def check_of(status: str) -> str:
@@ -281,7 +303,7 @@ def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
 
 
 @dataclass(frozen=True, slots=True)
-class Standing(StandingWords):
+class ImageStanding(ImageStandingWords):
     """What is known about one image at one version, wherever it runs."""
 
     image: ImageRef
@@ -443,21 +465,14 @@ class Standing(StandingWords):
 class Container:
     running: Any
     machine: Any
-    standing: Standing
+    standing: ImageStanding
     serves: tuple[str, ...] = field(default_factory=tuple)
     # How it is run, from Docker's inspect; None where that was not read.
     runtime: Mapping[str, Any] | None = None
 
     @property
     def uptime(self) -> str:
-        """How long it has been up, as HQ writes an age, when Docker's inspect
-        gave its start time. Docker's own phrase otherwise."""
-
-        started = moment(str((self.runtime or {}).get("started_at", "") or ""))
-        if started is None or not self.running.healthy:
-            return self.running.uptime
-        age = ago(started)
-        return "Just started" if age == "just now" else f"Up {age.removesuffix(' ago')}"
+        return up_for(self.running.status, (self.runtime or {}).get("started_at"), running=self.running.healthy)
 
     @property
     def address(self) -> str:
@@ -563,7 +578,7 @@ def _containers() -> list[Container]:
     )
 
 
-def standings_on(machine: str) -> dict[str, Standing]:
+def standings_on(machine: str) -> dict[str, ImageStanding]:
     """Each container on one machine's standing, by container name."""
 
     return {item.running.name: item.standing for item in containers() if item.machine.name == machine}
@@ -595,19 +610,19 @@ def on_machine(machine: Any) -> dict[str, Any]:
     }
 
 
-def standing_of(reference: str, host: str = "", container: str = "") -> Standing:
+def standing_of(reference: str, host: str = "", container: str = "") -> ImageStanding:
     """What is known about the image ``reference`` names."""
 
     with projection_scope():
         return _standing(reference, host, container)
 
 
-def _standing(reference: str, host: str, container: str) -> Standing:
+def _standing(reference: str, host: str, container: str) -> ImageStanding:
     image = ImageRef.parse(reference)
     if image is None:
         # A container left running an image whose name was removed reports
         # only its id. Still listed, and saying why nothing can be looked up.
-        return Standing(
+        return ImageStanding(
             image=ImageRef("", str(reference or "")[:19]),
             tag="",
             pinned=False,
@@ -624,7 +639,7 @@ def _standing(reference: str, host: str, container: str) -> Standing:
     target = str(((published or {}).get("digests") or {}).get(later[0], "") or "") if later else ""
     matched, unmatched = _advisories(tag, upstream)
 
-    return Standing(
+    return ImageStanding(
         image=image,
         tag=tag,
         pinned=bool(image.digest),

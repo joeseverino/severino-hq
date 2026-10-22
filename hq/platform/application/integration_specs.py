@@ -11,6 +11,7 @@ from pydantic import BaseModel, TypeAdapter
 
 from .search_contracts import SearchDefinition
 from .security import Capability
+lazy from . import records
 lazy from .labels import human_label
 
 
@@ -84,10 +85,11 @@ def capability_schema(spec: CapabilitySpec) -> dict[str, Any]:
 
     A capability whose effect is not ``read`` takes an optional
     ``idempotency_key``, whether or not its command type declares the field,
-    and never requires it. A ``read`` takes none.
+    and never requires it. A ``read`` takes none. A record command's fields
+    say what its model allows (``records.as_its_model_declares``).
     """
 
-    schema = command_schema(spec.command_type)
+    schema = records.as_its_model_declares(spec.command_type, command_schema(spec.command_type))
     if spec.effect == "read":
         return schema
     properties = dict(schema.get("properties", {}))
@@ -119,6 +121,13 @@ class CapabilitySpec:
     # What a person calls the command. Optional so an extension that has not
     # named its commands still composes; those read as their dotted name.
     label: str = ""
+    # What its button says, where that is shorter than its name ("Remove"
+    # beside "Remove a record"). Every button, link and toast for the command
+    # reads its words from here, never from text of its own.
+    verb: str = ""
+    # The words for a mode or state of the command, by name, where one
+    # button cannot say them all: ``(("all", "Refresh all"),)``.
+    variants: tuple[tuple[str, str], ...] = ()
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:
@@ -131,6 +140,27 @@ class CapabilitySpec:
         """The command's name wherever a person reads it."""
 
         return self.label or human_label(self.name)
+
+    def words(self, variant: str = "") -> str:
+        """What a button for the command says: its verb, else its name, or
+        one of its declared variants. An undeclared variant is a KeyError."""
+
+        if variant:
+            return dict(self.variants)[variant]
+        return self.verb or self.title
+
+    def requested(self, subject: str = "", *, again: bool = False) -> str:
+        """What a press says once the command is asked for, in its own words."""
+
+        return requested(self.words(), subject, again=again)
+
+
+def requested(words: str, subject: str = "", *, again: bool = False) -> str:
+    """What a press of the button saying ``words`` says once its work is asked
+    for: the one sentence every action's toast is."""
+
+    about = f" for {subject}" if subject else ""
+    return f"{words} was already requested{about}." if again else f"{words} requested{about}."
 
 
 # What every adapter reads beside a resource query as the keys to return, so

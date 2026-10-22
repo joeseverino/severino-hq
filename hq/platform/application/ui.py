@@ -15,6 +15,7 @@ from .chart_numbers import (
 )
 from .drawings import Dots, Trend
 from .labels import plural
+from .timestamps import moment
 from .workflow_contracts import ActionLink, WorkflowPlan
 
 # The one status vocabulary. Every surface that shows state (dashboard cards,
@@ -229,7 +230,8 @@ class ListRow:
     title: str
     # Inline after the title, muted: the one fact that distinguishes this row.
     detail: str = ""
-    # Trailing, right-aligned: usually a date. Kept short: it is scanned.
+    # Trailing, right-aligned, in words: a duration, a measure, "Due Oct 3".
+    # Kept short: it is scanned.
     meta: str = ""
     url: str = ""
     # Leaves HQ. Rendered so the operator knows before they click, and so a
@@ -238,11 +240,17 @@ class ListRow:
     # Optional state. `badge` carries the text, so state is never color alone.
     status: str = ""
     badge: str = ""
+    # When the record happened, after ``meta``: a value, so the row says it
+    # in HQ's time words as the day it fell on, the moment itself on hover.
+    at: date | None = None
 
     def __post_init__(self) -> None:
         _one_of("ListRow status", self.status, STATUS_VALUES, or_empty=True)
         if self.status and not self.badge:
             raise ValueError("ListRow status needs a badge: state is never carried by color alone.")
+        # A stamp handed over as text would be printed as the machine wrote it.
+        if not isinstance(self.meta, str) or moment(self.meta) is not None:
+            raise ValueError(f"ListRow meta is words; a moment goes in `at`. Got {self.meta!r}.")
 
 
 @dataclass(frozen=True, slots=True)

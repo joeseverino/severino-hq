@@ -40,7 +40,7 @@ _SENTENCES = (
 
 
 @dataclass(frozen=True, slots=True)
-class Progress:
+class DeliveryProgress:
     """Where a delivery behind production stands, at its least advanced plugin."""
 
     state: str
@@ -60,7 +60,7 @@ def _stage(item: Mapping[str, Any]) -> str:
     return next((state for words, state in _SENTENCES if said.endswith(words)), ENDED)
 
 
-def delivery_progress(resource) -> Progress | None:
+def delivery_progress(resource) -> DeliveryProgress | None:
     """How a delivery that reports a problem is getting on; None when it is
     not a delivery, is not behind, or a run has ended without deploying."""
 
@@ -76,10 +76,10 @@ def delivery_progress(resource) -> Progress | None:
         return None
     state = WAITING if WAITING in stages else RUNNING if RUNNING in stages else STARTING
     run_url = next((web_url(item.get("run_url")) for item in behind if _stage(item) == state), "")
-    return Progress(state, held_since(resource.conditions, "Degraded"), run_url)
+    return DeliveryProgress(state, held_since(resource.conditions, "Degraded"), run_url)
 
 
-def on_its_way(progress: Progress | None) -> bool:
+def on_its_way(progress: DeliveryProgress | None) -> bool:
     """Whether a deploy is merely in progress: started or about to, and not
     behind for longer than ``STALLED_AFTER``. When it began to be behind is not
     known for a delivery first read that way, and then it is not called stalled."""

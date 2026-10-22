@@ -14,25 +14,39 @@ from typing import Any
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink
+from .core_capabilities import CONTROLLER_REFRESH
 from .timestamps import moment
 from .topology_model import Topology, TopologyNode
 from .workflows import WorkflowPlan
+lazy from .capabilities import capability_words
 
 
 @dataclass(frozen=True, slots=True)
-class Remedy:
-    """An existing capability, named: never a new way to change anything."""
+class FindingRemedy:
+    """An existing capability, named: never a new way to change anything.
+
+    Said in the capability's words, or one of its declared ``variant``s.
+    ``intent`` is this remedy's own words for what the press does here, where
+    the command's name would not say it ("Mark it as running only
+    sometimes" through the command that changes a record): declared once,
+    here, and read by every surface that offers the remedy.
+    """
 
     capability: str
     target: str
-    label: str
-    effect: str
+    effect: str = ""
+    intent: str = ""
+    variant: str = ""
     url: str = ""
     method: str = "GET"
     # Whether the controller would run this unattended. Left False here: this
     # module proposes, and the thing that already schedules automatic work is
     # the only correct place for anything else.
     auto: bool = False
+
+    @property
+    def label(self) -> str:
+        return self.intent or capability_words(self.capability, self.variant)
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +59,7 @@ class Finding:
     severity: str
     explanation: str
     evidence: tuple[tuple[str, str], ...] = ()
-    remedies: tuple[Remedy, ...] = ()
+    remedies: tuple[FindingRemedy, ...] = ()
     # Safe, already-authorized read workflows emitted by the subject node.
     # Delivery adapters render these; they do not rediscover or filter them.
     offers: tuple[ActionLink, ...] = ()
@@ -120,7 +134,7 @@ class FindingEstate:
         return self.topology.nodes
 
 
-def open_the_path(node: TopologyNode) -> tuple[Remedy, ...]:
+def open_the_path(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     """Amend the policy, and look again once it is amended.
 
     The capability is handed the resource, not a path: which one to open is
@@ -130,31 +144,19 @@ def open_the_path(node: TopologyNode) -> tuple[Remedy, ...]:
     """
 
     return (
-        Remedy(
-            capability="tailnet.reach.allow",
-            target=node.label,
-            label="Allow it in the tailnet policy",
-            effect="infrastructure_change",
-        ),
+        FindingRemedy(capability="tailnet.reach.allow", target=node.label, effect="infrastructure_change"),
         *reconcile_remedy(node),
     )
 
 
-def reconcile_remedy(node: TopologyNode) -> tuple[Remedy, ...]:
+def reconcile_remedy(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     """The one capability that answers "go and look again", where the kind allows it."""
 
     provider = PROVIDERS.get(node.kind_key)
     policy = provider.actions.get("reconcile") if provider else None
     if policy is not None and policy.mode == "locked":
         return ()
-    return (
-        Remedy(
-            capability="infrastructure.reconcile",
-            target=node.label,
-            label="Apply again",
-            effect="",
-        ),
-    )
+    return (FindingRemedy(capability="infrastructure.reconcile", target=node.label),)
 
 
 def is_observable(kind_key: str) -> bool:
@@ -199,10 +201,13 @@ class OperatorStep:
     notes: tuple[str, ...] = ()
 
 
+# A problem card's own button: read what the claim rests on again, then run
+# the check against it.
+CHECK_AGAIN = "Check again"
 # What a step says last when a fresh read is what confirms the fix. A problem
-# card carries Check again; a connection's own page carries Read now.
-THEN_CHECK_AGAIN = "Then press Check again."
-THEN_READ_NOW = "Then press Read now."
+# card carries Check again; a connection's own page carries the refresh.
+THEN_CHECK_AGAIN = f"Then press {CHECK_AGAIN}."
+THEN_REFRESH = f"Then press {CONTROLLER_REFRESH.words()}."
 
 # A machine name a shell takes as one word.
 _MACHINE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

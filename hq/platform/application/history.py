@@ -102,7 +102,7 @@ class Moment:
 
 
 @dataclass(frozen=True, slots=True)
-class Entry:
+class HistoryLine:
     """One line of the history: an audit event, a run of them, or a moment."""
 
     at: datetime
@@ -168,7 +168,7 @@ def external(sources: Iterable[str], *, since: datetime | None = None, until: da
     return found
 
 
-def entries(events: Sequence[Any], found: Iterable[Moment] = (), *, group: bool = True) -> list[Entry]:
+def entries(events: Sequence[Any], found: Iterable[Moment] = (), *, group: bool = True) -> list[HistoryLine]:
     """Events and moments on one line, newest first, runs of like events as one.
 
     ``events`` must already be newest first. A run is consecutive events of one
@@ -176,18 +176,18 @@ def entries(events: Sequence[Any], found: Iterable[Moment] = (), *, group: bool 
     last; a moment from another source between them ends it.
     """
 
-    lines: list[Entry] = [Entry(event.created_at, events=(event,)) for event in events]
-    lines += [Entry(item.at, moment=item) for item in found]
+    lines: list[HistoryLine] = [HistoryLine(event.created_at, events=(event,)) for event in events]
+    lines += [HistoryLine(item.at, moment=item) for item in found]
     lines.sort(key=lambda line: line.at, reverse=True)
     return _grouped(lines) if group else lines
 
 
-def _grouped(lines: list[Entry]) -> list[Entry]:
-    merged: list[Entry] = []
+def _grouped(lines: list[HistoryLine]) -> list[HistoryLine]:
+    merged: list[HistoryLine] = []
     for line in lines:
         last = merged[-1] if merged else None
         if last is not None and _joins(last, line):
-            merged[-1] = Entry(last.at, events=(*last.events, *line.events))
+            merged[-1] = HistoryLine(last.at, events=(*last.events, *line.events))
         else:
             merged.append(line)
     return merged
@@ -197,7 +197,7 @@ def _key(event: Any) -> tuple[str, str, str]:
     return (event.action, event.actor_label, event.object_type)
 
 
-def _joins(run: Entry, line: Entry) -> bool:
+def _joins(run: HistoryLine, line: HistoryLine) -> bool:
     if not run.events or not line.events:
         return False
     previous, event = run.events[-1], line.events[0]

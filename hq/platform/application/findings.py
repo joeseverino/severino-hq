@@ -63,6 +63,7 @@ from . import (
 from .action_links import (
     ActionLink,
     action_with_return,
+    command_action,
     read_now_link,
     topology_investigation_links,
 )
@@ -70,11 +71,12 @@ from .contracts import route_url
 from .derivations import derivation, present
 from .derived_inputs import ESTATE_READS, estate_variant
 from .finding_model import (
+    CHECK_AGAIN,
     Finding,
     FindingEstate,
+    FindingRemedy,
     FindingRule,
     OperatorStep,
-    Remedy,
     is_observable,
     parse_stamp,
 )
@@ -299,10 +301,11 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
             None,
         )
         kept.append(
-            Remedy(
+            FindingRemedy(
                 capability=remedy.capability,
                 target=remedy.target,
-                label=remedy.label,
+                intent=remedy.intent,
+                variant=remedy.variant,
                 effect=effect,
                 url=(action_with_return(action, "control_plane:findings").url if action else remedy.url),
                 method=action.method if action else remedy.method,
@@ -315,14 +318,14 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
     remedy_actions = tuple(
-        ActionLink(
+        command_action(
             "remedy",
-            remedy.label,
-            remedy.effect,
+            remedy.capability,
             remedy.url,
             method=remedy.method,
-            capability=remedy.capability,
             target=remedy.target,
+            variant=remedy.variant,
+            intent=remedy.intent,
             recommended=True,
         )
         for remedy in resolved_remedies
@@ -382,29 +385,28 @@ def _read_subject(finding: Finding, subject: TopologyNode | None) -> dict[str, A
 
 
 def _verification(finding: Finding, principal: Principal, subject: TopologyNode | None) -> ActionLink | None:
-    """Read now and check again where a reading is involved; else check again."""
+    """Refresh and check again where a reading is involved; else check again."""
 
     findings_url = route_url("control_plane:findings")
     if not findings_url:
         return None
     wanted = _read_subject(finding, subject)
-    read = read_now_link(principal, label="Check again", **wanted) if wanted is not None else None
+    read = read_now_link(principal, **wanted) if wanted is not None else None
     again = f"{findings_url}?{urlencode({'rule': finding.rule})}"
     if read is not None:
         separator = "&" if "?" in read.url else "?"
-        return ActionLink(
+        return command_action(
             "verify",
-            read.label,
-            read.effect,
+            read.capability,
             f"{read.url}{separator}{urlencode({'next': again})}",
             method="POST",
-            capability=read.capability,
             target=read.target,
+            intent=CHECK_AGAIN,
             reason="Reads it now, then checks again.",
         )
     return ActionLink(
         "verify",
-        "Check again",
+        CHECK_AGAIN,
         "read",
         again,
         reason="Runs this check against current data.",

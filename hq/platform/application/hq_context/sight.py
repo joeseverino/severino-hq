@@ -52,7 +52,7 @@ class Sees:
 
 
 @dataclass(frozen=True, slots=True)
-class Sight:
+class HqSight:
     """Every reading kind, by the connection provider that takes it."""
 
     groups: tuple[tuple[str, tuple[Sees, ...]], ...] = ()
@@ -84,13 +84,13 @@ class Sight:
         return sum(row.state in (REFUSED, UNREADABLE) for row in self.rows)
 
 
-def sight() -> Sight:
+def sight() -> HqSight:
     """Every registered reading kind, by provider, as last read."""
 
     return read_once("hq_context.sight", _sight)
 
 
-def _sight() -> Sight:
+def _sight() -> HqSight:
     stored = {kind: rows[0] for kind, rows in stored_snapshots().items() if rows}
     reported = {CONNECTION_LABELS.get(row.provider) for row in connection_rows()}
     groups: dict[str, list[Sees]] = {}
@@ -105,7 +105,7 @@ def _sight() -> Sight:
         for label, rows in groups.items()
         if label == KEYLESS or label in reported or any(row.state not in (NOT_CONNECTED, NEVER_SWEPT) for row in rows)
     }
-    return Sight(
+    return HqSight(
         groups=tuple(sorted(shown.items(), key=lambda group: (group[0] == KEYLESS, group[0]))),
         unconnected=tuple(sorted(label for label in groups if label not in shown)),
     )
@@ -129,7 +129,7 @@ def _sees(kind: str, spec: Any, row: Any) -> Sees:
     )
 
 
-def sight_tile(seen: Sight) -> Tile:
+def sight_tile(seen: HqSight) -> Tile:
     detail = " · ".join(
         part
         for part in (
@@ -149,7 +149,7 @@ def sight_tile(seen: Sight) -> Tile:
     )
 
 
-def sight_json(seen: Sight) -> dict[str, Any]:
+def sight_json(seen: HqSight) -> dict[str, Any]:
     return {
         "read": seen.read,
         "out_of_date": seen.stale,

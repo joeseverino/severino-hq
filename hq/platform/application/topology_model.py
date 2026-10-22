@@ -26,6 +26,10 @@ class TopologyNode:
     # name a record stands for (``entity_links.record_name``). "" when the
     # label is already that name.
     name: str = ""
+    # What a record holds, shortened (``resource_context.record_summary``),
+    # when another record goes by the same name: then it is what tells them
+    # apart. "" otherwise.
+    summary: str = ""
     status: str = "neutral"
     status_label: str = ""
     detail: str = ""

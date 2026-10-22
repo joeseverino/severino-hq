@@ -452,7 +452,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                     for rendering in stalled
                     for item in (
                         ("Job", rendering.name),
-                        ("Sync", rendering.sync),
+                        ("Updates from 1Password", rendering.sync),
                         ("Connect last read", ago(rendering.sync_read_at, estate.now)),
                     )
                 ),

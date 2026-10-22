@@ -7,9 +7,9 @@ from .action_links import command_url
 from .finding_model import (
     Finding,
     FindingEstate,
+    FindingRemedy,
     FindingRule,
     OperatorStep,
-    Remedy,
     built_findings,
     fact_values,
 )
@@ -58,11 +58,7 @@ def _empty_group_granted(estate: FindingEstate) -> tuple[Finding, ...]:
                     "from the policy, or add the members it was meant for."
                 ),
                 evidence=tuple(("Empty group", name) for name in empty),
-                remedies=_policy_remedy(
-                    estate,
-                    "tailnet.policy.remove_empty_groups",
-                    "Remove empty groups",
-                ),
+                remedies=_policy_remedy(estate, "tailnet.policy.remove_empty_groups"),
                 steps=(
                     OperatorStep(
                         label=f"Remove {', '.join(empty)} from the policy's groups and "
@@ -102,7 +98,7 @@ def _tag_granted_to_nobody(estate: FindingEstate) -> tuple[Finding, ...]:
                     "Any device given one of them later gets that access."
                 ),
                 evidence=tuple(("Tag", tag) for tag in tags),
-                remedies=_policy_remedy(estate, "infrastructure.resource.update", "Change what HQ expects"),
+                remedies=_policy_remedy(estate, "infrastructure.resource.update"),
                 steps=(
                     OperatorStep(
                         label=f"Remove {', '.join(tags)} from the rules that name them, or tag the devices they were meant for."
@@ -113,7 +109,7 @@ def _tag_granted_to_nobody(estate: FindingEstate) -> tuple[Finding, ...]:
     return tuple(found)
 
 
-def _policy_remedy(estate: FindingEstate, capability: str, label: str) -> tuple[Remedy, ...]:
+def _policy_remedy(estate: FindingEstate, capability: str) -> tuple[FindingRemedy, ...]:
     """A policy amendment, offered when a tailnet policy is declared to amend.
 
     The capability re-derives the change from the declaration and writes it
@@ -129,15 +125,7 @@ def _policy_remedy(estate: FindingEstate, capability: str, label: str) -> tuple[
     url = command_url(capability, policy.label) if policy is not None else ""
     if not url:
         return ()
-    return (
-        Remedy(
-            capability=capability,
-            target=policy.label,
-            label=label,
-            effect="",
-            url=url,
-        ),
-    )
+    return (FindingRemedy(capability=capability, target=policy.label, url=url),)
 
 
 def _tailnet_dns_off_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:

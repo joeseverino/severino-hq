@@ -24,7 +24,7 @@ NETWORK_LABELS = {
 
 
 @dataclass(frozen=True, slots=True)
-class Source:
+class HopSource:
     """Where a hop was read: the kind, the connection, and when; or the declaration."""
 
     kind: str
@@ -59,7 +59,7 @@ class Certificate:
     name: str = ""
     issuer: str = ""
     expiry: str = ""
-    source: Source | None = None
+    source: HopSource | None = None
     unread: str = ""
     # The declaration the name is served with, when HQ holds one.
     record: str = ""
@@ -136,7 +136,7 @@ class Hop:
     name: str = ""
     link: EntityLink | None = None
     detail: str = ""
-    source: Source | None = None
+    source: HopSource | None = None
     certificate: Certificate | None = None
     unread: str = ""
     # ``(relation, link)`` for what sits over this hop: an Access application.

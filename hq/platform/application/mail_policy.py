@@ -125,7 +125,6 @@ DMARC_TAGS: tuple[PolicyTag, ...] = (
         label="For subdomains",
         kind="choice",
         default="",
-        help="Left unset, subdomains follow the rule above.",
         choices=(
             Choice("", "Same as above", "Subdomains inherit the domain's policy."),
             Choice("none", "Deliver it anyway", "Subdomains are left unprotected."),
@@ -267,15 +266,19 @@ class SpfPolicy:
 
     @property
     def default_result(self) -> str:
+        """What happens to mail from a sender the record does not list, said
+        of every sender when it lists none."""
+
+        who = "Mail from a sender not listed" if self.senders else "Mail from any sender"
         for term in reversed(self.terms):
             if term.mechanism == "all":
                 return {
-                    "-": "Anything else is rejected.",
-                    "~": "Anything else is marked as a soft failure.",
-                    "?": "Anything else is treated as neutral, so forgeries get through.",
-                    "+": "Anything else passes, so forgeries get through.",
+                    "-": f"{who} is rejected.",
+                    "~": f"{who} is marked as a soft failure.",
+                    "?": f"{who} is treated as neutral, so forgeries get through.",
+                    "+": f"{who} passes, so forgeries get through.",
                 }.get(term.qualifier, "")
-        return "No `all` term, so it says nothing about senders not listed here."
+        return "The record ends without an all term, so it says nothing about a sender it does not list."
 
 
 def parse_spf(value: str) -> SpfPolicy:
@@ -332,6 +335,11 @@ class MailSection:
     records: tuple[Any, ...] = ()
     concern: str = ""
     add_type: str = ""
+    # Its one record names no server, so it is read as what it says.
+    null_mx: bool = False
+    # Who sets its records, where a mail service does: none sets a record that
+    # says the domain takes or signs no mail.
+    source: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,7 +379,8 @@ def _senders(spf: SpfPolicy) -> str:
 
 
 def _receiving(mx: tuple[Any, ...]) -> MailSection:
-    if is_null_mx(mx):
+    null_mx = is_null_mx(mx)
+    if null_mx:
         answer = "Nobody, on purpose"
         detail = "A null MX says this domain takes no mail, so a sender is told at once instead of retrying for days."
     elif mx:
@@ -388,7 +397,36 @@ def _receiving(mx: tuple[Any, ...]) -> MailSection:
         detail=detail,
         records=mx,
         add_type="MX",
+        null_mx=null_mx,
+        source="" if null_mx else "Set by your mail service. Change these only when switching to another.",
     )
+
+
+def _revoked(record) -> bool:
+    """A DKIM record whose key is empty (RFC 6376 3.6.1): no signature under
+    its selector verifies."""
+
+    if record.record_type != "TXT":
+        return False
+    tags = (part.partition("=") for part in unquote(record.content).split(";"))
+    return any(name.strip().lower() == "p" and not value.strip() for name, _, value in tags)
+
+
+def _signing(dkim: tuple[Any, ...]) -> tuple[str, str]:
+    """What signs this domain's mail, as the card's answer and its sentence:
+    the keys by the selector each is published under."""
+
+    keys = [record for record in dkim if not _revoked(record)]
+    if keys:
+        selectors = ", ".join(record.name.split("._domainkey.", 1)[0] for record in keys)
+        words = "key" if len(keys) == 1 else "keys"
+        return counted(len(keys), "key"), f"Mail sent from this domain is signed with the {words} {selectors}."
+    if dkim:
+        return (
+            "Nothing, on purpose",
+            "The DKIM record publishes an empty key, so no signature claiming this domain verifies.",
+        )
+    return "Nothing", "No DKIM record, so nothing signs mail from this domain."
 
 
 def mail_overview(zone) -> MailOverview:
@@ -415,6 +453,7 @@ def mail_overview(zone) -> MailOverview:
     dmarc_value = dmarc_records[0].content if dmarc_records else ""
     dmarc_tags = parse_dmarc(dmarc_value) if dmarc_records else {}
     policy = dmarc_tags.get("p", "")
+    signers, signing = _signing(dkim)
 
     sections = (
         _receiving(mx),
@@ -441,13 +480,14 @@ def mail_overview(zone) -> MailOverview:
             id="signing",
             label="Signing",
             question="What proves a message really came from here?",
-            answer=(counted(len(dkim), "key") if dkim else "Nothing"),
-            detail=(
-                "These sign the mail sent from this domain."
-                if dkim
-                else "No DKIM record, so nothing signs mail from this domain."
-            ),
+            answer=signers,
+            detail=signing,
             records=dkim,
+            source=(
+                "Issued by your mail service, which also rotates the keys. HQ publishes the records."
+                if any(not _revoked(record) for record in dkim)
+                else ""
+            ),
             add_type="CNAME",
         ),
         MailSection(

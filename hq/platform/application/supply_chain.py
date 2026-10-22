@@ -11,7 +11,7 @@ check HQ could not read says so rather than failing.
 
 from typing import Any
 
-from .standards import Check, Posture, measure
+from .standards import Check, Measurement, measure
 
 
 def _attested(test):
@@ -49,6 +49,7 @@ STANDARD: tuple[Check, ...] = (
         lambda container: container.standing.pinned,
         "A tag can later point at a different image. A digest always names the same build.",
         "Pin the image by digest in the compose file.",
+        unmet="Not locked to an exact build",
     ),
     Check(
         "source-known",
@@ -56,6 +57,7 @@ STANDARD: tuple[Check, ...] = (
         _source_known,
         "Without it, no release or advisory can be matched to what runs.",
         "Name the repository it is built from in its settings in HQ.",
+        unmet="Source repository unknown",
     ),
     Check(
         "provenance",
@@ -63,6 +65,7 @@ STANDARD: tuple[Check, ...] = (
         _attested(lambda attested: bool(attested.get("provenance"))),
         "Provenance says what it was built from and on, so a rebuild or a swapped base image shows.",
         "Only its publisher can attach it.",
+        unmet="No build provenance",
     ),
     Check(
         "sbom",
@@ -70,6 +73,7 @@ STANDARD: tuple[Check, ...] = (
         _attested(lambda attested: bool(attested.get("packages"))),
         "A package list is what vulnerabilities are matched against.",
         "Only its publisher can attach it.",
+        unmet="No package list (SBOM)",
     ),
     Check(
         "no-urgent",
@@ -78,6 +82,7 @@ STANDARD: tuple[Check, ...] = (
         "It has a critical or high vulnerability in a package that has a fixed version.",
         "Upgrade to a release built with the fixed packages.",
         serious=True,
+        unmet="Has a fixable serious vulnerability",
     ),
     Check(
         "no-advisory",
@@ -86,6 +91,7 @@ STANDARD: tuple[Check, ...] = (
         "Its own project says this version is affected.",
         "Upgrade past the patched version.",
         serious=True,
+        unmet="An advisory names its version",
     ),
     Check(
         "tag-current",
@@ -93,9 +99,10 @@ STANDARD: tuple[Check, ...] = (
         _tag_current,
         "The tag was rebuilt or moved since this was pulled, often for a fix.",
         "Pull it again, or pin the new digest.",
+        unmet="The tag has moved since this build was pulled",
     ),
 )
 
 
-def supply_chain_of(container: Any) -> Posture:
+def supply_chain_of(container: Any) -> Measurement:
     return measure(container, STANDARD)

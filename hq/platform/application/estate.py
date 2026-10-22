@@ -489,7 +489,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
                 "renewal did not run."
             )
             action = "Open certificate"
-            renew = remedy_link("certificate.renew", "Renew certificate", expiry.resource_key)
+            renew = remedy_link("certificate.renew", expiry.resource_key)
             offered: dict[str, Any] = (
                 {"actions": (renew,)}
                 if renew

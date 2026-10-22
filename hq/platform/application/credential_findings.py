@@ -19,7 +19,7 @@ lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
 from .connection_lifecycle import UNREPORTED_FACT
 from .derivations import reached
-from .finding_model import THEN_READ_NOW, FindingRule, OperatorStep, built_findings, fact_values
+from .finding_model import THEN_REFRESH, FindingRule, OperatorStep, built_findings, fact_values
 from .timestamps import moment
 from .ui import counted
 lazy from .credential_mint import address_fields
@@ -69,7 +69,7 @@ def operator_steps(
         OperatorStep(
             label="Make a new token on your Mac" if command else "Make a new token",
             command=command,
-            notes=(*notes, THEN_READ_NOW),
+            notes=(*notes, THEN_REFRESH),
         ),
     )
 
@@ -120,7 +120,7 @@ def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
                 notes=(
                     *((f"{endpoint} is not the API.",) if endpoint else ()),
                     f"Set the address in the connection's 1Password item, {address_fields()}.",
-                    THEN_READ_NOW,
+                    THEN_REFRESH,
                 ),
             ),
         )
@@ -129,14 +129,14 @@ def answer_steps(node: Any) -> tuple[OperatorStep, ...]:
         return (
             OperatorStep(
                 label=f"Check that {where} is up and the controller can reach it",
-                notes=(THEN_READ_NOW,),
+                notes=(THEN_REFRESH,),
             ),
         )
     if failure in REFUSALS:
         return mint_steps(node) or (
             OperatorStep(
                 label="Replace the credential in the connection's 1Password item",
-                notes=(THEN_READ_NOW,),
+                notes=(THEN_REFRESH,),
             ),
         )
     return ()
@@ -229,7 +229,7 @@ RULES: tuple[FindingRule, ...] = (
         "A token is missing permissions",
         "attention",
         lambda estate: built_findings(missing_permissions(estate)),
-        operator_action=(f"Make a new token with the command on the connection's page. {THEN_READ_NOW}"),
+        operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
         no_help_reason=_CANNOT_ISSUE,
     ),
     FindingRule(
@@ -237,7 +237,7 @@ RULES: tuple[FindingRule, ...] = (
         "A token is expiring",
         "attention",
         lambda estate: built_findings(expiring(estate)),
-        operator_action=(f"Make a new token with the command on the connection's page. {THEN_READ_NOW}"),
+        operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
         no_help_reason=_CANNOT_ISSUE,
     ),
 )

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from .entity_links import EntityLink
-from .path_model import Hop, ServicePath, Source
+from .path_model import Hop, HopSource, ServicePath
 
 # What changing or losing a hop does to the name, by step.
 _CONSEQUENCES = {
@@ -37,7 +37,7 @@ class Dependency:
     name: str
     link: EntityLink | None
     consequence: str
-    source: Source | None = None
+    source: HopSource | None = None
 
 
 def depends_on(path: ServicePath) -> tuple[Dependency, ...]:
