@@ -14,7 +14,7 @@ socket, and the page says so as plainly as for anything else.
 from collections.abc import Mapping
 from typing import Any
 
-from .standards import Check, Posture, measure
+from .standards import Check, Measurement, measure
 lazy from .containers import by_design, socket_holders
 
 # Host paths whose write access is the machine's, not the container's: the
@@ -143,6 +143,7 @@ STANDARD: tuple[Check, ...] = (
         "A privileged container is root on its machine: every device and every kernel capability.",
         "Remove privileged mode and add only the capability it needs.",
         serious=True,
+        unmet="Runs privileged",
     ),
     Check(
         "no-docker-socket",
@@ -151,6 +152,7 @@ STANDARD: tuple[Check, ...] = (
         "Anything holding the Docker socket can start a container as root with any mount, even when the socket is mounted read-only.",
         "Put a socket proxy that allows only the calls it needs between it and the socket.",
         serious=True,
+        unmet="Holds the Docker socket",
     ),
     Check(
         "own-process-namespace",
@@ -159,6 +161,7 @@ STANDARD: tuple[Check, ...] = (
         "Sharing the host's process namespace lets it see and signal every process on the machine.",
         "Remove the host PID mode.",
         serious=True,
+        unmet="Shares the host's process list",
     ),
     Check(
         "confined",
@@ -167,6 +170,7 @@ STANDARD: tuple[Check, ...] = (
         "An unconfined container can make any system call the kernel offers.",
         "Remove the unconfined security option.",
         serious=True,
+        unmet="Not confined by seccomp and AppArmor",
     ),
     Check(
         "no-system-path-writable",
@@ -175,6 +179,7 @@ STANDARD: tuple[Check, ...] = (
         "A writable mount of a system path is a way to change the machine from inside the container.",
         "Mount it read-only, or mount only the one file it needs.",
         serious=True,
+        unmet="Can write a system path",
     ),
     Check(
         "no-powerful-capability",
@@ -183,6 +188,7 @@ STANDARD: tuple[Check, ...] = (
         "Some capabilities (SYS_ADMIN, NET_ADMIN, SYS_PTRACE and the like) give it nearly everything root on the machine has.",
         "Drop the capability, or narrow it to the one operation it needs.",
         serious=True,
+        unmet="Has an extra kernel capability",
     ),
     Check(
         "not-root",
@@ -190,6 +196,7 @@ STANDARD: tuple[Check, ...] = (
         _on(lambda runtime: str(runtime.get("user", "")) not in ROOT_USERS),
         "A process running as root inside a container becomes root on the machine if it escapes.",
         "Set a non-root user in the compose file, or use an image that runs as one.",
+        unmet="Runs as root",
     ),
     Check(
         "no-new-privileges",
@@ -202,6 +209,7 @@ STANDARD: tuple[Check, ...] = (
         ),
         "Without it, a setuid program inside the container can gain more privileges.",
         "Add no-new-privileges:true to its security options.",
+        unmet="Can gain privileges",
     ),
     Check(
         "no-devices",
@@ -209,6 +217,7 @@ STANDARD: tuple[Check, ...] = (
         _on(lambda runtime: not runtime.get("devices")),
         "A passed-through device is direct access to that hardware.",
         "Remove the device unless the service cannot work without it.",
+        unmet="Has a host device",
     ),
     Check(
         "own-network",
@@ -216,6 +225,7 @@ STANDARD: tuple[Check, ...] = (
         _on(lambda runtime: runtime.get("network_mode") != "host"),
         "On the host network, every port it opens is the machine's, on every interface.",
         "Give it a bridge network and publish only the ports it serves.",
+        unmet="On the host network",
     ),
     Check(
         "ports-bound",
@@ -223,6 +233,7 @@ STANDARD: tuple[Check, ...] = (
         _on(_bound_to_an_address),
         "A port published on every interface is reachable from every network the machine is on.",
         "Publish it on the address it is meant to be reached at, 127.0.0.1 behind a proxy.",
+        unmet="Publishes a port on every interface",
     ),
     Check(
         "memory-limited",
@@ -230,6 +241,7 @@ STANDARD: tuple[Check, ...] = (
         _on(lambda runtime: bool(runtime.get("memory_limit"))),
         "Without a limit, one runaway container can take the machine's memory from every other.",
         "Set a memory limit in the compose file.",
+        unmet="No memory limit",
     ),
     Check(
         "health-checked",
@@ -237,11 +249,12 @@ STANDARD: tuple[Check, ...] = (
         _health_checked,
         "Without a check, HQ can only see that it is running, and cannot tell whether an upgrade worked.",
         "Add a health check to the compose file, or serve it under a name HQ checks.",
+        unmet="No health check",
     ),
 )
 
 
-def posture_of(container: Any) -> Posture:
+def posture_of(container: Any) -> Measurement:
     return measure(container, STANDARD, by_design().get((container.machine.name, container.running.name)))
 
 

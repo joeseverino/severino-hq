@@ -25,7 +25,7 @@ from .whereabouts import Origin
 
 
 @dataclass(frozen=True, slots=True)
-class Reading:
+class ResourceFact:
     """One fact about a resource: what HQ asked for, and what was found.
 
     ``desired`` is blank where the operator authors nothing: a certificate's
@@ -61,7 +61,7 @@ class Claim:
     resource_key: str
     kind: str
     health: dict[str, str]
-    readings: tuple[Reading, ...] = ()
+    readings: tuple[ResourceFact, ...] = ()
     # Whether the provider answers for the name itself (its ``fronts``).
     fronted: bool = False
     # What tells this claim from another of its kind that would not replace it
@@ -314,7 +314,7 @@ def _fronted(provider: Any, resource: ManagedResource) -> bool:
         return False
 
 
-def _readings(provider: Any, resource: ManagedResource) -> tuple[Reading, ...]:
+def _readings(provider: Any, resource: ManagedResource) -> tuple[ResourceFact, ...]:
     """What this resource actually does, as its own provider describes it.
 
     Read from the authored spec rather than the resolved one: these are shown
@@ -330,7 +330,7 @@ def _readings(provider: Any, resource: ManagedResource) -> tuple[Reading, ...]:
     except KeyError, TypeError, ValueError:
         return ()
     return tuple(
-        Reading(label=label, desired=str(desired or ""), observed=str(observed or ""))
+        ResourceFact(label=label, desired=str(desired or ""), observed=str(observed or ""))
         for label, desired, observed in rows
         if desired or observed
     )

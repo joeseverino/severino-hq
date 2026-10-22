@@ -21,9 +21,9 @@ lazy from hq.platform.application.routes import reverse
 from .facts import inventory_records
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
+    FindingRemedy,
     FindingRule,
     OperatorStep,
-    Remedy,
     built_findings,
     cannot_run_commands,
     machine_step,
@@ -178,10 +178,10 @@ def unrecognized_containers(estate: Any) -> tuple[dict[str, Any], ...]:
                     ),
                     "evidence": (("Container", name), ("Machine", node.label)),
                     "remedies": (
-                        Remedy(
+                        FindingRemedy(
                             capability="infrastructure.resource.create",
                             target=name,
-                            label="Adopt it",
+                            intent="Adopt it",
                             effect="HQ starts watching it like any other container.",
                             url=adopt_url,
                             method="POST",
@@ -274,7 +274,7 @@ def _recreate(container: str, service: str, host: str) -> tuple:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "unrecognized-container",
-        "A container no compose project started",
+        "Container started outside compose",
         "serious",
         lambda estate: built_findings(unrecognized_containers(estate)),
         operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),

@@ -362,6 +362,6 @@ class ReadableValueTests(TestCase):
             readable("2026-09-20T22:08:26.284763+00:00"),
             when("2026-09-20T22:08:26.284763+00:00"),
         )
-        self.assertIn("Sep 20", readable("2026-09-20T22:08:26.284763+00:00"))
+        self.assertIn("Sep\xa020", readable("2026-09-20T22:08:26.284763+00:00"))
         self.assertEqual(readable("2d"), "2d")
         self.assertEqual(readable("Tailnet"), "Tailnet")

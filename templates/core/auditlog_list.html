@@ -1,42 +1,45 @@
 {% extends "list_page.html" %}
 {% comment %}
-One history. Each row is an application.history.Entry: one audit event, a run
+One history. Each row is an application.history.HistoryLine: one audit event, a run
 of like events shown as one line whose events the row's toggle lists, or a
 moment another source dated (a deploy, a container start). What a row names
 reads as an identifier where it is one (`readout`, cut at the region's cap);
 what a row says is text that breaks wherever it must (`cell-data`). The
 operation an event belongs to is an identifier too, so it waits for the open
 row rather than holding the Message column at an identifier's width.
+On a phone only What and When stay, so there What's second line says what
+happened, in the action's own word (`narrow-only`); wider, the Action column
+says it.
 {% endcomment %}
 {% block row %}
   {% if row.moment %}
-    <td class="muted date-col row-gutter">{% if row.moment.external %}<a href="{{ row.moment.url }}" rel="noopener">{{ row.at|when }}</a>{% else %}{{ row.at|when }}{% endif %}{% row_toggle %}</td>
-    <td>{{ row.moment.actor }}</td>
-    <td><span class="pill">{{ row.moment.source }}</span></td>
-    <td class="cell-data">{{ row.moment.title }}</td>
-    <td class="muted cell-data">{{ row.moment.detail }}</td>
+    <td class="cell-data row-gutter">{% if row.moment.external %}<a href="{{ row.moment.url }}" rel="noopener"><strong>{{ row.moment.title|breakable }}</strong></a>{% else %}<strong>{{ row.moment.title|breakable }}</strong>{% endif %}{% row_toggle %}</td>
+    <td class="muted date-col">{{ row.at|when }}</td>
+    <td>{{ row.moment.actor|breakable }}</td>
+    <td><span class="pill">{{ row.moment.source|breakable }}</span></td>
+    <td class="muted cell-data">{{ row.moment.detail|breakable }}</td>
   {% elif row.grouped %}
     {% with first=row.events.0 %}
-    <td class="muted date-col row-gutter"><a href="{% url 'core:audit_detail' first.pk %}">{{ row.at|when }}</a>{% row_toggle %}</td>
-    <td>{{ first.actor_label }}</td>
-    <td><span class="pill pill-{{ first.action }}">{{ first.get_action_display }}</span></td>
-    <td>
-      {{ row.title }}
+    <td class="row-gutter">
+      <a href="{% url 'core:audit_detail' first.pk %}"><strong>{{ row.title|breakable }}</strong></a>{% row_toggle %}<span class="narrow-only"><br><span class="muted">{{ first.get_action_display|breakable }}</span></span>
       <ul class="history-run-list row-below">
         {% for event in row.events %}
         <li><a href="{% url 'core:audit_detail' event.pk %}">{{ event.object_repr|default:event.type_label|readout }}</a></li>
         {% endfor %}
       </ul>
     </td>
-    <td class="muted cell-data">{{ first.message }}</td>
+    <td class="muted date-col">{{ row.at|when }}</td>
+    <td>{{ first.actor_label|breakable }}</td>
+    <td><span class="pill pill-{{ first.action }}">{{ first.get_action_display|breakable }}</span></td>
+    <td class="muted cell-data">{{ first.message|breakable }}</td>
     {% endwith %}
   {% else %}
     {% with event=row.event %}
-    <td class="muted date-col row-gutter"><a href="{% url 'core:audit_detail' event.pk %}">{{ event.created_at|when }}</a>{% row_toggle %}</td>
-    <td>{{ event.actor_label }}</td>
-    <td><span class="pill pill-{{ event.action }}">{{ event.get_action_display }}</span></td>
-    <td>{{ event.object_repr|default:event.type_label|readout }}{% if event.object_type and event.object_repr %}<br><span class="muted">{{ event.type_label }}</span>{% endif %}</td>
-    <td class="muted cell-data">{{ event.message }}{% if event.operation_id %} <code class="row-more">{{ event.operation_id|breakable }}</code>{% endif %}</td>
+    <td class="row-gutter"><a href="{% url 'core:audit_detail' event.pk %}"><strong>{{ event.object_repr|default:event.type_label|readout }}</strong></a>{% row_toggle %}{% if event.object_type and event.object_repr %}<br><span class="muted">{{ event.type_label|breakable }}<span class="narrow-only"> · {{ event.get_action_display|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ event.get_action_display|breakable }}</span></span>{% endif %}</td>
+    <td class="muted date-col">{{ event.created_at|when }}</td>
+    <td>{{ event.actor_label|breakable }}</td>
+    <td><span class="pill pill-{{ event.action }}">{{ event.get_action_display|breakable }}</span></td>
+    <td class="muted cell-data">{{ event.message|breakable }}{% if event.operation_id %} <code class="row-more">{{ event.operation_id|breakable }}</code>{% endif %}</td>
     {% endwith %}
   {% endif %}
 {% endblock %}

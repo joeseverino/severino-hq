@@ -22,12 +22,14 @@ from django.urls import include, path, reverse
 from django.utils import timezone
 
 from hq.config.urls import urlpatterns as host_urlpatterns
+from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
-from hq.platform.application import scheduled_work
+from hq.platform.application import outbound_work, scheduled_work
 from hq.platform.application.capabilities import capability_registry, execute_capability
+from hq.platform.application.integration_specs import requested
 from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
 from hq.platform.application.plugins import PluginIntegration, clear_plugin_composition_cache
-from hq.platform.application.security import Principal, cli_principal
+from hq.platform.application.security import Principal, cli_principal, internal_principal
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
 from hq_sdk.outbound import Failed, ask, run_now
@@ -200,7 +202,7 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
             self.assertEqual((again.status_code, again.json()["status"]), (202, first["status"]))
             # Another subject is told, and nothing is queued behind the first.
             self.assertEqual((other.status_code, other.json()["state"]), (200, "failed"))
-            self.assertEqual(other.json()["note"], "Look up is already running.")
+            self.assertEqual(other.json()["note"], outbound_work.ANOTHER_RUNNING)
             self.assertEqual(Job.objects.count(), 1)
             held.run()
 
@@ -351,6 +353,19 @@ class DeclarationTests(SimpleTestCase):
         ):
             outbound_work.declared_work()
 
+    def test_an_extension_cannot_declare_work_the_host_declares(self):
+        from hq.platform.application import outbound_work
+        from hq.platform.application.projects import REFRESH
+
+        integration = PluginIntegration(outbound=lambda: (self.work(name=REFRESH),))
+        outbound_work.clear_outbound_work_cache()
+        self.addCleanup(outbound_work.clear_outbound_work_cache)
+        with (
+            mock.patch("hq.platform.application.plugins.installed_integrations", return_value=((None, integration),)),
+            self.assertRaisesMessage(ImproperlyConfigured, f"Duplicate outbound work {REFRESH!r}"),
+        ):
+            outbound_work.declared_work()
+
     def test_failed_is_a_sentence_and_not_a_fault(self):
         self.assertEqual(str(Failed("The registry lists nothing.")), "The registry lists nothing.")
 
@@ -432,3 +447,51 @@ class CadenceDeclarationTests(SimpleTestCase):
 
     def test_a_cadence_is_accepted_for_work_about_no_record(self):
         self.assertEqual(validate(self.declared(every=timedelta(days=1))).every, timedelta(days=1))
+
+
+class JobWordingTests(ComposedExample):
+    """What HQ says about a job is said in the words the work declares.
+
+    A label names the work ("Refresh a project"), so a sentence with one as
+    its subject reads wrong; the answer to an ask is the one requested form of
+    its button's words. Every piece of work the composition declares, the
+    host's and the example extension's, is driven through each thing HQ says
+    of it: asked for, asked for while it runs, and its ending in the audit log.
+    """
+
+    def declared(self):
+        works = outbound_work.declared_work().values()
+        self.assertIn(example.LOOKUP, {work.name for work in works})
+        return works
+
+    def test_an_ask_is_answered_in_the_works_own_words(self):
+        principal = internal_principal("test")
+        with mock.patch.object(outbound_work, "_refusal", return_value=""):
+            for work in self.declared():
+                with self.subTest(work.name), held_jobs():
+                    started = outbound_work.request_work(work, "one", principal=principal)
+                    again = outbound_work.request_work(work, "one", principal=principal)
+                    other = outbound_work.request_work(work, "two", principal=principal)
+                    Job.objects.all().delete()
+                self.assertEqual(started["message"], requested(work.words, "one"))
+                for answer in (again, other):
+                    self.assertNotIn(work.label, answer["message"])
+                self.assertTrue(started["started"])
+                self.assertFalse(again["started"] or other["started"])
+
+    def test_scheduled_work_already_running_is_answered_without_its_label(self):
+        for work in scheduled_work.SCHEDULED:
+            with self.subTest(work.name):
+                Job.objects.create(kind=work.name, label=work.label, state=Job.State.RUNNING)
+                answer = scheduled_work.run(work.name)
+                Job.objects.all().delete()
+                self.assertEqual(answer["state"], "running")
+                self.assertNotIn(work.label, answer["note"])
+
+    def test_the_audit_log_titles_an_ending_with_the_label(self):
+        labels = [work.label for work in (*self.declared(), *scheduled_work.SCHEDULED)]
+        for label in labels:
+            with self.subTest(label):
+                job = runner.run("example.wording", label, lambda progress: {})
+                ended = AuditLog.objects.get(operation_id=str(job.pk), action=AuditLog.Action.IMPORTED)
+                self.assertTrue(ended.message.startswith(f"{label}: "), ended.message)

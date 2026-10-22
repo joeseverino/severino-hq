@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from hq.platform.core.models import AuditLog
 
-from ..capabilities import execute_capability
+from ..capabilities import capability_registry, execute_capability
 from ..denials import LABEL, record_denial
 from ..security import Capability, Principal
 
@@ -34,6 +34,9 @@ class AuthenticatedRefusalTests(TestCase):
         self.assertEqual(row.metadata["capability"], "project.create")
         self.assertTrue(row.metadata["authenticated"])
         self.assertEqual(row.actor_label, "example-agent")
+        # The log says what was refused as its button does.
+        self.assertIn(capability_registry()["project.create"].title, row.message)
+        self.assertNotIn("project.create", row.message)
 
     def test_every_authenticated_refusal_gets_its_own_row(self):
         for _ in range(3):

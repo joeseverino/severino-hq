@@ -176,14 +176,16 @@ class ComposedQueueTests(TestCase):
 
     def test_the_card_row_reads_in_the_same_order_as_the_bar(self):
         ContentItem.objects.create(title="Half-written", slug="half-written", status=ContentItem.Status.DRAFT)
-        Project.objects.create(name="Live", slug="live", status=Project.Status.ACTIVE)
+        Project.objects.create(
+            name="Live", slug="live", repository_url="https://github.com/example/live", dependency_updates=True
+        )
 
         cards = domain_dashboard_cards()
         labels = [card["label"] for card in cards]
 
         # Build (100) before Web (110), matching the nav, so the row does not
         # tell a different story about what matters than the bar above it.
-        self.assertLess(labels.index("Active projects"), labels.index("Drafts"))
+        self.assertLess(labels.index("Open updates"), labels.index("Drafts"))
 
     def test_extension_items_share_the_queue_with_host_items(self):
         """An extension on fire has to be visible on the page that lists work.

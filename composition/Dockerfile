@@ -10,11 +10,24 @@
 # The host image, by digest: compose.yml passes it after verifying its
 # signature. The default has no shell or users, so a build without it fails.
 ARG HQ_IMAGE=scratch
-# The installer uses the same Python ABI as HQ. uv is pinned to the toolchain
-# version and to the Linux amd64 image digest used by the composition runner.
-FROM ghcr.io/astral-sh/uv:0.13.4@sha256:9f130421e930bfbdc563c00740466603f8723158e90297d07957c2294640262b AS uv
+# uv at the release mise.toml pins, installed by mise from mise.lock, which
+# refuses a download whose checksum differs from it (as the host image's
+# tools stage does).
+FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS tools
+RUN apt-get update && apt-get install -y --no-install-recommends curl minisign \
+    && rm -rf /var/lib/apt/lists/*
+ENV MISE_LOCKED=1 \
+    MISE_TRUSTED_CONFIG_PATHS=/tools
+WORKDIR /tools
+COPY .github/actions/toolchain/mise-version.sh .github/actions/toolchain/install-mise.sh ./bin/
+COPY mise.toml mise.lock ./
+RUN bin/install-mise.sh mise.toml /usr/local/bin/mise \
+    && mise install uv \
+    && install -D "$(mise which uv)" /opt/bin/uv
+
+# The installer uses the same Python ABI as HQ.
 FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS installer-base
-COPY --from=uv /uv /usr/local/bin/uv
+COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # Every wheel an installer of this base installs carries its bytecode, as the
 # host's own packages do: the image is read-only to the account HQ runs as.
 ENV UV_COMPILE_BYTECODE=1

@@ -292,16 +292,34 @@
           "target_query=",
           "execution_notes=",
           "target_initial_fields=",
-          "label="
+          "label=",
+          "verb=",
+          "variants="
         ],
         "fields": [],
         "kind": "dataclass",
         "members": {
+          "requested": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "subject=",
+              "*",
+              "again="
+            ]
+          },
           "required_capabilities": {
             "kind": "property"
           },
           "title": {
             "kind": "property"
+          },
+          "words": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "variant="
+            ]
           }
         }
       },
@@ -660,12 +678,16 @@
           "refuse=",
           "effect=",
           "execution_notes=",
-          "every="
+          "every=",
+          "verb="
         ],
         "fields": [],
         "kind": "dataclass",
         "members": {
           "takes_subject": {
+            "kind": "property"
+          },
+          "words": {
             "kind": "property"
           }
         }
@@ -676,7 +698,6 @@
           "name",
           "subject=",
           "*",
-          "label=",
           "title=",
           "refresh=",
           "primary=",
@@ -1834,7 +1855,8 @@
           "url=",
           "external=",
           "status=",
-          "badge="
+          "badge=",
+          "at="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2140,7 +2162,8 @@
           "capability=",
           "target=",
           "reason=",
-          "recommended="
+          "recommended=",
+          "refusal="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2807,7 +2830,8 @@
         "parameters": [
           "link",
           "code=",
-          "label="
+          "label=",
+          "mark="
         ]
       },
       "post_button": {

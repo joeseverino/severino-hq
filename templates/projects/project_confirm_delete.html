@@ -1,4 +1,4 @@
 {% extends "confirm_page.html" %}
 {% block consequences %}
-<p>Deletes <strong>{{ project.name }}</strong> for good. Its expenses, assets and writeups stay, without the link.</p>
+<p>Deletes <strong>{{ project.name|breakable }}</strong> for good. Its expenses, assets and writeups stay, without the link.</p>
 {% endblock %}

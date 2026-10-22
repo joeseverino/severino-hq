@@ -35,7 +35,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from tools.gate.verdict import Step, run, verdict
+from tools.gate.verdict import Step, close, run
 from tools.pipeline.ci_report import GitHub as API, GitHubError
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -384,12 +384,12 @@ def main() -> int:
         print(f"  {status:<8} {step.label}")
     failed = [step for status, step in summary.rows if status == "FAILED"]
     if failed:
-        print(verdict("preflight", started, failed) + ": NOT READY")
+        close("preflight", started, failed, failed=": NOT READY")
         return 1
     if any(status != "passed" for status, _ in summary.rows):
         print("[preflight] HOST NOT VERIFIED. Every other gate passed; this is not a release verdict.")
         return 2
-    print(verdict("preflight", started, [step for _, step in summary.rows], passed=": READY"))
+    close("preflight", started, [step for _, step in summary.rows], passed=": READY")
     return 0
 
 

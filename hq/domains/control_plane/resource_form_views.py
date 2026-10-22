@@ -14,6 +14,7 @@ from hq.platform.application.adoption import (
     adopt,
     adopt_service,
 )
+from hq.platform.application.asks import APPLIES_SHORTLY
 from hq.platform.application.certificates import (
     CertificateError,
     UploadCertificateCommand,
@@ -37,7 +38,6 @@ from hq.platform.application.provider_forms import (
     spec_form_class,
 )
 from hq.platform.application.record_errors import RecordNotFound
-from hq.platform.application.resource_context import readout_rows
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.core import secrets
@@ -46,7 +46,7 @@ from .models import ManagedResource, OperationRequest
 from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
 from .provider_spec import NameContext
-from .providers import PROVIDERS, controller_action_policy, describe_providers, spec_withheld
+from .providers import PROVIDERS, controller_action_policy, describe_providers, readout_rows, spec_withheld
 
 
 class ResourceFormView(View):
@@ -212,8 +212,7 @@ class ResourceFormView(View):
                 return redirect("control_plane:upload_certificate", key=saved)
         messages.success(
             request,
-            f"{'Added' if result['created'] else 'Updated'} “{saved}”. "
-            "The controller applies it within about a minute.",
+            f"{'Added' if result['created'] else 'Updated'} “{saved}”. {APPLIES_SHORTLY}",
         )
         # Back where the operator was working. Publishing a service
         # takes two or three declarations, and landing on each one's
@@ -235,7 +234,7 @@ def _form_page(kind: str, resource) -> dict:
 def _apply_note(kind: str) -> str:
     """What actually happens after saving, which is not the same for every kind.
 
-    Most resources are applied at the provider within about a minute. A kind
+    Most resources are applied at the provider soon after. A kind
     whose actions are locked is not: a domain declaration records what HQ is
     responsible for and changes nothing. The capability registry's own reason
     is the honest answer, and it is written once, there.
@@ -243,7 +242,7 @@ def _apply_note(kind: str) -> str:
 
     applies, explanation = controller_action_policy(kind, OperationRequest.Action.RECONCILE)
     if applies:
-        return "The controller applies it within about a minute."
+        return APPLIES_SHORTLY
     return explanation
 
 
@@ -507,8 +506,7 @@ class CertificateUploadView(View):
             else:
                 messages.success(
                     request,
-                    f"Stored a certificate for {', '.join(stored['domains'])}. "
-                    "The controller installs it within a few minutes.",
+                    f"Stored a certificate for {', '.join(stored['domains'])}. {APPLIES_SHORTLY}",
                 )
                 return redirect("control_plane:detail", key=resource.key)
         return render(

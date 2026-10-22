@@ -5,7 +5,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
-from django.db.models import Q, QuerySet, Sum
+from django.core.exceptions import FieldDoesNotExist
+from django.db import models
+from django.db.models import Model, Q, QuerySet, Sum
 
 lazy from hq.platform.application.search import apply_search
 
@@ -39,14 +41,43 @@ COLUMN_KINDS = ("prose", "identifier", "numeric", "status", "control")
 _KIND_OF_CLASS = {"num-col": "numeric", "date-col": "status", "actions-col": "control", "row-actions": "control"}
 
 
-def column_kind(kind: str, css: str) -> str:
-    """The column's kind: the one declared, else the one its classes say, else prose."""
+def column_kind(kind: str, css: str, otherwise: str = "prose") -> str:
+    """The column's kind: the one declared, else the one its classes say, else ``otherwise``."""
 
     if kind:
         if kind not in COLUMN_KINDS:
             raise ValueError(f"A column holds {', '.join(COLUMN_KINDS)}, never {kind!r}.")
         return kind
-    return next((_KIND_OF_CLASS[name] for name in css.split() if name in _KIND_OF_CLASS), "prose")
+    return next((_KIND_OF_CLASS[name] for name in css.split() if name in _KIND_OF_CLASS), otherwise)
+
+
+_STATUS_FIELDS = (models.BooleanField, models.DateField, models.TimeField, models.DurationField)
+_NUMERIC_FIELDS = (models.IntegerField, models.FloatField, models.DecimalField)
+
+
+def field_kind(model: type[Model] | None, path: str) -> str:
+    """The kind of what a model field holds, followed along ``a__b``: a choice,
+    a flag or a time is a status, a number is numeric, anything else (or a
+    name no field answers to, such as an annotation) is prose."""
+
+    field = None
+    for name in path.split("__") if model and path else ():
+        try:
+            field = model._meta.get_field(name)
+        except FieldDoesNotExist:
+            return "prose"
+        model = field.related_model
+    if field is None or field.is_relation:
+        return "prose"
+    if field.choices or isinstance(field, _STATUS_FIELDS):
+        return "status"
+    return "numeric" if isinstance(field, _NUMERIC_FIELDS) else "prose"
+
+
+def typed(columns: tuple[TableColumn, ...], model: type[Model] | None) -> tuple[TableColumn, ...]:
+    """The columns, each that declares no kind given the kind of the field it sorts by."""
+
+    return tuple(column if column.kind else replace(column, kind=field_kind(model, column.sort)) for column in columns)
 
 
 def check_drop(drop: int, css: str, label: str) -> None:
@@ -110,14 +141,16 @@ class TableColumn:
     # Classes for the heading. ``key-col`` keeps the column at every width;
     # what a narrow box lets go is listed when a row is expanded.
     css: str = ""
-    # One of ``COLUMN_KINDS``; left empty, it follows from ``css``.
+    # One of ``COLUMN_KINDS``; left empty, it follows from ``css``, else from
+    # the model field the column sorts by (``typed``), so a list declares it
+    # only where neither says.
     kind: str = ""
     # The order a narrow table lets the column go in, 1 first; 0 keeps it.
     # Never on the column that names the row or on a key column.
     drop: int = 0
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "kind", column_kind(self.kind, self.css))
+        object.__setattr__(self, "kind", column_kind(self.kind, self.css, otherwise=""))
         check_drop(self.drop, self.css, self.label)
 
     def sorts(self) -> tuple[TableSort, ...]:
@@ -302,10 +335,8 @@ class TableListMixin:
             ),
             "toggles": toggles,
             # A rank says when a column leaves; with no count it never would.
-            "columns": (
-                ranked(self.table_columns)
-                if self.table_drop_mid or self.table_drop_narrow
-                else named_first(self.table_columns)
+            "columns": (ranked if self.table_drop_mid or self.table_drop_narrow else named_first)(
+                typed(self.table_columns, getattr(self, "model", None))
             ),
             "drop": {"mid": self.table_drop_mid, "narrow": self.table_drop_narrow},
             "room": self.table_room,
@@ -316,7 +347,7 @@ class TableListMixin:
             "empty_why": self.table_empty_why,
             "empty_remedy": self.table_empty_remedy,
             "empty_link": self.get_table_empty_remedy(),
-            "clear": Remedy("Clear the search and filters", "?"),
+            "clear": Remedy("Clear filters", "?"),
         }
 
     def table_totals_for(self, queryset: QuerySet[Any]) -> dict[str, Any]:

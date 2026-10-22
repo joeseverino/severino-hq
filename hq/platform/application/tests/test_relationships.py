@@ -23,7 +23,7 @@ from ..services import service_or_prospect
 from ..tailnet import TAILNET_KIND
 from ..topology import relation_graph
 from ..topology_model import READING_RANKS, RELATIONS
-from .markup import hrefs
+from .markup import hrefs, text
 from .test_hq_self import SITE, declare, own
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
@@ -447,11 +447,11 @@ class NoUnlinkedNamesTests(TestCase):
         parser = _Mentions()
         parser.feed(main)
         found = []
-        for text, linked in parser.runs:
+        for run, linked in parser.runs:
             found.extend(
-                (name, text.strip()[:80])
+                (name, run.strip()[:80])
                 for name in self.NAMES
-                if re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", text) and not linked
+                if re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", run) and not linked
             )
         return found
 
@@ -483,7 +483,7 @@ class NoUnlinkedNamesTests(TestCase):
         domain = self.client.get(reverse("zones:detail", args=["example.com"]))
 
         self.assertContains(machine, entity_link("connection", "example-tailnet").url)
-        self.assertContains(service, "example-gate-0")
+        self.assertIn("example-gate-0", text(service))
         self.assertContains(
             domain,
             f'href="https://dash.cloudflare.com/{ACCOUNT}/pages/view/example-site"',

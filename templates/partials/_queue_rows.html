@@ -19,32 +19,33 @@ dismissed row is its title and the way back.
   <td class="queue-mark row-gutter">{% row_toggle %}</td>
   <td class="queue-what">
     <div class="attention-head">
-      {% if item.href and not here %}<a class="attention-title" href="{{ item.href }}">{{ item.label }}</a>{% else %}<span class="attention-title">{{ item.label }}</span>{% endif %}
+      {% if item.href and not here %}<a class="attention-title" href="{{ item.href }}">{{ item.label|breakable }}</a>{% else %}<span class="attention-title">{{ item.label|breakable }}</span>{% endif %}
       {% if not item.aside %}{% include "partials/_urgency_pill.html" with item=item mark=True only %}{% endif %}
       {% if not item.aside %}{% if item.since or item.observed_at or not grouped %}
       <span class="attention-meta">
-        {% if not grouped %}<span>{{ item.source }}</span>{% endif %}
+        {% if not grouped %}<span>{{ item.source|breakable }}</span>{% endif %}
         {% if item.since %}<span>Since {{ item.since|when:"day" }}</span>{% endif %}
         {% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %}
       </span>
       {% endif %}{% endif %}
     </div>
     {% if not item.aside %}
-      {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
+      {% if item.detail %}<p class="attention-detail">{{ item.detail|breakable }}</p>{% endif %}
       {% if item.detail or item.facts or item.advice or item.steps or item.reason or item.links %}
       <div class="row-below queue-more">
-        {% if item.detail %}<p class="queue-meaning">{{ item.detail }}</p>{% endif %}
+        {% if item.detail %}<p class="queue-meaning">{{ item.detail|breakable }}</p>{% endif %}
         {% if item.facts %}{% include "partials/_facts.html" with facts=item.facts only %}{% endif %}
-        {% if item.advice %}<p class="attention-advice">{{ item.advice }}</p>{% endif %}
+        {% if item.advice %}<p class="attention-advice">{{ item.advice|breakable }}</p>{% endif %}
         {% include "partials/_resolution_workflow.html" with steps=item.steps label=item.label only %}
-        {% if item.reason %}<p class="attention-reason">{{ item.reason }}</p>{% endif %}
-        {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}<a class="icon-link" href="{{ link.url }}" data-tip="{{ link.label }}">{% include "partials/_icon.html" with name=icon only %}<span class="visually-hidden">{{ link.label }}</span></a>{% else %}<a href="{{ link.url }}">{{ link.label }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
+        {% if item.reason %}<p class="attention-reason">{{ item.reason|breakable }}</p>{% endif %}
+        {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}<a class="icon-link" href="{{ link.url }}" data-tip="{{ link.label }}">{% include "partials/_icon.html" with name=icon only %}<span class="visually-hidden">{{ link.label|breakable }}</span></a>{% else %}<a href="{{ link.url }}">{{ link.label|breakable }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
       </div>
       {% endif %}
     {% endif %}
   </td>
   <td class="queue-act">
-    {% if item.actions and not item.aside %}<div class="attention-actions narrow-more">{% include "partials/_action_links.html" with actions=item.actions|slice:":2" only %}</div>{% if item.actions|length > 2 %}<div class="attention-actions narrow-more queue-later">{% include "partials/_action_links.html" with actions=item.actions|slice:"2:" only %}</div>{% endif %}{% endif %}
+    {% if item.actions and not item.aside or triage %}<div class="queue-buttons">{% endif %}
+    {% remedies item.actions as shown %}{% if shown and not item.aside %}<div class="attention-actions narrow-more">{% include "partials/_action_links.html" with actions=shown|slice:":2" only %}</div>{% if shown|length > 2 %}<div class="attention-actions narrow-more queue-later">{% include "partials/_action_links.html" with actions=shown|slice:"2:" only %}</div>{% endif %}{% endif %}
     {% if triage %}
     <div data-triage>
       {% if item.aside %}
@@ -56,6 +57,7 @@ dismissed row is its title and the way back.
       {% endif %}
     </div>
     {% endif %}
+    {% if item.actions and not item.aside or triage %}</div>{% endif %}
   </td>
 </tr>
 {% endwith %}{% endfor %}

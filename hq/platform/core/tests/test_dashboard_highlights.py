@@ -15,7 +15,7 @@ from hq.platform.application.drawings import Dot, Dots, Trend
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.tests.markup import all_elements, elements, hrefs, links, select, text, with_class
-from hq.platform.application.ui import DomainOverview, Kpi
+from hq.platform.application.ui import ChartSeries, DomainOverview, Kpi, stacked_bar_chart
 
 SHAPES = frozenset({"circle", "line", "path", "polyline", "rect"})
 
@@ -39,6 +39,12 @@ def contributor(number, *, overview=None):
                         "id": f"example-{number}-b",
                         "label": "Second",
                         "value": 2,
+                        "url": "/",
+                    },
+                    {
+                        "id": f"example-{number}-c",
+                        "label": "Third",
+                        "value": 3,
                         "url": "/",
                     },
                 )
@@ -70,6 +76,7 @@ class DashboardHighlightTests(SimpleTestCase):
             (
                 Kpi("Recent work", 12, "Through Aug 21, 2026", "/example/"),
                 Kpi("Another reading", 3),
+                Kpi("A third reading", 4),
             ),
         )
         domain = contributor(1, overview=Mock(return_value=overview))
@@ -110,6 +117,33 @@ class DashboardHighlightTests(SimpleTestCase):
         overview.assert_not_called()
         self.assertFalse(result["highlights"])
         self.assertEqual(len(result["compact"]), 1)
+
+    def highlights_of(self, domain):
+        with (
+            patch("hq.platform.application.domains.all_domains", return_value=(domain,)),
+            patch("hq.platform.application.dashboard.all_domains", return_value=(domain,)),
+            uncached(),
+        ):
+            return dashboard_highlights()
+
+    def test_two_figures_read_in_the_strip_rather_than_beside_a_cards_rows(self):
+        domain = contributor(1)
+        domain.integration.dashboard.return_value = domain.integration.dashboard.return_value[:2]
+        result = self.highlights_of(domain)
+
+        self.assertFalse(result["highlights"])
+        self.assertEqual([card["label"] for card in result["compact"]], ["First", "Second"])
+
+    def test_an_overview_counts_its_own_figures_and_a_chart_holds_a_card(self):
+        short = DomainOverview("Example", "/example/", (Kpi("One", 1), Kpi("Two", 2)))
+        charted = DomainOverview(
+            "Example",
+            "/example/",
+            (Kpi("One", 1),),
+            (stacked_bar_chart("Example", "", ("One",), (ChartSeries("Example", (1,), 1),), unit="units"),),
+        )
+        self.assertFalse(self.highlights_of(contributor(1, overview=Mock(return_value=short)))["highlights"])
+        self.assertTrue(self.highlights_of(contributor(1, overview=Mock(return_value=charted)))["highlights"])
 
 
 class FigureDrawingTests(SimpleTestCase):

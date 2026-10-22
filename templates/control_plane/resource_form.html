@@ -18,7 +18,7 @@ model validates the submission. Nothing here knows what kind of resource this is
   {% if facts %}
     <dl class="kv compact form-facts">
       {% for label, desired, observed in facts %}
-        <dt>{{ label }}</dt>
+        <dt>{{ label|breakable }}</dt>
         <dd><code>{{ observed|default:desired|or_empty|breakable }}</code></dd>
       {% endfor %}
     </dl>
@@ -77,7 +77,7 @@ model validates the submission. Nothing here knows what kind of resource this is
     every kind whose actions are locked, which is the one case where an
     operator most needs to know that saving changes nothing.
     {% endcomment %}
-    <span class="muted form-actions-note">{{ apply_note }}</span>
+    <span class="muted form-actions-note">{{ apply_note|breakable }}</span>
   </div>
 </form>
 {% endblock %}

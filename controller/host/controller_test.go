@@ -28,6 +28,7 @@ var launchVariables = []string{
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
 	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS",
+	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN",
 }
 
 type launch struct {
@@ -37,6 +38,8 @@ type launch struct {
 	mounted    map[string][]byte
 	locked     bool
 	order      []string
+	// container is what the pass does, given its out directory on the host.
+	container func(out string)
 }
 
 func newLaunch(t *testing.T) *launch {
@@ -68,6 +71,9 @@ func newLaunch(t *testing.T) *launch {
 					if data, err := os.ReadFile(source); err == nil {
 						l.mounted[target] = data
 					}
+					if target == controllerOut && l.container != nil {
+						l.container(source)
+					}
 				}
 			}
 		}
@@ -77,12 +83,14 @@ func newLaunch(t *testing.T) *launch {
 		return program(ctx, name, args...)
 	}
 	l.controller = &Controller{
-		Machine:     f.machine,
-		SecretDir:   secrets,
-		ACME:        filepath.Join(f.root, "acme"),
-		CertStore:   filepath.Join(f.root, "certs"),
-		Tailscaled:  filepath.Join(f.root, "absent.sock"),
-		Connections: func() error { return nil },
+		Machine:       f.machine,
+		SecretDir:     secrets,
+		ACME:          filepath.Join(f.root, "acme"),
+		CertStore:     filepath.Join(f.root, "certs"),
+		Tailscaled:    filepath.Join(f.root, "absent.sock"),
+		Spool:         filepath.Join(f.root, "spool"),
+		DependencyRun: filepath.Join(f.root, "state", "renovate", "dependency-run.json"),
+		Connections:   func() error { return nil },
 		Lock: func(context.Context) (func(), error) {
 			l.locked = true
 			l.order = append(l.order, "lock")

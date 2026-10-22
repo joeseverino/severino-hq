@@ -39,6 +39,7 @@ from .findings import estate_findings, finding_key, rule_for
 from .first_seen import dated
 from .infrastructure import enabled_resources, resource_health
 from .item_help import commands, finding_plan, instructions, remedy_link
+from .labels import lower_first
 from .moments import ago, when_day
 from .projection import read_once
 from .references import dangling
@@ -202,7 +203,7 @@ def expenses() -> tuple[Insight, ...]:
     )
     if not counts["linked"]:
         return backlog
-    return (*backlog, *dangling(Expense, principal=cli_principal(), source=lambda expense: expense.label))
+    return (*backlog, *dangling(Expense, principal=cli_principal()))
 
 
 @dated
@@ -213,7 +214,7 @@ def receipts() -> tuple[Insight, ...]:
         eyebrow="Receipts",
         one="receipt is not attached to an expense or asset",
         many="receipts are not attached to an expense or asset",
-        action="Attach them",
+        action="Attach receipts",
         url=f"{reverse('receipts:list')}?unlinked=1",
     )
 
@@ -244,7 +245,7 @@ def assets() -> tuple[Insight, ...]:
         one="asset has no purchase date or cost",
         many="assets have no purchase date or cost",
         body="Depreciation cannot be calculated without both.",
-        action="Fill them in",
+        action="Fill in details",
         url=f"{reverse('assets:list')}?missing_purchase=1",
     )
     if not linked:
@@ -480,7 +481,7 @@ def _sign_key(key: str, name: str) -> WorkflowPlan:
 def _approve_routes(name: str) -> tuple[ActionLink, ...]:
     """The route approval the machine's own page offers, as a remedy."""
 
-    link = remedy_link("tailnet.routes.approve", "Approve routes", name, url=entity_link("machine", name).url)
+    link = remedy_link("tailnet.routes.approve", name, url=entity_link("machine", name).url)
     return (link,) if link else ()
 
 
@@ -612,7 +613,7 @@ def _deploying(resource, health: dict[str, str]) -> Insight:
             title="A deploy is waiting for your approval",
             value="1",
             body=said,
-            action="Approve on GitHub" if progress.run_url else "Open the deploy",
+            action="Approve on GitHub" if progress.run_url else "Open deploy",
             url=progress.run_url or link.url,
             subject=subject_link("resource", resource.key),
             since=progress.since,
@@ -625,7 +626,7 @@ def _deploying(resource, health: dict[str, str]) -> Insight:
         title="A deploy is running" if progress.state == "running" else "A deploy is about to start",
         value="1",
         body=f"{said} It becomes a problem if production is still behind after {counted(minutes, 'minute')}.",
-        action="Open the deploy",
+        action="Open deploy",
         url=link.url,
         subject=subject_link("resource", resource.key),
         notice=True,
@@ -639,7 +640,7 @@ def _apply_help(resource) -> dict:
     policy = provider.actions.get("reconcile") if provider else None
     link = None
     if policy is None or policy.mode != "locked":
-        link = remedy_link("infrastructure.reconcile", "Apply again", resource.key)
+        link = remedy_link("infrastructure.reconcile", resource.key)
     if link is not None:
         return {"actions": (link,)}
     return {
@@ -693,9 +694,9 @@ def _asked_change(shown) -> str:
 
     moves = [
         (
-            f"{row.path} from {row.before} to {row.after or 'empty'}"
+            f"{lower_first(row.label)} from {row.before} to {row.after or 'empty'}"
             if row.before
-            else f"{row.path} to {row.after or 'empty'}"
+            else f"{lower_first(row.label)} to {row.after or 'empty'}"
         )
         for row in shown.rows[:3]
     ]
@@ -731,7 +732,7 @@ def services() -> tuple[Insight, ...]:
             title=f"{service.hostname} is not set up properly",
             value=str(len(service.faults)),
             body=" ".join(service.faults),
-            action="Open the service",
+            action="Open service",
             url=service.url,
             subject=subject_link("service", service.hostname),
             # Wiring is declarations and readings together; no one reading dates it.

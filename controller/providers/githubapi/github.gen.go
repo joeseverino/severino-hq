@@ -159,6 +159,24 @@ func (e AppPermissionsDeployments) Valid() bool {
 	}
 }
 
+// Defines values for AppPermissionsIssues.
+const (
+	AppPermissionsIssuesRead  AppPermissionsIssues = "read"
+	AppPermissionsIssuesWrite AppPermissionsIssues = "write"
+)
+
+// Valid indicates whether the value is a known member of the AppPermissionsIssues enum.
+func (e AppPermissionsIssues) Valid() bool {
+	switch e {
+	case AppPermissionsIssuesRead:
+		return true
+	case AppPermissionsIssuesWrite:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AppPermissionsMetadata.
 const (
 	AppPermissionsMetadataRead  AppPermissionsMetadata = "read"
@@ -249,6 +267,24 @@ func (e AppPermissionsSecurityEvents) Valid() bool {
 	}
 }
 
+// Defines values for AppPermissionsStatuses.
+const (
+	AppPermissionsStatusesRead  AppPermissionsStatuses = "read"
+	AppPermissionsStatusesWrite AppPermissionsStatuses = "write"
+)
+
+// Valid indicates whether the value is a known member of the AppPermissionsStatuses enum.
+func (e AppPermissionsStatuses) Valid() bool {
+	switch e {
+	case AppPermissionsStatusesRead:
+		return true
+	case AppPermissionsStatusesWrite:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AppPermissionsVulnerabilityAlerts.
 const (
 	AppPermissionsVulnerabilityAlertsRead  AppPermissionsVulnerabilityAlerts = "read"
@@ -261,6 +297,21 @@ func (e AppPermissionsVulnerabilityAlerts) Valid() bool {
 	case AppPermissionsVulnerabilityAlertsRead:
 		return true
 	case AppPermissionsVulnerabilityAlertsWrite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppPermissionsWorkflows.
+const (
+	AppPermissionsWorkflowsWrite AppPermissionsWorkflows = "write"
+)
+
+// Valid indicates whether the value is a known member of the AppPermissionsWorkflows enum.
+func (e AppPermissionsWorkflows) Valid() bool {
+	switch e {
+	case AppPermissionsWorkflowsWrite:
 		return true
 	default:
 		return false
@@ -890,6 +941,12 @@ type ActionsVariable struct {
 	Name string `json:"name"`
 }
 
+// AlertHTMLURL The GitHub URL of the alert resource.
+type AlertHTMLURL = string
+
+// AlertNumber The security alert number.
+type AlertNumber = int
+
 // AllowedActions The permissions policy that controls the actions and reusable workflows that are allowed to run.
 type AllowedActions string
 
@@ -915,6 +972,9 @@ type AppPermissions struct {
 	// Deployments The level of permission to grant the access token for deployments and deployment statuses.
 	Deployments AppPermissionsDeployments `json:"deployments,omitempty"`
 
+	// Issues The level of permission to grant the access token for issues and related comments, assignees, labels, and milestones.
+	Issues AppPermissionsIssues `json:"issues,omitempty"`
+
 	// Metadata The level of permission to grant the access token to search repositories, list collaborators, and access repository metadata.
 	Metadata AppPermissionsMetadata `json:"metadata,omitempty"`
 
@@ -930,8 +990,14 @@ type AppPermissions struct {
 	// SecurityEvents The level of permission to grant the access token to view and manage security events like code scanning alerts.
 	SecurityEvents AppPermissionsSecurityEvents `json:"security_events,omitempty"`
 
+	// Statuses The level of permission to grant the access token for commit statuses.
+	Statuses AppPermissionsStatuses `json:"statuses,omitempty"`
+
 	// VulnerabilityAlerts The level of permission to grant the access token to manage Dependabot alerts.
 	VulnerabilityAlerts AppPermissionsVulnerabilityAlerts `json:"vulnerability_alerts,omitempty"`
+
+	// Workflows The level of permission to grant the access token to update GitHub Actions workflow files.
+	Workflows AppPermissionsWorkflows `json:"workflows,omitempty"`
 }
 
 // AppPermissionsActions The level of permission to grant the access token for GitHub Actions workflows, workflow runs, and artifacts.
@@ -952,6 +1018,9 @@ type AppPermissionsContents string
 // AppPermissionsDeployments The level of permission to grant the access token for deployments and deployment statuses.
 type AppPermissionsDeployments string
 
+// AppPermissionsIssues The level of permission to grant the access token for issues and related comments, assignees, labels, and milestones.
+type AppPermissionsIssues string
+
 // AppPermissionsMetadata The level of permission to grant the access token to search repositories, list collaborators, and access repository metadata.
 type AppPermissionsMetadata string
 
@@ -967,8 +1036,14 @@ type AppPermissionsSecretScanningAlerts string
 // AppPermissionsSecurityEvents The level of permission to grant the access token to view and manage security events like code scanning alerts.
 type AppPermissionsSecurityEvents string
 
+// AppPermissionsStatuses The level of permission to grant the access token for commit statuses.
+type AppPermissionsStatuses string
+
 // AppPermissionsVulnerabilityAlerts The level of permission to grant the access token to manage Dependabot alerts.
 type AppPermissionsVulnerabilityAlerts string
+
+// AppPermissionsWorkflows The level of permission to grant the access token to update GitHub Actions workflow files.
+type AppPermissionsWorkflows string
 
 // Artifact An artifact
 type Artifact struct {
@@ -1128,8 +1203,35 @@ type ContentFile struct {
 
 // DependabotAlert A Dependabot alert.
 type DependabotAlert struct {
+	// Dependency Details for the vulnerable dependency.
+	Dependency struct {
+		// ManifestPath The full path to the dependency manifest file, relative to the root of the repository.
+		ManifestPath string `json:"manifest_path,omitempty"`
+
+		// Package Details for the vulnerable package.
+		Package DependabotAlertPackage `json:"package,omitempty"`
+	} `json:"dependency"`
+
+	// HTMLURL The GitHub URL of the alert resource.
+	HTMLURL AlertHTMLURL `json:"html_url"`
+
+	// Number The security alert number.
+	Number AlertNumber `json:"number"`
+
 	// SecurityAdvisory Details for the GitHub Security Advisory.
 	SecurityAdvisory DependabotAlertSecurityAdvisory `json:"security_advisory"`
+
+	// SecurityVulnerability Details pertaining to one vulnerable version range for the advisory.
+	SecurityVulnerability DependabotAlertSecurityVulnerability `json:"security_vulnerability"`
+}
+
+// DependabotAlertPackage Details for the vulnerable package.
+type DependabotAlertPackage struct {
+	// Ecosystem The package's language or package management ecosystem.
+	Ecosystem string `json:"ecosystem"`
+
+	// Name The unique package name within its ecosystem.
+	Name string `json:"name"`
 }
 
 // DependabotAlertSecurityAdvisory Details for the GitHub Security Advisory.
@@ -1140,6 +1242,18 @@ type DependabotAlertSecurityAdvisory struct {
 
 // DependabotAlertSecurityAdvisorySeverity The severity of the advisory.
 type DependabotAlertSecurityAdvisorySeverity string
+
+// DependabotAlertSecurityVulnerability Details pertaining to one vulnerable version range for the advisory.
+type DependabotAlertSecurityVulnerability struct {
+	// FirstPatchedVersion Details pertaining to the package version that patches this vulnerability.
+	FirstPatchedVersion struct {
+		// Identifier The package version that patches this vulnerability.
+		Identifier string `json:"identifier"`
+	} `json:"first_patched_version"`
+
+	// Package Details for the vulnerable package.
+	Package DependabotAlertPackage `json:"package"`
+}
 
 // DeployKey An SSH key granting access to a single repository.
 type DeployKey struct {
@@ -1363,7 +1477,8 @@ type Installation_Account struct {
 
 // InstallationToken Authentication token for a GitHub App installed on a user or org.
 type InstallationToken struct {
-	Token string `json:"token"`
+	ExpiresAt string `json:"expires_at"`
+	Token     string `json:"token"`
 }
 
 // Integration GitHub apps are a new way to extend GitHub. They can be installed directly on organizations and user accounts and granted access to specific repositories. They come with granular permissions and built-in webhooks. GitHub apps are first class actors within GitHub.
@@ -1481,6 +1596,9 @@ type PublicUser struct {
 
 // PullRequestSimple Pull Request Simple
 type PullRequestSimple struct {
+	// CreatedAt Example: 2011-01-26T19:01:12Z
+	CreatedAt string `json:"created_at"`
+
 	// Draft Indicates whether or not the pull request is a draft.
 	//
 	// Example: false
@@ -1499,6 +1617,17 @@ type PullRequestSimple struct {
 
 	// HTMLURL Example: https://github.com/octocat/Hello-World/pull/1347
 	HTMLURL string `json:"html_url"`
+	Labels  []struct {
+		// ArchivedBy The user who archived the label, or `null` if it has not been archived.
+		ArchivedBy  SimpleUser `json:"archived_by"`
+		Color       string     `json:"color"`
+		Default     bool       `json:"default"`
+		Description string     `json:"description"`
+		ID          int        `json:"id"`
+		Name        string     `json:"name"`
+		NodeID      string     `json:"node_id"`
+		URL         string     `json:"url"`
+	} `json:"labels"`
 
 	// MergedAt Example: 2011-01-26T19:01:12Z
 	MergedAt string `json:"merged_at"`

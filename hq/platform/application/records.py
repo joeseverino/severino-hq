@@ -27,6 +27,8 @@ from .security import Principal
 
 # What a person calls the target, by kind.
 _TARGET_NAMES = {"slug": "slug", "integer": "ID", "doc_id": "ID", "key": "key"}
+# The commands every record domain gets.
+_VERBS = frozenset({"create", "upsert", "update", "delete"})
 
 
 def deleter(resource: str) -> Callable[..., dict[str, Any]]:
@@ -68,6 +70,50 @@ def records_for(model: type) -> Records:
         if load(records.model) is model:
             return records
     raise LookupError(f"No host domain declares records for {model.__name__}.")
+
+
+def as_its_model_declares(command_type: type, schema: dict[str, Any]) -> dict[str, Any]:
+    """A record command's schema with what its model says of each field.
+
+    A field the model limits to choices lists them, each value with its label
+    (``oneOf`` of ``const`` and ``title``), and one it holds as long text is
+    ``format: textarea``. The model is the one declaration: its ``full_clean``
+    refuses any other value on every path, so the schema only says so. Any
+    other command's schema is returned as it is.
+    """
+
+    model = next((load(records.model) for records in host_records() if load(records.command) is command_type), None)
+    if model is None:
+        return schema
+    names = {field.name: field for field in model._meta.get_fields() if getattr(field, "concrete", False)}
+    properties = {
+        name: _as_field_declares(names[name], declared) if name in names else declared
+        for name, declared in schema.get("properties", {}).items()
+    }
+    return {**schema, "properties": properties}
+
+
+def _as_field_declares(field: Any, declared: dict[str, Any]) -> dict[str, Any]:
+    if field.choices:
+        allowed = [{"const": value, "title": str(label)} for value, label in field.flatchoices]
+        if field.blank and all(choice["const"] != "" for choice in allowed):
+            allowed.insert(0, {"const": "", "title": "Not set"})
+        return {**declared, "oneOf": allowed}
+    if field.get_internal_type() == "TextField":
+        return {**declared, "format": "textarea"}
+    return declared
+
+
+def says_only_its_title(spec: CapabilitySpec) -> bool:
+    """Whether a capability's summary is the one a record command is given
+    when its domain declares none: its title as a sentence ("Add a new
+    asset."), which a page under that title does not repeat."""
+
+    for records in host_records():
+        verb = spec.name.removeprefix(f"{records.noun}.")
+        if verb in _VERBS:
+            return not {said: summary for said, summary, _label in records.wording}.get(verb)
+    return False
 
 
 def display_noun(records: Records) -> str:

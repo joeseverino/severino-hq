@@ -22,16 +22,16 @@ Pass compact=True where it shares a row with a chart rather than owning a page.
       {% for row in matrix.rows %}
         <tr>
           <th scope="row">
-            {% if row.url %}<a href="{{ row.url }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}
-            {% if row.detail %}<span class="muted cadence-detail">{{ row.detail }}</span>{% endif %}
+            {% if row.url %}<a href="{{ row.url }}">{{ row.label|breakable }}</a>{% else %}{{ row.label|breakable }}{% endif %}
+            {% if row.detail %}<span class="muted cadence-detail">{{ row.detail|breakable }}</span>{% endif %}
           </th>
           {% for week in row.weeks %}
             <td class="cadence-cell">
-              <span class="cadence-mark{% if week.hit %} is-hit{% elif week.no_data %} is-no-data{% endif %}" data-tip="{{ week.said }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span>
-              <span class="visually-hidden">{{ week.said }}</span>
+              <span class="cadence-mark{% if week.hit %} is-hit{% elif week.no_data %} is-no-data{% endif %}" data-tip="{{ week.said }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count|breakable }}{% endif %}</span>
+              <span class="visually-hidden">{{ week.said|breakable }}</span>
             </td>
           {% endfor %}
-          <td class="cadence-total">{{ row.tally }}</td>
+          <td class="cadence-total">{{ row.tally|breakable }}</td>
         </tr>
       {% endfor %}
     </tbody>

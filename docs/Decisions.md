@@ -26,8 +26,7 @@ image installs locked requirements with hashes.
 
 API contracts are emitted from runtime declarations, and every consumer is
 derived from the document: the OpenAPI 3.2.0 description (the version
-kin-openapi recognizes), the generated TypeScript client and repository CLI
-(Redocly's generator), and the MCP tool schemas, read from the document's
+kin-openapi recognizes) and the MCP tool schemas, read from the document's
 `x-hq-mcp-tools` extension. MCP-only tools are described as such rather than
 as HTTP operations.
 
@@ -66,7 +65,7 @@ derived values, each a validator or serializer in pydantic, so a model comes
 out longer than the function it replaces. The API document types a list as
 open objects today, so response models would not be a second source of truth,
 but adding them is a
-contract feature (the document and every generated client change) and belongs
+contract feature (the document and every consumer derived from it change) and belongs
 to the contract work, routed through the document's existing type hoisting.
 
 Audit keeps its own field diff. Snapshotting and diffing fields is a small

@@ -6,6 +6,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.observations.github import DEPENDENCY_RUN_KIND
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.control_plane.provider_adapters import github as delivery
 from hq.domains.jobs.models import Job
@@ -16,6 +17,8 @@ from .names import GITHUB, HQ_DIGEST, HQ_REVISION, hexed, iso, stamp
 
 # The repositories HQ's GitHub App reads, each kept the way the repo checks ask.
 REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", "backups", "dotfiles")
+# The repository HQ opens dependency updates for.
+UPDATED = "photo-library"
 # The scheduled work HQ declares that runs on a clock, and how many runs to show.
 SCHEDULED = tuple((work.name, work.every) for work in scheduled_work.SCHEDULED if work.every is not None)
 RUNS = 3
@@ -75,9 +78,26 @@ def repositories():
                 {"name": "production", "reviewers": ["example"], "wait_minutes": 0, "branches": ["main"]}
             ]
             record["images"] = [{"name": "example/hq", "signed": [HQ_DIGEST.removeprefix("sha256:")]}]
+        if name == UPDATED:
+            record.update(_updates(name))
         return record
 
     store("github.repository", *(repository(name) for name in REPOSITORIES))
+    # This morning's update run of the opted-in repository, finished cleanly.
+    started = timedelta(hours=5)
+    store(
+        DEPENDENCY_RUN_KIND,
+        {
+            "connection_ref": GITHUB,
+            "owner": "example",
+            "repositories": [f"example/{UPDATED}"],
+            "outcome": "ok",
+            "exit_code": 0,
+            "started_at": iso(started),
+            "finished_at": iso(started - timedelta(minutes=6)),
+        },
+        age=started,
+    )
     # Production runs what was last approved, as the deploy workflow reports it.
     deploys = {
         "repository": "example/hq",
@@ -110,6 +130,41 @@ def repositories():
             "location": "Example City",
         },
     )
+
+
+def _updates(name):
+    """One update open with its checks passing, and an alert no update answers yet."""
+
+    url = f"https://github.com/example/{name}"
+    return {
+        "pull_requests": [
+            {
+                "number": 41,
+                "title": "Update dependency example-thumbnailer to v3.2.1",
+                "url": f"{url}/pull/41",
+                "author": "renovate[bot]",
+                "draft": False,
+                "created_at": iso(timedelta(days=3)),
+                "updated_at": iso(timedelta(days=1)),
+                "head": hexed("update", name, length=40),
+                "branch": "renovate/example-thumbnailer-3.x",
+                "labels": ["dependencies"],
+                "checks": {"state": "success", "total": 4, "failing": [], "running": 0, "names": ["lint", "test"]},
+            }
+        ],
+        "alerts": {"dependabot": {"medium": 1}},
+        "dependabot_alerts": [
+            {
+                "number": 7,
+                "package": "example-exif",
+                "ecosystem": "pip",
+                "manifest_path": "uv.lock",
+                "severity": "medium",
+                "first_patched_version": "1.8.2",
+                "url": f"{url}/security/dependabot/7",
+            }
+        ],
+    }
 
 
 def jobs():

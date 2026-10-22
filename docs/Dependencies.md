@@ -6,11 +6,10 @@ Where every pin lives, and how to move one.
 
 | What | Pinned in | Held by |
 | :--- | :--- | :--- |
-| Tools: uv, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock) | `checks:toolchain`; CodeQL also `checks:codeql-bundle`, the bundle the pinned action runs |
+| Tools: Go, uv, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock). The images install Go and uv from the same lock, with a mise whose release signature they check, at `min_version` | `checks:toolchain`; CodeQL also `checks:codeql-bundle`, the bundle the pinned action runs |
 | Python packages | `pyproject.toml`, resolved with hashes in `uv.lock` | `checks:lockfile`, `checks:audit` |
-| uv in the images | `Dockerfile` and `composition/Dockerfile`, uv's own image by digest at the version `mise.toml` pins | `checks:toolchain` |
-| Go and its modules | `controller/go.mod` and `go.sum` | `controller:check` |
-| Base images | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build` |
+| Go and its modules | the release in `mise.toml`, of the language version `controller/go.mod` names; modules in `go.sum` | `checks:toolchain`, `controller:check` |
+| The Python base image, every stage's start | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build`; `checks:toolchain` refuses any other image |
 | GitHub Actions | each workflow, by commit with its version beside it | `ActionPinTests` |
 | Hosted runner image, Python matrix, coverage floor, Cordon commit, the Trivy release the image scans run | [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `JobLimitTests`, `PythonVersionTests` |
 | cosign, on the host and in every workflow | `CosignVersion` in `controller/host/verifier.go`; workflows install it through `.github/actions/cosign` | `hq-host install` |
@@ -50,9 +49,11 @@ change `version:` in `static/vendor/scalar/UPSTREAM` and run
 
 ## Advisories
 
-`mise run checks:audit` runs `pip-audit` against `uv.lock`, and the image
-gates scan the built image with Trivy. When an advisory lands against a
-transitive dependency, move only that package:
+`mise run checks:audit` runs `pip-audit` against `uv.lock`, and an
+extension's admission audits its lock through the same
+`tools/pipeline/audit.sh`. The image gates scan the built image with
+Trivy. When an advisory lands against a transitive dependency, move only
+that package:
 
 ```sh
 uv lock --upgrade-package <name>

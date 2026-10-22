@@ -1,2 +1,2 @@
-{% comment %}ActionLink objects and serialized actions share page-action semantics.{% endcomment %}
-{% for action in actions %}{% include "partials/_page_action.html" with action=action|workflow_action extra="compact" only %}{% endfor %}
+{% comment %}ActionLink objects and serialized actions share page-action semantics. `extra` replaces the default "compact" class. `remedies` leaves out a way that leads only to the view it is drawn on; a box around these asks it first, so it is drawn only around a control.{% endcomment %}
+{% remedies actions as shown %}{% for action in shown %}{% include "partials/_page_action.html" with action=action extra=extra|default:"compact" only %}{% endfor %}

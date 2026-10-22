@@ -214,13 +214,13 @@ class ReportedFieldTests(TestCase):
         self.assertContains(response, "Deploy run 9 finished without deploying it.")
         for dead_end in (
             "Keep the live version",
-            "Restore HQ's version",
+            "Apply HQ's settings",
             "In sync",
             "Drift detected",
             "Changed outside HQ",
         ):
             self.assertNotContains(response, dead_end)
-        self.assertContains(response, "Open the deploy on GitHub")
+        self.assertContains(response, "Open deploy on GitHub")
         self.assertContains(response, "https://github.com/example/host/actions")
 
     def test_a_problem_it_reports_offers_no_way_to_keep_or_restore_a_side(self):

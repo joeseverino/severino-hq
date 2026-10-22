@@ -1,0 +1,16 @@
+{% comment %}
+The project's last dependency update run, inside its Dependency updates fact
+(application.dependency_updates.last_run), said as what happened: a run that
+finished is only when it ran, and one that did not is marked. The run covers
+every opted-in repository, so "Not run yet" is said only of one that is opted
+in. The page's Update dependencies control refreshes this fact.
+{% endcomment %}
+{% if run %}
+  <br><span data-updates-run="{{ run.outcome }}">
+  {% if run.outcome == "ok" %}Last ran {{ run.started_at|when:"ago" }}
+  {% elif run.outcome == "handed_off" %}Started {{ run.started_at|when:"ago" }} <span class="pill pill-attention">Running</span>
+  {% else %}Last run {{ run.started_at|when:"ago" }} <span class="pill pill-serious">{% if run.outcome == "timeout" %}Stopped early{% else %}Failed{% endif %}</span>{% endif %}</span>
+{% elif project.dependency_updates %}
+  <br><span data-updates-run="">Not run yet</span>
+{% endif %}
+{% if asked %}<br><span class="muted" data-run-requested>Run requested {{ asked|when:"ago" }}</span>{% endif %}

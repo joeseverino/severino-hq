@@ -20,10 +20,10 @@ backdrop close the dialog; both are handled by the host, not by the caller.
   {% endcomment %}
   <div class="modal-panel" tabindex="-1" autofocus>
     <div class="modal-head">
-      <h2 id="modal-{{ id }}-title">{{ title }}</h2>
+      <h2 id="modal-{{ id }}-title">{{ title|breakable }}</h2>
       <button class="modal-close" type="button" data-modal-close aria-label="Close">&times;</button>
     </div>
-    {% if lede %}<p class="modal-lede">{{ lede }}</p>{% endif %}
+    {% if lede %}<p class="modal-lede">{{ lede|breakable }}</p>{% endif %}
     {% if body_template %}{% include body_template %}{% endif %}
   </div>
 </dialog>

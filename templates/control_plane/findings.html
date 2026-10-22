@@ -10,11 +10,11 @@ first screen on chips before the first finding.
     <option value="">All problems</option>
     {% for rule in finding_rules %}<option value="{{ rule.name }}"{% if active_rule.name == rule.name %} selected{% endif %}>{{ rule.title }}</option>{% endfor %}
   </select>
-  <button class="btn" type="submit">Show</button>
-  {% if active_rule %}<a class="btn ghost" href="{% url 'control_plane:findings' %}">Clear</a>{% endif %}
+  <button class="btn" type="submit">Filter</button>
+  {% if active_rule %}<a class="btn ghost" href="{% url 'control_plane:findings' %}">Clear filters</a>{% endif %}
   {% comment %}The count sits in the bar it filters, not in a second bar under it.{% endcomment %}
   <p class="filter-bar-summary" role="status">
-    <strong>{{ finding_entries|length|counted:"problem" }}</strong>{% if finding_entries|length == 1 %}{% if finding_counts.serious %}, urgent{% elif finding_counts.attention %}, needs attention{% endif %}{% else %}{% if finding_counts.serious %}, <strong>{{ finding_counts.serious }}</strong> urgent{% endif %}{% if finding_counts.attention %}, <strong>{{ finding_counts.attention }}</strong> need attention{% endif %}{% endif %}
+    <strong>{{ finding_entries|length|counted:"problem" }}</strong>{% if finding_entries|length == 1 %}{% if finding_counts.serious %}, urgent{% elif finding_counts.attention %}, needs attention{% endif %}{% else %}{% if finding_counts.serious %}, <strong>{{ finding_counts.serious|breakable }}</strong> urgent{% endif %}{% if finding_counts.attention %}, <strong>{{ finding_counts.attention|breakable }}</strong> need attention{% endif %}{% endif %}
   </p>
 </form>
 {% endif %}
@@ -26,9 +26,19 @@ first screen on chips before the first finding.
 </section>
 {% elif finding_coverage and not finding_coverage.read_at %}
 {% url 'control_plane:controller' as controller_url %}
-{% include "partials/_empty_state.html" with message="Nothing read yet, so nothing checked." action_url=controller_url action_label="Run the controller" %}
+{% include "partials/_empty_state.html" with message="Nothing read yet." action_url=controller_url action_label="Start the controller" %}
 {% elif finding_coverage %}
-{% include "partials/_empty_state.html" with message="No problems found." why=finding_coverage.sentence %}
+{% comment %}
+The verdict is the checks', said as theirs: what else waits on the reader
+(an image update, a certificate running out) is in the queue, and is named
+and linked here so this page never reads as all clear while it is not.
+{% endcomment %}
+{% if waiting_elsewhere %}
+{% url 'action_items' as queue_url %}
+{% include "partials/_empty_state.html" with message="The checks found no problems." why=finding_coverage.sentence action_url=queue_url action_label=waiting_elsewhere|counted:"other thing needs you,other things need you" %}
+{% else %}
+{% include "partials/_empty_state.html" with message="The checks found no problems." why=finding_coverage.sentence %}
+{% endif %}
 {% else %}
 {% include "partials/_empty_state.html" with message="No problems of this type." %}
 {% endif %}

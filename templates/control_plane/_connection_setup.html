@@ -15,7 +15,7 @@ connected is in one place.
 <section class="card connection-setup" aria-labelledby="connection-setup-heading">
   <div class="section-head">
     <h2 id="connection-setup-heading">{% if again %}Connect another account{% else %}Connect a service{% endif %}</h2>
-    <span class="count">{% if again %}{{ setups|length|counted:"service" }} connected{% else %}{{ count }} not connected yet{% endif %}</span>
+    <span class="count">{% if again %}{{ setups|length|counted:"service" }} connected{% else %}{{ count|breakable }} not connected yet{% endif %}</span>
   </div>
   <p class="muted">Each connection is a 1Password item the controller is given. Open one to see what to make.{% if guide %} <a href="{{ guide }}" rel="noopener">How connections work</a>{% endif %}</p>
   <ul class="setup-list">
@@ -23,18 +23,18 @@ connected is in one place.
       <li id="setup-{{ setup.provider }}">
         <details{% if opened == setup.provider %} open{% endif %}>
           <summary>
-            <strong>{{ setup.label }}</strong>
-            <span class="muted">{{ setup.gives }}</span>
+            <strong>{{ setup.label|breakable }}</strong>
+            <span class="muted">{{ setup.gives|breakable }}</span>
           </summary>
           <ol class="resolution-workflow">
             <li>
               <strong>Create</strong>
-              <p>{{ setup.create }}{% if setup.create_url|web_url %} <a class="external-link" href="{{ setup.create_url|web_url }}" rel="noopener">Where to make it</a>{% endif %}</p>
+              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} <a class="external-link" href="{{ setup.create_url|web_url }}" rel="noopener">Where to make it</a>{% endif %}</p>
               {% if setup.permissions %}
                 <p>Give it these permissions, and no others:</p>
                 <ul class="setup-permissions">{% for permission in setup.permissions %}<li><code>{{ permission|breakable }}</code></li>{% endfor %}</ul>
               {% elif setup.credential == "coarse" %}
-                <p class="muted">This is the whole account: {{ setup.label }} offers nothing narrower, so make it for HQ alone.</p>
+                <p class="muted">This is the whole account: {{ setup.label|breakable }} offers nothing narrower, so make it for HQ alone.</p>
               {% endif %}
               {% if setup.mint %}
                 <p>Or have the script issue one with exactly these:</p>
@@ -43,7 +43,7 @@ connected is in one place.
             </li>
             <li>
               <strong>Store it</strong>
-              <p>In the vault the controller reads, as {{ setup.item }} with these fields:</p>
+              <p>In the vault the controller reads, as {{ setup.item|breakable }} with these fields:</p>
               {% table_region "Fields of "|add:setup.item narrow=1 %}
                 <table class="data-table">
                   <thead><tr>{% table_heading "Field" "identifier" gutter=True local_sort=setup.fields|sortable %}{% table_heading "Value" "identifier" drop=2 local_sort=setup.fields|sortable %}{% table_heading "What it is" css="optional-col" drop=1 local_sort=setup.fields|sortable %}</tr></thead>
@@ -52,7 +52,7 @@ connected is in one place.
                       <tr>
                         <td class="row-gutter"><code>{{ field.name|breakable }}</code>{% row_toggle %}</td>
                         <td>{% if field.value %}<code>{{ field.value|breakable }}</code>{% elif field.secret %}<span class="muted">the secret</span>{% else %}<span class="muted">yours</span>{% endif %}</td>
-                        <td class="optional-col muted">{{ field.note }}</td>
+                        <td class="optional-col muted">{{ field.note|breakable }}</td>
                       </tr>
                     {% endfor %}
                   </tbody>
@@ -61,7 +61,7 @@ connected is in one place.
             </li>
             <li>
               <strong>Then</strong>
-              <p>HQ's host reads the vault every hour. The connection then appears above within a minute. To read the vault now:</p>
+              <p>HQ's host reads the vault every hour; the connection then appears above. To read the vault now:</p>
               {% include "partials/_command.html" with command="sudo systemctl start severino-hq-secrets.service" only %}
             </li>
           </ol>
@@ -70,8 +70,8 @@ connected is in one place.
     {% endfor %}
     {% for group in others %}
       <li class="setup-other">
-        <strong>{{ group.spec.label }}</strong>
-        <span class="muted">{{ group.spec.empty_message }}</span>
+        <strong>{{ group.spec.label|breakable }}</strong>
+        <span class="muted">{{ group.spec.empty_message|breakable }}</span>
         {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}<a class="external-link" href="{{ group.spec.documentation_url }}" rel="noopener">Docs</a>{% endif %}
       </li>
     {% endfor %}

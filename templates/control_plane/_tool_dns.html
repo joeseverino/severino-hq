@@ -14,7 +14,7 @@
                value="{{ asked|dictkey:'lookup.name' }}">
       </div>
       <div class="form-actions">
-        <button type="submit" class="primary">Look up</button>
+        <button type="submit" class="primary">{% words "lookup.name" %}</button>
       </div>
     </form>
 
@@ -29,7 +29,7 @@
                 {% for answer in reading.answers %}
                   <tr>
                     <td><code>{{ answer.type|breakable }}</code></td>
-                    <td>{{ answer.name }}</td>
+                    <td>{{ answer.name|breakable }}</td>
                     <td><code>{{ answer.value|breakable }}</code></td>
                   </tr>
                 {% empty %}
@@ -39,10 +39,10 @@
             </table>
           {% endtable_region %}
           {% if reading.resolver %}
-            <p class="help">Answered by {{ reading.resolver }}.</p>
+            <p class="help">Answered by {{ reading.resolver|breakable:"." }}</p>
           {% endif %}
         {% else %}
-          <p class="help">{{ reading.message|default:"Lookup failed." }}</p>
+          <p class="help">{{ reading.message|default:"Lookup failed."|breakable }}</p>
         {% endif %}
     </div>
       {% endif %}
@@ -63,7 +63,7 @@
                value="{{ asked|dictkey:'lookup.address' }}">
       </div>
       <div class="form-actions">
-        <button type="submit" class="primary">Look up</button>
+        <button type="submit" class="primary">{% words "lookup.address" %}</button>
       </div>
     </form>
 
@@ -73,27 +73,27 @@
         {% if reading.ok %}
           <dl class="kv">
             <dt>Address</dt>
-            <dd><code>{{ reading.address|breakable }}</code> IPv{{ reading.version }}</dd>
+            <dd><code>{{ reading.address|breakable }}</code> IPv{{ reading.version|breakable }}</dd>
             {% if reading.hostnames %}
               <dt>Reverse DNS</dt>
               <dd>{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}</dd>
             {% endif %}
             {% if reading.allocation.organization %}
               <dt>Allocated to</dt>
-              <dd><strong>{{ reading.allocation.organization }}</strong></dd>
+              <dd><strong>{{ reading.allocation.organization|breakable }}</strong></dd>
             {% endif %}
             {% if reading.allocation.prefixes %}
               <dt>Block</dt>
               <dd>{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}</dd>
             {% endif %}
             {% if reading.allocation.range %}
-              <dt>Range</dt><dd>{{ reading.allocation.range }}</dd>
+              <dt>Range</dt><dd>{{ reading.allocation.range|breakable }}</dd>
             {% endif %}
             {% if reading.allocation.handle %}
               <dt>Registry handle</dt><dd><code>{{ reading.allocation.handle|breakable }}</code></dd>
             {% endif %}
             {% if reading.note %}
-              <dt>Note</dt><dd class="muted">{{ reading.note }}</dd>
+              <dt>Note</dt><dd class="muted">{{ reading.note|breakable }}</dd>
             {% endif %}
           </dl>
           {% if reading.observed_at %}
@@ -104,12 +104,12 @@
                 {% csrf_token %}
                 <input type="hidden" name="tab" value="dns">
                 <input type="hidden" name="address" value="{{ asked|dictkey:'lookup.address' }}">
-                <button type="submit" class="btn ghost compact">Read now</button>
+                <button type="submit" class="btn ghost compact">{% words "lookup.address" %}</button>
               </form>
             </p>
           {% endif %}
         {% else %}
-          <p class="help">{{ reading.message|default:"Lookup failed." }}</p>
+          <p class="help">{{ reading.message|default:"Lookup failed."|breakable }}</p>
         {% endif %}
     </div>
       {% endif %}

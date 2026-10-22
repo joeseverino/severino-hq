@@ -5,13 +5,13 @@ several are numbered. Long steps fold under "Steps". A reason is a sentence on
 the card and is never a step. Actions link to their owner; nothing here runs one.
 {% endcomment %}
 {% if steps %}
-{% if fold %}<details class="resolution-fold"><summary>Steps<span class="visually-hidden"> for {{ label }}</span></summary>{% endif %}
+{% if fold %}<details class="resolution-fold"><summary>Steps<span class="visually-hidden"> for {{ label|breakable }}</span></summary>{% endif %}
 <{% if steps|length > 1 %}ol{% else %}ul{% endif %} class="resolution-workflow">
   {% for step in steps %}
     <li>
-      {% if step.label %}<strong>{{ step.label }}</strong>{% endif %}
-      {% if step.phase == "run" %}{% include "partials/_command.html" with command=step.summary only %}{% elif step.summary %}<p>{{ step.summary }}</p>{% endif %}
-      {% if step.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=step.actions only %}</div>{% endif %}
+      {% if step.label %}<strong>{{ step.label|breakable }}</strong>{% endif %}
+      {% if step.phase == "run" %}{% include "partials/_command.html" with command=step.summary only %}{% elif step.summary %}<p>{{ step.summary|breakable }}</p>{% endif %}
+      {% remedies step.actions as shown %}{% if shown %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=shown only %}</div>{% endif %}
     </li>
   {% endfor %}
 </{% if steps|length > 1 %}ol{% else %}ul{% endif %}>

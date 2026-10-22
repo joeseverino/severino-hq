@@ -28,6 +28,7 @@ from .conditions import stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
 from .plugin_admission import admitted_sources
 from .resource_operations import serialize_operation
+lazy from .dependency_updates import plan as dependency_updates
 lazy from .expiry import certificate_expiry, renewal_opens_at, renewal_window
 lazy from .findings import auto_remediable
 lazy from .github_profile import plan as github_profiles
@@ -480,7 +481,8 @@ def controller_registry() -> dict[str, Any]:
     A controller that cannot import these declarations asks for them: which
     actions it may apply, which it must refuse and why, which kinds need material
     HQ holds, which connections can read each kind, which extensions the image
-    composes, and whose public GitHub profile is due a read.
+    composes, whose public GitHub profile is due a read, and which repositories
+    a dependency update run covers and whether one is due.
     """
 
     registry = controller_capability_registry()
@@ -501,4 +503,5 @@ def controller_registry() -> dict[str, Any]:
         "connection_credentials": sorted(CONNECTION_CREDENTIALS),
         "extensions": [dict(source) for source in admitted_sources()],
         "github_profiles": github_profiles(),
+        "dependency_updates": dependency_updates(),
     }

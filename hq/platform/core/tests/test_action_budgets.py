@@ -25,7 +25,7 @@ from .estate_sizes import SMALL, at_both_sizes
 SCRIPT = {"X-Requested-With": "XMLHttpRequest"}
 
 # The actions that ask for work outside the request.
-BUDGETED = ("watching_refresh", "projects:refresh", "control_plane:read_now", "control_plane:visit")
+BUDGETED = ("watching_refresh", "jobs:ask", "control_plane:read_now", "control_plane:visit")
 
 
 class ActionBudgetTests(TestCase):
@@ -93,7 +93,7 @@ class AnswersBeforeTheWorkTests(TestCase):
                 self.assertTrue(self.client.get(answer["status"]).json()["live"])
 
     def test_a_job_is_recorded_and_its_work_has_not_run(self):
-        response = self.post("projects:refresh")
+        response = self.post("jobs:ask")
 
         answer = response.json()
         job = Job.objects.get(kind="project.refresh")

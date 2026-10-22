@@ -249,7 +249,7 @@ def sync_documentation(
         record_event(
             action=AuditLog.Action.IMPORTED,
             type_label="DocumentationRecord",
-            message="Synced the documentation manifest.",
+            message="Updated the list of docs.",
             metadata={"stats": stats},
         )
     return {"ok": True, "stats": stats}

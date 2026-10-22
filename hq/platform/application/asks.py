@@ -25,6 +25,7 @@ from django.shortcuts import redirect
 from django.utils import timezone
 
 lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+lazy from hq.domains.control_plane.providers import registry_label
 lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
 
 from .moments import duration
@@ -40,7 +41,19 @@ DONE = "done"
 FAILED = "failed"
 LIVE = frozenset({QUEUED, RUNNING})
 
-_LABELS = {IDLE: "", QUEUED: "Queued", RUNNING: "Running", DONE: "Done", FAILED: "Failed"}
+# A read's state in the words ``jobs.JobState`` says a job's in, so no two
+# pages call the same state two things. A job's standing carries its own.
+_LABELS = {IDLE: "", QUEUED: "Waiting", RUNNING: "Running", DONE: "Done", FAILED: "Failed"}
+
+# What asked-for work says while it waits its turn, and while a read is under way.
+WAITING = "Waiting…"
+REFRESHING = "Refreshing…"
+# What a read asked of the controller says while it waits for one to arrive,
+# and when none is arriving to take it.
+READ_WAITING = "Refresh asked for; waiting for the controller."
+READ_UNTAKEN = "Cannot refresh: {absent}."
+# What a saved change says of when it reaches the live system.
+APPLIES_SHORTLY = "HQ applies it shortly."
 
 _WATCH_SALT = "hq.platform.application.asks.watch"
 # Longer than any read request lives, so a page left open can still learn that
@@ -61,6 +74,8 @@ class Standing:
     since: datetime | None = None
     # How far along, where the work knows.
     percent: int | None = None
+    # The state in words, where the work's own record has them.
+    word: str = ""
 
     @property
     def live(self) -> bool:
@@ -68,7 +83,7 @@ class Standing:
 
     @property
     def label(self) -> str:
-        return _LABELS[self.state]
+        return self.word or _LABELS[self.state]
 
     @property
     def seconds(self) -> int:
@@ -179,6 +194,22 @@ def read_status_url(kinds: Iterable[str], asked: datetime, *, connection_ref: st
     return f"{reverse('control_plane:read_status')}?watch={token}"
 
 
+def _untried(asked: datetime) -> Standing:
+    """How a read asked for at ``asked``, and not yet answered, stands: under
+    way once the controller has arrived since, waiting while one is due, and
+    failed when none is arriving to take it."""
+
+    controller = cadence.controller_standing()
+    if controller.seen_at is None:
+        return Standing(FAILED, READ_UNTAKEN.format(absent="no controller has ever reported"), since=asked)
+    if controller.seen_at > asked:
+        return Standing(RUNNING, REFRESHING, since=asked)
+    if controller.silent:
+        silence = duration(timezone.now() - controller.seen_at)
+        return Standing(FAILED, READ_UNTAKEN.format(absent=f"no controller seen in {silence}"), since=asked)
+    return Standing(QUEUED, READ_WAITING, since=asked)
+
+
 def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> Standing:
     """How a read the controller was asked for at ``asked`` stands.
 
@@ -208,17 +239,14 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
         if timezone.now() - asked > read_request_lifetime():
             return Standing(
                 FAILED,
-                f"No controller answered within {duration(read_request_lifetime())}.",
+                f"No answer within {duration(read_request_lifetime())}.",
                 since=asked,
             )
-        seen = cadence.controller_standing().seen_at
-        if seen is not None and seen > asked:
-            return Standing(RUNNING, "The controller is reading it.", since=asked)
-        return Standing(QUEUED, "Waiting for the controller.", since=asked)
+        return _untried(asked)
     failed = [snapshot for snapshot in snapshots.values() if not snapshot.reachable]
     if failed:
         first = failed[0]
-        return Standing(FAILED, first.error or f"{first.kind} could not be read.", since=asked)
+        return Standing(FAILED, first.error or f"{registry_label(first.kind)} could not be read.", since=asked)
     refused = [
         refusal
         for snapshot in snapshots.values()
@@ -227,7 +255,7 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
     ]
     if refused:
         return Standing(FAILED, f"{refused[0].phrase}.", since=asked)
-    return Standing(DONE, "Read just now.", since=asked)
+    return Standing(DONE, "Refreshed just now.", since=asked)
 
 
 # ----- Jobs the runner runs ---------------------------------------------------
@@ -240,7 +268,13 @@ def job_standing(job: Any) -> Standing:
     state = states.get(job.state, FAILED)
     note = job.note
     if state == FAILED:
-        note = job.error.strip().splitlines()[-1] if job.error else "The job did not finish."
+        note = job.error.strip().splitlines()[-1] if job.error else "Failed."
     elif state == QUEUED and not note:
-        note = "Starting…"
-    return Standing(state, note, since=job.created_at, percent=job.percent if state != DONE else 100)
+        note = WAITING
+    return Standing(
+        state,
+        note,
+        since=job.created_at,
+        percent=job.percent if state != DONE else 100,
+        word=job.get_state_display(),
+    )

@@ -14,8 +14,9 @@ that one load; a finding names its check, page, width and theme.
 
 import json
 import re
-from functools import partial
+from functools import cache, partial
 from html import unescape
+from types import MappingProxyType
 from typing import override
 from urllib.parse import parse_qsl, urljoin, urlsplit
 
@@ -25,52 +26,30 @@ from django.urls import reverse
 lazy from django.db import transaction
 
 from hq.platform.core.browser_tests import (
-    _ASIDE_BESIDE_ITS_HEADING,
-    _AUDIT,
-    _BROKEN_WORDS,
-    _CELLS,
-    _CONTRAST,
-    _EMPTY_FRAMES,
     _FINISH_TRANSITIONS,
-    _NESTED_DISCLOSURES,
-    _NESTED_FRAMES,
-    _OVERLAPS,
-    _PAIRS,
-    _PAST_THE_GUTTER,
-    _RAISED_LINKS,
-    _READINGS,
-    _ROW_HEIGHTS,
+    _FONTS_READY,
     _SETTLED,
     _SIDEWAYS,
-    _SPILLED_LABELS,
-    _SQUEEZED_TITLES,
-    _TABLES,
-    _TABLES_THAT_DO_NOT_FIT,
-    _TOKEN_BREAKS,
-    _UNEVEN_BANDS,
-    _UNPADDED_CELLS,
     _UNPADDED_TILES,
-    _UNSEEN_COLUMNS,
-    _WRAPPED_PHRASES,
-    AUDIT_RULES,
-    LARGE_TEXT_CONTRAST,
     ORIGIN,
     PHONE_SCREEN,
-    ROW_LINES,
     SELECTORS,
-    TEXT_CONTRAST,
+    WIDE,
+    WIDE_TABLES,
+    WIDTHS,
     BrowserGate,
-    reading_problems,
     viewport,
 )
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 
-# A phone, a tablet held upright, a laptop and a wide desktop.
-WIDTHS = (PHONE_SCREEN[0], 820, 1360, 1680)
-# Where a frame across most of the page has the room to be judged empty.
-WIDE = 1360
+# The gate's widths and a wide desktop: the example estate is the homelab as a
+# person reads it, on every screen up to the widest. Where a script could move
+# what the server drew.
+DRAWN_AT = (*WIDTHS, 1680)
+# Those, and the laptop windows where a wide table has the least room.
+READ_AT = tuple(sorted((*DRAWN_AT, *WIDE_TABLES)))
 THEMES = ("light", "dark")
 # The API reference mounts a vendored viewer, whose markup is not HQ's to hold
 # to these rules; ReferenceBrowserTests holds it to its own.
@@ -110,7 +89,7 @@ def navigation():
 def records():
     """A record's page of each kind the navigation lists: the machine, the
     service with the longest name, its container (which has an upgrade to
-    make) and the zone."""
+    make), the zone, and a message with the page that deletes it."""
 
     hostname, container, *_ = max(SERVICES, key=lambda service: len(service[0]))
     return [
@@ -118,6 +97,8 @@ def records():
         reverse("control_plane:service", kwargs={"hostname": hostname}),
         reverse("control_plane:detail", kwargs={"key": f"{container}-container"}),
         reverse("control_plane:detail", kwargs={"key": "example-zone"}),
+        reverse("contacts:detail", args=[1]),
+        reverse("contacts:delete", args=[1]),
     ]
 
 
@@ -144,16 +125,28 @@ def render_estate():
     return paths, answers
 
 
-class ExampleEstateBrowserTests(BrowserGate):
-    """Every navigation page of the example estate keeps the layout rules."""
+@cache
+def estate_once():
+    """``render_estate`` once a process, so a worker handed both of the
+    estate's sweeps builds it once; it is rolled back once rendered."""
+
+    paths, answers = render_estate()
+    return tuple(paths), MappingProxyType(answers)
+
+
+class ExampleEstateGate(BrowserGate):
+    """The example estate's pages in a browser, read as a person reads them:
+    script on, and every part a page fetches answered. Its sweeps are the
+    classes below, so two workers run them side by side."""
+
+    scripted = True
 
     @classmethod
     def render(cls):
-        cls.navigation, answers = render_estate()
+        cls.navigation, answers = estate_once()
         return answers
 
     def start(self, **options):
-        options.setdefault("java_script_enabled", True)
         super().start(**options)
         self.unanswered = []
         # Requests not yet answered. `respond` answers every one, so zero after
@@ -193,6 +186,7 @@ class ExampleEstateBrowserTests(BrowserGate):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}{path}", wait_until="load")
         self.finish(path, width)
+        self.page.evaluate(_FONTS_READY)
 
     def finish(self, path, width):
         # Each frame lets a script start what an answer asked for; two quiet
@@ -205,49 +199,9 @@ class ExampleEstateBrowserTests(BrowserGate):
                 return
         raise AssertionError(f"{path} at {width}px still had {self.in_flight} requests in flight")
 
-    def geometry(self, path, width):
-        """What the layout invariants find on the page as loaded, by check."""
 
-        scroll = SELECTORS["table_scroll"]
-        found = {
-            "sideways": self.page.evaluate(_SIDEWAYS, SELECTORS["sideways"]),
-            "cells": self.page.evaluate(_CELLS),
-            "broken words": self.page.evaluate(_BROKEN_WORDS),
-            "wrapped phrases": self.page.evaluate(_WRAPPED_PHRASES, SELECTORS["one_line"]),
-            "overlaps": self.page.evaluate(_OVERLAPS),
-            "grid rows": self.page.evaluate(_PAIRS),
-            "bands": self.page.evaluate(_UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]),
-            "band padding": self.page.evaluate(_UNPADDED_CELLS, SELECTORS["band_cell"]),
-            "tables": self.page.evaluate(_TABLES)["found"],
-            "tables fit": self.page.evaluate(_TABLES_THAT_DO_NOT_FIT, scroll),
-            "unseen columns": self.page.evaluate(_UNSEEN_COLUMNS, scroll),
-            "row heights": self.page.evaluate(_ROW_HEIGHTS, ROW_LINES),
-            "control labels": self.page.evaluate(_SPILLED_LABELS, SELECTORS["control"]),
-            "cell labels": self.page.evaluate(_SPILLED_LABELS, SELECTORS["cell_content"]),
-            "raised links": self.page.evaluate(_RAISED_LINKS),
-            "row disclosures": self.page.evaluate(_NESTED_DISCLOSURES),
-            "tokens": self.page.evaluate(_TOKEN_BREAKS, SELECTORS["token"]),
-            "heading asides": self.page.evaluate(_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]),
-            "titles": self.page.evaluate(
-                _SQUEEZED_TITLES, [SELECTORS["page_title"], SELECTORS["page_actions"], SELECTORS["page_head"]]
-            ),
-            "gutter": self.page.evaluate(_PAST_THE_GUTTER, [SELECTORS["gutter_bound"], False]),
-            "audit": [v for v in self.page.evaluate(_AUDIT)["violations"] if v["rule"] in AUDIT_RULES],
-        }
-        if width >= WIDE:
-            found["wide frames"] = self.page.evaluate(_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]])
-        if path == "/":
-            found["readings"] = reading_problems(self.page.locator(SELECTORS["readings"]).evaluate_all(_READINGS))
-        return found
-
-    def palette(self):
-        """What depends on the palette: frames drawn by a border, and contrast."""
-
-        report = self.page.evaluate(_CONTRAST, [SELECTORS["contrast_scope"], TEXT_CONTRAST, LARGE_TEXT_CONTRAST])
-        return {
-            "frames": self.page.evaluate(_NESTED_FRAMES, [SELECTORS["frame_exempt"], SELECTORS["frame_exempt_within"]]),
-            "contrast": report["found"] if report["sampled"] else ["no text sampled"],
-        }
+class ExampleEstateBrowserTests(ExampleEstateGate):
+    """Every navigation page of the example estate keeps the layout rules."""
 
     def opened(self):
         """What holds once every disclosure on the page is open."""
@@ -270,7 +224,7 @@ class ExampleEstateBrowserTests(BrowserGate):
     def test_every_navigation_page_keeps_the_layout_rules(self):
         self.assertGreater(len(self.navigation), 10, "the navigation led almost nowhere")
         for path in self.navigation:
-            for width in WIDTHS:
+            for width in READ_AT:
                 with self.subTest(page=path, width=width):
                     self.page.emulate_media(color_scheme="light")
                     self.visit(path, width)
@@ -286,12 +240,16 @@ class ExampleEstateBrowserTests(BrowserGate):
                     if failed:
                         self.fail(json.dumps(failed, indent=1))
 
+
+class ExampleEstateDrawnTests(ExampleEstateGate):
+    """Nothing on a navigation page of the example estate moves once drawn."""
+
     def test_nothing_moves_once_a_page_is_drawn(self):
         """What the server draws is where things stay: a script and a part
         fetched after the page fill room that was already there."""
 
         for path in self.navigation:
-            for width in WIDTHS:
+            for width in DRAWN_AT:
                 with self.subTest(page=path, width=width):
                     moved = self.moved_once_drawn(f"{ORIGIN}{path}", width, partial(self.finish, path, width))
                     if moved:
@@ -334,6 +292,8 @@ class ExampleEstateControlTests(BrowserGate):
     The answers are rendered first, every address a press can ask for, keyed by
     what it asks (a blank field and the sort a list stands at by default ask
     nothing)."""
+
+    scripted = True
 
     @classmethod
     @override
@@ -411,14 +371,10 @@ class ExampleEstateControlTests(BrowserGate):
             # A part the page asks for by itself is not what these hold.
             route.fulfill(status=404, body="Not pressed here")
 
-    @override
-    def start(self, **options):
-        options.setdefault("java_script_enabled", True)
-        super().start(**options)
-
     def visit(self, path, width):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}{path}", wait_until="load")
+        self.page.evaluate(_FONTS_READY)
         self.page.evaluate(_SETTLED)
 
     def rows(self):
@@ -522,12 +478,21 @@ class ExampleEstateControlTests(BrowserGate):
                 self.assertEqual([mark for mark in marks if f"pill-{chosen}" not in mark], [])
 
     def test_a_menu_opens_and_closes_on_escape_and_a_press_outside(self):
+        # The page's clock stands still, so a press lands while the hover delay
+        # its pointer started is still pending, as a quick hand's does. A
+        # dismissal is read once every delay has run out: it has to hold.
         def is_open(menu):
             return menu.evaluate("(menu) => menu.open")
 
+        def every_delay_later():
+            self.page.clock.run_for(1000)
+
+        self.page.clock.install()
         for width in PRESSED_AT:
             with self.subTest(width=width):
+                self.page.clock.resume()
                 self.visit(reverse("expenses:list"), width)
+                self.page.clock.pause_at(self.page.evaluate("() => Date.now() / 1000 + 1"))
                 menus = [self.page.locator(SELECTORS["table_filter"]).first]
                 if width >= WIDE:
                     menus.append(self.page.locator(SELECTORS["nav_menu"]).first)
@@ -535,10 +500,12 @@ class ExampleEstateControlTests(BrowserGate):
                     menu.locator("summary").click()
                     self.assertTrue(is_open(menu))
                     self.page.keyboard.press("Escape")
+                    every_delay_later()
                     self.assertFalse(is_open(menu))
                     menu.locator("summary").click()
                     self.assertTrue(is_open(menu))
                     self.page.locator(SELECTORS["page_title"]).click()
+                    every_delay_later()
                     self.assertFalse(is_open(menu))
                 if width < WIDE:
                     # A phone's menus are in a drawer, which Escape closes whole.
@@ -548,4 +515,6 @@ class ExampleEstateControlTests(BrowserGate):
                     self.assertTrue(is_open(menu))
                     self.assertTrue(menu.locator("a").first.is_visible())
                     self.page.keyboard.press("Escape")
+                    every_delay_later()
+                    self.assertFalse(is_open(menu))
                     self.assertFalse(menu.is_visible())

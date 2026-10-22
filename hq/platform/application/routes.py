@@ -67,7 +67,7 @@ setting_changed.connect(_forget)
 
 
 @dataclass(frozen=True, slots=True)
-class Route:
+class RoutedView:
     """One routed view, as the URL configuration reaches it."""
 
     pattern: URLPattern
@@ -97,11 +97,11 @@ class Route:
 
 def routed(
     entries: Iterable[URLPattern | URLResolver] | None = None, mounts: tuple[URLResolver, ...] = ()
-) -> Iterator[Route]:
+) -> Iterator[RoutedView]:
     """Every routed view in the URL configuration in force, in its order."""
 
     for entry in get_resolver().url_patterns if entries is None else entries:
         if isinstance(entry, URLResolver):
             yield from routed(entry.url_patterns, (*mounts, entry))
         elif isinstance(entry, URLPattern):
-            yield Route(entry, mounts)
+            yield RoutedView(entry, mounts)

@@ -111,7 +111,8 @@ jobs:
         with:
           host: host
       # uv verifies every artifact against the locks; the cache only saves the download.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: uv-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ matrix.python }}-${{ hashFiles(format('{0}/uv.lock', inputs.package-dir), 'host/uv.lock') }}
@@ -122,6 +123,15 @@ jobs:
           PACKAGE_DIR: ${{ inputs.package-dir }}
           PLUGIN_REPOSITORY: ${{ github.repository }}
         run: host/tools/pipeline/check-plugin.sh --plugin-root "$PACKAGE_DIR"
+      - name: Save the uv cache
+        # From the calling repository's default branch only, which every branch reads.
+        if: >-
+          steps.uv-cache.outputs.cache-hit != 'true' &&
+          github.ref_name == github.event.repository.default_branch
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: ${{ steps.uv-cache.outputs.cache-primary-key }}
 
   secret-scan:
     name: Secret scan

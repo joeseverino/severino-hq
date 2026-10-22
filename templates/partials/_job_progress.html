@@ -12,8 +12,8 @@ would be wrong for every extension after the first.
 {% endcomment %}
 <div class="job-progress card" data-ask data-ask-outcome{% if job.is_live %} data-ask-status="{% url 'jobs:status' job.pk %}" aria-busy="true"{% endif %} data-ask-state="{{ job.state }}" data-state="{{ job.state }}">
   <div class="job-progress-head">
-    <strong>{{ job.label }}</strong>
-    <span class="job-state" data-ask-label>{{ job.get_state_display }}</span>
+    <strong>{{ job.label|breakable }}</strong>
+    <span class="job-state" data-ask-label>{{ job.get_state_display|breakable }}</span>
   </div>
   {% comment %}
   A determinate bar where the work knows how far along it is and an
@@ -26,5 +26,5 @@ would be wrong for every extension after the first.
        aria-valuemin="0" aria-valuemax="100">
     <i data-ask-bar {% if job.percent is not None %}style="--at: {{ job.percent }}%"{% endif %}></i>
   </div>
-  <p class="job-note" role="status" data-ask-note>{{ job.note|default:"Starting…" }}</p>
+  <p class="job-note" role="status" data-ask-note>{% if job.note %}{{ job.note|breakable }}{% else %}{% waiting %}{% endif %}</p>
 </div>

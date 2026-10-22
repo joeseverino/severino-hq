@@ -24,13 +24,17 @@ pickle its traceback and the real error is replaced by ``cannot pickle
 'traceback' object``. Use ``--parallel=1`` instead, or install it.
 """
 
+import io
 import logging
 import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+import unittest.util
 from pathlib import Path
+from typing import override
 
 from django.conf import settings
 from django.db import connections
@@ -145,12 +149,81 @@ class _LogsOnFailure:
         return super().addSubTest(test, subtest, err)
 
 
-class CompositionTextResult(_LogsOnFailure, _CompositionIsolation, unittest.TextTestResult):
-    pass
+class _ClassTimes:
+    """Each test class's wall time, its class fixtures included, by class."""
+
+    def addClassTime(self, test, seconds):
+        vars(self).setdefault("class_times", {})[unittest.util.strclass(type(test))] = seconds
+
+
+def block_on_output() -> None:
+    """Make writes to stdout and stderr wait for room again.
+
+    A child that shares the run's pipes (Playwright's driver does) can leave
+    them non-blocking, and a long report written then stops part way with
+    ``BlockingIOError``, its failures never printed.
+    """
+
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            os.set_blocking(stream.fileno(), True)
+        except OSError, ValueError, io.UnsupportedOperation:
+            continue
+
+
+class CompositionTextResult(_LogsOnFailure, _CompositionIsolation, _ClassTimes, unittest.TextTestResult):
+    def printErrors(self):
+        block_on_output()
+        super().printErrors()
 
 
 class CompositionRemoteResult(_LogsOnFailure, _CompositionIsolation, RemoteTestResult):
-    pass
+    def addClassTime(self, test, seconds):
+        # A worker's result keeps nothing: the parent replays this event
+        # against the subsuite's test at that index.
+        self.events.append(("addClassTime", self.test_index, seconds))
+
+
+class ClassTimedSuite(unittest.TestSuite):
+    """A suite that tells its result how long each class took, from its
+    ``setUpClass`` to the end of its ``tearDownClass``.
+
+    Under ``--parallel`` each worker's subsuite is this type too, since Django
+    partitions a suite into suites of its own type, so the time is measured
+    where the class ran and reaches the parent as an event.
+    """
+
+    def _handleClassSetUp(self, test, result):
+        if type(test) is not getattr(result, "_previousTestClass", None):
+            self._timing = (test, time.monotonic())
+        super()._handleClassSetUp(test, result)
+
+    def _tearDownPreviousClass(self, test, result):
+        previous = getattr(result, "_previousTestClass", None)
+        super()._tearDownPreviousClass(test, result)
+        timing = vars(self).pop("_timing", None) if previous is not type(test) else None
+        if timing and (record := getattr(result, "addClassTime", None)):
+            first, began = timing
+            record(first, time.monotonic() - began)
+
+
+# Enough to show where a run's wall time went: a parallel run lasts as long as
+# its slowest class.
+SLOWEST_SHOWN = 10
+
+
+def report_class_times(result, stream, began_load: tuple[float, ...]) -> None:
+    """The slowest classes of a run, and the load the machine was under."""
+
+    times = sorted(vars(result).get("class_times", {}).items(), key=lambda item: item[1], reverse=True)
+    if not times:
+        return
+    block_on_output()
+    load = " / ".join(f"{a:.2f} {b:.2f} {c:.2f}" for a, b, c in (began_load, os.getloadavg()))
+    stream.write(f"\nSlowest test classes (load average at start / end: {load}):\n")
+    for name, seconds in times[:SLOWEST_SHOWN]:
+        stream.write(f"  {seconds:8.1f}s  {name}\n")
+    stream.flush()
 
 
 class CompositionRemoteRunner(RemoteTestRunner):
@@ -272,6 +345,7 @@ class SeverinoTestRunner(DiscoverRunner):
     """Django's runner, with parallel workers on checkpointed database files."""
 
     parallel_test_suite = FileClonedParallelSuite
+    test_suite = ClassTimedSuite
 
     def __init__(self, *args, installed_plugins=False, **kwargs):
         super().__init__(*args, **kwargs)
@@ -314,6 +388,13 @@ class SeverinoTestRunner(DiscoverRunner):
 
     def get_resultclass(self):
         return super().get_resultclass() or CompositionTextResult
+
+    @override
+    def run_suite(self, suite, **kwargs):
+        began_load = os.getloadavg()
+        result = super().run_suite(suite, **kwargs)
+        report_class_times(result, sys.stderr, began_load)
+        return result
 
     def setup_databases(self, **kwargs):
         # Here, in the process that starts the run and before it makes files

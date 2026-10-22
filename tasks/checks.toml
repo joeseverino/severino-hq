@@ -1,0 +1,68 @@
+# The Checks job: every checks:* gate here and under mise-tasks/checks/, and the
+# drift:* gates (tasks/drift.toml).
+
+["checks:patch"]
+description = "No whitespace errors or conflict markers in the working tree"
+run = "git diff --check"
+
+["checks:ruff"]
+description = "ruff"
+run = ["uv run ruff check .", "uv run ruff format --check ."]
+
+["checks:mypy"]
+description = "mypy: the typed seams pyproject.toml names"
+# django-stubs loads the host's settings.
+extends = "django"
+run = "uv run python -m mypy"
+
+["setup:openapi"]
+description = "Install the locked contract tools"
+hide = true
+sources = ["tools/openapi/package-lock.json"]
+outputs = ["tools/openapi/node_modules/.package-lock.json"]
+run = "npm --prefix tools/openapi ci"
+
+["checks:openapi"]
+description = "Both OpenAPI descriptions pass specification lint"
+depends = ["setup:openapi"]
+# Specification rules cover wire contracts. HTTP style recommendations do not
+# apply to Django's canonical trailing slashes or the stdin/stdout bridge.
+run = "node tools/openapi/node_modules/@redocly/cli/bin/cli.js lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json"
+
+["checks:lockfile"]
+description = "uv.lock matches pyproject.toml"
+run = "uv lock --check"
+
+["checks:toolchain"]
+description = "mise.lock has a checksum for every pinned tool on every platform a gate runs on, mise's Go is go.mod's, and the images take no build tool from another image"
+run = "uv run python -m tools.pipeline.toolchain_lock"
+
+["checks:mise-tasks"]
+description = "Every task is valid: its usage spec parses, its dependencies exist, its timeout and globs are well formed"
+run = "mise tasks validate"
+
+["checks:workflows"]
+description = "The workflows are valid, run: blocks included"
+run = "actionlint -color"
+
+["checks:source"]
+description = "The tests that read the repository, run once on the checkout"
+# Tagged "source"; a whole-suite run leaves them out (hq/platform/core/test_runner.py),
+# so no image or composed pass runs them.
+extends = "django-heavy"
+usage = 'arg "[labels]..." var=#true help="Test labels, dotted; only their tagged tests run. Every one by default"'
+run = "uv run python manage.py test --tag source --noinput --parallel auto ${usage_labels:-}"
+
+["checks:deploycheck"]
+description = "Production settings raise no security warning"
+# DEBUG off, a real host. The values mirror a production configuration so the
+# check judges how settings.py reads one. The key is a throwaway long enough
+# for the strength check.
+extends = "django"
+env = { DJANGO_DEBUG = "0", DJANGO_SECRET_KEY = "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef", DJANGO_ALLOWED_HOSTS = "hq.example.com", SEVERINO_OIDC_ISSUER = "https://sso.example.com", DJANGO_BEHIND_TLS_PROXY = "1", DJANGO_SESSION_COOKIE_SECURE = "1", DJANGO_CSRF_COOKIE_SECURE = "1", DJANGO_HSTS_SECONDS = "31536000" }
+run = "uv run python manage.py check --deploy --fail-level WARNING"
+
+["checks:structural"]
+description = "No new near-duplicate pair outside tests"
+usage = 'flag "--record" help="Rewrite the baseline from this tree instead of checking it"'
+run = 'uv run python -m tools.structural.bar ${usage_record:+--record}'

@@ -7,7 +7,7 @@ one by hand would create a row that means nothing until one of those is true
 anyway, and would go on meaning nothing after it stopped being.
 {% endcomment %}
 
-{% if machines %}<p class="muted">{{ machines|length|counted:"machine" }}: {% for count, state in state_counts %}{{ count }} {{ state }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+{% if machines %}<p class="muted">{{ machines|length|counted:"machine" }}: {% for count, state in state_counts %}{{ count|breakable }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}</p>{% endif %}
 {% table_region "Machines" room="shared" narrow=3 %}
   <table class="data-table">
     <thead>
@@ -23,8 +23,8 @@ anyway, and would go on meaning nothing after it stopped being.
       {% for machine in machines %}
         <tr>
           <td class="row-gutter">
-            <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} <span class="tag" title="{{ role.detail }}">{{ role.label }}</span>{% endfor %}
-            {% if machine.role %}<br><span class="muted table-clamp" title="{{ machine.role }}">{{ machine.role }}</span>{% endif %}
+            <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} <span class="tag" title="{{ role.detail }}">{{ role.label|breakable }}</span>{% endfor %}
+            {% if machine.role %}<br><span class="muted table-clamp" title="{{ machine.role }}">{{ machine.role|breakable }}</span>{% endif %}
             {% row_toggle %}
           </td>
           <td>
@@ -32,23 +32,23 @@ anyway, and would go on meaning nothing after it stopped being.
           </td>
           <td>
             {% if machine.containers %}
-              {{ machine.running }} of {{ machine.containers|length }} running
+              {{ machine.running|breakable }} of {{ machine.containers|length }} running
             {% elif not machine.containers_visible %}
               <span class="muted" title="No connection reads containers.">Not visible</span>
             {% endif %}
           </td>
           <td>
-            {% if machine.runs_hq %}{{ hq_label }}{% if machine.hostnames %}<br>{% endif %}{% endif %}
+            {% if machine.runs_hq %}{{ hq_label|breakable }}{% if machine.hostnames %}<br>{% endif %}{% endif %}
             {% comment %}Two names and a count: a machine serving ten would make its row ten lines tall. Its page lists them all.{% endcomment %}
             {% for hostname in machine.hostnames|slice:":2" %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            {% if machine.hostnames|length > 2 %}<br><a class="muted" href="{{ machine.link.url }}#names">+{{ machine.hostnames|length|add:"-2" }} more</a>{% endif %}
+            {% if machine.hostnames|length > 2 %}<br><a class="muted" href="{{ machine.link.url }}#names">+{{ machine.hostnames|length|add:"-2"|breakable }} more</a>{% endif %}
           </td>
           <td>
             {% comment %}
             One state. Presence decides when the tailnet reports the machine;
             the connection that sees it is in "Read through".
             {% endcomment %}
-            <span class="pill pill-{{ machine.state.1 }}">{{ machine.state.0 }}</span>{% if machine.state_since %}<br><span class="muted">since {{ machine.state_since }}</span>{% endif %}
+            <span class="pill pill-{{ machine.state.1 }}">{{ machine.state.0|breakable }}</span>{% if machine.state_since %}<br><span class="muted">since {{ machine.state_since|breakable }}</span>{% endif %}
           </td>
         </tr>
       {% empty %}

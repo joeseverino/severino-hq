@@ -377,8 +377,8 @@ holds the same way (`hq.platform.application.conditions`), so a drift keeps the
 moment it was first seen. The topology gives a drifted declaration that moment
 and what the history holds within six hours of it
 (`hq.platform.application.history.near`), and the drift findings show both
-beside the key-level difference, so "Keep the live version" or "Restore HQ's
-version" is decided next to the deploy, recreate or edit that likely caused it.
+beside the key-level difference, so "Keep the live version" or "Apply HQ's
+settings" is decided next to the deploy, recreate or edit that likely caused it.
 
 ## Contradictions
 
@@ -530,7 +530,7 @@ its repository instead: the production deploy, whether it passed its checks,
 and, for whether anything is newer, whether the default branch has moved past
 it. Which container is HQ's is derived (`hq_self.own_container`).
 The containers page, each container's page and each machine's container table
-show one `Standing`; the action queue holds one item per affected image and
+show one `ImageStanding`; the action queue holds one item per affected image and
 version, and one for every image with a newer release. With a `HEAD` of the
 manifest, the refresh also resolves the digest each running tag names now and
 the digest of the newest tag of its shape: what an upgrade would pin, and
@@ -640,6 +640,36 @@ without a credential. Whose profile is the login their sign-in claims
 `hq.platform.application.github_profile.plan` hands the controller those
 accounts and says when the reading is due. Refresh asks for a read now; no
 request reads GitHub.
+
+### Dependency updates
+
+A project opted in by `project.dependency_updates` has its repository updated
+by Renovate once a day and when somebody asks (`project.dependency_updates.run`).
+`hq.platform.application.dependency_updates.plan` hands the controller the
+opted-in repositories, grouped by owner, whether a run is due, and
+`last_started_at`, the latest run HQ holds. When one is due the controller
+mints one installation token per owner, naming exactly that owner's
+repositories and exactly the Renovate grant (`githubRenovate` in
+`controller/providers/github_delivery.go`, held to `deploy/github-apps.json`),
+and writes them, mode 0600, to `dependency-updates.json` in the directory root
+gives the pass as `HQ_CONTROLLER_OUT`:
+
+```json
+{"version":1,"runs":[{"owner":"example","repositories":["example/app"],"token":"…","expires_at":"2030-01-01T00:00:00Z"}]}
+```
+
+A pass given no such directory mints nothing and logs why. Root runs Renovate
+and gives the next pass its result read-only, named by `SEVERINO_DEPENDENCY_RUN`:
+
+```json
+{"version":1,"started_at":"…","finished_at":"…","runs":[{"owner":"example","repositories":["example/app"],"exit_code":0,"outcome":"ok"}]}
+```
+
+`outcome` is `ok`, `failed` or `timeout`; any other shape is refused. The
+`github.dependency_run` reading is one record per owner: a run handed off
+(`handed_off`, until its result comes back, so the plan does not hand it off
+again), or the result once it started after `last_started_at`. A token reaches
+only the hand-off file, and no log text reaches HQ.
 
 ## Machine roles
 

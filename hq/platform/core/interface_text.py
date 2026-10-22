@@ -54,7 +54,7 @@ _FORM_TAG = re.compile(r"<(/?)form\b", re.IGNORECASE)
 
 
 @dataclass
-class Reading:
+class TextFindings:
     """Every finding of one pass over the source, as ``(path, line[, why])``."""
 
     files: int = 0
@@ -122,14 +122,14 @@ def _refusal(one: str, many: str | None) -> str | None:
     return None
 
 
-def _template_counts(path: Path, number: int, line: str, reading: Reading) -> None:
+def _template_counts(path: Path, number: int, line: str, reading: TextFindings) -> None:
     for match in _COUNTED_FILTER.finditer(line):
         reason = _refusal(*counted_phrases(match.group(2)))
         if reason:
             reading.unagreeable_counts.append((path, number, reason))
 
 
-def _template_forms(path: Path, number: int, line: str, depth: int, reading: Reading) -> int:
+def _template_forms(path: Path, number: int, line: str, depth: int, reading: TextFindings) -> int:
     """The form depth after ``line``; a form opened inside an open one is found."""
     for match in _FORM_TAG.finditer(line):
         if match.group(1):
@@ -172,7 +172,7 @@ def unclosed_template_comments(template_root: str | Path) -> list[str]:
     return found
 
 
-def _read_template(path: Path, source: str, worded: bool, reading: Reading) -> None:
+def _read_template(path: Path, source: str, worded: bool, reading: TextFindings) -> None:
     reading.open_comments.extend((path, number) for number in open_comment_lines(source))
     text = TEMPLATE_COMMENT.sub(lambda match: "\n" * match.group().count("\n"), source)
     depth = 0
@@ -241,7 +241,7 @@ def _has_em_dash(node: ast.AST) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str) and EM_DASH in node.value
 
 
-def _read_python(path: Path, source: str, worded: bool, reading: Reading) -> None:
+def _read_python(path: Path, source: str, worded: bool, reading: TextFindings) -> None:
     try:
         tree = ast.parse(source)
     except SyntaxError, ValueError:
@@ -260,7 +260,7 @@ def _read_python(path: Path, source: str, worded: bool, reading: Reading) -> Non
             reading.hand_plurals.append((path, node.lineno))
 
 
-def read() -> Reading:
+def read() -> TextFindings:
     """One pass over HQ and its extensions: each tree walked and each file parsed once.
 
     Wording and markup are read in HQ and in each extension checked out beside
@@ -269,7 +269,7 @@ def read() -> Reading:
     a page, and an open comment is printed on one, wherever it lives.
     """
     worded_roots = _roots()
-    reading = Reading()
+    reading = TextFindings()
     for root in _outermost(worded_roots + _plugin_roots()):
         for path in _files(root):
             source = _text(path)

@@ -1,11 +1,11 @@
 {% extends "list_page.html" %}
 {% block summary %}{% include "expenses/_cost_totals.html" %}{% endblock %}
 {% block row %}
-  <td class="row-gutter"><a href="{{ row.get_absolute_url }}">{{ row.date|when }}</a>{% row_toggle %}</td>
-  <td>{{ row.vendor }}</td>
-  <td>{{ row.item }}</td>
-  <td>{{ row.get_category_display }}</td>
+  <td class="row-gutter"><a href="{{ row.get_absolute_url }}"><strong>{{ row.vendor|breakable }}</strong></a>{% row_toggle %}</td>
+  <td class="date-col">{{ row.date|when }}</td>
+  <td>{{ row.item|or_empty }}</td>
+  <td>{{ row.get_category_display|breakable }}</td>
   <td>{{ row.total_cost|money }}</td>
-  <td class="muted">{{ row.business_use_percentage }}%</td>
+  <td class="muted">{{ row.business_use_percentage|breakable }}%</td>
   <td>{{ row.estimated_deductible_amount|money }}</td>
 {% endblock %}

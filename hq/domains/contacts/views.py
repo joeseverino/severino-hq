@@ -15,6 +15,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from hq.platform.application.asks import APPLIES_SHORTLY, WAITING
 from hq.platform.application.contact_submissions import (
     ContactDeleteCommand,
     ContactReviewCommand,
@@ -23,15 +24,18 @@ from hq.platform.application.contact_submissions import (
     find_submission,
     list_contact_submissions,
 )
+from hq.platform.application.moments import when
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import counted
 
 from . import inbox
 from .forms import STATUS_CHOICES, ContactReviewForm
 
-VALID_STATUSES = {value for value, _ in STATUS_CHOICES}
-QUEUED = "The controller applies it on its next run."
+STATUS_LABELS = dict(STATUS_CHOICES)
+QUEUED = APPLIES_SHORTLY
+GONE = "That message was not found."
 
 
 def reply_mailto(address: str, subject: str = "Re: your message") -> str:
@@ -50,13 +54,13 @@ def _waiting_note(current: inbox.Inbox) -> str:
     if current.refused:
         return f"The controller could not apply the last change: {current.refused}"
     if current.waiting:
-        return f"{counted(current.waiting, 'change')} waiting for the controller."
+        return f"{counted(current.waiting, 'change')}: {WAITING}"
     return ""
 
 
 def contact_list(request):
     selected_status = request.GET.get("status", "").strip()
-    if selected_status not in VALID_STATUSES:
+    if selected_status not in STATUS_LABELS:
         selected_status = ""
     q = request.GET.get("q", "").strip()
     current = inbox.current()
@@ -102,7 +106,7 @@ def _review(request, pk: int, command: ContactReviewCommand) -> bool:
 def contact_detail(request, pk: int):
     submission = find_submission(pk)
     if not submission:
-        messages.error(request, f"Message #{pk} was not found.")
+        messages.error(request, GONE)
         return redirect("contacts:list")
 
     if request.method == "POST":
@@ -114,7 +118,7 @@ def contact_detail(request, pk: int):
                 admin_notes=form.cleaned_data["admin_notes"],
             )
             if _review(request, pk, command):
-                messages.success(request, f"Message #{pk} saved. {QUEUED}")
+                messages.success(request, f"Message saved. {QUEUED}")
             return redirect("contacts:detail", pk=pk)
     else:
         form = ContactReviewForm(
@@ -135,7 +139,7 @@ def contact_detail(request, pk: int):
             "form": form,
             **page_context(
                 f"Message #{pk}",
-                f"{submission.get('name', '')} · {submission.get('created_at', '')}",
+                " · ".join(filter(None, (submission.get("name", ""), _sent(submission)))),
                 actions=(PageAction("Reply by email", reply),),
                 trail=(("Messages", reverse("contacts:list")),),
             ),
@@ -152,13 +156,13 @@ def _safe_next(request) -> str:
 @require_POST
 def contact_set_status(request, pk: int):
     status = request.POST.get("status", "")
-    if status not in VALID_STATUSES:
-        messages.error(request, f"Unknown status: {status!r}.")
+    if status not in STATUS_LABELS:
+        messages.error(request, "Choose a status from the list.")
         return redirect(_safe_next(request))
 
     submission = find_submission(pk)
     if not submission:
-        messages.error(request, f"Message #{pk} was not found.")
+        messages.error(request, GONE)
         return redirect("contacts:list")
     command = ContactReviewCommand(
         status=status,
@@ -166,14 +170,14 @@ def contact_set_status(request, pk: int):
         admin_notes=submission.get("admin_notes") or "",
     )
     if _review(request, pk, command):
-        messages.success(request, f"Message #{pk} marked {status}. {QUEUED}")
+        messages.success(request, f"Message marked {STATUS_LABELS[status].lower()}. {QUEUED}")
     return redirect(_safe_next(request))
 
 
 def contact_delete(request, pk: int):
     submission = find_submission(pk)
     if not submission:
-        messages.error(request, f"Message #{pk} was not found.")
+        messages.error(request, GONE)
         return redirect("contacts:list")
 
     if request.method == "POST":
@@ -186,7 +190,7 @@ def contact_delete(request, pk: int):
         except ValueError as exc:
             messages.error(request, str(exc))
             return redirect("contacts:detail", pk=pk)
-        messages.success(request, f"Message #{pk} will be deleted. {QUEUED}")
+        messages.success(request, f"Message deleted. {APPLIES_SHORTLY}")
         return redirect("contacts:list")
 
     return render(
@@ -201,7 +205,9 @@ def contact_delete(request, pk: int):
             },
             **page_context(
                 f"Delete message #{pk}?",
-                f"{submission.get('created_at', '')} · {submission.get('name', '')} ({submission.get('email', '')})",
+                " · ".join(
+                    filter(None, (_sent(submission), f"{submission.get('name', '')} ({submission.get('email', '')})"))
+                ),
                 trail=(
                     ("Messages", reverse("contacts:list")),
                     (f"Message #{pk}", reverse("contacts:detail", args=[pk])),
@@ -209,3 +215,10 @@ def contact_delete(request, pk: int):
             ),
         },
     )
+
+
+def _sent(submission) -> str:
+    """When a message was sent, in HQ's time words; D1 writes it in UTC."""
+
+    at = moment(submission.get("created_at"))
+    return when(at) if at is not None else ""

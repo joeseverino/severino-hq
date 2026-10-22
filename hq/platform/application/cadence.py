@@ -45,11 +45,14 @@ from hq.domains.control_plane.models import (
 )
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.provider_adapters.github import KIND as GITHUB_KIND
-lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.providers import PROVIDERS, registry_label
 
 from .derivations import asked_ahead, holds_until
+from .integration_specs import requested
 from .moments import duration
 from .security import Capability, Principal
+lazy from .action_links import READ_NOW_CAPABILITY
+lazy from .capabilities import capability_registry
 lazy from .credential_sight import fed_kinds
 lazy from .facts import stored_snapshots
 
@@ -323,7 +326,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
         f"every {duration(interval)}: {'due' if due else 'not due'}."
     )
     if not due and forced:
-        reason += f" Read now asked for {', '.join(read.subject for read in forced)}."
+        reason += f" A refresh was asked for {', '.join(read.subject for read in forced)}."
         if controller_id:
             # Due only because somebody asked: SSH is left as it was last
             # found, working or not, unless it is what they asked for.
@@ -340,7 +343,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
     }
 
 
-# ----- Read now ---------------------------------------------------------------
+# ----- Refresh ----------------------------------------------------------------
 
 
 def read_request_lifetime() -> timedelta:
@@ -597,11 +600,14 @@ def _read_label(subject: tuple[str, str] | None) -> str:
 
 
 def _sweep_message(subject: tuple[str, str] | None, due: bool) -> str:
-    if subject is not None:
-        return f"Asked the controller to read {_read_label(subject)} now; this page updates when it reports."
-    if due:
-        return "The controller was asked and will start now."
-    return "The controller was asked. What HQ shows is already up to date."
+    """What asking says, in the refresh command's own words."""
+
+    refresh = capability_registry()[READ_NOW_CAPABILITY]
+    ref, kind = subject or ("", "")
+    if ref or kind:
+        return refresh.requested(ref or registry_label(kind))
+    asked = requested(refresh.words("all"))
+    return asked if due or subject is not None else f"{asked} What HQ shows is already up to date."
 
 
 def _touch(path: Path) -> None:

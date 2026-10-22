@@ -1,22 +1,25 @@
 """What the operator keeps by hand: projects, runbooks, the calendar, and what
-running the homelab costs."""
+running the homelab costs; and what the site's readers wrote to it."""
 
-from datetime import date, time, timedelta
+from datetime import UTC, date, time, timedelta
 from decimal import Decimal
 
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
+from hq.domains.contacts import inbox
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
+from hq.platform.application.inventory_testing import store
 lazy from hq.domains.assets.models import Asset
 lazy from hq.domains.calendars.models import Entry
 lazy from hq.domains.content.models import ContentItem
 lazy from hq.domains.docs_index.models import DocumentationRecord
 lazy from hq.domains.expenses.models import Expense
 
-from .names import MACHINE
+from .names import CLOUDFLARE, MACHINE
 from .network import RENEWS_IN
+from .work import UPDATED
 
 # A one-page PDF that says what it is.
 _RECEIPT = (
@@ -41,7 +44,7 @@ PROJECTS = (
         "Media server",
         "media-server",
         "media-server",
-        "https://media.example.com/",
+        "https://streaming.example.com/",
         "Films and music streamed to the TV and the phone from the shelf in the hall.",
     ),
     (
@@ -98,6 +101,7 @@ def projects():
             public_url=url,
             description=about,
             repository_url=f"https://github.com/example/{repository}",
+            dependency_updates=repository == UPDATED,
         )
     _runbooks()
     _writeups()
@@ -132,6 +136,51 @@ def _writeups():
         item.related_projects.set(Project.objects.filter(slug=project))
         # Each writeup cites the runbooks of the project it is about.
         item.related_documentation.set(DocumentationRecord.objects.filter(related_projects__slug=project))
+
+
+def messages():
+    """The site's contact form, as the controller last read its table: one
+    message answered, one read. Neither waits on the operator, so the demo's
+    first glance stays at its few things to do. D1 writes a stamp the way
+    SQLite does, in UTC with a space and no zone."""
+
+    def message(index, name, address, text, status, age):
+        sent = (timezone.now() - age).astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
+        return {
+            "connection_ref": CLOUDFLARE,
+            "account_id": "example-account",
+            "database_id": "example-contact-database",
+            "database": "contacts",
+            "id": index,
+            "created_at": sent,
+            "updated_at": sent,
+            "name": name,
+            "email": address,
+            "message": text,
+            "status": status,
+            "country": "US",
+            "turnstile": "verified",
+        }
+
+    store(
+        inbox.READING,
+        message(
+            2,
+            "Example Reader",
+            "reader@example.com",
+            "Your writeup on restoring from the offsite backup saved my weekend. Is the script public?",
+            "replied",
+            timedelta(hours=3),
+        ),
+        message(
+            1,
+            "Example Neighbor",
+            "neighbor@example.org",
+            "Is the media server open to guests?",
+            "read",
+            timedelta(days=4),
+        ),
+    )
 
 
 def calendar():

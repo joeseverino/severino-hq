@@ -29,7 +29,7 @@ from ..topology import derive_topology
 from ..zone_insights import certificates, registration
 from ..zones import ZONE_KIND, find_zone
 from .host_only import host_only
-from .markup import select
+from .markup import select, text
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
 CLOUDFLARE = "example-cloudflare"
@@ -323,7 +323,7 @@ class RegistrationFallbackTests(TestCase):
 
         card = registration(find_zone("example.com"))
         self.assertIn("Domains Read (account)", card.note)
-        self.assertContains(response, escape(card.note))
+        self.assertIn(card.note, text(response))
         self.assertTrue(select(response, "title", "Cloudflare refused the request: Forbidden"))
 
     def test_a_refused_credential_still_says_so(self):

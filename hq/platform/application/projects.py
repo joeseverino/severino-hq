@@ -6,11 +6,12 @@ shape; adapters only parse input and render output.
 """
 
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields, replace
 from datetime import datetime
 from typing import Any
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from hq.domains.content.content_sync import ContentSyncError, sync_content_index
@@ -18,21 +19,24 @@ from hq.domains.projects.github import GitHubMetadataError, fetch_last_push
 from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context, record_event
 from hq.platform.core.models import AuditLog
-lazy from hq.domains.jobs.runner import JobConflict, start
 lazy from hq.platform.application.routes import reverse
 
 from .domains import records_of
 from .github_public import github_repository
-from .projection import addressable, iso, listing, read_once
+from .outbound_work import OutboundWork
+from .projection import addressable, iso, listing, projection_scope, read_once
 from .record_errors import RecordConflict, RecordNotFound
 from .record_links import linked
 from .security import Principal
+from .standards import MET
 from .ui import counted
 from .upserts import upsert_by_slug
 lazy from . import capabilities
 lazy from .action_links import READ_NOW_CAPABILITY
+lazy from .dependency_updates import last_run
 lazy from .entity_links import EntityLink, entity_link
-lazy from .github_estate import repository_for
+lazy from .github_estate import Repository, repositories, repository_for
+lazy from .github_posture import STANDARD, posture_of
 lazy from .plugins import installed_plugins
 lazy from .timestamps import moment
 
@@ -121,13 +125,6 @@ class ProjectCommand:
     notes: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class ProjectRefreshCommand:
-    """A targeted refresh has no free-form payload beyond its project target."""
-
-    pass
-
-
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
     fields = {
         "slug": project.slug,
@@ -141,18 +138,50 @@ def serialize_project(project: Project, *, relationships: bool = False) -> dict[
         "last_push_at": iso(project.last_push_at),
         "updated_at": iso(project.updated_at),
     }
+    if repository_key(project.repository_url):
+        fields["updates"] = _updates(project)
     return linked(fields, project, relationships=relationships, assets=project.assets)
 
 
-def list_projects(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:
-    return listing(
-        Project,
-        serialize_project,
-        search=("name", "slug", "description", "technologies_used"),
-        status=status,
-        query=query,
-        limit=limit,
-    )
+def _updates(project: Project) -> dict[str, Any]:
+    """Whether HQ's update run covers the repository, and what it has open there.
+
+    A count the reading does not hold is None: a repository the App does not
+    read, or whose Dependabot alerts GitHub refused, is not one with none.
+    """
+
+    repository = repository_for(project.repository_url)
+    read = repository is not None
+    run = last_run(project.repository_url)
+    return {
+        "enabled": project.dependency_updates,
+        "open_pulls": len(repository.update_pulls) if read else None,
+        "oldest_pull_days": repository.oldest_update_days if read else None,
+        "unmatched_alerts": (
+            len(repository.unmatched_alerts) if read and repository.dependabot_alerts is not None else None
+        ),
+        "last_run": run.as_record() if run is not None else None,
+    }
+
+
+def list_projects(
+    *,
+    status: str | None = None,
+    query: str | None = None,
+    updates: bool | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    rows = Project.objects.all() if updates is None else Project.objects.filter(dependency_updates=updates)
+    # Every item reads the same stored GitHub reading.
+    with projection_scope():
+        return listing(
+            rows,
+            serialize_project,
+            search=("name", "slug", "description", "technologies_used"),
+            status=status,
+            query=query,
+            limit=limit,
+        )
 
 
 def get_project(slug: str) -> dict[str, Any]:
@@ -192,7 +221,7 @@ def refresh_project(
                     action=AuditLog.Action.UPDATED,
                     obj=project,
                     type_label="Project",
-                    message="Synced the content index.",
+                    message="Updated the site's content.",
                     metadata=stats,
                 )
             result["content"] = {"ok": True, **stats}
@@ -286,7 +315,7 @@ def _record_push(project: Project, pushed_at: datetime | None, principal: Princi
     return {"ok": True, "last_push_at": pushed_at.isoformat()}
 
 
-REFRESH_JOB = "project.refresh"
+REFRESH = "project.refresh"
 
 
 def refresh_summary(result: dict[str, Any]) -> str:
@@ -314,55 +343,47 @@ def refresh_summary(result: dict[str, Any]) -> str:
     return " ".join(said)
 
 
-def request_project_refresh(slug: str, *, principal: Principal, requested_by: Any = None) -> Any:
-    """Start a project's refresh as a job and return it at once.
+def _refresh(progress: Any, *, subject: str, principal: Principal) -> dict[str, Any]:
+    progress("Reading GitHub.")
+    result = refresh_project(subject, principal=principal)
+    progress(refresh_summary(result), force=True)
+    return result
 
-    A refresh can wait on GitHub and on the published site, so no request does
-    it: the job runs ``refresh_project`` on its own thread and says what it did
-    as its last note. One refresh runs at a time (``jobs.runner.JobConflict``).
-    """
 
-    principal.require(records_of("projects").write)
-    try:
-        project = Project.objects.only("name").get(slug=slug)
-    except Project.DoesNotExist as exc:
-        raise RecordNotFound("That project was not found.") from exc
+def _known(slug: str) -> str:
+    """A refresh is asked for a project HQ holds; any other is not found, as
+    any command's unknown target is, before a job is recorded."""
 
-    def work(progress: Any) -> dict[str, Any]:
-        progress("Reading GitHub.")
-        result = refresh_project(slug, principal=principal)
-        progress(refresh_summary(result), force=True)
-        return result
+    if not Project.objects.filter(slug=slug).exists():
+        raise RecordNotFound("That project was not found.")
+    return ""
 
-    return start(
-        REFRESH_JOB,
-        f"Read GitHub for {project.name}",
-        work,
-        actor=principal.actor,
-        requested_by=requested_by,
-        request={"project": slug},
+
+def outbound_work() -> tuple[OutboundWork, ...]:
+    """A refresh waits on GitHub and on the published site, so it is done off
+    the request, one at a time, and says what it did as its last note."""
+
+    return (
+        OutboundWork(
+            REFRESH,
+            "Refresh a project",
+            "Read a project's latest GitHub activity and published pages.",
+            records_of("projects").write,
+            _refresh,
+            subject_label="Project",
+            subject_help="The project to refresh.",
+            subject_resource="projects",
+            refuse=_known,
+            verb="Refresh",
+            execution_notes=(
+                "Where the GitHub App reads the repository, ask the controller to read that "
+                "connection now, through infrastructure.controller.refresh.",
+                "For a repository the App does not read, read its last push from GitHub's "
+                "public API, which needs no credential.",
+                "Save when it was last pushed to, and record who asked.",
+            ),
+        ),
     )
-
-
-def execute_project_refresh(
-    command: ProjectRefreshCommand,
-    *,
-    principal: Principal,
-    current_slug: str,
-) -> dict[str, Any]:
-    """Capability-shaped entry point: starts the refresh and says where it runs."""
-
-    del command
-    try:
-        job = request_project_refresh(current_slug, principal=principal)
-    except JobConflict:
-        return {"ok": True, "started": False, "message": "GitHub is already being read for a project."}
-    return {
-        "ok": True,
-        "started": True,
-        "job": str(job.pk),
-        "message": "Reading GitHub. The job says what it found when it finishes.",
-    }
 
 
 @transaction.atomic
@@ -378,18 +399,8 @@ def save_project(
     principal.require(records_of("projects").write)
     operation = "project.create" if current_slug is None else "project.update"
     with operation_context(interface=principal.interface, actor=principal.actor, operation=operation):
-        if current_slug is None:
-            project = Project()
-            created = True
-        else:
-            try:
-                project = Project.objects.select_for_update().get(slug=current_slug)
-            except Project.DoesNotExist as exc:
-                raise RecordNotFound("That project was not found.") from exc
-            created = False
-            if expected_updated_at and project.updated_at.isoformat() != expected_updated_at:
-                raise RecordConflict("That project changed after it was read.")
-
+        created = current_slug is None
+        project = Project() if current_slug is None else _locked(current_slug, expected_updated_at)
         for field, value in asdict(command).items():
             setattr(project, field, value)
         project.full_clean()
@@ -400,6 +411,74 @@ def save_project(
         "created": created,
         "project": serialize_project(project, relationships=True),
     }
+
+
+def _locked(slug: str, expected_updated_at: str | None) -> Project:
+    """The project to change, held for this transaction, as the caller last read it."""
+
+    try:
+        project = Project.objects.select_for_update().get(slug=slug)
+    except Project.DoesNotExist as exc:
+        raise RecordNotFound("That project was not found.") from exc
+    if expected_updated_at and project.updated_at.isoformat() != expected_updated_at:
+        raise RecordConflict("That project changed after it was read.")
+    return project
+
+
+DEPENDENCY_UPDATES = "project.dependency_updates"
+# The repository check updates rest on: Renovate opens its security fixes from
+# these alerts.
+UPDATES_NEED = "vulnerability-alerts"
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyUpdatesCommand:
+    """Whether HQ's dependency update run covers the project's repository."""
+
+    enabled: bool
+
+
+@transaction.atomic
+def set_dependency_updates(
+    command: DependencyUpdatesCommand,
+    *,
+    principal: Principal,
+    current_slug: str,
+    expected_updated_at: str | None = None,
+) -> dict[str, Any]:
+    """Opt a project's repository in to dependency updates, or out.
+
+    Only a project that names a repository, and turning updates on only while
+    the repository passes ``UPDATES_NEED``. The switch records intent; the run
+    that acts on it reads it later.
+    """
+
+    principal.require(records_of("projects").write)
+    with operation_context(interface=principal.interface, actor=principal.actor, operation=DEPENDENCY_UPDATES):
+        project = _locked(current_slug, expected_updated_at)
+        refused = _updates_refusal(project, enabling=command.enabled)
+        if refused:
+            return {"ok": False, "error": {"code": "precondition", "message": refused}}
+        if project.dependency_updates != command.enabled:
+            project.dependency_updates = command.enabled
+            project.full_clean()
+            project.save()
+    return {"ok": True, "project": serialize_project(project, relationships=True)}
+
+
+def _updates_refusal(project: Project, *, enabling: bool) -> str:
+    """Why the switch cannot be set as asked; "" when it can."""
+
+    if not project.repository_url:
+        return "This project names no repository, so there is nothing to update."
+    if not enabling:
+        return ""
+    repository = repository_for(project.repository_url)
+    posture = posture_of(repository) if repository is not None else None
+    if posture is not None and posture.state_of(UPDATES_NEED) == MET:
+        return ""
+    check = next(check for check in STANDARD if check.id == UPDATES_NEED)
+    return f'Dependency updates need the repository check "{check.label}" ({check.id}) to pass first. {check.fix}'
 
 
 def upsert_project(
@@ -417,3 +496,45 @@ def upsert_project(
         principal=principal,
         expected_updated_at=expected_updated_at,
     )
+
+
+def sync_repositories(*, principal: Principal) -> dict[str, Any]:
+    """Make every repository the GitHub App reads a project.
+
+    A repository joins the project whose URL names it; else a project with no
+    repository whose slug is the repository's name, which takes its URL; else
+    a new project, archived when the repository is. Nothing else on a project
+    is changed and nothing is deleted, so a second pass over the same reading
+    writes nothing.
+    """
+
+    known = set(projects_by_repository())
+    unattached = {project.slug.lower(): project for project in Project.objects.filter(repository_url="")}
+    attached: list[str] = []
+    created: list[str] = []
+    for name, repository in sorted(repositories().items()):
+        key = repository_key(name)
+        if not key or key in known:
+            continue
+        named = unattached.pop(repository.short.lower(), None)
+        try:
+            result = _take_on(repository, named, principal=principal)
+        except ValidationError, RecordConflict, RecordNotFound:
+            # One repository that cannot be a project must not stop the rest;
+            # the next sweep tries it again.
+            continue
+        known.add(key)
+        (attached if named else created).append(result["project"]["slug"])
+    return {"attached": attached, "created": created}
+
+
+def _take_on(repository: Repository, named: Project | None, *, principal: Principal) -> dict[str, Any]:
+    """Attach ``repository`` to ``named``, or make it a project of its own."""
+
+    url = f"https://github.com/{repository.name}"
+    if named is not None:
+        kept = {field.name: getattr(named, field.name) for field in fields(ProjectCommand)}
+        command = replace(ProjectCommand(**kept), repository_url=url)
+        return save_project(command, principal=principal, current_slug=named.slug)
+    status = Project.Status.ARCHIVED if repository.archived else Project.Status.ACTIVE
+    return save_project(ProjectCommand(name=repository.short, status=status, repository_url=url), principal=principal)

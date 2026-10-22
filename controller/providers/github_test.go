@@ -51,6 +51,12 @@ type githubFakeCall struct {
 
 const githubFakeAPI, githubFakeRegistry = "api.github.com", "ghcr.io"
 
+// The listing routes, each followed by its page number.
+const (
+	githubInstallationsPage = "/app/installations?per_page=100&page="
+	githubRepositoriesPage  = "/installation/repositories?per_page=100&page="
+)
+
 func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	host := req.Header.Get("X-Fake-Host")
 	if host == githubFakeAPI && req.URL.Path != "/graphql" {
@@ -156,11 +162,11 @@ type githubHarness struct {
 func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Environment) *githubHarness {
 	t.Helper()
 	fake := &githubFake{t: t, routes: map[string]string{
-		githubFakeAPI + " /app/installations":                      `[{"id":7,"account":{"login":"example"}}]`,
-		githubFakeAPI + " /installation/repositories?per_page=100": `{"total_count":1,"repositories":[{"full_name":"example/app"}]}`,
-		githubFakeAPI + " /repos/example/app/installation":         `{"id":7}`,
-		githubFakeAPI + " /repos/example/host/installation":        `{"id":7}`,
-		githubFakeAPI + " /repos/example/ext/installation":         `{"id":7}`,
+		githubFakeAPI + " " + githubInstallationsPage + "1": `[{"id":7,"account":{"login":"example"}}]`,
+		githubFakeAPI + " " + githubRepositoriesPage + "1":  `{"total_count":1,"repositories":[{"full_name":"example/app"}]}`,
+		githubFakeAPI + " /repos/example/app/installation":  `{"id":7}`,
+		githubFakeAPI + " /repos/example/host/installation": `{"id":7}`,
+		githubFakeAPI + " /repos/example/ext/installation":  `{"id":7}`,
 	}, status: map[string]int{}, grants: map[string]githubapi.AppsCreateInstallationAccessTokenJSONBody{}}
 	maps.Copy(fake.routes, routes)
 	server := httptest.NewServer(fake)
@@ -322,7 +328,8 @@ func TestGitHubProbe(t *testing.T) {
 }
 
 // The app is registered with exactly what the controller's code asks for,
-// plus Actions write for an admission starting the host's composition.
+// a dependency update run's grant included, plus Actions write for an
+// admission starting the host's composition.
 func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 	data, err := os.ReadFile("../../deploy/github-apps.json")
 	if err != nil {
@@ -337,7 +344,7 @@ func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	wanted := map[string]string{}
-	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, {Actions: githubapi.AppPermissionsActionsWrite}} {
+	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}} {
 		encoded, _ := json.Marshal(grant)
 		var names map[string]string
 		_ = json.Unmarshal(encoded, &names)
@@ -378,17 +385,22 @@ func githubRepositoryRoutes() map[string]string {
 			{"id":1,"name":"test","status":"completed","conclusion":"failure","started_at":"2030-01-01T00:00:00Z"},
 			{"id":2,"name":"test","status":"completed","conclusion":"success","started_at":"2030-01-01T01:00:00Z"},
 			{"id":3,"name":"lint","status":"in_progress","conclusion":null,"started_at":"2030-01-01T00:00:00Z"}]}`,
-		api("/pulls?state=open&per_page=30"):         `[{"number":5,"title":"Bump","html_url":"https://github.com/example/app/pull/5","user":{"login":"bot"},"draft":false,"updated_at":"2030-01-02T00:00:00Z","head":{"sha":"bbbb"}}]`,
-		api("/commits/bbbb/check-runs?per_page=100"): `{"check_runs":[{"id":9,"name":"build","status":"completed","conclusion":"success"}]}`,
+		api("/pulls?state=open&per_page=30"): `[{"number":6,"title":"Update example-lib to v2","html_url":"https://github.com/example/app/pull/6","user":{"login":"renovate[bot]"},"draft":false,
+				"created_at":"2030-01-03T00:00:00Z","updated_at":"2030-01-04T00:00:00Z","head":{"sha":"eeee","ref":"renovate/example-lib-2.x"},"labels":[{"name":"dependencies"},{"name":"security"}]},
+			{"number":5,"title":"Bump","html_url":"https://github.com/example/app/pull/5","user":{"login":"octo"},"draft":true,"created_at":"2030-01-01T00:00:00Z","updated_at":"2030-01-02T00:00:00Z","head":{"sha":"bbbb","ref":"bump"},"labels":[]}]`,
+		api("/commits/eeee/check-runs?per_page=100"): `{"check_runs":[{"id":9,"name":"build","status":"completed","conclusion":"success"},{"id":10,"name":"test","status":"completed","conclusion":"failure"}]}`,
 		api("/actions/workflows?per_page=100"):       `{"workflows":[{"id":11,"name":"CI","state":"active"},{"id":12,"name":"graph","state":"active"}]}`,
 		api("/actions/runs/3/pending_deployments"):   `[{"environment":{"name":"production"}},{"environment":{}}]`,
 		api("/releases?per_page=1"):                  `[{"tag_name":"v1.2.0","html_url":"https://github.com/example/app/releases/v1.2.0","published_at":"2030-01-01T00:00:00Z"}]`,
 		api("/deployments?per_page=20"): `[{"id":21,"environment":"production","sha":"aaaa","created_at":"2030-01-02T00:00:00Z"},
 			{"id":20,"environment":"production","sha":"9999","created_at":"2030-01-01T00:00:00Z"}]`,
-		api("/deployments/21/statuses?per_page=1"):             `[{"state":"success","log_url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","target_url":""}]`,
-		api("/actions/jobs/77"):                                `{"id":77,"steps":[{"name":"Verify signature","conclusion":"success"},{"name":"Deploy","conclusion":"success"}]}`,
-		api("/code-scanning/alerts?state=open&per_page=100"):   `[{"rule":{"security_severity_level":"high","severity":"error"}},{"rule":{"severity":"warning"}}]`,
-		api("/dependabot/alerts?state=open&per_page=100"):      `[{"security_advisory":{"severity":"critical"}}]`,
+		api("/deployments/21/statuses?per_page=1"):           `[{"state":"success","log_url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","target_url":""}]`,
+		api("/actions/jobs/77"):                              `{"id":77,"steps":[{"name":"Verify signature","conclusion":"success"},{"name":"Deploy","conclusion":"success"}]}`,
+		api("/code-scanning/alerts?state=open&per_page=100"): `[{"rule":{"security_severity_level":"high","severity":"error"}},{"rule":{"severity":"warning"}}]`,
+		api("/dependabot/alerts?state=open&per_page=100"): `[{"number":3,"html_url":"https://github.com/example/app/security/dependabot/3","dependency":{"package":{"ecosystem":"npm","name":"example-lib"},"manifest_path":"web/package.json"},
+				"security_advisory":{"severity":"critical"},"security_vulnerability":{"package":{"ecosystem":"npm","name":"example-lib"},"first_patched_version":{"identifier":"2.0.1"}}},
+			{"number":2,"html_url":"https://github.com/example/app/security/dependabot/2","dependency":{"manifest_path":"go.mod"},
+				"security_advisory":{"severity":"high"},"security_vulnerability":{"package":{"ecosystem":"go","name":"example.com/unfixed"},"first_patched_version":null}}]`,
 		api("/secret-scanning/alerts?state=open&per_page=100"): `[]`,
 		api("/actions/artifacts?per_page=50"): `{"artifacts":[{"name":"late","expired":false,"expires_at":"2030-03-01T00:00:00Z","workflow_run":{"head_sha":"aaaa"}},
 			{"name":"old","expired":true,"expires_at":"2029-01-01T00:00:00Z"},{"name":"soon","expired":false,"expires_at":"2030-02-01T00:00:00Z","workflow_run":{"head_sha":"aaaa"}}]}`,
@@ -439,12 +451,16 @@ func TestGitHubRepositoryReading(t *testing.T) {
 	}{
 		{"head", record.Head, `{"sha":"aaaa000000000000000000000000000000000000","message":"Ship it","author":"octo","date":"2030-01-02T00:00:00Z","url":"https://github.com/example/app/commit/aaaa"}`},
 		{"a check stands as its last run did", record.Checks, `{"state":"pending","total":2,"failing":[],"running":1,"names":["lint","test"]}`},
-		{"pull request checks", record.PullRequestChecks, `["build"]`},
+		{"the checks the newest pull request runs", record.PullRequestChecks, `["build","test"]`},
+		{"each open pull request, with its checks read only for an update's", record.PullRequests, `[{"number":6,"title":"Update example-lib to v2","url":"https://github.com/example/app/pull/6","author":"renovate[bot]","draft":false,"created_at":"2030-01-03T00:00:00Z","updated_at":"2030-01-04T00:00:00Z","head":"eeee","branch":"renovate/example-lib-2.x","labels":["dependencies","security"],"checks":{"state":"failure","total":2,"failing":["test"],"running":0,"names":["build","test"]}},` +
+			`{"number":5,"title":"Bump","url":"https://github.com/example/app/pull/5","author":"octo","draft":true,"created_at":"2030-01-01T00:00:00Z","updated_at":"2030-01-02T00:00:00Z","head":"bbbb","branch":"bump","labels":[],"checks":null}]`},
+		{"each open Dependabot alert, its package from the dependency or the vulnerability", record.DependabotAlerts, `[{"number":3,"package":"example-lib","ecosystem":"npm","manifest_path":"web/package.json","severity":"critical","first_patched_version":"2.0.1","url":"https://github.com/example/app/security/dependabot/3"},` +
+			`{"number":2,"package":"example.com/unfixed","ecosystem":"go","manifest_path":"go.mod","severity":"high","first_patched_version":null,"url":"https://github.com/example/app/security/dependabot/2"}]`},
 		{"each workflow that exists now once, under its name now", record.Runs, `[{"id":3,"name":"CI","status":"waiting","conclusion":"","event":"push","branch":"main","sha":"aaaa","url":"https://github.com/example/app/actions/runs/3","created_at":"2030-01-03T00:00:00Z"}]`},
 		{"waiting", record.Waiting[0].Environments, `["production"]`},
 		{"release", record.Release, `{"tag":"v1.2.0","url":"https://github.com/example/app/releases/v1.2.0","published_at":"2030-01-01T00:00:00Z"}`},
 		{"the newest deployment to each environment, with what its job verified", record.Deployments, `[{"environment":"production","sha":"aaaa","created_at":"2030-01-02T00:00:00Z","state":"success","url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","verified":[{"name":"Verify signature","conclusion":"success"}]}]`},
-		{"alerts by severity; a refused kind is absent, not zero", record.Alerts, `{"code_scanning":{"high":1,"warning":1},"dependabot":{"critical":1}}`},
+		{"alerts by severity; a refused kind is absent, not zero", record.Alerts, `{"code_scanning":{"high":1,"warning":1},"dependabot":{"critical":1,"high":1}}`},
 		{"live artifacts, soonest first", record.Artifacts, `[{"name":"soon","expires_at":"2030-02-01T00:00:00Z","sha":"aaaa"},{"name":"late","expires_at":"2030-03-01T00:00:00Z","sha":"aaaa"}]`},
 		{"rules", record.Rules, `{"pull_request":true,"reviews":2,"required_checks":["lint","test"],"blocks_force_push":true,"blocks_deletion":true}`},
 		{"environments", record.Environments, `[{"name":"production","reviewers":["octo","ops"],"wait_minutes":5,"branches":"protected"},{"name":"preview","reviewers":[],"wait_minutes":0,"branches":"any"}]`},
@@ -476,7 +492,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		if strings.HasPrefix(call.path, "/repos/actions/checkout/commits/") {
 			resolved++
 		}
-		if !minted || call.method != "GET" || strings.HasPrefix(call.path, "/app") || strings.HasSuffix(call.path, "/installation") || call.path == "/installation/repositories?per_page=100" {
+		if !minted || call.method != "GET" || strings.HasPrefix(call.path, "/app") || strings.HasSuffix(call.path, "/installation") || strings.HasPrefix(call.path, githubRepositoriesPage) {
 			continue
 		}
 		encoded, _ := json.Marshal(grant.Permissions)
@@ -513,6 +529,11 @@ func TestGitHubRepositoryParts(t *testing.T) {
 			func(r GitHubRepositoryRecord) bool { return r.Access == nil }, runtime.FailureClassUnclassified},
 		{"access refused whole", map[string]int{"/keys?per_page=100": 404}, runtime.PartAccess,
 			func(r GitHubRepositoryRecord) bool { return r.Access == nil }, runtime.FailureClassUnclassified},
+		{"Dependabot alerts refused are no rows and no count, not none", map[string]int{"/dependabot/alerts?state=open&per_page=100": 403}, runtime.PartDependabot,
+			func(r GitHubRepositoryRecord) bool {
+				_, counted := r.Alerts["dependabot"]
+				return r.DependabotAlerts == nil && !counted
+			}, runtime.FailureClassUnclassified},
 		{"a refused credential keeps its class", map[string]int{"/actions/variables?per_page=100": 401}, runtime.PartVariables,
 			func(r GitHubRepositoryRecord) bool { return r.Variables == nil }, runtime.FailureClassCredential},
 	} {
@@ -541,6 +562,115 @@ func TestGitHubRepositoryParts(t *testing.T) {
 	report := NewController(h.r, runtime.ControllerRegistry{}).readKind(t.Context(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
 	if report.OK {
 		t.Fatal("a repository whose head cannot be read fails the reading, never reads as empty")
+	}
+}
+
+// withSecondRepository is the routes with example/other installed beside
+// example/app, read from the same routes under its own name.
+func withSecondRepository(routes map[string]string) map[string]string {
+	for key, body := range githubRepositoryRoutes() {
+		if rest, ok := strings.CutPrefix(key, githubFakeAPI+" /repos/example/app"); ok {
+			routes[githubFakeAPI+" /repos/example/other"+rest] = strings.ReplaceAll(body, "example/app", "example/other")
+		}
+	}
+	routes[githubFakeAPI+" "+githubRepositoriesPage+"1"] = `{"total_count":2,"repositories":[{"full_name":"example/app"},{"full_name":"example/other"}]}`
+	routes[githubFakeAPI+" /repos/example/other/installation"] = `{"id":7}`
+	return routes
+}
+
+func TestARepositoryThatCannotBeReadIsRefusedAlone(t *testing.T) {
+	h := newGitHubHarness(t, withSecondRepository(githubRepositoryRoutes()), runtime.Environment{})
+	h.refuse(githubFakeAPI, "/repos/example/other/commits/main", 502)
+	report := NewController(h.r, runtime.ControllerRegistry{}).readKind(t.Context(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
+	if !report.OK || len(report.Records) != 1 || report.Records[0].(GitHubRepositoryRecord).Repository != "example/app" {
+		t.Fatalf("the repository that reads is reported: %+v", report)
+	}
+	whole := []runtime.RefusedPart{}
+	for _, refused := range report.RefusedParts {
+		if refused.Part == runtime.PartWhole {
+			whole = append(whole, refused)
+		}
+	}
+	if len(whole) != 1 || whole[0].Scope != "example/other" || whole[0].ConnectionRef != "hq-app" {
+		t.Fatalf("the repository that does not is refused by name: %+v", report.RefusedParts)
+	}
+}
+
+// Every installation and every repository it covers is read, however many
+// pages GitHub lists them on.
+func TestEveryInstalledRepositoryIsListed(t *testing.T) {
+	full := make([]string, githubListPage)
+	for i := range full {
+		full[i] = `{"id":` + strconv.Itoa(100+i) + `,"account":{"login":"example"}}`
+	}
+	repositories := make([]string, githubListPage)
+	for i := range repositories {
+		repositories[i] = `{"full_name":"example/repo-` + strconv.Itoa(i) + `"}`
+	}
+	h := newGitHubHarness(t, map[string]string{
+		githubFakeAPI + " " + githubInstallationsPage + "1": "[" + strings.Join(full[:githubListPage-1], ",") + `,{"id":7,"account":{"login":"example"}}]`,
+		githubFakeAPI + " " + githubInstallationsPage + "2": `[{"id":8,"account":{"login":"example"}}]`,
+		githubFakeAPI + " " + githubRepositoriesPage + "1":  `{"total_count":101,"repositories":[` + strings.Join(repositories, ",") + `]}`,
+		githubFakeAPI + " " + githubRepositoriesPage + "2":  `{"total_count":101,"repositories":[{"full_name":"example/last"}]}`,
+	}, runtime.Environment{})
+	c, _ := h.r.githubConnection("")
+	names, err := h.r.githubInstallationRepositories(t.Context(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != githubListPage+1 || !slices.Contains(names, "example/last") || !slices.Contains(names, "example/repo-0") {
+		t.Fatalf("listed %d: %v", len(names), names)
+	}
+	installations := 0
+	for _, call := range h.recorded() {
+		if strings.HasSuffix(call.path, "/access_tokens") {
+			installations++
+		}
+	}
+	if installations != githubListPage+1 {
+		t.Fatalf("every installation on every page is listed, minted for %d", installations)
+	}
+}
+
+func TestAListThatNeverEndsIsRefused(t *testing.T) {
+	page := make([]string, githubListPage)
+	for i := range page {
+		page[i] = "1"
+	}
+	read := 0
+	_, err := githubPaged(func(string) ([]string, error) { read++; return page, nil })
+	if err == nil || read != githubPageLimit {
+		t.Fatalf("read %d pages: %v", read, err)
+	}
+}
+
+// The mint takes everything it needs as arguments: the token it asks for
+// names exactly its scope, under a JWT the app's key signed.
+func TestMintGitHubTokenNamesItsScope(t *testing.T) {
+	h := newGitHubHarness(t, nil, runtime.Environment{})
+	app := GitHubApp{ID: "12345", Key: h.key}
+	minted, err := MintGitHubToken(t.Context(), h.r.HTTP, h.r.Now(), app, 7, []string{"app"}, githubChecksRead)
+	token := minted.Token
+	if err != nil || token == "" || minted.ExpiresAt != "2030-01-01T00:00:00Z" {
+		t.Fatalf("token %+v: %v", minted, err)
+	}
+	calls := h.recorded()
+	if len(calls) != 1 || calls[0].method != "POST" || calls[0].path != "/app/installations/7/access_tokens" {
+		t.Fatalf("calls %+v", calls)
+	}
+	grant, _ := h.grantOf(githubFakeCall{auth: "Bearer " + token})
+	got, _ := json.Marshal(grant.Permissions)
+	if want, _ := json.Marshal(githubChecksRead); !slices.Equal(grant.Repositories, []string{"app"}) || string(got) != string(want) {
+		t.Fatalf("grant %+v", grant)
+	}
+	parts := strings.Split(strings.TrimPrefix(calls[0].auth, "Bearer "), ".")
+	signature, _ := base64.RawURLEncoding.DecodeString(parts[len(parts)-1])
+	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
+	if len(parts) != 3 || rsa.VerifyPKCS1v15(&h.key.PublicKey, crypto.SHA256, digest[:], signature) != nil {
+		t.Fatal("the mint is asked under a JWT the app's key signed")
+	}
+	if _, err := MintGitHubToken(t.Context(), h.r.HTTP, h.r.Now(), app, 7, []string{"app"}, githubapi.AppPermissions{}); err == nil || len(h.recorded()) != 1 {
+		t.Fatal("a token naming no permission, which GitHub would grant every one of, was asked for")
 	}
 }
 
@@ -803,5 +933,22 @@ func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 	marker := strings.Replace(githubDeliveryMark, "%s", "{}", 1)
 	if !strings.Contains(read("tools/pipeline/ci_report.py"), `DELIVERY_MARK = "`+marker+`"`) {
 		t.Errorf("ci_report.py does not write the marker %q", marker)
+	}
+}
+
+// A part of a repository the token already reached is refused as a feature the
+// repository leaves off when GitHub answers forbidden or not found; any other
+// answer keeps its own reason.
+func TestRepositoryPartRefusalSaysWhatTheStatusMeans(t *testing.T) {
+	for _, test := range []struct {
+		status int
+		off    bool
+	}{{403, true}, {404, true}, {500, false}, {401, false}} {
+		t.Run(strconv.Itoa(test.status), func(t *testing.T) {
+			refused := asRepositoryRefusal(runtime.HTTPRefusal(test.status))
+			if off := strings.HasPrefix(refused.Error(), "not available on this repository"); off != test.off {
+				t.Fatalf("%d refused as %q", test.status, refused)
+			}
+		})
 	}
 }

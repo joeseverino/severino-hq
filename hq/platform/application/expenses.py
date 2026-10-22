@@ -16,10 +16,12 @@ from hq.domains.projects.models import Project
 from hq.platform.core.audit import operation_context
 
 from .domains import records_of
+from .money import money
 from .projection import iso
 from .record_errors import RecordConflict, RecordNotFound
 from .security import Principal
 from .sensitivity import SAFE_SENSITIVITIES
+from .ui import Kpi
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,21 +44,13 @@ def cost_totals(sums: dict[str, Any], *, narrowed: bool) -> CostTotals:
     return CostTotals(sums.get("total") or zero, sums.get("deductible") or zero, narrowed)
 
 
-@dataclass(frozen=True, slots=True)
-class CategoryTotal:
-    """What one category of a list of costs adds up to, and the list narrowed to it."""
-
-    label: str
-    total: Decimal
-    url: str
-
-
-def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTotals, tuple[CategoryTotal, ...]]:
+def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTotals, tuple[Kpi, ...]]:
     """What a list of expenses adds up to, whole and by category, from one statement.
 
     ``rows`` is the list as its filters leave it and ``query`` the request's
-    own, which each category's link keeps. The categories are said only where
-    they divide the list: two or more, and none already chosen.
+    own, which each category's link keeps. Each category is a figure linking
+    to the list narrowed to it, said only where the categories divide the
+    list: two or more, and none already chosen.
     """
 
     sums = list(
@@ -82,7 +76,11 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
         return f"?{kept.urlencode()}"
 
     return totals, tuple(
-        CategoryTotal(labels.get(row["category"], row["category"]), row["total"] or zero, narrowed_to(row["category"]))
+        Kpi(
+            labels.get(row["category"], row["category"]),
+            money(row["total"] or zero, cents=False),
+            url=narrowed_to(row["category"]),
+        )
         for row in sorted(sums, key=lambda row: row["total"] or zero, reverse=True)
     )
 

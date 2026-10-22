@@ -1,7 +1,9 @@
-"""The list contract's wording: a sort names its order the way a person would."""
+"""The list contract's wording: a sort names its order the way a person would,
+and a row is named by what it is."""
 
 import re
 
+from django.db import models
 from django.test import SimpleTestCase
 from django.urls import get_resolver
 
@@ -36,3 +38,30 @@ class SortLabelTests(SimpleTestCase):
             for label in labels:
                 with self.subTest(view=view.__name__, label=label):
                     self.assertIsNone(QUERY_WORDS.search(label))
+
+
+def _field(model: type[models.Model], path: str) -> models.Field | None:
+    """The field a sort path ends on, across its relations."""
+
+    field = None
+    for name in path.lstrip("-").split("__"):
+        field = model._meta.get_field(name)
+        model = field.related_model or model
+    return field
+
+
+class RowNameTests(SimpleTestCase):
+    def test_no_list_names_its_rows_by_a_date(self):
+        """The first column names each row: on a phone it is what the row is
+        read by. A date says when, so it never stands there; a list kept in
+        order of time still sorts by it from a later column."""
+
+        views = [view for view in _list_views() if isinstance(view.table_columns, tuple) and view.table_columns]
+        self.assertGreater(len(views), 5, "The walk found almost no list views")
+        for view in views:
+            first = view.table_columns[0]
+            model = getattr(view, "model", None)
+            with self.subTest(view=view.__name__, column=first.label):
+                self.assertNotIn("date-col", first.css.split(), "names its rows by a date")
+                if first.sort and model is not None:
+                    self.assertNotIsInstance(_field(model, first.sort), models.DateField, "names its rows by a date")

@@ -40,6 +40,7 @@ from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
+from hq.platform.core.templatetags.value_tags import breakable
 
 from .forms import ReceiptUploadForm
 from .models import Receipt
@@ -153,7 +154,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
         receipt = self.get_receipt()
         return format_html(
             "<strong>{}</strong> · {}",
-            receipt.vendor or "(Unknown vendor)",
+            breakable(receipt.vendor or "(Unknown vendor)"),
             money(receipt.amount),
         )
 

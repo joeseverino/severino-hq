@@ -16,7 +16,7 @@ from ..inventory_testing import store
 from ..policy_fixes import policy_without_empty_groups, request_empty_groups_removal
 from ..record_errors import RecordNotFound
 from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal
-from .markup import elements, with_class
+from .markup import elements, links, with_class
 from .test_approvals import POLICY_KEY, an_operator, declare_policy
 from .test_tailnet_posture import policy, raised, tailnet_connection
 
@@ -263,7 +263,7 @@ class DriftOffersBothWaysTests(TestCase):
         self.assertEqual(remedies[0].label, "Keep the live version")
         self.assertEqual(
             [(r.capability, r.label) for r in remedies[1:]],
-            [("infrastructure.reconcile", "Restore HQ's version")],
+            [("infrastructure.reconcile", "Apply HQ's settings")],
         )
 
     def test_another_fault_keeps_reconcile_alone(self):
@@ -326,8 +326,8 @@ class KeepTheLiveVersionPageTests(TestCase):
 
         content = response.content.decode()
         self.assertIn("Keep the live version", content)
-        self.assertIn("Restore HQ&#x27;s version", content)
-        self.assertLess(content.index("Keep the live version"), content.index("Restore HQ&#x27;s version"))
+        self.assertIn("Apply HQ&#x27;s settings", content)
+        self.assertLess(content.index("Keep the live version"), content.index("Apply HQ&#x27;s settings"))
 
     def test_a_resource_in_step_offers_neither(self):
         from django.urls import reverse
@@ -335,7 +335,6 @@ class KeepTheLiveVersionPageTests(TestCase):
         response = self.client.get(reverse("control_plane:detail", args=[POLICY_KEY]))
 
         self.assertNotContains(response, "Keep the live version")
-        self.assertNotContains(response, "Restore HQ&#x27;s version")
 
 
 class CleanPageTests(TestCase):
@@ -362,8 +361,8 @@ class CleanPageTests(TestCase):
     def test_nothing_read_is_not_no_problems(self):
         response = self.page(None)
 
-        self.assertContains(response, "Nothing read yet, so nothing checked.")
-        self.assertNotContains(response, "No problems")
+        self.assertContains(response, "Nothing read yet.")
+        self.assertNotContains(response, "found no problems")
 
     def test_no_problems_says_what_was_checked_and_when(self):
         from django.utils import timezone
@@ -372,5 +371,16 @@ class CleanPageTests(TestCase):
 
         response = self.page(timezone.now())
 
-        self.assertContains(response, "No problems found.")
+        self.assertContains(response, "The checks found no problems.")
         self.assertContains(response, f"{len(RULES)} checks over 1 machine and 0 services, from readings")
+
+    def test_a_clean_page_names_what_else_waits_on_the_reader(self):
+        from unittest import mock
+
+        from django.urls import reverse
+        from django.utils import timezone
+
+        with mock.patch("hq.domains.control_plane.finding_views.waiting", return_value=3):
+            response = self.page(timezone.now())
+
+        self.assertIn(("3 other things need you →", reverse("action_items")), links(response))

@@ -1,5 +1,6 @@
 """An open page asks for its own readings: only those, only when due, only by POST."""
 
+import os
 import re
 import tempfile
 from datetime import timedelta
@@ -16,9 +17,10 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, ReadRequest
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
+from hq.domains.control_plane.providers import registry_label
 
 from .. import visit_refresh
-from ..asks import Standing, read_standing, watched
+from ..asks import READ_WAITING, Standing, read_standing, watched
 from ..freshness import VISIT_EVERY
 from ..security import Capability, Principal, cli_principal
 from ..visit_refresh import Reads, askable, request_visit_refresh
@@ -230,6 +232,23 @@ class VisitRefreshTests(TestCase):
         store(FAST, age=OLD, attempted=timedelta(0))
         with page(FAST):
             self.assertEqual(self.ask()["requested"], [])
+
+    def test_a_waiting_read_says_what_waits_and_says_so_when_no_controller_will_take_it(self):
+        store(FAST, age=OLD)
+        with page(FAST):
+            status = self.ask()["status"]
+        self.assertEqual((followed(status).state, followed(status).note), ("queued", READ_WAITING))
+
+        quiet = DIRECTORY / "quiet-heartbeat"
+        quiet.touch()
+        long_ago = (timezone.now() - timedelta(hours=2)).timestamp()
+        os.utime(quiet, (long_ago, long_ago))
+        with override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(quiet)):
+            stalled = followed(status)
+
+        self.assertFalse(stalled.live)
+        self.assertEqual(stalled.state, "failed")
+        self.assertIn("no controller", stalled.note)
 
     def test_a_watch_hq_did_not_sign_is_not_honored(self):
         from ..asks import _WATCH_SALT
@@ -491,3 +510,15 @@ class VisitRefreshViewTests(TestCase):
         self.assertContains(response, "data-ask-auto")
         self.assertContains(response, 'name="subject" value="service"')
         self.assertContains(response, 'name="name" value="example.test"')
+
+
+class ReadStandingWordsTests(TestCase):
+    def test_a_read_that_failed_unexplained_names_what_was_read_in_words(self):
+        asked_at = timezone.now() - timedelta(minutes=1)
+        ProviderInventory.objects.create(kind=FAST, records=[], reachable=False, observed_at=timezone.now())
+
+        standing = read_standing((FAST,), asked_at)
+
+        self.assertEqual(standing.state, "failed")
+        self.assertIn(registry_label(FAST), standing.note)
+        self.assertNotIn(FAST, standing.note)

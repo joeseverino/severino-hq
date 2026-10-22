@@ -15,9 +15,9 @@ from typing import Any
 
 from ..projection import projection_scope
 from .release import Release, release, release_json, release_tile, repository as repository_of
-from .sight import KEYLESS, Sees, Sight, sight, sight_json, sight_tile
+from .sight import KEYLESS, HqSight, Sees, sight, sight_json, sight_tile
 from .tones import ATTENTION, GOOD, NEUTRAL, SERIOUS, Tile
-from .work import Job, Renderer, Work, work, work_json
+from .work import Renderer, Work, WorkUnit, work, work_json
 lazy from .. import hq_self, request_context, service_health
 lazy from ..decisions import urgency
 lazy from ..entity_links import entity_link
@@ -35,7 +35,7 @@ class HQContext:
     machine: Any = None
     container: Any = None
     work: Work = field(default_factory=Work)
-    sight: Sight = field(default_factory=Sight)
+    sight: HqSight = field(default_factory=HqSight)
     problems: tuple[Mapping[str, Any], ...] = ()
     # The part of the page each problem is about, beside it in ``problems``.
     parts: tuple[str, ...] = ()
@@ -235,12 +235,12 @@ def read_hq() -> dict[str, Any]:
 __all__ = [
     "KEYLESS",
     "HQContext",
-    "Job",
+    "HqSight",
     "Release",
     "Renderer",
     "Sees",
-    "Sight",
     "Work",
+    "WorkUnit",
     "hq_context",
     "read_hq",
     "serialize_hq",

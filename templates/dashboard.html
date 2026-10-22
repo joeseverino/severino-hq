@@ -10,14 +10,14 @@ here names one.
 <header class="page-head dash-head">
   <div class="dash-hello">
     <p class="dash-date">{% now "l, F j" %}</p>
-    <h1>{{ greeting }}</h1>
+    <h1>{{ greeting|breakable }}</h1>
     <p class="dash-status">
       {% if action_queue_count %}
         <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>{% if notice_count %} <span class="muted">· {{ notice_count|counted:"notice,notices" }}</span>{% endif %}
       {% elif notice_count %}
         Nothing needs you. <a href="{% url 'action_items' %}">{{ notice_count|counted:"notice,notices" }}</a>
       {% elif aside_count %}
-        Nothing needs you. <a href="{% url 'action_items' %}">{{ aside_count }} dismissed</a>
+        Nothing needs you. <a href="{% url 'action_items' %}">{{ aside_count|breakable }} dismissed</a>
       {% elif not controller.known %}
         {% comment %}An empty queue the controller never filled is not a clear one.{% endcomment %}
         HQ has read nothing yet.
@@ -57,13 +57,13 @@ the row is gone once every step is done.
 <section class="card dash-start" aria-labelledby="dash-start-title">
   <div class="section-head">
     <h2 id="dash-start-title">Get started</h2>
-    <span class="count">{{ getting_started_left }} left{% if install_guide %} · <a href="{{ install_guide }}" rel="noopener">Install guide</a>{% endif %}</span>
+    <span class="count">{{ getting_started_left|breakable }} left{% if install_guide %} · <a href="{{ install_guide }}" rel="noopener">Install guide</a>{% endif %}</span>
   </div>
   <ol class="step-list">
     {% for step in getting_started %}
       <li{% if step.done %} class="is-done"{% endif %}>
         <span class="band-icon">{% include "partials/_icon.html" with name=step.done|yesno:"check-circle,"|default:step.icon %}</span>
-        <span>{% if step.done %}<strong>{{ step.label }}</strong> <span class="muted">Done.</span>{% else %}<a href="{{ step.url }}">{{ step.label }}</a> <span class="muted">{{ step.why }}</span>{% endif %}</span>
+        <span>{% if step.done %}<strong>{{ step.label|breakable }}</strong> <span class="muted">Done.</span>{% else %}<a href="{{ step.url }}">{{ step.label|breakable }}</a> <span class="muted">{{ step.why|breakable }}</span>{% endif %}</span>
       </li>
     {% endfor %}
   </ol>
@@ -75,20 +75,27 @@ the row is gone once every step is done.
 {% if dashboard_cards %}<section class="dashboard-counts" aria-label="Across HQ">
   {% for card in dashboard_cards %}
     <a class="kpi{% if not card.value %} is-zero{% endif %}" href="{{ card.url }}">
-      <span class="label">{{ card.label }}</span>
-      <span class="value">{{ card.value }}</span>
-      {% if card.detail %}<span class="muted">{{ card.detail }}</span>{% endif %}
+      <span class="label">{{ card.label|breakable }}</span>
+      <span class="value">{{ card.value|breakable }}</span>
+      {% if card.detail %}<span class="muted">{{ card.detail|breakable }}</span>{% endif %}
     </a>
   {% endfor %}
 </section>{% endif %}
 
 {% comment %}
-Charts, the calendar, then Projects, Publishing and Contacts, in one grid so
-the cards pair up however many there are. A domain's own calendar stays on its
-pages.
+Each domain's leading chart, a row of its own, so however many there are they
+never break up the row under them.
 {% endcomment %}
-<section class="dashboard-patterns" aria-label="Trends, the month and the work">
+{% if dashboard_charts %}<section class="dashboard-patterns" aria-label="Trends">
   {% for chart in dashboard_charts %}{% include "partials/_stacked_bar_chart.html" with chart=chart %}{% endfor %}
+</section>{% endif %}
+
+{% comment %}
+The calendar, recent projects, Publishing and Messages, as many to a row as
+fit. A domain's own calendar stays on its pages. How many projects are active
+is said here, over the ones most recently changed, and nowhere else on the page.
+{% endcomment %}
+<section class="dashboard-patterns" aria-label="The month and the work">
   {% partialdef calendar inline %}
   {% if not calendar.empty %}
   <section class="card calendar-month is-compact" id="dashboard-calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace" aria-labelledby="dashboard-calendar-title">
@@ -108,7 +115,7 @@ pages.
   <section class="card">
     <div class="section-head">
       <h2>Projects</h2>
-      {% if active_project_count %}<span class="count">{{ active_project_count }} active</span>{% endif %}
+      {% if active_project_count %}<span class="count">{{ active_project_count|breakable }} active{% if projects_needing_output %} · {{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}
     </div>
     {% if active_projects %}
       <ul class="list-rows">
@@ -116,7 +123,7 @@ pages.
           <li>
             <span class="row-main">
               <span class="cat-dot cat-{{ p.category }}" aria-hidden="true"></span>
-              {% if p.get_category_display %}<span class="visually-hidden">{{ p.get_category_display }}</span>{% endif %}
+              {% if p.get_category_display %}<span class="visually-hidden">{{ p.get_category_display|breakable }}</span>{% endif %}
               <strong>{% entity "project"|entity_of:p.slug label=p.name %}</strong>
             </span>
             <span class="row-meta">{{ p.updated_at|when:"day" }}</span>
@@ -155,23 +162,24 @@ pages.
 {% if external_links or external_choices %}
 <section class="dash-links" aria-label="Links">
   <h2>Links</h2>
+  {% comment %}
+  A link to the links page, which does the same job without script; with it
+  the page opens as a dialog, which cannot fall off the bottom of the page.
+  Beside the heading, so it never wraps onto a row of its own under the links.
+  {% endcomment %}
+  <a class="ext-edit" href="{% url 'dashboard_links' %}" data-modal-open="links">Edit</a>
   {% partialdef links inline %}
   <ul class="ext-links" id="dashboard-links" data-fragment data-fragment-name="links">
     {% for l in external_links %}
       <li>
         <a href="{{ l.href }}" target="_blank" rel="noopener" title="{{ l.sub }}">
-          <span class="ext-label">{{ l.label }}</span>
+          <span class="ext-label">{{ l.label|breakable }}</span>
           <span class="ext-arrow" aria-hidden="true">↗</span>
         </a>
       </li>
     {% endfor %}
   </ul>
   {% endpartialdef %}
-  {% comment %}
-  A link to the links page, which does the same job without script; with it
-  the page opens as a dialog, which cannot fall off the bottom of the page.
-  {% endcomment %}
-  <a class="ext-edit" href="{% url 'dashboard_links' %}" data-modal-open="links">Edit</a>
 </section>
 {% include "partials/_modal.html" with id="links" title="Dashboard links" lede="Tick the links to show. With none ticked, all of them show." body_template="core/_dashboard_links_form.html" %}
 {% endif %}

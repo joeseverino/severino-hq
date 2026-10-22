@@ -20,7 +20,7 @@ for it. Nothing here asks it anything.
     <span class="band-icon">{% include "partials/_icon.html" with name="eye" %}</span>
     <div>
       <span class="band-label">Last read</span>
-      {% if controller.swept_at %}<strong>{{ controller.swept_at|when:"ago" }}</strong><small>{% if controller.failing %}{{ controller.failing }} of {{ controller.readings|length }} readings failed.{% else %}All {{ controller.readings|length }} readings are current.{% endif %}</small>
+      {% if controller.swept_at %}<strong>{{ controller.swept_at|when:"ago" }}</strong><small>{% if controller.failing %}{{ controller.failing|breakable }} of {{ controller.readings|length }} readings failed.{% else %}All {{ controller.readings|length }} readings are current.{% endif %}</small>
       {% else %}<strong>Never</strong><small>Nothing has been read yet.</small>{% endif %}
     </div>
   </div>
@@ -28,10 +28,10 @@ for it. Nothing here asks it anything.
     <span class="band-icon">{% include "partials/_icon.html" with name="clock" %}</span>
     <div>
       <span class="band-label">Next read</span>
-      {% if not standing.known %}<strong>After the first run</strong><small>Everything is read every {{ controller.sweep_every }} once it runs.</small>
-      {% elif controller.overdue %}<strong>Overdue</strong><small>{{ controller.oldest.label }} · {% include "partials/_reading_age.html" with at=controller.oldest.attempted_at only %}. Everything is read every {{ controller.sweep_every }}.</small>
-      {% elif controller.sweep_due %}<strong>Within a minute</strong><small>Everything is read every {{ controller.sweep_every }}.</small>
-      {% elif controller.next_sweep_at %}<strong>In {{ controller.next_sweep_at|timeuntil }}</strong><small>Everything is read every {{ controller.sweep_every }}.</small>
+      {% if not standing.known %}<strong>After the first run</strong><small>Everything is read every {{ controller.sweep_every|breakable }} once it runs.</small>
+      {% elif controller.overdue %}<strong>Overdue</strong><small>{{ controller.oldest.label|breakable }} · {% include "partials/_reading_age.html" with at=controller.oldest.attempted_at only %}. Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
+      {% elif controller.sweep_due %}<strong>Shortly</strong><small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
+      {% elif controller.next_sweep_at %}<strong>In {{ controller.next_sweep_at|timeuntil }}</strong><small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
       {% else %}<strong>After the first run</strong><small>Nothing has been read yet.</small>{% endif %}
     </div>
   </div>
@@ -40,7 +40,7 @@ for it. Nothing here asks it anything.
     <div>
       <span class="band-label">Waiting to be applied</span>
       <strong>{% if controller.queue %}{{ controller.queue|length|counted:"change" }}{% else %}Nothing{% endif %}</strong>
-      <small>{% if controller.asked %}A fresh read was asked for: {% for read in controller.asked %}{{ read.subject }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% elif controller.queue %}Applied on the controller's next run.{% else %}No changes are queued.{% endif %}</small>
+      <small>{% if controller.asked %}{% words "infrastructure.controller.refresh" %} asked for {% for read in controller.asked %}{% with mark=forloop.last|then:".|," %}{{ read.subject|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}{% elif controller.queue %}{% waiting %}{% endif %}</small>
     </div>
   </div>
 </div>
@@ -51,10 +51,10 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 {% if not standing.known %}
 <section class="card controller-start" aria-labelledby="controller-start-heading">
   <h2 id="controller-start-heading">Start the controller</h2>
-  <p class="muted">It holds your connections' credentials; HQ never does. Once installed, it runs whenever HQ has work for it.{% if start_guide %} <a href="{{ start_guide }}" rel="noopener">Install guide</a>{% endif %}</p>
+  <p class="muted">It holds your connections' credentials; HQ never does.{% if start_guide %} <a href="{{ start_guide }}" rel="noopener">Install guide</a>{% endif %}</p>
   <ol class="resolution-workflow">
     <li><strong>Install it</strong>{% include "partials/_command.html" with command="sudo /usr/local/lib/severino-hq/deploy/bin/hq-host install" only %}</li>
-    <li><strong>Run a pass now</strong>{% include "partials/_command.html" with command="sudo systemctl start severino-hq-controller.service" only %}</li>
+    <li><strong>Start it</strong>{% include "partials/_command.html" with command="sudo systemctl start severino-hq-controller.service" only %}</li>
     <li><strong>If nothing arrives</strong>{% include "partials/_command.html" with command="sudo journalctl -u severino-hq-controller.service -n 50" only %}</li>
   </ol>
 </section>
@@ -71,8 +71,8 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
         {% for work in controller.queue %}
           <tr>
             <td class="row-gutter"><strong>{% entity "resource"|entity_of:work.resource %}</strong>{% row_toggle %}</td>
-            <td>{{ work.action }}</td>
-            <td>{{ work.state }}</td>
+            <td>{{ work.action|breakable }}</td>
+            <td>{{ work.state|breakable }}</td>
             <td>{{ work.created_at|when:"ago" }}</td>
           </tr>
         {% endfor %}
@@ -92,11 +92,11 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
       <tbody>
         {% for reading in controller.readings %}
           <tr>
-            <td class="row-gutter"><strong title="{{ reading.kind }}">{{ reading.label }}</strong>{% row_toggle %}</td>
+            <td class="row-gutter"><strong title="{{ reading.kind }}">{{ reading.label|breakable }}</strong>{% row_toggle %}</td>
             <td>{{ reading.attempted_at|when:"ago" }}</td>
             <td>{{ reading.observed_at|when:"ago" }}</td>
-            <td class="num-col">{{ reading.records }}</td>
-            <td><span class="pill pill-{% if reading.ok %}good{% else %}serious{% endif %}">{% if reading.ok %}{{ reading.result }}{% else %}Failed{% endif %}</span>{% if not reading.ok %}<br><span class="muted cell-line">{{ reading.result }}</span>{% endif %}</td>
+            <td class="num-col">{{ reading.records|breakable }}</td>
+            <td><span class="pill pill-{% if reading.ok %}good{% else %}serious{% endif %}">{% if reading.ok %}{{ reading.result|breakable }}{% else %}Failed{% endif %}</span>{% if not reading.ok %}<br><span class="muted">{% cell_line reading.result %}</span>{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

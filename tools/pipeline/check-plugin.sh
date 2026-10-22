@@ -41,6 +41,7 @@ uv sync --locked --group dev
 python=$(uv run --no-sync python -c 'import sys; print(sys.executable)')
 uv pip install --python "$python" --require-hashes -r "$host_requirements"
 "$python" -m ruff check src
+"$python" -m ruff format --check src
 PYTHONPATH="$hq_root" "$python" -m hq_sdk.validation src
 
 export DJANGO_DEBUG=true

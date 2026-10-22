@@ -431,6 +431,38 @@ class TopologyPageTests(TestCase):
         self.assertNotContains(response, "{#")
         self.assertNotContains(response, "#}")
 
+    def test_records_of_one_name_and_type_are_told_apart_by_their_values(self):
+        for key, content in (
+            ("caa-issue", '0 issue "ca.example.net"'),
+            ("caa-iodef", '0 iodef "mailto:a@example.com"'),
+        ):
+            ManagedResource.objects.create(
+                key=key,
+                kind="cloudflare.dns_record",
+                spec={"zone": "example.com", "name": "example.com", "record_type": "CAA", "content": content},
+            )
+
+        response = self.page(all="1")
+
+        def values(node):
+            return [
+                element.text
+                for element in within(response, "data-topology-node", node)
+                if "data-topology-node-summary" in element.attrs
+            ]
+
+        (issue,) = values("resource:caa-issue")
+        (iodef,) = values("resource:caa-iodef")
+        self.assertIn("ca.example.net", issue)
+        self.assertIn("mailto:a@example.com", iodef)
+        # A card no other card shares a name with is told apart by its name.
+        self.assertEqual(values("resource:internal-name"), [])
+
+    def test_clear_selection_is_drawn_hidden_when_nothing_is_selected(self):
+        (reset,) = select(self.page(), "data-topology-reset")
+
+        self.assertIn("hidden", reset.attrs)
+
     def test_a_node_states_each_edge_from_where_it_stands(self):
         """Direction is the half of an edge a neighbor list throws away."""
 

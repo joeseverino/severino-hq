@@ -10,11 +10,13 @@ The whole kind on one scope is the part ``WHOLE``: a zone whose certificate
 packs are refused while other zones read.
 """
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from ipaddress import ip_address
 from typing import Any
 
+from .connection_kinds import CONNECTION_LABELS
 from .names import in_zone, normalized_hostname
 from .observations import OBSERVATIONS, ReadingPart
 from .provider_adapters.contracts import (
@@ -28,6 +30,22 @@ WHOLE = ""
 _REASON_LENGTH = 300
 _SCOPE_LENGTH = 253
 _REF_LENGTH = 160
+
+# The request a provider's reason names ("GitHub 403 for /repos/a/b/..."): the
+# scope already says which, and without it equal reasons group.
+_REQUEST = re.compile(r"\s+for\s+(?:/|https?://)\S+$")
+# A reason that is only the status a provider answered ("GitHub 404", "provider
+# answered 403"), after whatever led to it.
+_STATUS = re.compile(r"(?P<lead>.*:\s+)?(?:provider answered|[A-Z][\w.-]*)\s+(?P<code>[1-5]\d\d)")
+# What each status means to the owner, by code or by its hundred.
+_STATUS_MEANS = {
+    401: "{who}'s credential was refused",
+    403: "closed to {who}",
+    404: "hidden from {who}",
+    429: "{who} was asked to slow down; the next read tries again",
+    500: "the service failed to answer; the next read tries again",
+    400: "the service refused the read",
+}
 
 
 def parts_of(kind: str) -> Mapping[str, ReadingPart]:
@@ -67,12 +85,25 @@ class PartRefusal:
         return self.part.requires if self.refusal == PERMISSION_REFUSAL else ()
 
     @property
+    def said(self) -> str:
+        """Why it was not read, in words: the provider's reason, with a bare
+        HTTP status said as what it means and without the request it named."""
+
+        reason = _REQUEST.sub("", self.reason or "the read failed").rstrip(".")
+        status = _STATUS.fullmatch(reason)
+        if status is None:
+            return reason
+        provider = self.part.provider or getattr(OBSERVATIONS.get(self.kind), "provider", "")
+        meaning = _STATUS_MEANS.get(int(status["code"]), _STATUS_MEANS.get(int(status["code"]) // 100 * 100, ""))
+        return (status["lead"] or "") + meaning.format(who=f"HQ's {CONNECTION_LABELS.get(provider, 'connection')}")
+
+    @property
     def phrase(self) -> str:
-        """ "<part> not read: missing <permissions>", or the provider's reason."""
+        """ "<part> not read: missing <permissions>", or why it was not read."""
 
         if self.missing:
             return f"{self.part.label} not read: missing {', '.join(self.missing)}"
-        return f"{self.part.label} not read: {(self.reason or 'the read failed').rstrip('.')}"
+        return f"{self.part.label} not read: {self.said}"
 
     def covers(self, hostname: str) -> bool:
         """Whether this refusal hides something about ``hostname``."""

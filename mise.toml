@@ -1,20 +1,25 @@
 # The toolchain and every gate, declared once.
 #
 #   mise install        the pinned tools (versions here, checksums in mise.lock);
-#                       a lazy one installs on its first use
+#                       a lazy one installs on its first use; a github:
+#                       one needs lazy_bins for its shim, and `mise which`
+#                       finds it only once installed
 #   mise run fast       the inner loop: only what the change touches
 #   mise run check      does my change work
 #   mise run ci         will the pipeline accept it: every gate CI runs
 #   mise run <gate>     one gate, e.g. `mise run checks:ruff`
 #   mise tasks          the list
 #
-# A gate is a task named <job>:<gate>. Each CI job runs the aggregate of its
-# name (`mise run -c checks`), so a gate added here runs locally and in the
-# pipeline with no second list to edit. `-c` keeps going past a failure and
-# names every gate that failed. No gate declares `sources`: mise judges them by
-# file times alone, and a verdict also turns on the environment and on files
-# no list would name. A task whose body is more than one line is a file under
-# mise-tasks/, declared in its own #MISE header, so checks:shell lints it.
+# A gate is a task named <job>:<gate>, declared in its job's file under tasks/
+# (tasks/checks.toml for checks:*), which task_config below includes. Each CI
+# job runs the aggregate of its name (`mise run -c checks`), so a gate added
+# there runs locally and in the pipeline with no second list to edit. `-c`
+# keeps going past a failure and names every gate that failed. No gate declares
+# `sources`: mise judges them by file times alone, and a verdict also turns on
+# the environment and on files no list would name. A task whose body is more
+# than one line is a file under mise-tasks/, declared in its own #MISE header,
+# so checks:shell lints it. This file keeps the tools, the environment, the
+# templates, the development servers and the aggregates.
 #
 # Python dependencies come from uv.lock, which UV_LOCKED below holds every uv
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
@@ -28,6 +33,10 @@ min_version = "2026.10.15"
 # gate's failures sit under its own verdict.
 output = "keep-order"
 
+[task_config]
+# The list replaces mise's default task directories, so it names mise-tasks.
+includes = ["mise-tasks", "tasks/*.toml"]
+
 [env]
 # Facts that are not tools: the Python matrix, the coverage floor, the runner
 # image. Shell and workflows read the same file.
@@ -37,25 +46,34 @@ SEVERINO_LOG_LEVEL = "CRITICAL"
 # moved past, as `--locked` does. So do `uv lock` and `uv add`: change the lock
 # outside mise, or with UV_LOCKED=0.
 UV_LOCKED = "1"
+# Go builds with the release mise pins and never downloads the one go.mod
+# names, here and in the image.
+GOTOOLCHAIN = "local"
 
 [tools]
 node = "24.22.0"
+# The controller's Go, a release of go.mod's language version (checks:toolchain).
+# The images install it and uv from mise.lock, so this line is their only pin.
+go = "1.27.3"
 shellcheck = "0.11.0"
 actionlint = "1.7.12"
 yq = "4.54.1"
 jq = "1.8.2"
-# The images copy uv from its own image at this version (checks:toolchain).
 uv = "0.13.4"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
-scorecard = "5.6.0"
+# Lazy, as age is: only checks:scorecard runs it.
+scorecard = { version = "5.6.0", lazy = true }
 # Seals a failed Compose run's output (tools/pipeline/seal-failure-logs.sh). Lazy:
 # `mise install` leaves it to its first use, held to mise.lock all the same.
 age = { version = "1.3.2", lazy = true }
 
 # The code graph the structural bar indexes with. Linux takes the portable
-# (static) build so the runner needs no matching libc.
+# (static) build so the runner needs no matching libc. Lazy: only
+# checks:structural runs it, and installs it first (tools/structural/bar.py).
 [tools."github:DeusData/codebase-memory-mcp"]
 version = "0.12.0"
+lazy = true
+lazy_bins = ["codebase-memory-mcp"]
 
 [tools."github:DeusData/codebase-memory-mcp".platforms]
 linux-x64 = { asset_pattern = "codebase-memory-mcp-linux-amd64-portable.tar.gz" }
@@ -84,15 +102,13 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 # "database is locked"). It is named as a test run's scratch is, for the mise
 # that ran it, so the next test run sweeps it (hq/config/sandbox.py). A gate
 # sees no extension set it did not ask for. A task extends one template and a
-# template extends none, so composed and django-heavy restate django's env.
+# template extends none, so django-heavy restates django's env: an env file
+# could hold it once, but mise reads one as written, never rendered, and the
+# database path is an exec. The composed suite extends django and sets what
+# it changes in its own header.
 
 [task_templates.django]
 env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
-
-# The extension set mise.local.toml names, loaded as the image loads it: DEBUG
-# off, and admission off, since a checkout has no admitted wheels.
-[task_templates.composed]
-env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = false, DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION = "0", SEVERINO_HQ_PLUGINS = "{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH = "{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}" }
 
 # ------------------------------------------------------------------ heavy
 # A task that loads the machine (a suite, a browser, a demo build, an aggregate
@@ -116,10 +132,12 @@ env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/seve
 shell = "tools/lib/heavy.sh sh -o errexit -c"
 timeout = "30m"
 
-# --------------------------------------------------------------- operator
-
+# ---------------------------------------------------------------- servers
 # The development servers. Each profile is a task whose env says where it
 # listens and which database it opens; tools/dev/dev.sh refuses what env cannot.
+# They stay in this file because their env names files by path: mise reads an
+# env path, and renders config_root inside env, from the directory of the file
+# that declares the task, so the same lines in tasks/ would point under tasks/.
 
 # The long-lived server behind a TLS proxy. Its facts live only in the
 # gitignored dev.local.toml (tools/dev/dev.local.example.toml), which no other
@@ -200,59 +218,11 @@ extends = "dev:scratch-env"
 description = "A signed-in session cookie for this checkout's scratch server"
 run = "uv run python manage.py dev_session operator"
 
-[tasks."dev:look"]
-extends = "django-heavy"
-depends = ["setup:webkit"]
-description = "Screenshot HQ pages as the browser gates draw them at a few widths, and run one of their rules there"
-usage = '''
-arg "<pages>" help="Comma-separated pages: the gate's estate (connections,dense/services,derived/assets/list), the API reference (api/docs), the example estate's navigation (estate, estate/infrastructure, or estate/all for every page of it), or all"
-flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
-flag "--rule <rule>" help="A rule method of LayoutBrowserTests to run on each page"
-flag "--css <css>" help="A stylesheet added first: the defect a new rule must catch"
-flag "--dark" help="In the dark palette"
-flag "--open" help="With every disclosure open"
-flag "--expand" help="With every table row opened"
-flag "--no-script" help="As the server drew it, before tables.js and the rest run"
-flag "--deep" help="Also every page the example estate pages link to: each list's records and the command forms they open"
-'''
-run = "uv run --group browser python manage.py test hq.platform.core.browser_look.Look.test_look --noinput --parallel 1"
-
 [tasks."dev:manage"]
 extends = "dev:scratch-env"
 raw = true
 description = "manage.py against this checkout's scratch database, extensions loaded: mise run dev:manage -- <command>"
 run = "uv run python manage.py"
-
-[tasks.manage]
-description = "manage.py with the development settings the gates use: mise run manage -- <command>"
-raw = true
-extends = "django"
-run = "uv run --group browser python manage.py"
-
-[tasks.regen]
-description = "Rewrite every derived file from its source; `mise run drift` checks them instead"
-# In the order each reads the last: the API document feeds the clients, the
-# bridge contract feeds the Go types. Each step takes the heavy turn, the
-# contract tools' install among them, so none shares tools/clients'
-# node_modules with a drift gate's install.
-extends = "django-heavy"
-run = [
-  "mise run setup:openapi",
-  "uv run python manage.py sdk_contract",
-  "uv run python manage.py api_openapi",
-  "tools/clients/generate.sh --write",
-  "uv run python manage.py bridge_contract",
-  "cd controller && go generate ./...",
-  "uv run python manage.py connections_reference",
-]
-
-[tasks.drift]
-description = "Every derived file is what its source generates: each drift:* gate, naming every one behind"
-# Run-form, so the gates and the installs they depend on run inside one turn.
-# The Go types are held by `mise run controller`, which regenerates them
-# against a snapshot.
-extends = "heavy"
-run = "mise run -c 'drift:*'"
 
 # ------------------------------------------------------------- aggregates
 
@@ -291,11 +261,22 @@ timeout = "2h"
 run = "mise run -c 'checks:*' ::: 'drift:*'"
 
 [tasks.browser]
-description = "CI job Browser"
-# Run-form, so one turn covers every browser gate.
+description = "CI job Browser, one gate at a time, in WebKit"
+# Run-form, so one turn covers every browser gate. One at a time: a run-form
+# aggregate starts as many tasks as the jobs setting allows, and each gate
+# starts a browser per core. The Chromium leg is CI's alone.
 extends = "heavy"
 timeout = "2h"
-run = "mise run -c 'browser:*'"
+env = { MISE_TASK_SKIP = "browser:layout-chromium" }
+run = "mise run -c -j 1 'browser:*'"
+
+[tasks.drift]
+description = "Every derived file is what its source generates: each drift:* gate, naming every one behind"
+# Run-form, so the gates and the installs they depend on run inside one turn.
+# The Go types are held by `mise run controller`, which regenerates them
+# against a snapshot.
+extends = "heavy"
+run = "mise run -c 'drift:*'"
 
 [tasks.controller]
 description = "CI job Controller"
@@ -309,185 +290,23 @@ depends = ["scan:*"]
 description = "CI job Image: build, then every check an image must pass"
 depends = ["image:verify:*"]
 
-# ----------------------------------------------------------------- checks
+# Whether this checkout can compose its extensions: `mise doctor project` names
+# each gap with its fix. Without a set, `fast` skips the composed pass and says
+# nothing, and an agent's worktree has none until its mise.local.toml is copied
+# in. A check that needs the set passes when none is named, so one missing file
+# is reported once.
+[doctor.checks."local:extensions"]
+description = "mise.local.toml names an extension set, so the composed suite and dev servers load it"
+run = 'test -n "$HQ_LOCAL_PLUGINS"'
+hint = "cp tools/dev/mise.local.example.toml mise.local.toml and name your extension checkouts in it"
 
-[tasks."checks:patch"]
-description = "No whitespace errors or conflict markers in the working tree"
-run = "git diff --check"
+[doctor.checks."local:extension-sources"]
+description = "Every directory on HQ_LOCAL_PYTHONPATH exists"
+run = '[ -z "$HQ_LOCAL_PLUGINS" ] || { IFS=:; for d in $HQ_LOCAL_PYTHONPATH; do test -d "$d" || exit 1; done; }'
+hint = "Point HQ_LOCAL_PYTHONPATH in mise.local.toml at each extension checkout's src directory"
 
-[tasks."checks:ruff"]
-description = "ruff"
-run = ["uv run ruff check .", "uv run ruff format --check ."]
-
-[tasks."checks:mypy"]
-description = "mypy: the typed seams pyproject.toml names"
-# django-stubs loads the host's settings.
-extends = "django"
-run = "uv run python -m mypy"
-
-[tasks."setup:openapi"]
-description = "Install the locked contract tools"
-hide = true
-sources = ["tools/clients/package-lock.json"]
-outputs = ["tools/clients/node_modules/.package-lock.json"]
-run = "npm --prefix tools/clients ci"
-
-[tasks."checks:openapi"]
-description = "Both OpenAPI descriptions pass specification lint"
-depends = ["setup:openapi"]
-# Specification rules cover wire contracts. HTTP style recommendations do not
-# apply to Django's canonical trailing slashes or the stdin/stdout bridge.
-run = [
-  "node tools/clients/node_modules/@redocly/cli/bin/cli.js lint --extends=spec --format=summary hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json",
-  "node --test tools/clients/test-client.mjs",
-]
-
-[tasks."checks:lockfile"]
-description = "uv.lock matches pyproject.toml"
-run = "uv lock --check"
-
-[tasks."checks:toolchain"]
-description = "mise.lock has a checksum for every pinned tool on every platform a gate runs on, and the images take the uv mise pins"
-run = "uv run python -m tools.pipeline.toolchain_lock"
-
-[tasks."checks:mise-tasks"]
-description = "Every task is valid: its usage spec parses, its dependencies exist, its timeout and globs are well formed"
-run = "mise tasks validate"
-
-[tasks."checks:mise-format"]
-description = "mise.toml is formatted as `mise fmt` writes it"
-# Read through stdin: `mise fmt --check` also judges the gitignored mise.local.toml.
-run = "mise fmt --stdin <mise.toml | diff -u mise.toml -"
-
-[tasks."checks:workflows"]
-description = "The workflows are valid, run: blocks included"
-run = "actionlint -color"
-
-[tasks."checks:source"]
-description = "The tests that read the repository, run once on the checkout"
-# Tagged "source"; a whole-suite run leaves them out (hq/platform/core/test_runner.py),
-# so no image or composed pass runs them.
-extends = "django-heavy"
-usage = 'arg "[labels]..." var=#true help="Test labels, dotted; only their tagged tests run. Every one by default"'
-run = "uv run python manage.py test --tag source --noinput --parallel auto ${usage_labels:-}"
-
-[tasks."checks:deploycheck"]
-description = "Production settings raise no security warning"
-# DEBUG off, a real host. The values mirror a production configuration so the
-# check judges how settings.py reads one. The key is a throwaway long enough
-# for the strength check.
-extends = "django"
-env = { DJANGO_DEBUG = "0", DJANGO_SECRET_KEY = "ci-only-deploy-check-key-0123456789abcdef0123456789abcdef", DJANGO_ALLOWED_HOSTS = "hq.example.com", SEVERINO_OIDC_ISSUER = "https://sso.example.com", DJANGO_BEHIND_TLS_PROXY = "1", DJANGO_SESSION_COOKIE_SECURE = "1", DJANGO_CSRF_COOKIE_SECURE = "1", DJANGO_HSTS_SECONDS = "31536000" }
-run = "uv run python manage.py check --deploy --fail-level WARNING"
-
-[tasks."checks:structural"]
-description = "No new near-duplicate pair outside tests"
-usage = 'flag "--record" help="Rewrite the baseline from this tree instead of checking it"'
-run = 'uv run python -m tools.structural.bar ${usage_record:+--record}'
-
-# ------------------------------------------------------------------ drift
-# Each derived file against its source, run by the Checks job, by `mise run
-# fast` side by side, and by `mise run drift`. `mise run regen` rewrites them
-# all.
-
-[tasks."drift:sdk-contract"]
-description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
-extends = "django"
-run = "uv run python manage.py sdk_contract --check"
-
-[tasks."drift:api-document"]
-description = "The machine API's OpenAPI document is current"
-extends = "django"
-run = "uv run python manage.py api_openapi --check"
-
-[tasks."drift:clients"]
-description = "The generated API clients are what the API document generates"
-depends = ["setup:openapi"]
-run = "tools/clients/generate.sh --check"
-
-[tasks."drift:bridge-contract"]
-description = "The controller's contracts are the ones the registry derives"
-extends = "django"
-run = "uv run python manage.py bridge_contract --check"
-
-[tasks."drift:connections-reference"]
-description = "docs/Connections.md is what the providers declare"
-extends = "django"
-run = "uv run python manage.py connections_reference --check"
-
-# ------------------------------------------------------------------ tests
-# Each runs on the interpreter UV_PYTHON names; `mise run tests` walks the matrix.
-
-[tasks."tests:django"]
-description = "Django's system checks"
-extends = "django"
-run = "uv run python manage.py check"
-
-[tasks."tests:plugins"]
-description = "The public plugin contract"
-extends = "django"
-env = { SEVERINO_HQ_PLUGINS = "tests.fixtures.example_hq_plugin.plugin:plugin" }
-run = ["uv run python manage.py check", "uv run python manage.py plugins"]
-
-[tasks."tests:migrations"]
-description = "No model change without its migration"
-extends = "django"
-run = "uv run python manage.py makemigrations --check --dry-run"
-
-[tasks."tests:api-properties"]
-description = "Generated API cases through the real WSGI middleware"
-extends = "django-heavy"
-run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
-
-# ---------------------------------------------------------------- browser
-
-[tasks."docs:screenshot"]
-description = "Retake the README's pictures from the showcase demo"
-depends = ["setup:webkit", "demo:build"]
-extends = "heavy"
-run = "uv run --group browser python -m demo.screenshot"
-
-[tasks."browser:demo"]
-description = "Build the demo and check it in WebKit"
-depends = ["setup:webkit", "demo:build"]
-env = { HQ_DEMO_OUT = "{{config_root}}/var/demo" }
-extends = "heavy"
-run = "uv run --group browser python -m unittest demo.check -v"
-
-# Each browser:* gate is one CI job, the classes split for balance. A new
-# browser test class is named in one of them (test_browser_gate_tasks).
-[tasks."browser:layout"]
-description = "Real-browser layout invariants over the stress estate"
-depends = ["setup:webkit"]
-extends = "django-heavy"
-run = "uv run --group browser python manage.py test hq.platform.core.browser_tests.LayoutBrowserTests --noinput --parallel 1"
-
-[tasks."browser:navigation"]
-description = "Real-browser invariants over the example estate, the frame around a page and its fragments"
-depends = ["setup:webkit"]
-extends = "django-heavy"
-run = "uv run --group browser python manage.py test hq.platform.core.estate_browser_tests hq.platform.core.browser_tests.ReferenceBrowserTests hq.platform.core.browser_tests.FragmentBrowserTests --noinput --parallel 1"
-
-# ------------------------------------------------------------- controller
-
-[tasks."controller:check"]
-description = "The Go controller: format, generated types, vet, race tests"
-run = "controller/scripts/check.sh"
-
-# ------------------------------------------------------------------ image
-# IMAGE names the image under test; the pipeline passes the one it built.
-
-[tasks."image:verify:healthy"]
-description = "It comes up healthy"
-depends = ["image:build"]
-run = 'tools/pipeline/image-health.sh "${IMAGE:-severino-hq:ci-local}"'
-
-[tasks."image:verify:host-boot"]
-description = "It boots under its unit: waits for its environment, survives a crash and a reboot"
-depends = ["image:build"]
-run = 'tools/pipeline/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'
-
-[tasks."plugin:check"]
-description = "One extension package's contract check against this host, as its CI runs it"
-dir = "{{cwd}}"
-run = "{{config_root}}/tools/pipeline/check-plugin.sh"
+[doctor.checks."local:extension-imports"]
+description = "Every module HQ_LOCAL_PLUGINS names imports with the host's libraries"
+run = '''[ -z "$HQ_LOCAL_PLUGINS" ] || PYTHONPATH="$HQ_LOCAL_PYTHONPATH" uv run --no-sync python -c 'import importlib, os; [importlib.import_module(p.split(":")[0]) for p in os.environ["HQ_LOCAL_PLUGINS"].split(",")]' '''
+hint = "Run uv sync; if it still fails, the extension needs a newer host: update both checkouts to main"
+timeout = "30s"

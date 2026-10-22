@@ -6,15 +6,19 @@ what may be done to it, where it runs and sends traffic, which services it
 takes part in, how its provider describes it, and when a certificate runs out.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from hq.domains.control_plane.models import ManagedResource
+from django.utils.text import Truncator
+
+from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
-from hq.domains.control_plane.providers import PROVIDERS, controller_capability_registry
+from hq.domains.control_plane.providers import PROVIDERS, controller_capability_registry, readout_rows
 
+from .asks import APPLIES_SHORTLY
 from .entity_links import entity_link
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import controller_contract, enabled_resources, resolved_spec, resource_health, serialize_resource
@@ -83,16 +87,39 @@ def service_links(resource) -> tuple[tuple[str, str], ...]:
     return tuple((name, url) for name, url in links if url)
 
 
-def readout_rows(resource) -> tuple[tuple[str, str, str], ...]:
-    """``(label, desired, observed)`` as the provider describes itself."""
+def record_summary(resource, shown_name: str) -> str:
+    """What a record holds, in a line short enough to recognize it by.
 
-    provider = PROVIDERS[resource.kind]
-    if provider.readout is None:
-        return ()
-    try:
-        return tuple(provider.readout(resource.spec, resource.status or {}))
-    except KeyError, TypeError, ValueError:
-        return ()
+    The first line of its provider's readout, shortened: a DMARC record runs
+    to three wrapped lines and the full value is one click away on the record
+    itself.
+    """
+
+    rows = readout_rows(resource)
+    return value_summary(rows[0][1] or rows[0][2] if rows else "", shown_name)
+
+
+def value_summary(value: str, shown_name: str) -> str:
+    """A record's value as the line it is recognized by: shortened, and blank
+    when the name it is shown by already says it, since "a → 10.0.0.10:80"
+    needs no "http://10.0.0.10:80"."""
+
+    if value.rpartition("://")[2] in shown_name:
+        return ""
+    return Truncator(value).chars(_SUMMARY_CHARS)
+
+
+def shared_names[Name](names: Iterable[Name]) -> frozenset[Name]:
+    """The names more than one record goes by: there, only the value tells them apart."""
+
+    seen: set[Name] = set()
+    shared: set[Name] = set()
+    for name in names:
+        (shared if name in seen else seen).add(name)
+    return frozenset(shared)
+
+
+_SUMMARY_CHARS = 64
 
 
 # How far behind the newest reading of its own type a record may fall before
@@ -179,7 +206,7 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
             "pending",
             "pending",
             "Change waiting to apply",
-            "The controller applies it within a few minutes." if automatically else "Press Apply again to apply it.",
+            APPLIES_SHORTLY if automatically else f"Press {OperationRequest.Action.RECONCILE.label} to apply it.",
             None,
             read_at,
         )
@@ -223,17 +250,17 @@ def newest_reading(kind: str) -> datetime | None:
 
 
 @dataclass(frozen=True, slots=True)
-class Expiry:
+class ExpiryWindow:
     not_after: datetime
     days_left: int
     renewal_at: datetime
 
 
-def expiry_of(resource) -> Expiry | None:
+def expiry_of(resource) -> ExpiryWindow | None:
     expires = certificate_expiry(resource.status)
     if expires is None:
         return None
-    return Expiry(
+    return ExpiryWindow(
         expires,
         max(0, days_until(expires)),
         renewal_opens_at(expires, renewal_window(resource.spec)),
@@ -281,7 +308,7 @@ class ResourceContext:
     provider_machine: dict[str, Any] | None
     service_links: tuple[tuple[str, str], ...]
     readout_rows: tuple[tuple[str, str, str], ...]
-    expiry: Expiry | None
+    expiry: ExpiryWindow | None
     awaiting_approval: tuple[Any, ...]
     resolved_spec: dict[str, Any] | None
     display_consumers: tuple[dict[str, Any], ...]
@@ -424,7 +451,7 @@ def controller_summary(actions, labels) -> ControllerSummary | None:
         return ControllerSummary("HQ does not change this", "declared", lines, frozenset(off))
     automatic = any(allowed.automatic for allowed in actions.values())
     return ControllerSummary(
-        "Applied automatically" if automatic else "Applied when you press Apply again",
+        "Applied automatically" if automatic else f"Applied when you press {OperationRequest.Action.RECONCILE.label}",
         "good",
         lines,
         frozenset(off),

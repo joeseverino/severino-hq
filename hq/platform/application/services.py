@@ -54,7 +54,7 @@ from .projection import read_once
 from .published_sites import published_projects
 from .reach import UNKNOWN, Reach, is_documentation, reach_of
 from .service_declarations import Claim, declarations, runtime_claim
-from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, Facet
+from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, ServiceFacet
 from .ui import ListRow
 from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
 lazy from .exposure import exposure_of_name
@@ -68,7 +68,7 @@ OBSERVED_MARK = "observed"
 @dataclass(frozen=True)
 class Service:
     hostname: str
-    facets: tuple[Facet, ...]
+    facets: tuple[ServiceFacet, ...]
     origin: Origin | None = None
     project: dict[str, str] | None = None
     faults: tuple[str, ...] = ()
@@ -598,7 +598,7 @@ def _assemble(
     # halves, which is the tie.
     runtime = runtime_claim(origin, containers)
     facets = tuple(
-        Facet(
+        ServiceFacet(
             id=facet_id,
             label=label,
             claims=tuple(declared.get(facet_id, ()))
@@ -688,7 +688,7 @@ class _CertificatesInUse:
 
 
 def _faults(
-    facets: tuple[Facet, ...],
+    facets: tuple[ServiceFacet, ...],
     origin: Origin | None,
     in_use: _CertificatesInUse | None = None,
     hostname: str = "",
@@ -739,7 +739,7 @@ def _faults(
     return tuple(faults)
 
 
-def _points_nowhere(origin: Origin | None, dns: Facet | None = None) -> str:
+def _points_nowhere(origin: Origin | None, dns: ServiceFacet | None = None) -> str:
     """Why an address answers nothing, when that is knowable from the address.
 
     A parked name is a legitimate thing to have and an easy thing to forget, so
@@ -766,7 +766,7 @@ def _points_nowhere(origin: Origin | None, dns: Facet | None = None) -> str:
     return ""
 
 
-def _served_by_the_provider(dns: Facet | None) -> bool:
+def _served_by_the_provider(dns: ServiceFacet | None) -> bool:
     """Whether a DNS provider answers for this name rather than forwarding it.
 
     A proxied record means the provider terminates the connection and does

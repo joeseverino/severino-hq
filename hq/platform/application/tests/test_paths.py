@@ -249,6 +249,25 @@ class PathTests(TestCase):
         # A source that is not a web address is not made into a link.
         self.assertEqual(_running_facts({"revision": "0123456789abcdef", "source": "git@x:y"}), (("0123456", ""),))
 
+    def test_a_container_hop_says_how_long_it_is_up_as_the_machine_page_does(self):
+        """Docker's phrase is fixed when it is read and rounds its own way, so
+        where its start time is known both pages count from that."""
+
+        from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
+
+        from ..containers import up_for
+        from ..paths import _running_facts
+
+        started = (timezone.now() - timedelta(days=12)).isoformat()
+        store(RUNTIME_KIND, {"host": "example-host", "container": "app", "started_at": started})
+        running = {"host": "example-host", "name": "app", "state": "running", "status": "Up 12 days (healthy)"}
+
+        with projection_scope():
+            (uptime,) = _running_facts(running)
+
+        self.assertEqual(uptime[0], up_for(running["status"], started, running=True))
+        self.assertNotIn("12 days", uptime[0])
+
     def test_only_the_certificate_the_ingress_names_serves_the_name(self):
         from ..services import certificates_serving
 

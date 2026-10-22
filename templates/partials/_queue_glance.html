@@ -9,7 +9,7 @@ that shows the rest (`page`), steps included.
     <li class="attention-row" data-attention-item>
       <div class="attention-body">
         <div class="attention-head">
-          <a class="attention-title" href="{{ item.page }}">{{ item.label }}</a>
+          <a class="attention-title" href="{{ item.page }}">{{ item.label|breakable }}</a>
           {% if item.since or item.observed_at %}
           <span class="attention-meta">
             {% if item.since %}<span>Since {{ item.since|when:"day" }}</span>{% endif %}
@@ -17,10 +17,10 @@ that shows the rest (`page`), steps included.
           </span>
           {% endif %}
         </div>
-        {% if item.detail %}<p class="attention-detail">{{ item.detail }}</p>{% endif %}
+        {% if item.detail %}<p class="attention-detail">{{ item.detail|breakable }}</p>{% endif %}
       </div>
       <div class="attention-end">
-        {% if item.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=item.actions only %}</div>{% endif %}
+        {% remedies item.actions as shown %}{% if shown %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=shown only %}</div>{% endif %}
         <div data-triage>
           {% url 'action_items_set_aside' as triage_url %}
           {% post_button "Dismiss" triage_url name="key" value=item|row_value css="btn compact ghost" %}

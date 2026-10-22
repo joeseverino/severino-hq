@@ -14,7 +14,7 @@ from ..relationships import relationships_for
 from ..security import Capability, Principal
 from ..topology import relation_graph
 from ..topology_model import RELATIONS
-from .markup import select
+from .markup import select, text
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
 ON_LAB = {"connection_ref": "example-portainer", "environment_id": 1, "host": "lab-1", "host_address": "192.0.2.10"}
@@ -196,7 +196,8 @@ class MachinePageTests(TestCase):
         response = self.client.get(reverse("control_plane:machine", args=["lab-1"]))
 
         self.assertEqual(response.status_code, 200)
-        for text in (
+        said = text(response)
+        for words in (
             "Docker environment",
             "Where data lives",
             "/opt/apps/shop/config",
@@ -208,7 +209,7 @@ class MachinePageTests(TestCase):
             "No tag",
             "27.1.1",
         ):
-            self.assertContains(response, text)
+            self.assertIn(words, said)
 
     def test_a_machine_nothing_reads_docker_for_has_no_docker_bands(self):
         ProviderInventory.objects.filter(kind__startswith="portainer.").delete()

@@ -1,21 +1,21 @@
 {% extends "page.html" %}
 {% block page %}
 
-{% if active_lens %}<p class="topology-lens-note muted">{{ active_lens.summary }}</p>{% endif %}
+{% if active_lens %}<p class="topology-lens-note muted">{{ active_lens.summary|breakable }}</p>{% endif %}
 
 {% if topology_trace %}
   <section class="topology-trace-bar" id="trace" tabindex="-1" aria-label="What is shown">
     <div>
       <span class="eyebrow">Showing</span>
-      <strong>{{ topology_trace_focus.label }}</strong>
-      <span class="muted">{{ topology_trace_label }} · {{ topology_trace.depth|counted:"step" }}</span>
+      <strong>{{ topology_trace_focus.label|breakable }}</strong>
+      <span class="muted">{{ topology_trace_label|breakable }} · {{ topology_trace.depth|counted:"step" }}</span>
     </div>
     <nav class="topology-trace-controls" aria-label="Direction">
-      {% for item in trace_direction_links %}<a class="scope-chip{% if topology_trace.direction == item.name %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.direction == item.name %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
+      {% for item in trace_direction_links %}<a class="scope-chip{% if topology_trace.direction == item.name %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.direction == item.name %} aria-current="page"{% endif %}>{{ item.label|breakable }}</a>{% endfor %}
     </nav>
     <nav class="topology-trace-controls" aria-label="Steps">
       <span class="muted">Steps</span>
-      {% for item in trace_depth_links %}<a class="scope-chip{% if topology_trace.depth == item.depth %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.depth == item.depth %} aria-current="page"{% endif %}>{{ item.depth }}</a>{% endfor %}
+      {% for item in trace_depth_links %}<a class="scope-chip{% if topology_trace.depth == item.depth %} is-active{% endif %}" href="{{ item.url }}"{% if topology_trace.depth == item.depth %} aria-current="page"{% endif %}>{{ item.depth|breakable }}</a>{% endfor %}
     </nav>
     <a class="btn ghost compact" href="{{ trace_reset_url }}">Clear</a>
   </section>
@@ -24,36 +24,39 @@
 <section class="topology-workspace" data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}" data-topology-total="{{ topology_total }}">
   <div class="topology-toolbar" role="group" aria-label="Topology controls">
     {% comment %}
-    Which view is the server's question, so it is a form; the rest of this bar
-    filters in place. One bar for both, and its "N of M shown" is the count.
+    One bar, in the order a reader narrows: a name, then which view (the
+    server's question, so a form with its Filter button), then the kinds.
+    What the map leaves out is said with its count, in the line under it.
     {% endcomment %}
+    <label class="topology-search">
+      <span class="visually-hidden">Find on the map</span>
+      <input type="search" placeholder="Find on the map" data-topology-search autocomplete="off">
+    </label>
     <form class="topology-view" method="get">
       <select name="lens" aria-label="View">
         <option value="">Show: everything</option>
         {% for lens in topology_lenses %}<option value="{{ lens.name }}"{% if active_lens.name == lens.name %} selected{% endif %}>{{ lens.label }}</option>{% endfor %}
       </select>
-      <button class="btn" type="submit">Apply</button>
-      {% if active_lens %}<a class="btn ghost" href="{% url 'control_plane:topology' %}">Clear</a>{% endif %}
+      <button class="btn" type="submit">Filter</button>
+      {% if active_lens %}<a class="btn ghost" href="{% url 'control_plane:topology' %}">Clear filters</a>{% endif %}
     </form>
-    <label class="topology-search">
-      <span class="visually-hidden">Filter</span>
-      <input type="search" placeholder="Filter…" data-topology-search autocomplete="off">
-    </label>
     <fieldset class="topology-kind-filters">
       <legend class="visually-hidden">Show</legend>
       {% for group in topology_groups %}
-        <label><input type="checkbox" value="{{ group.kind }}" data-topology-kind checked> {{ group.label }}</label>
+        <label><input type="checkbox" value="{{ group.kind }}" data-topology-kind checked> {{ group.label|breakable }}</label>
       {% endfor %}
     </fieldset>
-    <button class="btn ghost compact" type="button" data-topology-reset>Clear selection</button>
-    {% comment %}
-    One control for what the whole map leaves out: the lanes that are context
-    and the cards nothing links to (`topology_lenses.kept_on_the_map`).
-    {% endcomment %}
-    {% if topology_left_out %}<a class="btn ghost compact" href="{% url 'control_plane:topology' %}?all=1#map">Show {{ topology_left_out }} more</a>{% elif topology_everything %}<a class="btn ghost compact" href="{% url 'control_plane:topology' %}#map">Show fewer</a>{% endif %}
+    {% comment %}Shown by the script while a card is selected: with nothing selected, or no script, it does nothing.{% endcomment %}
+    <button class="btn ghost compact" type="button" data-topology-reset hidden>Clear selection</button>
   </div>
 
-  <p class="topology-hint muted" aria-live="polite" data-topology-status>{{ topology_shown }} of {{ topology_total }} shown. Press a count of links to see only what it connects to.</p>
+  {% comment %}
+  The count, and beside it the one control for what the whole map leaves out:
+  the lanes that are context and the cards nothing links to
+  (`topology_lenses.kept_on_the_map`). The script rewrites only the count.
+  {% endcomment %}
+  <p class="topology-hint muted"><span aria-live="polite" data-topology-status>{{ topology_shown|breakable }} of {{ topology_total|breakable }} shown. Press a count of links to see only what it connects to.</span>
+    {% if topology_left_out %}<a href="{% url 'control_plane:topology' %}?all=1#map">Show {{ topology_left_out|breakable }} more</a>{% elif topology_everything %}<a href="{% url 'control_plane:topology' %}#map">Show fewer</a>{% endif %}</p>
 
   <div class="topology-stage{% if topology_detail %} has-detail{% endif %}" data-topology-stage>
   <div class="topology-map" id="map" tabindex="-1" role="region" aria-label="Topology lanes">
@@ -61,7 +64,7 @@
       <section class="topology-lane" data-topology-lane="{{ group.kind }}" aria-labelledby="topology-{{ group.kind }}">
         <header>
           <span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
-          <h2 id="topology-{{ group.kind }}">{{ group.label }}</h2>
+          <h2 id="topology-{{ group.kind }}">{{ group.label|breakable }}</h2>
           <span class="count" data-topology-count title="{{ group.count }}" aria-label="{{ group.count }}">{{ group.items|length }}</span>
         </header>
         <div class="topology-node-list">
@@ -75,12 +78,13 @@
               data-topology-node="{{ item.node.id }}"
               data-topology-node-kind="{{ item.node.kind }}"
               data-topology-neighbors="{{ item.neighbors }}"
-              data-topology-search-text="{{ item.node.label }} {{ item.node.name }} {{ item.node.subtitle }} {{ item.node.detail }}"
+              data-topology-search-text="{{ item.node.label }} {{ item.node.name }} {{ item.node.subtitle }} {{ item.node.summary }} {{ item.node.detail }}"
               data-topology-body="{{ item.body_url }}"
             >
-              <span class="topology-node-title" title="{{ item.node.label }} · {{ item.node.subtitle }}">
+              <span class="topology-node-title" title="{{ item.node.label }} · {{ item.node.subtitle }}{% if item.node.summary %} · {{ item.node.summary }}{% endif %}">
                 <strong>{% if item.link.url %}<a class="topology-node-link" href="{{ item.link.url }}" data-entity="{{ item.link.kind_label }}"{% if item.link.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.link.label|breakable }}</a>{% else %}<span data-entity="{{ item.link.kind_label }}">{{ item.link.label|breakable }}</span>{% endif %}</strong>
-                <small>{{ item.node.subtitle }}</small>
+                <small>{{ item.node.subtitle|breakable }}</small>
+                {% if item.node.summary %}<small data-topology-node-summary>{{ item.node.summary|breakable }}</small>{% endif %}
               </span>
               <a class="topology-node-select" href="{{ item.focus_url }}" data-topology-select aria-controls="topology-detail" title="Details · {{ item.degree|counted:"link" }}" aria-label="Details for {{ item.node.label }}, {{ item.degree|counted:"link" }}"{% if item.node.id == focus_node %} aria-current="true"{% endif %}><span class="topology-node-degree" aria-hidden="true">{{ item.degree|counted:"link" }}</span></a>
             </article>
@@ -89,7 +93,7 @@
       </section>
     {% endif %}{% empty %}
       {% if active_lens %}
-        {% include "partials/_empty_state.html" with message="Nothing matches this view." %}
+        {% include "partials/_empty_state.html" with message="Nothing matches." %}
       {% else %}
         {% include "partials/_empty_state.html" with message="Nothing here yet." %}
       {% endif %}
@@ -113,10 +117,10 @@
       <tbody>
         {% for item in topology_edges %}
           <tr data-topology-edge="{{ item.edge.source }} {{ item.edge.target }}">
-            <td class="row-gutter">{% entity item.source_link %}<br><span class="muted">{{ item.source_link.kind_label }}</span>{% row_toggle %}</td>
-            <td>{{ item.edge.label }}</td>
-            <td>{% entity item.target_link %}<br><span class="muted">{{ item.target_link.kind_label }}</span></td>
-            <td><span class="pill pill-{{ item.edge.status }}">{{ item.edge.status|title }}</span></td>
+            <td class="row-gutter">{% entity item.source_link %}<br><span class="muted">{{ item.source_link.kind_label|breakable }}</span>{% row_toggle %}</td>
+            <td>{{ item.edge.label|breakable }}</td>
+            <td>{% entity item.target_link %}<br><span class="muted">{{ item.target_link.kind_label|breakable }}</span></td>
+            <td><span class="pill pill-{{ item.edge.status }}">{{ item.edge.status|title|breakable }}</span></td>
           </tr>
         {% endfor %}
       </tbody>

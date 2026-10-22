@@ -1,5 +1,6 @@
-"""Readings of GitHub: each repository the App's installation covers, and the
-public profile of each account a sign-in names.
+"""Readings of GitHub: each repository the App's installation covers, the
+public profile of each account a sign-in names, and how each dependency update
+run ended.
 
 One record per repository, as the App's read-only token sees it: the default
 branch's head and its checks, open pull requests, the latest run of each
@@ -12,7 +13,7 @@ read, so the schema has nowhere to put them.
 """
 
 from datetime import timedelta
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field
 
@@ -64,13 +65,24 @@ class RepositoryRecord(ObservationRecord):
     pushed_at: str = ""
     head: dict[str, Any] = {}
     checks: dict[str, Any] = {}
+    # ``{number, title, url, author, draft, created_at, updated_at, head, branch,
+    # labels, checks}`` per open pull request, newest first; ``checks`` is the
+    # head's ``{state, total, failing, running, names}`` for a pull request
+    # Renovate opened (its branch under ``renovate/``) and None for any other.
     pull_requests: list[dict[str, Any]] = []
+    # The check names the newest pull request runs.
     pull_request_checks: list[str] = []
     runs: list[dict[str, Any]] = []
     waiting: list[dict[str, Any]] = []
     release: dict[str, Any] | None = None
     deployments: list[dict[str, Any]] = []
+    # Open alerts counted by part and severity: ``{"dependabot": {"high": 2}}``.
     alerts: dict[str, Any] = {}
+    # ``{number, package, ecosystem, manifest_path, severity,
+    # first_patched_version, url}`` per open Dependabot alert;
+    # ``first_patched_version`` is None where no version fixes it yet. None
+    # when the Dependabot part was refused.
+    dependabot_alerts: list[dict[str, Any]] | None = None
     artifacts: list[dict[str, Any]] = []
     rules: dict[str, Any] | None = None
     environments: list[dict[str, Any]] = []
@@ -129,6 +141,29 @@ class ProfileRecord(ObservationRecord):
     watched: list[dict[str, Any]] = Field(default=[], max_length=WATCHED_KEPT)
 
 
+DEPENDENCY_RUN_KIND = "github.dependency_run"
+# Opted-in repositories are updated once a day and when somebody asks.
+DEPENDENCY_RUN_EVERY = timedelta(days=1)
+# An account and a repository as a run names them: GitHub's rules, lower-cased.
+# The controller reads both from this record's schema in the bridge contract.
+OWNER = r"^[a-z0-9-]{1,39}$"
+REPOSITORY = r"^([a-z0-9-]{1,39})/[a-z0-9._-]{1,100}$"
+
+
+class DependencyRunRecord(ObservationRecord):
+    """One account's update run: what root reported of it, never its log."""
+
+    owner: str = Field(pattern=OWNER)
+    repositories: list[Annotated[str, Field(pattern=REPOSITORY)]] = []
+    # How the run ended, as root reports it, or ``handed_off``: the controller
+    # gave root a token for it and no result has come back yet.
+    outcome: str = Field(pattern=r"^(ok|failed|timeout|handed_off)$")
+    # None until the run has finished.
+    exit_code: int | None
+    started_at: str = ""
+    finished_at: str = ""
+
+
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         REPOSITORY_KIND,
@@ -164,5 +199,23 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         relation="Public profile of",
         console=lambda record: str(record.get("url", "")),
         every=PROFILE_EVERY,
+    ),
+    ObservationSpec(
+        DEPENDENCY_RUN_KIND,
+        PROVIDER,
+        "Dependency update run",
+        DependencyRunRecord,
+        # The token handed to the run: the App's Renovate grant.
+        requires=(
+            "contents: write",
+            "pull requests: write",
+            "issues: write",
+            "commit statuses: write",
+            "workflows: write",
+            "Dependabot alerts: read",
+        ),
+        title=lambda record: str(record.get("owner", "")),
+        relation="Dependency updates of",
+        every=DEPENDENCY_RUN_EVERY,
     ),
 )

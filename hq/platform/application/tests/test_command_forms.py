@@ -3,7 +3,7 @@
 from django.test import SimpleTestCase
 
 from hq.platform.application.capabilities import capability_registry
-from hq.platform.application.command_forms import command_form_class
+from hq.platform.application.command_forms import _field_for_schema, command_form_class
 
 
 class CapabilityCommandFormTests(SimpleTestCase):
@@ -31,3 +31,10 @@ class CapabilityCommandFormTests(SimpleTestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("__execution_key", form.errors)
+
+    def test_a_label_is_sentence_case_unless_the_command_declares_one(self):
+        derived = _field_for_schema("purchase_date", {"type": "string", "title": "Purchase Date"}, required=False)
+        declared = _field_for_schema("ttl", {"type": "integer", "title": "TTL in seconds"}, required=False)
+
+        self.assertEqual(derived.label, "Purchase date")
+        self.assertEqual(declared.label, "TTL in seconds")

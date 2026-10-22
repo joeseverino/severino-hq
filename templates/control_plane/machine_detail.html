@@ -10,7 +10,7 @@
     <div class="section-head">
       <div>
         <h2 id="machine-telemetry-heading">Current load</h2>
-        {% if machine.telemetry.summary %}<p class="muted">{{ machine.telemetry.summary }}</p>{% endif %}
+        {% if machine.telemetry.summary %}<p class="muted">{{ machine.telemetry.summary|breakable }}</p>{% endif %}
       </div>
       {% if machine.telemetry_observed_at %}
         <span class="muted">{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}</span>
@@ -19,9 +19,9 @@
     <dl class="machine-telemetry-metrics">
       {% for metric in load_metrics %}
         <div title="{{ metric.detail }}">
-          <dt>{{ metric.label }}</dt>
-          <dd>{{ metric.value }}</dd>
-          {% if metric.detail %}<span>{{ metric.detail }}</span>{% endif %}
+          <dt>{{ metric.label|breakable }}</dt>
+          <dd>{{ metric.value|breakable }}</dd>
+          {% if metric.detail %}<span>{{ metric.detail|breakable }}</span>{% endif %}
         </div>
       {% endfor %}
     </dl>
@@ -33,8 +33,8 @@
   Where they are read from, beside the heading, and what they leave behind
   under it. How they stand is the band at the top of the page.
   {% endcomment %}
-  <h2>Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status }}{% endif %}{% if docker.connection %} · read through {% entity docker.connection %}{% endif %}</span>{% endif %}</h2>
-  {% if unused_images %}<ul class="dot-list section-facts"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size }} can be freed</li></ul>{% endif %}
+  <h2>Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %} · read through {% entity docker.connection %}{% endif %}</span>{% endif %}</h2>
+  {% if unused_images %}<ul class="dot-list section-facts"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size|breakable }} can be freed</li></ul>{% endif %}
   {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
   {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Containers" %}{% endif %}
   {% if machine.folded %}
@@ -72,7 +72,7 @@
         is wider than a column of facts.
         {% endcomment %}
         <dt class="kv-whole">Addresses</dt>
-          <dd>{% if labeled_addresses %}<ul class="address-list">{% for label, address in labeled_addresses %}<li><span>{{ label }}</span> <code>{{ address|breakable }}</code></li>{% endfor %}</ul>{% else %}{% empty_value %}{% endif %}</dd>
+          <dd>{% if labeled_addresses %}<ul class="address-list">{% for label, address in labeled_addresses %}<li><span>{{ label|breakable }}</span> <code>{{ address|breakable }}</code></li>{% endfor %}</ul>{% else %}{% empty_value %}{% endif %}</dd>
         <dt>Device</dt>
           <dd>{% entity device_link %}</dd>
         {% if magic_dns_link %}
@@ -80,7 +80,7 @@
           <dd>{% entity magic_dns_link code=True %}</dd>
         {% endif %}
         <dt>State</dt>
-          <dd>{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.state_since %}, last seen {{ machine.state_since }}{% endif %}{% endif %}</dd>
+          <dd>{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.state_since %}, last seen {{ machine.state_since|breakable }}{% endif %}{% endif %}</dd>
         {% comment %}
         When a request last came to HQ from this machine. Not said of the
         machine HQ runs on: its controller reaches HQ without a request, so the
@@ -89,7 +89,7 @@
         {% endcomment %}
         {% if machine.presence.reached_hq and not machine.presence.observer %}
           <dt>Last reached HQ</dt>
-          <dd>{{ machine.presence.reached_hq.phrase|capfirst }}</dd>
+          <dd>{{ machine.presence.reached_hq.phrase|capfirst|breakable }}</dd>
         {% endif %}
         {% comment %}
         Every tailnet reading here is observer-relative, and on this machine
@@ -103,7 +103,7 @@
         <dt>Node key</dt>
           <dd>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days|counted:"day" }}{% else %}Does not expire{% endif %}</dd>
         <dt>Runs</dt>
-          <dd>{{ machine.presence.os|or_empty }}{% if tailscale_version %} · <span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}</dd>
+          <dd>{{ machine.presence.os|or_empty }}{% if tailscale_version %} · <span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version|breakable }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}</dd>
         {% comment %}
         Each shown only when true. A device that runs no Tailscale SSH, accepts
         inbound connections and belongs to this tailnet is every device: three
@@ -127,7 +127,7 @@
         {% endif %}
         {% if machine.presence.lock_error %}
           <dt>Tailnet lock</dt>
-          <dd><strong>Not signed</strong>: {{ machine.presence.lock_error }}</dd>
+          <dd><strong>Not signed</strong>: {{ machine.presence.lock_error|breakable }}</dd>
         {% endif %}
         {% comment %}
         Offered and approved, never one of the two. A route is advertised by the
@@ -165,11 +165,12 @@
               {% comment %}
         Who the policy lets in, per port: the answer the policy test gives,
         shown without having to ask. A policy alias names a machine's address
-        and links to it; tags and users stay as the policy writes them.
+        and links to it; tags and users stay as the policy writes them. The
+        label is the port alone, so it fits its column beside the answer.
         {% endcomment %}
         {% for port, who in opening_links %}
-          <dt>Allowed on port <code>{{ port|breakable }}</code></dt>
-          <dd>{% include "control_plane/_policy_names.html" with names=who %}</dd>
+          <dt>Port <code>{{ port|breakable }}</code></dt>
+          <dd>Open to {% include "control_plane/_policy_names.html" with names=who %}</dd>
         {% endfor %}
   </dl>
 </section>
@@ -189,13 +190,13 @@
     <dl class="kv">
           <dt>Handshake</dt>
           <dd>
-              Completed {{ machine.presence.handshake }}
+              Completed {{ machine.presence.handshake|breakable }}
               {% if machine.presence.active %} · active{% endif %}
             </dd>
           <dt>Path</dt>
           <dd>
               {% if machine.presence.peer_path == "direct" %}
-                Direct: <code>{{ machine.presence.direct_endpoint|breakable }}</code>{% if machine.presence.relay %}, fallback relay <code>{{ machine.presence.relay|breakable }}</code>{% endif %}
+                Direct: {% with mark=machine.presence.relay|then:"," %}<code>{{ machine.presence.direct_endpoint|breakable:mark }}</code>{% endwith %}{% if machine.presence.relay %} fallback relay <code>{{ machine.presence.relay|breakable }}</code>{% endif %}
               {% elif machine.presence.peer_path == "relayed" %}
                 Relayed through <code>{{ machine.presence.relay|breakable }}</code> because no direct path was found. It is still encrypted end to end.
               {% else %}
@@ -214,12 +215,14 @@
 {% comment %}
   What else HQ holds about this machine. Each band is a section the registry
   produced, rendered through the shared renderer, so a section HQ gains later
-  appears here without this template learning anything about it.
+  appears here without this template learning anything about it. How it
+  relates comes last: it is the tallest of the short ones, so it is the one
+  left to take a row of its own rather than standing beside a short card.
 {% endcomment %}
 <div class="section-flow">
 {% include "partials/_page_sections.html" %}
-{% include "partials/_relationships.html" %}
 {% referenced_by "machine" machine.name cards=True %}
+{% include "partials/_relationships.html" %}
 </div>
 
 {% if device_names %}

@@ -15,12 +15,12 @@ from pathlib import Path
 from django.forms.utils import ErrorList
 from django.test import SimpleTestCase, tag
 
+from hq.platform.core.stylesheets import stylesheet
 from hq_sdk.template_contract import CLASSES
 
 from ..plugin_testing import selector_classes, stylesheet_selectors
 
 ROOT = Path(__file__).resolve().parents[4]
-STYLESHEET = ROOT / "static" / "css" / "app.css"
 USER_ROOTS = ("templates", "hq", "hq_sdk", "static/js")
 # The contract lists the classes an extension may write; it is not a user.
 NOT_USERS = frozenset({"template_contract.py", "contract.json"})
@@ -90,12 +90,12 @@ class StylesheetUsageTests(SimpleTestCase):
 
     def test_every_class_the_stylesheet_defines_has_a_user(self) -> None:
         sources = [(path.suffix, path.read_text(encoding="utf-8")) for path in user_files()]
-        unused = unused_style_classes(STYLESHEET.read_text(encoding="utf-8"), sources, set(CLASSES) | self.FRAMEWORK)
+        unused = unused_style_classes(stylesheet(), sources, set(CLASSES) | self.FRAMEWORK)
 
         self.assertEqual(
             unused,
             [],
-            "static/css/app.css defines classes nothing renders: delete their rules, or if an extension "
+            "The stylesheet defines classes nothing renders: delete their rules, or if an extension "
             "needs one, add it to hq_sdk.template_contract.CLASSES.",
         )
 

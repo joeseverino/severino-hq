@@ -94,31 +94,81 @@ func (r *Registry) signingKey(ref string, public bool) (string, error) {
 
 func base64URL(data []byte) string { return base64.RawURLEncoding.EncodeToString(data) }
 
-// githubJWT is a short-lived JWT naming the app, signed RS256 with the key the
-// connection's name points at.
-func (r *Registry) githubJWT(_ context.Context, c githubConnection) (string, error) {
-	path, err := r.signingKey(c.ref, false)
-	if err != nil {
-		return "", err
-	}
-	key, err := readSigningKey(path)
-	if err != nil {
-		return "", &ProviderError{Message: "the signing key for " + c.ref + " cannot be read"}
-	}
-	now := r.Now()
+// GitHubApp is what signs as a GitHub App: its id and its private key.
+type GitHubApp struct {
+	ID  string
+	Key *rsa.PrivateKey
+}
+
+// jwt is a short-lived JWT naming the app, signed RS256 with its key.
+func (app GitHubApp) jwt(now time.Time) (string, error) {
 	header, _ := json.Marshal(map[string]string{"alg": "RS256", "typ": "JWT"})
 	claims, _ := json.Marshal(struct {
 		Expires  int64  `json:"exp"`
 		IssuedAt int64  `json:"iat"`
 		Issuer   string `json:"iss"`
-	}{now.Add(githubJWTLifetime).Unix(), now.Add(-githubJWTBackdate).Unix(), c.appID})
+	}{now.Add(githubJWTLifetime).Unix(), now.Add(-githubJWTBackdate).Unix(), app.ID})
 	input := base64URL(header) + "." + base64URL(claims)
 	digest := sha256.Sum256([]byte(input))
-	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
+	signature, err := rsa.SignPKCS1v15(rand.Reader, app.Key, crypto.SHA256, digest[:])
 	if err != nil {
-		return "", &ProviderError{Message: "the JWT for " + c.ref + " could not be signed"}
+		return "", &ProviderError{Message: "the JWT for GitHub App " + app.ID + " could not be signed"}
 	}
 	return input + "." + base64URL(signature), nil
+}
+
+// githubNoGrant is a permission set naming nothing, as the token request encodes it.
+const githubNoGrant = "{}"
+
+// MintGitHubToken is an installation token for exactly these repositories
+// (names within the installation's account) and permissions, with the moment
+// GitHub says it expires. No repositories is every repository the installation
+// covers; no permissions is refused, since GitHub would grant all of the
+// installation's.
+func MintGitHubToken(ctx context.Context, transport Transport, now time.Time, app GitHubApp, installation int, repositories []string, permissions githubapi.AppPermissions) (githubapi.InstallationToken, error) {
+	if grant, _ := json.Marshal(permissions); string(grant) == githubNoGrant {
+		return githubapi.InstallationToken{}, &ProviderError{Message: "a GitHub token names its permissions"}
+	}
+	jwt, err := app.jwt(now)
+	if err != nil {
+		return githubapi.InstallationToken{}, err
+	}
+	body := githubapi.AppsCreateInstallationAccessTokenJSONBody{Repositories: repositories, Permissions: permissions}
+	raw, err := transport.Request(ctx, githubAPI+"/app/installations/"+strconv.Itoa(installation)+"/access_tokens", "POST", githubHeaders(jwt), body)
+	if err != nil {
+		return githubapi.InstallationToken{}, err
+	}
+	token, err := decodeAnswer[githubapi.InstallationToken](raw, "GitHub installation token")
+	if err != nil {
+		return githubapi.InstallationToken{}, err
+	}
+	if token.Token == "" {
+		return githubapi.InstallationToken{}, &ProviderError{Message: "GitHub did not issue an installation token"}
+	}
+	return token, nil
+}
+
+// githubApp is the app a connection signs as, its key read from where the
+// connection's name points.
+func (r *Registry) githubApp(c githubConnection) (GitHubApp, error) {
+	path, err := r.signingKey(c.ref, false)
+	if err != nil {
+		return GitHubApp{}, err
+	}
+	key, err := readSigningKey(path)
+	if err != nil {
+		return GitHubApp{}, &ProviderError{Message: "the signing key for " + c.ref + " cannot be read"}
+	}
+	return GitHubApp{ID: c.appID, Key: key}, nil
+}
+
+// githubJWT is a short-lived JWT naming the connection's app.
+func (r *Registry) githubJWT(_ context.Context, c githubConnection) (string, error) {
+	app, err := r.githubApp(c)
+	if err != nil {
+		return "", err
+	}
+	return app.jwt(r.Now())
 }
 
 // readSigningKey is the RSA key a PKCS#8 PEM file holds, as the secrets
@@ -203,20 +253,14 @@ func (r *Registry) githubInstallation(ctx context.Context, c githubConnection, o
 	return id, err
 }
 
-// githubMint is an installation token for a request body naming its scope.
-func (r *Registry) githubMint(ctx context.Context, c githubConnection, installation int, body githubapi.AppsCreateInstallationAccessTokenJSONBody) (string, error) {
-	raw, err := r.githubAsApp(ctx, c, "POST", "/app/installations/"+strconv.Itoa(installation)+"/access_tokens", body)
+// githubMint is an installation token the connection's app mints for its scope.
+func (r *Registry) githubMint(ctx context.Context, c githubConnection, installation int, repositories []string, permissions githubapi.AppPermissions) (string, error) {
+	app, err := r.githubApp(c)
 	if err != nil {
 		return "", err
 	}
-	token, err := decodeAnswer[githubapi.InstallationToken](raw, "GitHub installation token")
-	if err != nil {
-		return "", err
-	}
-	if token.Token == "" {
-		return "", &ProviderError{Message: "GitHub did not issue an installation token"}
-	}
-	return token.Token, nil
+	token, err := MintGitHubToken(ctx, r.HTTP, r.Now(), app, installation, repositories, permissions)
+	return token.Token, err
 }
 
 // githubToken is a token for exactly these repositories and permissions,
@@ -225,7 +269,7 @@ func (r *Registry) githubMint(ctx context.Context, c githubConnection, installat
 func (r *Registry) githubToken(ctx context.Context, c githubConnection, repositories []string, permissions githubapi.AppPermissions) (string, error) {
 	names := slices.Compact(slices.Sorted(slices.Values(repositories)))
 	grant, _ := json.Marshal(permissions)
-	if len(names) == 0 || string(grant) == "{}" {
+	if len(names) == 0 || string(grant) == githubNoGrant {
 		return "", &ProviderError{Message: "a GitHub token names its repositories and its permissions"}
 	}
 	owners := map[string]bool{}
@@ -247,9 +291,7 @@ func (r *Registry) githubToken(ctx context.Context, c githubConnection, reposito
 		if err != nil {
 			return nil, err
 		}
-		token, err := r.githubMint(ctx, c, installation, githubapi.AppsCreateInstallationAccessTokenJSONBody{
-			Repositories: repos, Permissions: permissions,
-		})
+		token, err := r.githubMint(ctx, c, installation, repos, permissions)
 		if err != nil {
 			return nil, err
 		}
@@ -290,11 +332,7 @@ func githubGet[T any](ctx context.Context, r *Registry, c githubConnection, path
 // the installation found for each repository is kept for the sweep.
 func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubConnection) ([]string, error) {
 	raw, err := r.cached(ctx, "github_app.repositories|"+c.ref, func() (json.RawMessage, error) {
-		answer, err := r.githubAsApp(ctx, c, "GET", "/app/installations", nil)
-		if err != nil {
-			return nil, err
-		}
-		installations, err := decodeAnswer[[]githubapi.Installation](answer, "GitHub installations")
+		installations, err := r.githubInstallations(ctx, c)
 		if err != nil {
 			return nil, err
 		}
@@ -303,23 +341,24 @@ func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubC
 			if installation.ID == 0 {
 				continue
 			}
-			token, err := r.githubMint(ctx, c, installation.ID, githubapi.AppsCreateInstallationAccessTokenJSONBody{
-				Permissions: githubapi.AppPermissions{Metadata: githubapi.AppPermissionsMetadataRead},
+			token, err := r.githubMint(ctx, c, installation.ID, nil, githubapi.AppPermissions{Metadata: githubapi.AppPermissionsMetadataRead})
+			if err != nil {
+				return nil, err
+			}
+			repositories, err := githubPaged(func(query string) ([]githubapi.Repository, error) {
+				listed, err := r.githubRequest(ctx, "GET", "/installation/repositories"+query, token, nil)
+				if err != nil {
+					return nil, err
+				}
+				page, err := decodeAnswer[struct {
+					Repositories []githubapi.Repository `json:"repositories"`
+				}](listed, "GitHub installation repositories")
+				return page.Repositories, err
 			})
 			if err != nil {
 				return nil, err
 			}
-			listed, err := r.githubRequest(ctx, "GET", "/installation/repositories?per_page=100", token, nil)
-			if err != nil {
-				return nil, err
-			}
-			page, err := decodeAnswer[struct {
-				Repositories []githubapi.Repository `json:"repositories"`
-			}](listed, "GitHub installation repositories")
-			if err != nil {
-				return nil, err
-			}
-			for _, repository := range page.Repositories {
+			for _, repository := range repositories {
 				owner, repo, err := githubRepositoryName(repository.FullName)
 				if err != nil {
 					continue
@@ -337,6 +376,38 @@ func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubC
 	var names []string
 	err = json.Unmarshal(raw, &names)
 	return names, err
+}
+
+// githubInstallations is every installation of the connection's app.
+func (r *Registry) githubInstallations(ctx context.Context, c githubConnection) ([]githubapi.Installation, error) {
+	return githubPaged(func(query string) ([]githubapi.Installation, error) {
+		answer, err := r.githubAsApp(ctx, c, "GET", "/app/installations"+query, nil)
+		if err != nil {
+			return nil, err
+		}
+		return decodeAnswer[[]githubapi.Installation](answer, "GitHub installations")
+	})
+}
+
+// githubPageLimit bounds a paged list: a list that never comes back short is
+// refused rather than followed.
+const githubPageLimit = 100
+
+// githubPaged is every item of a paged GitHub list, read a full page at a time
+// until a page comes back short. read takes the page's query string.
+func githubPaged[T any](read func(query string) ([]T, error)) ([]T, error) {
+	found := []T{}
+	for page := 1; page <= githubPageLimit; page++ {
+		items, err := read("?per_page=" + strconv.Itoa(githubListPage) + "&page=" + strconv.Itoa(page))
+		if err != nil {
+			return nil, err
+		}
+		found = append(found, items...)
+		if len(items) < githubListPage {
+			return found, nil
+		}
+	}
+	return nil, &ProviderError{Message: fmt.Sprintf("GitHub listed more than %d pages", githubPageLimit)}
 }
 
 // sshKeyFingerprint is a public key's fingerprint as GitHub lists an app's
@@ -376,11 +447,7 @@ func (r *Registry) githubProbe(ctx context.Context, ref string) (ProbeResult, er
 	if app.Slug == "" {
 		return ProbeResult{}, &ProviderError{Message: "GitHub did not accept the app's signature", Failure: runtime.FailureClassCredential}
 	}
-	raw, err = r.githubAsApp(ctx, c, "GET", "/app/installations", nil)
-	if err != nil {
-		return ProbeResult{}, err
-	}
-	installations, err := decodeAnswer[[]githubapi.Installation](raw, "GitHub installations")
+	installations, err := r.githubInstallations(ctx, c)
 	if err != nil {
 		return ProbeResult{}, err
 	}

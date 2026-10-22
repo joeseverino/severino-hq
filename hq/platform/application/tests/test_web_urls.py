@@ -4,6 +4,8 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
+from hq.platform.application.tests.markup import text
+
 from ..entity_links import declared_link, entity_link, web_url
 
 HOSTILE = (
@@ -57,4 +59,4 @@ class RenderedLinkTests(TestCase):
         body = self.client.get(reverse("docs_index:detail", args=[record.doc_id])).content.decode()
 
         self.assertNotIn('href="javascript:', body)
-        self.assertIn("javascript:fetch", body)  # still shown, as text
+        self.assertIn("javascript:fetch", text(body))  # still shown, as text

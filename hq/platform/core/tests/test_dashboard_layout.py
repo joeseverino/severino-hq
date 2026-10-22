@@ -3,12 +3,12 @@
 import re
 from functools import cache
 from math import ceil
-from pathlib import Path
 
-from django.conf import settings
 from django.test import SimpleTestCase, tag
 
-_RULE = re.compile(r"(@container \(min-width: (\d+)px\) \{)|([^{}]+)\{([^{}]*)\}|(\})")
+from hq.platform.core.stylesheets import stylesheet
+
+_RULE = re.compile(r"(@container kpi \(min-width: (\d+)px\) \{)|([^{}]+)\{([^{}]*)\}|(\})")
 _HAS = re.compile(r":has\(> ([^)]*\)?[^)]*)\)")
 
 
@@ -16,7 +16,7 @@ _HAS = re.compile(r":has\(> ([^)]*\)?[^)]*)\)")
 def _column_rules() -> tuple[tuple[int, str, int], ...]:
     """(minimum container width, cell selector, columns), in source order."""
 
-    css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    css = stylesheet()
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
     found, width = [], 0
     for match in _RULE.finditer(css):
@@ -75,7 +75,7 @@ class HighlightGridTests(SimpleTestCase):
         self.assertEqual(columns(6, 520), 3)
 
     def test_highlight_cards_fit_the_available_width_without_empty_tracks(self):
-        css = (Path(settings.BASE_DIR) / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        css = stylesheet()
         rule = re.search(r"\.dashboard-highlights \{([^}]*)\}", css).group(1)
         # As many to a row as fit, each row shared evenly by the cards on it:
         # the last row too, so a third card on a window that fits two takes the

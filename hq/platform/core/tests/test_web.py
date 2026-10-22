@@ -520,7 +520,7 @@ class ManifestUploadTests(_AuthedTestCase):
         response = self.upload(b"\xff\xfe[]")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "not UTF-8")
+        self.assertIn("not UTF-8", text(response))
 
     def test_an_oversized_manifest_is_refused_before_it_is_read(self):
         from hq.domains.docs_index.forms import MAX_MANIFEST_BYTES
@@ -1476,6 +1476,33 @@ class AuditDetailPageTests(_AuthedTestCase):
         # What else happened to the same object: its creation.
         created = AuditLog.objects.get(object_id=str(project.pk), action=AuditLog.Action.CREATED)
         self.assertIn(reverse("core:audit_detail", args=[created.pk]), hrefs(page))
+
+    def test_a_record_field_that_moved_is_said_in_words(self):
+        from hq.domains.control_plane.models import ManagedResource
+
+        resource = ManagedResource.objects.create(
+            key="example-policy",
+            kind="example.policy",
+            spec={"grants": [{"src": ["group:example"], "dst": ["tag:example"]}], "hosts": {"one": "192.0.2.1"}},
+        )
+        resource = ManagedResource.objects.get(pk=resource.pk)
+        resource.spec["grants"][0]["src"].append("group:elsewhere")
+        resource.spec["hosts"]["one"] = "192.0.2.2"
+        with operation_context(interface="cli", actor="op", operation="example.edit"):
+            resource.save()
+        event = AuditLog.objects.get(action=AuditLog.Action.UPDATED, object_id=str(resource.pk))
+
+        page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
+        shown = text(page)
+
+        self.assertIn("Spec › Grants › Entry 1 › Src", shown)
+        self.assertIn("group:example, group:elsewhere", shown)
+        self.assertIn("Spec › Hosts › One", shown)
+        self.assertIn("192.0.2.2", shown)
+        self.assertNotIn("{'", shown)
+        self.assertNotIn("['", shown)
+        # What was recorded beside the change is named in words too.
+        self.assertEqual(set(page.context["extra"]), {"Actor", "Interface", "Operation"})
 
     def test_an_event_links_to_the_rest_of_its_operation(self):
         # The point of operation_id: one action touching several rows is one

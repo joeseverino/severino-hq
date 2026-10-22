@@ -13,6 +13,9 @@ from starlette.staticfiles import StaticFiles
 
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
+from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
+from hq_sdk import validation
+from hq_sdk.validation import _cell_markup_pins
 
 from .source import parsed, source_files
 
@@ -216,8 +219,7 @@ class StyleContractTests(SimpleTestCase):
 
     @staticmethod
     def _stylesheet() -> str:
-        root = Path(__file__).resolve().parents[4]
-        return (root / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        return stylesheet()
 
     def test_hidden_text_is_anchored_inside_its_box(self):
         """Left at its static position, an absolutely placed label escapes any
@@ -238,14 +240,20 @@ class StyleContractTests(SimpleTestCase):
 
         root = Path(__file__).resolve().parents[4]
         head = (root / "templates" / "base.html").read_text(encoding="utf-8")
-        faces = re.findall(r"@font-face\s*\{([^}]*)\}", self._stylesheet())
+        faces = [
+            (sheet, face)
+            for sheet in sheet_paths()
+            for face in re.findall(r"@font-face\s*\{([^}]*)\}", sheet.read_text(encoding="utf-8"))
+        ]
         self.assertTrue(faces)
-        for face in faces:
-            source = re.search(r'url\("\.\./([^"]+)"\)', face)
-            with self.subTest(face=source.group(1) if source else face[:60]):
+        for sheet, face in faces:
+            source = re.search(r'url\("([^"]+)"\)', face)
+            # The face's address as `{% static %}` names it: relative to the sheet that asks for it.
+            asset = (sheet.parent / source.group(1)).resolve().relative_to(STATIC).as_posix() if source else ""
+            with self.subTest(face=asset or face[:60]):
                 self.assertIn("font-display: optional", face)
                 self.assertIsNotNone(source)
-                self.assertIn(f'{{% static \'{source.group(1)}\' %}}" as="font"', head)
+                self.assertIn(f'{{% static \'{asset}\' %}}" as="font"', head)
 
     def test_a_blur_has_something_to_show_through(self):
         """A backdrop filter costs a layer redrawn on every scroll; behind an
@@ -772,8 +780,9 @@ class StyleContractTests(SimpleTestCase):
             check=True,
         ).stdout.split("\0")
 
-        # Documentation and private ranges are examples, not places. Anything
-        # outside them is somewhere a packet can actually go.
+        # Documentation, private, multicast and reserved ranges are examples or
+        # classes, not places. Anything outside them is somewhere a packet can
+        # actually go.
         #
         # 192.168.0.0/16 is the exception: a host from it is somebody's actual
         # machine rather than an example. Only the range's base address passes,
@@ -781,7 +790,7 @@ class StyleContractTests(SimpleTestCase):
         # private address use 10.0.0.0/8, which every classifier here treats
         # identically.
         reserved = re.compile(
-            r"^(?:127\.|10\.|192\.168\.0\.0$|169\.254\.|0\.|255\.|"
+            r"^(?:127\.|10\.|192\.168\.0\.0$|169\.254\.|0\.|255\.|22[4-9]\.|2[3-5][0-9]\.|"
             r"172\.(?:1[6-9]|2[0-9]|3[01])\.|"
             r"100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|"
             r"203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|192\.0\.0\.|"
@@ -1024,8 +1033,7 @@ class SharedPrimitiveStyleTests(SimpleTestCase):
     def test_partial_classes_are_defined_in_the_stylesheet(self):
 
         root = Path(__file__).resolve().parents[4]
-        css = (root / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        defined = set(re.findall(r"\.([a-z][a-z0-9-]*)", css))
+        defined = set(re.findall(r"\.([a-z][a-z0-9-]*)", stylesheet()))
         offenders = []
         for template in sorted((root / "templates" / "partials").rglob("*.html")):
             text = template.read_text(encoding="utf-8")
@@ -1217,18 +1225,7 @@ class AssertionPrecisionTests(SimpleTestCase):
     def test_no_assertion_hides_a_comparison_inside_a_boolean(self):
         root = Path(__file__).resolve().parents[4]
         offenders = []
-        for path in sorted(root.rglob("test*.py")):
-            # Any virtualenv in the tree, whatever it happens to be called, and
-            # anything installed into one. Matching only ".venv" would miss a
-            # sibling such as `.venv312` and report third-party test files as
-            # offenders: a failure about the machine rather than the change.
-            # Nor any hidden directory: a worktree under .claude/ is another
-            # copy of this tree, checked in its own checkout.
-            if any(
-                part == "venv" or part.startswith(".") or part == "site-packages"
-                for part in path.relative_to(root).parts
-            ):
-                continue
+        for path in source_files(root, "test*.py"):
             tree = parsed(path)
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call) or not node.args:
@@ -1247,6 +1244,57 @@ class AssertionPrecisionTests(SimpleTestCase):
                 offenders.append(f"{path.relative_to(root)}:{node.lineno}: use {better}")
 
         self.assertEqual(offenders, [])
+
+
+@tag("source")
+class CellMarkupTests(SimpleTestCase):
+    """A test reads a table cell by its text: the host may wrap what a cell says.
+
+    One rule for the host and its extensions: ``hq_sdk.validation`` refuses it
+    in an extension's tree, and this holds the host's own tests to it.
+    """
+
+    def test_no_test_pins_a_cell_closing_tag(self):
+        root = Path(__file__).resolve().parents[4]
+        offenders = [
+            f"{path.relative_to(root)}:{line}"
+            for path in source_files(root, "*.py")
+            for line in _cell_markup_pins(parsed(path))
+        ]
+        self.assertEqual(offenders, [], "read the cell's text, not the tag that closes it")
+
+    def test_a_pin_is_found_however_the_text_is_written(self):
+        pinned = {
+            "a literal": 'self.assertContains(response, "<td>Served</td>")',
+            "a header": 'self.assertNotContains(response, "<th>Name</th>\\n")',
+            "a keyword": 'self.assertContains(response, text="<td>Served</td>")',
+            "an f-string": 'self.assertIn(f"<td>{name}</td>", html)',
+            "a concatenation": 'self.assertNotIn("<td>" + name + "</td>", html)',
+        }
+        free = {
+            "a cell's text": 'self.assertIn("Served", cells)',
+            "an opening tag": 'self.assertContains(response, "<td>")',
+            "a computed end": 'self.assertIn(f"<td>{tail}", html)',
+            "the haystack": 'self.assertIn("Served", "<td>Served</td>")',
+            "another assertion": 'self.assertEqual(cell, "<td>Served</td>")',
+        }
+        for name, line in pinned.items():
+            with self.subTest(pinned=name):
+                self.assertEqual(_cell_markup_pins(ast.parse(line)), [1])
+        for name, line in free.items():
+            with self.subTest(free=name):
+                self.assertEqual(_cell_markup_pins(ast.parse(line)), [])
+
+    def test_the_plugin_check_refuses_a_pin_and_says_what_to_read(self):
+        with TemporaryDirectory() as source:
+            tests = Path(source) / "example_plugin" / "tests"
+            tests.mkdir(parents=True)
+            (tests / "test_pages.py").write_text('def test(self, r):\n    self.assertContains(r, "<td>A</td>")\n')
+            with patch("sys.argv", ["validation", source]), patch("builtins.print") as printed:
+                self.assertEqual(validation.main(), 1)
+        said = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn("example_plugin/tests/test_pages.py:2", said)
+        self.assertIn("read the cell's text", said)
 
 
 @tag("source")
@@ -1279,9 +1327,6 @@ class CommentHistoryTests(SimpleTestCase):
         return re.finditer(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", text, re.DOTALL)
 
     SUFFIXES = {".py", ".js", ".css", ".html", ".sh", ".go", ".md"}
-    # Generated or installed trees, and anything hidden (.git, .venv). The suite
-    # also runs inside the image, where there is no git to ask what is tracked.
-    SKIPPED = {"node_modules", "staticfiles", "build", "data", "var", "media", "exports", "backups"}
 
     @staticmethod
     def _in_scope(relative: Path) -> bool:
@@ -1298,15 +1343,9 @@ class CommentHistoryTests(SimpleTestCase):
         return True
 
     def _sources(self, root: Path):
-        for path in sorted(root.rglob("*")):
-            parts = path.relative_to(root).parts
-            if path.suffix not in self.SUFFIXES or not path.is_file():
-                continue
-            if not self._in_scope(path.relative_to(root)):
-                continue
-            if any(part.startswith(".") or part in self.SKIPPED for part in parts[:-1]):
-                continue
-            yield path
+        for path in source_files(root, "*"):
+            if path.suffix in self.SUFFIXES and path.is_file() and self._in_scope(path.relative_to(root)):
+                yield path
 
     def test_no_comment_narrates_history(self):
         root = Path(__file__).resolve().parents[4]
@@ -1567,7 +1606,7 @@ class PlainWordsTests(SimpleTestCase):
             [word for word, _instead in self.words.words_in("Open Action items from the Command Center")],
             ["Action items", "Command Center"],
         )
-        self.assertEqual(list(self.words.words_in("3 things need you. Read now.")), [])
+        self.assertEqual(list(self.words.words_in("3 things need you. Refresh all.")), [])
 
     def test_a_setting_name_or_a_field_value_is_found_even_in_code(self):
         template = (
@@ -1917,23 +1956,62 @@ class FileSizeTests(SimpleTestCase):
     """No source file is longer than ``LIMIT`` lines.
 
     A file grows freely below it; one past it is split by responsibility.
-    Tests and migrations are not counted.
+    Every language HQ writes is held to it. Tests, migrations, generated code
+    and vendored copies are not counted.
     """
 
     LIMIT = 1000
     ROOT = Path(__file__).resolve().parents[4]
+    # The fewest files each language's walk can find in a checkout or the image.
+    FLOOR = {"*.py": 100, "*.go": 50, "*.js": 4, "*.css": 4}
+    NOT_WRITTEN_HERE = ("_tests.py", "_test.go", ".gen.go", ".min.js")
+
+    def _counted(self, path: Path) -> bool:
+        return (
+            not path.name.startswith("test")
+            and not path.name.endswith(self.NOT_WRITTEN_HERE)
+            and not {"tests", "migrations", "node_modules", "vendor"} & set(path.relative_to(self.ROOT).parts)
+        )
 
     def test_no_source_file_exceeds_the_ceiling(self):
-        sizes = {
-            str(path.relative_to(self.ROOT)): len(path.read_text(encoding="utf-8").splitlines())
-            for path in source_files(self.ROOT, "*.py")
-            if not path.name.startswith("test")
-            and not path.name.endswith("_tests.py")
-            and not {"tests", "migrations", "node_modules"} & set(path.relative_to(self.ROOT).parts)
-        }
-        self.assertGreater(len(sizes), 100, "the walk found almost nothing; its root is wrong")
+        sizes = {}
+        for pattern, floor in self.FLOOR.items():
+            found = [path for path in source_files(self.ROOT, pattern) if self._counted(path)]
+            self.assertGreater(len(found), floor, f"the {pattern} walk found almost nothing; its root is wrong")
+            sizes |= {
+                str(path.relative_to(self.ROOT)): len(path.read_text(encoding="utf-8").splitlines()) for path in found
+            }
         over = {path: lines for path, lines in sizes.items() if lines > self.LIMIT}
         self.assertEqual(over, {}, "split these by responsibility")
+
+
+@tag("source")
+class OneDefinitionTests(SimpleTestCase):
+    """A module-level name is assigned once.
+
+    Python keeps the later of two assignments without a word, so a second
+    constant of the same name quietly replaces the first everywhere it is read,
+    a probe string included. Ruff's F811 covers functions and imports only.
+    """
+
+    def test_no_module_level_name_is_assigned_twice(self):
+        root = Path(__file__).resolve().parents[4]
+        twice = {}
+        for path in source_files(root, "*.py"):
+            counts: dict[str, int] = {}
+            for node in parsed(path).body:
+                targets = (
+                    node.targets
+                    if isinstance(node, ast.Assign)
+                    else [node.target]
+                    if isinstance(node, ast.AnnAssign)
+                    else []
+                )
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        counts[target.id] = counts.get(target.id, 0) + 1
+            twice |= {f"{path.relative_to(root)}: {name}": n for name, n in counts.items() if n > 1}
+        self.assertEqual(twice, {}, "give each its own name")
 
 
 class RouteOwnerTests(SimpleTestCase):
@@ -2053,7 +2131,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
 
     @tag("source")
     def test_asked_for_work_is_followed_by_one_script_behavior(self):
-        script = (self.ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        script = (self.ROOT / "static" / "js" / "ask.js").read_text(encoding="utf-8")
         templates = "\n".join(
             path.read_text(encoding="utf-8") for path in sorted((self.ROOT / "templates").rglob("*.html"))
         )
@@ -2093,7 +2171,7 @@ class FragmentPrimitiveTests(SimpleTestCase):
     # work answers with how it stands (state, note, seconds, status address),
     # which every copy of its control on the page draws in place; that answer
     # is data no one region is drawn from: the ask's post and its status poll.
-    ALLOWED = {("app.js", "reads a response body as data"): 2}
+    ALLOWED = {("ask.js", "reads a response body as data"): 2}
     # The attributes of the hand-rolled reads the primitive replaced.
     RETIRED = (
         "data-deferred",
@@ -2141,9 +2219,10 @@ class FragmentPrimitiveTests(SimpleTestCase):
 
     def test_the_primitive_loads_before_the_scripts_that_use_it(self):
         base = (self.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
-        order = [base.index(f"js/{name}") for name in (self.PRIMITIVE, "app.js", "tables.js")]
+        deferred = re.findall(r"js/([\w-]+\.js)'[^>]*\bdefer\b", base)
 
-        self.assertEqual(order, sorted(order))
+        self.assertGreater(len(deferred), 1)
+        self.assertEqual(deferred[0], self.PRIMITIVE)
 
     def test_every_part_a_template_names_is_one_a_template_defines(self):
         sources = [path.read_text(encoding="utf-8") for path in sorted((self.ROOT / "templates").rglob("*.html"))]

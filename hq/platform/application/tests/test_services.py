@@ -7,6 +7,7 @@ is public, and a fixture is documentation whether or not it was meant to be.
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
+from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_spec import SERVICE_FACET_IDS, SERVICE_FACETS
@@ -339,7 +340,7 @@ class OriginProvenanceTests(TestCase):
 
         response = self._page()
 
-        self.assertContains(response, "10.0.0.10:6379")
+        self.assertIn("10.0.0.10:6379", strip_tags(response.content.decode()))
 
 
 class SurfacesAgreeTests(TestCase):
@@ -813,7 +814,7 @@ class OriginNoteTests(TestCase):
         from hq.domains.control_plane.provider_spec import NameContext
 
         from ..containers import Running
-        from ..service_facets import Facet
+        from ..service_facets import ServiceFacet
         from ..services import Service
         from ..whereabouts import Origin
 
@@ -835,7 +836,7 @@ class OriginNoteTests(TestCase):
             with self.subTest(observed=bool(observed)):
                 service = Service(
                     hostname="probe.invalid",
-                    facets=(Facet(id="runtime", label="Runtime", observed=observed, context=NameContext()),),
+                    facets=(ServiceFacet(id="runtime", label="Runtime", observed=observed, context=NameContext()),),
                     origin=Origin(address="10.0.0.9:8099", host="a-docker-host", container="probe" if observed else ""),
                 )
 

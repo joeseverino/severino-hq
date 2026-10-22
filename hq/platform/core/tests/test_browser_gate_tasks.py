@@ -1,10 +1,14 @@
-"""Every real-browser test is run by a browser gate: a class no task names never runs."""
+"""Every real-browser test is run by a browser gate: a class no task names never
+runs. The gates' `--fallback-face` still finds the face it withholds."""
 
 import ast
+import os
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.core.browser_tests import in_the_face
 from tests.mise_tasks import body, mise_tasks
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -13,23 +17,34 @@ BASE = "BrowserGate"
 
 
 def gate_classes(root: Path) -> dict[str, str]:
-    """Each test class built on the browser gate, as ``module.Class``, by module."""
+    """Each class built on the browser gate that holds tests, its own or inherited, as ``module.Class``, by module.
 
-    found: dict[str, str] = {}
-    gates = {BASE}
-    trees = {module: ast.parse((root / (module.replace(".", "/") + ".py")).read_text()) for module in MODULES}
-    grew = True
-    while grew:
-        grew = False
-        for module, tree in trees.items():
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.ClassDef) or node.name in gates:
-                    continue
-                if any(isinstance(base, ast.Name) and base.id in gates for base in node.bases):
-                    gates.add(node.name)
-                    found[f"{module}.{node.name}"] = module
-                    grew = True
-    return found
+    A class that holds only rules for others to run runs nothing when named.
+    """
+
+    defined: dict[str, tuple[str, ast.ClassDef]] = {}
+    for module in MODULES:
+        tree = ast.parse((root / (module.replace(".", "/") + ".py")).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                defined[node.name] = (module, node)
+
+    def bases(node: ast.ClassDef) -> list[str]:
+        return [base.id for base in node.bases if isinstance(base, ast.Name) and base.id in defined]
+
+    def on_the_gate(name: str) -> bool:
+        return name == BASE or any(on_the_gate(base) for base in bases(defined[name][1]))
+
+    def holds_tests(name: str) -> bool:
+        node = defined[name][1]
+        own = any(isinstance(item, ast.FunctionDef) and item.name.startswith("test_") for item in node.body)
+        return own or any(holds_tests(base) for base in bases(node))
+
+    return {
+        f"{module}.{name}": module
+        for name, (module, _node) in defined.items()
+        if name != BASE and on_the_gate(name) and holds_tests(name)
+    }
 
 
 def browser_labels() -> set[str]:
@@ -47,3 +62,28 @@ class BrowserGateTaskTests(SimpleTestCase):
         self.assertTrue(classes)
         unnamed = sorted(name for name, module in classes.items() if name not in labels and module not in labels)
         self.assertEqual(unnamed, [], "no browser:* task runs these")
+
+
+@tag("source")
+class FallbackFaceTests(SimpleTestCase):
+    """Without the face the stylesheet names, `--fallback-face` would quietly
+    draw every page in Inter."""
+
+    def served(self, face):
+        css = (ROOT / "static" / "css" / "app" / "tokens.css").read_bytes()
+        with mock.patch.dict(os.environ, {"HQ_BROWSER_FACE": face}):
+            return in_the_face(css)
+
+    def test_the_fallback_face_withholds_inter_so_the_stack_falls_through(self):
+        served = self.served("fallback")
+        self.assertNotIn(b"@font-face", served)
+        self.assertIn(b"--font:", served)
+
+    def test_the_gates_otherwise_wait_for_inter(self):
+        served = self.served("")
+        self.assertIn(b"inter-variable", served)
+        self.assertNotIn(b"font-display: optional", served)
+
+    def test_an_unknown_face_is_refused(self):
+        with self.assertRaisesMessage(ValueError, "HQ_BROWSER_FACE"):
+            self.served("serif")

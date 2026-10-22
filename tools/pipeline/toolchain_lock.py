@@ -1,7 +1,10 @@
-"""Hold mise.lock to mise.toml, and the images' uv to the uv mise pins.
+"""Hold mise.lock to mise.toml, and mise's Go to the language go.mod names.
 
-Every pinned tool is locked for every platform a gate runs on. The images copy
-uv from its own image, pinned by digest; its tag is the version mise.toml pins.
+Every pinned tool is locked for every platform a gate runs on, and the images
+install their build tools from the same lock. The controller
+builds with mise's Go, a release of the language version go.mod names. An
+image takes nothing from another image but the Python it runs on, so no build
+tool has a second pin.
 """
 
 from __future__ import annotations
@@ -12,10 +15,17 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# The pipeline's runners and the machines the gates are run on by hand.
+# The pipeline's runners, which also build the images, and the machines the
+# gates are run on by hand.
 PLATFORMS = ("linux-x64", "macos-arm64")
 IMAGES = ("Dockerfile", "composition/Dockerfile")
-UV_IMAGE = re.compile(r"^FROM ghcr\.io/astral-sh/uv:(\S+)@sha256:[0-9a-f]{64}\b", re.MULTILINE)
+# The OS and interpreter the app runs on: a base, not a build tool.
+BASE_IMAGE = "python:"
+STAGE = re.compile(r"^FROM\s+(\S+)(?:\s+AS\s+(\S+))?", re.MULTILINE | re.IGNORECASE)
+COPY_FROM = re.compile(r"--from=(\S+)")
+GO_MOD = "controller/go.mod"
+GO_DIRECTIVE = re.compile(r"^go (\S+)$", re.MULTILINE)
+GO_TOOLCHAIN = re.compile(r"^toolchain go(\S+)$", re.MULTILINE)
 
 
 def declared_version(declared: str | dict) -> str:
@@ -35,23 +45,38 @@ def missing(config: dict, lock: dict) -> list[str]:
     return found
 
 
-def image_drift(config: dict, images: dict[str, str]) -> list[str]:
-    version = declared_version(config["tools"]["uv"])
+def foreign_images(images: dict[str, str]) -> list[str]:
     found = []
     for name, text in images.items():
-        tags = UV_IMAGE.findall(text)
-        if not tags:
-            found.append(f"{name} copies no digest-pinned ghcr.io/astral-sh/uv image")
-        found.extend(f"{name} takes uv {tag}; mise.toml pins {version}" for tag in tags if tag != version)
+        stages = STAGE.findall(text)
+        own = {alias for _, alias in stages if alias}
+        found.extend(
+            f"{name} takes {ref} from an image; a build tool installs from mise.lock"
+            for ref in [ref for ref, _ in stages] + COPY_FROM.findall(text)
+            if ref not in own and not ref.startswith(("$", BASE_IMAGE))
+        )
+    return found
+
+
+def go_drift(config: dict, go_mod: str) -> list[str]:
+    version = declared_version(config["tools"]["go"])
+    found = []
+    language = GO_DIRECTIVE.search(go_mod)
+    want = language.group(1) if language else "no version"
+    if version != want and not version.startswith(want + "."):
+        found.append(f"mise.toml pins Go {version}; {GO_MOD} names go {want}")
+    toolchain = GO_TOOLCHAIN.search(go_mod)
+    if toolchain and toolchain.group(1) != version:
+        found.append(f"mise.toml pins Go {version}; {GO_MOD} names toolchain go{toolchain.group(1)}")
     return found
 
 
 def main() -> int:
     config = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))
     lock = tomllib.loads((ROOT / "mise.lock").read_text(encoding="utf-8"))
-    images = {name: (ROOT / name).read_text(encoding="utf-8") for name in IMAGES}
     unlocked = missing(config, lock)
-    drift = image_drift(config, images)
+    images = {name: (ROOT / name).read_text(encoding="utf-8") for name in IMAGES}
+    drift = go_drift(config, (ROOT / GO_MOD).read_text(encoding="utf-8")) + foreign_images(images)
     for line in unlocked + drift:
         print(line, file=sys.stderr)
     if unlocked:

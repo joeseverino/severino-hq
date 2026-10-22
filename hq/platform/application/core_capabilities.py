@@ -7,9 +7,11 @@ not here: ``application.records`` derives them from its declaration.
 extension declares; ``application.capabilities`` runs them.
 """
 
+from hq.domains.control_plane.models import OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 
 from .cadence import ControllerSweepCommand, request_controller_sweep
+from .dependency_updates import RUN_NOW as DEPENDENCY_RUN_NOW, DependencyRunCommand, request_run
 from .documentation import (
     DocumentationSyncCommand,
     execute_documentation_sync,
@@ -25,8 +27,9 @@ from .lookup import (
 )
 from .policy_fixes import request_empty_groups_removal
 from .projects import (
-    ProjectRefreshCommand,
-    execute_project_refresh,
+    DEPENDENCY_UPDATES,
+    DependencyUpdatesCommand,
+    set_dependency_updates,
 )
 from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES, HQImportCommand, execute_hq_import
 from .resource_operations import (
@@ -42,6 +45,23 @@ from .security import Capability
 from .sync import HQSyncCommand, execute_hq_sync
 from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
 
+# Named, so prose that tells a person which button to press reads its words.
+CONTROLLER_REFRESH = CapabilitySpec(
+    "infrastructure.controller.refresh",
+    "Ask the controller to read everything again now.",
+    "infrastructure_change",
+    Capability.MANAGE_INFRASTRUCTURE,
+    ControllerSweepCommand,
+    request_controller_sweep,
+    execution_notes=(
+        "Mark HQ as in use, so readings are taken more often.",
+        "Wake the controller. HQ's web process holds no credential for any service.",
+        "The controller reads what HQ says is due, with its own credentials.",
+    ),
+    label="Refresh",
+    variants=(("all", "Refresh all"),),
+)
+
 CORE_CAPABILITY_SPECS = (
     CapabilitySpec(
         "hq.sync",
@@ -53,7 +73,7 @@ CORE_CAPABILITY_SPECS = (
         HQSyncCommand,
         execute_hq_sync,
         subject_resource="documentation",
-        label="Sync the vault",
+        label="Update docs from the vault",
     ),
     CapabilitySpec(
         "hq.import",
@@ -73,25 +93,39 @@ CORE_CAPABILITY_SPECS = (
         label="Import projects and assets",
     ),
     CapabilitySpec(
-        "project.refresh",
-        "Read a project's latest GitHub activity and published pages.",
+        DEPENDENCY_UPDATES,
+        "Turn dependency updates on or off for a project's repository.",
         "remote_write",
         records_of("projects").write,
-        ProjectRefreshCommand,
-        execute_project_refresh,
+        DependencyUpdatesCommand,
+        set_dependency_updates,
         "slug",
         "projects",
         target_label="Project",
-        target_help="The project to refresh.",
+        target_help="The project whose repository to update.",
         execution_notes=(
-            "Start the refresh as a job and answer at once with the job's id; the work runs outside the request.",
-            "Where the GitHub App reads the repository, ask the controller to read that "
-            "connection now, through infrastructure.controller.refresh.",
-            "For a repository the App does not read, read its last push from GitHub's "
-            "public API, which needs no credential.",
-            "Save when it was last pushed to, and record who asked.",
+            "Refuse a project that names no repository.",
+            "Turn updates on only while the repository passes its vulnerability-alerts check.",
+            "Record the switch and who set it; the next update run reads it.",
         ),
-        label="Refresh a project",
+        label="Dependency updates",
+        variants=(("on", "Turn on updates"), ("off", "Turn off updates")),
+    ),
+    CapabilitySpec(
+        DEPENDENCY_RUN_NOW,
+        "Update dependencies in every opted-in repository.",
+        "remote_write",
+        # The ask is a controller read, which needs infrastructure as well.
+        (records_of("projects").write, Capability.MANAGE_INFRASTRUCTURE),
+        DependencyRunCommand,
+        request_run,
+        subject_resource="projects",
+        execution_notes=(
+            "Refuse when no project is opted in.",
+            "Ask the controller for a run and wake it; it hands one token per account to the host.",
+            "The run's outcome comes back as the github.dependency_run reading.",
+        ),
+        label="Update dependencies",
     ),
     CapabilitySpec(
         "documentation.sync",
@@ -101,7 +135,7 @@ CORE_CAPABILITY_SPECS = (
         DocumentationSyncCommand,
         execute_documentation_sync,
         subject_resource="documentation",
-        label="Sync documentation",
+        label="Update docs from an export",
     ),
     CapabilitySpec(
         "infrastructure.resource.create",
@@ -151,22 +185,9 @@ CORE_CAPABILITY_SPECS = (
         "infrastructure.resources",
         target_label="Record",
         target_help="The record to apply.",
-        label="Apply HQ's settings",
+        label=OperationRequest.Action.RECONCILE.label,
     ),
-    CapabilitySpec(
-        "infrastructure.controller.refresh",
-        "Ask the controller to read everything again now.",
-        "infrastructure_change",
-        Capability.MANAGE_INFRASTRUCTURE,
-        ControllerSweepCommand,
-        request_controller_sweep,
-        execution_notes=(
-            "Mark HQ as in use, so readings are taken more often.",
-            "Wake the controller. HQ's web process holds no credential for any service.",
-            "The controller reads what HQ says is due, with its own credentials.",
-        ),
-        label="Read everything now",
-    ),
+    CONTROLLER_REFRESH,
     CapabilitySpec(
         "infrastructure.resource.remove",
         "Remove the live thing this record describes, then remove the record from HQ.",
@@ -179,6 +200,9 @@ CORE_CAPABILITY_SPECS = (
         target_label="Record",
         target_help="The record to remove.",
         label="Remove a record",
+        verb=OperationRequest.Action.DELETE.label,
+        # A record HQ only watches is forgotten, and nothing live is touched.
+        variants=(("forget", "Stop tracking in HQ"),),
     ),
     CapabilitySpec(
         "tailnet.routes.approve",
@@ -198,6 +222,7 @@ CORE_CAPABILITY_SPECS = (
             "Approve exactly the advertised set, so no route this was not about is withdrawn.",
         ),
         label="Approve subnet routes",
+        verb=OperationRequest.Action.APPROVE_ROUTES.label,
     ),
     CapabilitySpec(
         "tailnet.reach.allow",
@@ -221,6 +246,7 @@ CORE_CAPABILITY_SPECS = (
             "Change the Tailscale policy. A person approves the change before anything reaches the tailnet.",
         ),
         label="Allow a blocked Tailscale connection",
+        verb="Allow in the tailnet policy",
     ),
     CapabilitySpec(
         "tailnet.policy.remove_empty_groups",
@@ -259,7 +285,7 @@ CORE_CAPABILITY_SPECS = (
             "Queue one renewal for the controller, which does the work outside this request.",
             "Return what was queued and why, recorded under whoever asked.",
         ),
-        label="Renew certificate",
+        label=OperationRequest.Action.RENEW.label,
     ),
     # Capabilities that read something HQ does not hold. Both are `read`, so
     # neither takes an idempotency key and neither writes: asking a

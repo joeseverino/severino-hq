@@ -14,25 +14,35 @@ hostnames it serves. Every name is example.*; every address is a documentation
 or shared-address range (192.0.2.0/24, 198.51.100.0/24, 100.64.0.0/10).
 """
 
+import tempfile
 from contextlib import ExitStack
 from datetime import timedelta
+from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.contrib.auth import get_user_model
+from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import (
+    ApprovalRequest,
+    CapabilityRule,
     DashboardConfiguration,
     DashboardMachine,
     ManagedResource,
     ProviderInventory,
     WeatherObservation,
 )
+from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.projects.models import Project
 from hq.platform.application import readings
+from hq.platform.application.approvals import entry_event
+from hq.platform.application.asks import READ_WAITING
+from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.report_testing import report_connections
-from hq.platform.application.security import cli_principal
+from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.services import CONTAINER_KIND
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.test_browser_fixtures import (
@@ -333,6 +343,41 @@ def _glance():
     )
 
 
+def _due_on_opening():
+    """What the dashboard's queue says GitHub holds, old enough to read again,
+    so the dashboard draws the ask it posts once it is shown."""
+
+    old = timezone.now() - timedelta(hours=3)
+    ProviderInventory.objects.create(kind=REPOSITORY_KIND, records=[], reachable=True, observed_at=old)
+    ProviderInventory.objects.filter(kind=REPOSITORY_KIND).update(updated_at=old)
+
+
+def _asked_on_opening(user):
+    """The answers to the dashboard's ask, by the path the browser asks them
+    at: asked for, and waiting on a controller that arrived a moment before.
+    Every page that asks on opening hears the same, and draws what it says."""
+
+    client = Client()
+    client.force_login(user)
+    with tempfile.TemporaryDirectory() as directory:
+        markers = Path(directory)
+        (markers / "heartbeat").touch()
+        with override_settings(
+            SEVERINO_CONTROLLER_HEARTBEAT=str(markers / "heartbeat"),
+            SEVERINO_CONTROLLER_DOORBELL=str(markers / "doorbell"),
+            SEVERINO_ACTIVITY_MARKER=str(markers / "activity"),
+        ):
+            asked = client.post(reverse("control_plane:visit"), {"subject": "page", "name": "dashboard"})
+            status = asked.json()["status"]
+            followed = client.get(status)
+    if asked.json()["note"] != READ_WAITING or followed.json()["note"] != READ_WAITING:
+        raise AssertionError(f"the dashboard's ask was answered {asked.json()} and then {followed.json()}")
+    return {
+        reverse("control_plane:visit").strip("/"): asked.content.decode(),
+        urlsplit(status).path.strip("/"): followed.content.decode(),
+    }
+
+
 def build_dense_estate():
     """The dense estate, and the user its pages are rendered for."""
 
@@ -356,6 +401,7 @@ def build_dense_estate():
     _findings()
     _containers()
     _glance()
+    _due_on_opening()
     report_connections(
         [
             {
@@ -420,6 +466,7 @@ def build_dense_estate():
     _operations(user)
     _unmanaged()
     _tailnet_policy()
+    _held()
     return user
 
 
@@ -532,6 +579,29 @@ def _tailnet_policy():
     )
 
 
+def _held():
+    """An agent's docs import waiting for a person: a list of records and a
+    flag, the payload a held request most often carries."""
+
+    CapabilityRule.objects.create(scope="surface", subject="mcp", capability="documentation.sync", rule="approve")
+    agent = Principal(
+        "an-example-agent-with-a-long-name", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION})
+    )
+    with override_settings(SEVERINO_MCP_ENABLE_INFRASTRUCTURE=True):
+        execute_capability(
+            "documentation.sync",
+            {
+                "manifest": [
+                    {"doc_id": f"rb-an-example-runbook-with-a-long-name-{index}", "title": "An example runbook"}
+                    for index in range(12)
+                ],
+                "prune_orphans": True,
+                "confirm_prune": True,
+            },
+            principal=agent,
+        )
+
+
 def _starred(user):
     """The GitHub account the sign-in claims, starring repositories with long
     names, releases and advisories."""
@@ -608,6 +678,11 @@ def _audit_trail(user):
                 "forward_host": [ADDRESS, EDGE_ADDRESS],
                 "domain_names": [[_hostname(0)], [_hostname(0), _hostname(1)]],
                 "certificate": ["an-example-wildcard-certificate", "an-example-certificate-with-a-long-name"],
+                # A record field, as each value in it that moved, by where it is.
+                "advanced_config": {
+                    "Locations › Entry 2 › Forward host": ["", EDGE_ADDRESS],
+                    "Locations › Entry 1 › Allowed sources": ["group:example", "group:example, group:elsewhere"],
+                },
             },
             "requested_from": SERVICE,
         },
@@ -674,6 +749,11 @@ DENSE_PAGES = {
     "dense/controller": (lambda: reverse("control_plane:controller"), ExitStack),
     "dense/tailnet": (lambda: reverse("control_plane:tailnet"), ExitStack),
     "dense/audit": (lambda: reverse("core:audit_list"), ExitStack),
+    # The held request's decision card, on the audit entry its link opens.
+    "dense/approval": (
+        lambda: reverse("core:audit_detail", args=[entry_event(ApprovalRequest.objects.get().pk).pk]),
+        ExitStack,
+    ),
     "dense/audit-event": (
         lambda: reverse("core:audit_detail", args=[AuditLog.objects.filter(metadata__has_key="changes").get().pk]),
         ExitStack,
@@ -682,4 +762,5 @@ DENSE_PAGES = {
 
 
 def render_dense_pages(user):
-    return render_pages(user, DENSE_PAGES)
+    # Asked after every page is drawn, so each is drawn before anything was asked.
+    return render_pages(user, DENSE_PAGES) | _asked_on_opening(user)

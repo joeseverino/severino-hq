@@ -1,8 +1,9 @@
 """Static conformance checks for plugin source trees.
 
-Two boundaries, both read without importing the plugin or configuring Django:
-its Python imports only ``hq_sdk``, and its templates use only the public
-pieces of the host's (``contract.json``'s ``templates`` section).
+Each read without importing the plugin or configuring Django: its Python
+imports only ``hq_sdk``, its templates use only the public pieces of the
+host's (``contract.json``'s ``templates`` section), and its tests read a table
+cell by its text, never by the markup the host closes it with.
 """
 
 import argparse
@@ -112,6 +113,66 @@ def unsupported_hq_imports(source_root: str | Path) -> list[str]:
     for source_path in sorted(root.rglob("*.py")):
         violations.extend(_file_violations(source_path, root))
     return sorted(set(violations))
+
+
+# Test checks ---------------------------------------------------------------
+
+# A cell's text is what a page promises; the markup around it is the host's,
+# which may wrap what a cell says (a link, a mark, a toggle) without changing a
+# word. So no test looks for text that ends on a cell's closing tag.
+_CELL_CLOSE = ("</td>", "</th>")
+# Each text assertion, with the position and keyword of the text it looks for.
+_NEEDLES = {
+    "assertContains": (1, "text"),
+    "assertNotContains": (1, "text"),
+    "assertIn": (0, "member"),
+    "assertNotIn": (0, "member"),
+}
+
+
+def _literal_end(node: ast.expr) -> str:
+    """The literal text an expression ends with; empty when its end is computed."""
+
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr) and node.values:
+        return _literal_end(node.values[-1])
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _literal_end(node.right)
+    return ""
+
+
+def _needle(call: ast.Call) -> ast.expr | None:
+    if not isinstance(call.func, ast.Attribute) or call.func.attr not in _NEEDLES:
+        return None
+    position, keyword = _NEEDLES[call.func.attr]
+    if len(call.args) > position:
+        return call.args[position]
+    return next((named.value for named in call.keywords if named.arg == keyword), None)
+
+
+def _cell_markup_pins(tree: ast.Module) -> list[int]:
+    """The line of each text assertion in ``tree`` that looks for a cell's closing tag."""
+
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and (needle := _needle(node)) is not None
+        and _literal_end(needle).rstrip().endswith(_CELL_CLOSE)
+    ]
+
+
+def _pinned_cells(source_root: Path) -> list[str]:
+    root = source_root.resolve()
+    found: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except OSError, SyntaxError:
+            continue  # unsupported_hq_imports reports a file that does not parse
+        found.extend(f"{path.relative_to(root)}:{line}" for line in _cell_markup_pins(tree))
+    return found
 
 
 # Template checks -----------------------------------------------------------
@@ -372,7 +433,10 @@ def template_violations(source_root: str | Path, contract: dict[str, Any] | None
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Reject plugin imports outside hq_sdk and templates outside the public template contract."
+        description=(
+            "Reject plugin imports outside hq_sdk, templates outside the public template contract,"
+            " and tests that pin a table cell's closing tag."
+        )
     )
     parser.add_argument("source_root", type=Path)
     args = parser.parse_args()
@@ -393,9 +457,18 @@ def main() -> int:
         print("Templates outside HQ's public template contract (docs/Plugins.md, Shared UI contract):")
         for violation in templates:
             print(f"- {violation}")
+    pinned = _pinned_cells(args.source_root)
+    if pinned:
+        failed = True
+        print(
+            "Tests that look for a table cell's closing tag, which breaks when the host wraps what the cell says;"
+            " read the cell's text instead (its td or th parsed, whitespace collapsed):"
+        )
+        for violation in pinned:
+            print(f"- {violation}")
     if failed:
         return 1
-    print("HQ SDK import and template boundaries passed.")
+    print("HQ SDK import, template and table cell boundaries passed.")
     return 0
 
 

@@ -1,8 +1,9 @@
 """The inner-loop gate: only what the change can have broken.
 
 Changed files against the merge base are mapped to the test modules that reach
-them, by the import graph of the tree itself (nothing here lists an app), and
-a changed file that is not Python to the tests that name its path. The
+them, by the import graph of the tree itself (nothing here lists an app), a
+changed task definition to the tests that read the tasks, and a changed file
+that is not Python to the tests that name its path. The
 architecture tests always run. Every other check is a mise task, run here by
 name, so each exists once. A change to what extensions render through
 (templates, static, hq_sdk, the shared page and table layer) also runs the
@@ -21,9 +22,11 @@ import re
 import subprocess
 import sys
 import time
+import tomllib
+from fnmatch import fnmatch
 from pathlib import Path
 
-from tools.gate.verdict import Step, run, verdict
+from tools.gate.verdict import Step, close, run
 
 ROOT = Path(__file__).resolve().parents[2]
 # The gates that run whatever changed, side by side: each is quick, and each
@@ -33,6 +36,9 @@ TASKS = ("checks:ruff", "checks:mypy", "checks:structural", "tests:django", "tes
 # pass that `mise run check` also leaves to `mise run browser`.
 SKIP_PARTS = {"node_modules", "controller", "browser_tests", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")
+# The module every test that reads the tasks goes through; a change to a task
+# definition reaches those tests as a change to it would.
+TASK_READER = "tests.mise_tasks"
 # How many importers away from a changed module a test is still selected: one
 # that imports it, or imports a module that does. Further out the walk reaches
 # most of the tree through the shared layers, and the module in between has
@@ -51,6 +57,19 @@ SHARED_UI = (
     "hq/platform/application/ui.py",
     "hq/platform/application/moments.py",
 )
+
+
+def task_sources() -> tuple[str, ...]:
+    """Where mise reads this checkout's tasks: mise.toml and what its task_config includes."""
+
+    config = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))
+    return ("mise.toml", *config.get("task_config", {}).get("includes", ()))
+
+
+def defines_tasks(path: str, sources: tuple[str, ...]) -> bool:
+    """A file mise reads tasks from: one a source names or matches, or one inside a source directory."""
+
+    return any(fnmatch(path, source) or fnmatch(path, f"{source}/*") for source in sources)
 
 
 def touches_shared_ui(paths: list[str]) -> bool:
@@ -262,9 +281,12 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
     seen: set[str] = set()
     seeds: set[str] = set()
     touched: set[str] = set()
+    sources = task_sources()
     for path in [*changed, *deleted]:
         if path.endswith(".py"):
             seeds.add(module_name(Path(path)))
+        elif defines_tasks(path, sources):
+            seeds.add(TASK_READER)
         pkg = owner(path, apps)
         if pkg:
             touched.add(pkg)
@@ -365,7 +387,7 @@ def main(argv: list[str]) -> int:
             )
         )
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
-    print(verdict("fast", started, steps, " (full gate before push: `mise run check`)"), flush=True)
+    close("fast", started, steps, " (full gate before push: `mise run check`)")
     return 0 if all(s.ok for s in steps) else 1
 
 

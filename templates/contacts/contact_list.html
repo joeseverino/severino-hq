@@ -3,17 +3,17 @@
 {% if not_read %}
 {% include "partials/_empty_state.html" with message="No messages read yet." remedy=page.remedy %}
 {% else %}
-{% if problem %}<div class="msg msg-warning">{{ problem }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}</div>{% endif %}
-{% if waiting_note %}<div class="msg msg-info">{{ waiting_note }}</div>{% endif %}
+{% if problem %}<div class="msg msg-warning">{{ problem|breakable }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}</div>{% endif %}
+{% if waiting_note %}<div class="msg msg-info">{{ waiting_note|breakable }}</div>{% endif %}
 <div class="status-tabs">
   <a class="status-tab {% if not selected_status %}is-current{% endif %}"
      href="{% url 'contacts:list' %}{% if q %}?q={{ q|urlencode }}{% endif %}">
-    All <span class="count">{{ total_count }}</span>
+    All <span class="count">{{ total_count|breakable }}</span>
   </a>
   {% for tab in status_tabs %}
     <a class="status-tab {% if tab.value == selected_status %}is-current{% endif %}"
        href="?status={{ tab.value }}{% if q %}&q={{ q|urlencode }}{% endif %}">
-      {{ tab.label }} <span class="count">{{ tab.count }}</span>
+      {{ tab.label|breakable }} <span class="count">{{ tab.count|breakable }}</span>
     </a>
   {% endfor %}
 </div>
@@ -22,7 +22,7 @@
   {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
   <input type="search" name="q" value="{{ q }}" placeholder="Search name, email, or message…" aria-label="Search name, email, or message">
   <button type="submit">Search</button>
-  {% if q %}<a class="btn" href="{% url 'contacts:list' %}{% if selected_status %}?status={{ selected_status }}{% endif %}">Clear</a>{% endif %}
+  {% if q %}<a class="btn" href="{% url 'contacts:list' %}{% if selected_status %}?status={{ selected_status }}{% endif %}">Clear search</a>{% endif %}
 </form>
 
 {% comment %}With nothing received, one sentence says so; the tabs, the count and an empty table would say it three more times.{% endcomment %}
@@ -47,14 +47,14 @@
   <tbody>
     {% for s in submissions %}
       <tr {% if s.status == "unread" %}class="row-unread"{% endif %}>
-        <td class="row-gutter"><a href="{% url 'contacts:detail' s.id %}">{{ s.id }}</a>{% row_toggle %}</td>
+        <td class="row-gutter">{{ s.id|breakable }}{% row_toggle %}</td>
         <td class="muted">{{ s.created_at|when }}</td>
         <td>
-          <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name }}</strong></a>
-          <div class="muted">{{ s.email }}</div>
+          <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name|breakable }}</strong></a>
+          <div class="muted">{{ s.email|breakable }}</div>
         </td>
-        <td class="msg-preview"><a class="subtle-link" href="{% url 'contacts:detail' s.id %}">{{ s.message_preview|truncatechars:120 }}</a></td>
-        <td><span class="pill pill-{{ s.status }}">{{ s.status|capfirst }}</span>{% if s.pending %} <span class="pill pill-attention">Waiting</span>{% endif %}</td>
+        <td class="msg-preview">{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
+        <td><span class="pill pill-{{ s.status }}">{{ s.status|capfirst|breakable }}</span>{% if s.pending %} <span class="pill pill-attention">Waiting</span>{% endif %}</td>
         <td class="muted">{{ s.country|or_empty }}</td>
         <td class="actions-col row-actions">
           {% url 'contacts:set_status' s.id as status_url %}
@@ -64,7 +64,7 @@
         </td>
       </tr>
     {% empty %}
-      <tr><td colspan="7" class="muted">{% if selected_status or q %}No messages match.{% else %}No messages yet.{% endif %}</td></tr>
+      <tr><td colspan="7" class="muted">{% if selected_status or q %}Nothing matches.{% else %}No messages yet.{% endif %}</td></tr>
     {% endfor %}
   </tbody>
 </table>

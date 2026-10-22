@@ -1543,6 +1543,9 @@
           },
           "github_profiles": {
             "$ref": "#/components/schemas/GitHubProfilePlan"
+          },
+          "dependency_updates": {
+            "$ref": "#/components/schemas/DependencyUpdatesPlan"
           }
         },
         "additionalProperties": false,
@@ -1555,7 +1558,8 @@
           "observations",
           "connection_credentials",
           "extensions",
-          "github_profiles"
+          "github_profiles",
+          "dependency_updates"
         ]
       },
       "AnalyticsSiteReading": {
@@ -1979,6 +1983,53 @@
         "required": [
           "accounts",
           "due"
+        ]
+      },
+      "DependencyUpdatesPlan": {
+        "type": "object",
+        "description": "Which repositories HQ's dependency update run covers, by the account that owns them, and whether to run now. HQ holds the clock: due says the latest run is a day old or somebody asked. last_started_at is when the latest run HQ holds started or was handed off, or empty: a result is news only when it started after it.",
+        "properties": {
+          "owners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DependencyUpdatesOwner"
+            }
+          },
+          "due": {
+            "type": "boolean"
+          },
+          "last_started_at": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "owners",
+          "due",
+          "last_started_at"
+        ]
+      },
+      "DependencyUpdatesOwner": {
+        "type": "object",
+        "description": "One account's opted-in repositories, each as owner/name under that account: what one token names.",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "A GitHub login, lower-cased, as GitHubDependencyRunRecord's owner."
+          },
+          "repositories": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            },
+            "description": "Repositories as owner/name, lower-cased, as GitHubDependencyRunRecord's repositories."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "owner",
+          "repositories"
         ]
       },
       "TLSCertificateDomain": {

@@ -18,7 +18,7 @@ lazy from .glance import dashboard_machines
 
 
 @dataclass(frozen=True, slots=True)
-class Step:
+class SetupStep:
     id: str
     label: str
     why: str
@@ -28,27 +28,27 @@ class Step:
     icon: str = ""
 
 
-def steps() -> tuple[Step, ...]:
+def steps() -> tuple[SetupStep, ...]:
     """Every step, done or not; ``remaining`` is what a page shows."""
 
     return read_once("getting_started.steps", _steps)
 
 
-def remaining() -> tuple[Step, ...]:
+def remaining() -> tuple[SetupStep, ...]:
     return tuple(step for step in steps() if not step.done)
 
 
-def _steps() -> tuple[Step, ...]:
+def _steps() -> tuple[SetupStep, ...]:
     return (
-        Step(
+        SetupStep(
             "controller",
-            "Run the controller",
+            "Start the controller",
             "It reads your machines and services and applies the changes HQ asks for.",
             reverse("control_plane:controller"),
             cadence.controller_standing().known,
             icon="activity",
         ),
-        Step(
+        SetupStep(
             "connection",
             "Add a connection",
             "Cloudflare, Tailscale, Portainer or your proxy: whatever HQ should read.",
@@ -56,7 +56,7 @@ def _steps() -> tuple[Step, ...]:
             bool(connection_rows()),
             icon="link",
         ),
-        Step(
+        SetupStep(
             "machine",
             "Choose a machine for the dashboard",
             "Its load and containers then show at the top of this page.",

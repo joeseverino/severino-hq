@@ -10,6 +10,7 @@ from django.db.models.functions import Coalesce, Lower, NullIf, Trim
 from django.utils import timezone
 
 from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
+from hq.domains.jobs.models import JobState
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
 
@@ -361,18 +362,23 @@ class CertificateMaterial(TimestampedModel):
 
 
 class OperationState(models.TextChoices):
-    QUEUED = "queued", "Queued"
-    CLAIMED = "claimed", "Claimed"
-    SUCCEEDED = "succeeded", "Succeeded"
-    FAILED = "failed", "Failed"
-    CANCELLED = "cancelled", "Cancelled"
+    """An operation's state, in the words a job's is said in."""
+
+    QUEUED = "queued", JobState.QUEUED.label
+    CLAIMED = "claimed", JobState.RUNNING.label
+    SUCCEEDED = "succeeded", JobState.SUCCEEDED.label
+    FAILED = "failed", JobState.FAILED.label
+    CANCELLED = "cancelled", JobState.LOST.label
 
 
 class OperationRequest(TimestampedModel):
     class Action(models.TextChoices):
-        RECONCILE = "reconcile", "Reconcile"
+        """Each action in the words of the button that asks for it, which a
+        capability that queues one says too."""
+
+        RECONCILE = "reconcile", "Apply HQ's settings"
         RENEW = "renew", "Renew certificate"
-        DELETE = "delete", "Delete"
+        DELETE = "delete", "Remove"
         # Lifecycle, not convergence. Restarting a container does not move the
         # world toward a declaration: it is a thing an operator asks for once,
         # about something already exactly as declared, which is why none of
@@ -384,7 +390,7 @@ class OperationRequest(TimestampedModel):
         # the tailnet approves it, and approving is a decision about trusting
         # that machine to carry that traffic, so it is asked for once, by an
         # operator, about a route the machine is already offering.
-        APPROVE_ROUTES = "approve-routes", "Approve advertised routes"
+        APPROVE_ROUTES = "approve-routes", "Approve routes"
 
     # Declared above the model so a rule in ``Meta`` can name its values.
     State = OperationState

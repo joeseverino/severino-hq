@@ -54,6 +54,8 @@ from django.test.utils import CaptureQueriesContext, setup_databases, teardown_d
 from django.urls import URLPattern, reverse
 
 from hq.platform.application.derivations import counting, derive_ahead
+from hq.platform.application.outbound_work import SUBJECT_FIELD
+from hq.platform.application.projects import REFRESH
 from hq.platform.application.resources import describe_resources
 from hq.platform.application.routes import routed
 from hq.platform.application.security import host_capabilities
@@ -133,7 +135,7 @@ VARIANTS: dict[str, tuple[str, ...]] = {
 
 
 @dataclass(frozen=True, slots=True)
-class Action:
+class PostedAction:
     """What one action is posted: its route arguments, its form, and what must
     exist first (made inside the same rolled-back transaction)."""
 
@@ -148,12 +150,12 @@ def _link_github(seeded: Seeded) -> None:
 
 
 # The actions exercised: each changes only the scratch database.
-ACTIONS: dict[str, Action] = {
-    "watching_refresh": Action(prepare=_link_github),
-    "projects:refresh": Action(kwargs=lambda s: {"slug": s.project.slug}),
-    "control_plane:read_now": Action(data=lambda s: {"kind": s.resource.kind}),
-    "control_plane:visit": Action(data=lambda s: {"subject": "machine", "name": "lab-1"}),
-    "dashboard_glance": Action(),
+ACTIONS: dict[str, PostedAction] = {
+    "watching_refresh": PostedAction(prepare=_link_github),
+    "jobs:ask": PostedAction(kwargs=lambda s: {"name": REFRESH}, data=lambda s: {SUBJECT_FIELD: s.project.slug}),
+    "control_plane:read_now": PostedAction(data=lambda s: {"kind": s.resource.kind}),
+    "control_plane:visit": PostedAction(data=lambda s: {"subject": "machine", "name": "lab-1"}),
+    "dashboard_glance": PostedAction(),
 }
 
 # Actions that cannot be posted against a scratch database, and why.
@@ -174,7 +176,7 @@ UNSAFE = {
 
 
 @dataclass
-class Result:
+class PageTiming:
     page: str
     url: str
     status: int
@@ -236,11 +238,11 @@ def _answers_post(name: str, pattern: URLPattern) -> bool:
     return "post" in view.http_method_names and hasattr(view, "post")
 
 
-def _actions(seeded: Seeded) -> tuple[list[tuple[str, str, Action]], list[tuple[str, str]]]:
+def _actions(seeded: Seeded) -> tuple[list[tuple[str, str, PostedAction]], list[tuple[str, str]]]:
     """(name, url, what to post) for every exercised action, and (name, reason)
     for every other route that answers a POST."""
 
-    exercised: list[tuple[str, str, Action]] = []
+    exercised: list[tuple[str, str, PostedAction]] = []
     left: list[tuple[str, str]] = []
     for name, pattern in _routes():
         if not _answers_post(name, pattern):
@@ -278,7 +280,7 @@ def _controller_arriving() -> Iterator[None]:
             yield
 
 
-def _post(client: Client, url: str, action: Action, seeded: Seeded):
+def _post(client: Client, url: str, action: PostedAction, seeded: Seeded):
     """One post of an action over the seeded estate, undone afterwards."""
 
     with transaction.atomic():
@@ -293,8 +295,8 @@ def _post(client: Client, url: str, action: Action, seeded: Seeded):
 
 
 def _measure_action(
-    client: Client, name: str, url: str, action: Action, seeded: Seeded, rounds: int
-) -> tuple[Result, list[str]]:
+    client: Client, name: str, url: str, action: PostedAction, seeded: Seeded, rounds: int
+) -> tuple[PageTiming, list[str]]:
     for _ in range(3):
         _post(client, url, action, seeded)
     times = []
@@ -303,7 +305,7 @@ def _measure_action(
         times.append(took)
     times.sort()
     return (
-        Result(
+        PageTiming(
             page=f"POST {name}",
             url=url,
             status=response.status_code,
@@ -372,7 +374,7 @@ def _asked_again(client: Client, page: str, url: str) -> list[tuple[str, str, di
 
 def _measure(
     client: Client, page: str, url: str, rounds: int, headers: dict[str, str] | None = None
-) -> tuple[Result, list[str]]:
+) -> tuple[PageTiming, list[str]]:
     get = functools.partial(client.get, url, headers=headers)
     for _ in range(3):
         response = get()
@@ -388,7 +390,7 @@ def _measure(
     statements = [query["sql"] for query in captured.captured_queries]
     times.sort()
     return (
-        Result(
+        PageTiming(
             page=page,
             url=url,
             status=response.status_code,
@@ -429,7 +431,7 @@ def _swept(client: Client, url: str, rounds: int, headers: dict[str, str] | None
     }
 
 
-def _swept_columns(result: Result) -> str:
+def _swept_columns(result: PageTiming) -> str:
     if result.swept_ms is None:
         return ""
     asking = f" {result.ahead_ms:7.2f}ms" if result.ahead_ms is not None else ""
@@ -472,7 +474,7 @@ class Command(BaseCommand):
             with Path(options["json"]).open("w", encoding="utf-8") as out:
                 json.dump([asdict(result) for result in results], out, indent=2)
 
-    def _run(self, options) -> tuple[list[Result], list[tuple[str, str]], list[tuple[str, str]]]:
+    def _run(self, options) -> tuple[list[PageTiming], list[tuple[str, str]], list[tuple[str, str]]]:
         seeded = seed(options["scale"])
         pages, left = _pages(seeded)
         pages += _api_lists()
@@ -505,7 +507,7 @@ class Command(BaseCommand):
                 ]
         return results, left, unexercised
 
-    def _said(self, options, result: Result, statements: list[str]) -> Result:
+    def _said(self, options, result: PageTiming, statements: list[str]) -> PageTiming:
         """The result, after printing its queries where they were asked for."""
 
         if options["sql"]:
@@ -514,7 +516,9 @@ class Command(BaseCommand):
                 self.stdout.write(f"{times:4d}x {statement[:400]}")
         return result
 
-    def _report(self, results: list[Result], left: list[tuple[str, str]], unexercised: list[tuple[str, str]]) -> None:
+    def _report(
+        self, results: list[PageTiming], left: list[tuple[str, str]], unexercised: list[tuple[str, str]]
+    ) -> None:
         self.stdout.write(
             f"\n{'page':58s} {'status':>6s} {'median':>9s} {'p95':>9s} {'queries':>7s} {'repeat':>6s} {'derive':>6s} {'KB':>8s}"
             + (

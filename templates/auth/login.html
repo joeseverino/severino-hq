@@ -4,7 +4,7 @@
 {% block content %}
 <div class="auth-card">
   <img class="auth-logo" src="{% static 'img/logo.png' %}" alt="{{ SITE_NAME }}" width="64" height="64">
-  <h1>Sign in to {{ SITE_NAME }}</h1>
+  <h1>Sign in to {{ SITE_NAME|breakable }}</h1>
 
   {% if form.non_field_errors %}
     <div class="msg msg-error">{{ form.non_field_errors }}</div>
@@ -17,7 +17,7 @@
   {% endcomment %}
   {% if OIDC_ENABLED %}
     {% if request.GET.signed_out %}<p class="muted">You are signed out.</p>{% endif %}
-    {% if sso_failure %}<div class="msg msg-error" role="alert">{{ sso_failure }}</div>{% endif %}
+    {% if sso_failure %}<div class="msg msg-error" role="alert">{{ sso_failure|breakable }}</div>{% endif %}
     <p><a class="btn primary auth-sso" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Sign in with single sign-on</a></p>
   {% else %}
     <form method="post" action="">

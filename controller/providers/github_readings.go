@@ -1,13 +1,13 @@
 package providers
 
 import (
-	"bytes"
 	"cmp"
 	"context"
-	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -53,26 +53,9 @@ const (
 	githubTagsPage        = 1000
 )
 
-// githubRegistry is the container registry an app token reads packages from;
-// GitHub's package API does not take an installation token. It is fixed here
-// and never taken from an image reference: the app's token is sent to it.
-const githubRegistry = "ghcr.io"
-
 var (
 	githubFailed  = map[string]bool{"failure": true, "timed_out": true, "action_required": true, "startup_failure": true}
 	githubRunning = map[string]bool{"queued": true, "in_progress": true, "requested": true, "pending": true, "waiting": true}
-	// A uses: value: an action or reusable workflow and the ref it is taken at.
-	githubUses   = regexp.MustCompile(`(?m)^\s*(?:-\s*)?uses:\s*["']?([^\s"'#]+)`)
-	githubCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	// A reusable workflow another repository holds.
-	githubCalled = regexp.MustCompile(`^[^./][^/]*/[^/]+/\.github/workflows/[^/]+\.ya?ml$`)
-)
-
-// Where the files whose uses: lines run live: each workflow, and each local
-// composite action's own action.yml.
-const (
-	githubWorkflowsDir = ".github/workflows"
-	githubActionsDir   = ".github/actions"
 )
 
 // GitHubRepositoryRecord is one repository as the app's read-only token sees it.
@@ -94,6 +77,7 @@ type GitHubRepositoryRecord struct {
 	Release           *GitHubRelease            `json:"release"`
 	Deployments       []GitHubDeployment        `json:"deployments"`
 	Alerts            map[string]map[string]int `json:"alerts"`
+	DependabotAlerts  []GitHubDependabotAlert   `json:"dependabot_alerts"`
 	Artifacts         []GitHubArtifact          `json:"artifacts"`
 	Rules             *GitHubRules              `json:"rules"`
 	Environments      []GitHubEnvironment       `json:"environments"`
@@ -122,14 +106,24 @@ type GitHubChecks struct {
 }
 
 type GitHubPull struct {
-	Number    int    `json:"number"`
-	Title     string `json:"title"`
-	URL       string `json:"url"`
-	Author    string `json:"author"`
-	Draft     bool   `json:"draft"`
-	UpdatedAt string `json:"updated_at"`
-	Head      string `json:"head"`
+	Number    int      `json:"number"`
+	Title     string   `json:"title"`
+	URL       string   `json:"url"`
+	Author    string   `json:"author"`
+	Draft     bool     `json:"draft"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
+	Head      string   `json:"head"`
+	Branch    string   `json:"branch"`
+	Labels    []string `json:"labels"`
+	// Checks is the head commit's checks, read for an update's pull request
+	// (its branch under githubUpdateBranch) and nil for any other.
+	Checks *GitHubChecks `json:"checks"`
 }
+
+// githubUpdateBranch is the prefix of the branches Renovate opens its pull
+// requests from.
+const githubUpdateBranch = "renovate/"
 
 type GitHubRun struct {
 	ID         int    `json:"id"`
@@ -176,72 +170,9 @@ type GitHubArtifact struct {
 	SHA       string `json:"sha"`
 }
 
-type GitHubRules struct {
-	PullRequest     bool     `json:"pull_request"`
-	Reviews         int      `json:"reviews"`
-	RequiredChecks  []string `json:"required_checks"`
-	BlocksForcePush bool     `json:"blocks_force_push"`
-	BlocksDeletion  bool     `json:"blocks_deletion"`
-}
-
-type GitHubEnvironment struct {
-	Name        string   `json:"name"`
-	Reviewers   []string `json:"reviewers"`
-	WaitMinutes int      `json:"wait_minutes"`
-	Branches    string   `json:"branches"`
-}
-
-type GitHubRunner struct {
-	Name   string   `json:"name"`
-	Status string   `json:"status"`
-	Busy   bool     `json:"busy"`
-	Labels []string `json:"labels"`
-}
-
-type GitHubImage struct {
-	Name   string   `json:"name"`
-	Tags   int      `json:"tags"`
-	Signed []string `json:"signed"`
-}
-
-type GitHubAccess struct {
-	Visibility           string               `json:"visibility"`
-	Collaborators        []GitHubCollaborator `json:"collaborators"`
-	DeployKeys           []GitHubDeployKey    `json:"deploy_keys"`
-	AllowedActions       string               `json:"allowed_actions"`
-	PinningRequired      bool                 `json:"pinning_required"`
-	Token                string               `json:"token"`
-	TokenApprovesReviews bool                 `json:"token_approves_reviews"`
-	// VulnerabilityAlerts is whether GitHub raises the dependency alerts
-	// Renovate opens its security fixes from.
-	VulnerabilityAlerts bool `json:"vulnerability_alerts"`
-	// Security is each security feature's status; nil where the plan offers
-	// none of them, which is not "off".
-	Security map[string]*string `json:"security"`
-}
-
-type GitHubCollaborator struct {
-	Login string `json:"login"`
-	Role  string `json:"role"`
-}
-
-type GitHubDeployKey struct {
-	Title     string `json:"title"`
-	ReadOnly  bool   `json:"read_only"`
-	LastUsed  string `json:"last_used"`
-	CreatedAt string `json:"created_at"`
-}
-
-type GitHubPin struct {
-	Path   string `json:"path"`
-	Uses   string `json:"uses"`
-	Action string `json:"action"`
-	Ref    string `json:"ref"`
-	SHA    string `json:"sha"`
-}
-
 // githubRepositories reads every repository the installations cover, a few at
-// once. One repository failing fails the read; none started after it is asked.
+// once. A repository that cannot be read is refused alone and the rest are
+// reported; every repository refused is a refused read.
 func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 	c, err := r.githubConnection("")
 	if err != nil {
@@ -251,23 +182,36 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	records := make([]any, len(names))
-	group, groupCtx := errgroup.WithContext(ctx)
+	records := make([]GitHubRepositoryRecord, len(names))
+	failures := make([]error, len(names))
+	var group errgroup.Group
 	group.SetLimit(githubReadConcurrency)
 	for i, name := range names {
 		group.Go(func() error {
-			if err := groupCtx.Err(); err != nil {
-				return err
+			if failures[i] = ctx.Err(); failures[i] == nil {
+				records[i], failures[i] = (&githubRepository{r: r, c: c, name: name}).read(ctx)
 			}
-			record, err := (&githubRepository{r: r, c: c, name: name}).read(groupCtx)
-			records[i] = record
-			return err
+			return nil
 		})
 	}
-	if err := group.Wait(); err != nil {
+	_ = group.Wait()
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return records, nil
+	found := []any{}
+	var refused []error
+	for i, name := range names {
+		if failures[i] != nil {
+			refused = append(refused, failures[i])
+			refuse(ctx, runtime.PartWhole, c.ref, name, failures[i])
+			continue
+		}
+		found = append(found, records[i])
+	}
+	if len(names) > 0 && len(refused) == len(names) {
+		return nil, fmt.Errorf("every repository refused its reading: %w", refused[0])
+	}
+	return found, nil
 }
 
 // githubRepository is one repository being read.
@@ -299,8 +243,12 @@ func part[T any](ctx context.Context, g *githubRepository, name runtime.ReadingP
 // asRepositoryRefusal: every read runs under a token minted with all of
 // githubRead, and GitHub mints none for a permission the installation lacks,
 // so a 403 is a feature the repository does not offer, never a permission to grant.
+// A part is read from a repository the token already reached, so its 404 is the
+// same: GitHub answers a feature that is off (code scanning never set up) as not found.
 func asRepositoryRefusal(err error) error {
-	if failure, _, _ := runtime.Classify(err); failure != runtime.FailureClassPermission {
+	failure, _, _ := runtime.Classify(err)
+	answered, _ := errors.AsType[*ProviderError](err)
+	if failure != runtime.FailureClassPermission && (answered == nil || answered.HTTPStatus != http.StatusNotFound) {
 		return err
 	}
 	return &ProviderError{Message: "not available on this repository (its plan or settings leave it off)"}
@@ -341,13 +289,8 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		return record, err
 	}
 	record.PullRequests = githubPulls(pulls)
-	record.PullRequestChecks = []string{}
-	if len(record.PullRequests) > 0 && record.PullRequests[0].Head != "" {
-		checks, err := g.checks(ctx, record.PullRequests[0].Head)
-		if err != nil {
-			return record, err
-		}
-		record.PullRequestChecks = checks.Names
+	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests); err != nil {
+		return record, err
 	}
 	workflows, err := repoGet[struct {
 		Workflows []githubapi.Workflow `json:"workflows"`
@@ -369,7 +312,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if record.Deployments, err = g.deployments(ctx); err != nil {
 		return record, err
 	}
-	record.Alerts = g.alerts(ctx)
+	record.Alerts, record.DependabotAlerts = g.alerts(ctx)
 	artifacts, err := repoGet[struct {
 		Artifacts []githubapi.Artifact `json:"artifacts"`
 	}](ctx, g, "/actions/artifacts?per_page="+strconv.Itoa(githubRunsPage))
@@ -495,12 +438,41 @@ func summarizeChecks(runs []githubapi.CheckRun) GitHubChecks {
 func githubPulls(pulls []githubapi.PullRequestSimple) []GitHubPull {
 	found := []GitHubPull{}
 	for _, pull := range pulls {
+		labels := []string{}
+		for _, label := range pull.Labels {
+			labels = append(labels, label.Name)
+		}
 		found = append(found, GitHubPull{
 			Number: pull.Number, Title: pull.Title, URL: pull.HTMLURL, Author: pull.User.Login,
-			Draft: pull.Draft, UpdatedAt: pull.UpdatedAt, Head: pull.Head.Sha,
+			Draft: pull.Draft, CreatedAt: pull.CreatedAt, UpdatedAt: pull.UpdatedAt, Head: pull.Head.Sha,
+			Branch: pull.Head.Ref, Labels: labels,
 		})
 	}
 	return found
+}
+
+// pullChecks reads the checks of every update's pull request onto it, and
+// answers the check names the newest pull request runs: what a pull request
+// is checked by, for the rules to require.
+func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull) ([]string, error) {
+	for i := range pulls {
+		if pulls[i].Head == "" || !strings.HasPrefix(pulls[i].Branch, githubUpdateBranch) {
+			continue
+		}
+		checks, err := g.checks(ctx, pulls[i].Head)
+		if err != nil {
+			return nil, err
+		}
+		pulls[i].Checks = &checks
+	}
+	if len(pulls) == 0 || pulls[0].Head == "" {
+		return []string{}, nil
+	}
+	if pulls[0].Checks != nil {
+		return pulls[0].Checks.Names, nil
+	}
+	checks, err := g.checks(ctx, pulls[0].Head)
+	return checks.Names, err
 }
 
 func githubRunOf(run githubapi.WorkflowRun) GitHubRun {
@@ -619,47 +591,6 @@ func (g *githubRepository) verifications(ctx context.Context, link string) ([]Gi
 	return verified, nil
 }
 
-// alerts is open alerts by severity. A kind the repository cannot answer is
-// that part refused, never zero.
-func (g *githubRepository) alerts(ctx context.Context) map[string]map[string]int {
-	found := map[string]map[string]int{}
-	count := func(name runtime.ReadingPartName, severities []string) {
-		counts := map[string]int{}
-		for _, severity := range severities {
-			counts[strings.ToLower(orDefault(severity, "unknown"))]++
-		}
-		found[string(name)] = counts
-	}
-	if alerts, ok := part(ctx, g, runtime.PartCodeScanning, func() ([]githubapi.CodeScanningAlertItems, error) {
-		return repoGet[[]githubapi.CodeScanningAlertItems](ctx, g, "/code-scanning/alerts?state=open&per_page="+strconv.Itoa(githubListPage))
-	}); ok {
-		severities := []string{}
-		for _, alert := range alerts {
-			severities = append(severities, orDefault(string(alert.Rule.SecuritySeverityLevel), string(alert.Rule.Severity)))
-		}
-		count(runtime.PartCodeScanning, severities)
-	}
-	if alerts, ok := part(ctx, g, runtime.PartDependabot, func() ([]githubapi.DependabotAlert, error) {
-		return repoGet[[]githubapi.DependabotAlert](ctx, g, "/dependabot/alerts?state=open&per_page="+strconv.Itoa(githubListPage))
-	}); ok {
-		severities := []string{}
-		for _, alert := range alerts {
-			severities = append(severities, string(alert.SecurityAdvisory.Severity))
-		}
-		count(runtime.PartDependabot, severities)
-	}
-	if alerts, ok := part(ctx, g, runtime.PartLeakedCredentials, func() ([]githubapi.SecretScanningAlert, error) {
-		return repoGet[[]githubapi.SecretScanningAlert](ctx, g, "/secret-scanning/alerts?state=open&per_page="+strconv.Itoa(githubListPage))
-	}); ok {
-		severities := make([]string, len(alerts))
-		for i := range alerts {
-			severities[i] = "leaked"
-		}
-		count(runtime.PartLeakedCredentials, severities)
-	}
-	return found
-}
-
 // liveArtifacts is the artifacts that have not expired, soonest to expire first.
 func liveArtifacts(artifacts []githubapi.Artifact) []GitHubArtifact {
 	live := []GitHubArtifact{}
@@ -673,387 +604,4 @@ func liveArtifacts(artifacts []githubapi.Artifact) []GitHubArtifact {
 		live = live[:githubArtifactsKept]
 	}
 	return live
-}
-
-// branchRules is what the default branch requires, from every ruleset that
-// applies to it. Each rule is read as the variant its type names.
-func branchRules(rules []githubapi.RepositoryRuleDetailed) (GitHubRules, error) {
-	found := GitHubRules{RequiredChecks: []string{}}
-	checks := map[string]bool{}
-	for _, rule := range rules {
-		raw, err := rule.MarshalJSON()
-		if err != nil {
-			return found, err
-		}
-		var kind struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(raw, &kind); err != nil {
-			return found, &ProviderError{Message: "decode GitHub branch rule", Err: err}
-		}
-		switch kind.Type {
-		case "pull_request":
-			var pull githubapi.RepositoryRulePullRequest
-			if err := json.Unmarshal(raw, &pull); err != nil {
-				return found, &ProviderError{Message: "decode GitHub pull request rule", Err: err}
-			}
-			found.PullRequest = true
-			found.Reviews = max(found.Reviews, pull.Parameters.RequiredApprovingReviewCount)
-		case "required_status_checks":
-			var required githubapi.RepositoryRuleRequiredStatusChecks
-			if err := json.Unmarshal(raw, &required); err != nil {
-				return found, &ProviderError{Message: "decode GitHub status check rule", Err: err}
-			}
-			for _, check := range required.Parameters.RequiredStatusChecks {
-				checks[check.Context] = true
-			}
-		case "non_fast_forward":
-			found.BlocksForcePush = true
-		case "deletion":
-			found.BlocksDeletion = true
-		}
-	}
-	found.RequiredChecks = sortedKeys(checks)
-	return found, nil
-}
-
-func githubEnvironments(environments []githubapi.Environment) ([]GitHubEnvironment, error) {
-	found := []GitHubEnvironment{}
-	for _, environment := range environments {
-		reviewers := map[string]bool{}
-		wait := 0
-		for _, rule := range environment.ProtectionRules {
-			typed, err := rule.AsEnvironmentProtectionRules2()
-			if err != nil {
-				return nil, &ProviderError{Message: "decode GitHub environment rule", Err: err}
-			}
-			switch typed.Type {
-			case "required_reviewers":
-				required, err := rule.AsEnvironmentProtectionRules1()
-				if err != nil {
-					return nil, &ProviderError{Message: "decode GitHub reviewer rule", Err: err}
-				}
-				for _, entry := range required.Reviewers {
-					user, _ := entry.Reviewer.AsSimpleUser()
-					team, _ := entry.Reviewer.AsTeam()
-					if name := orDefault(user.Login, team.Name); name != "" {
-						reviewers[name] = true
-					}
-				}
-			case "wait_timer":
-				timer, err := rule.AsEnvironmentProtectionRules0()
-				if err != nil {
-					return nil, &ProviderError{Message: "decode GitHub wait timer rule", Err: err}
-				}
-				wait = timer.WaitTimer
-			}
-		}
-		branches := "any"
-		switch policy := environment.DeploymentBranchPolicy; {
-		case policy.ProtectedBranches:
-			branches = "protected"
-		case policy.CustomBranchPolicies:
-			branches = "custom"
-		}
-		found = append(found, GitHubEnvironment{Name: environment.Name, Reviewers: sortedKeys(reviewers), WaitMinutes: wait, Branches: branches})
-	}
-	return found, nil
-}
-
-func githubRunners(runners []githubapi.Runner) []GitHubRunner {
-	found := []GitHubRunner{}
-	for _, runner := range runners {
-		labels := []string{}
-		for _, label := range runner.Labels {
-			labels = append(labels, label.Name)
-		}
-		slices.Sort(labels)
-		found = append(found, GitHubRunner{Name: runner.Name, Status: runner.Status, Busy: runner.Busy, Labels: labels})
-	}
-	return found
-}
-
-// access is who can reach the repository and how its Actions may run.
-func (g *githubRepository) access(ctx context.Context, repo githubapi.FullRepository, raw json.RawMessage) (GitHubAccess, error) {
-	actions, err := repoGet[githubapi.ActionsRepositoryPermissions](ctx, g, "/actions/permissions")
-	if err != nil {
-		return GitHubAccess{}, err
-	}
-	workflow, err := repoGet[githubapi.ActionsGetDefaultWorkflowPermissions](ctx, g, "/actions/permissions/workflow")
-	if err != nil {
-		return GitHubAccess{}, err
-	}
-	alerts, err := g.vulnerabilityAlerts(ctx)
-	if err != nil {
-		return GitHubAccess{}, err
-	}
-	collaborators, err := repoGet[[]githubapi.Collaborator](ctx, g, "/collaborators?per_page="+strconv.Itoa(githubListPage))
-	if err != nil {
-		return GitHubAccess{}, err
-	}
-	keys, err := repoGet[[]githubapi.DeployKey](ctx, g, "/keys?per_page="+strconv.Itoa(githubListPage))
-	if err != nil {
-		return GitHubAccess{}, err
-	}
-	// Which security features the plan offers is which keys are present, so
-	// they are read as a map, not the struct that cannot tell absent from off.
-	security, err := decodeAnswer[struct {
-		SecurityAndAnalysis map[string]*struct {
-			Status *string `json:"status"`
-		} `json:"security_and_analysis"`
-	}](raw, "GitHub repository security")
-	if err != nil {
-		return GitHubAccess{}, err
-	}
-	visibility := repo.Visibility
-	if visibility == "" {
-		visibility = map[bool]string{true: "private", false: "public"}[repo.Private]
-	}
-	access := GitHubAccess{
-		Visibility: visibility, Collaborators: []GitHubCollaborator{}, DeployKeys: []GitHubDeployKey{},
-		AllowedActions: string(actions.AllowedActions), PinningRequired: actions.ShaPinningRequired,
-		Token: string(workflow.DefaultWorkflowPermissions), TokenApprovesReviews: workflow.CanApprovePullRequestReviews,
-		VulnerabilityAlerts: alerts,
-	}
-	for _, collaborator := range collaborators {
-		access.Collaborators = append(access.Collaborators, GitHubCollaborator{Login: collaborator.Login, Role: collaborator.RoleName})
-	}
-	for _, key := range keys {
-		access.DeployKeys = append(access.DeployKeys, GitHubDeployKey{Title: key.Title, ReadOnly: key.ReadOnly, LastUsed: key.LastUsed, CreatedAt: key.CreatedAt})
-	}
-	if len(security.SecurityAndAnalysis) > 0 {
-		access.Security = map[string]*string{}
-		for feature, setting := range security.SecurityAndAnalysis {
-			if setting != nil {
-				access.Security[feature] = setting.Status
-			} else {
-				access.Security[feature] = nil
-			}
-		}
-	}
-	return access, nil
-}
-
-type githubUsesFound struct {
-	pins   []GitHubPin
-	called []string
-}
-
-// vulnerabilityAlerts is GitHub's answer for the setting: 204 on, 404 off.
-func (g *githubRepository) vulnerabilityAlerts(ctx context.Context) (bool, error) {
-	_, err := g.raw(ctx, "/vulnerability-alerts")
-	if httpStatus(err) == 404 {
-		return false, nil
-	}
-	return err == nil, err
-}
-
-// listing is a directory's entries; a 404 is the repository saying it has no
-// such directory, so nothing in it to pin.
-func (g *githubRepository) listing(ctx context.Context, path, branch string) (githubapi.ContentDirectory, error) {
-	raw, err := g.raw(ctx, "/contents/"+path+"?ref="+url.QueryEscape(branch))
-	if httpStatus(err) == 404 {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if !bytes.HasPrefix(bytes.TrimSpace(raw), []byte("[")) {
-		return nil, nil
-	}
-	return decodeAnswer[githubapi.ContentDirectory](raw, "GitHub directory "+path)
-}
-
-// usesFiles is every workflow file, then every local composite action's action.yml.
-func (g *githubRepository) usesFiles(ctx context.Context, branch string) ([]string, error) {
-	workflows, err := g.listing(ctx, githubWorkflowsDir, branch)
-	if err != nil {
-		return nil, err
-	}
-	files := []string{}
-	for _, entry := range workflows {
-		if strings.HasSuffix(entry.Path, ".yml") || strings.HasSuffix(entry.Path, ".yaml") {
-			files = append(files, entry.Path)
-		}
-	}
-	actions, err := g.listing(ctx, githubActionsDir, branch)
-	if err != nil {
-		return nil, err
-	}
-	for _, action := range actions {
-		if action.Type != githubapi.ContentDirectoryTypeDir {
-			continue
-		}
-		entries, err := g.listing(ctx, action.Path, branch)
-		if err != nil {
-			return nil, err
-		}
-		for _, entry := range entries {
-			if entry.Name == "action.yml" || entry.Name == "action.yaml" {
-				files = append(files, entry.Path)
-			}
-		}
-	}
-	return files, nil
-}
-
-// workflowUses is every uses: line not pinned to a commit, with the commit
-// its ref names now, and every workflow called from another repository, pinned
-// or not: what a called workflow uses lives in that repository, not this one.
-func (g *githubRepository) workflowUses(ctx context.Context, branch string) (githubUsesFound, error) {
-	files, err := g.usesFiles(ctx, branch)
-	if err != nil {
-		return githubUsesFound{}, err
-	}
-	found := githubUsesFound{pins: []GitHubPin{}, called: []string{}}
-	resolved := map[string]string{}
-	called := map[string]bool{}
-	for _, path := range files {
-		file, err := repoGet[githubapi.ContentFile](ctx, g, "/contents/"+path+"?ref="+url.QueryEscape(branch))
-		if err != nil {
-			return githubUsesFound{}, err
-		}
-		content, err := base64.StdEncoding.DecodeString(strings.NewReplacer("\n", "", "\r", "").Replace(file.Content))
-		if err != nil {
-			return githubUsesFound{}, &ProviderError{Message: "decode GitHub file " + path, Err: err}
-		}
-		for _, match := range githubUses.FindAllStringSubmatch(string(content), -1) {
-			uses := match[1]
-			if strings.HasPrefix(uses, "./") || strings.HasPrefix(uses, "docker://") || !strings.Contains(uses, "@") {
-				continue
-			}
-			at := uses[strings.LastIndex(uses, "@")+1:]
-			action := uses[:strings.LastIndex(uses, "@")]
-			if githubCalled.MatchString(action) {
-				called[uses] = true
-			}
-			if githubCommit.MatchString(at) {
-				continue
-			}
-			source := strings.Join(firstN(strings.Split(action, "/"), 2), "/")
-			key := source + "@" + at
-			sha, seen := resolved[key]
-			if !seen {
-				sha = g.commitOf(ctx, source, at)
-				resolved[key] = sha
-			}
-			found.pins = append(found.pins, GitHubPin{Path: path, Uses: uses, Action: action, Ref: at, SHA: sha})
-		}
-	}
-	found.called = sortedKeys(called)
-	return found, nil
-}
-
-func firstN(parts []string, n int) []string {
-	if len(parts) > n {
-		return parts[:n]
-	}
-	return parts
-}
-
-// commitOf is the commit a tag or branch of source names now, or "" when it
-// could not be read. Resolved once per action and ref in a sweep, under the
-// read-only token of the repository being read; only a commit that was read
-// is shared, since one repository's token failing says nothing of the next's.
-func (g *githubRepository) commitOf(ctx context.Context, source, at string) string {
-	raw, err := g.r.cached(ctx, "github.commit|"+source+"|"+at, func() (json.RawMessage, error) {
-		commit, err := githubGet[githubapi.Commit](ctx, g.r, g.c, "/repos/"+source+"/commits/"+url.PathEscape(at), []string{g.name}, githubRead)
-		if err != nil {
-			return nil, err
-		}
-		if !githubCommit.MatchString(commit.Sha) {
-			return nil, &ProviderError{Message: "the ref names no commit"}
-		}
-		return json.Marshal(commit.Sha)
-	})
-	if err != nil {
-		return ""
-	}
-	var sha string
-	_ = json.Unmarshal(raw, &sha)
-	return sha
-}
-
-// registryToken and registryTags are the OCI distribution API's token and
-// tag-list answers.
-type registryToken struct {
-	Token string `json:"token"`
-}
-
-type registryTags struct {
-	Tags []string `json:"tags"`
-}
-
-// images is the container images this controller's own composition names for
-// the repository: the host's image and the composition it runs, read from the
-// registry, which takes the app's token where GitHub's package API does not.
-// Each image is refused alone.
-func (g *githubRepository) images(ctx context.Context) ([]GitHubImage, error) {
-	composed := g.r.composition()
-	found := []GitHubImage{}
-	if composed.Repository != g.name {
-		return found, nil
-	}
-	names := map[string]bool{strings.ToLower(g.name): true}
-	if rest, ok := strings.CutPrefix(composed.Image, githubRegistry+"/"); ok {
-		rest, _, _ = strings.Cut(rest, "@")
-		rest, _, _ = strings.Cut(rest, ":")
-		names[strings.ToLower(rest)] = true
-	}
-	token, err := g.r.githubToken(ctx, g.c, []string{g.name}, githubRead)
-	if err != nil {
-		return nil, err
-	}
-	for _, image := range sortedKeys(names) {
-		scope := g.name + ":" + image
-		read, err := g.image(ctx, image, token)
-		if err != nil {
-			refuse(ctx, runtime.PartImages, g.c.ref, scope, asRepositoryRefusal(err))
-			continue
-		}
-		found = append(found, read)
-	}
-	return found, nil
-}
-
-// image is an image's tags, and which digests carry a cosign signature, which
-// the tag list alone says. Cosign 2 tags its signature sha256-<digest>.sig.
-// Cosign 3 attaches a referrer, and on a registry without the referrers API
-// (GHCR) the referrers index is tagged sha256-<digest>. Either is the
-// signature's presence, not its verification, which the deploy does.
-func (g *githubRepository) image(ctx context.Context, image, token string) (GitHubImage, error) {
-	basic := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
-	query := url.Values{"scope": {"repository:" + image + ":pull"}, "service": {githubRegistry}}
-	raw, err := g.r.HTTP.Request(ctx, "https://"+githubRegistry+"/token?"+query.Encode(), "GET", map[string]string{"Authorization": "Basic " + basic}, nil)
-	if err != nil {
-		return GitHubImage{}, err
-	}
-	pull, err := decodeAnswer[registryToken](raw, "registry token")
-	if err != nil {
-		return GitHubImage{}, err
-	}
-	raw, err = g.r.HTTP.Request(ctx, "https://"+githubRegistry+"/v2/"+image+"/tags/list?n="+strconv.Itoa(githubTagsPage), "GET", map[string]string{"Authorization": "Bearer " + pull.Token}, nil)
-	if err != nil {
-		return GitHubImage{}, err
-	}
-	listed, err := decodeAnswer[registryTags](raw, "registry tags")
-	if err != nil {
-		return GitHubImage{}, err
-	}
-	record := GitHubImage{Name: image, Signed: []string{}}
-	for _, tag := range listed.Tags {
-		if !strings.HasPrefix(tag, "sha256-") {
-			record.Tags++
-			continue
-		}
-		digest := strings.TrimPrefix(tag, "sha256-")
-		if signature, ok := strings.CutSuffix(digest, ".sig"); ok {
-			record.Signed = append(record.Signed, signature)
-		} else if !strings.Contains(digest, ".") {
-			record.Signed = append(record.Signed, digest)
-		}
-	}
-	slices.Sort(record.Signed)
-	record.Signed = slices.Compact(record.Signed)
-	return record, nil
 }

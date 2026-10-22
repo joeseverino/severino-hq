@@ -1,27 +1,47 @@
-"""The toolchain gate holds mise.lock to every pinned tool, and the images'
-uv to the version mise pins."""
+"""The toolchain gate holds mise.lock to every pinned tool, mise's Go to
+go.mod, and the images to taking their build tools from the lock."""
 
 from django.test import SimpleTestCase
 
 from tools.pipeline import toolchain_lock as toolchain
 
 DIGEST = "sha256:" + "a" * 64
-CONFIG = {"tools": {"uv": "0.13.1"}}
+BASE = f"FROM python:3.15-slim-trixie@{DIGEST} AS tools\n"
 
 
-class UvImageTests(SimpleTestCase):
-    def test_an_image_at_the_pinned_version_passes(self):
-        images = {"Dockerfile": f"FROM ghcr.io/astral-sh/uv:0.13.1@{DIGEST} AS uv\n"}
-        self.assertEqual(toolchain.image_drift(CONFIG, images), [])
+class ImageTests(SimpleTestCase):
+    def test_stages_of_the_python_base_pass(self):
+        text = BASE + "FROM tools AS build\nCOPY --from=tools /opt/bin/uv /usr/local/bin/uv\nFROM ${HQ_IMAGE}\n"
+        self.assertEqual(toolchain.foreign_images({"Dockerfile": text}), [])
 
-    def test_an_image_at_another_version_fails(self):
-        images = {"Dockerfile": f"FROM ghcr.io/astral-sh/uv:0.12.0@{DIGEST} AS uv\n"}
-        self.assertTrue(toolchain.image_drift(CONFIG, images))
-
-    def test_an_image_without_a_digest_pinned_uv_fails(self):
-        for text in ("FROM ghcr.io/astral-sh/uv:0.13.1 AS uv\n", "FROM python:3.15\n"):
+    def test_a_tool_taken_from_its_own_image_fails(self):
+        for text in (
+            f"FROM ghcr.io/astral-sh/uv:0.13.1@{DIGEST} AS uv\n" + BASE + "COPY --from=uv /uv /usr/local/bin/uv\n",
+            BASE + f"COPY --from=ghcr.io/astral-sh/uv:0.13.1@{DIGEST} /uv /usr/local/bin/uv\n",
+            f"FROM golang:1.27.2-trixie@{DIGEST} AS controller\n",
+        ):
             with self.subTest(text=text):
-                self.assertTrue(toolchain.image_drift(CONFIG, {"Dockerfile": text}))
+                self.assertTrue(toolchain.foreign_images({"Dockerfile": text}))
+
+
+class GoTests(SimpleTestCase):
+    CONFIG = {"tools": {"go": "1.27.2"}}
+    GO_MOD = "module example.com/controller\n\ngo 1.27\n"
+
+    def drift(self, go_mod=GO_MOD):
+        return toolchain.go_drift(self.CONFIG, go_mod)
+
+    def test_one_release_of_the_language_version_passes(self):
+        self.assertEqual(self.drift(), [])
+        self.assertEqual(self.drift(go_mod=self.GO_MOD + "\ntoolchain go1.27.2\n"), [])
+
+    def test_another_language_version_fails(self):
+        for go_mod in ("go 1.26\n", "go 1.2\n", "go 1.27.1\n", "module example.com/controller\n"):
+            with self.subTest(go_mod=go_mod):
+                self.assertTrue(self.drift(go_mod=go_mod))
+
+    def test_another_toolchain_fails(self):
+        self.assertTrue(self.drift(go_mod=self.GO_MOD + "\ntoolchain go1.27.1\n"))
 
 
 def locked(version, platforms=toolchain.PLATFORMS):

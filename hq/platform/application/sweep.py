@@ -18,6 +18,7 @@ from typing import Any
 
 from django.db import transaction
 
+lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
@@ -31,6 +32,7 @@ from .inventory import (
 from .zones import RECORD_KIND, adopt_discovered_records
 lazy from . import problems, scheduled_work
 lazy from .first_seen import look_due
+lazy from .projects import sync_repositories
 lazy from .public_registry import registry_due
 
 logger = logging.getLogger("severino.sweep")
@@ -57,6 +59,10 @@ def record_sweep(payload: dict[str, Any], *, principal, controller_id: str = "")
     # Run after the loop above so a zone adopted moments ago already counts,
     # otherwise its records would wait a whole sweep for no reason.
     adopted += adopt_discovered_records(principal=principal)["adopted"]
+    # Every repository the GitHub App reads is a project, from the reading
+    # just stored.
+    if REPOSITORY_KIND in payload:
+        sync_repositories(principal=principal)
     # And everything already declared that the sweep just found unchanged, so
     # a declaration nothing touched still reads as observed.
     confirmed = confirm_observed(payload)

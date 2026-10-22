@@ -52,11 +52,13 @@ def ago(moment: date | str, now: datetime | None = None) -> str:
 # How HQ writes a day and a time of day, as Django date-format strings. Spelled
 # here and nowhere else: ``when``, ``when_day`` and ``when_exact`` are built from
 # them, and ``config.formats`` hands the same ones to Django, so a datetime a
-# template prints bare still reads this way.
-DAY_FORMAT = "M j"
-DAY_YEAR_FORMAT = "M j, Y"
-CLOCK_FORMAT = "g:i A"
-CLOCK_EXACT_FORMAT = "g:i:s A"
+# template prints bare still reads this way. The spaces inside a date and a
+# time are no-break spaces (U+00A0), as Django's own ages are: "Dec" at the end
+# of one line and "15" at the start of the next reads as two facts.
+DAY_FORMAT = "M\xa0j"
+DAY_YEAR_FORMAT = "M\xa0j,\xa0Y"
+CLOCK_FORMAT = "g:i\xa0A"
+CLOCK_EXACT_FORMAT = "g:i:s\xa0A"
 MOMENT_YEAR_FORMAT = f"{DAY_YEAR_FORMAT}, {CLOCK_FORMAT}"
 
 
@@ -107,7 +109,7 @@ def when_exact(value: date) -> str:
     value = _local(value)
     exact = _written(value, f"{DAY_YEAR_FORMAT}, {CLOCK_EXACT_FORMAT}")
     zone = value.tzname() or ""
-    return f"{exact} {zone}".strip()
+    return f"{exact}\xa0{zone}" if zone else exact
 
 
 def when_range(start: date, end: date) -> str:

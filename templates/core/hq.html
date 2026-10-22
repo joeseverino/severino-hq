@@ -16,9 +16,9 @@ and leads to the first.
   <div class="band-fact tone-{{ tile.tone }}">
     {% if tile.icon %}<span class="band-icon">{% include "partials/_icon.html" with name=tile.icon %}</span>{% endif %}
     <div>
-      <span class="band-label">{{ tile.label }}</span>
-      <strong>{% if tile.url %}<a href="{{ tile.url }}">{{ tile.value }}</a>{% else %}{{ tile.value }}{% endif %}</strong>
-      {% if tile.detail %}<small>{{ tile.detail }}</small>{% endif %}
+      <span class="band-label">{{ tile.label|breakable }}</span>
+      <strong>{% if tile.url %}<a href="{{ tile.url }}">{{ tile.value|breakable }}</a>{% else %}{{ tile.value|breakable }}{% endif %}</strong>
+      {% if tile.detail %}<small>{{ tile.detail|breakable }}</small>{% endif %}
     </div>
   </div>
   {% endfor %}
@@ -34,30 +34,30 @@ they share a row; either alone takes it.
   {% include "partials/_problems.html" with problems=hq.problems_in.release|not_urgent only %}
   <dl class="kv">
         <dt>Commit</dt>
-          <dd>{% if release.commit_url %}<a class="external-link" href="{{ release.commit_url }}" rel="noopener"><code>{{ release.short }}</code></a>{% elif release.revision %}<code>{{ release.short }}</code>{% else %}<span class="muted">This build does not say which commit it is.</span>{% endif %}</dd>
+          <dd>{% if release.commit_url %}<a class="external-link" href="{{ release.commit_url }}" rel="noopener"><code>{{ release.short|breakable }}</code></a>{% elif release.revision %}<code>{{ release.short|breakable }}</code>{% else %}<span class="muted">This build does not say which commit it is.</span>{% endif %}</dd>
         {% if release.repository %}{% with repository=release.repository %}
-        <dt>{{ repository.default_branch|default:"Branch"|capfirst }}</dt>
+        <dt>{{ repository.default_branch|default:"Branch"|capfirst|breakable }}</dt>
           <dd>
-            {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7" }}</code>, production runs <code>{{ release.deployed|slice:":7" }}</code>
-            {% elif release.behind is False %}Production runs its head, <code>{{ release.head|slice:":7" }}</code>
+            {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
+            {% elif release.behind is False %}Production runs its head, <code>{{ release.head|slice:":7"|breakable }}</code>
             {% else %}<span class="muted">Its head or its production deploy has not been read.</span>{% endif %}
             {% if release.runs_deployed is False %}<br><strong>This process is not the commit production last deployed.</strong>{% endif %}
-            <br>{% if repository.url|web_url %}<a class="external-link" href="{{ repository.url|web_url }}" rel="noopener">{{ repository.name }}</a>{% else %}{{ repository.name }}{% endif %} <span class="muted">· {% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
+            <br>{% if repository.url|web_url %}<a class="external-link" href="{{ repository.url|web_url }}" rel="noopener">{{ repository.name|breakable }}</a>{% else %}{{ repository.name|breakable }}{% endif %} <span class="muted">· {% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
           </dd>
         {% endwith %}{% endif %}
         {% if release.image %}
         <dt>Image</dt>
           <dd>
-            <code title="{{ release.image }}">{{ container.standing.image.short }}</code>{% if release.digest %} <span class="muted" tabindex="0" data-tip="{{ release.digest }}">locked to an exact build</span>{% endif %}
+            <code title="{{ release.image }}">{{ container.standing.image.short|breakable }}</code>{% if release.digest %} <span class="muted" tabindex="0" data-tip="{{ release.digest }}">locked to an exact build</span>{% endif %}
             {% if release.built %}<br><span class="muted">Built {{ release.built|when:"ago" }}</span>{% endif %}
           </dd>
         <dt>Signature</dt>
           <dd>{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}</dd>
         <dt>Vulnerabilities</dt>
-          <dd>{{ release.vulnerabilities|capfirst }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %} · <a class="external-link" href="{{ repository.url|web_url }}/security" rel="noopener">{% if repository.open_alerts %}{{ repository.open_alerts|counted:"open alert,open alerts" }}{% else %}no open alerts{% endif %}</a>{% endif %}{% endwith %}{% endif %}</dd>
+          <dd>{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %} · <a class="external-link" href="{{ repository.alerts_url|web_url }}" rel="noopener">{% if repository.open_alerts %}{{ repository.open_alerts|counted:"open alert,open alerts" }}{% else %}no open alerts{% endif %}</a>{% endif %}{% endwith %}{% endif %}</dd>
         {% endif %}
         <dt>Extensions</dt>
-          <dd>{% for name, version in release.extensions %}{{ name }} <span class="muted">{{ version }}</span>{% if not forloop.last %} · {% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</dd>
+          <dd>{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %} · {% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</dd>
       </dl>
 </section>
 <div class="{% if machine and hq.request_path %}two-col{% else %}stack{% endif %}">
@@ -67,15 +67,15 @@ they share a row; either alone takes it.
   {% include "partials/_problems.html" with problems=hq.problems_in.where|not_urgent only %}
   <dl class="kv">
         <dt>Machine</dt>
-          <dd>{% entity machine.link %} <span class="muted">{{ machine.state.0 }}</span></dd>
+          <dd>{% entity machine.link %} <span class="muted">{{ machine.state.0|breakable }}</span></dd>
         {% if container %}{% with runtime=container.runtime %}
         <dt>Container</dt>
-          <dd><a href="{{ container.url }}">{{ container.running.name }}</a> <span class="muted">{{ container.uptime }}</span></dd>
+          <dd><a href="{{ container.url }}">{{ container.running.name|breakable }}</a> <span class="muted">{{ container.uptime|breakable }}</span></dd>
         <dt>Health</dt>
-          <dd>{{ runtime.health|default:container.running.check|default:container.running.status|capfirst }}{% if runtime %} · {{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}</dd>
+          <dd>{{ runtime.health|default:container.running.check|default:container.running.status|capfirst|breakable }}{% if runtime %} · {{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}</dd>
         {% with posture=container.posture %}
         <dt>How it is run</dt>
-          <dd>{{ posture.met }} of {{ posture.measured }} checks met{% for result in posture.unmet %}<br><span class="muted">{{ result.check.label }}</span>{% endfor %}</dd>
+          <dd>{{ posture.met|breakable }} of {{ posture.measured|breakable }} checks met{% for result in posture.unmet %}<br><span class="muted">{{ result.check.unmet|breakable }}</span>{% endfor %}</dd>
         {% endwith %}
         {% endwith %}{% else %}
         <dt>Container</dt>
@@ -83,7 +83,7 @@ they share a row; either alone takes it.
         {% endif %}
         {% if work.services %}
         <dt>Kept running by</dt>
-          <dd>{% for job in work.services %}<code>{{ job.unit }}</code>{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd>
+          <dd>{% for job in work.services %}<code>{{ job.unit|breakable }}</code>{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd>
         {% endif %}
       </dl>
 </section>
@@ -93,9 +93,9 @@ they share a row; either alone takes it.
   <h2 id="hq-reach-heading">Reached through</h2>
   {% include "partials/_example_connection.html" with notice=True %}
   {% include "partials/_problems.html" with problems=hq.problems_in.reach|not_urgent only %}
-  <p class="muted">{{ found.connection.channel.label }} · {{ found.proof }}</p>
+  <p class="muted">{{ found.connection.channel.label|breakable }} · {{ found.proof|breakable }}</p>
   {% include "control_plane/_path_hops.html" with route=found.route label="How this page reached you" %}
-  {% for hop in found.findings %}<p class="notice notice-attention"><strong>{{ hop.label }}</strong> {{ hop.check.detail }} {{ hop.check.step }}</p>{% endfor %}
+  {% for hop in found.findings %}<p class="notice notice-attention"><strong>{{ hop.label|breakable }}</strong> {{ hop.check.detail|breakable }} {{ hop.check.step|breakable }}</p>{% endfor %}
 </section>
 {% endwith %}{% endif %}
 </div>
@@ -103,18 +103,18 @@ they share a row; either alone takes it.
 <section aria-labelledby="hq-work-heading">
   <h2 id="hq-work-heading">Jobs{% if work.jobs and work.read_at and not work.unread %} <span class="heading-aside">{% include "partials/_reading_age.html" with at=work.read_at only %}</span>{% endif %}</h2>
   {% if work.unread %}
-    <p class="muted">{{ work.unread }}</p>
+    <p class="muted">{{ work.unread|breakable }}</p>
   {% elif work.jobs %}
     {% table_region "Jobs" narrow=3 %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Unit" "identifier" local_sort=work.jobs|sortable gutter=True %}{% table_heading "Runs" "numeric" local_sort=work.jobs|sortable drop=3 %}{% table_heading "Last run" "status" local_sort=work.jobs|sortable drop=2 %}{% table_heading "Result" "status" css="key-col" local_sort=work.jobs|sortable %}{% table_heading "Next run" "status" css="optional-col" local_sort=work.jobs|sortable drop=1 %}</tr></thead>
+        <thead><tr>{% table_heading "Unit" "identifier" local_sort=work.jobs|sortable gutter=True %}{% table_heading "Runs" "identifier" local_sort=work.jobs|sortable drop=3 %}{% table_heading "Last run" "status" local_sort=work.jobs|sortable drop=2 %}{% table_heading "Result" "status" css="key-col" local_sort=work.jobs|sortable %}{% table_heading "Next run" "status" css="optional-col" local_sort=work.jobs|sortable drop=1 %}</tr></thead>
         <tbody>
           {% for job in work.jobs %}
             <tr>
-              <td class="row-gutter"><code>{{ job.unit }}</code>{% row_toggle %}</td>
-              <td>{{ job.runs }}</td>
+              <td class="row-gutter"><code>{{ job.unit|breakable }}</code>{% row_toggle %}</td>
+              <td>{% if job.runs_unit %}<code>{{ job.runs|breakable }}</code>{% else %}{{ job.runs|breakable }}{% endif %}</td>
               <td>{% if job.last_run %}{{ job.last_run|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
-              <td><span class="pill pill-{{ job.tone }}">{{ job.result }}</span></td>
+              <td><span class="pill pill-{{ job.tone }}">{{ job.result|breakable }}</span></td>
               <td class="optional-col">{% if job.next_run %}{{ job.next_run|when }}{% else %}{% empty_value %}{% endif %}</td>
             </tr>
           {% endfor %}
@@ -129,10 +129,10 @@ they share a row; either alone takes it.
         <tbody>
           {% for item in work.scheduled %}
             <tr>
-              <td class="row-gutter">{{ item.label }}{% row_toggle %}</td>
-              <td class="optional-col">{{ item.every }}</td>
+              <td class="row-gutter">{{ item.label|breakable }}{% row_toggle %}</td>
+              <td class="optional-col">{{ item.every|breakable }}</td>
               <td>{% if item.runs %}{% include "partials/_dots.html" with dots=item.runs only %}{% else %}{% empty_value %}{% endif %}</td>
-              <td><span class="pill pill-{{ item.tone }}">{{ item.result }}</span></td>
+              <td><span class="pill pill-{{ item.tone }}">{{ item.result|breakable }}</span></td>
               <td class="optional-col">{% if item.next_due %}{{ item.next_due|when }}{% else %}Now{% endif %}</td>
             </tr>
           {% endfor %}
@@ -141,7 +141,7 @@ they share a row; either alone takes it.
     {% endtable_region %}
   {% endif %}
   {% if work.renderers_unread %}
-    <p class="muted">{{ work.renderers_unread }}</p>
+    <p class="muted">{{ work.renderers_unread|breakable }}</p>
   {% elif work.renderers %}
     {% table_region "Credentials refresh" narrow=2 %}
       <table class="data-table compact-table">
@@ -149,8 +149,8 @@ they share a row; either alone takes it.
         <tbody>
           {% for item in work.renderers %}
             <tr>
-              <td class="row-gutter"><code>{{ item.name }}</code>{% row_toggle %}</td>
-              <td><span class="pill pill-{{ item.tone }}">{{ item.result }}</span></td>
+              <td class="row-gutter"><code>{{ item.name|breakable }}</code>{% row_toggle %}</td>
+              <td><span class="pill pill-{{ item.tone }}">{{ item.result|breakable }}</span></td>
               <td>{% if item.attempted %}{{ item.attempted|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
               <td>{% if item.succeeded %}{{ item.succeeded|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
             </tr>
@@ -167,23 +167,23 @@ they share a row; either alone takes it.
   {% include "partials/_problems.html" with problems=hq.problems_in.sight|not_urgent only %}
   {% comment %}A table where every row says "Never read" says one thing; it is said once.{% endcomment %}
   {% if sight.never == sight.rows|length %}
-  <p class="card">None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>
+  <p class="card">None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label|breakable }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>
   {% else %}
   {% table_region "Readings" narrow=2 %}
     <table class="data-table">
       <thead><tr>{% table_heading "Reading" local_sort=sight.rows|sortable gutter=True %}{% table_heading "State" "status" css="key-col" local_sort=sight.rows|sortable %}{% table_heading "Records" "numeric" local_sort=sight.rows|sortable drop=2 %}{% table_heading "Last read" "status" css="optional-col" local_sort=sight.rows|sortable drop=1 %}</tr></thead>
       {% for provider, rows in sight.groups %}
       <tbody>
-        <tr class="row-group"><th colspan="4" scope="rowgroup">{{ provider }} <span class="count">{{ rows|length }}</span></th></tr>
+        <tr class="row-group"><th colspan="4" scope="rowgroup">{{ provider|breakable }} <span class="count">{{ rows|length }}</span></th></tr>
         {% for row in rows %}
           <tr>
             <td class="row-gutter">
-              {{ row.label }}
-              {% if row.reasons %}<ul class="cell-notes">{% for reason in row.reasons %}<li class="muted">{{ reason }}</li>{% endfor %}</ul>{% elif row.remedy %}<br><span class="muted">{{ row.remedy }}</span>{% elif row.error and not row.read %}<br><span class="muted">{{ row.error }}</span>{% endif %}
+              {{ row.label|breakable }}
+              {% if row.reasons %}<ul class="cell-notes">{% for reason in row.reasons %}<li class="muted">{{ reason|breakable }}</li>{% endfor %}</ul>{% elif row.remedy %}<br><span class="muted">{{ row.remedy|breakable }}</span>{% elif row.error and not row.read %}<br><span class="muted">{{ row.error|breakable }}</span>{% endif %}
               {% row_toggle %}
             </td>
-            <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label }}{% else %}<strong>{{ row.state_label }}</strong>{% endif %}</td>
-            <td>{% if row.read %}{{ row.records }}{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label|breakable }}{% else %}<strong>{{ row.state_label|breakable }}</strong>{% endif %}</td>
+            <td>{% if row.read %}{{ row.records|breakable }}{% else %}{% empty_value %}{% endif %}</td>
             <td class="optional-col">{% if row.observed_at %}{{ row.observed_at|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
           </tr>
         {% endfor %}
@@ -192,7 +192,7 @@ they share a row; either alone takes it.
     </table>
   {% endtable_region %}
   {% endif %}
-  {% if sight.unconnected %}<p class="muted">Not connected: {{ sight.unconnected|join:", " }}. <a href="{% url 'control_plane:connections' %}">Connections</a></p>{% endif %}
+  {% if sight.unconnected %}<p class="muted">Not connected: {{ sight.unconnected|join:", "|breakable:"." }} <a href="{% url 'control_plane:connections' %}">Connections</a></p>{% endif %}
 </section>
 {% endif %}
 {% endwith %}

@@ -37,7 +37,6 @@ from .integrations import integration_graph
 from .moments import ago
 from .projection import read_once
 from .security import Principal
-lazy from .capabilities import capability_title
 lazy from .entity_links import entity_link
 
 # The family the controller observes on HQ's behalf. It leads every inventory
@@ -420,14 +419,8 @@ def _ability_state(
         # Named for the command it opens, not for the ability that led here.
         # Several abilities are commonly performed by one command, and a button
         # labeled with the ability lands on a page that says something else.
-        capability_action_link(
-            ability.capability,
-            ability.effect,
-            capability_title(ability.capability),
-            principal=principal,
-        )
-        if available
-        else None,
+        # A command about one record is about this connection.
+        capability_action_link(ability.capability, principal=principal, subject=instance.id) if available else None,
         evidence,
     )
 

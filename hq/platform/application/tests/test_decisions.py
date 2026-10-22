@@ -151,12 +151,14 @@ class DecisionTests(SimpleTestCase):
     def test_the_title_goes_to_the_thing_and_the_named_next_step_is_a_link(self):
         subject = asdict(ActionLink("subject", "example-host", "read", "/machines/example-host/"))
         about = decision(self.item(url="/findings/?rule=example", subject=subject))
-        backlog = decision(self.item(url="/assets/?missing=1", action="Fill them in"))
+        backlog = decision(self.item(url="/assets/?missing=1", action="Fill in details"))
         advice = decision(self.item(url="/runs/", action="Count this run as a hard session."))
 
         self.assertEqual(about["href"], "/machines/example-host/")
         self.assertEqual(backlog["href"], "/assets/?missing=1")
-        self.assertEqual([(a["label"], a["url"]) for a in backlog["actions"]], [("Fill them in", "/assets/?missing=1")])
+        self.assertEqual(
+            [(a["label"], a["url"]) for a in backlog["actions"]], [("Fill in details", "/assets/?missing=1")]
+        )
         self.assertEqual((advice["actions"], advice["advice"]), ([], "Count this run as a hard session."))
 
     def test_a_card_says_since_when_only_when_its_owner_knows(self):

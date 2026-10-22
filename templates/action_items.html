@@ -12,8 +12,8 @@
     {% for source_id, source_label in action_sources %}<option value="{{ source_id }}"{% if action_source == source_id %} selected{% endif %}>{{ source_label }}</option>{% endfor %}
   </select>
   {% if action_about %}<input type="hidden" name="about" value="{{ action_about }}">{% endif %}
-  <button class="btn" type="submit">Apply</button>
-  {% if action_query or action_status or action_source or action_about %}<a class="btn ghost" href="{% url 'action_items' %}">Clear</a>{% endif %}
+  <button class="btn" type="submit">Filter</button>
+  {% if action_query or action_status or action_source or action_about %}<a class="btn ghost" href="{% url 'action_items' %}">Clear filters</a>{% endif %}
 </form>
 
 {% comment %}
@@ -29,14 +29,14 @@ area when there is one, else that it is a list of what to do.
 {% if action_groups %}
 <section class="card action-items-card" data-triage-routes data-dismiss="{% url 'action_items_set_aside' %}" data-restore="{% url 'action_items_bring_back' %}">
   <div class="section-head">
-    <h2>{% if action_groups|length == 1 %}{{ action_groups.0.label }}{% elif action_query or action_status or action_source or action_about %}Matches{% else %}To do{% endif %} <span class="count" data-queue-count>{{ action_item_total }}</span></h2>
+    <h2>{% if action_groups|length == 1 %}{{ action_groups.0.label|breakable }}{% elif action_query or action_status or action_source or action_about %}Matches{% else %}To do{% endif %} <span class="count" data-queue-count>{{ action_item_total|breakable }}</span></h2>
     {% post_button "Dismiss all" aside_all_url css="btn compact ghost" %}
   </div>
   {% include "partials/_queue_groups.html" with groups=action_groups prefix="queue" aside_url=aside_all_url titled=action_groups|length|add:"-1" %}
 </section>
 {% elif action_query or action_status or action_source or action_about %}
   {% url 'action_items' as all_actions_url %}
-  {% include "partials/_empty_state.html" with message="Nothing matches these filters." action_url=all_actions_url action_label="Clear filters" only %}
+  {% include "partials/_empty_state.html" with message="Nothing matches." action_url=all_actions_url action_label="Clear filters" only %}
 {% else %}
   {% include "partials/_empty_state.html" with message="Nothing needs you." only %}
 {% endif %}
@@ -49,7 +49,7 @@ of it unless it reports something else.
 {% if notice_groups %}
   <section class="card action-items-card">
     <div class="section-head">
-      <h2>Notices <span class="count" data-queue-count>{{ notice_total }}</span></h2>
+      <h2>Notices <span class="count" data-queue-count>{{ notice_total|breakable }}</span></h2>
       {% post_button "Dismiss all" notices_aside_url css="btn compact ghost" %}
     </div>
     {% include "partials/_queue_groups.html" with groups=notice_groups prefix="notice" aside_url=notices_aside_url %}
@@ -58,7 +58,7 @@ of it unless it reports something else.
 
 {% if aside_groups %}
   <details class="card section-fold action-items-aside">
-    <summary><h2>Dismissed <span class="count">{{ aside_total }}</span></h2></summary>
+    <summary><h2>Dismissed <span class="count">{{ aside_total|breakable }}</span></h2></summary>
     {% include "partials/_queue_groups.html" with groups=aside_groups prefix="aside" %}
   </details>
 {% endif %}

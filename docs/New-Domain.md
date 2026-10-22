@@ -68,9 +68,11 @@ Rules that hold for every change, not a domain in particular; the class docstrin
 is the rule. `StyleContractTests` and `SharedPrimitiveStyleTests` (CSS, tokens,
 layers, spacing, color), `TemplateCommentTests` (what a `{# #}` comment left open is),
 `CognitiveComplexityTests` (score 20 per function), `FileSizeTests` (no source
-file past 1,000 lines), `CommentHistoryTests` (comments
+file past 1,000 lines), `OneDefinitionTests` (a module-level name is
+assigned once), `CommentHistoryTests` (comments
 describe the present), `AssertionPrecisionTests` (`assertEqual(a, b)`, not
-`assertTrue(a == b)`), `CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,
+`assertTrue(a == b)`), `CellMarkupTests` (a table cell is read by its text,
+never by the tag that closes it), `CountedTests` (plurals), `InterfaceTextTests` (no em dash, hand-built plural,
 nested form, `counted` phrase that cannot agree or `{# #}` comment that spans
 lines, in HQ or an extension; no
 system check reads source), `PlainWordsTests` (no word HQ keeps to itself in

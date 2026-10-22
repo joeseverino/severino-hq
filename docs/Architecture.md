@@ -142,9 +142,9 @@ now"; there is no second action catalog. Focus and dependency-trace links come
 from one canonical topology address (`action_links.topology_url`). A
 stale-controller finding derives the registered controller-refresh capability
 from its node; running it rings the credential-free doorbell, and the
-controller still pulls and decides what is due. "Read now" is that capability
+controller still pulls and decides what is due. "Refresh" is that capability
 with a subject: a stored `ReadRequest` that HQ's `sweep-due` answer turns into
-the kinds read next ([API](API.md#read-now)). Contextual command links carry a
+the kinds read next ([API](API.md#refresh)). Contextual command links carry a
 same-origin return path through Command Center's result screen.
 
 The resolution plan is domain-neutral and exported through `hq_sdk.workflows`:
@@ -270,7 +270,12 @@ storing the result. The cache is Django's database cache in the same SQLite
 file, so every process reads one copy and a value stored inside a transaction
 commits or rolls back with the rows it came from. The key is the derivation's
 name, what `vary` returns for the arguments, and the revision of every table in
-`reads`.
+`reads`, behind the cache's `KEY_PREFIX`: the identity of the running code
+(`hq.platform.application.code_identity`), a digest of the interpreter, the
+installed distributions and the source of the host and every extension. A
+value is pickled, so it is served only to the code that stored it; an edit a
+development server reloads on, or a deploy that changes any of that code,
+starts from an empty cache.
 
 **Revisions.** `core.Revision` holds one counter per table. Insert, update and
 delete triggers on every model table move it inside the writing statement, so
@@ -278,7 +283,8 @@ delete triggers on every model table move it inside the writing statement, so
 it, and a counter never commits apart from its rows.
 `hq.platform.core.revisions.install` restores the triggers after every
 `migrate` (SQLite drops them when a migration rebuilds a table), creates the
-cache table and clears it, so a value from the previous build is never read.
+cache table. A value an older build stored is never read: the cache's key
+carries the identity of the running code (`hq.platform.application.code_identity`).
 Reading the revisions also reads which triggers exist, in one statement; a
 table without its triggers has no revision, and its derivations run on every
 call.
@@ -371,7 +377,8 @@ costs nobody:
   doorbell and answers; the reading arrives through the sweep's ingest. A
   reading whose provider rations calls keeps its own clock
   (`ObservationSpec.every`): HQ tells the controller when it is due.
-  `github.profile` is the example (`observations/github.py`).
+  `github.profile` is the example (`observations/github.py`); a reading's
+  procedure is in [Derived Facts](Derived-Facts.md#readings).
 - **Long local work is a job** (`hq/domains/jobs/`): its own thread, progress
   notes, a heartbeat, one live job per kind. A project's refresh is one.
 

@@ -5,8 +5,8 @@ The answer to the policy test. The tailnet page answers it alone as its
 <div id="whatif-result" data-fragment="{% url 'control_plane:tailnet' %}" data-fragment-name="whatif">
 {% if verdict %}
   <p class="verdict">
-    <span class="pill pill-{% if not verdict.known %}unprobed{% elif verdict.allowed %}reachable{% else %}unreachable{% endif %}">{{ verdict.label }}</span>
-    {{ verdict.detail }}
+    <span class="pill pill-{% if not verdict.known %}unprobed{% elif verdict.allowed %}reachable{% else %}unreachable{% endif %}">{{ verdict.label|breakable }}</span>
+    {{ verdict.detail|breakable }}
   </p>
   {% if verdict.rules %}
     {% comment %}
@@ -20,7 +20,7 @@ The answer to the policy test. The tailnet page answers it alone as its
       <tbody>
         {% for rule in verdict.rules %}
           <tr>
-            <td>{% if rule.line %}line {{ rule.line }}{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% if rule.line %}line {{ rule.line|breakable }}{% else %}{% empty_value %}{% endif %}</td>
             <td>{% for who in rule.who %}<code>{{ who|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
             <td>{% for to in rule.to %}<code>{{ to|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
           </tr>

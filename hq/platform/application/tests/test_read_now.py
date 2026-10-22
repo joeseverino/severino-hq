@@ -1,4 +1,4 @@
-"""Read now: an operator asks for one connection, one kind or everything to be read.
+"""Refresh: an operator asks for one connection, one kind or everything to be read.
 
 The forced kinds are due on the next pull whatever the cadence says, and only
 the kinds that connection's credential reads. The request goes through the one
@@ -15,11 +15,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
+from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AuditLog
 
 from ..action_links import read_now_link, read_now_payload
 from ..cadence import forced_reads, settle_read_requests, sweep_due
-from ..capabilities import execute_capability
+from ..capabilities import capability_registry, execute_capability
 from ..credential_sight import fed_kinds
 from ..security import Capability, Principal, cli_principal
 
@@ -182,10 +183,7 @@ class WebTests(TestCase):
 
         self.assertEqual(link.method, "POST")
         self.assertEqual(ReadRequest.objects.get().connection_ref, "example-tailnet")
-        self.assertContains(
-            response,
-            "Asked the controller to read example-tailnet now; this page updates when it reports.",
-        )
+        self.assertIn(capability_registry()[link.capability].requested("example-tailnet"), text(response))
 
     def test_a_refusal_is_said_on_the_page_it_came_from(self):
         response = self.client.post(

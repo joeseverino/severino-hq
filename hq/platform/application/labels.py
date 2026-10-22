@@ -10,6 +10,21 @@ def human_label(name: str) -> str:
     return " ".join(word.upper() if word in _ACRONYMS else word.title() for word in words)
 
 
+def field_label(name: str, title: str | None = None) -> str:
+    """A field as a person names it: its declared title, else its name as a
+    sentence (``confirm_prune`` → "Confirm prune", ``dns_name`` → "DNS name").
+
+    A title Pydantic made up from the name is the name title-cased, and reads
+    as the name.
+    """
+
+    words = name.replace(".", " ").replace("_", " ").split()
+    if title and title != " ".join(word.title() for word in words):
+        return title
+    said = " ".join(word.upper() if word in _ACRONYMS else word for word in words)
+    return said[:1].upper() + said[1:]
+
+
 def lower_first(text: str) -> str:
     """A label as it reads mid-sentence, leaving an acronym alone.
 

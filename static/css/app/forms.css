@@ -1,0 +1,519 @@
+/* Forms: fields and their errors, the dropzone, the modal, and what a
+   command shows before and after it runs. */
+
+@layer components {
+
+/* ── Forms ──────────────────────────────────────────────────────── */
+
+/* A form is two columns where there is room and one where there is not, in
+   reading order, and a row's fields share its whole width: pairs sit side by
+   side, and the odd one of a run takes its row rather than leaving a hole.
+   Two, never three: a third column is where a run of four became three and a
+   stray. Anything that is not a single short field (a textarea, a group of
+   boxes, errors, the actions) takes the row. */
+/* A command's fields are the same grid, inside the card that holds its notes. */
+:is(.form, .command-fields) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-7) var(--space-10);
+  align-items: flex-start;
+}
+.form { padding: var(--surface-inset, var(--space-10)); }
+/* More than a third of the row, so no more than two fit it. */
+:is(.form, .command-fields) .field { flex: 1 1 max(18rem, 34%); min-width: min(100%, 18rem); }
+:is(.form, .command-fields) > :not(.field) { flex-basis: 100%; }
+:is(.form, .command-fields) > .field:has(textarea) { flex-basis: 100%; }
+:is(.form, .command-fields) > .field:has(> div > * + *) { flex-basis: 100%; }
+:is(.form, .command-fields) > .field { margin-bottom: 0; }
+/* A lone checkbox sits beside its label, the help under both, rather than
+   alone on a line under its own question. */
+.field:has(> input[type=checkbox]) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--space-4); }
+.field:has(> input[type=checkbox]) > input { grid-column: 1; grid-row: 1; margin: 0; }
+.field:has(> input[type=checkbox]) > label { grid-column: 2; grid-row: 1; margin: 0; }
+.field:has(> input[type=checkbox]) > :not(label, input) { grid-column: 1 / -1; }
+/* A group of boxes reads across, not one per line. */
+.field > div:has(> div input[type=checkbox], > div input[type=radio]) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); }
+.field { margin-bottom: var(--space-7); }
+/* A control inside a table cell or a row, where the gap that separates stacked
+   form fields is just a taller row. `.field` has to stay the wrapper: the
+   control styling hangs off `.field select`, so dropping it to kill the margin
+   drops the border and padding with it and the control falls back to the
+   browser's own. Same modifier convention as .kv.compact. */
+.field.compact { margin-bottom: 0; }
+.field label { display: block; font-weight: 600; margin-bottom: var(--space-2); font-size: var(--text-sm); }
+.field input, .field select, .field textarea { width: 100%; }
+.field textarea { resize: vertical; min-height: 80px; }
+/* A field that is the form's subject (a title, a note) takes the whole row. */
+.form .field.is-wide { flex-basis: 100%; }
+/* A field shown only when another's value calls for it (app.js). The wrapper
+   adds no box, so the fields inside keep their place in the grid. */
+/* A field shown only when another field's value calls for it: data-when names
+   the field ("repeat", any value) or the values ("repeat=weekly"). The
+   stylesheet reads the chosen option, so the form is laid out once, from its
+   first frame, with or without script. */
+.form [data-when] { display: contents; }
+.form:has([name="repeat"] option[value=""]:checked) [data-when="repeat"],
+.form:not(:has([name="repeat"] option[value="weekly"]:checked)) [data-when="repeat=weekly"] { display: none; }
+.help { color: var(--muted); font-size: var(--text-xs); }
+.field .help { margin: var(--space-2) 0 0; }
+.field .check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin: 0;
+  line-height: 1.4;
+}
+/* A box to tick, never a field to fill: `.field input` stretches every input
+   to the column, which would make a checkbox the width of its row and push its
+   label past the edge. */
+.field input[type=checkbox], .field input[type=radio] { width: auto; }
+.check-row input { flex: 0 0 auto; margin-top: var(--space-1); }
+.field.has-errors input, .field.has-errors textarea, .field.has-errors select { border-color: var(--danger); }
+/* Django renders errors as a plain `<ul class="errorlist">`, unstyled by
+   default. */
+.errorlist {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  color: var(--danger);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+/* Errors with no field to sit under say what was wrong with the request as a
+   whole, so they read as a notice rather than as a line under a control. */
+.form-errors {
+  margin: 0 0 var(--space-7);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+}
+.form-errors .errorlist { margin: 0; }
+.errors { color: var(--danger); margin: var(--space-2) 0 0; padding-left: var(--space-8); font-size: var(--text-sm); }
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
+.form-actions-note { font-size: var(--text-xs); }
+
+/* ── Dropzone ───────────────────────────────────────────────────────
+   The real file input covers the zone, so the click target and the drop target
+   are the control itself. That keeps the whole thing working with scripting
+   unavailable and means no hidden state can disagree with what will submit. */
+
+.field label.dropzone, .dropzone {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+  font-weight: 400;
+  margin-bottom: 0;
+  padding: var(--space-12) var(--space-9);
+  border: 1.5px dashed var(--field-line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+/* `.field label.dropzone` above is (0,2,1), so a bare `.dropzone:hover` at
+   (0,2,0) would lose to it inside a form field, which is every dropzone on a
+   form. Matched here rather than lowered there, because the base rule's
+   specificity is what makes it beat the generic `.field label` styling in the
+   first place. */
+.field label.dropzone:hover, .dropzone:hover,
+.field label.dropzone:focus-within, .dropzone:focus-within {
+  border-color: var(--accent-2); background: var(--accent-tint);
+}
+/* The input is full-bleed and `opacity: 0`, so its own ring is invisible and
+   the zone has to carry one. Without this a keyboard user tabbing onto the
+   upload control gets no indication they are on it at all. */
+.field label.dropzone:focus-within, .dropzone:focus-within {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.field label.dropzone.is-dragging, .dropzone.is-dragging {
+  border-color: var(--accent); background: var(--accent-tint);
+}
+/* Full-bleed and invisible: the input is the hit target, the text is chrome. */
+.field .dropzone input[type=file] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  padding: 0; border: 0; background: none;
+  opacity: 0; cursor: pointer;
+}
+.dropzone-title { font-weight: 600; font-size: var(--text-sm); color: var(--ink); }
+.dropzone-hint { font-size: var(--text-xs); color: var(--muted); }
+.dropzone-files {
+  list-style: none; margin: var(--space-4) 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--space-1);
+  font-size: var(--text-xs); color: var(--ink-2); font-feature-settings: "tnum";
+}
+
+/* ── Modal ──────────────────────────────────────────────────────────
+   One short task, over the page that launched it. The trigger is always a real
+   link to a page that does the same job, so this layer is never load-bearing. */
+
+.modal {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  background: var(--surface);
+  color: var(--ink);
+  width: min(520px, calc(100vw - 32px));
+}
+.modal::backdrop { background: var(--scrim); }
+.modal-panel { padding: var(--space-9) var(--space-10) var(--space-10); }
+.modal-panel:focus { outline: none; }
+.modal-head { display: flex; align-items: center; gap: var(--space-6); margin-bottom: var(--space-2); }
+.modal-head h2 { margin: 0; flex: 1; font-size: var(--text-xl); letter-spacing: -.01em; }
+.modal-close {
+  padding: 0 var(--space-3); line-height: 1; font-size: var(--text-3xl);
+  background: none; border: 0; color: var(--muted); box-shadow: none;
+}
+.modal-close:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
+.modal-lede { margin: 0 0 var(--space-7); font-size: var(--text-sm); color: var(--muted); line-height: 1.5; }
+.modal .form { background: none; border: 0; padding: 0; box-shadow: none; max-width: none; }
+
+.command-center-modal {
+  width: min(780px, calc(100vw - 28px));
+  max-height: min(760px, calc(100vh - 28px));
+}
+.command-center-modal .modal-panel { padding: var(--space-9) var(--space-9) var(--space-6); }
+.command-center-modal .modal-head { margin-bottom: var(--space-1); }
+.command-center-modal .modal-head h2 { font-size: var(--text-2xl); letter-spacing: -.02em; text-transform: none; }
+.command-center-modal .modal-lede { margin-bottom: var(--space-6); }
+.command-center-palette { display: grid; min-height: 0; }
+.command-center-query {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 0 var(--space-6);
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.command-center-query:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.command-center-query svg { fill: none; stroke: var(--muted); stroke-width: 1.8; }
+.command-center-query input[type=search] {
+  width: 100%;
+  min-height: 46px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  font-size: var(--text-lg);
+}
+.command-center-query kbd { white-space: nowrap; }
+.command-center-results {
+  min-height: 120px;
+  max-height: min(56vh, 520px);
+  margin-top: var(--space-5);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.command-center-results[aria-busy="true"] { opacity: .62; }
+.command-center-options { display: grid; gap: var(--space-5); }
+.command-center-group h3 {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: var(--muted);
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.command-center-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) 16px;
+  align-items: center;
+  gap: var(--space-5);
+  min-width: 0;
+  padding: var(--space-4) var(--space-4);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+}
+.command-center-option.is-active {
+  background: var(--accent-tint);
+  color: inherit;
+}
+.command-center-copy { display: grid; gap: var(--space-1); min-width: 0; }
+.command-center-copy > .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+}
+.command-center-title { display: flex; align-items: baseline; gap: var(--space-4); min-width: 0; }
+.command-center-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-center-title code { color: var(--muted-2); font-size: var(--text-3xs); overflow-wrap: anywhere; }
+.command-center-evidence {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.command-center-evidence .scope-chip { padding: var(--space-1) var(--space-3); font-size: var(--text-3xs); white-space: nowrap; }
+.command-center-destination { color: var(--muted); font-size: var(--text-3xs); white-space: nowrap; }
+.command-center-arrow { color: var(--muted-2); opacity: 0; transform: translateX(-3px); transition: 100ms ease; }
+.command-center-option.is-active .command-center-arrow { opacity: 1; transform: none; }
+.command-center-empty {
+  display: grid;
+  place-items: center;
+  gap: var(--space-2);
+  min-height: 120px;
+  padding: var(--space-10);
+  text-align: center;
+}
+.command-center-loading, .command-center-more { padding: var(--space-7) var(--space-4); font-size: var(--text-xs); }
+.command-center-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line-2);
+  color: var(--muted);
+  font-size: var(--text-3xs);
+}
+.command-center-footer span { white-space: nowrap; }
+.command-center-footer kbd { margin-right: var(--space-1); }
+.command-center-palette.has-active-option .command-center-enter-hint { display: none; }
+
+@media (max-width: 640px) {
+  .command-center-modal { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+  .command-center-modal .modal-panel { padding: var(--space-7) var(--space-6) var(--space-5); }
+  .command-center-option { grid-template-columns: minmax(0, 1fr) 14px; }
+  .command-center-evidence { grid-column: 1; justify-content: flex-start; overflow: hidden; }
+  .command-center-copy > .muted { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .command-center-arrow { grid-column: 2; grid-row: 1; }
+  .command-center-footer { justify-content: center; }
+  .command-center-footer span:nth-child(2) { display: none; }
+}
+
+.list-rows .row-empty { color: var(--muted); }
+
+/* Wrapped, a tag sits on its first line: an inline block's baseline is its
+   last, which a row aligned on baselines (an opened row's panel) would lift
+   over the rows above, as base.css does for an identifier. */
+.tag { display: inline-block; padding: 1px var(--space-4); margin-right: var(--space-2); background: var(--bg-tint); border-radius: 999px; font-size: var(--text-2xs); color: var(--ink-2); baseline-source: first; }
+@supports not (baseline-source: first) {
+  .tag { vertical-align: top; }
+}
+
+.search-page-form input[type=search] { flex-basis: 420px; }
+.command-center-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  align-items: start;
+  gap: var(--layout-gap);
+  margin: var(--layout-gap) 0;
+}
+.command-center-grid > * { margin: 0; min-width: 0; }
+.discovery-group > .section-head { margin-bottom: var(--space-4); }
+.discovery-list { list-style: none; margin: 0; padding: 0; }
+.discovery-list li { border-top: 1px solid var(--line); }
+.discovery-list li:first-child { border-top: 0; }
+.discovery-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-7);
+  padding: var(--space-5) 0;
+  color: inherit;
+  text-decoration: none;
+}
+a.discovery-link:hover strong { color: var(--accent); }
+.discovery-main { display: grid; gap: var(--space-1); min-width: 0; flex: 1 1 20rem; }
+.discovery-main .muted { font-size: var(--text-xs); line-height: 1.4; }
+.discovery-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex: 1 1 16rem;
+}
+.discovery-meta code { font-size: var(--text-3xs); }
+.command-hint { margin: var(--space-2) 0 0; }
+/* A key to press is said only where there are keys: not on a touch screen. */
+@media (hover: none) { .keyboard-only { display: none; } }
+.command-runner { margin: 0; max-width: 56rem; }
+/* What a command acts on, when the page was opened for one thing. */
+.command-target p { margin: 0; }
+.command-target .field-label { display: block; color: var(--muted); font-size: var(--text-xs); }
+/* The confirmation closes the form, apart from the fields it confirms. */
+.command-form > .command-confirm { margin: var(--space-8) 0 0; }
+.command-effect-note { margin: 0 0 var(--space-7); }
+.command-confirm {
+  padding: var(--space-6) var(--space-7);
+  /* A callout, like .notice: inside a surface its tint and its bar, not a frame. */
+  border: var(--surface-border, 1px solid var(--warn));
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 7%, var(--surface));
+}
+.command-result pre {
+  margin: var(--space-7) 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.command-result-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); }
+.command-result { margin-bottom: var(--layout-gap); border-left: 3px solid var(--ok); }
+.command-result .section-head { align-items: flex-start; }
+.command-result .section-head h2 { margin-bottom: 0; }
+/* The projected result: facts as a small grid, the list as a plain data table
+   with its count in the caption, and the JSON behind a disclosure below both. */
+.command-result-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: var(--space-4);
+  margin: var(--space-6) 0 0;
+}
+.command-result-facts dt { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.command-result-facts dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-weight: 600; }
+.command-result .table-scroll { margin-top: var(--space-6); }
+.command-result-table caption { caption-side: top; text-align: left; padding: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; }
+.command-result-table td { overflow-wrap: anywhere; }
+.command-result-json { margin-top: var(--space-6); }
+.command-result-json summary { cursor: pointer; }
+.command-result-json summary .muted { display: block; margin-top: var(--space-1); }
+.command-result-json pre { margin-top: var(--space-4); }
+.connection-summary {
+  display: flex;
+  gap: var(--space-4) var(--space-9);
+  flex-wrap: wrap;
+  margin: 0 0 var(--layout-gap);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.connection-summary strong { color: var(--ink); }
+.connection-summary .is-attention strong { color: var(--attn); }
+/* A line of its own size: inline after a <br>, its links would align to the
+   cell's larger line and sit above the words beside them. */
+.connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
+/* Where a connection is reached from is one line. Sized to nothing and
+   stretched to the cell, it never widens its column; its words keep their
+   length and the machine's name, a name in a context line, is cut at the
+   cell's edge (figures.css). */
+.connection-reach { display: flex; gap: .3em; width: 0; min-width: 100%; white-space: nowrap; }
+/* Its own section under the table, not a second compartment of a card around it. */
+/* How to connect each provider not yet connected: one row each, opened for its steps. */
+.connection-setup { margin-top: var(--stack-gap); }
+.setup-list { margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+.setup-list > li { border-top: 1px solid var(--line-2); }
+.setup-list summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0; cursor: pointer; }
+.setup-list details[open] { padding-bottom: var(--space-6); }
+/* Names share one edge so what each gives reads down one column; narrow, it wraps under its name. */
+.setup-list summary > strong { flex: 0 0 10rem; }
+.setup-list summary > .muted { flex: 1 1 18rem; }
+/* A family set up on its own: one line, its name under the services' names,
+   past the width of their disclosure mark and its gaps. */
+.setup-list > .setup-other { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0 var(--space-4) calc(1.05em + var(--space-1) + var(--space-5)); }
+.setup-permissions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin: var(--space-2) 0; padding: 0; list-style: none; font-size: var(--text-xs); }
+.setup-permissions code { white-space: nowrap; }
+.connection-sight,
+.connection-more-scope { margin-top: var(--space-2); }
+.connection-sight-tally { display: block; font-size: var(--text-xs); color: var(--muted); }
+/* Styled by their own class: opened, they move to the line beneath the row,
+   out of the cell they were written in. */
+.connection-sight-list,
+.cell-notes { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.connection-sight-list ul { margin: var(--space-1) 0 0; padding-left: var(--space-6); }
+.connection-sight-list > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+.connection-sight-list > li > ul { flex-basis: 100%; }
+.connection-credential-steps { font-size: var(--text-xs); }
+/* Opened beneath the row, the things it reads fill the line, row by row. */
+.row-detail .connection-sight-list { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
+/* Each reading carries its state's color, so what needs reading again shows. */
+.row-detail .connection-sight-list > li::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.row-detail .connection-sight-list > li:is(.connection-sight-partial)::before { background: var(--warn); }
+.row-detail .connection-sight-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
+.row-detail .connection-sight-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
+.row-detail .connection-sight-list > li.muted::before { content: none; }
+/* The fix is the one thing to do, so it reads as a callout, its notes
+   numbered steps at a reading width. */
+.row-detail .connection-credential-steps {
+  max-width: 72ch; padding: var(--space-3) var(--space-5); border-left: 3px solid var(--warn); border-radius: var(--radius-sm);
+  background: var(--tone-caution-tint); counter-reset: fix-step;
+}
+.row-detail .connection-credential-steps .operator-step:first-child { margin-top: 0; }
+.row-detail .connection-credential-steps .operator-step p {
+  display: grid; grid-template-columns: 1.5em minmax(0, 1fr); margin-top: var(--space-2); color: var(--ink-2);
+}
+.row-detail .connection-credential-steps .operator-step p::before { counter-increment: fix-step; content: counter(fix-step) "."; color: var(--warn); font-weight: 650; }
+/* The rest of what it reads, as chips. They sit on the opened row's tinted
+   panel, which `--accent-tint` all but matches in light, so the chip is a
+   wash of the accent over whatever is behind it: darker than the panel in
+   light, lighter in dark. */
+.row-detail .connection-ability-all > li { grid-template-columns: minmax(0, 1fr); padding: 1px var(--space-4); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.row-detail .connection-ability-all > li::before { content: none; }
+.connection-sight-state { font-weight: 600; }
+.connection-sight-refused .connection-sight-state,
+.connection-sight-unreadable .connection-sight-state,
+.connection-sight-refusal { color: var(--danger); }
+.connection-sight-refusal { margin: var(--space-2) 0 0; font-size: var(--text-xs); }
+.connection-sight-partial .connection-sight-state { color: var(--warn); }
+.connection-credential-fix { margin-top: var(--space-2); font-size: var(--text-xs); }
+.connection-credential-fix-headline { display: block; color: var(--warn); }
+.operator-step { margin-top: var(--space-2); }
+.operator-step p { margin: var(--space-1) 0 0; }
+/* A command and its copy button, which sits in its corner rather than on a
+   line of its own; the command leaves room for it. */
+.command { position: relative; width: fit-content; max-width: 100%; min-width: 0; }
+.command > .command-copy { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); min-height: 0; padding: var(--space-1) var(--space-3); font-size: var(--text-2xs); color: var(--code-ink); border-color: transparent; background: transparent; opacity: .7; }
+.command > .command-copy:is(:hover, :focus-visible) { opacity: 1; }
+.command > .operator-command { margin: 0; padding-inline-end: 4.5rem; }
+/* A command wraps rather than scrolling: selecting it copies it whole. It
+   breaks where `|breakable` lets it, a word only when nothing else fits. */
+.operator-command {
+  width: fit-content;
+  max-width: 100%;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-5);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  user-select: all;
+  font-size: var(--text-xs);
+}
+.connection-sight-never_swept .connection-sight-state,
+.connection-sight-not_connected .connection-sight-state { color: var(--muted); }
+.connection-security-advanced { margin-top: calc(var(--layout-gap) * 1.5); padding: 0; overflow: hidden; }
+.connection-security-advanced > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-9);
+  padding: var(--space-8) var(--space-9);
+}
+/* Closed, it is a status line: the disclosure's one mark (surfaces.css), the
+   title at the left, how the checks stand at the right. */
+.connection-security-advanced > summary > span:first-child { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-6); }
+.connection-security-advanced > summary strong { font-size: var(--text-lg); }
+.connection-security-advanced > summary small { color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
+.connection-trust-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-12);
+  align-items: center;
+  padding: var(--space-9);
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.connection-trust-path > :first-child { flex: 1 1 14rem; min-width: 0; }
+.connection-trust-path > :last-child { flex: 3 1 24rem; min-width: 0; }
+.connection-trust-path h3 { margin: var(--space-1) 0 var(--space-2); font-size: var(--text-lg); }
+.connection-trust-path p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+
+}

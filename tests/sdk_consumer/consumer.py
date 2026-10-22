@@ -12,7 +12,20 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, assert_type
 
-from hq_sdk import capabilities, demo, jobs, money, outbound, pages, reads, resources, site, tables, testing
+from hq_sdk import (
+    capabilities,
+    demo,
+    jobs,
+    money,
+    outbound,
+    pages,
+    reads,
+    resources,
+    site,
+    tables,
+    testing,
+    workflows,
+)
 
 
 def the_clock(moment: datetime) -> None:
@@ -109,6 +122,24 @@ def as_someone(principal: capabilities.Principal) -> None:
     capabilities.execute_capability("example.do", ["x"], principal=principal)  # type: ignore[arg-type]
 
 
+def looking_up(progress: jobs.Progress, *, subject: str, principal: capabilities.Principal) -> dict[str, Any]:
+    return {}
+
+
+def declared_words(spec: capabilities.CapabilitySpec) -> None:
+    # What a command's button and toast say is read from its declaration.
+    lookup = outbound.OutboundWork(
+        "example.lookup", "Look up a note", "Ask.", "example.write", looking_up, verb="Look up"
+    )
+    assert_type(lookup.words, str)
+    assert_type(spec.words(), str)
+    assert_type(spec.words("all"), str)
+    assert_type(spec.requested("example"), str)
+
+    outbound.ask("example.lookup", label="Look")  # type: ignore[call-arg]
+    spec.words(1)  # type: ignore[arg-type]
+
+
 def a_page() -> None:
     assert_type(pages.page_context("Example"), dict[str, pages.Page])
     assert_type(pages.PageAction("Open", "/example/", primary=True).css, str)
@@ -117,6 +148,14 @@ def a_page() -> None:
     pages.page_context("Example", actions=["Open"])  # type: ignore[list-item]
     assert_type(pages.page_context("Example", reads=("example.things",)), dict[str, pages.Page])
     pages.page_context("Example", reads=1)  # type: ignore[arg-type]
+
+
+def a_refused_action() -> None:
+    # A link the command would refuse now says why, and is drawn unusable.
+    link = workflows.ActionLink("run", "Run", "remote_write", "/run/", refusal="Not now.")
+    assert_type(link.refusal, str)
+
+    workflows.ActionLink("run", "Run", "remote_write", "/run/", refusal=True)  # type: ignore[arg-type]
 
 
 def a_page_lead(page: pages.Page) -> None:

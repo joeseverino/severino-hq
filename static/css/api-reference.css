@@ -1,10 +1,10 @@
 /* The API reference (/api/docs/): the vendored viewer, drawn in HQ's terms.
 
    The viewer reads its look from `--scalar-*` custom properties and keeps its
-   own rules in cascade layers it declares after app.css's, so they outrank
+   own rules in cascade layers it declares after HQ's, so they outrank
    every layered HQ rule. This sheet is unlayered, which outranks both, and
    is loaded by this page only. It holds no color, size or face of its own:
-   every value is an app.css token, and each color token already carries its
+   every value is an HQ token, and each color token already carries its
    light and dark halves, so the reference follows `color-scheme` with the
    rest of the page and needs no second palette. */
 

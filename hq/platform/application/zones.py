@@ -24,7 +24,8 @@ definition: a challenge record that outlived its issuance, and a CAA record that
 forbids the authority HQ renews with.
 """
 
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, replace
 from functools import cached_property
 from typing import Any
 
@@ -49,6 +50,7 @@ from .ui import ListRow
 lazy from . import adoption, plugins
 lazy from .facts import snapshots_of
 lazy from .projection import read_once
+lazy from .resource_context import shared_names, value_summary
 
 RECORD_KIND = DNS_RECORD_KIND
 
@@ -98,6 +100,10 @@ class ZoneRecord:
     token: str = ""
     # Unmanaged and read through a connection that only observes.
     observed_only: bool = False
+    # Its value in a line, where another record in its table has the same
+    # name and type, so a row that has lost its Value column still says
+    # which one it is (``told_apart``).
+    summary: str = ""
 
     @property
     def managed(self) -> bool:
@@ -162,6 +168,20 @@ class ZoneRecord:
         if not self.declares_service:
             return ""
         return entity_link("service", normalized_hostname(self.name)).url
+
+
+def told_apart(records: Iterable[ZoneRecord]) -> tuple[ZoneRecord, ...]:
+    """One table's records, each that shares its name and type with another
+    carrying the value that tells them apart (two MX records on one name)."""
+
+    rows = tuple(records)
+    shared = shared_names((record.name, record.record_type) for record in rows)
+    return tuple(
+        replace(record, summary=value_summary(record.value, record.name))
+        if (record.name, record.record_type) in shared
+        else record
+        for record in rows
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,13 +313,13 @@ class Zone:
     def routing(self) -> tuple[ZoneRecord, ...]:
         """Where traffic goes. The question a domain is usually opened to answer."""
 
-        return tuple(record for record in self.listed if not record.secondary)
+        return told_apart(record for record in self.listed if not record.secondary)
 
     @property
     def policy(self) -> tuple[ZoneRecord, ...]:
         """Verification strings and issuance rules, folded away by default."""
 
-        return tuple(record for record in self.listed if record.secondary)
+        return told_apart(record for record in self.listed if record.secondary)
 
     @property
     def cards(self) -> tuple[ZoneInsight, ...]:

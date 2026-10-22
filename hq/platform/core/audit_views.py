@@ -9,6 +9,7 @@ lazy from django.utils import timezone
 
 from hq.platform.application import approvals, history
 from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.payload_words import STEP, path_words, value_words
 from hq.platform.application.projection import day_span, projection_scope
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 lazy from hq.platform.application.approvals import AUDIT_LABELS, awaiting_ids
@@ -39,10 +40,10 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     # The Message column is prose, so what a row names gets what it leaves.
     table_room = "shared"
     table_columns = (
-        TableColumn("When", "created_at", "Oldest event", "Newest event"),
+        TableColumn("What", "object_type", "Type A–Z", "Type Z–A"),
+        TableColumn("When", "created_at", "Oldest event", "Newest event", css="date-col key-col"),
         TableColumn("Who", "user__username", "User A–Z", "User Z–A", css="optional-col"),
         TableColumn("Action", "action", "Action A–Z", "Action Z–A"),
-        TableColumn("What", "object_type", "Type A–Z", "Type Z–A", css="key-col"),
         TableColumn("Message", "message", "Message A–Z", "Message Z–A"),
     )
     table_default_sort = "-created_at"
@@ -170,6 +171,26 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         return self.request.GET.get("awaiting") == "1"
 
 
+def _change_rows(changes: dict) -> list[dict]:
+    """Field-level changes, as rows rather than as a blob of JSON.
+
+    A plain field is stored as its pair of values; a record or list as the
+    values in it that moved, each already in words, by where it is.
+    """
+
+    rows = []
+    for field, change in changes.items():
+        named = path_words((field,))
+        if isinstance(change, dict):
+            rows.extend(
+                {"field": f"{named}{STEP}{inner}" if inner else named, "before": pair[0], "after": pair[1]}
+                for inner, pair in change.items()
+            )
+        elif isinstance(change, list) and len(change) == 2:
+            rows.append({"field": named, "before": value_words(change[0]), "after": value_words(change[1])})
+    return rows
+
+
 class AuditLogDetailView(PageMixin, DetailView):
     """One event, in full, and what sits either side of it.
 
@@ -208,15 +229,11 @@ class AuditLogDetailView(PageMixin, DetailView):
         context = super().get_context_data(**kwargs)
         event = self.object
 
-        # Field-level changes, as rows rather than as a blob of JSON.
-        changes = event.metadata.get("changes") or {}
-        context["changes"] = [
-            {"field": field, "before": pair[0], "after": pair[1]}
-            for field, pair in sorted(changes.items())
-            if isinstance(pair, list) and len(pair) == 2
-        ]
+        context["changes"] = _change_rows(event.metadata.get("changes") or {})
         # Everything else in the metadata, minus what is already rendered.
-        context["extra"] = {key: value for key, value in sorted(event.metadata.items()) if key != "changes"}
+        context["extra"] = {
+            path_words((key,)): value_words(value) for key, value in sorted(event.metadata.items()) if key != "changes"
+        }
 
         # The rest of the same operation: what `operation_id` is for. One
         # action can touch many rows, and matching them up by timestamp alone

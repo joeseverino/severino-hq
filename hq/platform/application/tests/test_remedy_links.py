@@ -28,7 +28,7 @@ from ..paths import routed_names
 from ..projection import MAX_PAGE_SIZE, projection_scope
 from ..security import web_principal
 from ..topology import derive_topology
-from .markup import elements, texts
+from .markup import all_elements, elements, text, texts
 from .test_approvals import POLICY_KEY, declare_policy
 from .test_finding_fixes import document
 from .test_paths import PUBLIC_RANGE, estate, record, store
@@ -92,7 +92,7 @@ class EveryTargetedCommandPreselectsTests(TestCase):
     def test_a_target_the_command_does_not_act_on_is_said_not_silently_dropped(self):
         response = self.client.get(command_url("tailnet.policy.remove_empty_groups", "no-such-thing"))
 
-        self.assertContains(response, f"no-such-thing {UNOFFERED}")
+        self.assertIn(f"no-such-thing {UNOFFERED}", text(response))
 
 
 def _command_links(links) -> list[tuple[str, str]]:
@@ -183,20 +183,24 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
                     links += [(action["label"], action["url"], action["method"]) for action in step.get("actions", ())]
         return links + self.rendered()
 
-    def rendered(self) -> list[tuple[str, str, str]]:
-        """Every command link the pages themselves render, as a person meets them."""
+    def pages(self) -> list[str]:
+        """The pages that draw what findings and the queue offer."""
 
-        pages = [
+        return [
             reverse("control_plane:findings"),
             reverse("action_items"),
             *(reverse("control_plane:service", args=[name]) for name in routed_names()),
             *(resource.get_absolute_url() for resource in ManagedResource.objects.all()),
         ]
+
+    def rendered(self) -> list[tuple[str, str, str]]:
+        """Every command link the pages themselves render, as a person meets them."""
+
         found = []
-        for page in pages:
+        for page in self.pages():
             body = self.client.get(page).content.decode()
             for label_url in re.finditer(r'<a [^>]*href="(/commands/[^"]+)"[^>]*>(.*?)</a>', body, re.DOTALL):
-                url, label = unescape(label_url.group(1)), re.sub(r"<[^>]+>|\s+", " ", label_url.group(2)).strip()
+                url, label = unescape(label_url.group(1)), " ".join(re.sub(r"<[^>]+>", "", label_url.group(2)).split())
                 found.append((label, url, "GET"))
         return found
 
@@ -209,6 +213,33 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         self.assertIn("Keep the live version", labels)
         self.assertIn("Remove empty groups", labels)
         self.assertIn("Change what HQ expects", labels)
+
+    def test_no_page_offers_a_way_to_itself(self):
+        # The fixture is only worth something while a page it draws is one a
+        # remedy names as the way to it.
+        offered = {urlsplit(url).path for _label, url, _method in self.emitted()}
+        self.assertTrue(offered & set(self.pages()))
+        for page in self.pages():
+            with self.subTest(page=page):
+                # A control is a page action or a remedy; the view's own
+                # address, its query too, is its state and never one of them.
+                controls = [
+                    link.attrs["href"] for link in elements(self.client.get(page), "a") if "btn" in link.classes
+                ]
+                self.assertNotIn(page, controls)
+
+    def test_a_box_of_remedies_holds_a_control(self):
+        # A remedy left out because it leads to the page it is drawn on takes
+        # its box with it, never an empty band where controls would be.
+        boxes = 0
+        for page in self.pages():
+            drawn = all_elements(self.client.get(page))
+            held = {id(box) for box in drawn if "attention-actions" in box.classes}
+            boxes += len(held)
+            filled = {id(ancestor) for element in drawn if "btn" in element.classes for ancestor in element.ancestors}
+            with self.subTest(page=page):
+                self.assertLessEqual(held, filled)
+        self.assertTrue(boxes)
 
     def test_every_command_remedy_opens_with_its_target_chosen_and_no_trap(self):
         followed = _command_links(self.emitted())

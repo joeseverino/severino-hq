@@ -16,8 +16,8 @@ from typing import Any
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.routes import reverse
 
-from .action_links import command_url
-from .containers import VULNERABLE, Container, Standing, containers
+from .action_links import command_action, command_url
+from .containers import VULNERABLE, Container, ImageStanding, containers
 from .exposure import LEVELS, OPEN, UNKNOWN, UNROUTED, exposure_of_container, status_at, worse
 from .finding_model import on_machine
 from .images import version
@@ -36,7 +36,7 @@ MOST_ACTIONS = 8
 
 
 def attention() -> tuple[Insight, ...]:
-    seen: dict[str, tuple[Standing, list[Container]]] = {}
+    seen: dict[str, tuple[ImageStanding, list[Container]]] = {}
     for item in containers():
         seen.setdefault(item.standing.label, (item.standing, []))[1].append(item)
     items = []
@@ -71,7 +71,7 @@ def attention() -> tuple[Insight, ...]:
     return tuple(items)
 
 
-def needs_you(standing: Standing, running: list[Container]) -> bool:
+def needs_you(standing: ImageStanding, running: list[Container]) -> bool:
     """Whether a version asks something of you: a newer release to move to, or,
     with none, the internet may reach it. Otherwise its page says what is
     known and there is nothing to do yet."""
@@ -132,7 +132,7 @@ def _sets_image(files: tuple[str, ...]) -> str:
     return next((path for path in files if path.rsplit("/", 1)[-1] in OVERRIDES), files[0])
 
 
-def _advisory(label: str, standing: Standing, running: list[Container]) -> Insight:
+def _advisory(label: str, standing: ImageStanding, running: list[Container]) -> Insight:
     """One upgrade however many advisories; none yet if no release fixes them."""
 
     where = ", ".join(sorted({f"{item.running.name} on {item.machine.name}" for item in running}))
@@ -298,18 +298,17 @@ def socket_holder_link(item: Container) -> ActionLink:
     """The update of its declaration, where ``holds_docker_socket`` is set."""
 
     key = item.running.watcher
-    return ActionLink(
+    return command_action(
         "mark-socket-holder",
-        f"Mark {item.running.name} as meant to control Docker",
-        "remote_write",
+        UPDATE_CAPABILITY,
         command_url(UPDATE_CAPABILITY, key),
-        capability=UPDATE_CAPABILITY,
         target=key,
+        intent=f"Mark {item.running.name} as meant to control Docker",
         reason="This container is meant to control Docker. Stop warning about it.",
     )
 
 
-def _fixed_in(standing: Standing) -> str:
+def _fixed_in(standing: ImageStanding) -> str:
     fixes = {
         patched.strip()
         for advisory in standing.advisories

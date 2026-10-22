@@ -10,7 +10,7 @@
   ],
   "ignorePaths": ["**/node_modules/**"],
   "schedule": ["* * * * 1"],
-  "minimumReleaseAge": "14 days",
+  "minimumReleaseAge": "7 days",
   "prConcurrentLimit": 3,
   "labels": ["dependencies"],
   "automerge": false,
@@ -27,6 +27,11 @@
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
+      "description": "Stable libraries release slowly, so only two years without a release reads as abandoned.",
+      "matchPackageNames": ["*"],
+      "abandonmentThreshold": "2 years"
+    },
+    {
       "description": "Everything short of a major moves together, digests included, so a week's updates are one pull request.",
       "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
       "groupName": "dependencies",
@@ -34,22 +39,25 @@
     },
     {
       "description": "A new Python or Go minor is a new language version that the matrix, the target versions and go.mod move with, so it comes on its own like a major.",
-      "matchPackageNames": ["python", "golang", "go"],
+      "matchPackageNames": ["python", "go"],
       "matchUpdateTypes": ["minor"],
       "groupName": "{{depName}} {{newMajor}}.{{newMinor}}",
       "groupSlug": "{{depName}}-{{newMajor}}.{{newMinor}}"
     },
     {
+      "description": "Go's patch releases are its security releases, and OSV sees the standard library only through a go.mod toolchain line, so a Go patch opens at once. mise.toml is Go's one pin: the images install it from mise.lock.",
+      "matchManagers": ["mise"],
+      "matchDepNames": ["go"],
+      "matchUpdateTypes": ["patch"],
+      "minimumReleaseAge": "0 days",
+      "schedule": ["at any time"],
+      "groupName": "go patch",
+      "groupSlug": "go-patch"
+    },
+    {
       "description": "requires-python, engines and the go directive say what the project supports, not what it runs, so they stay ranges.",
       "matchDepTypes": ["requires-python", "engines", "golang"],
       "rangeStrategy": "auto"
-    },
-    {
-      "description": "uv's mise pin and the images' uv move in one pull request; checks:toolchain fails while they differ.",
-      "matchDepNames": ["uv", "ghcr.io/astral-sh/uv"],
-      "matchUpdateTypes": ["major"],
-      "groupName": "uv {{newMajor}}",
-      "groupSlug": "uv-{{newMajor}}"
     },
     {
       "description": "mise records a github: tool's version without the tag's leading v.",
@@ -72,11 +80,16 @@
         "fileFilters": ["static/vendor/scalar/**"],
         "executionMode": "update"
       }
+    },
+    {
+      "description": "Playwright and the image the browser jobs run in move as one update: a test holds them to one version.",
+      "matchPackageNames": ["playwright", "mcr.microsoft.com/playwright/python"],
+      "groupName": "playwright"
     }
   ],
   "customManagers": [
     {
-      "description": "The mise release CI installs, which min_version decides; mise's own manager reads only the tools.",
+      "description": "The mise release CI and the image builds install, which min_version decides; mise's own manager reads only the tools.",
       "customType": "regex",
       "managerFilePatterns": ["/^mise\\.toml$/"],
       "matchStrings": ["min_version = \"(?<currentValue>[^\"]+)\""],
@@ -124,6 +137,14 @@
       "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/renovate\\.yml$/"],
       "matchStrings": ["renovate-image: (?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})"],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "description": "The Renovate image the host runs for every opted-in repository, by version and digest.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^deploy/renovate/image$/"],
+      "matchStrings": ["^(?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})"],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
     }

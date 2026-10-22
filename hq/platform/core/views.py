@@ -377,7 +377,7 @@ class ApprovalEntryView(View):
         return redirect("core:audit_detail", pk=event.pk)
 
 
-class ConnectionView(PageMixin, TemplateView):
+class ConnectionPageView(PageMixin, TemplateView):
     """Why this request was allowed to arrive, layer by layer.
 
     A page rather than only a dialog, for the same reason every other dialog

@@ -26,9 +26,9 @@ drawn when nothing is open.
   <li class="problem-line">
     {% include "partials/_urgency_pill.html" with item=item only %}
     <p>
-      <strong>{{ item.label }}</strong>{% if item.detail %} {{ item.detail }}{% endif %}{% if item.advice %} <span class="muted">{{ item.advice }}</span>{% endif %}{% if item.reason %} <span class="muted">{{ item.reason }}</span>{% endif %}
+      <strong>{{ item.label|breakable }}</strong>{% if item.detail %} {{ item.detail|breakable }}{% endif %}{% if item.advice %} <span class="muted">{{ item.advice|breakable }}</span>{% endif %}{% if item.reason %} <span class="muted">{{ item.reason|breakable }}</span>{% endif %}
     </p>
-    {% if item.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=item.actions only %}</div>{% endif %}
+    {% remedies item.actions as shown %}{% if shown %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=shown only %}</div>{% endif %}
     {% include "partials/_resolution_workflow.html" with steps=item.steps fold=item.steps_fold label=item.label only %}
   </li>
   {% endwith %}{% endfor %}

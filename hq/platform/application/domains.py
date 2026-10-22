@@ -90,7 +90,8 @@ class Records:
     on_delete: str = ""
     # The records any reader may count; every row when empty.
     visible: str = ""
-    # (verb, summary, label) where the derived wording would say less than it should.
+    # (verb, summary, label) where the derived wording would say less than it
+    # should; an empty one keeps the derived.
     wording: tuple[tuple[str, str, str], ...] = ()
 
     @property
@@ -215,6 +216,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             # failing default branch, a serious alert, a lapsing admission.
             # Decisions, not the portfolio's shape, which is why it is here.
             attention=_provider("hq.platform.application.github_posture:build_attention"),
+            outbound=_provider("hq.platform.application.projects:outbound_work"),
         ),
         apps=("hq.domains.projects",),
         mounts=(Mount("projects/", "hq.domains.projects.urls"),),
@@ -353,7 +355,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             lookup="pk",
             command="hq.platform.application.expenses:ExpenseCommand",
             save="hq.platform.application.expenses:save_expense",
-            wording=(("create", "Create an HQ expense.", "Record expense"),),
+            wording=(("create", "", "Record expense"),),
         ),
     ),
     DomainDescriptor(
@@ -708,7 +710,7 @@ def composition() -> tuple[tuple[str, str, str], ...]:
 
 
 def host_specs(kind: str) -> tuple[Any, ...]:
-    """What the host's domains declare of one kind: connections, capabilities, resources.
+    """What the host's domains declare of one kind: connections, capabilities, resources, outbound work.
 
     Extensions cross a separate admission boundary and continue through the
     plugin registry. Host domains use the same late-bound provider shape, so a

@@ -1,8 +1,8 @@
 {% comment %}
 What a list of costs adds up to, between its toolbar and its table. `totals`
 is application.expenses.CostTotals; a list with nothing to add up says nothing.
-`by_category` are application.expenses.CategoryTotal, each a link to the list
-narrowed to it.
+`by_category` are the figures each category adds up to, each a link to the
+list narrowed to it.
 {% endcomment %}
 {% if totals %}<p class="muted">{% if totals.narrowed %}Matching: {% else %}Total {% endif %}<strong>{{ totals.total|money }}</strong>{% if totals.narrowed %} total{% endif %} · deductible (est.) <strong>{{ totals.deductible|money }}</strong></p>{% endif %}
-{% if by_category %}<nav class="window-switch" aria-label="Totals by category">{% for row in by_category %}<a class="chip" href="{{ row.url }}">{{ row.label }} <strong>{{ row.total|money }}</strong></a>{% endfor %}</nav>{% endif %}
+{% if by_category %}{% include "partials/_kpi_grid.html" with items=by_category label="Totals by category" only %}{% endif %}

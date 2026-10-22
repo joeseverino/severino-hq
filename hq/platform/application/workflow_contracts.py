@@ -5,7 +5,12 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class ActionLink:
-    """One safe route from observed state to an existing HQ use case."""
+    """One safe route from observed state to an existing HQ use case.
+
+    ``refusal`` is why the command would be refused if it were asked for now,
+    in its own words: the link is drawn unusable with it, never offered as a
+    press that fails.
+    """
 
     name: str
     label: str
@@ -16,6 +21,7 @@ class ActionLink:
     target: str = ""
     reason: str = ""
     recommended: bool = False
+    refusal: str = ""
 
 
 @dataclass(frozen=True, slots=True)

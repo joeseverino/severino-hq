@@ -33,6 +33,8 @@ from unittest import mock
 
 lazy from django.utils import timezone
 
+lazy from hq.platform.core.stylesheets import stylesheet
+
 from .plugins import (
     DERIVED_PROVIDERS,
     PLUGIN_API_VERSION,
@@ -88,12 +90,7 @@ def undefined_style_classes(template_root: str | Path) -> list[str]:
 
     Returns sorted "template.html: .name" strings so a failure names the file.
     """
-    css = Path(__file__).resolve().parents[3] / "static" / "css" / "app.css"
-    defined = {
-        name
-        for selector in stylesheet_selectors(css.read_text(encoding="utf-8"))
-        for name in selector_classes(selector)
-    }
+    defined = {name for selector in stylesheet_selectors(stylesheet()) for name in selector_classes(selector)}
     offenders = set()
     for template in sorted(Path(template_root).rglob("*.html")):
         text = template.read_text(encoding="utf-8")

@@ -42,7 +42,7 @@ class ReadingLine:
 
 
 @dataclass(frozen=True, slots=True)
-class Facet:
+class ServiceFacet:
     """One thing that has to be true for a hostname to answer, and whether it is."""
 
     id: str

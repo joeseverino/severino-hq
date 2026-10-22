@@ -21,19 +21,19 @@ communicated by color alone.
   {% for item in items %}
     <article class="insight-card">
       <div class="insight-head">
-        {% if item.eyebrow %}<span class="pill pill-{{ item.status|default:'neutral' }}">{{ item.eyebrow }}</span>{% endif %}
-        {% if item.value %}<strong class="insight-value">{{ item.value }}</strong>{% endif %}
+        {% if item.eyebrow %}<span class="pill pill-{{ item.status|default:'neutral' }}">{{ item.eyebrow|breakable }}</span>{% endif %}
+        {% if item.value %}<strong class="insight-value">{{ item.value|breakable }}</strong>{% endif %}
       </div>
       <h3 class="insight-title">
-        {% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+        {% if item.url %}<a href="{{ item.url }}">{{ item.title|breakable }}</a>{% else %}{{ item.title|breakable }}{% endif %}
       </h3>
-      {% if item.body %}<p class="insight-body">{{ item.body }}</p>{% endif %}
-      {% if item.action %}<p class="insight-action">{{ item.action }}</p>{% endif %}
+      {% if item.body %}<p class="insight-body">{{ item.body|breakable }}</p>{% endif %}
+      {% if item.action %}<p class="insight-action">{{ item.action|breakable }}</p>{% endif %}
       {% if item.workflow %}{% with parts=item.workflow|workflow_parts %}
         {% include "partials/_resolution_workflow.html" with steps=parts.steps fold=parts.fold label=item.title only %}
-        {% if parts.reason %}<p class="attention-reason">{{ parts.reason }}</p>{% endif %}
+        {% if parts.reason %}<p class="attention-reason">{{ parts.reason|breakable }}</p>{% endif %}
       {% endwith %}{% endif %}
-      {% if item.actions %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=item.actions only %}</div>{% endif %}
+      {% remedies item.actions as shown %}{% if shown %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=shown only %}</div>{% endif %}
     </article>
   {% endfor %}
 </section>

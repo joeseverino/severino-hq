@@ -30,7 +30,8 @@ const DriftUnit = "severino-hq-script-drift.service"
 // Checker is the deploy host's half of a preflight: run there by the
 // operator's own account from a build of the release being checked, so what
 // is checked is what that release needs. Read-only: it changes nothing, and
-// prints verdicts, never file contents or sudo rules. Its sudo never prompts.
+// prints verdicts, never file contents, and of sudo's rules only a command
+// it fails. Its sudo never prompts.
 type Checker struct {
 	// Lib and Systemd are where the tree and the units are installed.
 	Lib, Systemd string
@@ -61,10 +62,16 @@ func (c *Checker) unknown(format string, args ...any) {
 	c.unverified = true
 }
 
+// skip is a fact the check cannot read whose absence no release depends on.
+func (c *Checker) skip(format string, args ...any) {
+	fmt.Fprintf(c.Out, "skip    "+format+"\n", args...)
+}
+
 // Check runs every check and returns the exit it adds up to.
 func (c *Checker) Check(ctx context.Context) int {
 	c.runner(ctx)
 	c.verified(ctx)
+	c.egress(ctx)
 	c.rootsAlone(hostRelative)
 	c.units()
 	c.room()
@@ -118,6 +125,56 @@ func (c *Checker) runner(ctx context.Context) {
 	default:
 		c.bad("%s has no NOPASSWD sudo rule for %s", user, deploy)
 	}
+	if err == nil {
+		c.onlyRendered(user, rules)
+	}
+}
+
+// onlyRendered: every command sudo lists for the runner is one HQ renders a
+// rule for. sudo-rs resolves the aliases, groups and includes, and names no
+// rule's source, so a failure says how to find it.
+func (c *Checker) onlyRendered(user, rules string) {
+	program := filepath.Join(c.Lib, hostRelative)
+	rendered := []string{program + " deploy *", program + " upgrade *"}
+	commands, found := listedCommands(rules)
+	if !found {
+		c.unknown("sudo's listing of %s's rules has no list of commands", user)
+		return
+	}
+	extra := false
+	for _, command := range commands {
+		if !slices.Contains(rendered, command) {
+			c.bad("%s may run %s through sudo, which HQ does not render; 'sudo grep -rn %s /etc/sudoers /etc/sudoers.d' there finds the rule", user, command, user)
+			extra = true
+		}
+	}
+	if !extra {
+		c.ok("%s may run nothing through sudo that HQ does not render", user)
+	}
+}
+
+var sudoTags = regexp.MustCompile(`^(?:[A-Z_]+:\s*|[A-Z_]+=\S+\s+)*`)
+
+// listedCommands are the commands `sudo -l -U` lists, each with its spacing
+// collapsed: an entry is `(runas) TAGS: command, command`, aliases expanded.
+func listedCommands(rules string) (commands []string, found bool) {
+	_, entries, found := strings.Cut(rules, "may run the following commands")
+	if !found {
+		return nil, false
+	}
+	_, entries, _ = strings.Cut(entries, "\n")
+	for line := range strings.SplitSeq(entries, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "(") {
+			_, line, _ = strings.Cut(line, ")")
+		}
+		for command := range strings.SplitSeq(line, ", ") {
+			if command = strings.Join(strings.Fields(sudoTags.ReplaceAllString(strings.TrimSpace(command), "")), " "); command != "" {
+				commands = append(commands, command)
+			}
+		}
+	}
+	return commands, true
 }
 
 // verified: the host is the release it runs, the tree, the units and nothing
@@ -183,6 +240,31 @@ func (c *Checker) lastVerify(ctx context.Context, since int64) string {
 		return "success"
 	}
 	return "failure"
+}
+
+// egress: the Renovate container's egress table, where loaded, is the one
+// hq-host renders. Each run loads it before it starts and refuses to start
+// without it, so an absent table (a firewall reload flushes it) is waiting for
+// the next run, and only a different one is a fault.
+func (c *Checker) egress(ctx context.Context) {
+	tables, err := c.output(ctx, "sudo", "-n", "nft", "list", "tables")
+	if err != nil {
+		c.skip("the Renovate egress table cannot be read without root here; each run refuses to start without it")
+		return
+	}
+	if !slices.Contains(strings.Split(tables, "\n"), "table inet "+EgressTable) {
+		c.ok("the Renovate egress table is not loaded; each run loads it before it starts")
+		return
+	}
+	listed, err := c.output(ctx, "sudo", "-n", "nft", "list", "table", "inet", EgressTable)
+	switch {
+	case err != nil:
+		c.bad("the Renovate egress table %s cannot be listed", EgressTable)
+	case !sameRules(listed, EgressRules()):
+		c.bad("the Renovate egress table %s is not the one hq-host renders; 'sudo nft list table inet %s' there shows it, and the next run replaces it", EgressTable, EgressTable)
+	default:
+		c.ok("the Renovate egress table is the one hq-host renders")
+	}
 }
 
 // rootsAlone: a program a sudo rule runs as root is root's, and so is every

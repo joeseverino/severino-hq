@@ -23,7 +23,7 @@ opening a day ask this page for the `calendar` part and take it in place.
     {% if day %}
       <section class="card day-panel" id="day-panel" aria-labelledby="day-panel-title">
         <div class="section-head">
-          <h2 id="day-panel-title">{% if day.day == day.today %}Today{% else %}{{ day.day|date:"l" }}{% endif %} <span class="muted">{{ day.day|date:"M j" }}</span></h2>
+          <h2 id="day-panel-title">{% if day.day == day.today %}Today{% else %}{{ day.day|date:"l" }}{% endif %} <span class="muted">{{ day.day|when:"day" }}</span></h2>
           <nav class="calendar-nav" aria-label="Change day">
             <a href="?month={{ day.previous|date:'Y-m' }}&amp;day={{ day.previous|date:'Y-m-d' }}" rel="prev" aria-label="Previous day">&lsaquo;</a>
             <a href="?month={{ day.next|date:'Y-m' }}&amp;day={{ day.next|date:'Y-m-d' }}" rel="next" aria-label="Next day">&rsaquo;</a>
@@ -32,22 +32,22 @@ opening a day ask this page for the `calendar` part and take it in place.
         </div>
         {% if entry %}
           <article class="day-panel-entry" aria-label="{{ entry.object.title }}">
-            <h3>{{ entry.object.title }}</h3>
-            <p class="day-panel-when">{{ entry.when }}</p>
-            {% if entry.object.location or entry.repeat %}<p class="muted">{% if entry.object.location %}{{ entry.object.location }}{% endif %}{% if entry.object.location and entry.repeat %} · {% endif %}{{ entry.repeat }}</p>{% endif %}
-            {% if entry.about %}<p class="muted">About {{ entry.about.kind_label|lower }} {% entity entry.about %}</p>{% endif %}
-            {% if entry.next %}<p class="muted">Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|date:"M j" }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}
-            {% if entry.object.notes %}<p>{{ entry.object.notes|linebreaksbr }}</p>{% endif %}
+            <h3>{{ entry.object.title|breakable }}</h3>
+            <p class="day-panel-when">{{ entry.when|breakable }}</p>
+            {% if entry.object.location or entry.repeat %}<p class="muted">{% if entry.object.location %}{{ entry.object.location|breakable }}{% endif %}{% if entry.object.location and entry.repeat %} · {% endif %}{{ entry.repeat|breakable }}</p>{% endif %}
+            {% if entry.about %}<p class="muted">About {{ entry.about.kind_label|lower|breakable }} {% entity entry.about %}</p>{% endif %}
+            {% if entry.next %}<p class="muted">Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|when:"day" }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+            {% if entry.object.notes %}<p>{{ entry.object.notes|breakable|linebreaksbr }}</p>{% endif %}
             <p class="page-actions">{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}</p>
           </article>
         {% endif %}
         {% for source, rows in day_groups %}
-          <h3 class="day-panel-source"><i class="calendar-swatch series-{{ source.slot }}" aria-hidden="true"></i>{{ source.label }}</h3>
+          <h3 class="day-panel-source"><i class="calendar-swatch series-{{ source.slot }}" aria-hidden="true"></i>{{ source.label|breakable }}</h3>
           {% include "partials/_record_list.html" with rows=rows label=source.label %}
         {% empty %}
           {% if not entry %}<p class="muted">Nothing on this day.</p>{% endif %}
         {% endfor %}
-        <p><a href="{{ new_entry_url }}?on={{ day.day|date:'Y-m-d' }}" data-hotkey="c">Add event</a></p>
+        <p><a href="{{ new_entry_url }}?on={{ day.day|date:'Y-m-d' }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></p>
       </section>
     {% endif %}
 
@@ -60,7 +60,7 @@ opening a day ask this page for the `calendar` part and take it in place.
 
     <section class="card calendar-sources" id="calendar-sources" aria-label="Calendars">
       {% for group, sources in calendar.groups %}
-        {% if group %}<h3>{{ group }}</h3>{% endif %}
+        {% if group %}<h3>{{ group|breakable }}</h3>{% endif %}
         <ul>
           {% for source in sources %}
             <li>
@@ -70,8 +70,8 @@ opening a day ask this page for the `calendar` part and take it in place.
                 <input type="hidden" name="shown" value="{% if source.shown %}0{% else %}1{% endif %}">
                 <button type="submit" class="calendar-source series-{{ source.slot }}" aria-pressed="{% if source.shown %}true{% else %}false{% endif %}">
                   <i class="calendar-check" aria-hidden="true"></i>
-                  <span>{{ source.label }}{% if source.description %}<small class="calendar-source-note">{{ source.description }}</small>{% endif %}</span>
-                  {% if source.failure %}<small class="calendar-source-failure">{{ source.failure }}</small>{% endif %}
+                  <span>{{ source.label|breakable }}{% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}</span>
+                  {% if source.failure %}<small class="calendar-source-failure">{{ source.failure|breakable }}</small>{% endif %}
                 </button>
               </form>
             </li>

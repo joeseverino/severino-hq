@@ -10,7 +10,8 @@ and from then on a call is answered in this order:
 
 1. from the projection in progress, so one request never derives twice;
 2. from the ``derived`` cache, under a key made of the derivation's name, its
-   arguments and the revision of every table it reads;
+   arguments and the revision of every table it reads, behind the identity of
+   the code that stored it (``code_identity``, the cache's ``KEY_PREFIX``);
 3. by running the function, and storing what it returned under that key.
 
 The revisions are kept by the database on every write
@@ -555,7 +556,7 @@ def _keep(key: str | None, value: Any, until: datetime | None) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class Standing:
+class DerivedKey:
     """What an answer was derived at, and the moment it stops holding."""
 
     key: str
@@ -577,7 +578,7 @@ def standing_key(function: Callable[..., Any], *args: Any) -> str | None:
     return _key(declared, repr(declared.vary(*args) if declared.vary else (args, [])))
 
 
-def standing(function: Callable[..., Any], *args: Any) -> Standing | None:
+def standing(function: Callable[..., Any], *args: Any) -> DerivedKey | None:
     """The key and the expiry of the answer this projection was just given.
 
     None unless the call was answered in the projection in progress from a
@@ -588,7 +589,7 @@ def standing(function: Callable[..., Any], *args: Any) -> Standing | None:
     answered = read_once("derivation.answered", dict)
     if key is None or key not in answered:
         return None
-    return Standing(key, answered[key])
+    return DerivedKey(key, answered[key])
 
 
 # ----- Asking again, ahead of the next request ----------------------------------

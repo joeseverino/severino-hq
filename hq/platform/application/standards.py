@@ -9,7 +9,7 @@ that check is "by design", shown with the reason and never a gap.
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 MET = "met"
@@ -31,10 +31,13 @@ class Check:
     scope: str = ""
     # Whether it applies to a given subject; every subject when None.
     applies: Callable[[Any], bool] | None = None
+    # What is wrong when it fails, in a clause a list of failures reads as
+    # ("vulnerability alerts are off"); the label says what passing is.
+    unmet: str = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
-class Result:
+class CheckResult:
     check: Check
     state: str
     # Why it is failed on purpose, for an ``intended`` result.
@@ -42,9 +45,9 @@ class Result:
 
 
 @dataclass(frozen=True, slots=True)
-class Posture:
+class Measurement:
     subject: Any
-    results: tuple[Result, ...]
+    results: tuple[CheckResult, ...]
 
     @property
     def met(self) -> int:
@@ -59,11 +62,21 @@ class Posture:
         return len(self.results) - self.measured
 
     @property
-    def unmet(self) -> tuple[Result, ...]:
+    def unmet(self) -> tuple[CheckResult, ...]:
         return tuple(result for result in self.results if result.state == UNMET)
 
     @property
-    def intended(self) -> tuple[Result, ...]:
+    def summary(self) -> str:
+        """How many checks pass, then what is wrong in each that fails: what a
+        meter of the results says as one control."""
+
+        passing = f"{self.met} of {self.measured} {'check passes' if self.measured == 1 else 'checks pass'}"
+        if not self.unmet:
+            return passing
+        return f"{passing}; {', '.join(result.check.unmet for result in self.unmet)}"
+
+    @property
+    def intended(self) -> tuple[CheckResult, ...]:
         return tuple(result for result in self.results if result.state == INTENDED)
 
     @property
@@ -76,7 +89,7 @@ class Posture:
         return next((result.state for result in self.results if result.check.id == check_id), "")
 
 
-def measure(subject: Any, standard: tuple[Check, ...], intended: Mapping[str, str] | None = None) -> Posture:
+def measure(subject: Any, standard: tuple[Check, ...], intended: Mapping[str, str] | None = None) -> Measurement:
     """``subject`` against every check in ``standard`` that applies to it.
     ``intended`` maps a check it fails on purpose to why."""
 
@@ -86,11 +99,11 @@ def measure(subject: Any, standard: tuple[Check, ...], intended: Mapping[str, st
             continue
         outcome = check.test(subject)
         if outcome is None:
-            results.append(Result(check, UNAVAILABLE))
+            results.append(CheckResult(check, UNAVAILABLE))
         elif outcome:
-            results.append(Result(check, MET))
+            results.append(CheckResult(check, MET))
         elif intended and check.id in intended:
-            results.append(Result(check, INTENDED, intended[check.id]))
+            results.append(CheckResult(check, INTENDED, intended[check.id]))
         else:
-            results.append(Result(check, UNMET))
-    return Posture(subject, tuple(results))
+            results.append(CheckResult(check, UNMET))
+    return Measurement(subject, tuple(results))

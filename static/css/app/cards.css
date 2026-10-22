@@ -1,0 +1,378 @@
+/* Cards: pills, the KPI grid, the tooltip, the insight grid, the queue and
+   steps side by side. */
+
+@layer components {
+
+/* ── Pills / tags ───────────────────────────────────────────────── */
+
+/* Reads the tone contract, so every variant below is a choice of tone rather
+   than three colors. Falls back to neutral, so an unrecognized status renders
+   as a plain pill instead of an unstyled one. */
+.pill {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 1px var(--space-4); border-radius: 999px; font-size: var(--text-2xs); font-weight: 500;
+  background: var(--tone-bg, var(--tone-neutral-bg));
+  color: var(--tone-ink, var(--tone-neutral-ink));
+  border: 1px solid var(--tone-line, var(--tone-neutral-line));
+  letter-spacing: .01em;
+  /* A pill is one short state; it never wraps. */
+  white-space: nowrap;
+}
+
+.pill-unread { font-weight: 650; }
+
+/* ── Contact submissions ────────────────────────────────────────── */
+
+.status-tabs { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-6); }
+.status-tab {
+  display: inline-flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-6); border-radius: 999px; font-size: var(--text-sm);
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+}
+.status-tab:hover { background: var(--surface-2); text-decoration: none; }
+.status-tab.is-current { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.status-tab .count { font-size: var(--text-2xs); opacity: .75; font-variant-numeric: tabular-nums; }
+.row-unread td { background: var(--accent-tint); }
+.row-unread .msg-preview a, .row-unread td:first-child a { font-weight: 650; }
+.row-actions form { display: inline-block; margin: 0; }
+.inline-form { display: inline; margin: 0; }
+.row-actions button.icon-link { cursor: pointer; font-size: var(--text-sm); }
+.icon-link.danger-link { color: var(--danger); }
+.quick-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0 0 var(--space-10); }
+.quick-actions form { margin: 0; }
+
+/* Category color dots: paired with project rows */
+.cat-dot {
+  width: 7px; height: 7px; border-radius: 2px; display: inline-block; flex-shrink: 0;
+  background: var(--muted-2);
+}
+.cat-dot.cat-homelab { background: var(--cat-homelab); }
+.cat-dot.cat-automation { background: var(--cat-automation); }
+.cat-dot.cat-wordpress_security { background: var(--cat-wordpress-security); }
+.cat-dot.cat-cloudflare { background: var(--cat-cloudflare); }
+.cat-dot.cat-dns_email_security { background: var(--cat-dns-email-security); }
+.cat-dot.cat-vps { background: var(--cat-vps); }
+.cat-dot.cat-tailscale { background: var(--cat-tailscale); }
+.cat-dot.cat-adguard { background: var(--cat-adguard); }
+.cat-dot.cat-networking { background: var(--cat-networking); }
+.cat-dot.cat-tls_certificates { background: var(--cat-tls-certificates); }
+.cat-dot.cat-cybersecurity_labs { background: var(--cat-cybersecurity-labs); }
+.cat-dot.cat-other { background: var(--cat-other); }
+
+/* ── KPI grid ───────────────────────────────────────────────────── */
+
+/* Wrapping row, not a track grid. The 1px hairlines are the container's own
+   background showing through the gaps, so any track a grid left empty would
+   paint as a solid gray block. A flex row has no cells to leave empty:
+   whatever wraps grows to fill its row instead, at every width. */
+.kpi-grid { display: flex; flex-wrap: wrap; margin: 0 0 var(--stack-gap); }
+.kpi { flex: 1 1 150px; min-width: 0; padding: var(--space-7) var(--space-8); display: flex; flex-direction: column; gap: var(--space-2); }
+/* A linked KPI is a whole tile target, so it should not also wear inline-link
+   underlines on its label and value. */
+a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
+a.kpi:hover { background: var(--surface-2); }
+.kpi .label { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+/* A mark for what the figure counts: quieter than the label it sits before.
+   The label is a row, so a label too long for its column wraps beside its
+   mark, never underneath it. */
+.kpi .label:has(> .icon) { display: flex; align-items: flex-start; gap: var(--space-3); }
+.kpi .label .icon { width: 14px; height: 14px; margin-top: 1px; color: var(--muted-2); }
+/* The supporting figures of an overview stand three to a row. In a card too
+   narrow for a mark and its label to fit one of those columns, the mark goes:
+   a label running into its neighbor costs more than the mark is worth. */
+.kpi-grid.is-featured > :not(:first-child) .label .icon { display: none; }
+@container kpi (min-width: 325px) {
+  .kpi-grid.is-featured > :not(:first-child) .label .icon { display: inline; }
+}
+.kpi .value { font-size: var(--text-4xl); font-weight: 650; letter-spacing: -.018em; line-height: 1.1; font-feature-settings: "tnum"; }
+.kpi.is-zero .value { color: var(--muted-2); font-weight: 500; }
+.kpi .muted { font-size: var(--text-2xs); }
+/* Nested in a card, the grid's own bottom margin becomes dead space inside the
+   card's padding rather than separation between sections. */
+.card > .kpi-grid:last-child, .card > .insight-grid:last-child { margin-bottom: 0; }
+
+/* The tooltip: chart marks, and anything else carrying data-tip. Fixed to the viewport and inert to the pointer, so it can
+   never sit between the cursor and the mark it is describing. */
+.chart-tip {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--accent-ink);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.45;
+  /* One line for a chart mark; a line per fact where a tip has several. */
+  white-space: pre;
+  box-shadow: var(--shadow);
+  font-feature-settings: "tnum";
+}
+.bar-chart:hover rect:not(:hover) { opacity: .78; }
+
+/* ── Insight grid ───────────────────────────────────────────────────
+   Decision-support cards: a reading, its interpretation, the next action.
+   Extensions render against this rather than defining their own card class,
+   an undefined class is silent at runtime and simply renders unstyled. */
+
+.insight-grid {
+  /* One band, like the KPI band: one frame, and each reading a cell of it
+     rather than a floating card with its own margin and shadow. */
+  display: grid;
+  /* A narrower track ceiling lets four insights share one row at desktop
+     widths instead of stranding the fourth alone beside two empty columns. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, clamp(240px, 22%, 290px)), 1fr));
+  margin: 0 0 var(--stack-gap);
+}
+.insight-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-8);
+  min-width: 0;
+}
+.insight-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; }
+.insight-value { font-size: var(--text-xl); font-weight: 650; letter-spacing: -.015em; font-feature-settings: "tnum"; white-space: nowrap; }
+.insight-title { margin: 0; font-size: var(--text-2xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.insight-title a { color: inherit; }
+.insight-body { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-2); }
+/* Sits with the body it follows, not pinned to the card's floor: pinned, it
+   leaves a hole in the middle of every card whose body is shorter than its
+   tallest neighbor. Cards still share a height; the slack goes underneath. */
+.insight-action { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted); }
+
+
+/* ── The queue ──────────────────────────────────────────────────────
+   What awaits a decision, scanned top-down in severity order. Wherever it is
+   drawn whole it is the table primitive (partials/_queue_rows.html): a dot,
+   what is wrong, what can be pressed, so every row's parts share one edge. The
+   dashboard's short list is the one place it is a list of cards. */
+
+/* The dashboard's list: what a card says, then what can be pressed and the
+   reader's own dismiss at its end, wrapping under it when the row is narrow. */
+.attention-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.attention-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2) var(--space-7);
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--line-2);
+}
+.attention-body { flex: 1 1 18rem; min-width: 0; }
+.attention-body > * { max-width: var(--measure); }
+.attention-end { flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3) var(--space-4); margin-left: auto; }
+.attention-end > .attention-actions { margin: 0; justify-content: flex-end; }
+.attention-row[data-dismissed] > .attention-end > :not([data-triage]) { display: none; }
+.attention-end form { margin: 0; }
+.attention-row:first-child { border-top: 0; padding-top: var(--space-2); }
+.attention-row:last-child { padding-bottom: 0; }
+.attention-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
+/* A row the reader has just dismissed, until the page is next drawn: one quiet
+   line in its place, with the way back. */
+.attention-row[data-dismissed] > .attention-body { display: none; }
+.attention-row[data-dismissed] { align-items: center; color: var(--muted); font-size: var(--text-sm); }
+.attention-row[data-dismissed]::before { content: attr(data-dismissed); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Since when, and how old the reading behind it is: quiet while current, in
+   the attention tone once out of date. */
+.attention-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--text-xs); }
+.attention-meta > a { overflow-wrap: anywhere; }
+.reading-age { white-space: nowrap; }
+.reading-age.is-stale { color: var(--tone-caution-ink); }
+.attention-title { min-width: 0; max-width: 100%; font-size: var(--text-md); font-weight: 650; color: var(--ink); letter-spacing: -.005em; overflow-wrap: anywhere; }
+/* What it means, then what to do, then the reason it cannot be done from
+   here, then what can be pressed. */
+.attention-detail { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-sm); line-height: 1.65; color: var(--ink-2); overflow-wrap: anywhere; }
+.attention-advice { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
+.attention-reason { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
+.attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
+.attention-actions form { margin: 0; }
+/* The pages that help look into it: quiet links, the topology's as icons. */
+.attention-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: var(--space-3) 0 0; padding: 0; list-style: none; font-size: var(--text-xs); }
+.attention-links .icon-link { min-width: 0; width: 1.6rem; height: 1.6rem; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
+.attention-links .icon-link:is(:hover, :focus-visible) { color: var(--ink); background: var(--surface-2); }
+/* What raised an item, opened from its urgency: a small modal over the page,
+   titled with the item it explains. */
+.modifier-held [data-origin] { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; outline: 1px solid var(--tone-line, var(--line)); outline-offset: 1px; }
+/* Hide the tooltip while the origin panel is open: it would cover the panel. */
+:root:has(.origin-panel:popover-open) .chart-tip { display: none; }
+/* One of HQ's modals; what it lists sits flat inside it. */
+.origin-panel { --surface-border: 0 none; --surface-radius: 0; --surface-bg: transparent; --surface-shadow: none; --surface-inset: 0; }
+/* What was read that shows it: each label once, its values beside it. */
+.attention-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-6); margin: var(--space-3) 0 0; font-size: var(--text-xs); color: var(--ink-2); }
+.attention-facts > div { display: contents; }
+.attention-facts dt { color: var(--muted); }
+.attention-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* The queue's table. A row's urgency is a word, quiet, after its title and
+   only when it is urgent; a row that needs attention carries no mark, and the
+   toggle is its one symbol. Either way the pill keeps its word for a screen
+   reader, its tip and its origin panel. The title is what a reader presses, so it leads; the meaning under it is one
+   quiet line until the row is opened, and the buttons end the row at the
+   table's edge. */
+.queue-table > tbody > tr > :is(.queue-mark, .queue-what) { font-size: var(--text-md); line-height: 1.5; }
+/* The gutter is the queue's at every width, so the title and everything the
+   opened line holds start on one edge whatever the rows offer. */
+.queue-table > tbody > tr > .queue-mark { width: 1%; padding-inline: var(--row-gutter) 0; }
+.queue-table .queue-mark > [data-row-toggle] { inset-inline-start: var(--space-5); }
+.pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); line-height: 1.5; font-weight: 600; }
+.queue-table .attention-title { font-weight: 600; }
+.queue-table a.attention-title:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.queue-table .attention-detail {
+  margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden;
+}
+/* A table with no headings has no floors from tables.js, so the column that
+   names the row keeps a readable width itself, and the table counts its own
+   columns for the share: past a phone, what is wrong and what can be pressed
+   both hold out, and the dismiss beside the buttons is the unbounded half the
+   share leaves. */
+@container table-region (width >= 640px) {
+  .data-table.queue-table { --kept: 2; }
+}
+.queue-table .queue-what { min-width: 10rem; }
+.queue-table .queue-act { width: 1%; text-align: right; white-space: nowrap; padding-block-start: calc(var(--row-pad) - var(--space-1)); padding-inline-end: var(--space-4); }
+/* What a row offers, then the reader's own dismiss, side by side on one line
+   whatever the cell's white-space says (an opened row lifts it); the dismiss
+   is one word and never gives way to them. */
+.queue-table .queue-buttons { display: inline-flex; gap: var(--space-3); vertical-align: top; text-align: start; }
+.queue-table .queue-buttons > [data-triage] { flex: none; }
+.queue-table .queue-buttons > * { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-3); margin: 0; }
+.queue-table .queue-act form { margin: 0; }
+/* A row with nothing to press, or whose buttons wait in the line beneath in a
+   narrow table, gives the title the room its padding would keep. */
+.queue-table .queue-act:not(:has(> *)) { padding: 0; }
+/* A row's buttons stand one to a line, each as wide as its label, so the
+   column asks for the longest label rather than every label in a row. A
+   label is never cut: one longer than the cap breaks at its words. The cap is
+   a grid track, which the rule lifting an opened row's clamps leaves alone, so
+   opening a row moves no column. */
+.queue-table .queue-buttons > .attention-actions { display: grid; width: max-content; grid-template-columns: fit-content(var(--hold)); justify-items: end; }
+.queue-table .queue-buttons .btn { white-space: normal; text-align: end; }
+/* A label is one run of text, so a name in it wraps with the words around it
+   rather than standing as a box of its own, and a button asks the column for
+   no more than the cap: a name longer than that is cut at the button's edge. */
+.queue-table .attention-actions .btn { display: block; min-width: 0; max-width: 100%; }
+@media (scripting: enabled) {
+  /* Past the first two, a row's buttons wait in the line beneath at any
+     width, with the rest of what it holds. */
+  .queue-table > tbody > tr:not(.row-detail) .queue-later { display: none; }
+  /* The meaning in full is the opened line's, so the row keeps its title. */
+  .queue-table tr.is-expanded > .queue-what > .attention-detail { display: none; }
+  /* A row whose opened line would only repeat the meaning it shows whole
+     offers nothing: its toggle shows once the meaning is cut short, or the
+     row holds something else back. */
+  .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .narrow-more, .queue-more > :not(.queue-meaning))) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
+  @container table-region (width >= 640px) {
+    .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .queue-more > :not(.queue-meaning))) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
+  }
+  @container table-region (width < 640px) {
+    .queue-table .queue-act:not(:has(> :not(.narrow-more, .queue-buttons), .queue-buttons > :not(.narrow-more))) { padding: 0; }
+    /* Opened, such a row's buttons are in its line, so the cell holds nothing
+       and is not drawn. */
+    .queue-table > tbody > tr.is-expanded > .queue-act:not(:has(.btn)) { display: none; }
+    /* On a phone the title has the row: Dismiss is a mark at its end, still
+       named by its word. */
+    .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss { width: 2rem; max-width: none; padding: 0; justify-content: center; font-size: 0; }
+    .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss::before { content: "\00d7" / ""; font-size: var(--text-lg); line-height: 1; }
+  }
+}
+/* The opened line: on the title's edge and the table's full width, what the
+   row means in full, what was read and what to do, then one place for every
+   button the row holds, each the line's width on a phone. There a button asks
+   the line for no width of its own (`contain: inline-size`): a part in its
+   label is one box, cut at the button's edge (figures.css), and asking for
+   its whole length would widen the table past its box. */
+.queue-table .row-detail > td { padding-inline: calc(var(--row-gutter) + var(--space-6)) var(--space-6); padding-bottom: var(--space-8); }
+.queue-meaning { max-width: var(--measure); margin: 0; font-size: var(--text-sm); line-height: 1.6; color: var(--ink-2); overflow-wrap: anywhere; }
+.queue-more > :first-child { margin-top: 0; }
+.queue-table .row-detail .row-columns { display: block; margin-top: var(--space-6); padding: 0; background: none; }
+.queue-table .row-detail .row-columns:first-child { margin-top: 0; }
+.queue-table .row-detail .row-columns > dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.queue-table .row-detail .row-columns > dd { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.queue-table .row-detail .row-columns > dd > .attention-actions { display: contents; }
+@container table-region (width < 640px) {
+  .queue-table .row-detail .row-columns > dd { flex-direction: column; }
+  .queue-table .row-detail .row-columns > dd .btn { width: 100%; contain: inline-size; justify-content: center; white-space: normal; text-align: center; }
+}
+/* A family: how bad, what kind and how many, opening to its rows, which are
+   set in under its name. Its name heads them, so it reads below a title. */
+.queue-family { cursor: pointer; }
+.queue-family-name { font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); }
+.queue-table .count { margin-inline-start: var(--space-1); color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.queue-table .row-group > th { font-weight: 600; color: var(--muted); }
+@container table-region (width >= 640px) {
+  .queue-table tr[data-folded] > .queue-what { padding-inline-start: calc(var(--space-6) + var(--space-10)); }
+  .queue-table tr[data-folded] + .row-detail > td { padding-inline-start: calc(var(--row-gutter) + var(--space-6) + var(--space-10)); }
+}
+/* A row dismissed in place: its title, quiet, and the way back. */
+.queue-row[data-dismissed] > td > :not(.attention-head, .queue-buttons),
+.queue-row[data-dismissed] .queue-buttons > :not([data-triage]),
+.queue-row[data-dismissed] :is(.attention-meta, .pill.is-mark) { display: none; }
+.queue-row[data-dismissed] .attention-title { color: var(--muted); font-weight: 400; }
+.queue-row[data-dismissed] .attention-title::before { content: "Dismissed: "; }
+.attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
+.action-items-card { padding-top: var(--space-5); }
+.action-items-aside[open] > summary { margin-bottom: var(--space-6); }
+/* The urgent problems about the thing a page shows: the queue's rows in one box. */
+.problems-here { padding-block: var(--space-5); margin-bottom: var(--space-6); border-left: 3px solid var(--tone-ink); }
+/* A problem that is not urgent: one unframed line, its button beside it. */
+.problem-lines { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-3); }
+.problem-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
+.problem-line > p { flex: 0 1 auto; max-width: var(--measure); margin: 0; font-size: var(--text-sm); color: var(--ink-2); }
+.problem-line > .pill { flex: none; }
+.problem-line > p > strong { color: var(--ink); }
+.problem-line > .attention-actions { margin: 0; }
+.problem-line > :is(.resolution-workflow, .resolution-fold) { flex-basis: 100%; margin-top: 0; }
+/* The short queue on the dashboard, under the greeting: a card like any other. */
+.dash-needs { margin-bottom: var(--stack-gap); }
+/* At a glance a card's meaning is one line; the rest is on the page its title opens. */
+.attention-glance .attention-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Steps or checks side by side, each an icon, a title and a sentence. Read
+   down each column, as a list is, so however many there are the columns end
+   within a step of each other: never a row of five and a row of two. */
+.dash-start { margin-bottom: var(--stack-gap); }
+.step-list {
+  columns: 14rem 4; column-gap: var(--space-9);
+  margin: 0; padding: 0; list-style: none; font-size: var(--text-sm);
+}
+.step-list li { display: flex; align-items: flex-start; gap: var(--space-5); break-inside: avoid; padding-bottom: var(--space-5); }
+.step-list li.is-done { color: var(--muted); }
+.step-list li.is-done .band-icon { background: var(--surface-2); color: var(--muted); }
+.step-list li:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
+.step-list a { font-weight: 600; }
+.step-list .muted { display: block; margin-top: var(--space-1); }
+/* HQ's standard: its checks read as a list in two columns at most (4 and 3),
+   never a row of five with two under it. */
+.posture-checks { grid-template-columns: repeat(auto-fit, minmax(min(100%, max(20rem, 40%)), 1fr)); }
+
+/* A card's steps (partials/_resolution_workflow.html): one stands alone,
+   several are numbered, and long ones fold under "Steps". */
+/* Each step's label beside its command, the commands starting on one line; a
+   label takes at most two fifths of the row and wraps inside it. A command
+   too long for the room beside its label goes under it with the row's whole
+   width, so a path is not folded into a strip. A step's number
+   is its label's, since a list laid out this way draws no markers. */
+.resolution-workflow {
+  margin: var(--space-3) 0 0; padding: 0; list-style: none;
+  display: grid; gap: var(--space-2);
+  font-size: var(--text-sm); color: var(--ink-2); counter-reset: step;
+}
+.resolution-workflow > li { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-6); counter-increment: step; }
+/* A short label (a repository, a machine) is a column its command lines up
+   beside; a label that is a whole instruction takes the line, and its command
+   goes under it. */
+.resolution-workflow > li > strong { flex: 0 1 auto; min-width: min(40%, 11rem); max-width: 100%; }
+.resolution-workflow > li > .command { flex: 0 1 auto; }
+.resolution-workflow > li > :not(strong, .command),
+.resolution-workflow > li > .command:first-child { flex-basis: 100%; }
+ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
+.resolution-workflow li > strong { color: var(--ink); font-weight: 650; }
+.resolution-workflow li > p { max-width: var(--measure); margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
+.resolution-fold { margin-top: var(--space-3); }
+.resolution-fold > summary { width: fit-content; max-width: 100%; color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
+
+.quick-actions.vertical { display: grid; grid-template-columns: 1fr; }
+
+}

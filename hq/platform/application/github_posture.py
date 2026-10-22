@@ -23,7 +23,7 @@ from hq.platform.application.routes import reverse
 from .derivations import passed
 from .github_estate import Repository, attention as repository_attention, repositories
 from .item_help import cannot_help, do_step, run_step, steps
-from .standards import UNMET, Check as _Check, Posture, measure
+from .standards import UNMET, Check as _Check, Measurement, measure
 from .timestamps import moment
 from .ui import Insight, counted
 lazy from .projects import repository_key
@@ -38,10 +38,20 @@ def _public(repo: Repository) -> bool:
     return not repo.private
 
 
-def Check(id: str, label: str, scope: str, test, why: str, fix: str, *, serious: bool = False) -> _Check:
+def Check(id: str, label: str, scope: str, test, why: str, fix: str, *, unmet: str, serious: bool = False) -> _Check:
     """A repository check: every repository's, or a public one's besides."""
 
-    return _Check(id, label, test, why, fix, serious=serious, scope=scope, applies=_public if scope == PUBLIC else None)
+    return _Check(
+        id,
+        label,
+        test,
+        why,
+        fix,
+        serious=serious,
+        scope=scope,
+        applies=_public if scope == PUBLIC else None,
+        unmet=unmet,
+    )
 
 
 def _access(repo: Repository) -> dict[str, Any] | None:
@@ -113,6 +123,7 @@ STANDARD: tuple[Check, ...] = (
         "Anyone else with access can read private code or push to it.",
         "Remove the collaborator in the repository's access settings.",
         serious=True,
+        unmet="Someone else has access",
     ),
     Check(
         "keys-read-only",
@@ -122,6 +133,7 @@ STANDARD: tuple[Check, ...] = (
         "A deploy key that can write can push to the repository without you.",
         "Replace the key with a read-only one.",
         serious=True,
+        unmet="A deploy key can write",
     ),
     Check(
         "keys-in-use",
@@ -130,6 +142,7 @@ STANDARD: tuple[Check, ...] = (
         _keys_in_use,
         f"A key unused for {KEY_IDLE_DAYS} days is access nothing needs.",
         "Delete the key, or find what stopped using it.",
+        unmet=f"A deploy key has gone unused for {KEY_IDLE_DAYS} days",
     ),
     Check(
         "token-read-only",
@@ -138,6 +151,7 @@ STANDARD: tuple[Check, ...] = (
         _setting("token", "read"),
         "A writable default token lets any workflow change the repository.",
         "Set workflow permissions to read in the Actions settings.",
+        unmet="The workflow token can write",
     ),
     Check(
         "token-no-approvals",
@@ -146,6 +160,7 @@ STANDARD: tuple[Check, ...] = (
         _setting("token_approves_reviews", False),
         "A workflow that approves its own pull request skips review.",
         "Turn off approving pull requests in the Actions settings.",
+        unmet="Workflows can approve pull requests",
     ),
     Check(
         "actions-pinned",
@@ -154,6 +169,7 @@ STANDARD: tuple[Check, ...] = (
         _setting("pinning_required", True),
         "A tag can be moved to different code; a commit cannot.",
         "Pin every action its workflows use to a commit, then require pinning in the Actions settings.",
+        unmet="Actions need not be pinned to a commit",
     ),
     Check(
         "vulnerability-alerts",
@@ -162,6 +178,7 @@ STANDARD: tuple[Check, ...] = (
         _setting("vulnerability_alerts", True),
         "Renovate opens its security fixes from these alerts; without them a vulnerable dependency stays until you notice it.",
         "Turn on Dependabot alerts in the security settings.",
+        unmet="Vulnerability alerts are off",
     ),
     Check(
         "no-variables",
@@ -170,6 +187,7 @@ STANDARD: tuple[Check, ...] = (
         _no_variables,
         "A variable is state outside the repository that changes what a build does.",
         "Move it into the workflow or a secret, or delete it.",
+        unmet="Actions variables are set",
     ),
     Check(
         "pull-request-required",
@@ -178,6 +196,7 @@ STANDARD: tuple[Check, ...] = (
         _rule("pull_request"),
         "A direct push to the default branch skips every check.",
         "Require a pull request in the default branch's ruleset.",
+        unmet="Changes can be pushed without a pull request",
     ),
     Check(
         "force-push-blocked",
@@ -186,6 +205,7 @@ STANDARD: tuple[Check, ...] = (
         _rule("blocks_force_push"),
         "A force push rewrites history others have already built on.",
         "Block force pushes in the default branch's ruleset.",
+        unmet="The default branch can be rewritten",
     ),
     Check(
         "deletion-blocked",
@@ -194,6 +214,7 @@ STANDARD: tuple[Check, ...] = (
         _rule("blocks_deletion"),
         "Deleting the default branch takes every deploy with it.",
         "Block deletion in the default branch's ruleset.",
+        unmet="The default branch can be deleted",
     ),
     Check(
         "secret-scanning",
@@ -202,6 +223,7 @@ STANDARD: tuple[Check, ...] = (
         _security("secret_scanning"),
         "A credential committed to a public repository is found by others first.",
         "Turn on secret scanning.",
+        unmet="Leaked credentials are not scanned for",
     ),
     Check(
         "push-protection",
@@ -210,6 +232,7 @@ STANDARD: tuple[Check, ...] = (
         _security("secret_scanning_push_protection"),
         "Scanning finds a leak after it is public; push protection stops it.",
         "Turn on push protection.",
+        unmet="Credentials are not stopped before they are pushed",
     ),
     Check(
         "code-scanning",
@@ -218,6 +241,7 @@ STANDARD: tuple[Check, ...] = (
         _code_scanning,
         "Code scanning finds vulnerable patterns before a reviewer does.",
         "Turn on code scanning.",
+        unmet="Code is not scanned",
     ),
 )
 
@@ -492,14 +516,14 @@ def _intended(repo: Repository) -> dict[str, str]:
     return {}
 
 
-def posture_of(repo: Repository) -> Posture | None:
+def posture_of(repo: Repository) -> Measurement | None:
     """How ``repo`` meets the standard; None for an archived one, which is
     read-only and so has nothing more to protect."""
 
     return None if repo.archived else measure(repo, STANDARD, intended=_intended(repo))
 
 
-def postures() -> list[Posture]:
+def postures() -> list[Measurement]:
     found = (posture_of(repo) for repo in sorted(repositories().values(), key=lambda item: item.name))
     return [posture for posture in found if posture is not None]
 

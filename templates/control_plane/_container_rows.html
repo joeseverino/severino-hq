@@ -28,20 +28,20 @@ cannot go missing from the other.
               {% if container.watcher %}
                 <strong>{% entity "resource"|entity_of:container.watcher label=container.name %}</strong>
               {% else %}
-                <strong>{{ container.name }}</strong>
+                <strong>{{ container.name|breakable }}</strong>
               {% endif %}
               {% comment %}
               The compose project only when it is not the container's own name.
               A one-service compose file names the project after the service, so
               printing both says one thing twice.
               {% endcomment %}
-              {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack }}</span>{% endif %}
+              {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack|breakable }}</span>{% endif %}
               {% row_toggle %}
             </td>
-            {% with standing=standings|dictkey:container.name %}<td>{% if standing %}<code tabindex="0" data-tip="{{ container.image }}">{{ standing.label|breakable }}</code>{% else %}<code>{{ container.image_label|breakable }}</code>{% endif %}</td>{% endwith %}
+            {% with standing=standings|dictkey:container.name %}<td>{% if standing %}<code class="cell-whole" tabindex="0" data-tip="{{ container.image }}">{{ standing.label|breakable }}</code>{% else %}<code class="cell-whole">{{ container.image_label|breakable }}</code>{% endif %}</td>{% endwith %}
             {% with standing=standings|dictkey:container.name %}{% if standing %}{% include "control_plane/_container_standing.html" %}{% else %}<td>{% empty_value %}</td><td>{% empty_value %}</td>{% endif %}{% endwith %}
-            <td class="optional-col">{{ container.published }}</td>
-            <td>{% if not container.healthy %}<span class="pill pill-unreachable">{{ container.state|default:"unknown" }}</span> {% endif %}{% with up=uptimes|dictkey:container.name %}{{ up|default:container.uptime|default:container.status }}{% endwith %}{% if container.health %} <span class="muted" title="{{ container.check|capfirst }}">· {{ container.health }}</span>{% endif %}</td>
+            <td class="optional-col">{{ container.published|breakable }}</td>
+            <td>{% if not container.healthy %}<span class="pill pill-unreachable">{{ container.state|default:"unknown"|breakable }}</span> {% endif %}{% with up=uptimes|dictkey:container.name %}<span class="cell-part">{{ up|default:container.uptime|default:container.status|breakable }}{% if container.health %}<span class="muted">,</span>{% endif %}</span>{% endwith %}{% if container.health %} <span class="cell-part muted" title="{{ container.check|capfirst }}">{{ container.health|breakable }}</span>{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

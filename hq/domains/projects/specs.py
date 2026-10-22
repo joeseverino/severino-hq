@@ -12,6 +12,8 @@ from .models import Project
 class ProjectQuery(BoundedQuery):
     status: str | None = None
     query: str | None = None
+    # True for the projects HQ's dependency update run covers, False for the rest.
+    updates: bool | None = None
 
 
 def resources() -> tuple[ResourceSpec, ...]:

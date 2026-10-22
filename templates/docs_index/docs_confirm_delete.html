@@ -1,4 +1,4 @@
 {% extends "confirm_page.html" %}
 {% block consequences %}
-<p>Removes <strong>{{ record.title }}</strong> (<code>{{ record.doc_id|breakable }}</code>) from HQ. The vault file is not changed.</p>
+<p>Removes <strong>{{ record.title|breakable }}</strong> (<code>{{ record.doc_id|breakable:")" }}</code> from HQ. The vault file is not changed.</p>
 {% endblock %}

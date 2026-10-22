@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% comment %}
 Your GitHub profile and what you watch there, from application.github_profile:
-the controller's last github.profile reading. Read now asks it to read again.
+the controller's last github.profile reading. Refresh asks it to read again.
 Yours because your sign-in names the account; a page that let you type a login
 would be a page about anybody.
 {% endcomment %}
@@ -15,14 +15,14 @@ would be a page about anybody.
   <section class="gh-profile" aria-label="Your GitHub profile">
     {% if profile.avatar %}<img class="gh-avatar" src="{{ profile.avatar }}" alt="" width="64" height="64">{% endif %}
     <div class="gh-identity">
-      <p class="gh-name">{{ profile.name|default:profile.login }}<span class="gh-verified" tabindex="0" data-tip="This is your GitHub account, according to your sign-in.{% if app_repositories %}&#10;HQ's GitHub App is installed on it.{% endif %}">{% include "partials/_icon.html" with name="check-circle" %}<span class="visually-hidden">This is your GitHub account, according to your sign-in.</span></span></p>
-      <p><a class="external-link" href="{{ profile.url }}" rel="noopener">@{{ profile.login }}</a>{% if profile.bio %} · {{ profile.bio }}{% endif %}</p>
+      <p class="gh-name">{{ profile.name|default:profile.login|breakable }}<span class="gh-verified" tabindex="0" data-tip="This is your GitHub account, according to your sign-in.{% if app_repositories %}&#10;HQ's GitHub App is installed on it.{% endif %}">{% include "partials/_icon.html" with name="check-circle" %}<span class="visually-hidden">This is your GitHub account, according to your sign-in.</span></span></p>
+      <p><a class="external-link" href="{{ profile.url }}" rel="noopener">@{{ profile.login|breakable }}</a>{% if profile.bio %} · {{ profile.bio|breakable }}{% endif %}</p>
     </div>
     <dl class="gh-stats">
-      <div><dt>Followers</dt><dd><a href="{{ profile.url }}?tab=followers" rel="noopener">{{ profile.followers }}</a></dd></div>
-      <div><dt>Following</dt><dd><a href="{{ profile.url }}?tab=following" rel="noopener">{{ profile.following }}</a></dd></div>
-      <div><dt>Public repos</dt><dd><a href="{{ profile.url }}?tab=repositories" rel="noopener">{{ profile.public_repos }}</a></dd></div>
-      <div><dt>Starred</dt><dd><a href="{{ profile.url }}?tab=stars" rel="noopener">{{ profile.starred }}</a></dd></div>
+      <div><dt>Followers</dt><dd><a href="{{ profile.url }}?tab=followers" rel="noopener">{{ profile.followers|breakable }}</a></dd></div>
+      <div><dt>Following</dt><dd><a href="{{ profile.url }}?tab=following" rel="noopener">{{ profile.following|breakable }}</a></dd></div>
+      <div><dt>Public repos</dt><dd><a href="{{ profile.url }}?tab=repositories" rel="noopener">{{ profile.public_repos|breakable }}</a></dd></div>
+      <div><dt>Starred</dt><dd><a href="{{ profile.url }}?tab=stars" rel="noopener">{{ profile.starred|breakable }}</a></dd></div>
     </dl>
   </section>
 
@@ -34,16 +34,16 @@ would be a page about anybody.
         {% for repo in profile.watched %}
           <tr>
             <td class="row-gutter">
-              <a class="external-link" href="{{ repo.url }}" rel="noopener"><strong>{{ repo.name }}</strong></a>
-              {% if repo.description %}<div class="muted">{{ repo.description|truncatechars:110 }}</div>{% endif %}
+              <a class="external-link" href="{{ repo.url }}" rel="noopener"><strong>{{ repo.name|breakable }}</strong></a>
+              {% if repo.description %}<div class="muted">{{ repo.description|truncatechars:110|breakable }}</div>{% endif %}
               {% row_toggle %}
             </td>
-            <td>{% if repo.release %}<a class="external-link" href="{{ repo.release.url }}" rel="noopener">{{ repo.release.tag }}</a>{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|ago_short }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% if repo.release %}<a class="external-link" href="{{ repo.release.url }}" rel="noopener">{{ repo.release.tag|breakable }}</a>{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|ago_short }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
             <td>
               {% for item in repo.advisories|slice:":2" %}
-                <div><span class="pill{% if item.severity == 'critical' or item.severity == 'high' %} pill-serious{% elif item.severity == 'medium' %} pill-attention{% endif %}">{{ item.severity|default:"advisory" }}</span> <a class="external-link" href="{{ item.url }}" rel="noopener">{{ item.id }}</a>{% if item.summary %} {{ item.summary|truncatechars:90 }}{% endif %}{% if item.published %} <span class="muted nowrap">{{ item.published|ago_short }}</span>{% endif %}</div>
+                <div><span class="pill{% if item.severity == 'critical' or item.severity == 'high' %} pill-serious{% elif item.severity == 'medium' %} pill-attention{% endif %}">{{ item.severity|default:"advisory"|breakable }}</span> <a class="external-link" href="{{ item.url }}" rel="noopener">{{ item.id|breakable }}</a>{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} <span class="muted nowrap">{{ item.published|ago_short }}</span>{% endif %}</div>
               {% empty %}{% empty_value %}{% endfor %}
-              {% if repo.advisories|length > 2 %}<a class="muted" href="{{ repo.url }}/security/advisories" rel="noopener">and {{ repo.advisories|length|add:"-2" }} more</a>{% endif %}
+              {% if repo.advisories|length > 2 %}<a class="muted" href="{{ repo.url }}/security/advisories" rel="noopener">and {{ repo.advisories|length|add:"-2"|breakable }} more</a>{% endif %}
             </td>
             <td class="nowrap">{% if repo.starred %}{{ repo.starred|when:"ago" }}{% else %}{% empty_value %}{% endif %}</td>
           </tr>
@@ -55,16 +55,16 @@ would be a page about anybody.
   <h2>Your GitHub account</h2>
   <dl class="github-facts account-facts">
     {% if profile.since %}<div><dt>On GitHub since</dt><dd>{{ profile.since|date:"F Y" }}</dd></div>{% endif %}
-    {% if profile.company %}<div><dt>Company</dt><dd>{{ profile.company }}</dd></div>{% endif %}
-    {% if profile.location %}<div><dt>Location</dt><dd>{{ profile.location }}</dd></div>{% endif %}
-    {% if profile.website|web_url %}<div><dt>Website</dt><dd><a class="external-link" href="{{ profile.website|web_url }}" rel="noopener">{{ profile.website|cut:"https://" }}</a></dd></div>{% endif %}
-    {% if profile.social %}<div><dt>X</dt><dd>@{{ profile.social }}</dd></div>{% endif %}
+    {% if profile.company %}<div><dt>Company</dt><dd>{{ profile.company|breakable }}</dd></div>{% endif %}
+    {% if profile.location %}<div><dt>Location</dt><dd>{{ profile.location|breakable }}</dd></div>{% endif %}
+    {% if profile.website|web_url %}<div><dt>Website</dt><dd><a class="external-link" href="{{ profile.website|web_url }}" rel="noopener">{{ profile.website|cut:"https://"|breakable }}</a></dd></div>{% endif %}
+    {% if profile.social %}<div><dt>X</dt><dd>@{{ profile.social|breakable }}</dd></div>{% endif %}
     <div><dt>Open to work</dt><dd>{% if profile.hireable %}Yes, on the profile{% else %}Not shown{% endif %}</dd></div>
-    {% if profile.public_gists %}<div><dt>Public gists</dt><dd>{{ profile.public_gists }}</dd></div>{% endif %}
+    {% if profile.public_gists %}<div><dt>Public gists</dt><dd>{{ profile.public_gists|breakable }}</dd></div>{% endif %}
     <div><dt>HQ's GitHub App</dt><dd>
       {% if app_repositories %}
         Installed, reading {{ app_repositories|length }} of your repositories:
-        {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short }}</a>{% else %}<a class="external-link" href="{{ item.repo.url }}" rel="noopener">{{ item.repo.short }}</a>{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}<a class="external-link" href="{{ item.repo.url }}" rel="noopener">{{ item.repo.short|breakable }}</a>{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
         · <a class="external-link" href="https://github.com/settings/installations" rel="noopener">Manage on GitHub</a>
       {% else %}
         <span class="muted">Not reading any repository this account owns.</span>

@@ -31,7 +31,7 @@ which shares the "Runs on" column with the origin it would duplicate.
         <tbody>
           {% for service in unmanaged %}
             <tr>
-              <td class="row-gutter"><strong>{{ service.hostname }}</strong>{% row_toggle %}</td>
+              <td class="row-gutter"><strong>{{ service.hostname|breakable }}</strong>{% row_toggle %}</td>
               {% for id, label, value in service.facets %}
                 <td>{% if value %}<code>{{ value|breakable }}</code>{% else %}{% empty_value %}{% endif %}</td>
               {% endfor %}

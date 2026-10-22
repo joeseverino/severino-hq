@@ -13,7 +13,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.plugin_testing import ComposedPluginTestCase, sibling
 from hq.platform.application.plugins import NavigationItem
 from hq.platform.application.projects import hq_sections, refresh_summary
-from hq.platform.application.tests.markup import elements, links, select, text
+from hq.platform.application.tests.markup import elements, links, select, text, texts
 
 
 def _document(doc_id, title, doc_type="runbook", status="active"):
@@ -85,6 +85,16 @@ class ProjectPageTests(TestCase):
         self.assertNotContains(response, "Content items")
         self.assertContains(response, f'href="{item.get_absolute_url()}"')
         self.assertIn(("Example Host · Hosting", expense.get_absolute_url()), links(response))
+
+    def test_the_description_is_the_heads_own_line_and_not_a_section(self):
+        self.project.description = "One place for every example."
+        self.project.save()
+
+        response = self.page()
+
+        (description,) = select(response, "data-project-description")
+        self.assertIn("page-lede", {cls for ancestor in description.ancestors for cls in ancestor.classes})
+        self.assertNotIn("Description", [heading.words for heading in elements(response, "h2")])
 
     def test_a_project_with_nothing_linked_draws_no_related_card(self):
         self.assertEqual(self.page().context["related"], ())
@@ -160,7 +170,24 @@ class ProjectListTests(TestCase):
         self.assertNotIn("Example example", page)
         # The first three technologies, the rest behind the row's toggle.
         self.assertIn("Go SQLite Django +2", page)
-        self.assertContains(response, "Edited ")
+
+    def test_every_cell_answers_its_heading(self):
+        Project.objects.create(name="Example", slug="example")
+        Project.objects.create(name="Example Tool", slug="tool", repository_url="https://github.com/example/tool")
+
+        response = self.client.get(reverse("projects:list"))
+
+        # A heading is its label, then any sort mark.
+        headings = [heading.partition(" ")[0] for heading in texts(response, "th")]
+        rows = {}
+        for row in elements(response, "tr")[1:]:
+            cells = [cell.words for cell in elements(response, "td") if row in cell.ancestors]
+            rows[cells[headings.index("Name")]] = dict(zip(headings, cells, strict=True))
+        # A repository column says only what the repository says; the record's
+        # own edit is its own column.
+        self.assertEqual(rows["Example"]["Repository"], "")
+        self.assertEqual(rows["Example"]["Edited"], rows["Example Tool tool"]["Edited"])
+        self.assertEqual(rows["Example Tool tool"]["Repository"], "Not read yet")
 
     def test_filters_and_sorts_say_what_they_do(self):
         response = self.client.get(reverse("projects:list"))

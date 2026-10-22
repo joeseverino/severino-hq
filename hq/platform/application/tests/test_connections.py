@@ -27,7 +27,7 @@ from ..derivations import counting
 from ..provider_choices import container_stack, zone
 from ..report_testing import report_connections
 from ..security import cli_principal
-from .markup import hrefs
+from .markup import hrefs, text
 from .sentinel import CONNECTION, SentinelMixin, plant_credentials
 
 A_PORTAINER = {
@@ -381,10 +381,10 @@ REDEFINE = f"?kind={CONTAINER_STACK_KIND}&amp;hostname=probe.invalid"
 
 def _certificate_and_dns(hostname):
     from ..naming import name_context
-    from ..service_facets import Facet
+    from ..service_facets import ServiceFacet
 
     context = name_context(hostname)
-    return {facet: Facet(id=facet, label=facet.title(), context=context) for facet in ("dns", "certificate")}
+    return {facet: ServiceFacet(id=facet, label=facet.title(), context=context) for facet in ("dns", "certificate")}
 
 
 class SeedTests(TestCase):
@@ -669,8 +669,8 @@ class ControllerColumnTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "via a-controller")
-        self.assertContains(response, "via another-controller")
+        self.assertIn("via a-controller", text(response))
+        self.assertIn("via another-controller", text(response))
 
 
 class ExpiredCredentialTests(TestCase):

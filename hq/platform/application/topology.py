@@ -19,8 +19,10 @@ from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .action_links import (
+    READ_NOW_CAPABILITY,
     ActionLink as TopologyAction,
     capability_action_link,
+    command_action,
     command_url,
     connection_action_links,
     topology_url,
@@ -31,9 +33,10 @@ from .connections import ConnectionLink, ConnectionSpec
 from .contradiction_findings import add_contradiction_facts
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
-from .entity_links import entity_link, kind_label, record_name
+from .entity_links import entity_link, kind_label, node_name, record_name
 from .infrastructure import RESOURCE_TONES, is_drifted, resource_health
-from .resource_capabilities import removals_pending, resource_capabilities
+from .resource_capabilities import REMOVAL_CAPABILITY, removals_pending, resource_capabilities
+from .resource_context import record_summary, shared_names
 from .security import Capability, Principal
 from .topology_facts import add_connection_facts, add_observed_facts
 from .topology_lenses import TOPOLOGY_LENSES, TopologyLens, apply_lens, apply_trace, lens_for
@@ -94,12 +97,10 @@ def _resource_actions(
     if not principal.permits(Capability.MANAGE_INFRASTRUCTURE):
         return tuple(actions)
     actions.append(
-        TopologyAction(
+        command_action(
             "edit",
-            "Change what HQ expects",
-            "remote_write",
+            "infrastructure.resource.update",
             reverse("control_plane:edit", kwargs={"key": key}),
-            capability="infrastructure.resource.update",
             target=key,
         )
     )
@@ -109,50 +110,43 @@ def _resource_actions(
         # Something changed it outside HQ: keeping that is the choice that
         # loses nothing, so it is offered, and first.
         actions.append(
-            TopologyAction(
+            command_action(
                 "keep_live",
-                "Keep the live version",
-                "remote_write",
+                "infrastructure.resource.accept_observed",
                 command_url("infrastructure.resource.accept_observed", key),
-                capability="infrastructure.resource.accept_observed",
                 target=key,
             )
         )
     reconcile = capabilities.actions.get("reconcile")
     if reconcile and reconcile.enabled:
         actions.append(
-            TopologyAction(
+            command_action(
                 "reconcile",
-                "Restore HQ's version" if drifted else "Apply again",
-                "infrastructure_change",
+                "infrastructure.reconcile",
                 reverse("control_plane:reconcile", kwargs={"key": key}),
                 method="POST",
-                capability="infrastructure.reconcile",
                 target=key,
             )
         )
     renew = capabilities.actions.get("renew")
     if renew and renew.enabled and principal.permits(Capability.REQUEST_CERTIFICATE_RENEWAL):
         actions.append(
-            TopologyAction(
+            command_action(
                 "renew",
-                "Renew certificate",
-                "infrastructure_change",
+                "certificate.renew",
                 reverse("control_plane:renew", kwargs={"key": key}),
                 method="POST",
-                capability="certificate.renew",
                 target=key,
             )
         )
     if capabilities.removal != "unavailable":
         actions.append(
-            TopologyAction(
+            command_action(
                 "remove",
-                "Stop tracking in HQ" if capabilities.removal == "forget" else "Remove",
-                "destructive",
+                REMOVAL_CAPABILITY,
                 reverse("control_plane:remove", kwargs={"key": key}),
-                capability="infrastructure.resource.remove",
                 target=key,
+                intent=capabilities.removal_words,
             )
         )
     return tuple(actions)
@@ -197,12 +191,7 @@ def _ability_actions(ability, ability_id: str, principal: Principal) -> tuple[To
     """
 
     actions = [TopologyAction("focus", "Show links", "read", _focus_url(ability_id))]
-    command = capability_action_link(
-        ability.capability,
-        ability.effect,
-        "Run",
-        principal=principal,
-    )
+    command = capability_action_link(ability.capability, principal=principal)
     if command is not None:
         actions.append(command)
     return tuple(actions)
@@ -272,12 +261,7 @@ def _merge_controller_node(
     """
 
     action = TopologyAction("open", f"Open {group_label}", "read", url) if url else None
-    refresh = capability_action_link(
-        "infrastructure.controller.refresh",
-        "infrastructure_change",
-        "Read now",
-        principal=principal,
-    )
+    refresh = capability_action_link(READ_NOW_CAPABILITY, principal=principal)
     emitted = tuple(item for item in (action, refresh) if item is not None)
     current = nodes.get(node_id)
     if current is None:
@@ -571,12 +555,16 @@ def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
     )
     # Read on first use, once for every resource.
     manages = manages_through()
+    named = {resource.key: _resource_node(resource) for resource in resources}
+    shared = shared_names(node_name(node) for node in named.values())
     nodes: dict[str, TopologyNode] = {}
     for resource in resources:
         provider = PROVIDERS.get(resource.kind)
         status, status_label, detail = _resource_status(resource)
-        nodes[f"resource:{resource.key}"] = replace(
-            _resource_node(resource),
+        node = named[resource.key]
+        nodes[node.id] = replace(
+            node,
+            summary=record_summary(resource, node_name(node)) if node_name(node) in shared else "",
             status=status,
             status_label=status_label,
             detail=detail,

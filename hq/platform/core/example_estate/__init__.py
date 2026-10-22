@@ -119,4 +119,5 @@ def seed():
     work.jobs()
     records.calendar()
     records.money()
+    records.messages()
     agents.seen()

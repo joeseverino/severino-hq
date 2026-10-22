@@ -23,7 +23,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .connection_lifecycle import UNREPORTED_NODE
 from .entity_links import node_name
-from .finding_model import Finding, FindingEstate, FindingRule, Remedy, fact_values
+from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule, fact_values
 from .topology_model import TopologyNode
 from .ui import counted
 lazy from .facts import snapshots_of
@@ -119,12 +119,11 @@ def add(nodes: dict[str, TopologyNode], resources: Iterable[Any]) -> None:
             nodes[node.id] = replace(node, facts=node.facts + tuple(facts))
 
 
-def _edit(node: TopologyNode) -> tuple[Remedy, ...]:
+def _edit(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     return (
-        Remedy(
+        FindingRemedy(
             capability="infrastructure.resource.update",
             target=node.label,
-            label="Change what HQ expects",
             effect="",
         ),
     )

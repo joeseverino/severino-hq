@@ -39,7 +39,7 @@ VISIT_EVERY = timedelta(minutes=2)
 
 
 @dataclass(frozen=True, slots=True)
-class Cadence:
+class ReadCadence:
     """How often a kind is read, and how many of those may pass unread."""
 
     every: timedelta
@@ -50,23 +50,23 @@ class Cadence:
         return self.every * self.missed
 
 
-def cadence(kind: str = "") -> Cadence:
+def cadence(kind: str = "") -> ReadCadence:
     """The cadence one kind of reading is taken on."""
 
     if kind == DASHBOARD_GLANCE:
-        return Cadence(GLANCE_EVERY, missed=3)
+        return ReadCadence(GLANCE_EVERY, missed=3)
     if kind == PAGE_VISIT:
-        return Cadence(VISIT_EVERY, missed=3)
+        return ReadCadence(VISIT_EVERY, missed=3)
     if kind == SSH_PROBE:
-        return Cadence(ssh_probe_interval(), missed=2)
+        return ReadCadence(ssh_probe_interval(), missed=2)
     spec = OBSERVATIONS.get(kind)
     if spec is not None and spec.read_by == "hq":
-        return Cadence(read_every(kind), missed=2)
+        return ReadCadence(read_every(kind), missed=2)
     if spec is not None and spec.every is not None:
-        return Cadence(spec.every, missed=2)
+        return ReadCadence(spec.every, missed=2)
     # A controller reads on the sweep, whose slowest interval is the idle one;
     # a reading is stale once it has missed a whole sweep, not when one is due.
-    return Cadence(slowest_sweep_interval(), missed=2)
+    return ReadCadence(slowest_sweep_interval(), missed=2)
 
 
 def stale_after(kind: str = "") -> timedelta:

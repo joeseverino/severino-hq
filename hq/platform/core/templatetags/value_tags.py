@@ -1,12 +1,14 @@
 import re
-from datetime import date, datetime
-from urllib.parse import unquote, urlsplit
+from datetime import date, datetime, time
+from html import unescape
+from numbers import Number
+from urllib.parse import parse_qs, unquote, urlsplit
 lazy from dataclasses import replace
 
 from django import template
 from django.utils import timezone
 from django.utils.html import conditional_escape, format_html
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeData, mark_safe
 lazy from django.conf import settings
 
 from hq.platform.application.entity_links import (
@@ -91,10 +93,14 @@ def or_empty(value):
     """The value, or the one muted mark for a value that is not there.
 
     Built in, so every HQ and extension template has it without a load. Zero is
-    a value and is shown; only None and the empty string are missing.
+    a value and is shown; only None and the empty string are missing. What
+    shows as text (a string, a record's name) holds the names in it
+    (``breakable``); markup, numbers and dates pass as they are.
     """
     if value is None or value == "":
         return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
+    if not isinstance(value, (SafeData, Number, date, time)):
+        return breakable(value)
     return value
 
 
@@ -136,7 +142,7 @@ def when(value, form=""):
     - ``{{ at|when:"exact" }}``: "Oct 3, 2026, 9:29:15 AM CDT".
 
     Takes a datetime, a date or an ISO stamp. Nothing shows the mark for a
-    missing value; text that names no instant is shown as it came.
+    missing value; text that names no instant is shown as it came, its names held.
     """
 
     if form not in _WHEN_FORMS:
@@ -147,7 +153,7 @@ def when(value, form=""):
         return or_empty(value)
     found = _instant(value)
     if found is None:
-        return value
+        return breakable(value)
     return format_html(
         '<time datetime="{}" title="{}">{}</time>',
         found.isoformat(),
@@ -243,18 +249,24 @@ def ago_short(value):
 
 @register.filter
 def readable(value):
-    """A value that may be an ISO 8601 timestamp: ``when`` if it is, unchanged if not."""
+    """A value that may be an ISO 8601 timestamp: ``when`` if it is, its names held if not."""
 
     if not isinstance(value, str) or "T" not in value:
-        return value
+        return breakable(value)
     return when(value)
 
 
 # Where an address, a hostname, a path or an image reference may wrap: after a
 # slash, after a colon run (never inside a scheme's "://" or an IPv6 "::"), and
 # after a dot unless digits stand either side of it, so a version ("2.39.8")
-# and an IPv4 address are each one piece.
-_BREAK_AFTER = re.compile(r"(/|:+|(?<!\d)\.|\.(?!\d))(?=[^/:])")
+# and an IPv4 address are each one piece. An address's query wraps after its
+# "?" and each "&" (escaped by then), so a word of it stays whole.
+_BREAK_AFTER = re.compile(r"(/|:+|\?|&amp;|(?<!\d)\.|\.(?!\d))(?=[^/:])")
+# A seam as markup: an empty span whose stylesheet text is a zero-width space
+# (base.css). A `<wbr>` would do in WebKit, but Chromium breaks at one even
+# where `white-space: nowrap` holds its line, and a zero-width space in the
+# text itself would be copied with the name.
+_SEAM = '<span class="seam"></span>'
 
 
 # A part with a hyphen inside it ("nginx-proxy-manager") is kept on one line:
@@ -265,24 +277,152 @@ _INNER_HYPHEN = re.compile(r"[^-\s]-")
 # path, a host name. A dot after a bracket ("(.zip)") is punctuation.
 _INNER_SEAM = re.compile(r"\w(?:/|:+|\.)\w")
 _WORDS = re.compile(r"(\s+)")
+# A figure in a phrase: an amount, a time, an address of digits ("$12.00",
+# "9:29", "172.18.0.2"). Nothing in one is a place a line breaks.
+_FIGURE = re.compile(r"\W*\d+(?:[.:,]\d+)*\W*")
+# Where a browser may break a hyphenated part: after each inner hyphen.
+_AFTER_HYPHEN = re.compile(r"(?<=[^-\s]-)")
+# A piece of a name shorter than this, alone on a line ("1" under
+# "portainer-agent-"), reads as a stray mark rather than part of the name.
+_SCRAP = 3
 
 
-def _whole(part: str) -> str:
-    return f'<span class="whole">{part}</span>' if _INNER_HYPHEN.search(part) else part
+def _glued(pieces: list[str]) -> list[list[str]]:
+    """``pieces`` grouped so that no group is a scrap: a short piece goes with
+    the one before it, and a short first piece with the one after."""
+
+    groups: list[list[str]] = []
+    for piece in pieces:
+        if groups and (len(unescape(piece)) < _SCRAP or len(unescape("".join(groups[-1]))) < _SCRAP):
+            groups[-1].append(piece)
+        else:
+            groups.append([piece])
+    return groups
 
 
-def _token(word: str) -> str:
+# A label of a name, with the seam after it: letters, digits, hyphens. A
+# bracket or a quote ("com']") makes the run a value that holds names, not one.
+_LABEL = re.compile(r"[\w-]+(?:\.|/|:+)?")
+
+
+def _labels_held(pieces: list[str]) -> list[str]:
+    """``pieces`` with each dotted name's end labels held to their neighbors:
+    the last label stays with the one before it ("example.com"), and the
+    first with the next while the name still has a seam left to break at. A
+    label alone on a line ("com") reads as a word rather than part of a name.
+    A hyphenated first label already reads as a name, so it keeps its seam:
+    held to the next label, the pair could break only at a hyphen.
+    Applied to a sole token, a name that is its value whole."""
+
+    out: list[str] = []
+    start = 0
+    while start < len(pieces):
+        end = start
+        while end < len(pieces) - 1 and pieces[end].endswith("."):
+            end += 1
+        run = pieces[start : end + 1]
+        if all(_LABEL.fullmatch(piece) for piece in run) and len(run) > 1:
+            run = [*run[:-2], run[-2] + run[-1]]
+        if len(run) > 2 and not _INNER_HYPHEN.search(run[0]):
+            run = [run[0] + run[1], *run[2:]]
+        out.extend(run)
+        start = end + 1
+    return out
+
+
+def _joined(text: str) -> str:
+    return f'<span class="joined">{text}</span>'
+
+
+def _held(group: list[str], first: bool, last: bool) -> str:
+    """A group at an end of its part, held together. The hold's edges sit
+    before a hyphen, where no line may break, never after one: a browser
+    decides a break at an element's edge by the box around both sides, and
+    where the part is text with no box of its own (a name cut in a cell),
+    that box would let the line break there."""
+
+    text = "".join(group)
+    if len(group) == 1:
+        return text
+    if first and last:
+        return _joined(text)
+    if first:
+        return _joined(text[:-1]) + "-"
+    return group[0][:-1] + _joined("-" + "".join(group[1:]))
+
+
+def _whole(part: str, boxed: bool = False) -> str:
+    """A part, kept on one line when a hyphen is inside it. Where it must break
+    after a hyphen all the same, a scrap at either end stays with its
+    neighbor; one inside it has words on both sides to share its line.
+
+    ``boxed`` puts its text in a box of its own (``.part``), which a table
+    cell cuts at the cell's edge while the part around it asks for its whole
+    length and holds out for none of it (figures.css)."""
+
+    if not _INNER_HYPHEN.search(part):
+        return part
+    groups = _glued(_AFTER_HYPHEN.split(part))
+    last = len(groups) - 1
+    held = "".join(
+        _held(group, at == 0, at == last) if at in (0, last) else "".join(group) for at, group in enumerate(groups)
+    )
+    inner = f'<span class="part">{held}</span>' if boxed else held
+    return f'<span class="whole">{inner}</span>'
+
+
+def _token(word: str, sole: bool) -> str:
     """A word with a seam or a hyphen inside it, as a token. A word with
-    neither reads as a word, and stays plain text."""
+    neither reads as a word, and stays plain text. A token that is the whole
+    value (a name, never a word of a sentence) is marked ``data-sole``, so a
+    table cell may cut it rather than break it. A figure among words reads
+    as one of them."""
 
     if not (_INNER_SEAM.search(word) or _INNER_HYPHEN.search(word)):
         return word
-    parts = _BREAK_AFTER.sub(r"\1<wbr>", word).split("<wbr>")
-    return '<span class="token">' + "<wbr>".join(_whole(part) for part in parts) + "</span>"
+    if not sole and _FIGURE.fullmatch(unescape(word)):
+        return word
+    # A word has no whitespace, so a newline marks where it splits.
+    seams = _BREAK_AFTER.sub("\\1\n", word).split("\n")
+    # Only a name standing alone holds its end labels: a value of several
+    # words (a list, a sentence) shares its line, and a longer piece there
+    # widens the column it sits in.
+    seams = _labels_held(seams) if sole else seams
+    parts = ["".join(group) for group in _glued(seams)]
+    if not sole:
+        # A word of a phrase: each part is cut on its own, at its cell's edge.
+        return f'<span class="token">{_SEAM.join(_whole(part, boxed=True) for part in parts)}</span>'
+    inside = _SEAM.join(_whole(part) for part in parts)
+    # A name a cell cuts inside a hyphenated part is cut by a box within the
+    # token, so the token can ask for the name's whole length around it
+    # (figures.css).
+    if any(_INNER_HYPHEN.search(part) for part in parts):
+        inside = f'<span class="cut">{inside}</span>'
+    return f'<span class="token" data-sole{_short(word)}>{inside}</span>'
+
+
+# The characters a value a cell cuts holds out for (`--cut-floor`,
+# tables.css) in a narrow box and in any other, counted generously: a
+# proportional face sets most letters narrower than `ch`.
+_FLOORS = (6, 16)
+
+
+def _short(word: str) -> str:
+    """``data-short``, naming the least floor a name is no longer than: such a
+    name holds out for all of it, and no more, since a box padded to the floor
+    leaves a gulf before the words after it on its line."""
+
+    length = len(unescape(word))
+    floor = next((floor for floor in _FLOORS if length <= floor), None)
+    return f' data-short="{floor}"' if floor else ""
+
+
+# The tags that close a word's boxes, after its last letter.
+_CLOSING = re.compile(r"(?:</span>)*$")
 
 
 @register.filter(is_safe=True)
-def breakable(value):
+def breakable(value, mark=""):
     """``value`` as tokens, one per word: escaped, with a line-break
     opportunity where an address or a path may wrap, and none inside a
     hyphenated part.
@@ -290,18 +430,63 @@ def breakable(value):
     The one way a template writes an identifier (``<code>{{ x|breakable }}</code>``,
     or bare as a link's text). A token that fits on its line moves to the next
     one whole; one longer than its line wraps at its seams; a part longer than
-    its line alone breaks wherever it must.
+    its line alone breaks wherever it must. Markup passes as it is: what built
+    it held the names in it, and a seam inside a tag would break the tag.
+
+    ``mark`` is the punctuation the sentence puts after the value
+    (``{{ x|breakable:"." }}``), written inside the last word's innermost box:
+    a box as wide as its line leaves a mark after it no room there, and the
+    mark would start the next line alone. Given the ``forloop`` of a list
+    (``{{ x|breakable:forloop }}``), the mark is the comma between its items.
     """
 
+    mark = _mark(mark)
+    if isinstance(value, SafeData):
+        return value + conditional_escape(mark)
     # Escaped first, so the only markup in the result is what is added here.
     text = str(conditional_escape(value))
-    return mark_safe("".join(_token(word) for word in _WORDS.split(text)))
+    words = _WORDS.split(text)
+    drawn = [_token(word, sole=len(words) == 1) for word in words]
+    if mark:
+        last = drawn[-1]
+        at = _CLOSING.search(last).start()
+        # Hidden from the accessibility tree: in a link it would be heard as
+        # part of the link's name.
+        drawn[-1] = f'{last[:at]}<span class="mark" aria-hidden="true">{conditional_escape(mark)}</span>{last[at:]}'
+    return mark_safe("".join(drawn))
+
+
+def _mark(mark) -> str:
+    """A mark as ``breakable`` takes it: the text given, or for a list's
+    ``forloop`` a comma after every item but the last."""
+
+    if isinstance(mark, dict):
+        return "" if mark["last"] else ","
+    return str(mark)
+
+
+@register.filter
+def then(value, marks):
+    """``marks`` split at ``|``: the first when ``value`` holds, the second
+    (or none) when it does not. The mark a value takes depends on what the
+    sentence says after it (``{% with mark=relay|then:"," %}``), and
+    ``yesno`` cannot say a comma."""
+
+    yes, _, no = str(marks).partition("|")
+    return yes if value else no
+
+
+def _request(context):
+    """The request being drawn: the context's own, which an ``{% include ...
+    only %}`` keeps, or else the variable a plain ``Context`` was given."""
+
+    return getattr(context, "request", None) or context.get("request")
 
 
 def _is_this_page(context, url: str) -> bool:
     """Whether ``url`` is the page being rendered, not a fragment of it."""
 
-    request = context.get("request")
+    request = _request(context)
     if request is None or not url or "#" in url:
         return False
     parts = urlsplit(url)
@@ -309,19 +494,34 @@ def _is_this_page(context, url: str) -> bool:
 
 
 @register.simple_tag(takes_context=True)
-def entity(context, link, code=False, label=""):
+def is_this_page(context, url):
+    """``{% is_this_page url as here %}``: whether ``url`` is the view being
+    drawn, its path and its query: a control that would only lead there is
+    the view's own state, never a way to it."""
+
+    url = str(url or "")
+    return _is_this_page(context, url) and parse_qs(urlsplit(url).query) == parse_qs(
+        _request(context).META.get("QUERY_STRING", "")
+    )
+
+
+@register.simple_tag(takes_context=True)
+def entity(context, link, code=False, label="", mark=""):
     """One entity name, as the link builder answered for it.
 
     ``link`` is an ``application.entity_links.EntityLink``. Every mention of an
     entity on a page renders here, marked ``data-entity``. An external link
     opens in a new tab without a way back to this page. A link to the page it
-    is on renders as plain text.
+    is on renders as plain text. ``mark`` is the punctuation after the name
+    (or a list's ``forloop``), held to it as ``breakable`` holds it.
     """
     if link is None:
-        return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
+        return format_html('<span class="empty-value" title="None">{}</span>', MISSING) + conditional_escape(
+            _mark(mark)
+        )
     if label:
         link = replace(link, label=str(label))
-    label = format_html("<code>{}</code>", breakable(link.label)) if code else breakable(link.label)
+    label = format_html("<code>{}</code>", breakable(link.label, mark)) if code else breakable(link.label, mark)
     if link.url and not link.external and _is_this_page(context, link.url):
         return format_html('<span data-entity="{}">{}</span>', link.kind_label, label)
     if link.url and link.external:
@@ -342,6 +542,20 @@ def entity(context, link, code=False, label=""):
             label,
         )
     return format_html('<span data-entity="{}">{}</span>', link.kind_label, label)
+
+
+@register.simple_tag
+def cell_line(text, url=""):
+    """One fact in a table cell written as a line (``.cell-line``), a link when
+    ``url`` is given: its names held as ``breakable`` holds them, the whole
+    line in its title where the cell cuts it. The line asks for its whole
+    length around the box that cuts it (``.cut``, figures.css)."""
+
+    if url:
+        return format_html(
+            '<a class="cell-line" href="{}" title="{}"><span class="cut">{}</span></a>', url, text, breakable(text)
+        )
+    return format_html('<span class="cell-line" title="{}"><span class="cut">{}</span></span>', text, breakable(text))
 
 
 def _viewer(context):
@@ -423,7 +637,9 @@ def readout(value):
     text = str(value)
     if " " not in text.strip() and _IDENTIFIER.search(text):
         return format_html("<code>{}</code>", breakable(text))
-    return text
+    # A phrase can still name something ("restart example-web"): its names
+    # are held as tokens, its words stay text.
+    return breakable(text)
 
 
 @register.filter

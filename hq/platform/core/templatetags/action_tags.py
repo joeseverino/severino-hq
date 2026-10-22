@@ -13,10 +13,12 @@ from django import template
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
-lazy from hq.platform.application import action_items, decisions
+lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
+lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.application.pages import PageAction
+lazy from hq.platform.core.templatetags.value_tags import breakable, is_this_page
 
 register = template.Library()
 
@@ -58,17 +60,33 @@ def queue_entries(entries):
 
 @register.filter
 def workflow_action(action):
-    """An emitted ActionLink uses the same renderer as a page action."""
+    """An emitted ActionLink uses the same renderer as a page action, so one
+    the command would refuse now is drawn unusable, saying why."""
 
+    if isinstance(action, PageAction):
+        return action
     values = asdict(action) if is_dataclass(action) else action
+    refusal = values.get("refusal", "")
     return PageAction(
         values["label"],
         values["url"],
         method=values["method"].lower(),
         primary=values.get("recommended", False),
         danger=values.get("effect") == "destructive",
-        title=values.get("reason", ""),
+        title=refusal or values.get("reason", ""),
+        disabled=bool(refusal),
     )
+
+
+@register.simple_tag(takes_context=True)
+def remedies(context, actions):
+    """``{% remedies actions as shown %}``: the actions a page draws, each as a
+    page action. A remedy is a way somewhere else, so one that leads only to
+    the view it is drawn on is left out; a post still acts there. A box that
+    holds remedies asks this first, so it is drawn only around a control."""
+
+    shown = (workflow_action(action) for action in actions or ())
+    return [action for action in shown if action.method == "post" or not is_this_page(context, action.url)]
 
 
 @register.simple_tag
@@ -81,7 +99,7 @@ def post_button(label, url, *, name="action", value="", css="btn", title="", dis
         css,
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" disabled") if disabled else "",
-        label,
+        breakable(label),
     )
 
 
@@ -110,11 +128,40 @@ def lead_action(actions):
 @register.filter
 def as_ask(action):
     """An emitted ActionLink that asks for work, as the control that follows it:
-    a row's Read now. It stands idle until pressed; the page's script follows
+    a row's Refresh. It stands idle until pressed; the page's script follows
     what the press started."""
 
     values = asdict(action) if is_dataclass(action) else action
     return Ask(values["label"], values["url"], title=values.get("reason", ""), compact=True)
+
+
+@register.simple_tag
+def words(capability, variant=""):
+    """``{% words "name" %}``: what a button for that command says, from its
+    declaration, for prose that tells a person which one to press."""
+
+    return capability_words(capability, variant)
+
+
+@register.simple_tag
+def waiting():
+    """``{% waiting %}``: what asked-for work says while it waits its turn."""
+
+    return asks.WAITING
+
+
+@register.simple_tag
+def refreshing():
+    """``{% refreshing %}``: what a reading says while it is fetched again."""
+
+    return asks.REFRESHING
+
+
+@register.simple_tag
+def applies_shortly():
+    """``{% applies_shortly %}``: what a saved change says of when it goes live."""
+
+    return asks.APPLIES_SHORTLY
 
 
 @register.simple_tag
@@ -135,7 +182,7 @@ def ask_button(ask, extra=""):
         " ".join(part for part in (ask.css, extra) if part),
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
         mark_safe(" disabled") if ask.disabled else "",
-        ask.label,
+        breakable(ask.label),
     )
 
 

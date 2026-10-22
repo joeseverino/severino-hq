@@ -88,7 +88,7 @@ HQ_SOURCE = "https://github.com/example/hq"
 SERVICES = (
     (HQ, "hq", 8000, f"ghcr.io/example/hq:2.4.0@{HQ_DIGEST}"),
     ("photos.example.com", "immich", 2283, "ghcr.io/immich-app/immich-server:v1.120.0"),
-    ("media.example.com", "jellyfin", 8096, "jellyfin/jellyfin:10.10.0"),
+    ("streaming.example.com", "jellyfin", 8096, "jellyfin/jellyfin:10.10.0"),
     ("git.example.com", "forgejo", 3000, "codeberg.org/forgejo/forgejo:9.0.1"),
     # A long name, and the long tags some publishers build: version, base and build.
     (
@@ -103,6 +103,8 @@ SUPPORT = (
     ("adguard", 3080, "adguard/adguardhome:v0.107.55"),
     ("nginx-proxy-manager", 81, "jc21/nginx-proxy-manager:2.12.1"),
     ("portainer", 9443, "portainer/portainer-ce:2.24.0"),
+    # Named the way Compose names a container: project, service, replica.
+    ("portainer-agent-portainer-agent-1", 9001, "portainer/agent:2.24.0"),
 )
 # Every container: name, port, image.
 CONTAINERS = (*((c, p, i) for _h, c, p, i in SERVICES), *SUPPORT)
@@ -116,6 +118,7 @@ SOURCES = {
     "adguard": "https://github.com/AdguardTeam/AdGuardHome",
     "nginx-proxy-manager": "https://github.com/NginxProxyManager/nginx-proxy-manager",
     "portainer": "https://github.com/portainer/portainer",
+    "portainer-agent-portainer-agent-1": "https://github.com/portainer/agent",
 }
 
 

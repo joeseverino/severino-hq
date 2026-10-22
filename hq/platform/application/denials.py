@@ -14,6 +14,8 @@ from django.utils import timezone
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
+lazy from .capabilities import capability_title
+
 logger = logging.getLogger("severino.denials")
 
 LABEL = "Access denied"
@@ -83,6 +85,6 @@ def _coalesce(interface: str, reason: str, source: str) -> bool:
 
 def _message(reason: str, *, actor: str, capability: str, detail: str) -> str:
     who = actor or "An unauthenticated caller"
-    what = f" {capability}" if capability else ""
+    what = f" “{capability_title(capability)}”" if capability else ""
     said = f"{who} was refused{what}: {reason.replace('_', ' ')}"
     return f"{said}. {detail}".strip() if detail else said

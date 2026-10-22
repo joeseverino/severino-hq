@@ -2,6 +2,12 @@
 // Runs before the bundle: zod inside it probes for eval unless told not to,
 // and HQ's policy refuses eval.
 globalThis.__zod_globalConfig = { jitless: true };
+// The viewer draws a section only when it comes into view, in batches it holds
+// for idle time, and keeps scrolling to every entry a reader followed until the
+// batch is drawn. A busy browser has no idle time, so an earlier entry's
+// scrolling outlasts the click on the next. Without idle callbacks the viewer
+// draws each batch at once, and the page settles on the entry followed last.
+window.requestIdleCallback = undefined;
 
 // Every code-sample target the bundle ships, named so all but curl can be
 // hidden: the option is a list of what to hide, with no list of what to show.

@@ -12,9 +12,9 @@ still selects, validates, and submits.
 <div class="field{% if field.errors %} has-errors{% endif %}">
   <label class="dropzone" data-dropzone>
     {{ field }}
-    <span class="dropzone-title">{{ title|default:field.label }}</span>
-    <span class="dropzone-hint">{{ hint|default:field.help_text }}</span>
+    <span class="dropzone-title">{{ title|default:field.label|breakable }}</span>
+    <span class="dropzone-hint">{{ hint|default:field.help_text|breakable }}</span>
     <ul class="dropzone-files" data-dropzone-files hidden></ul>
   </label>
-  {% if field.errors %}<ul class="errors">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+  {% if field.errors %}<ul class="errors">{% for error in field.errors %}<li>{{ error|breakable }}</li>{% endfor %}</ul>{% endif %}
 </div>

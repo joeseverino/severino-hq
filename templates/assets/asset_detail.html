@@ -1,23 +1,23 @@
 {% extends "page.html" %}
 {% block page %}
 <dl class="kv">
-  {% if thing %}<dt>This is</dt><dd>{{ thing.kind_label }} {% entity thing %}</dd>{% endif %}
+  {% if thing %}<dt>This is</dt><dd>{{ thing.kind_label|breakable }} {% entity thing %}</dd>{% endif %}
   {% if domain %}<dt>Domain page</dt><dd>{% entity domain %}</dd>{% endif %}
-  {% if asset.vendor %}<dt>Vendor</dt><dd>{{ asset.vendor }}</dd>{% endif %}
+  {% if asset.vendor %}<dt>Vendor</dt><dd>{{ asset.vendor|breakable }}</dd>{% endif %}
   <dt>Purchased</dt><dd>{{ asset.purchase_date|when }}</dd>
   {% if asset.total_cost %}
     <dt>Cost</dt><dd>{{ asset.total_cost|money }}</dd>
-    <dt>Business use</dt><dd>{{ asset.business_use_percentage }}%</dd>
+    <dt>Business use</dt><dd>{{ asset.business_use_percentage|breakable }}%</dd>
     <dt>Deductible (est.)</dt><dd>{{ asset.estimated_deductible_amount|money }} <span class="muted">(estimate, not tax advice)</span></dd>
   {% else %}
     <dt>Cost</dt><dd class="muted">Not recorded</dd>
   {% endif %}
-  {% if asset.payment_method %}<dt>Payment method</dt><dd>{{ asset.get_payment_method_display }}</dd>{% endif %}
+  {% if asset.payment_method %}<dt>Payment method</dt><dd>{{ asset.get_payment_method_display|breakable }}</dd>{% endif %}
   {% if asset.serial_number %}<dt>Serial</dt><dd><code>{{ asset.serial_number|breakable }}</code></dd>{% endif %}
   {% if asset.warranty_date %}<dt>Warranty until</dt><dd>{{ asset.warranty_date|when }}</dd>{% endif %}
 </dl>
 
-{% if asset.notes %}<h2>Notes</h2><p>{{ asset.notes|linebreaksbr }}</p>{% endif %}
+{% if asset.notes %}<h2>Notes</h2><p>{{ asset.notes|breakable|linebreaksbr }}</p>{% endif %}
 
 <div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
 {% endblock %}

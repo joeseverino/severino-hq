@@ -1,0 +1,38 @@
+{% comment %}
+A project's dependency updates, inside its GitHub panel: the update pull
+requests open on the repository and the Dependabot alerts none of them answers
+(application.github_estate), as one list under one heading, since an alert
+with no update is the other half of the same question. Whether updates are on
+is a fact in the panel's list above; the switch is the page's own action. The
+queue's alert item and the projects list link here.
+{% endcomment %}
+{% with pulls=repo.update_pulls unmatched=repo.unmatched_alerts %}
+{% if pulls or unmatched %}
+  <div id="updates">
+    <h3 class="section-heading">Open updates <span class="heading-aside">{% if pulls %}{{ pulls|length|counted:"pull request,pull requests" }}{% endif %}{% if pulls and unmatched %} · {% endif %}{% if unmatched %}{{ unmatched|length|counted:"alert with no update,alerts with no update" }}{% endif %}</span></h3>
+    <ul class="github-list">
+      {% for pull in pulls %}
+        <li data-updates>
+          <span class="github-mark">{% include "partials/_icon.html" with name="pull" %}</span>
+          {% if pull.url|web_url %}<a href="{{ pull.url|web_url }}" rel="noopener">{{ pull.title|breakable }}</a>{% else %}{{ pull.title|breakable }}{% endif %}
+          <span class="muted">#{{ pull.number|breakable }}{% if pull.opened %} · opened {{ pull.opened|when:"ago" }}{% endif %}</span>
+          {% with state=pull.checks.state %}
+            {% if state == "failure" %}<span class="pill pill-serious" title="{{ pull.checks.failing|join:', ' }}">Checks failing</span>
+            {% elif state == "pending" %}<span class="pill pill-attention">Checks running</span>
+            {% elif state == "success" %}<span class="pill pill-good">Checks passing</span>
+            {% else %}<span class="muted">No checks</span>{% endif %}
+          {% endwith %}
+        </li>
+      {% endfor %}
+      {% for alert in unmatched %}
+        <li data-unmatched-alerts>
+          <span class="github-mark">{% include "partials/_icon.html" with name="shield" %}</span>
+          {% if alert.url|web_url %}<a href="{{ alert.url|web_url }}" rel="noopener"><code>{{ alert.package|breakable }}</code></a>{% else %}<code>{{ alert.package|breakable }}</code>{% endif %}
+          <span class="pill {% if alert.severity == 'critical' or alert.severity == 'high' %}pill-serious{% elif alert.severity == 'medium' or alert.severity == 'moderate' %}pill-attention{% endif %}">{{ alert.severity|capfirst|breakable }}</span>
+          <span class="muted">No update open · {% if alert.first_patched_version %}fixed in {{ alert.first_patched_version|breakable }}{% else %}no fixed version yet{% endif %} · {{ alert.manifest_path|breakable }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+{% endwith %}

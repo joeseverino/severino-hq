@@ -4,17 +4,17 @@
       {% for group in palette_estate %}{% include "core/_command_center_group.html" %}{% endfor %}
       {% for group in palette_search_groups %}
         <section class="command-center-group" aria-labelledby="command-center-group-search-{{ group.scope }}">
-          <h3 id="command-center-group-search-{{ group.scope }}">{{ group.label }}</h3>
+          <h3 id="command-center-group-search-{{ group.scope }}">{{ group.label|breakable }}</h3>
           {% for item in group.items %}
             <a id="command-center-option-search-{{ group.scope }}-{{ forloop.counter }}"
                class="command-center-option" href="{% if item.url %}{{ item.url }}{% else %}{% url 'core:audit_list' %}?q={{ q|urlencode }}{% endif %}"
                role="option" aria-selected="false" tabindex="-1" data-command-center-option>
               <span class="command-center-copy">
                 <span class="command-center-title">
-                  <strong>{{ item.title }}</strong>
+                  <strong>{{ item.title|breakable }}</strong>
                   {% if item.badge %}<code>{{ item.badge|breakable }}</code>{% endif %}
                 </span>
-                {% if item.snippet %}<span class="muted">{% for text, hit in item.snippet %}{{ text }}{% endfor %}</span>{% endif %}
+                {% if item.snippet %}<span class="muted">{% for text, hit in item.snippet %}{{ text|breakable }}{% endfor %}</span>{% endif %}
               </span>
               <span class="command-center-evidence">
                 {% if item.timestamp %}<span class="command-center-destination">{{ item.timestamp|when }}</span>{% endif %}
@@ -27,11 +27,11 @@
       {% for group in palette_groups %}{% include "core/_command_center_group.html" %}{% endfor %}
     </div>
     {% if palette_total > palette_count %}
-      <p class="command-center-more muted">Showing {{ palette_count }} of {{ palette_total }} matches. Press Enter to search all of HQ.</p>
+      <p class="command-center-more muted">Showing {{ palette_count|breakable }} of {{ palette_total|breakable }} matches. Press Enter to search all of HQ.</p>
     {% endif %}
   {% elif q %}
     <div class="command-center-empty">
-      <strong>No page or command called “{{ q }}”.</strong>
+      <strong>No page or command called “{{ q|breakable }}”.</strong>
       <span class="muted">Press Enter to search everything.</span>
     </div>
   {% else %}

@@ -26,7 +26,7 @@ records. Each state is worded by `credential_sight.standing`: refused, unreadabl
 or out of date.
 {% endcomment %}
 {% if inventory %}
-  {% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %} · {% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
+  {% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %} · {% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower|breakable }}</span>{% endif %}{% endif %}{% endfor %}
   {% elif only_kind %}
     <p class="muted">
       {% for snapshot in inventory %}
@@ -35,7 +35,7 @@ or out of date.
             {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %} ·
             {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}
           {% else %}
-            {{ snapshot.state_label|lower }}{% if snapshot.error %} ({{ snapshot.error }}){% endif %}
+            {{ snapshot.state_label|lower|breakable }}{% if snapshot.error %} ({{ snapshot.error|breakable:")" }}{% endif %}
           {% endif %}
         {% endif %}
       {% endfor %}
@@ -51,15 +51,15 @@ or out of date.
       <div class="sweep-grid">
         {% for snapshot in inventory %}
           <div class="sweep-item{% if not snapshot.reachable %} sweep-item-unreachable{% elif snapshot.state == "stale" or snapshot.state == "partial" %} sweep-item-stale{% endif %}">
-            <span class="sweep-label">{{ snapshot.label }}</span>
+            <span class="sweep-label">{{ snapshot.label|breakable }}</span>
             {% if snapshot.reachable %}
-              <span class="sweep-count">{{ snapshot.count }}</span>
+              <span class="sweep-count">{{ snapshot.count|breakable }}</span>
               <span class="sweep-age"{% if snapshot.refused_parts %} title="{{ snapshot.refused_parts|join:'; ' }}"{% endif %}>
-                {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% if snapshot.state == "stale" or snapshot.state == "partial" %} · {{ snapshot.state_label|lower }}{% endif %}
+                {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% if snapshot.state == "stale" or snapshot.state == "partial" %} · {{ snapshot.state_label|lower|breakable }}{% endif %}
               </span>
             {% else %}
               <span class="sweep-count">{% empty_value %}</span>
-              <span class="sweep-age" title="{{ snapshot.error }}">{{ snapshot.state_label }}</span>
+              <span class="sweep-age" title="{{ snapshot.error }}">{{ snapshot.state_label|breakable }}</span>
             {% endif %}
           </div>
         {% endfor %}

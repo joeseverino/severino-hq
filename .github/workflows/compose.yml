@@ -115,8 +115,11 @@ jobs:
         run: |
           set -euo pipefail
           . ./tools/pipeline/toolchain.env
-          echo "cordon-commit=$CORDON_COMMIT" >> "$GITHUB_OUTPUT"
-          echo "trivy=$TRIVY_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "cordon-commit=$CORDON_COMMIT"
+            echo "trivy=$TRIVY_VERSION"
+            echo "date=$(date -u +%Y-%m-%d)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Read the composition set
         # A secret, and never interpolated into the script body. Actions
@@ -462,6 +465,18 @@ jobs:
           IMAGE: ${{ steps.candidate.outputs.image }}
         run: tools/pipeline/image-health.sh "$IMAGE"
 
+      # The scan caches its database by the day under this key, and saves it
+      # wherever it caches. Only main's composition caches; a pull request's
+      # restores main's newest and saves nothing.
+      - name: Restore the vulnerability database
+        if: >-
+          steps.fingerprint.outputs.build == 'true' && github.ref != 'refs/heads/main'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/.cache/trivy
+          key: cache-trivy-${{ steps.pins.outputs.date }}
+          restore-keys: cache-trivy-
+
       - name: Scan composed image
         # Skipped only by an admission's dispatch that found nothing to do.
         # JSON to a file rather than the table: the table lists every package,
@@ -472,6 +487,8 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ steps.pins.outputs.trivy }}
+          cache: ${{ github.ref == 'refs/heads/main' }}
+          cache-dir: ${{ github.workspace }}/.cache/trivy
           image-ref: ${{ steps.candidate.outputs.image }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
@@ -549,6 +566,8 @@ jobs:
         with:
           version: ${{ steps.mise.outputs.version }}
           install_args: age
+          # One small tool, on a failure: no cache entry of its own.
+          cache: false
       - name: Seal the withheld output
         id: seal
         if: failure()

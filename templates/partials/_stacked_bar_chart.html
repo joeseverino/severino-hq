@@ -1,13 +1,13 @@
 <figure class="chart-card card">
   <figcaption>
-    <h2>{{ chart.title }}</h2>
-    <p>{{ chart.description }}</p>
+    <h2>{{ chart.title|breakable }}</h2>
+    <p>{{ chart.description|breakable }}</p>
   </figcaption>
   {% if chart.empty %}
     {% include "partials/_empty_state.html" with message="Not enough data to chart yet." %}
   {% else %}
     <div class="chart-legend" aria-label="Legend">
-      {% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label }}</span>{% endfor %}
+      {% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}
     </div>
     <div class="chart-scroll">
       <div class="chart-frame{% if chart.dense %} chart-frame-dense{% endif %}" style="--gutter: {{ chart.gutter }}%">
@@ -27,8 +27,8 @@
         rendered by the browser rather than by the SVG, so it stays 11px however
         far the drawing has been scaled to fit.
         {% endcomment %}
-        {% for tick in chart.axis_y %}<span class="chart-axis chart-tick" style="--at: {{ tick.at }}%">{{ tick.label }}</span>{% endfor %}
-        <div class="chart-cats">{% for category in chart.axis_x %}<span class="chart-axis chart-category" style="--at: {{ category.at }}%">{{ category.label }}</span>{% endfor %}</div>
+        {% for tick in chart.axis_y %}<span class="chart-axis chart-tick" style="--at: {{ tick.at }}%">{{ tick.label|breakable }}</span>{% endfor %}
+        <div class="chart-cats">{% for category in chart.axis_x %}<span class="chart-axis chart-category" style="--at: {{ category.at }}%">{{ category.label|breakable }}</span>{% endfor %}</div>
       </div>
     </div>
     <details class="chart-data">
@@ -36,7 +36,7 @@
       {% table_region chart.title pane=True %}
         <table class="data-table compact-table">
           <thead><tr>{% table_heading "Period" "status" %}{% for heading in chart.table_headings %}{% table_heading heading "numeric" %}{% endfor %}</tr></thead>
-          <tbody>{% for row in chart.table_rows %}<tr><th>{{ row.label }}</th>{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+          <tbody>{% for row in chart.table_rows %}<tr><th>{{ row.label|breakable }}</th>{% for cell in row.cells %}<td>{{ cell|breakable }}</td>{% endfor %}</tr>{% endfor %}</tbody>
         </table>
       {% endtable_region %}
     </details>

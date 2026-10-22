@@ -15,11 +15,11 @@ narrow page the surfaces go from the far end, then the default.
     </thead>
     {% for group in groups %}
       <tbody>
-        <tr class="row-group"><th colspan="{{ column_heads|length|add:2 }}" scope="rowgroup">{{ group.label }}</th></tr>
+        <tr class="row-group"><th colspan="{{ column_heads|length|add:2 }}" scope="rowgroup">{{ group.label|breakable }}</th></tr>
         {% for row in group.rows %}
           <tr>
-            <th scope="row" class="row-gutter">{{ row.label }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label }}</span>{% endif %}{% row_toggle %}</th>
-            <td class="policy-default">{{ row.default }}</td>
+            <th scope="row" class="row-gutter">{{ row.label|breakable }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label|breakable }}</span>{% endif %}{% row_toggle %}</th>
+            <td class="policy-default">{{ row.default|breakable }}</td>
             {% for cell in row.cells %}<td>{% include "core/_policy_setting.html" %}</td>{% endfor %}
           </tr>
         {% endfor %}

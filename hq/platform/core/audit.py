@@ -6,6 +6,7 @@ post_save / post_delete signals then write to AuditLog, attributing the change
 to the current request user (via CurrentUserMiddleware).
 """
 
+import json
 import logging
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
@@ -16,11 +17,14 @@ from decimal import Decimal
 from typing import Any, Literal, overload
 from uuid import UUID
 
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.db.models import Max, Model, Q, QuerySet
 lazy from django.utils import timezone
+
+from hq.platform.application.payload_words import changed_words
 
 from . import speculation
 from .facets import as_metadata as facet_metadata
@@ -70,9 +74,29 @@ VALUE_CHARS = 200
 
 
 def _readable(value):
+    """A value as the diff compares it. A record or list is copied whole as
+    JSON, so a change anywhere in it is seen, and said in words only once it is
+    known to have moved.
+    """
     if value is None or isinstance(value, (bool, int, float, str)):
         return value if not isinstance(value, str) else value[:VALUE_CHARS]
+    if isinstance(value, (dict, list, tuple)):
+        try:
+            return json.loads(json.dumps(value, cls=DjangoJSONEncoder))
+        except TypeError, ValueError:
+            pass
     return str(value)[:VALUE_CHARS]
+
+
+def _cut(words: str) -> str:
+    return words if len(words) <= VALUE_CHARS else f"{words[: VALUE_CHARS - 1]}…"
+
+
+def _inner_changes(before, after) -> dict[str, list[str]]:
+    """A record or list that moved, as each value in it that moved, in words,
+    by where it is inside the field ("" for the field as a whole).
+    """
+    return {row.label: [_cut(row.before), _cut(row.after)] for row in changed_words(before, after)}
 
 
 # Types whose values cannot change in place. Holding one is the same as
@@ -130,7 +154,9 @@ def _shown(held: dict | None) -> dict | None:
 
 
 def _changes(before: dict | None, after: dict, secret: frozenset) -> dict:
-    """Which fields moved, and what they moved between.
+    """Which fields moved, and what they moved between: a pair for a plain
+    value, and for a record or list the pair of each value in it that moved,
+    in words, by where it is.
 
     `before` is None for an instance constructed rather than read: nothing
     is known about the previous state, so nothing is claimed about it.
@@ -143,6 +169,9 @@ def _changes(before: dict | None, after: dict, secret: frozenset) -> dict:
             continue
         if name in secret:
             changed[name] = [REDACTED, REDACTED]
+        elif isinstance(before[name], (dict, list)) or isinstance(new, (dict, list)):
+            if inner := _inner_changes(before[name], new):
+                changed[name] = inner
         else:
             changed[name] = [before[name], new]
     return changed

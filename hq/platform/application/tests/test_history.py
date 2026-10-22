@@ -10,6 +10,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AuditLog
 
 from ..conditions import held_since, stamped
@@ -291,7 +292,7 @@ class AuditHistoryPageTests(TestCase):
 
         page = self.client.get(self.url()).content.decode()
 
-        self.assertIn("example-operator · 4 times", page)
+        self.assertIn("example-operator · 4 times", text(page))
 
     def test_a_run_breaks_on_another_actor_a_gap_or_a_moment_between(self):
         user = get_user_model().objects.get(username="example-operator")

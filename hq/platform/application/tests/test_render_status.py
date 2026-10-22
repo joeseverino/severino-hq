@@ -404,7 +404,7 @@ class SyncTests(TestCase):
 
         self.assertEqual(finding["severity"], "attention")
         self.assertEqual(finding["title"], "1Password Connect on example-controller has stopped syncing")
-        self.assertIn({"label": "Sync", "value": "TOKEN_NEEDED"}, finding["evidence"])
+        self.assertIn({"label": "Updates from 1Password", "value": "TOKEN_NEEDED"}, finding["evidence"])
         self.assertEqual(
             finding["operator_steps"][-1]["command"],
             'ssh example-controller "sudo systemctl start severino-hq-secrets.service"',
@@ -420,7 +420,7 @@ class SyncTests(TestCase):
 
         (finding,) = raised("connect-sync-stalled")
 
-        self.assertIn({"label": "Sync", "value": "not reported"}, finding["evidence"])
+        self.assertIn({"label": "Updates from 1Password", "value": "not reported"}, finding["evidence"])
 
     def test_a_run_that_never_reached_connect_says_nothing_of_sync(self):
         sweep(read(sync=None))

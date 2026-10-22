@@ -32,7 +32,7 @@ NOT_READ = "Not read yet"
 
 
 @dataclass(frozen=True, slots=True)
-class Reading:
+class CheckOutcome:
     """``met`` is None when there is nothing to read it from."""
 
     met: bool | None
@@ -46,7 +46,7 @@ class Reading:
 
 
 @dataclass(frozen=True, slots=True)
-class Check:
+class PostureCheck:
     id: str
     label: str
     # The finding's title.
@@ -56,13 +56,13 @@ class Check:
     # The panel's sentence when it is met.
     holds: str
     step: str
-    read: Callable[[Inputs], Reading]
+    read: Callable[[Inputs], CheckOutcome]
 
 
 @dataclass(frozen=True, slots=True)
-class Standing:
-    check: Check
-    reading: Reading
+class CheckStanding:
+    check: PostureCheck
+    reading: CheckOutcome
     # Under Advanced HQ Posture an unmet check is a fault; otherwise it is
     # an open item, shown quietly.
     enforced: bool = False
@@ -92,7 +92,7 @@ class Standing:
 @dataclass(frozen=True, slots=True)
 class Posture:
     advanced: bool
-    standings: tuple[Standing, ...]
+    standings: tuple[CheckStanding, ...]
 
     @property
     def met_count(self) -> int:
@@ -115,7 +115,7 @@ class Posture:
         return " · ".join(parts)
 
     @property
-    def unmet(self) -> tuple[Standing, ...]:
+    def unmet(self) -> tuple[CheckStanding, ...]:
         return tuple(standing for standing in self.standings if not standing.met)
 
     def as_dict(self) -> dict[str, Any]:
@@ -153,13 +153,13 @@ class Inputs:
     groups: tuple[Any, ...]
 
 
-def _from_control(control, kinds: tuple[str, ...]) -> Reading:
+def _from_control(control, kinds: tuple[str, ...]) -> CheckOutcome:
     """Evidence only when unmet: a met check's label says it."""
 
     met = {"good": True, "neutral": None, "attention": None}.get(control.state, False)
     if met is None:
         return _not_read(kinds, control.evidence)
-    return Reading(met, "" if met else control.evidence)
+    return CheckOutcome(met, "" if met else control.evidence)
 
 
 def _readers(kinds: tuple[str, ...]) -> tuple[str, ...]:
@@ -174,7 +174,7 @@ def _readers(kinds: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(found))
 
 
-def _not_read(kinds: tuple[str, ...], evidence: str = NOT_READ) -> Reading:
+def _not_read(kinds: tuple[str, ...], evidence: str = NOT_READ) -> CheckOutcome:
     """A check nothing has read, with what would read it: the connection to
     add, else the controller to run, else only that the reading is due."""
 
@@ -184,25 +184,25 @@ def _not_read(kinds: tuple[str, ...], evidence: str = NOT_READ) -> Reading:
     readers = [provider for provider in _readers(kinds) if provider in CONNECTION_LABELS]
     if readers and not connected.intersection(readers):
         labels = " or ".join(CONNECTION_LABELS[provider] for provider in readers)
-        return Reading(None, evidence, remedy=f"connect {labels}", remedy_url=_setup_url())
+        return CheckOutcome(None, evidence, remedy=f"connect {labels}", remedy_url=_setup_url())
     if not cadence.controller_standing(present()).known:
-        return Reading(None, evidence, remedy="run the controller", remedy_url=reverse("control_plane:controller"))
-    return Reading(None, evidence)
+        return CheckOutcome(None, evidence, remedy="run the controller", remedy_url=reverse("control_plane:controller"))
+    return CheckOutcome(None, evidence)
 
 
 def _setup_url() -> str:
     return reverse("control_plane:connections") + "#connection-setup-heading"
 
 
-def _sign_in(_inputs) -> Reading:
-    return Reading(True, "") if sso_only() else Reading(False, "Password sign-in installed")
+def _sign_in(_inputs) -> CheckOutcome:
+    return CheckOutcome(True, "") if sso_only() else CheckOutcome(False, "Password sign-in installed")
 
 
-def _edge(inputs) -> Reading:
+def _edge(inputs) -> CheckOutcome:
     return _from_control(inputs.edge, ingress_kinds())
 
 
-def _firewall(_inputs) -> Reading:
+def _firewall(_inputs) -> CheckOutcome:
     return _from_control(
         host_firewall_control(next(iter(stored_snapshots().get(FIREWALL_KIND, ())), None)), (FIREWALL_KIND,)
     )
@@ -222,26 +222,30 @@ def _allows_everyone(policy) -> bool:
     return grants or acls
 
 
-def _tailnet_policy(_inputs) -> Reading:
+def _tailnet_policy(_inputs) -> CheckOutcome:
     policy = tailnet.policy()
     if not policy.known and not policy.acls:
         return _not_read((TAILNET_POLICY_KIND,))
     if _allows_everyone(policy):
-        return Reading(False, "An allow-all rule")
-    return Reading(True, counted(len(policy.grants) + len(policy.acls), "rule", "rules"))
+        return CheckOutcome(False, "An allow-all rule")
+    return CheckOutcome(True, counted(len(policy.grants) + len(policy.acls), "rule", "rules"))
 
 
-def _tailnet_lock(_inputs) -> Reading:
+def _tailnet_lock(_inputs) -> CheckOutcome:
     lock = tailnet.policy().lock
     if not lock:
         # A read that failed keeps the last reading, so with none it says why.
         snapshot = next(iter(stored_snapshots().get(TAILNET_LOCK_KIND, ())), None)
         return _not_read((TAILNET_LOCK_KIND,), (snapshot.error if snapshot is not None else "") or NOT_READ)
     keys = lock.get("trusted_keys") or 0
-    return Reading(True, counted(keys, "signing key", "signing keys")) if lock.get("enabled") else Reading(False, "Off")
+    return (
+        CheckOutcome(True, counted(keys, "signing key", "signing keys"))
+        if lock.get("enabled")
+        else CheckOutcome(False, "Off")
+    )
 
 
-def _scope(inputs) -> Reading:
+def _scope(inputs) -> CheckOutcome:
     """Unmet only where the provider takes a scoped token (its setup lists
     permissions); a login has no scoped form."""
 
@@ -253,15 +257,15 @@ def _scope(inputs) -> Reading:
         if connection.instance.credential_model == "coarse" and connection.instance.kind in scoped
     )
     if broad:
-        return Reading(False, f"Full account access: {', '.join(broad)}")
+        return CheckOutcome(False, f"Full account access: {', '.join(broad)}")
     if not any(connection.instance.credential_model not in ("none", "") for connection in connections):
-        return Reading(None, "No connections yet", remedy="add a connection", remedy_url=_setup_url())
+        return CheckOutcome(None, "No connections yet", remedy="add a connection", remedy_url=_setup_url())
     if any(connection.instance.credential_model in ("", "unknown") for connection in connections):
-        return Reading(None, NOT_READ)
+        return CheckOutcome(None, NOT_READ)
     return _scoped_where_offered(connections, scoped)
 
 
-def _scoped_where_offered(connections, scoped: set[str]) -> Reading:
+def _scoped_where_offered(connections, scoped: set[str]) -> CheckOutcome:
     """Met, said as what was checked: the scoped tokens, and the logins whose
     service offers nothing narrower, by name, so a whole-account login is never
     read as a clean pass."""
@@ -276,22 +280,24 @@ def _scoped_where_offered(connections, scoped: set[str]) -> Reading:
     if whole:
         said.append(f"nothing narrower offered for {', '.join(whole)}")
     evidence = ", ".join(said)
-    return Reading(True, evidence[:1].upper() + evidence[1:], qualified=bool(whole))
+    return CheckOutcome(True, evidence[:1].upper() + evidence[1:], qualified=bool(whole))
 
 
-def _approval(_inputs) -> Reading:
+def _approval(_inputs) -> CheckOutcome:
     found = repository(None)
     if found is None:
         return _not_read((REPOSITORY_KIND,))
     production = found.production_environment
     if production is None:
-        return Reading(False, "No production environment")
+        return CheckOutcome(False, "No production environment")
     reviewers = production.get("reviewers") or ()
-    return Reading(True, f"Reviewers: {', '.join(reviewers)}") if reviewers else Reading(False, "No reviewers")
+    return (
+        CheckOutcome(True, f"Reviewers: {', '.join(reviewers)}") if reviewers else CheckOutcome(False, "No reviewers")
+    )
 
 
-STANDARD: tuple[Check, ...] = (
-    Check(
+STANDARD: tuple[PostureCheck, ...] = (
+    PostureCheck(
         "edge",
         "The proxy lets in tailnet addresses only",
         "The proxy lets in more than the tailnet",
@@ -300,7 +306,7 @@ STANDARD: tuple[Check, ...] = (
         "Give HQ's proxy host an access list that allows the two tailnet ranges and denies everything else.",
         _edge,
     ),
-    Check(
+    PostureCheck(
         "host-firewall",
         "The firewall requires the tailnet interface",
         "The firewall accepts HQ's port by address alone",
@@ -309,7 +315,7 @@ STANDARD: tuple[Check, ...] = (
         "Accept HQ's port only on the tailnet interface in the host firewall.",
         _firewall,
     ),
-    Check(
+    PostureCheck(
         "tailnet-policy",
         "The tailnet policy has no allow-all rule",
         "The tailnet policy lets every device reach every device",
@@ -318,7 +324,7 @@ STANDARD: tuple[Check, ...] = (
         "Replace the allow-all rule with grants that name who reaches HQ.",
         _tailnet_policy,
     ),
-    Check(
+    PostureCheck(
         "tailnet-lock",
         "Tailnet lock is on",
         "Tailnet lock is off",
@@ -327,7 +333,7 @@ STANDARD: tuple[Check, ...] = (
         "Turn on tailnet lock, with signing keys on devices you hold.",
         _tailnet_lock,
     ),
-    Check(
+    PostureCheck(
         "sign-in",
         "Sign-in is single sign-on only",
         "Password sign-in is installed",
@@ -336,7 +342,7 @@ STANDARD: tuple[Check, ...] = (
         "Turn password sign-in off in HQ's settings once single sign-on works.",
         _sign_in,
     ),
-    Check(
+    PostureCheck(
         "scope",
         "Each token is scoped where its service allows it",
         "A full-account token is used where a scoped one is offered",
@@ -345,7 +351,7 @@ STANDARD: tuple[Check, ...] = (
         "Replace the full-account token with a scoped one holding the permissions its connection lists.",
         _scope,
     ),
-    Check(
+    PostureCheck(
         "approval",
         "Deploys wait for your approval",
         "Deploys do not wait for approval",
@@ -359,7 +365,7 @@ STANDARD: tuple[Check, ...] = (
 
 def posture(inputs: Inputs) -> Posture:
     enforced = advanced()
-    return Posture(enforced, tuple(Standing(check, check.read(inputs), enforced) for check in STANDARD))
+    return Posture(enforced, tuple(CheckStanding(check, check.read(inputs), enforced) for check in STANDARD))
 
 
 def estate_posture(groups) -> Posture:

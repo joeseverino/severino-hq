@@ -9,36 +9,56 @@ trap 'rm -rf "$work"' EXIT
 bin="$work/bin"
 mkdir -p "$bin"
 
-# run list: the run named by TEST_<status> for the repository. run download:
-# an artifact exists when its name is in TEST_ARTIFACTS. api: a run is the
-# shared repository's, described by TEST_STARTED. Every call is logged.
+# api .../workflows/<file>/runs: the shared repository's newest runs, newest
+# first: a success on a branch and one from a pull request, which never count,
+# then on main TEST_SHARED_NEWEST failed unless it is TEST_SHARED_SUCCESS, and
+# TEST_SHARED_SUCCESS; none on main when TEST_NO_MAIN is set, and a failed call
+# when TEST_API_FAILS is. Any other repository's newest is 300, a success. The
+# --jq filter runs in jq. run download: an artifact exists when its name is in
+# TEST_ARTIFACTS. api .../runs/<id>: a run is the shared repository's,
+# described by TEST_STARTED. Every call is logged.
 cat >"$bin/gh" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$TEST_CALLS"
 if [ "$1" = api ]; then
   case "$2" in
+    repos/example/extensions/actions/workflows/*/runs\?*)
+      if [ -n "$TEST_API_FAILS" ]; then
+        echo "HTTP 502: Bad Gateway (https://api.github.com/$2)" >&2
+        exit 1
+      fi
+      [ "$3" = --jq ] || exit 2
+      jq -n --arg success "$TEST_SHARED_SUCCESS" --arg newest "$TEST_SHARED_NEWEST" --arg none "$TEST_NO_MAIN" '
+        def run($id; $branch; $event; $conclusion):
+          {id: $id, head_branch: $branch, event: $event, status: "completed", conclusion: $conclusion};
+        {workflow_runs: (
+          [run(999; "feature"; "push"; "success"), run(998; "main"; "pull_request"; "success")] +
+          if $none != "" then [] else
+            (if $newest != "" and $newest != $success then [run($newest | tonumber; "main"; "push"; "failure")] else [] end) +
+            (if $success != "" then [run($success | tonumber; "main"; "push"; "success")] else [] end)
+          end)}' | jq -r "$4"
+      exit ;;
+    repos/*/actions/workflows/*/runs\?*)
+      [ "$3" = --jq ] || exit 2
+      jq -n '{workflow_runs: [{id: 300, head_branch: "main", event: "push", status: "completed", conclusion: "success"}]}' | jq -r "$4"
+      exit ;;
     repos/example/extensions/actions/runs/*) printf '%s\n' "$TEST_STARTED"; exit 0 ;;
     *) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
   esac
 fi
-repository="" status="" name="" dir=""
+[ "$1 $2" = "run download" ] || exit 2
+repository="" name="" dir=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo) repository=$2; shift ;;
-    --status) status=$2; shift ;;
     --name) name=$2; shift ;;
     --dir) dir=$2; shift ;;
   esac
   shift
 done
-case "$status" in
-  success) [ "$repository" = example/extensions ] && echo "$TEST_SHARED_SUCCESS" || echo 300 ;;
-  completed) [ "$repository" = example/extensions ] && echo "$TEST_SHARED_NEWEST" || echo 300 ;;
-  "")
-    case " $TEST_ARTIFACTS " in
-      *" $name "*) mkdir -p "$dir" && echo "$name" >"$dir/admission.json" ;;
-      *) echo "no artifact matches $name in $repository" >&2; exit 1 ;;
-    esac ;;
+case " $TEST_ARTIFACTS " in
+  *" $name "*) mkdir -p "$dir" && echo "$name" >"$dir/admission.json" ;;
+  *) echo "no artifact matches $name in $repository" >&2; exit 1 ;;
 esac
 STUB
 chmod +x "$bin/gh"
@@ -57,6 +77,7 @@ admissions() {
   rm -rf "$work/withheld" "$work/artifacts"
   (cd "$work" && PATH="$bin:$PATH" TEST_CALLS="$work/calls" WITHHELD_DIR="$work/withheld" \
     TEST_SHARED_SUCCESS="${SUCCESS-200}" TEST_SHARED_NEWEST="${NEWEST-200}" \
+    TEST_NO_MAIN="${NO_MAIN-}" TEST_API_FAILS="${API_FAILS-}" \
     TEST_ARTIFACTS="${ARTIFACTS-$every_artifact}" ADMISSION_RUN="${STARTED_RUN-}" \
     TEST_STARTED="${STARTED-$(printf '%s\t%s\t%s\t%s' "$workflow" main push -)}" \
     "$repo_dir/tools/pipeline/admissions.sh" find set.json admissions.txt &&
@@ -75,7 +96,7 @@ admissions "$two_in_one" || fail "two extensions in one repository did not resol
 [ "$(cat "$work/admissions.txt")" = "$(printf '%s\t%s\t%s\n' \
   example.alpha example/extensions 200 example.beta example/extensions 200 example.gamma example/gamma 300)" ] ||
   fail "each extension is not paired with its repository's newest successful run"
-[ "$(grep -c 'run list' "$work/calls")" -eq 4 ] || fail "a repository's runs were listed once per extension, not once"
+[ "$(grep -c '/runs?' "$work/calls")" -eq 2 ] || fail "a repository's runs were listed once per extension, not once"
 for id in example.alpha example.beta example.gamma; do
   [ "$(cat "$work/artifacts/$id/admission.json")" = "admission-$id" ] || fail "$id did not get its own artifact"
 done
@@ -101,7 +122,20 @@ quiet "a missing artifact"
 grep -q 'example.beta' "$work/withheld/admissions.log" || fail "the withheld log does not say which artifact is missing"
 
 if SUCCESS="" admissions "$two_in_one"; then fail "a repository with no successful admission was composed"; fi
+grep -q 'no successful admission on main' "$work/out" || fail "a repository with no successful admission did not say so"
 quiet "no successful admission"
+
+if NO_MAIN=1 admissions "$two_in_one"; then fail "a repository with no run on main in the page was composed"; fi
+grep -q 'no admission run on main among its newest 100' "$work/out" ||
+  fail "a page with no run on main did not say so"
+! grep -q 'no successful admission' "$work/out" || fail "a page with no run on main read as no successful admission"
+quiet "no run on main"
+
+if API_FAILS=1 admissions "$two_in_one"; then fail "a failed API call was composed"; fi
+grep -q '::error::the GitHub API failed .*HTTP 502: Bad Gateway' "$work/out" || fail "a failed API call did not fail with the API's error"
+! grep -q 'admission on main\|admission run on main' "$work/out" || fail "a failed API call read as a missing admission"
+quiet "a failed API call"
+grep -q 'example/extensions' "$work/withheld/admissions.log" || fail "the withheld log does not say which repository's call failed"
 
 if admissions "$(jq '.extensions[0].workflow = ".github/workflows/other.yml"' <<<"$two_in_one")"; then
   fail "two signers for one repository were accepted"

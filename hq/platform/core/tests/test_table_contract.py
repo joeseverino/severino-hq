@@ -10,8 +10,10 @@ from django.test import RequestFactory, SimpleTestCase, tag
 from django.urls import reverse
 
 from hq.domains.expenses.views import ExpenseListView
-from hq.platform.application.tables import TableColumn, TableListMixin, named_first, ranked
-from hq.platform.application.tests.markup import all_elements, elements, select, within
+from hq.platform.application.routes import routed
+from hq.platform.application.tables import TableColumn, TableListMixin, named_first, ranked, typed
+from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
+from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 from hq.platform.core.templatetags import table_tags
 
 from .test_web import _AuthedTestCase
@@ -134,9 +136,7 @@ class TableContractTests(SimpleTestCase):
         }
         marked |= set(re.findall(r'toggleAttribute\("data-([\w-]+)"', script))
         self.assertIn("cut", marked)
-        stylesheet = re.sub(
-            r"/\*.*?\*/", " ", (root / "static" / "css" / "app.css").read_text(encoding="utf-8"), flags=re.DOTALL
-        )
+        stylesheet = re.sub(r"/\*.*?\*/", " ", whole_stylesheet(), flags=re.DOTALL)
         gutters = [
             selector
             for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", stylesheet)
@@ -251,6 +251,82 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(marked, {"dash", "empty", "empty value", "line break"})
         self.assertEqual(len(blank), 4, "a table inside a cell is that cell's content")
 
+    def test_each_cell_carries_the_tier_its_heading_declares_however_wide_the_table(self):
+        # Fourteen columns: the name, then each that may leave, the far end first.
+        headings = "".join(f'{{% table_heading "C{n}" drop={15 - n} %}}' for n in range(2, 15))
+        cells = "".join(f'<td data-col="{n}">{n}</td>' for n in range(3, 15))
+        nested = "<table><tbody><tr><td>a</td><td>b</td><td>c</td></tr></tbody></table>"
+        source = (
+            '{% table_region "Things" mid=2 narrow=13 %}<table class="data-table"><thead><tr>'
+            '{% table_heading "Name" %}' + headings + "</tr></thead><tbody>"
+            '<tr class="row-group"><th colspan="14">Group</th></tr>'
+            f'<tr><th>one</th><td data-col="2">2</td>{cells}</tr>'
+            f'<tr><th>two</th><td data-col="2">{nested}</td>{cells}</tr>'
+            '<tr><td colspan="14">Nothing else</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        html = _render(source)
+        tier = {heading.text.strip(): heading.attrs.get("data-drop-tier") for heading in elements(html, "th")}
+        self.assertEqual((tier["C2"], tier["C13"], tier["C14"]), ("narrow", "mid", "mid"))
+        found = elements(html, "td")
+        for cell in (each for each in found if "data-col" in each.attrs):
+            with self.subTest(column=cell.attrs["data-col"]):
+                self.assertEqual(cell.attrs.get("data-drop-tier"), tier[f"C{cell.attrs['data-col']}"])
+        others = [each for each in found if "data-col" not in each.attrs]
+        self.assertEqual(len(others), 4, "the three cells of the table in a cell, and the one spanning the row")
+        self.assertEqual([each for each in others if "data-drop-tier" in each.attrs], [])
+
+    def test_a_column_with_nothing_in_any_row_is_marked_in_every_row(self):
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Pick" select_all=True %}'
+            '{% table_heading "Name" %}{% table_heading "Empty" %}{% table_heading "Some" %}</tr></thead><tbody>'
+            '<tr class="row-group"><th colspan="4">Group</th></tr>'
+            '<tr><td data-col="pick"></td><td data-col="name">—</td><td data-col="empty">—</td><td data-col="some">Said</td></tr>'
+            '<tr><td data-col="pick"></td><td data-col="name">—</td><td data-col="empty"> </td><td data-col="some">–</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        marked = [each for each in all_elements(_render(source)) if "data-blank-column" in each.attrs]
+        # Never the name's, though it says nothing: a column of tick-boxes stands before it.
+        self.assertEqual(
+            [each.attrs.get("data-col") or each.text.strip() for each in marked], ["Empty", "empty", "empty"]
+        )
+
+    def test_what_a_kept_line_says_is_one_part_the_stylesheet_can_hold(self):
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
+            '<tr><td>a</td><td data-col="said">Ask me first <span class="muted">for\nthis</span></td><td>b</td></tr>'
+            '<tr><td>c</td><td data-col="blank">—</td><td>d</td></tr>'
+            '<tr><td colspan="3">Nothing else</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        kept = with_class(_render(source), "kept-line")
+        self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["said"])
+        self.assertEqual(kept[0].words, "Ask me first for this")
+
+    def test_only_a_long_cell_of_prose_holds_out_for_a_floor(self):
+        long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
+        lines = "Two lines, each of them short<br>and the second one as short"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
+            f'<tr><td>{long}</td><td>{long}</td><td data-col="long">{long}</td></tr>'
+            f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}</td></tr>'
+            '<tr><td>c</td><td>Up</td><td data-col="blank"><span class="empty-value">——————————————————</span></td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
+        self.assertEqual(marked, ["long"])
+
+    def test_a_tier_on_the_column_that_names_the_row_is_refused(self):
+        source = (
+            '{% table_region "Things" narrow=1 %}<table class="data-table"><thead><tr>'
+            '<th data-drop-tier="narrow">Name</th>{% table_heading "Value" %}</tr></thead>'
+            "<tbody><tr><td>a</td><td>b</td></tr></tbody></table>{% endtable_region %}"
+        )
+        with self.assertRaises(ValueError):
+            _render(source)
+
     def test_a_heading_refuses_what_cannot_be(self):
         for source in (
             '{% table_heading "Name" "color" %}',
@@ -338,8 +414,26 @@ class TableColumnTests(SimpleTestCase):
     def test_a_columns_kind_follows_from_its_classes(self):
         self.assertEqual(TableColumn("Cost", css="num-col").kind, "numeric")
         self.assertEqual(TableColumn("When", css="date-col").kind, "status")
-        self.assertEqual(TableColumn("Name").kind, "prose")
         self.assertEqual(TableColumn("Cost", css="num-col", kind="prose").kind, "prose")
+
+    def test_a_columns_kind_otherwise_follows_from_the_field_it_sorts_by(self):
+        from hq.domains.expenses.models import Expense
+
+        columns = typed(
+            (
+                TableColumn("Vendor", "vendor"),
+                TableColumn("Date", "date"),
+                TableColumn("Cost", "total_cost"),
+                TableColumn("Category", "category"),
+                TableColumn("Note"),
+                TableColumn("Who", "no_such_field"),
+                TableColumn("Kept", "total_cost", kind="prose"),
+            ),
+            Expense,
+        )
+        self.assertEqual(
+            [column.kind for column in columns], ["prose", "status", "numeric", "status", "prose", "prose", "prose"]
+        )
 
     def test_a_kept_column_has_no_drop_rank(self):
         with self.assertRaises(ValueError):
@@ -419,13 +513,53 @@ class ListTableTests(_AuthedTestCase):
         rows = [each for each in within(page, "role", "region") if each.tag == "tr"]
         self.assertGreater(len(rows), 1)
 
+    def test_a_sort_mark_is_drawn_by_the_stylesheet_never_by_a_face(self):
+        """A glyph is drawn by whichever face has it, at that face's size, so
+        the mark holds no text: its arrow is the stylesheet's, read from the
+        heading's `aria-sort`."""
+
+        marks = with_class(self.client.get(reverse("expenses:list")), "sort-indicator")
+        self.assertTrue(marks)
+        self.assertEqual([mark.text for mark in marks if mark.text], [])
+
     def test_a_list_drops_the_columns_its_view_counts(self):
         page = self.client.get(reverse("expenses:list"))
-        tiers = {
-            heading.text.strip().rstrip("↕↑↓\ufe0e ").strip(): heading.attrs.get("data-drop-tier")
-            for heading in elements(page, "th")
-        }
+        tiers = {heading.text.strip(): heading.attrs.get("data-drop-tier") for heading in elements(page, "th")}
         dropped = {label for label, tier in tiers.items() if tier}
         self.assertEqual(len(dropped), ExpenseListView.table_drop_narrow)
         # The column that names the row and the key column stay.
-        self.assertFalse(dropped & {"Date", "Cost"})
+        self.assertFalse(dropped & {"Vendor", "Cost"})
+
+    def test_every_list_leads_each_row_with_its_name(self):
+        """A row's name looks the same on every list: its first cell leads with
+        it, set as a name, so no list reads as a column of plain links."""
+
+        lists = [
+            route.name
+            for route in routed()
+            if route.name
+            and "<" not in route.path
+            and isinstance(route.view, type)
+            and issubclass(route.view, TableListMixin)
+        ]
+        self.assertGreater(len(lists), 5, "The walk found almost no lists")
+        read = 0
+        for name in lists:
+            found = all_elements(self.client.get(reverse(name)).content.decode())
+            names = [
+                cell
+                for cell in found
+                if cell.tag == "td"
+                and "row-gutter" in cell.classes
+                and any(each.tag == "tbody" for each in cell.ancestors)
+            ]
+            read += bool(names)
+            for cell in names:
+                with self.subTest(name, row=cell.words):
+                    lead = next(
+                        (each for each in found if each.tag == "strong" and any(up is cell for up in each.ancestors)),
+                        None,
+                    )
+                    self.assertIsNotNone(lead)
+                    self.assertTrue(lead.words and cell.words.startswith(lead.words))
+        self.assertGreater(read, 5, "The example estate fills almost no list")

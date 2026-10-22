@@ -18,10 +18,12 @@ copied, so a band gained on one renders identically on the other.
 """
 
 from collections.abc import Callable
+from dataclasses import replace
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.routes import reverse
 from hq.platform.core.models import AuditLog
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.models import ManagedResource
 lazy from hq.domains.control_plane.providers import service_facets
 
@@ -33,6 +35,7 @@ from .projection import projection_scope
 from .service_context import Cell, ServiceSection
 from .ui import MISSING
 lazy from . import connections, services
+lazy from .cadence import connection_providers
 lazy from .hq_self import hq_service
 lazy from .locate import host_of
 lazy from .own_addresses import tailnet_sightings
@@ -69,15 +72,19 @@ def _identity(machine) -> ServiceSection | None:
     and expensive to rediscover.
     """
 
-    keys = [
-        key
-        for key in (
-            getattr(machine, "declaration", ""),
-            getattr(machine, "route_approval_key", ""),
+    keys = list(
+        dict.fromkeys(
+            key
+            for key in (
+                getattr(machine, "declaration", ""),
+                getattr(machine, "route_approval_key", ""),
+            )
+            if key
         )
-        if key
-    ]
-    if not keys:
+    )
+    # One declaration is the machine itself, which its page already is: there
+    # is nothing to explain until a second one names it.
+    if len(keys) < 2:
         return None
     by_key = {r.key: r for r in ManagedResource.objects.filter(key__in=keys)}
     records = tuple(
@@ -242,7 +249,7 @@ def machine_links(machine, relationships) -> dict[str, object]:
     serves = serves_links(machine, relationships)
     links: dict[str, object] = {
         "reached_links": tuple(
-            (entity_link("connection", ref), ref in machine.unanswered) for ref in machine.reached_by
+            (_reached_through(machine, ref), ref in machine.unanswered) for ref in machine.reached_by
         ),
         "serves_links": serves,
         "serves_count": len(serves) + len(getattr(machine, "roles", ()) or ()),
@@ -269,6 +276,22 @@ def machine_links(machine, relationships) -> dict[str, object]:
     names = PolicyNames()
     links["opening_links"] = tuple((port, names.of(who)) for port, who in presence.openings)
     return links
+
+
+def _reached_through(machine, ref: str):
+    """A connection that reaches the machine, as its page names it.
+
+    A connection named for the machine it reaches would read, on that
+    machine's page, as the machine being its own source: it is named by its
+    kind instead ("SSH"), its own name kept for hover.
+    """
+
+    own = {str(name).lower() for name in (machine.name, *(getattr(machine, "aliases", ()) or ()))}
+    providers = connection_providers(ref) if ref.lower() in own else ()
+    if not providers:
+        return entity_link("connection", ref)
+    kinds = ", ".join(CONNECTION_LABELS.get(provider, provider) for provider in providers)
+    return replace(entity_link("connection", ref, label=kinds), title=ref)
 
 
 _NETWORKS = {"tailnet": "Tailnet", "network": "LAN", "public": "Public"}

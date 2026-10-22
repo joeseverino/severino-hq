@@ -19,6 +19,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
     PERMISSION_REFUSAL,
 )
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.tests.markup import text
 
 from ..connections import _controller_contract
 from ..credential_sight import (
@@ -429,13 +430,14 @@ class CredentialSightPageTests(TestCase):
         self.assertFalse([sight.remedy for sight in api.sights if sight.remedy])
         (tailnet_user,) = [sight for sight in rows["example-tailnet"].sight.sights if sight.kind == "tailscale.user"]
         self.assertIn("users:read", tailnet_user.remedy)
-        self.assertContains(response, escape(tailnet_user.remedy))
+        said = text(response)
+        self.assertIn(tailnet_user.remedy, said)
         readable = {sight.kind for sight in rows["example-ssh"].sight.sights if sight.state == READABLE}
         self.assertEqual(readable, {"host.perimeter", "caddy.route"})
         # Not connected: in the setup list, with what it would let HQ see.
         for provider in ("adguard", "onepassword"):
-            self.assertContains(response, escape(CONNECTION_LABELS[provider]))
-            self.assertContains(response, escape(CONNECTION_KINDS[provider].gives))
+            self.assertIn(CONNECTION_LABELS[provider], said)
+            self.assertIn(CONNECTION_KINDS[provider].gives, said)
         # A label is the provider's own name, never one made from its id.
         self.assertNotRegex(response.content.decode(), r"\b(Onepassword|Adguard)\b")
 
@@ -506,6 +508,24 @@ class PartReasonTests(SimpleTestCase):
                 "Code scanning alerts, Branch rules not read on app, site: "
                 "not available on this repository (its plan or settings leave it off)",
                 "Branch rules not read on app: GitHub timed out",
-                "Code scanning alerts, Branch rules not read on web: GitHub 404",
+                "Code scanning alerts, Branch rules not read on web: hidden from HQ's connection",
             ),
         )
+
+    def test_a_bare_status_is_said_as_what_it_means_to_the_connection_that_read(self):
+        from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+        from hq.domains.control_plane.observations import ReadingPart
+        from hq.domains.control_plane.reading_parts import PartRefusal
+
+        provider, label = next(iter(CONNECTION_LABELS.items()))
+        part = ReadingPart("rules", "Branch rules", provider=provider)
+
+        def said(reason: str) -> str:
+            return PartRefusal(kind="example", part=part, refusal="", reason=reason, scope="example/app").said
+
+        self.assertEqual(said("provider answered 404"), f"hidden from HQ's {label}")
+        self.assertEqual(said("Example 403 for /repos/example/app/rules"), f"closed to HQ's {label}")
+        self.assertEqual(said("provider answered 503"), "the service failed to answer; the next read tries again")
+        for reason in ("Example timed out", "Example listed more than 10 pages"):
+            with self.subTest(reason):
+                self.assertEqual(said(reason), reason)

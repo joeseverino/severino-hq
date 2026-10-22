@@ -644,7 +644,8 @@ def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Me
             groups[field.heading].append(
                 Mention(
                     EntityLink(
-                        label=str(row),
+                        # Named as the model names it everywhere else.
+                        label=known[field.model].name_of(row) if field.model in known else str(row),
                         url=row.get_absolute_url(),
                         kind=field.model._meta.label_lower,
                         kind_label=str(field.model._meta.verbose_name).capitalize(),
@@ -718,7 +719,7 @@ def dangling(
                     title=f"{source(row)} links to {name}, which HQ does not have",
                     value="",
                     body="Choose something else for it, or clear the link.",
-                    action="Open it",
+                    action="Open record",
                     url=row.get_absolute_url(),
                     key=f"reference:{field.model._meta.label_lower}:{row.pk}:{field.attname}",
                     family="Links to nothing",

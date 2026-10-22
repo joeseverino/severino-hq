@@ -132,7 +132,7 @@ def request_read(login: str, *, principal: Principal) -> datetime:
 
     A read spends GitHub's hourly allowance and says what HQ is asking about,
     so asking for one is gated like every other public lookup, and waking the
-    controller is gated as Read now is.
+    controller is gated as Refresh is.
     """
 
     principal.require(Capability.LOOK_UP_PUBLIC_RECORDS)

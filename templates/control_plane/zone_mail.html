@@ -11,13 +11,13 @@ hostnames underneath says everything twice and is twice as tall for it.
   {% for section in mail.sections %}
     <section class="mail-stage{% if section.concern %} mail-stage-concern{% endif %}">
       <div class="mail-stage-head">
-        <span class="control-label">{{ section.label }}</span>
-        <strong>{{ section.answer }}</strong>
+        <span class="control-label">{{ section.label|breakable }}</span>
+        <strong>{{ section.answer|breakable }}</strong>
       </div>
-      <p class="mail-stage-question">{{ section.question }}</p>
-      <p class="muted">{{ section.detail }}</p>
+      <p class="mail-stage-question">{{ section.question|breakable }}</p>
+      <p class="muted">{{ section.detail|breakable }}</p>
       {% if section.concern %}
-        <p class="mail-stage-warning"><span class="pill pill-attention">Needs attention</span> {{ section.concern }}</p>
+        <p class="mail-stage-warning"><span class="pill pill-attention">Needs attention</span> {{ section.concern|breakable }}</p>
       {% endif %}
     </section>
   {% endfor %}
@@ -49,14 +49,13 @@ four would turn a typo in a DKIM selector into a mail outage.
         {% endfor %}
         <div class="name-list-row">
           <input type="text" name="rule" value="" spellcheck="false" autocapitalize="off" placeholder="include:example.com">
-          <button type="button" class="btn ghost" data-name-list-remove>Remove</button>
         </div>
         <button type="button" class="btn name-list-add" data-name-list-add>Add sender</button>
       </div>
       <p class="help">
         Usually <code>include:</code> plus a mail service that sends for you. Each one
-        costs a DNS lookup. Receivers ignore SPF past {{ spf_limit }} lookups. This
-        record uses {{ spf.lookups }} of {{ spf_limit }}.
+        costs a DNS lookup. Receivers ignore SPF past {{ spf_limit|breakable }} lookups. This
+        record uses {{ spf.lookups|breakable }} of {{ spf_limit|breakable:"." }}
       </p>
     </div>
 
@@ -67,16 +66,15 @@ four would turn a typo in a DKIM selector into a mail outage.
           <label class="policy-choice">
             <input type="radio" name="default" value="{{ choice.value }}"{% if choice.value == spf_default %} checked{% endif %}>
             <span class="policy-choice-body">
-              <span class="policy-choice-label">{{ choice.label }}</span>
-              <span class="policy-choice-consequence">{{ choice.consequence }}</span>
+              <span class="policy-choice-label">{{ choice.label|breakable }}</span>
+              <span class="policy-choice-consequence">{{ choice.consequence|breakable }}</span>
             </span>
           </label>
         {% endfor %}
       </div>
     </div>
 
-    <p class="help field-effect">Saving rewrites the SPF record. HQ applies it within a minute.</p>
-    <div class="form-actions"><button type="submit" class="primary">Save senders</button></div>
+    <div class="form-actions"><button type="submit" class="primary">Save senders</button><span class="muted form-actions-note">Saving rewrites the SPF record. {% applies_shortly %}</span></div>
   </form>
 </section>
 
@@ -88,7 +86,7 @@ four would turn a typo in a DKIM selector into a mail outage.
       <input type="hidden" name="section" value="dmarc">
       {% for tag in policy_tags %}
         <div class="field">
-          <label>{{ tag.label }}</label>
+          <label>{{ tag.label|breakable }}</label>
           {% if tag.kind == "choice" %}
             <div class="policy-choices">
               {% for choice in tag.choices %}
@@ -96,8 +94,8 @@ four would turn a typo in a DKIM selector into a mail outage.
                   <input type="radio" name="{{ tag.id }}" value="{{ choice.value }}"
                          {% if choice.value == mail.dmarc_tags|dictkey:tag.id %}checked{% endif %}>
                   <span class="policy-choice-body">
-                    <span class="policy-choice-label">{{ choice.label }}</span>
-                    <span class="policy-choice-consequence">{{ choice.consequence }}</span>
+                    <span class="policy-choice-label">{{ choice.label|breakable }}</span>
+                    <span class="policy-choice-consequence">{{ choice.consequence|breakable }}</span>
                   </span>
                 </label>
               {% endfor %}
@@ -118,7 +116,7 @@ four would turn a typo in a DKIM selector into a mail outage.
                    value="{{ mail.dmarc_tags|dictkey:tag.id|default:tag.default }}"
                    spellcheck="false" autocapitalize="off">
           {% endif %}
-          {% if tag.help %}<p class="help">{{ tag.help }}</p>{% endif %}
+          {% if tag.help %}<p class="help">{{ tag.help|breakable }}</p>{% endif %}
         </div>
       {% endfor %}
 
@@ -128,8 +126,7 @@ four would turn a typo in a DKIM selector into a mail outage.
       what will actually be published.
       {% endcomment %}
       <p class="help">Publishes as <code>{{ mail.dmarc_record.content|breakable }}</code></p>
-      <p class="help field-effect">Saving rewrites the DMARC record. HQ applies it within a minute.</p>
-      <div class="form-actions"><button type="submit" class="primary">Save policy</button></div>
+      <div class="form-actions"><button type="submit" class="primary">Save policy</button><span class="muted form-actions-note">Saving rewrites the DMARC record. {% applies_shortly %}</span></div>
     </form>
   </section>
 {% endif %}
@@ -148,8 +145,12 @@ not designed. Adding or removing one is a record, through the domain's own
         {% for record in section.records %}
           <li>
             <code>{{ record.name|breakable }}</code>
-            {% if record.priority is not None %}<span class="pill">priority {{ record.priority }}</span>{% endif %}
-            <span class="mail-record-value">{{ record.content }}</span>
+            {% if section.null_mx %}
+              <span class="mail-record-value">Null MX: this domain receives no mail</span>
+            {% else %}
+              {% if record.priority is not None %}<span class="pill">priority {{ record.priority|breakable }}</span>{% endif %}
+              <span class="mail-record-value">{{ record.content|breakable }}</span>
+            {% endif %}
             {% if record.resource_key %}
               {% url 'control_plane:edit' record.resource_key as record_edit %}
               <a class="subtle-link" href="{{ record_edit }}?next={{ request.get_full_path|urlencode }}">Change</a>
@@ -159,13 +160,7 @@ not designed. Adding or removing one is a record, through the domain's own
           </li>
         {% endfor %}
       </ul>
-      <p class="help">
-        {% if section.id == "receiving" %}
-          Set by your mail service. Change these only when switching to another.
-        {% else %}
-          Issued by your mail service, which also rotates the keys. HQ publishes the records.
-        {% endif %}
-      </p>
+      {% if section.source %}<p class="help">{{ section.source|breakable }}</p>{% endif %}
     </section>
   {% endif %}
 {% endfor %}

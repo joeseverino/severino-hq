@@ -471,7 +471,7 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
             ),
             hq_path=walked,
             caller_path=(joined(walked, request, None) if walked is not None and request is not None else None),
-            read_all=read_now_link(principal, every_connection=True, label="Read all now"),
+            read_all=read_now_link(principal, every_connection=True),
             reading_everything_since=everything,
             answers_request=request is not None,
         )

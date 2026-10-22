@@ -1,15 +1,29 @@
 """What a suite run selects, and what it leaves behind."""
 
+import io
 import os
+import pickle
 import subprocess
 import sys
 import tempfile
+import unittest
+import unittest.mock
 from pathlib import Path
 
 from django.test import SimpleTestCase
 
 from hq.config.sandbox import sweep_abandoned
-from hq.platform.core.test_runner import SOURCE, SeverinoTestRunner, excluded_tags
+from hq.platform.core.test_runner import (
+    SOURCE,
+    ClassTimedSuite,
+    CompositionRemoteResult,
+    CompositionTextResult,
+    FileClonedParallelSuite,
+    SeverinoTestRunner,
+    block_on_output,
+    excluded_tags,
+    report_class_times,
+)
 
 
 class SourceSelectionTests(SimpleTestCase):
@@ -60,3 +74,79 @@ class AbandonedRunTests(SimpleTestCase):
             sweep_abandoned(root, os.getpid())
 
             self.assertEqual(sorted(p.name for p in root.iterdir()), sorted(kept))
+
+
+class BlockingOutputTests(SimpleTestCase):
+    def test_a_pipe_left_non_blocking_waits_for_room_again_before_the_report(self):
+        read, write = os.pipe()
+        self.addCleanup(os.close, read)
+        with os.fdopen(write, "w") as stream:
+            os.set_blocking(write, False)
+            with (
+                unittest.mock.patch.object(sys, "stdout", stream),
+                unittest.mock.patch.object(sys, "stderr", io.StringIO()),
+            ):
+                block_on_output()
+            self.assertTrue(os.get_blocking(write))
+
+
+def _timed_classes(clock):
+    """Two classes whose fixtures and test advance ``clock`` by known amounts."""
+
+    class Slow(unittest.TestCase):
+        @classmethod
+        def setUpClass(cls):
+            clock[0] += 5
+
+        def test_it(self):
+            clock[0] += 1
+
+    class Quick(unittest.TestCase):
+        def test_it(self):
+            clock[0] += 2
+
+    return Slow, Quick
+
+
+class ClassTimeTests(SimpleTestCase):
+    """Each class's wall time reaches the run's result, its fixtures included,
+    whether it ran here or in a parallel worker."""
+
+    def run_timed(self, result):
+        """The tests run, as the parent holds them: a suite empties itself as it runs."""
+
+        clock = [0.0]
+        slow, quick = _timed_classes(clock)
+        loader = unittest.defaultTestLoader
+        tests = [*loader.loadTestsFromTestCase(slow), *loader.loadTestsFromTestCase(quick)]
+        with unittest.mock.patch("hq.platform.core.test_runner.time.monotonic", lambda: clock[0]):
+            ClassTimedSuite(tests).run(result)
+        return tests
+
+    def times(self, result):
+        return {name.rsplit(".", 1)[-1]: seconds for name, seconds in result.class_times.items()}
+
+    def test_a_serial_run_times_each_class_with_its_set_up(self):
+        result = CompositionTextResult(io.StringIO(), True, 0)
+        self.run_timed(result)
+
+        self.assertEqual(self.times(result), {"Slow": 6, "Quick": 2})
+
+    def test_a_workers_times_reach_the_parent(self):
+        worker = CompositionRemoteResult()
+        tests = self.run_timed(worker)
+
+        parent = CompositionTextResult(io.StringIO(), True, 0)
+        for event in pickle.loads(pickle.dumps(worker.events)):
+            FileClonedParallelSuite.handle_event(None, parent, tests, event)
+        self.assertEqual(self.times(parent), {"Slow": 6, "Quick": 2})
+
+    def test_the_report_puts_the_slowest_first_beside_the_load(self):
+        result = CompositionTextResult(io.StringIO(), True, 0)
+        result.class_times = {"example.Quick": 2.0, "example.Slow": 6.0}
+        stream = io.StringIO()
+        report_class_times(result, stream, (1.0, 2.0, 3.0))
+
+        said = stream.getvalue()
+        self.assertIn("load average", said)
+        self.assertLess(said.index("example.Slow"), said.index("example.Quick"))

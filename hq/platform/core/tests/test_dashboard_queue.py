@@ -195,7 +195,7 @@ class DashboardQueueTests(TestCase):
 
     def test_empty_filtered_queue_offers_a_way_back(self):
         response = self.client.get("/action-items/", {"q": "not an existing item"})
-        self.assertContains(response, "Nothing matches these filters.")
+        self.assertContains(response, "Nothing matches.")
         self.assertContains(response, "Clear filters")
         self.assertNotContains(response, "Nothing needs you.")
 

@@ -15,6 +15,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core import browser_tests
+from hq.platform.core.stylesheets import stylesheet
 
 ROOT = Path(settings.BASE_DIR)
 GATE = ROOT / "hq/platform/core" / "browser_tests.py"
@@ -46,7 +47,7 @@ def tokens(selector: str) -> set[tuple[str, str]]:
 
 @cache
 def markup() -> tuple[set[str], set[str], str]:
-    """(classes, ids, all template text) across TEMPLATE_ROOTS."""
+    """(classes, ids, all markup text) across TEMPLATE_ROOTS and the tag libraries."""
 
     classes: set[str] = set()
     ids: set[str] = set()
@@ -60,6 +61,8 @@ def markup() -> tuple[set[str], set[str], str]:
             ids.update(re.findall(r'\bid="([^"{}]+)"', source))
     for library in TAG_LIBRARIES.glob("*.py"):
         source = library.read_text(encoding="utf-8")
+        # A tag library writes markup too: its attributes are rendered.
+        text.append(source)
         for value in re.findall(r'\bclass="([\w\s-]*)"', source):
             classes.update(value.split())
     return classes, ids, "\n".join(text)
@@ -67,7 +70,7 @@ def markup() -> tuple[set[str], set[str], str]:
 
 @cache
 def stylesheet_classes() -> set[str]:
-    css = (ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    css = stylesheet()
     css = re.sub(r"/\*.*?\*/", " ", css, flags=re.DOTALL)
     css = re.sub(r"\{[^{}]*\}", " ", css)
     return set(_CLASS.findall(css))

@@ -31,6 +31,7 @@ lazy from django.utils.safestring import mark_safe
 
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
+lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .forms import LinesField
 from .plugins import _import
@@ -97,8 +98,8 @@ class NameListWidget(forms.Widget):
                 "</div>",
                 name,
                 item,
-                item,
-                note,
+                breakable(item),
+                breakable(note),
             )
         return format_html(
             '<div class="name-list-row">'
@@ -333,11 +334,8 @@ def spec_form_class(
             # last seen holding, so it finds the existing record by its old name
             # and updates that one in place: a real rename rather than a
             # second record beside the first. The warning stays because the
-            # change reaches a live name on the next pass.
-            rename_warning = (
-                "Changing this renames the live record within about a minute. The old name stops resolving."
-            )
-            fields[name].help_text = rename_warning
+            # change reaches a live name; when is the form's apply note.
+            fields[name].help_text = "Changing this renames the live record. The old name stops resolving."
     return type(
         f"{provider.spec_type.__name__}Form",
         (ProviderSpecForm,),

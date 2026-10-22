@@ -32,14 +32,14 @@ class JobListView(PageMixin, TableListMixin, ListView):
     template_name = "jobs/job_list.html"
     paginate_by = 40
     page_title = "Background jobs"
-    table_search_fields = ("label", "kind", "note")
+    table_search_fields = ("label", "note")
     table_search_placeholder = "Search jobs and results…"
     page_lede = "Work HQ does on a schedule or that you started, and how each run went."
     table_drop_narrow = 3
     table_columns = (
-        TableColumn("Started", "created_at"),
-        TableColumn("Job", css="key-col"),
-        TableColumn("State", css="key-col"),
+        TableColumn("Job"),
+        TableColumn("State", css="key-col", kind="status"),
+        TableColumn("Started", "created_at", css="date-col"),
         TableColumn("Duration", css="num-col"),
         TableColumn("Result"),
         TableColumn("Requested by"),

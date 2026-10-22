@@ -49,6 +49,12 @@ type Environment struct {
 	RenderStatus string `env:"SEVERINO_RENDER_STATUS"`
 	// HostUnits is what `systemctl show` printed for the shipped units.
 	HostUnits string `env:"SEVERINO_HOST_UNITS"`
+	// DependencyRun is root's result of the last dependency update run, given
+	// read-only.
+	DependencyRun string `env:"SEVERINO_DEPENDENCY_RUN"`
+	// Out is the directory this run may hand files to root through; root
+	// reads it after the run exits.
+	Out string `env:"HQ_CONTROLLER_OUT"`
 	// PortainerInspectConcurrency bounds container inspections in flight.
 	PortainerInspectConcurrency string `env:"HQ_PORTAINER_INSPECT_CONCURRENCY"`
 	// inherited is what a child process may inherit (childEnvironment).

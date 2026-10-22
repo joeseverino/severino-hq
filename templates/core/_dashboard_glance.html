@@ -18,58 +18,59 @@ part, so only a panel that changed is replaced and an open one stays open.
         <summary class="glance-panel-head">
           <span class="glance-symbol">{% include "partials/_icon.html" with name=panel.icon %}</span>
           {% if panel.lead %}
-            <span class="glance-lead" title="{{ panel.lead.label }}{% if panel.lead.detail %} · {{ panel.lead.detail }}{% endif %}"><strong>{{ panel.lead.value }}</strong>{% if panel.head_labels %} {{ panel.lead.short_label }}{% endif %}</span>
+            <span class="glance-lead" title="{{ panel.lead.label }}{% if panel.lead.detail %} · {{ panel.lead.detail }}{% endif %}"><strong>{{ panel.lead.value|breakable }}</strong>{% if panel.head_labels %} {{ panel.lead.short_label|breakable }}{% endif %}</span>
             <span class="glance-caption">
-              {% if panel.alert %}<span class="glance-alert">{{ panel.alert }}</span>{% endif %}
-              {% for metric in panel.caption %}<span title="{{ metric.label }}{% if metric.detail %} · {{ metric.detail }}{% endif %}">{% if panel.head_labels %}{{ metric.short_label }} {% endif %}{{ metric.value }}</span>{% endfor %}
+              {% if panel.subject %}<span>{{ panel.subject|breakable }}</span>{% endif %}
+              {% if panel.alert %}<span class="glance-alert">{{ panel.alert|breakable }}</span>{% endif %}
+              {% for metric in panel.caption %}<span title="{{ metric.label }}{% if metric.detail %} · {{ metric.detail }}{% endif %}">{% if panel.head_labels %}{{ metric.short_label|breakable }} {% endif %}{{ metric.value|breakable }}</span>{% endfor %}
             </span>
           {% else %}
-            <span class="glance-lead glance-lead-empty">{{ panel.label }}</span>
-            <span class="glance-caption">{% if panel.refreshing %}Reading…{% else %}No reading yet{% endif %}</span>
+            <span class="glance-lead glance-lead-empty">{{ panel.label|breakable }}</span>
+            <span class="glance-caption">{% if panel.refreshing %}{% refreshing %}{% else %}No reading yet{% endif %}</span>
           {% endif %}
           {% comment %}Said only when it is news: a current reading needs no age.{% endcomment %}
           {% if panel.refreshing or panel.outdated or panel.payload.refresh_failed %}
             <span class="glance-freshness">
-              {% if panel.refreshing %}Reading{% elif panel.payload.refresh_failed %}Reading failed{% else %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
+              {% if panel.refreshing %}{% refreshing %}{% elif panel.payload.refresh_failed %}Refresh failed{% else %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
             </span>
           {% endif %}
         </summary>
         <div class="glance-expanded">
           <header class="glance-expanded-head">
-            <strong>{{ panel.label }}</strong>
-            {% if panel.payload.summary %}<span>{{ panel.payload.summary }}</span>{% endif %}
+            <strong>{{ panel.label|breakable }}</strong>
+            {% if panel.payload.summary %}<span>{{ panel.payload.summary|breakable }}</span>{% endif %}
             {% if panel.observed_at %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
           </header>
-          {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-note">The last reading failed ({{ panel.payload.refresh_failed }}). This is the one before it.</p>{% endif %}
+          {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-note">The last reading failed ({{ panel.payload.refresh_failed|breakable:")." }} This is the one before it.</p>{% endif %}
           {% if panel.payload.metrics %}
             <dl class="glance-metrics">
               {% for metric in panel.readings %}
                 <div>
-                  <dt>{{ metric.label }}</dt>
-                  <dd>{{ metric.value }}</dd>
-                  {% if metric.detail %}<dd class="glance-metric-detail">{{ metric.detail }}</dd>{% endif %}
+                  <dt>{{ metric.label|breakable }}</dt>
+                  <dd>{{ metric.value|breakable }}</dd>
+                  {% if metric.detail %}<dd class="glance-metric-detail">{{ metric.detail|breakable }}</dd>{% endif %}
                 </div>
               {% endfor %}
             </dl>
           {% else %}
-            <p class="glance-note">{% if panel.refreshing %}Reading…{% elif panel.payload.summary %}{{ panel.payload.summary }}{% else %}{{ panel.empty }}{% endif %}</p>
+            <p class="glance-note">{% if panel.refreshing %}{% refreshing %}{% elif panel.payload.summary %}{{ panel.payload.summary|breakable }}{% else %}{{ panel.empty|breakable }}{% endif %}</p>
           {% endif %}
           {% if panel.payload.hours %}
             <ol class="glance-hours" aria-label="The hours ahead">
               {% for hour in panel.payload.hours %}
                 <li title="{{ hour.forecast }}">
-                  <span>{{ hour.time }}</span>
-                  <strong>{{ hour.temperature }}</strong>
+                  <span>{{ hour.time|breakable }}</span>
+                  <strong>{{ hour.temperature|breakable }}</strong>
                   {% comment %}A chance of rain is said only when there is one.{% endcomment %}
-                  <small{% if hour.precipitation != "0%" %} class="is-wet"{% endif %}>{% if hour.precipitation != "0%" %}{{ hour.precipitation }}{% endif %}</small>
+                  <small{% if hour.precipitation != "0%" %} class="is-wet"{% endif %}>{% if hour.precipitation != "0%" %}{{ hour.precipitation|breakable }}{% endif %}</small>
                 </li>
               {% endfor %}
             </ol>
           {% endif %}
           <footer class="glance-expanded-foot">
-            {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label }} →</a>{% endif %}
+            {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label|breakable }} →</a>{% endif %}
             <span>
-              {% if dashboard_can_refresh %}<button class="glance-refresh" type="submit" form="glance-refresh">Read now</button>{% endif %}
+              {% if dashboard_can_refresh %}<button class="glance-refresh" type="submit" form="glance-refresh">Refresh</button>{% endif %}
               <a href="{% url 'dashboard_glance_settings' %}">Settings</a>
             </span>
           </footer>

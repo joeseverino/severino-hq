@@ -149,7 +149,10 @@ class ProjectionTests(TestCase):
             (found.release.short, found.release.behind, found.release.runs_deployed), (HEAD[:7], False, True)
         )
         (timer,) = (job for job in found.work.jobs if job.unit.endswith(".timer"))
-        self.assertEqual((timer.runs, timer.result), ("Delete old routine log entries", "Succeeded"))
+        self.assertEqual((timer.runs, timer.result), ("Delete old routine log entries", "Done"))
+        # What HQ has no words for is named by its unit, an identifier.
+        (web,) = (job for job in found.work.jobs if job.unit.endswith("-web.service"))
+        self.assertEqual([(job.runs, job.runs_unit) for job in (timer, web)], [(timer.runs, False), (web.unit, True)])
         self.assertEqual([job.unit for job in found.work.services], ["severino-hq-example-web.service"])
         self.assertEqual([item.result for item in found.work.renderers], ["Already current"])
         self.assertEqual([item["label"] for item in found.problems], [])
@@ -450,7 +453,7 @@ class ScheduledWorkTests(TestCase):
 
         row = self.rows()["audit.prune"]
 
-        self.assertEqual((row.every, row.result, row.tone), ("Daily", "Succeeded", "good"))
+        self.assertEqual((row.every, row.result, row.tone), ("Daily", "Done", "good"))
         self.assertEqual([dot.filled for dot in row.runs.shown], [True, False, True])
         self.assertEqual(
             [dot.url for dot in row.runs.shown],
@@ -488,7 +491,7 @@ class ScheduledWorkTests(TestCase):
             if item["name"] == "sessions.clear"
         ]
 
-        self.assertEqual((row["label"], row["every"], row["result"]), ("Delete expired sessions", "Daily", "Succeeded"))
+        self.assertEqual((row["label"], row["every"], row["result"]), ("Delete expired sessions", "Daily", "Done"))
         self.assertEqual(len(row["recent"]), 1)
 
 

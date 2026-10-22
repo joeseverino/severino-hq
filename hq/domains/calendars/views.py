@@ -21,6 +21,7 @@ from hq.platform.application.calendar_entries import (
     upcoming,
     when_label,
 )
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.deletion import delete_calendar_entry
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
@@ -58,7 +59,13 @@ class CalendarView(PageMixin, TemplateView):
     @override
     def get_page_actions(self):
         day = self._selected() or timezone.localdate()
-        return (PageAction("Add event", f"{reverse('calendar:entry_new')}?on={day.isoformat()}", primary=True),)
+        return (
+            PageAction(
+                capability_words("calendar.entry.create"),
+                f"{reverse('calendar:entry_new')}?on={day.isoformat()}",
+                primary=True,
+            ),
+        )
 
     @override
     def get_context_data(self, **kwargs):

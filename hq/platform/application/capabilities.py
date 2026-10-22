@@ -72,6 +72,12 @@ def capability_title(name: str) -> str:
     return spec.title if spec else human_label(name)
 
 
+def capability_words(name: str, variant: str = "") -> str:
+    """What a button for the command named ``name`` says (``CapabilitySpec.words``)."""
+
+    return capability_registry()[name].words(variant)
+
+
 def capability_registry() -> dict[str, CapabilitySpec]:
     return dict(integration_graph().capabilities)
 
@@ -87,6 +93,8 @@ class CapabilityDescription(TypedDict):
 
     name: str
     label: str
+    verb: str
+    variants: dict[str, str]
     summary: str
     effect: str
     required_capabilities: list[str]
@@ -107,6 +115,8 @@ def describe_capabilities() -> dict[str, Any]:
         {
             "name": spec.name,
             "label": spec.title,
+            "verb": spec.words(),
+            "variants": dict(spec.variants),
             "summary": spec.summary,
             "effect": spec.effect,
             "required_capabilities": [

@@ -7,14 +7,14 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application import history
-from hq.platform.application.capability_policy import Cell, Column, Group, Row, Scope, split_by_default
+from hq.platform.application.capability_policy import Column, Group, PolicyCell, Row, Scope, split_by_default
 from hq.platform.application.tests.markup import elements, with_class
 from hq.platform.core.models import AuditLog
 
 
 def _row(name: str, rule: str | None) -> Row:
     column = Column(Scope.SURFACE, "mcp", "All MCP agents", "MCP")
-    cell = Cell(
+    cell = PolicyCell(
         field=f"rule:{column.scope}:{column.subject}:{name}",
         scope=column.scope,
         column=column.label,

@@ -579,7 +579,8 @@ class ConnectionPageTests(TestCase):
 
         response = self.client.get(reverse("connection"))
 
-        self.assertIn(when(self.user.last_login), texts(response, "time"))
+        # The page's words are read with whitespace collapsed, a no-break space with it.
+        self.assertIn(" ".join(when(self.user.last_login).split()), texts(response, "time"))
 
     def test_the_request_timeline_includes_the_observed_npm_edge(self):
         ProviderInventory.objects.create(
@@ -1294,7 +1295,7 @@ class DashboardConnectionTileTests(SimpleTestCase):
 class VerdictTests(SimpleTestCase):
     """Green only when every check on the way in is confirmed."""
 
-    def verdict(self, *layers):
+    def connection(self, *layers):
         from types import SimpleNamespace
 
         from ..request_connection import Connection
@@ -1307,7 +1308,16 @@ class VerdictTests(SimpleTestCase):
             observer=None,
             identity=None,
             layers=tuple(SimpleNamespace(holds=held, conclusive=sure) for held, sure in layers),
-        ).verdict
+        )
+
+    def verdict(self, *layers):
+        return self.connection(*layers).verdict
+
+    def test_the_panels_tally_names_the_checks_and_their_whole(self):
+        # Beside it the path counts steps; a bare "1 failed" reads as one of those.
+        for layers in (((False, True), (True, False), (True, True)), ((True, False), (True, True), (True, True))):
+            with self.subTest(layers):
+                self.assertTrue(self.connection(*layers).tally.startswith("3 checks, "))
 
     def test_every_check_held_on_evidence_is_confirmed(self):
         self.assertEqual(self.verdict((True, True), (True, True)), "confirmed")

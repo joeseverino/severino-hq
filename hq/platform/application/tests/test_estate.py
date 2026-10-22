@@ -33,7 +33,7 @@ from ..public_registry import wanted_addresses
 from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
 from .host_only import host_only
-from .markup import elements, hrefs
+from .markup import elements, hrefs, text
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
 # 203.0.113.0/24 stands in for a public range here.
@@ -156,7 +156,7 @@ class AuditSearchTitleTests(TestCase):
 
         response = self.client.get(reverse("search"), {"q": "example-host"})
 
-        self.assertContains(response, "Updated example-host")
+        self.assertIn("Updated example-host", text(response))
         self.assertNotContains(response, f"#{resource.pk}")
 
 

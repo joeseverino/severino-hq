@@ -37,7 +37,7 @@ INFORMATIONAL = (
 
 
 @dataclass(frozen=True, slots=True)
-class Check:
+class ConstraintCheck:
     """One ``AddConstraint`` of a check constraint, as its migration states it."""
 
     app: str
@@ -59,7 +59,7 @@ class Check:
         return f'SELECT "{self.key}" FROM "{self.table}" WHERE NOT ({self.condition}) LIMIT 5'
 
 
-def checks() -> Iterator[Check]:
+def checks() -> Iterator[ConstraintCheck]:
     """Every check constraint a migration on disk adds, in migration order."""
 
     loader = MigrationLoader(None, ignore_no_migrations=True)
@@ -76,7 +76,7 @@ def checks() -> Iterator[Check]:
             except LookupError:
                 # A model a later migration removed has no table left to count.
                 continue
-            yield Check(
+            yield ConstraintCheck(
                 app=app,
                 migration=name,
                 position=position,
@@ -137,7 +137,7 @@ class Command(BaseCommand):
                 f"{counted(refused, 'pending constraint', 'pending constraints')} would be refused by a stored row."
             )
 
-    def _report(self, database: sqlite3.Connection, found: list[Check]) -> int:
+    def _report(self, database: sqlite3.Connection, found: list[ConstraintCheck]) -> int:
         applied = _applied(database)
         refused = 0
         heading = None
@@ -172,7 +172,7 @@ def _applied(database: sqlite3.Connection) -> set[tuple[str, str]]:
         return set()
 
 
-def _count(database: sqlite3.Connection, check: Check) -> tuple[int | None, list[object]]:
+def _count(database: sqlite3.Connection, check: ConstraintCheck) -> tuple[int | None, list[object]]:
     try:
         (count,) = database.execute(check.counting).fetchone()
         sample = [row[0] for row in database.execute(check.sampling)] if count else []

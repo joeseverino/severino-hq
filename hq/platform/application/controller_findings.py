@@ -1,20 +1,20 @@
 """Findings about the controller's own work: kinds it stopped sweeping, records it skipped or never saw, and changes it keeps applying without effect."""
 
 import re
-from dataclasses import replace
 
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .cadence import sweep_interval
+from .core_capabilities import CONTROLLER_REFRESH
 from .credential_findings import UNREPORTED
 from .derivations import since
 from .entity_links import kind_label, node_name
 from .finding_model import (
     Finding,
     FindingEstate,
+    FindingRemedy,
     FindingRule,
-    Remedy,
     cannot_run_commands,
     fact_values,
     is_observable,
@@ -34,9 +34,6 @@ lazy from .timestamps import moment
 
 # The background job that runs the controller on its machine (deploy/systemd).
 CONTROLLER_UNIT = "severino-hq-controller.service"
-# The one label for asking the controller to read again, from a card about it.
-READ_NOW = "Read now"
-READ_ALL_NOW = "Read all now"
 
 
 def _many(kind_key: str) -> str:
@@ -54,8 +51,8 @@ def _the_others(count: int, noun: str) -> str:
     return f"The other {count} {plural(noun)} were"
 
 
-def _read_again(label: str = READ_NOW) -> Remedy:
-    return Remedy(capability="infrastructure.controller.refresh", target="", label=label, effect="")
+def _read_again(variant: str = "") -> FindingRemedy:
+    return FindingRemedy(capability=CONTROLLER_REFRESH.name, target="", variant=variant)
 
 
 # ``_STALE_AFTER`` is imported rather than restated: the lens that asks "what
@@ -105,7 +102,7 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
     return tuple(found)
 
 
-def _skipped_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
+def _skipped_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     """The two answers the explanation gives, as the actions that carry them out.
 
     A container missing from a sweep is either one that runs now and then, or
@@ -113,19 +110,13 @@ def _skipped_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
     again at something that is, correctly, not running.
     """
 
-    remove = Remedy(
-        capability="infrastructure.resource.remove",
-        target=node.label,
-        label="Remove from HQ",
-        effect="",
-    )
+    remove = FindingRemedy(capability="infrastructure.resource.remove", target=node.label)
     if node.kind_key == CONTAINER_KIND:
         return (
-            Remedy(
+            FindingRemedy(
                 capability="infrastructure.resource.update",
                 target=node.label,
-                label="Mark it as running only sometimes",
-                effect="",
+                intent="Mark it as running only sometimes",
             ),
             remove,
         )
@@ -162,7 +153,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=kind_key,
                 title=f"{_many(kind_key)} have not been read for {duration(silent)}",
                 severity="serious",
-                explanation=("Read them now. If that fails, the connection that reads them needs fixing."),
+                explanation="Refresh them. If that fails, the connection that reads them needs fixing.",
                 evidence=(
                     ("Last read", newest.isoformat()),
                     ("Read every", duration(sweep_interval())),
@@ -184,8 +175,8 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=f"{_many(kind_key)} have never been read",
                 severity="serious",
                 explanation=(
-                    "What HQ shows for them is only what was entered in HQ. Read them "
-                    "now. If that fails, the connection that reads them needs fixing."
+                    "What HQ shows for them is only what was entered in HQ. Refresh "
+                    "them. If that fails, the connection that reads them needs fixing."
                 ),
                 evidence=(
                     ("Last read", "never"),
@@ -236,7 +227,7 @@ def _controller_stopped(estate: FindingEstate, machine: str, controller: str, ki
         severity="serious",
         explanation="Everything listed is read by the same controller, so check it first.",
         evidence=(("Not read", ", ".join(sorted(_many(kind) for kind in kinds))),),
-        remedies=(_read_again(READ_ALL_NOW),),
+        remedies=(_read_again("all"),),
         steps=_controller_steps(machine),
         no_help_reason=cannot_run_commands(machine),
         affected_scopes=tuple(sorted(kinds)),
@@ -256,13 +247,8 @@ def _controller_steps(machine: str):
     )
 
 
-def _keep_live(node: TopologyNode) -> Remedy:
-    return Remedy(
-        capability="infrastructure.resource.accept_observed",
-        target=node.label,
-        label="Keep the live version",
-        effect="",
-    )
+def _keep_live(node: TopologyNode) -> FindingRemedy:
+    return FindingRemedy(capability="infrastructure.resource.accept_observed", target=node.label)
 
 
 def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
@@ -310,7 +296,7 @@ def _fault_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
     )
 
 
-def _fault_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
+def _fault_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     """Drift has two honest answers, and reconciling alone is the destructive one.
 
     Something changed the live record outside HQ. Reconciling pushes HQ's copy
@@ -323,10 +309,7 @@ def _fault_remedies(node: TopologyNode) -> tuple[Remedy, ...]:
     restore = reconcile_remedy(node)
     if node.status_label != DRIFT_LABEL:
         return restore
-    return (
-        _keep_live(node),
-        *(replace(remedy, label="Restore HQ's version") for remedy in restore),
-    )
+    return (_keep_live(node), *restore)
 
 
 def _reports_itself(node: TopologyNode) -> bool:
@@ -400,12 +383,7 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
             remedies=(
                 (
                     _keep_live(node),
-                    Remedy(
-                        capability="infrastructure.resource.update",
-                        target=node.label,
-                        label="Change what HQ expects",
-                        effect="",
-                    ),
+                    FindingRemedy(capability="infrastructure.resource.update", target=node.label),
                 )
                 if node.status_label == DRIFT_LABEL
                 else ()
@@ -472,7 +450,7 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
             severity="attention",
             explanation=(
                 f"HQ set these and the last reading did not include them: {_settings(node)}. "
-                "Apply again to set them and read them back. If this stays after applying, "
+                "Apply HQ's settings to set them and read them back. If this stays after applying, "
                 "HQ cannot read them from the service."
             ),
             evidence=(
@@ -612,7 +590,7 @@ RULES: tuple[FindingRule, ...] = (
         _connections_lost,
         operator_action=(
             "Check that the vault this machine reads holds the connection items, "
-            "run the refresh job, then press Read now."
+            f"run the refresh job, then press {CONTROLLER_REFRESH.words()}."
         ),
         no_help_reason="HQ cannot read the vault.",
     ),
@@ -629,7 +607,7 @@ RULES: tuple[FindingRule, ...] = (
         "The controller has stopped reading",
         "serious",
         _controller_sweep_stale,
-        operator_action=("On its machine, check the controller is running, then press Read all now."),
+        operator_action=f"On its machine, check the controller is running, then press {CONTROLLER_REFRESH.words('all')}.",
         no_help_reason="HQ cannot start the controller.",
         subsumes=("kind-never-swept",),
     ),
@@ -646,7 +624,7 @@ RULES: tuple[FindingRule, ...] = (
         "Something has not been read for days",
         "serious",
         _kind_never_swept,
-        operator_action="Fix the connection that reads them, then press Read now.",
+        operator_action=f"Fix the connection that reads them, then press {CONTROLLER_REFRESH.words()}.",
         no_help_reason="HQ cannot fix a connection that is not answering.",
         # When the sweep itself is the fault, every record of the kind looks
         # skipped. Saying it once about the kind beats saying it about each.
@@ -673,7 +651,7 @@ RULES: tuple[FindingRule, ...] = (
         "Settings HQ could not check",
         "attention",
         _weakly_verified,
-        operator_action="Apply again, so HQ sets them and reads them back.",
+        operator_action="Apply HQ's settings, so HQ sets them and reads them back.",
         no_help_reason="HQ cannot read this setting from the service.",
     ),
     FindingRule(

@@ -52,8 +52,12 @@ def _validate_capability_identity(spec: CapabilitySpec) -> None:
         raise ImproperlyConfigured(f"Invalid capability name {spec.name!r}.")
     if not spec.summary.strip():
         raise ImproperlyConfigured(f"Capability {spec.name!r} has no summary.")
-    if spec.label != spec.label.strip() or len(spec.label) > 60:
-        raise ImproperlyConfigured(f"Capability {spec.name!r} needs a short label without padding.")
+    words = (spec.label, spec.verb, *(text for _name, text in spec.variants))
+    if any(text != text.strip() or len(text) > 60 for text in words):
+        raise ImproperlyConfigured(f"Capability {spec.name!r} needs short words without padding.")
+    names = [name for name, _text in spec.variants]
+    if any(not name or not text for name, text in spec.variants) or len(names) != len(set(names)):
+        raise ImproperlyConfigured(f"Capability {spec.name!r} names each variant once, with its words.")
     if spec.effect not in EFFECTS:
         raise ImproperlyConfigured(f"Capability {spec.name!r} has invalid effect {spec.effect!r}.")
 

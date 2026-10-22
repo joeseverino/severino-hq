@@ -52,7 +52,7 @@ class NamedRule:
 
 
 @dataclass(frozen=True, slots=True)
-class Setting:
+class TailnetSetting:
     """One tailnet setting; ``addresses`` when its value names machines."""
 
     label: str
@@ -74,7 +74,7 @@ class TagRow:
 class TailnetContext:
     policy: Policy
     declaration: str
-    settings: tuple[Setting, ...]
+    settings: tuple[TailnetSetting, ...]
     grants: tuple[NamedRule, ...]
     ssh_rules: tuple[NamedRule, ...]
     tags: tuple[TagRow, ...]
@@ -231,7 +231,7 @@ def tailnet_context(*, principal: Principal) -> TailnetContext:
             policy=found,
             declaration=declaration(),
             settings=tuple(
-                Setting(
+                TailnetSetting(
                     label,
                     value,
                     names.addresses(value.split(", ")) if label == RESOLVES_THROUGH else None,

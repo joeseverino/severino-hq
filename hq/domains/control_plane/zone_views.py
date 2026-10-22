@@ -14,11 +14,13 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
+from django.utils.safestring import SafeString
 from django.views import View
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.adoption import AdoptCommand, adopt
+from hq.platform.application.asks import APPLIES_SHORTLY
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.infrastructure import (
     ManagedResourceCommand,
@@ -52,6 +54,7 @@ from hq.platform.application.zones import (
     find_zone,
     zone_catalog,
 )
+from hq.platform.core.templatetags.value_tags import breakable
 
 from .resource_form_views import _readable_error
 
@@ -205,7 +208,7 @@ class ZoneMailView(View):
         except (DjangoValidationError, PolicyError, RecordNotFound, ValueError) as exc:
             messages.error(request, _readable_error(exc))
             return redirect("zones:mail", zone=zone.zone)
-        messages.success(request, f"{what} saved. Publishing within a minute.")
+        messages.success(request, f"{what} saved. {APPLIES_SHORTLY}")
         return redirect("zones:mail", zone=zone.zone)
 
     def post(self, request, zone: str):
@@ -305,8 +308,7 @@ class ZoneDetailView(View):
                     found.zone,
                     (
                         format_html(
-                            'The DNS records of this domain, from <a href="{}" data-entity="{}">{}</a>.',
-                            *_connection_mention(found.connection_ref),
+                            "The DNS records of this domain, from {}.", _connection_mention(found.connection_ref)
                         )
                         if found.connection_ref
                         else "The DNS records of this domain."
@@ -332,7 +334,7 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
     if capabilities.removal != "unavailable":
         actions.append(
             PageAction(
-                "Stop tracking in HQ" if capabilities.removal == "forget" else "Remove",
+                capabilities.removal_words,
                 reverse("control_plane:remove", args=[resource.key]),
                 danger=True,
                 title=(
@@ -378,6 +380,6 @@ class ZoneAdoptView(View):
         return redirect("zones:detail", zone=zone)
 
 
-def _connection_mention(ref: str) -> tuple[str, str, str]:
+def _connection_mention(ref: str) -> SafeString:
     link = entity_link("connection", ref)
-    return link.url, link.kind_label, link.label
+    return format_html('<a href="{}" data-entity="{}">{}</a>', link.url, link.kind_label, breakable(link.label))

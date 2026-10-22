@@ -47,7 +47,7 @@ from ..zones import (
     find_zone,
     zone_catalog,
 )
-from .markup import texts
+from .markup import text, texts
 
 # Every DNS connection these tests name, each managing.
 DNS_CONNECTIONS = tuple(("cloudflare_dns", ref) for ref in ("cf-example", "cf", "a-dns", "a-dns-account"))
@@ -392,8 +392,8 @@ class ZonePageTests(TestCase):
     def test_a_domain_page_lists_every_record_in_it(self):
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "mx02.mail.example.net")
-        self.assertContains(response, "letsencrypt.org")
+        self.assertIn("mx02.mail.example.net", text(response))
+        self.assertIn("letsencrypt.org", text(response))
 
     def test_an_unknown_domain_is_a_404_not_an_empty_page(self):
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "nope.example"}))
@@ -426,9 +426,9 @@ class ProviderSurfaceTests(TestCase):
         # Asserted on the promise, not on the sentence explaining its absence,
         # so the reason can be reworded without editing a test that is not
         # about it.
-        self.assertNotIn("The controller applies it", _apply_note(ZONE_KIND))
+        self.assertNotIn("HQ applies it", _apply_note(ZONE_KIND))
         self.assertIn(PROVIDERS[ZONE_KIND].actions["reconcile"].reason, _apply_note(ZONE_KIND))
-        self.assertIn("The controller applies it", _apply_note(RECORD_KIND))
+        self.assertIn("HQ applies it", _apply_note(RECORD_KIND))
 
     def test_a_zone_declares_no_service_facet(self):
         # A zone is a namespace, not a name that answers. Given a facet it would
@@ -1051,7 +1051,7 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
 
         self.assertContains(response, PROVIDERS["adguard.rewrite"].label)
         self.assertContains(response, "10.0.0.99")
-        self.assertContains(response, "HQ expects 10.0.0.10")
+        self.assertIn("HQ expects 10.0.0.10", text(response))
 
 
 class ResourcePageLifecycleTests(TestCase):
@@ -1109,7 +1109,7 @@ class ResourcePageLifecycleTests(TestCase):
 
         response = self.client.get(reverse("control_plane:remove", kwargs={"key": "private-proxy"}))
 
-        self.assertContains(response, "private.example.com")
+        self.assertIn("private.example.com", text(response))
         self.assertNotContains(response, "[&#x27;private.example.com&#x27;]")
 
     def test_routine_settings_are_folded_away_before_a_deletion(self):
@@ -1552,12 +1552,15 @@ class NewVerbReadinessTests(TestCase):
         self.assertFalse(hasattr(views, "RenewCertificateView"))
         self.assertTrue(hasattr(views, "OperationView"))
 
-    def test_every_verb_the_model_allows_has_a_phrase(self):
-        """A verb without one would be announced by its identifier."""
+    def test_a_verbs_press_is_announced_in_its_buttons_words(self):
+        """Its press is announced in the words its button uses."""
 
-        from hq.domains.control_plane.views import OPERATION_PHRASE
+        from hq.domains.control_plane.views import requested
 
-        self.assertEqual(set(OPERATION_PHRASE), set(OperationRequest.Action.values))
+        self.assertEqual(
+            requested(OperationRequest.Action.RENEW, "example-cert", queued=True),
+            "Renew certificate requested for example-cert.",
+        )
 
     def test_the_routes_carry_the_verb_rather_than_the_class(self):
         from hq.platform.application.adoption_testing import managing_everything
@@ -1722,7 +1725,7 @@ class ResourceListReadabilityTests(TestCase):
         page = self.client.get(reverse("control_plane:list")).content.decode()
         domain, caa = self.row(page, "example-com"), self.row(page, "example-com-caa")
 
-        self.assertIn("CAA 0 issue &quot;letsencrypt.org&quot;", caa)
+        self.assertIn('CAA 0 issue "letsencrypt.org"', text(caa))
         self.assertIn("Change waiting to apply", caa)
         self.assertNotIn("Change waiting to apply", domain)
 
@@ -1734,10 +1737,10 @@ class LabelAndDensityTests(TestCase):
         """ "Add tLS certificate": the first letter lowered without looking at
         the word it belonged to."""
 
-        from ..service_facets import Facet
+        from ..service_facets import ServiceFacet
 
-        offers = dict(Facet(id="certificate", label="Certificate").declarable)
-        dns = dict(Facet(id="dns", label="DNS").declarable)
+        offers = dict(ServiceFacet(id="certificate", label="Certificate").declarable)
+        dns = dict(ServiceFacet(id="dns", label="DNS").declarable)
 
         # Both ways of getting a certificate, offered where one is needed.
         self.assertLessEqual({"tls.certificate", "tls.uploaded_certificate"}, set(offers))
