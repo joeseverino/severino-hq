@@ -4,12 +4,9 @@
 #MISE sources=["uv.lock"]
 
 # The lock pins Playwright, which pins the browser. A browser removed by hand
-# comes back with `mise run --force setup:webkit`.
+# comes back with `mise run --force setup:webkit`. CI's browser jobs run in
+# Playwright's image, which carries this browser and its system libraries, so
+# there this finds it installed.
 set -eu
 
-# On a runner the system libraries come with it.
-if [ -n "${CI:-}" ]; then
-    uv run --group browser python -m playwright install --with-deps webkit
-else
-    uv run --group browser python -m playwright install webkit
-fi
+uv run --group browser python -m playwright install webkit

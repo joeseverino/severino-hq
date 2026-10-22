@@ -2,8 +2,4 @@
 #MISE description="No known vulnerability in any locked dependency"
 set -eu
 
-export="$(mktemp)"
-trap 'rm -f "$export"' EXIT
-uv export --all-groups --no-emit-project --output-file "$export" >/dev/null
-# The export is exact and hashed, so nothing is resolved or installed to audit it.
-uv run --only-group audit pip-audit --disable-pip --require-hashes -r "$export"
+exec tools/pipeline/audit.sh

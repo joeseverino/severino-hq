@@ -1,0 +1,15 @@
+#!/bin/sh
+#MISE description="Write what checks:ruff and checks:mise-format hold: Ruff's fixes and format, and mise.toml and its task files as mise fmt writes them"
+
+# The same file set the two gates read, so a fix run leaves them nothing to
+# report.
+set -eu
+
+uv run ruff check --fix .
+uv run ruff format .
+includes="$(yq -p toml -oy '.task_config.includes[] | select(test("\.toml$"))' mise.toml)"
+# shellcheck disable=SC2086  # each include is a glob for the shell to expand
+for file in mise.toml ${includes}; do
+    formatted="$(mise fmt --stdin <"${file}")"
+    printf '%s\n' "${formatted}" >"${file}"
+done

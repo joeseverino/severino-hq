@@ -191,13 +191,16 @@ def similar_pairs(root: Path, inspector: Path, pages: list[dict]) -> list[str]:
 
     classifier = Classifier(root, inspector)
     pairs = set()
+    explained = 0
     for a, b in graph_pairs(pages):
         if TEST.search(a[0]) or TEST.search(b[0]):
             continue
         reason = classifier.pair(a, b)
         pair = " <> ".join(sorted(f"{path}::{name}" for path, name in (a, b)))
         if reason:
-            print(f"classified {pair}: {reason}", file=sys.stderr)
+            explained += 1
         else:
             pairs.add("similar " + pair)
+    # One line, so a gate's verdict is never pushed out of view by pairs that pass.
+    print(f"{explained} similar pairs explained by a classification", file=sys.stderr)
     return sorted(pairs)

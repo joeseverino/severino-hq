@@ -6,9 +6,9 @@ it still one system?". A file's size is a test's (FileSizeTests).
     mise run checks:structural             check
     mise run checks:structural --record    rewrite the baseline from this tree
 
-The graph is codebase-memory-mcp at the release mise.toml pins, found through
-mise, since the answer's shape is that release's. Exit 3 when mise has none,
-which fails the gate.
+The graph is codebase-memory-mcp at the release mise.toml pins, installed and
+found through mise, since the answer's shape is that release's. It is lazy
+there, so this installs it first. Exit 3 when mise cannot, which fails the gate.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from tools.structural.classify import similar_pairs
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = Path(__file__).with_name("baseline.txt")
 TOOL = "codebase-memory-mcp"
+PACKAGE = f"github:DeusData/{TOOL}"
 QUERY = "MATCH (a)-[r:SIMILAR_TO]->(b) RETURN a.file_path, b.file_path, a.name, b.name"
 HEADER = (
     "# Structural baseline for `mise run checks:structural`: each near-duplicate\n"
@@ -34,10 +35,11 @@ HEADER = (
 
 
 def graph_binary() -> str:
-    found = subprocess.run(["mise", "which", TOOL], cwd=ROOT, capture_output=True, text=True, check=False)
-    if found.returncode != 0 or not found.stdout.strip():
-        print(f"mise has no {TOOL}; the structural bar did not run.\n{found.stderr}", file=sys.stderr)
-        raise SystemExit(3)
+    for command in (["mise", "install", PACKAGE], ["mise", "which", TOOL]):
+        found = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+        if found.returncode != 0:
+            print(f"mise has no {TOOL}; the structural bar did not run.\n{found.stderr}", file=sys.stderr)
+            raise SystemExit(3)
     return found.stdout.strip()
 
 

@@ -1,0 +1,16 @@
+#!/bin/sh
+#MISE description="mise.toml and the task files it includes are formatted as `mise fmt` writes them"
+
+# Each file through stdin: `mise fmt --check` also judges the gitignored
+# mise.local.toml. The task files are the .toml entries of
+# task_config.includes, each a glob the shell expands.
+set -eu
+
+includes="$(yq -p toml -oy '.task_config.includes[] | select(test("\.toml$"))' mise.toml)"
+status=0
+# shellcheck disable=SC2086  # each include is a glob for the shell to expand
+for file in mise.toml ${includes}; do
+    # shellcheck disable=SC2094  # diff only reads the file it compares against
+    mise fmt --stdin <"${file}" | diff -u "${file}" - || status=1
+done
+exit "${status}"

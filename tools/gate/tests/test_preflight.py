@@ -7,9 +7,10 @@ from contextlib import redirect_stderr
 from io import StringIO
 from unittest import mock
 
-from django.test import SimpleTestCase, tag
+from django.test import tag
 
 from tools.gate import preflight
+from tools.gate.tests.base import GateTestCase
 from tools.pipeline import ci_report
 
 SHA = "a" * 40
@@ -41,7 +42,7 @@ class FakeApi:
 
 
 @tag("source")
-class SettleTests(SimpleTestCase):
+class SettleTests(GateTestCase):
     def github(self, finish_after: int) -> preflight.GitHub:
         github = preflight.GitHub(SHA, REPOSITORY)
         github.api = ci_report.GitHub(None, REPOSITORY, run=FakeApi(finish_after))

@@ -11,17 +11,18 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, tag
+from django.test import tag
 
 from hq.config.sandbox import PREFIX, sweep_abandoned
 from tests.mise_tasks import mise_tasks
 from tools.gate import fast as fast_gate, verdict as gate_verdict
+from tools.gate.tests.base import GateTestCase
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 @tag("source")
-class FastGateMappingTests(SimpleTestCase):
+class FastGateMappingTests(GateTestCase):
     def setUp(self):
         self.files = fast_gate.python_files()
 
@@ -89,6 +90,13 @@ class FastGateMappingTests(SimpleTestCase):
                 chosen, _ = fast_gate.test_labels(files, set(), set(), [".github/actions/example/action.yml"])
             self.assertEqual(chosen, ["test_arguments", "test_segments", "test_string"])
 
+    def test_a_task_definition_change_selects_the_tests_that_read_the_tasks(self):
+        """A task moved between mise.toml, tasks/ and mise-tasks/ is read through tests.mise_tasks, by no path."""
+        for changed in ("mise.toml", "tasks/browser.toml", "mise-tasks/suite/as-image"):
+            with self.subTest(changed=changed):
+                self.assertIn("hq.platform.core.tests.test_browser_gate_tasks", self.labels(changed))
+        self.assertNotIn("hq.platform.core.tests.test_browser_gate_tasks", self.labels("docs/Development.md"))
+
     def test_a_test_change_selects_that_test_and_the_architecture_tests(self):
         labels = self.labels("hq/platform/core/tests/test_security.py")
         self.assertIn("hq.platform.core.tests.test_security", labels)
@@ -103,7 +111,7 @@ class FastGateMappingTests(SimpleTestCase):
 
 
 @tag("source")
-class FastGateBaseTests(SimpleTestCase):
+class FastGateBaseTests(GateTestCase):
     REFS = {"main": "aaa", "topic": "bbb"}
 
     def resolve(self, base):
@@ -134,7 +142,7 @@ class FastGateBaseTests(SimpleTestCase):
 
 
 @tag("source")
-class FastGateNestedLayoutTests(SimpleTestCase):
+class FastGateNestedLayoutTests(GateTestCase):
     def test_app_config_label_can_differ_from_source_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -193,11 +201,18 @@ sys.exit(1)
 """
 
 
+# `python -m tools.gate.verdict`, keeping its verdict in the folder named first.
+VERDICT_IN = (
+    "import sys; from pathlib import Path; from tools.gate import verdict;"
+    " verdict.VERDICTS = Path(sys.argv[1]); sys.exit(verdict.main(sys.argv[2:]))"
+)
+
+
 @tag("source")
-class GateVerdictTests(SimpleTestCase):
+class GateVerdictTests(GateTestCase):
     def gate(self, *cmd: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, "-m", "tools.gate.verdict", "check", *cmd],
+            [sys.executable, "-c", VERDICT_IN, str(gate_verdict.VERDICTS), "check", *cmd],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -213,6 +228,19 @@ class GateVerdictTests(SimpleTestCase):
         self.assertTrue(last.startswith("[check] FAILED"), last)
         for named in ("checks:ruff", "hq.x.tests.test_y.Case.test_z", "hq.x.tests.test_w.Other.setUpClass"):
             self.assertIn(named, last)
+
+    def test_the_verdict_is_kept_whole_in_the_file_it_names(self):
+        tests = [f"hq.x.tests.test_y.Case.test_{n}" for n in range(gate_verdict.SHOWN + 2)]
+        failed = gate_verdict.Step("tests", ok=False, tasks=["checks:ruff"], tests=tests)
+        with patch("sys.stdout", new_callable=io.StringIO) as out:
+            gate_verdict.close("test at main", 0.0, [failed])
+        *_, named, last = out.getvalue().splitlines()
+        path = Path(named.rsplit(" ", 1)[-1])
+        self.assertEqual(path.parent, gate_verdict.VERDICTS)
+        line, *every = path.read_text().splitlines()
+        self.assertEqual(line, last)
+        self.assertIn("and 2 more", last)
+        self.assertEqual(every, ["checks:ruff", *tests])
 
     def test_a_pass_says_passed(self):
         result = self.gate(sys.executable, "-c", "print('FAIL: test_z (a.B.test_z)')")
@@ -251,7 +279,7 @@ print("database=" + path)
 
 
 @tag("source")
-class GateDatabaseTests(SimpleTestCase):
+class GateDatabaseTests(GateTestCase):
     def test_gates_run_side_by_side_each_write_a_database_the_next_test_run_sweeps(self):
         # Two processes making one new SQLite file WAL at once: one is refused.
         (ROOT / "var").mkdir(exist_ok=True)
@@ -262,10 +290,7 @@ class GateDatabaseTests(SimpleTestCase):
             (Path(config) / "write.py").write_text(WRITE)
             run = json.dumps(f"{sys.executable} write.py")
             (Path(config) / "mise.toml").write_text(
-                "".join(
-                    f'[tasks."gate:{n}"]\nextends = "{template}"\nrun = {run}\n'
-                    for n, template in enumerate(("django", "django", "composed", "composed"))
-                )
+                "".join(f'[tasks."gate:{n}"]\nextends = "django"\nrun = {run}\n' for n in range(4))
             )
             result = subprocess.run(
                 [shutil.which("mise") or "mise", "run", "-c", "--jobs", "4", "gate:*"],

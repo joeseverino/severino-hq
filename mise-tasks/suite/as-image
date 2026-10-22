@@ -1,15 +1,16 @@
 #!/bin/sh
 #MISE description="The suite composed with the extensions mise.local.toml names, as the image runs it: only the files the image ships"
-#MISE extends="composed"
+#MISE extends="django"
+#MISE env={DJANGO_DEBUG=false, SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
 #MISE timeout="30m"
 #USAGE arg "[arguments]..." var=#true help="Passed on to manage.py test: test labels, --tag, --parallel"
 
 # The suite runs in a copy of only what the image is built from (the paths
 # Dockerfile.dockerignore admits, tracked or new), so a test that reads docs/,
 # .git or anything else the image leaves out fails here rather than in Compose.
-# It runs as the image configures it: the task's composed environment (DEBUG
-# off, the extension set mise.local.toml names), with SEVERINO_HQ_SOURCE and
-# SEVERINO_HQ_REVISION stamped. Without an extension set it runs the host alone
+# It runs as the image configures it: DEBUG off, the extension set
+# mise.local.toml names, admission off since a checkout has no admitted wheels,
+# with SEVERINO_HQ_SOURCE and SEVERINO_HQ_REVISION stamped. Without an extension set it runs the host alone
 # and says so; REQUIRE_COMPOSED=1 fails instead.
 set -eu
 
