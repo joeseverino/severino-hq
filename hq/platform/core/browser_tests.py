@@ -23,11 +23,13 @@ import mimetypes
 import os
 import re
 import tempfile
-from functools import cache, wraps
+from collections import deque
+from functools import cache, partial, wraps
 from itertools import islice, takewhile
 from pathlib import Path
 from types import MappingProxyType
 from typing import override
+from unittest import mock
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -42,6 +44,7 @@ lazy from django.template.loader import render_to_string
 lazy from playwright.sync_api import Error as BrowserError, TimeoutError as LoadTimeout
 
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
+from hq.platform.core.test_runner import stall_watch
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, build_dense_estate, render_dense_pages
 from hq.platform.core.tests.test_browser_derived_fixtures import build_derived_estate, render_derived_pages
 from hq.platform.core.tests.test_browser_fixtures import PAGES, build_estate, render_pages
@@ -3266,6 +3269,39 @@ def reads(*probes):
     return rule
 
 
+# What Playwright's driver logs while the stall watch is on (its DEBUG and
+# DEBUG_FILE, read once when the driver starts): the browser's launch, with its
+# arguments and its own output, and every call with its steps, a navigation's
+# included. It goes to a file, so a run that does not stall prints none of it.
+DRIVER_DEBUG = "pw:browser,pw:api"
+DRIVER_LOG_SHOWN = 80
+
+
+def start_driver(owner, sync_playwright):
+    """Playwright's driver for ``owner``'s class, its log shown in a stall report."""
+
+    if not stall_watch.enabled:
+        return sync_playwright().start()
+    handle, log = tempfile.mkstemp(prefix="hq-playwright-", suffix=".log")
+    os.close(handle)
+    owner.addClassCleanup(os.unlink, log)
+    with mock.patch.dict(os.environ, {"DEBUG": DRIVER_DEBUG, "DEBUG_FILE": log}):
+        driver = sync_playwright().start()
+    evidence = partial(driver_log, log)
+    stall_watch.evidence.append(evidence)
+    owner.addClassCleanup(stall_watch.evidence.remove, evidence)
+    return driver
+
+
+def driver_log(path, stream):
+    """The end of the driver's log, as a stall report's evidence."""
+
+    with Path(path).open(encoding="utf-8", errors="replace") as log:
+        tail = deque(log, maxlen=DRIVER_LOG_SHOWN)
+    stream.write(f"--- Playwright {DRIVER_DEBUG}, last {len(tail)} lines ({path}) ---\n")
+    stream.writelines(tail)
+
+
 class BrowserGate(SimpleTestCase):
     """A browser over pages rendered once, every request answered locally.
 
@@ -3296,7 +3332,7 @@ class BrowserGate(SimpleTestCase):
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
             raise RuntimeError("Playwright is not installed. Run: mise run browser") from exc
-        cls.playwright = sync_playwright().start()
+        cls.playwright = start_driver(cls, sync_playwright)
         cls.addClassCleanup(cls.playwright.stop)
         engine = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
         if engine not in {"chromium", "firefox", "webkit"}:

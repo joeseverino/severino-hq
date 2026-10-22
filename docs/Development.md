@@ -241,6 +241,13 @@ animation frame comes that many milliseconds late, and an idle callback waits
 three times its timeout. `HQ_BROWSER_SLOW=150 mise run browser:navigation`
 reproduces such a flake without loading the machine.
 
+A run that stalls says where. With `HQ_TEST_STALL_SECONDS=<s>`, each test
+process (every parallel worker) prints a stall report once a test or a class
+fixture has run that long: what it was running, every thread's and greenlet's
+stack, and in a browser gate the end of Playwright's own log (the browser's
+launch and output, each call and navigation). The run carries on; CI sets it
+below a job's time limit, so a hang there is read from the job's log.
+
 The example estate's values have the shapes and lengths real providers give
 (both tailnet addresses and a MagicDNS name per device, long image tags, a
 zone with many records), so a layout that holds there holds on real data.

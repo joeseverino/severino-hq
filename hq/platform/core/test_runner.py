@@ -24,13 +24,18 @@ pickle its traceback and the real error is replaced by ``cannot pickle
 'traceback' object``. Use ``--parallel=1`` instead, or install it.
 """
 
+import contextlib
+import faulthandler
+import gc
 import io
 import logging
 import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import traceback
 import unittest
 import unittest.util
 from pathlib import Path
@@ -171,13 +176,141 @@ def block_on_output() -> None:
             continue
 
 
-class CompositionTextResult(_LogsOnFailure, _CompositionIsolation, _ClassTimes, unittest.TextTestResult):
+# Seconds a test process may go without starting a test or a class fixture
+# before it reports where it is. CI sets it below its job's time limit, so a
+# run that stalls there leaves its stacks in the log before it is cancelled.
+# Unset, nothing is watched: a run at a terminal is watched by the person at it.
+STALL_SECONDS = "HQ_TEST_STALL_SECONDS"
+
+# After the report is due, how long the watch's own thread has to write it
+# before faulthandler's C watchdog dumps the stacks without it: the thread
+# needs the interpreter, which a call that never releases it does not give up.
+_FALLBACK_GRACE = 30.0
+
+
+def suspended_greenlets(stream) -> None:
+    """The stack of every greenlet that is not running. Playwright's sync API
+    runs the test on one and its event loop on another, so the thread's stack
+    shows only the loop and the test's own call is here."""
+
+    if (greenlet := sys.modules.get("greenlet")) is None:
+        return
+    for each in gc.get_objects():
+        if isinstance(each, greenlet.greenlet) and each.gr_frame is not None:
+            stream.write(f"--- suspended greenlet {each!r} (most recent call last) ---\n")
+            stream.writelines(traceback.format_stack(each.gr_frame))
+
+
+class StallWatch:
+    """Report where a test process is stuck when a test or a class fixture
+    runs longer than ``seconds``.
+
+    A daemon thread waits for the deadline that each ``mark`` moves. When it
+    passes, the thread writes what was running, whatever the evidence
+    callbacks add (the browser's own log, from ``BrowserGate``), and every
+    thread's stack (``faulthandler.dump_traceback``), once per mark, and the
+    run carries on: a dump never ends a test, the job's own limit does.
+    ``faulthandler.dump_traceback_later`` stands behind it, for a call that
+    holds the interpreter so the thread cannot run.
+    """
+
+    def __init__(self, seconds: float | None, stream=None):
+        self.seconds = seconds
+        self.stream = stream
+        self.evidence: list = []
+        self._ready = threading.Condition()
+        self._watching = 0
+        self._label: str | None = None
+        self._deadline: float | None = None
+        self._thread: threading.Thread | None = None
+
+    @classmethod
+    def from_environment(cls) -> StallWatch:
+        value = os.environ.get(STALL_SECONDS, "").strip()
+        return cls(float(value) if value else None)
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.seconds)
+
+    @contextlib.contextmanager
+    def watching(self):
+        """Watch this process while the block runs, restoring what an outer
+        run was watching when it ends."""
+
+        if not self.enabled:
+            yield
+            return
+        with self._ready:
+            saved = (self._label, self._deadline)
+            self._watching += 1
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._wait, name="stall-watch", daemon=True)
+                self._thread.start()
+        try:
+            yield
+        finally:
+            with self._ready:
+                self._watching -= 1
+                self._label, self._deadline = saved if self._watching else (None, None)
+                self._ready.notify()
+            if self._deadline is None:
+                faulthandler.cancel_dump_traceback_later()
+
+    def mark(self, label: str) -> None:
+        """``label`` starts now; it has ``seconds`` to finish or be followed."""
+
+        if not self._watching:
+            return
+        with self._ready:
+            self._label = label
+            self._deadline = time.monotonic() + self.seconds
+            self._ready.notify()
+        faulthandler.dump_traceback_later(self.seconds + _FALLBACK_GRACE, exit=False)
+
+    def report(self, label: str) -> None:
+        """Write what has stalled, the evidence for it, and every thread's stack."""
+
+        block_on_output()
+        stream = self.stream or sys.stderr
+        stream.write(f"\n=== stalled {self.seconds:g}s: {label} (pid {os.getpid()}) ===\n")
+        for evidence in list(self.evidence):
+            evidence(stream)
+        stream.write("--- every thread's stack ---\n")
+        stream.flush()
+        faulthandler.dump_traceback(file=stream, all_threads=True)
+        suspended_greenlets(stream)
+        stream.write(f"=== end of stall report: {label} ===\n")
+        stream.flush()
+
+    def _wait(self) -> None:
+        while True:
+            with self._ready:
+                while self._deadline is None or (left := self._deadline - time.monotonic()) > 0:
+                    self._ready.wait(None if self._deadline is None else left)
+                label, self._deadline = self._label, None
+            faulthandler.cancel_dump_traceback_later()
+            self.report(label or "between tests")
+
+
+stall_watch = StallWatch.from_environment()
+
+
+class _StallMarks:
+    """Restart the stall watch as each test begins."""
+
+    def startTest(self, test):
+        stall_watch.mark(test.id())
+        return super().startTest(test)
+
+
+class CompositionTextResult(_StallMarks, _LogsOnFailure, _CompositionIsolation, _ClassTimes, unittest.TextTestResult):
     def printErrors(self):
         block_on_output()
         super().printErrors()
 
 
-class CompositionRemoteResult(_LogsOnFailure, _CompositionIsolation, RemoteTestResult):
+class CompositionRemoteResult(_StallMarks, _LogsOnFailure, _CompositionIsolation, RemoteTestResult):
     def addClassTime(self, test, seconds):
         # A worker's result keeps nothing: the parent replays this event
         # against the subsuite's test at that index.
@@ -186,20 +319,32 @@ class CompositionRemoteResult(_LogsOnFailure, _CompositionIsolation, RemoteTestR
 
 class ClassTimedSuite(unittest.TestSuite):
     """A suite that tells its result how long each class took, from its
-    ``setUpClass`` to the end of its ``tearDownClass``.
+    ``setUpClass`` to the end of its ``tearDownClass``, and keeps the stall
+    watch on while it runs.
 
     Under ``--parallel`` each worker's subsuite is this type too, since Django
     partitions a suite into suites of its own type, so the time is measured
-    where the class ran and reaches the parent as an event.
+    where the class ran and reaches the parent as an event, and the watch runs
+    in the process the tests run in. The parent only replays their events.
     """
+
+    @override
+    def run(self, result, debug=False):
+        if getattr(result, "_testRunEntered", False):
+            return super().run(result, debug)
+        with stall_watch.watching():
+            return super().run(result, debug)
 
     def _handleClassSetUp(self, test, result):
         if type(test) is not getattr(result, "_previousTestClass", None):
+            stall_watch.mark(f"{unittest.util.strclass(type(test))} setUpClass")
             self._timing = (test, time.monotonic())
         super()._handleClassSetUp(test, result)
 
     def _tearDownPreviousClass(self, test, result):
         previous = getattr(result, "_previousTestClass", None)
+        if previous is not None and previous is not type(test):
+            stall_watch.mark(f"{unittest.util.strclass(previous)} tearDownClass")
         super()._tearDownPreviousClass(test, result)
         timing = vars(self).pop("_timing", None) if previous is not type(test) else None
         if timing and (record := getattr(result, "addClassTime", None)):

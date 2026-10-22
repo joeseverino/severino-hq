@@ -6,20 +6,24 @@ import pickle
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock
 from pathlib import Path
+from typing import override
 
 from django.test import SimpleTestCase
 
 from hq.config.sandbox import sweep_abandoned
 from hq.platform.core.test_runner import (
     SOURCE,
+    STALL_SECONDS,
     ClassTimedSuite,
     CompositionRemoteResult,
     CompositionTextResult,
     FileClonedParallelSuite,
     SeverinoTestRunner,
+    StallWatch,
     block_on_output,
     excluded_tags,
     report_class_times,
@@ -150,3 +154,112 @@ class ClassTimeTests(SimpleTestCase):
         said = stream.getvalue()
         self.assertIn("load average", said)
         self.assertLess(said.index("example.Slow"), said.index("example.Quick"))
+
+
+class _Marks(StallWatch):
+    def __init__(self):
+        super().__init__(seconds=600)
+        self.marks = []
+
+    @override
+    def mark(self, label):
+        self.marks.append(label)
+        super().mark(label)
+
+
+class StallWatchTests(SimpleTestCase):
+    """A test process that stops making progress says what it was running and
+    where every thread is, and only a process running tests does."""
+
+    def written(self, watch):
+        watch.stream.seek(0)
+        return watch.stream.read()
+
+    def watch(self, seconds, kind=StallWatch):
+        watch = kind(seconds=seconds)
+        # A real file: faulthandler writes the stacks to its descriptor.
+        watch.stream = self.enterContext(tempfile.TemporaryFile("w+"))
+        return watch
+
+    def test_the_report_names_what_stalled_shows_the_evidence_and_every_stack(self):
+        watch = self.watch(60)
+        watch.evidence.append(lambda stream: stream.write("browser launched\n"))
+        watch.report("example.Tests.test_it")
+
+        said = self.written(watch)
+        self.assertIn("example.Tests.test_it", said)
+        self.assertIn("browser launched", said)
+        self.assertIn("test_the_report_names_what_stalled_shows_the_evidence_and_every_stack", said)
+
+    def test_the_report_shows_a_call_waiting_on_another_greenlet(self):
+        # As Playwright's sync API leaves a test: switched away mid-call. The
+        # greenlet package comes only with the browser group, so a stand-in
+        # carries its documented surface: the type, and gr_frame on a
+        # suspended one.
+        class Suspended:
+            def __init__(self, frame):
+                self.gr_frame = frame
+
+        def waiting_on_the_browser():
+            yield
+
+        call = waiting_on_the_browser()
+        next(call)
+        self.addCleanup(call.close)
+        self.waiting = Suspended(call.gi_frame)
+        stand_in = unittest.mock.Mock(greenlet=Suspended)
+        watch = self.watch(60)
+        with unittest.mock.patch.dict(sys.modules, {"greenlet": stand_in}):
+            watch.report("example.Tests.test_it")
+
+        self.assertIn("waiting_on_the_browser", self.written(watch))
+
+    def test_a_mark_left_unfollowed_is_reported(self):
+        reported = threading.Event()
+
+        class Signalled(StallWatch):
+            @override
+            def report(self, label):
+                super().report(label)
+                reported.set()
+
+        watch = self.watch(0.01, Signalled)
+        with watch.watching():
+            watch.mark("example.Tests.test_stuck")
+            self.assertTrue(reported.wait(timeout=60))
+        self.assertIn("example.Tests.test_stuck", self.written(watch))
+
+    def test_a_process_that_only_replays_results_is_not_watched(self):
+        watch = self.watch(0.01)
+        watch.mark("example.Tests.test_it")
+        self.assertIsNone(watch._thread)
+
+    def test_unset_nothing_is_watched(self):
+        with unittest.mock.patch.dict(os.environ, {STALL_SECONDS: ""}):
+            watch = StallWatch.from_environment()
+        with watch.watching():
+            watch.mark("example.Tests.test_it")
+        self.assertFalse(watch.enabled)
+        self.assertIsNone(watch._thread)
+
+    def test_a_run_inside_a_test_gives_the_outer_test_back_its_watch(self):
+        watch = self.watch(600)
+        with watch.watching():
+            watch.mark("outer")
+            with watch.watching():
+                watch.mark("inner")
+            self.assertEqual(watch._label, "outer")
+        self.assertIsNone(watch._deadline)
+
+    def test_a_suite_marks_each_class_fixture_and_test(self):
+        watch = _Marks()
+        slow, quick = _timed_classes([0.0])
+        loader = unittest.defaultTestLoader
+        tests = [*loader.loadTestsFromTestCase(slow), *loader.loadTestsFromTestCase(quick)]
+        with unittest.mock.patch("hq.platform.core.test_runner.stall_watch", watch):
+            ClassTimedSuite(tests).run(CompositionRemoteResult())
+
+        self.assertEqual(
+            [mark.rsplit(".", 1)[-1] for mark in watch.marks],
+            ["Slow setUpClass", "test_it", "Slow tearDownClass", "Quick setUpClass", "test_it", "Quick tearDownClass"],
+        )
