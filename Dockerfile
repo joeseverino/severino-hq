@@ -3,10 +3,26 @@
 # as a non-root user.
 
 # Every stage pins its base by digest; Renovate bumps it on these lines.
-# uv comes from its own image, at the version mise.toml pins (checks:toolchain).
-FROM ghcr.io/astral-sh/uv:0.13.4@sha256:9f130421e930bfbdc563c00740466603f8723158e90297d07957c2294640262b AS uv
+
+# The build tools, Go and uv, at the releases mise.toml pins: mise installs
+# each from mise.lock and refuses a download whose checksum differs from it.
+# mise itself is checked against its release signature (install-mise.sh).
+FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS tools
+RUN apt-get update && apt-get install -y --no-install-recommends curl minisign \
+    && rm -rf /var/lib/apt/lists/*
+ENV MISE_LOCKED=1 \
+    MISE_TRUSTED_CONFIG_PATHS=/tools
+WORKDIR /tools
+COPY .github/actions/toolchain/mise-version.sh .github/actions/toolchain/install-mise.sh ./bin/
+COPY mise.toml mise.lock ./
+RUN bin/install-mise.sh mise.toml /usr/local/bin/mise \
+    && mise install go uv \
+    && cp -a "$(mise where go)" /opt/go \
+    && install -D "$(mise which uv)" /opt/bin/uv
+
+
 FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS build
-COPY --from=uv /uv /usr/local/bin/uv
+COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # The cache mount and /install are different filesystems, so files are copied.
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -31,20 +47,15 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # The controller and the root secret renderer, one static binary each: CGO off,
 # -trimpath, so the runtime image carries no Go toolchain and the binaries no
-# build paths. Their Go is go.mod's go directive; the build fails if this
-# pinned image drifts from it.
-FROM golang:1.27.2-trixie@sha256:47667934874913a449b96faa7ef4777fa285d9ec29126ee80ed61c45b7cccf0e AS controller
-ENV CGO_ENABLED=0 \
+# build paths. Their Go is mise's (checks:toolchain holds it to go.mod).
+FROM tools AS controller
+ENV PATH=/opt/go/bin:$PATH \
+    CGO_ENABLED=0 \
     GOTOOLCHAIN=local \
     GOFLAGS=-mod=readonly
 WORKDIR /src
 COPY controller/go.mod controller/go.sum ./
-RUN want="$(sed -n 's/^go \([0-9.]*\)$/\1/p' go.mod)" \
-    && case "$(go env GOVERSION)" in \
-        "go${want}" | "go${want}."*) ;; \
-        *) echo "$(go env GOVERSION) is not go.mod's go ${want}" >&2; exit 1 ;; \
-    esac \
-    && go mod download
+RUN go mod download
 COPY controller/ ./
 # hq-host deploys only what its source repository's compose workflow signed,
 # so it is told that repository here, from the source the image is labeled with.

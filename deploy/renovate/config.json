@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "onboarding": false,
+  "requireConfig": "optional",
+  "allowedCommands": ["^node tools/dev/vendor-scalar\\.mjs$"],
+  "allowedUnsafeExecutions": ["mise"],
+  "platformCommit": "enabled",
+  "extends": ["config:best-practices"],
+  "minimumReleaseAge": "14 days",
+  "vulnerabilityAlerts": { "enabled": true },
+  "osvVulnerabilityAlerts": true,
+  "dependencyDashboard": true
+}
