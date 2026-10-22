@@ -1,0 +1,379 @@
+/* Time: the planning timeline, notice pages, cadence strips and matrices,
+   tabbed charts, background jobs, and print. */
+
+@layer components {
+
+/* ── Planning timeline ─────────────────────────────────────────────
+   One chronological primitive for every domain. A two-column horizon uses the
+   desktop canvas without turning eight dates into a full page of vertical rail;
+   source order remains chronological and collapses to one column on phones. */
+.timeline-head { align-items: flex-start; }
+.timeline-head > div { min-width: 0; }
+.timeline-head .count { margin-left: auto; }
+.timeline-description { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+.timeline-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  column-gap: var(--space-14);
+  /* Each item draws the rule above it and the list clips the first row's, so
+     the dividers are right in one column or two without counting items. */
+  overflow: clip;
+}
+.timeline-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-6);
+  min-height: 62px;
+  padding: var(--space-3) 0;
+  box-shadow: 0 -1px 0 var(--line-2);
+}
+.timeline-item time { display: flex; flex-direction: column; align-items: center; font-feature-settings: "tnum"; }
+.timeline-month { color: var(--muted); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.timeline-day { color: var(--ink); font-size: var(--text-2xl); font-weight: 650; line-height: 1.1; }
+.timeline-year { color: var(--muted-2); font-size: var(--text-3xs); font-weight: 600; letter-spacing: .04em; }
+.timeline-copy { display: flex; flex-direction: column; min-width: 0; gap: var(--space-1); font-size: var(--text-sm); }
+.timeline-copy a { color: var(--ink); }
+.timeline-copy a:hover { color: var(--accent); }
+
+
+/* ── Notice pages (404 / 500) ───────────────────────────────────────
+   Deliberately plain: the operator is here by accident, so the page
+   orients and offers one way out rather than decorating the mistake. */
+
+.notice-page { max-width: 44ch; margin: 12vh auto 0; text-align: center; }
+.notice-code {
+  margin: 0 0 var(--space-3); font-size: var(--text-xs); font-weight: 650; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted-2); font-feature-settings: "tnum";
+}
+.notice-page h1 { margin: 0 0 var(--space-5); font-size: var(--text-4xl); letter-spacing: -.02em; }
+.notice-body { margin: 0 0 var(--space-10); color: var(--muted); line-height: 1.6; }
+.notice-page .page-actions { justify-content: center; display: flex; }
+
+/* In a narrow box (its region's width, not the screen's) the cadence matrix drops its oldest periods rather than scrolling. A
+   sideways scrollbar under a five-column grid of dots is both ugly and
+   useless: the columns only mean anything lined up against each other, and
+   half of them parked off-screen are not lined up against anything. The
+   three most recent survive, which is the end of the row an eye goes to
+   first and the part a decision is made from; the full history is a tap away
+   on the page this panel links to.
+   Counted from the end, so it is "the last three" whatever the window
+   length happens to be, rather than a fixed set of column numbers. */
+@container table-region (width < 640px) {
+  .cadence-matrix th:nth-child(n+2):nth-last-child(n+5),
+  .cadence-matrix td:nth-child(n+2):nth-last-child(n+5) { display: none; }
+  /* The "last trained" line is what pushes the label column past a narrow box.
+     The dots are the reading; the exact recency is on the split page. */
+  .cadence-matrix .cadence-detail { display: none; }
+  .cadence-matrix th, .cadence-matrix td { padding: var(--space-3) var(--space-1); }
+}
+
+/* ── Cadence strip ──────────────────────────────────────────────────
+   Whether a thing happened, period by period. A filled mark is a period it
+   happened in; the gaps are the point, so they stay the same size and shape as
+   the hits rather than collapsing. */
+
+.cadence { display: flex; flex-direction: column; gap: var(--space-4); }
+.cadence-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-5); }
+.cadence-title { font-size: var(--text-sm); font-weight: 650; color: var(--ink); }
+.cadence-count { font-size: var(--text-xs); color: var(--muted); font-feature-settings: "tnum"; white-space: nowrap; }
+.cadence-strip { display: flex; flex-wrap: wrap; gap: var(--space-5); list-style: none; margin: 0; padding: 0; }
+.cadence-week { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); min-width: 34px; }
+.cadence-mark {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--text-2xs); font-weight: 650; color: var(--muted);
+  font-feature-settings: "tnum";
+}
+.cadence-mark.is-hit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+/* A period nothing is known about. Dashed and unfilled with the missing-value
+   dash inside, so it reads as "no reading" beside a period that was skipped,
+   by shape as well as by color. */
+.cadence-mark.is-no-data { background: transparent; border-style: dashed; color: var(--muted-2); }
+.cadence-mark.is-no-data::before { content: "\2013"; }
+.cadence-label { font-size: var(--text-3xs); color: var(--muted-2); white-space: nowrap; }
+.cadence-note { margin: 0; font-size: var(--text-xs); color: var(--muted); line-height: 1.5; }
+/* Anchored at the top-left of its containing block. At its static position, a
+   label in the last column of a wide table would sit past the page edge,
+   outside both the table's scroll box and main's clip, and scroll the whole
+   page sideways. */
+.visually-hidden { position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Text only a screen reader hears has no lines for a name to hold. */
+.visually-hidden :is(.token, .whole) { display: inline; }
+
+/* Cadence matrix: the same marks as a single strip, aligned in columns so the
+   rows can be read against each other. Deliberately not stacked on a phone: a
+   matrix that becomes a list of lists loses the alignment it exists for, and a
+   row of five dots fits a narrow screen comfortably. */
+.cadence-matrix th[scope="col"] { text-align: center; }
+.cadence-matrix th[scope="col"]:first-child { text-align: left; }
+.cadence-matrix th[scope="row"] { text-align: left; font-weight: 650; }
+.cadence-matrix th[scope="row"] a { color: var(--ink); }
+.cadence-matrix th[scope="row"] a:hover { color: var(--accent); }
+.cadence-detail { display: block; font-weight: 400; font-size: var(--text-2xs); }
+.cadence-cell { text-align: center; }
+.cadence-cell .cadence-mark { margin: 0 auto; }
+.cadence-period { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; white-space: nowrap; }
+.cadence-total { text-align: center; font-feature-settings: "tnum"; color: var(--muted); white-space: nowrap; }
+/* Compact: for a matrix sharing a row with a chart, where the default cell
+   padding would push eight columns past a half-width card. */
+.cadence-matrix.is-compact th,
+.cadence-matrix.is-compact td { padding: var(--space-3) var(--space-2); }
+.cadence-matrix.is-compact .cadence-period { font-size: var(--text-3xs); }
+.cadence-matrix.is-compact th[scope="row"] { font-size: var(--text-sm); }
+.cadence-matrix.is-compact .cadence-detail { font-size: var(--text-3xs); }
+
+/* Tabbed charts. Several drawings of one thing in the space of one, built from
+   radios so the panel works with no JavaScript and the arrow keys move between
+   tabs for free. The inputs are hidden from sight but not from the accessibility
+   tree, which is what keeps them focusable. */
+.chart-tabs { padding-top: var(--space-6); }
+.chart-tablist { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-5); }
+.chart-tab-input { position: absolute; opacity: 0; pointer-events: none; }
+.chart-tab {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--text-xs);
+  font-weight: 550;
+  color: var(--muted);
+  background: var(--bg-tint);
+  cursor: pointer;
+}
+.chart-tab:hover { color: var(--ink); }
+.chart-tab-input:checked + .chart-tab {
+  background: var(--surface);
+  border-color: var(--ink-2);
+  color: var(--ink);
+}
+.chart-tab-input:focus-visible + .chart-tab { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chart-panel { display: none; }
+/* The nth panel belongs to the nth radio. Written out rather than generated:
+   the tab count is small, and `nth-of-type` on the panels would count the tab
+   strip as well, since both are divs. Numbered classes say exactly which panel
+   is meant and cannot be thrown off by a wrapper appearing between them. */
+.chart-tabs .chart-tab-input:nth-of-type(1):checked ~ .chart-panel-1,
+.chart-tabs .chart-tab-input:nth-of-type(2):checked ~ .chart-panel-2,
+.chart-tabs .chart-tab-input:nth-of-type(3):checked ~ .chart-panel-3,
+.chart-tabs .chart-tab-input:nth-of-type(4):checked ~ .chart-panel-4 { display: block; }
+/* A chart inside a tab panel already sits in a card, so it must not draw a
+   second border and a second block of padding inside the first. */
+.chart-panel .chart-card { border: 0; padding: 0; margin: 0; box-shadow: none; background: none; }
+
+/* What a reading was worth, in the outcome's own units. Colored by whether it
+   helped, with the sign and the number carrying the meaning: the color is
+   never the only thing saying which way it went. */
+.worth { font-variant-numeric: tabular-nums; }
+.worth-good { color: var(--ok); }
+.worth-attention { color: var(--warn); }
+.worth-neutral { color: var(--ink-2); }
+
+/* A finding stated once, with its arithmetic underneath. The claim is what
+   gets read; the numbers are what make it checkable. */
+.finding { margin: var(--space-1) 0 var(--space-1); font-size: var(--text-lg); font-weight: 600; line-height: 1.4; }
+.finding-evidence { margin: 0 0 var(--space-7); font-size: var(--text-xs); }
+
+/* A route, drawn from its own points. No basemap, so the line carries
+   everything: shape for where, color for how fast. */
+.route-frame { background: var(--bg-tint); border-radius: var(--radius); padding: var(--space-2); margin: var(--space-5) 0 var(--space-2); }
+.route-map { display: block; width: 100%; height: auto; }
+/* Semi-transparent so a retraced route shows its repeats as density rather
+   than hiding every pass but the last under an opaque line. */
+.route-line { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-opacity: .55; transition: opacity .08s ease; }
+/* A sequential ramp, slowest to fastest. Deliberately not the categorical
+   series palette: these bands are ordered, and a reader has to be able to see
+   which way the order runs without consulting the legend. */
+.route-band-1 { stroke: var(--route-band-1); }
+.route-band-2 { stroke: var(--route-band-2); }
+.route-band-3 { stroke: var(--route-band-3); }
+.route-band-4 { stroke: var(--route-band-4); }
+.route-band-5 { stroke: var(--route-band-5); }
+.route-swatch { inline-size: 9px; block-size: 9px; border-radius: 2px; }
+.route-band-1.route-swatch { background: var(--route-band-1); }
+.route-band-2.route-swatch { background: var(--route-band-2); }
+.route-band-3.route-swatch { background: var(--route-band-3); }
+.route-band-4.route-swatch { background: var(--route-band-4); }
+.route-band-5.route-swatch { background: var(--route-band-5); }
+.route-marker { stroke: var(--surface); stroke-width: 2.5; }
+.route-scale { stroke: var(--ink-2); stroke-width: 2; }
+.route-map:hover .route-line:not(:hover) { opacity: .55; }
+
+/* ── Background jobs ────────────────────────────────────────────── */
+/* Work that outlives its request, reporting where it has got to. */
+.job-progress { margin: 0 0 var(--stack-gap); }
+.job-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-6); }
+.job-state { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .05em; }
+/* The track. `overflow: hidden` so the fill's corners are the track's. */
+.job-bar {
+  position: relative;
+  overflow: hidden;
+  block-size: 6px;
+  margin: var(--space-5) 0 var(--space-4);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+/* Filled to `--at`, set by the poller. Transitioned so a jump from 10% to
+   60% between polls reads as progress rather than a glitch. */
+.job-bar i {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: var(--at, 0%);
+  border-radius: inherit;
+  background: var(--accent);
+  transition: inline-size .4s ease;
+}
+/* Work that cannot say how far along it is: a travelling band rather than a
+   bar sitting at a number nobody computed. */
+.job-bar-unknown i {
+  inline-size: 30%;
+  animation: job-sweep 1.4s ease-in-out infinite;
+}
+@keyframes job-sweep {
+  0% { inset-inline-start: -30%; }
+  100% { inset-inline-start: 100%; }
+}
+.job-note { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.job-progress[data-state="failed"] .job-bar i,
+.job-progress[data-state="lost"] .job-bar i { background: var(--danger); }
+.job-progress[data-state="succeeded"] .job-bar i { background: var(--ok, var(--accent)); }
+/* Reduced motion: the sweep is decoration. The bar still fills. */
+@media (prefers-reduced-motion: reduce) {
+  .job-bar-unknown i { animation: none; inline-size: 100%; opacity: .35; }
+  .job-bar i { transition: none; }
+  .page-nav-list a { transition: none; }
+}
+
+/* Shown only on paper. In the document rather than in CSS `content` so it
+   can carry real values: a date, a name. */
+.print-only { display: none; }
+
+/* ── Print ──────────────────────────────────────────────────────── */
+/* A page that leaves the building: the care brief is handed to a clinician on
+   paper, in black and white. Three things break when a screen page is printed
+   without help: backgrounds and borders are dropped, so cards dissolve;
+   anything carried by color is carried by nothing; and a chart lands half on
+   one page and half on the next. */
+@media print {
+  /* Room for the browser's own header and footer. */
+  @page { margin: 14mm 12mm; }
+
+  html, body { background: var(--surface); color: var(--print-ink); font-size: 10.5pt; }
+  .content { max-width: none; padding: 0; overflow: visible; }
+
+  /* Chrome that means nothing on paper: navigation cannot be followed, the
+     search box cannot be typed into, buttons cannot be pressed. */
+  .site-header, .primary-nav, .global-search, .user-menu, .user-menu-panel,
+  .page-nav,
+  .table-filter-menu, .table-selection, .section-foot,
+  .btn, button, .job-progress, .page-actions, form,
+  /* `.pill` in a page head is a link ("Markdown", "Care →"). Status pills
+     inside a table are content and are kept. */
+  .page-head .pill, .section-head .pill,
+  /* The app's warning banner addresses whoever is at the screen. Printed
+     under a page of gait measurements it reads as an accusation. */
+
+  /* Cards become ruled sections: backgrounds are dropped, so the separation
+     has to be drawn in ink rather than in a tint. */
+  .card, figure.chart-card, .two-col > section, .two-col > div {
+    background: none;
+    border: 1px solid var(--print-ink);
+    box-shadow: none;
+    padding: 10pt 12pt;
+    margin: 0 0 8pt;
+  }
+
+
+  /* The card is the unit that moves whole. `table` deliberately does *not*
+     avoid breaking: nested elements that each refuse to split are how a card
+     starts on one page, its table jumps to the next, and the card's opening
+     border is left behind as an empty rectangle. Rows still hold together. */
+  .card, figure.chart-card, .section-head, tr { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+
+  /* Two across on paper, where the screen fits three: A4 gives about 186mm
+     between the margins, so a pair is ~90mm each: close to the width these
+     are legible at, and six measures in three rows rather than six pages. */
+  /* Charts only. Two five-column tables at half width lose their last
+     columns off the edge of the paper. Selected by what the row contains, so
+     it cannot be applied to a row of tables by accident. */
+  /* Inline-block columns, not a grid: Chromium fragments grid items across
+     page breaks badly, printing the card as an empty box with no chart in it.
+     49% rather than 50% because inline-block boxes are separated by the
+     whitespace between the tags. */
+  .two-col:has(> .chart-card) { display: block; font-size: 0; }
+  .two-col:has(> .chart-card) > .chart-card {
+    display: inline-block;
+    width: 49%;
+    vertical-align: top;
+    font-size: 10.5pt;
+    margin: 0 0 8pt;
+  }
+  .two-col:has(> .chart-card) > .chart-card:nth-child(odd) { margin-right: 1.5%; }
+  /* Everything else stacks and keeps full width, which is how a wide table
+     survives the margins. */
+  .two-col:not(:has(> .chart-card)) { display: block; }
+  .two-col:not(:has(> .chart-card)) > * { margin-bottom: 8pt; }
+  .chart-frame, .line-chart, .bar-chart { max-width: none !important; }
+  .chart-card { margin-bottom: 0; }
+
+  /* These charts use color to separate a declared measure from context; on
+     paper that distinction lives in the caption instead and every line is
+     drawn in the one ink there is. `print-color-adjust` is what keeps the
+     grid a gray rather than nothing. */
+  .chart-line, .chart-line-1, .chart-line-2, .chart-line-3, .chart-line-4,
+  .chart-line-5 { stroke: var(--print-ink) !important; }
+  .chart-dot, .chart-series-1, .chart-series-2, .chart-series-3,
+  .chart-series-4, .chart-series-5 { fill: var(--print-ink) !important; }
+  .chart-grid, .chart-mark {
+    stroke: var(--print-faint) !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .chart-trend { stroke: var(--print-rule) !important; }
+  .chart-axis, .chart-mark-label { color: var(--print-ink); fill: var(--print-ink); }
+  /* A hit area for a pointer paper does not have. */
+  .chart-hit { display: none; }
+
+  /* Muted grays print faint, and the small print is the part a careful
+     reader wants. */
+  /* Secondary grays (dates, reading counts, chart captions) recede on a
+     backlit display and disappear on paper. On paper it is all one ink. */
+  .muted, .lede, p, td, th, li, span, small, figcaption, .count,
+  .page-lede, .chart-card figcaption p,
+  /* Headings too: a muted gray reads as hierarchy on screen and as faded
+     toner on paper. */
+  h1, h2, h3, .section-head h2, .page-head h1 { color: var(--print-ink) !important; }
+  .data-table th, .data-table td { border-bottom: 0.5pt solid var(--print-rule); padding: 4pt 6pt; }
+  .data-table thead th { background: none; border-bottom: 1pt solid var(--print-ink); }
+  .table-scroll { overflow: visible; }
+  /* A heading pinned to a viewport that does not exist on paper. */
+  .data-table thead th { position: static; box-shadow: none; }
+
+  /* Disclosures print closed, silently dropping their contents, and those
+     are the numbers behind every drawing. */
+  details { display: block; }
+  details > summary { display: none; }
+  details > *:not(summary) { display: revert; }
+
+  a { color: var(--print-ink); text-decoration: none; }
+
+  /* A sheet of numbers with no date on it is one nobody can place. Rendered
+     by the page, not here: `counter(page)` only resolves inside an `@page`
+     margin box and silently produces nothing in ordinary flow. */
+  .print-only { display: block !important; }
+  .print-footer {
+    margin-top: 10pt;
+    padding-top: 6pt;
+    border-top: 0.5pt solid var(--print-rule);
+    font-size: 8pt;
+    color: var(--print-muted);
+  }
+}
+
+}

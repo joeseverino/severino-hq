@@ -1,0 +1,296 @@
+/* Elements, the site header and the page layout, and the document's own
+   transition between pages. */
+
+@layer base {
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+/* iOS inflates text in a block wider than the viewport, scaled by how far it
+   overruns, so equal type needs this. */
+/* A link to a part of the page lands it below the sticky header, whatever
+   the part is; a part under a page's own nav asks for more itself. */
+html {
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--site-header-height) + var(--space-5));
+}
+body {
+  font-family: var(--font);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  /* A word too long for its line (a URL, a key, a digest) breaks rather than
+     pushing the page wide. It breaks only where it would overflow, and does
+     not change how wide a table cell asks to be. */
+  overflow-wrap: break-word;
+}
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { color: var(--accent); text-decoration: underline; }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--bg-tint); padding: 1px var(--space-2); border-radius: 4px; color: var(--ink-2); }
+pre code { background: transparent; padding: 0; color: inherit; }
+/* An identifier (`|breakable`, or code): an address, a path, a key, an image.
+   One that fits on its line moves to the next line whole; one longer than its
+   line wraps at the seams the filter marks; a hyphenated part (`.whole`) or a
+   seamless one breaks inside only when it alone is longer than its line. A
+   table lays out its own identifiers. */
+:is(code, .token, .whole):not(pre *, td *, th *) {
+  display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
+  /* As wide as what it says: as a grid's item it would stretch to its
+     column, a chip as wide as the longest one beside it. */
+  justify-self: start;
+  /* Wrapped, it sits on its first line: an inline block's baseline is its
+     last, which a row aligned on baselines would lift over the rows above. */
+  baseline-source: first;
+}
+@supports not (baseline-source: first) {
+  :is(code, .token, .whole):not(pre *, td *, th *) { vertical-align: top; }
+}
+:is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
+.whole:is(td *, th *) { display: inline-block; max-width: 100%; }
+:is(td, th) [data-entity] > .token, :is(td, th) [data-entity] > .token > .whole { display: contents; }
+/* Where the filter lets a token break (value_tags._SEAM): a zero-width space,
+   so `white-space` governs it as it does any text, kept out of the name a
+   reader hears. */
+.seam::after { content: "\200B"; content: "\200B" / ""; }
+/* A scrap of a part ("1" in "example-agent-1") never stands alone on a line.
+   It holds its neighbor with no box of its own, so nothing about it can reach
+   past a cell or open a break where the part around it is held whole. */
+.joined { display: contents; white-space: nowrap; }
+/* The sentence's mark after a name (value_tags.breakable) sits inside the
+   name's box so it keeps to the name's last line. In code it is no part of
+   the value, so copying the value leaves it behind. */
+code .mark { -webkit-user-select: none; user-select: none; }
+/* A chip that is a link reads as one: the link color, underlined on hover. */
+a code { color: var(--accent-2); }
+a:hover code { color: var(--accent); text-decoration: underline; }
+/* A command or a file: its lines as written, scrolled inside its block, which
+   is never wider than the box it sits in. */
+pre { max-width: 100%; background: var(--code-bg); color: var(--code-ink); padding: var(--space-7) var(--space-8); border-radius: var(--radius); overflow-x: auto; font-size: var(--text-sm); line-height: 1.55; }
+::selection { background: var(--selection); color: var(--ink); }
+pre ::selection { color: var(--code-ink); }
+
+/* A node key is one long unbroken token. Stacked so the machine's name sits
+   above it rather than competing for width, and broken only where a line
+   cannot hold it. */
+.conn-keys { display: grid; gap: var(--space-1); margin: var(--space-3) 0 var(--space-4); }
+.conn-keys dt { color: var(--muted); font-size: var(--text-xs); }
+.conn-keys dd { margin: 0 0 var(--space-3); }
+.conn-keys dd code { font-size: var(--text-xs); overflow-wrap: break-word; }
+.node-key { font-size: var(--text-xs); overflow-wrap: anywhere; word-break: break-all; }
+
+/* A mark, not an alarm. It has to be visible while the mode is on (an
+   operator who forgets can screenshot fiction and file it as fact) and it
+   sits beside the profile control rather than shouting over the header. */
+.demo-flag {
+  font-size: var(--text-2xs); font-weight: 600; white-space: nowrap;
+  padding: var(--space-1) var(--space-4); border-radius: 20px;
+  background: var(--bg-tint); color: var(--muted);
+  border: 1px solid var(--line);
+}
+/* The header is one row at every width, and on the narrowest screens there is
+   no room for this. Dropped rather than shrunk: the switch in the profile menu
+   still carries the state, so the mode is a tap away from being visible. */
+@media (max-width: 400px) {
+  .demo-flag { display: none; }
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+
+/* Off-screen rather than `display: none`, which would take it out of the tab
+   order and leave nothing to skip with. It sits above the sticky header's
+   stacking context so it is not painted underneath the thing it jumps past. */
+.skip-link {
+  position: absolute; left: 12px; top: -100px; z-index: 20;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: var(--space-5) var(--space-7); font-size: var(--text-sm); font-weight: 600;
+  transition: top .12s ease-out;
+}
+.skip-link:focus { top: 12px; text-decoration: none; outline: 2px solid var(--accent); }
+/* The target takes focus so the next Tab continues from the content, but it is
+   only ever focused programmatically: an outline there would be a box drawn
+   around the whole page. */
+.content:focus { outline: none; }
+@media (prefers-reduced-motion: reduce) { .skip-link { transition: none; } }
+
+/* One row, always. The sections are the header's job; the search field is the
+   part that gives way. It collapses to a button that expands back over the nav
+   on focus, so a cramped header costs a click rather than a second row, and
+   the nav is never handed less room than its own content. */
+.site-header {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-5) var(--space-7);
+  padding: var(--space-5) var(--space-14);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 10;
+  backdrop-filter: saturate(180%) blur(12px);
+}
+.brand {
+  font-weight: 700; font-size: var(--text-lg); color: var(--ink);
+  letter-spacing: -.01em;
+  display: inline-flex; align-items: center; gap: var(--space-4);
+  white-space: nowrap;
+}
+.brand::before {
+  content: ""; width: 9px; height: 9px; border-radius: 2px;
+  background: var(--accent); display: inline-block;
+}
+.brand:hover { text-decoration: none; }
+.primary-nav {
+  display: flex;
+  /* Single row, deliberately: a control wrapped onto a second row would sit
+     beneath an open dropdown, where the panel covers it and swallows its
+     clicks. Grouping keeps the bar short enough that one row is enough. */
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  /* Never squeezed below its own content. `overflow` must stay visible, so a
+     nav handed less room than it needs has nothing to clip or scroll it: its
+     tail would paint underneath the search field. */
+  flex: 0 1 auto;
+  /* Must stay visible: an overflow scroll container clips absolutely
+     positioned descendants, the group dropdowns included. */
+  overflow: visible;
+}
+.primary-nav a {
+  color: var(--muted); font-weight: 500; font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-5); border-radius: 6px;
+  white-space: nowrap;
+  transition: background .12s ease, color .12s ease;
+}
+.primary-nav > a, .nav-group > summary { color: var(--muted); font-weight: 500; font-size: var(--text-sm); padding: var(--space-2) var(--space-5); border-radius: 6px; white-space: nowrap; }
+.primary-nav a:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
+.primary-nav a.active { color: var(--ink); background: var(--bg-tint); }
+
+/* Grouped sections. A <details> dropdown keeps the bar to a fixed number of
+   controls as sections are added, instead of overflowing behind a hidden
+   scrollbar where the tail becomes unreachable. */
+.nav-group { position: relative; }
+/* Safari stops toggling <details> when `display` on <summary> is changed away
+   from list-item, so the summary keeps its default display and an inner span
+   does the layout. Chromium toggles either way, so this has to be checked in
+   Safari rather than assumed. */
+.nav-group > summary {
+  display: list-item; list-style: none;
+  cursor: pointer; user-select: none;
+  transition: background .12s ease, color .12s ease;
+}
+.nav-group > summary::-webkit-details-marker { display: none; }
+.nav-group > summary::marker { content: ""; }
+.nav-group-label { display: inline-flex; align-items: center; gap: var(--space-2); }
+.nav-group > summary:hover, .nav-group[open] > summary { color: var(--ink); background: var(--bg-tint); }
+.nav-group > summary.active { color: var(--ink); background: var(--bg-tint); }
+.nav-caret { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+.nav-group[open] .nav-caret { transform: rotate(180deg); }
+.nav-group-panel {
+  position: absolute; z-index: 40; top: calc(100% + 6px); left: 0;
+  min-width: 176px; display: flex; flex-direction: column; gap: 1px;
+  padding: var(--space-2); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.nav-group-panel a { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-sm); }
+
+/* Gives way before the sections do: below the breakpoint it is an icon. */
+.global-search {
+  flex: 0 1 210px;
+  min-width: 150px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--control-size);
+  padding: 0 var(--space-3) 0 var(--space-5);
+  border: 1px solid var(--bar-control-line);
+  border-radius: var(--radius-sm);
+  background: var(--bar-control-bg);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+.global-search:hover { background: var(--bar-control-bg-hover); color: var(--ink-2); text-decoration: none; }
+.search-icon { flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.search-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-key { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted-2); font: inherit; font-size: var(--text-3xs); line-height: 1.6; }
+
+@media (max-width: 1280px) {
+  .global-search { flex: none; min-width: 0; width: var(--control-size); justify-content: center; padding: 0; }
+  .search-label, .search-key { display: none; }
+}
+
+.inline { display: inline-flex; align-items: center; gap: var(--space-3); }
+
+/* ── Layout ─────────────────────────────────────────────────────── */
+
+/* overflow-x: clip, not hidden: clip contains sideways overflow without making
+   this a scroll container, so position: sticky and the chart tooltip still
+   work. A single wide table stays behind its own card's scroller instead of
+   widening the whole document. */
+
+/* Every form control looks like HQ's wherever it sits, not only inside .field.
+   Components still override this; it is the floor. */
+input:where([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], [type=file], :not([type])),
+select,
+textarea {
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+/* A one-line control is the height of a button, whatever the browser would
+   draw it at: a select, a date and a field side by side read as one row. */
+input:where([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], :not([type])),
+select:not([multiple], [size]) {
+  box-sizing: border-box;
+  block-size: var(--control-size);
+  padding-block: 0;
+}
+/* HQ draws the select, so WebKit's small rounded one does not sit beside
+   square fields; the chevron is two gradient strokes in the muted ink. */
+select:not([multiple], [size]) {
+  appearance: none;
+  padding-inline-end: calc(var(--chevron-inset) + 14px);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - var(--chevron-inset) - 5px) 50%,
+    calc(100% - var(--chevron-inset)) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+input::-webkit-datetime-edit { padding-block: 0; }
+input::-webkit-date-and-time-value { text-align: start; }
+/* WebKit fills an empty date with today's date in gray, which reads as a
+   value. app.js marks an empty one, and it shows nothing until focused. */
+input[data-empty]:not(:focus)::-webkit-datetime-edit { -webkit-text-fill-color: transparent; }
+input:where([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], :not([type])):focus,
+select:focus,
+textarea:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-tint); }
+
+}
+
+/* Moving between pages. Both pages opt in, so a same-origin navigation fades
+   the new document in over the old instead of flashing to blank between them.
+   The header is its own layer and is not animated: the old one is dropped and
+   the new one stands at once, so only what is under it changes. Outside any
+   cascade layer: `@view-transition` is a rule about the document. Skipped
+   whole for a reader who asks for less motion, and by a browser that does not
+   know the rule. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  .site-header { view-transition-name: site-header; }
+  ::view-transition-old(site-header) { display: none; }
+  ::view-transition-new(site-header) { animation: none; }
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation-duration: 120ms; }
+}

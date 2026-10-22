@@ -1,0 +1,607 @@
+/* Layout: section cards and columns, the domain workspace and its calendar,
+   prose lists, the empty state and the facts grid. */
+
+@layer components {
+
+/* ── Section cards / two-col ────────────────────────────────────── */
+
+/* Two columns at most: a track is never narrower than half the row, so four
+   cards pair up 2+2 instead of leaving one orphaned, and below two 320px
+   tracks it is one column with no breakpoint. A card is as tall as what it
+   holds: stretched to a taller neighbor, a short card is mostly empty frame,
+   which reads worse than a card that is honestly short. */
+.two-col { container: pair / inline-size; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(320px, (100% - var(--layout-gap)) / 2)), 1fr)); gap: var(--layout-gap); align-items: start; margin: 0 0 var(--stack-gap); }
+
+/* A main panel with a companion. Unlike two equal siblings, the companion is
+   sized to its own contents: stretching a three-row list to match a long one
+   just produces a tall empty box, which reads worse than a short card that is
+   honestly short. */
+.split { margin: 0 0 var(--stack-gap); }
+/* Main content and a narrower companion. They share a row while both keep a
+   readable width and wrap to a column when they cannot, at whatever width the
+   page or card gives them. One layout for every such pairing: no breakpoint,
+   no per-page columns. */
+:where(.split, .upgrade-detail) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--layout-gap);
+}
+:where(.split, .upgrade-detail) > * { flex: 1 1 16rem; min-width: 0; }
+:where(.split, .upgrade-detail) > :first-child { flex: 2 1 28rem; }
+/* min-width:0 so a child that scrolls its own overflow (a wide table in its
+   scroll wrapper) cannot instead force the column open and push the page
+   sideways. A grid item defaults to min-width:auto, which means "as wide as my
+   content", and the scroll wrapper never gets the chance to do its job. */
+.split > * { margin: 0; min-width: 0; }
+/* The wide column second. A drawing sized to itself beside a table of six
+   columns wants the narrow half, and reading order puts the drawing first. */
+.two-col > * { min-width: 0; }
+/* The sections at the end of a thing's page (what else HQ holds, how it
+   relates, what names it) are mostly short: each is a card holding its own
+   heading, two to a row where both fit, the two at one height so the shorter
+   leaves no hole beside the taller, and one that is wide (a table of four
+   columns or more, a folded section, a fold of raw readings) takes the whole
+   row. */
+.section-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+/* Short sections collect at the end, so they pair with each other rather than
+   each sitting beside the gap a wide one leaves. */
+.section-flow > * { min-width: 0; margin: 0; order: 1; }
+.section-flow > :not(section, .page-section),
+.section-flow > :is(section, .page-section):has(table > thead th:nth-child(4)),
+.section-flow > :is(section, .page-section):has(> details.section-fold) { grid-column: 1 / -1; order: 0; }
+/* Sections stacked in one column of a pair, at the pair's own gap. */
+.stack { display: grid; gap: var(--layout-gap); align-content: start; min-width: 0; }
+/* Two charts are like with like and end together: each card is a column, its
+   drawing in the middle of whatever height the pair ends up being. */
+.two-col:has(> .chart-card) { align-items: stretch; }
+.two-col > .chart-card {
+  display: flex;
+  flex-direction: column;
+}
+.two-col > .chart-card > .chart-scroll,
+.two-col > .chart-card > .pie-row { margin-block: auto; }
+/* Panels that flow rather than pair. Assigning cards to a fixed left and right
+   column means their heights are whatever the data made them, so one column
+   ends early and the page carries the difference as a hole. Columns balance
+   themselves; a card just has to not be split across the break. */
+/* At most two columns, each at least this wide: the browser drops to one when
+   the space is not there, so no breakpoint has to say when. */
+.card-columns { columns: 22rem 2; column-gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+.card-columns > * { break-inside: avoid; margin: 0 0 var(--layout-gap); display: block; width: 100%; }
+/* Flex rather than a grid of fixed tracks, so a row's last card takes what
+   the row leaves: three cards on a window that fits two put the third across
+   the row, not in half of it beside nothing. */
+.dashboard-patterns { display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
+.dashboard-patterns > * { flex: 1 1 min(100%, 360px); }
+/* Overview cards share the available width, so three contributing domains
+   stay in one scan on a desktop. Narrow containers naturally stack them. */
+/* As many overviews to a row as fit, sharing it evenly, and a row's cards the
+   same height. Flex rather than a grid of fixed tracks, so the last row's
+   cards share the whole row too: three domains on a window that fits two put
+   the third across the full width, not in half of it beside nothing. */
+.dashboard-highlights { display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin-bottom: var(--stack-gap); }
+.dashboard-highlights > .highlight-card { flex: 1 1 320px; }
+/* A card holding a band of stats is the container its columns are measured
+   against, so the same count-aware columns hold in any card, not only the
+   dashboard's. */
+.card:has(> .kpi-grid) { container: kpi / inline-size; }
+/* An overview card is that container too, under both names, since its own
+   declaration replaces the one above. */
+.highlight-card.card { display: flex; flex-direction: column; min-width: 0; padding: var(--space-8); container: featured kpi / inline-size; }
+.highlight-card > .kpi-grid { flex: 1; }
+.card > .kpi-grid {
+  --kpi-columns: 3;
+}
+.highlight-card .section-head { margin-bottom: var(--space-8); padding-bottom: var(--space-6); border-bottom: 1px solid var(--line); }
+.highlight-card .kpi { flex: 1 1 calc(100% / var(--kpi-columns) - 1px); padding: var(--space-5); }
+/* Columns follow the cell count and the card's width (110px a cell), so rows
+   stay even: four cells are 4 or 2+2, six are 6 or 3+3, never 3+1. */
+.card > .kpi-grid:has(> :only-child) { --kpi-columns: 1; }
+.card > .kpi-grid:has(> :nth-child(2):last-child),
+.card > .kpi-grid:has(> :nth-child(4):last-child),
+.card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 2; }
+/* Two rows of three wait for a card wide enough to fit them; in a phone's card
+   three columns are cramped. */
+@container kpi (min-width: 360px) {
+  .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 3; }
+}
+@container kpi (min-width: 440px) {
+  .card > .kpi-grid:has(> :nth-child(4):last-child),
+  .card > .kpi-grid:has(> :nth-child(7)) { --kpi-columns: 4; }
+}
+@container kpi (min-width: 550px) {
+  .card > .kpi-grid:has(> :nth-child(5):last-child) { --kpi-columns: 5; }
+}
+@container kpi (min-width: 660px) {
+  .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 6; }
+}
+/* The totals across HQ, and the owner's links: each one surface, so neither
+   floats on the page between the cards. */
+.dashboard-counts { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-9); padding: var(--surface-inset, var(--space-5) var(--space-8)); margin-bottom: var(--stack-gap); }
+.dashboard-counts .kpi { display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); padding: 0; background: none; }
+.dashboard-counts .kpi .value { font-size: var(--text-md); order: -1; }
+.dashboard-counts .kpi .label { font-size: var(--text-xs); text-transform: none; letter-spacing: 0; }
+.dashboard-counts .kpi .muted { font-size: var(--text-2xs); }
+.dashboard-patterns > .card { display: flex; flex-direction: column; min-width: 0; margin: 0; padding: var(--space-6); }
+.dashboard-patterns .chart-card figcaption p { min-height: 0; }
+/* A pair ends together, so a chart's data opens inside its card rather than
+   growing it and stretching the card beside it: a pane of its own height. */
+.dashboard-patterns .chart-data > .table-scroll { max-height: 12rem; overflow: auto; }
+.dashboard-patterns .chart-data .data-table thead th { position: sticky; inset-block-start: 0; z-index: 1; background: var(--surface-2); }
+.dashboard-patterns .chart-legend { margin-top: var(--space-3); }
+.dashboard-patterns .calendar-day { height: 24px; padding: var(--space-1); border-radius: 5px; vertical-align: middle; }
+.dashboard-patterns .calendar-date { display: inline-block; }
+.dashboard-patterns .calendar-marks { display: inline-flex; margin: 0 0 0 var(--space-1); min-height: 6px; }
+.dashboard-patterns .calendar-dot { width: 5px; height: 5px; }
+.dashboard-patterns .calendar-legend { margin-block: var(--space-3); }
+.two-col > section, .two-col > div, .section-flow > :is(section, .page-section), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
+/* A confirmation is as wide as what it says and the buttons under it, up to a
+   line's measure, never a frame stretched across the page around them. */
+.card.confirm { inline-size: fit-content; max-inline-size: min(100%, var(--measure)); }
+/* Inside a layout container the gap is the separation, so a section's own
+   stacking margin is dead space. Declared after the section rules above so it
+   wins on source order at equal specificity. */
+.two-col > *,
+.dashboard-patterns > * { margin-bottom: 0; }
+
+/* What sits beside the heading takes the next line when the two do not fit. */
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
+.section-head h2 { margin: 0; flex: 1; }
+/* Wrapped, its lines are as even as its words allow, so none is left with one. */
+.section-head .count { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; text-wrap: balance; }
+/* A count is a quiet figure wherever it stands: beside a summary as in a
+   heading, never louder than the words it counts. */
+.count { color: var(--muted); font-size: var(--text-xs); font-weight: 500; font-variant-numeric: tabular-nums; }
+/* A count said in its heading, after the words it counts, in a quieter voice. */
+:is(h2, h3) > .count { color: var(--muted); font-size: .8em; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* Rich plugins emit data; HQ owns how a domain workspace is composed. Keeping
+   this layout in the host means every present and future private domain gets
+   the same rhythm without shipping its own near-copy of the shell. */
+.domain-stack { display: grid; gap: calc(var(--stack-gap) * 1.5); }
+.domain-stack > * { min-width: 0; }
+.domain-stack > section { display: grid; gap: var(--space-6); }
+/* The section's gap spaces its parts; their own stack margins would double it. */
+.domain-stack > section > * { margin-block: 0; }
+.domain-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--layout-gap);
+}
+.domain-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--text-2xl);
+  font-weight: 650;
+  letter-spacing: -.01em;
+  text-transform: none;
+}
+.domain-head-copy { min-width: 0; }
+.domain-head-copy .eyebrow { display: block; margin-bottom: var(--space-2); }
+.domain-head-copy p { margin: var(--space-2) 0 0; max-width: 680px; }
+.domain-head > a { flex: 0 0 auto; }
+
+/* A domain's featured analysis: the chart and the calendar beside it. Two
+   explicit columns rather than .two-col's auto-fit, so the pair stays paired.
+   A chart alone in this row either sits in a card twice its width or scales
+   its viewBox across the row, so the other half holds something worth reading. */
+.domain-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+  gap: var(--layout-gap);
+  margin: 0 0 var(--stack-gap);
+}
+.domain-charts > * { min-width: 0; margin: 0; }
+.domain-charts .chart-card figcaption p { max-width: 62ch; }
+
+/* Activity calendar: one month of plan against execution. */
+.calendar-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); }
+.calendar-head h2 { margin: 0; }
+.calendar-head-copy { min-width: 0; }
+/* The calendar. A source's color is one custom property, so a dot, a line, a
+   bar and a swatch all read it the same way. */
+.series-1 { --source: var(--series-1); }
+.series-2 { --source: var(--series-2); }
+.series-3 { --source: var(--series-3); }
+.series-4 { --source: var(--series-4); }
+.series-5 { --source: var(--series-5); }
+.series-6 { --source: var(--series-6); }
+.series-7 { --source: var(--series-7); }
+.series-8 { --source: var(--series-8); }
+.series-9 { --source: var(--series-9); }
+.series-10 { --source: var(--series-10); }
+/* The month takes the room; the list of calendars is as wide as its names and
+   never grows, wrapping under the month where both do not fit. */
+.calendar-layout > :first-child { flex: 999 1 36rem; }
+.calendar-layout > .calendar-aside { flex: 1 1 15rem; }
+.calendar-month { container: month / inline-size; padding: var(--space-6) var(--space-6) var(--space-4); }
+.calendar-month .section-head { align-items: center; margin-bottom: var(--space-5); }
+.calendar-month .section-head h2 a { color: inherit; text-decoration: none; }
+.calendar-month .section-head h2 a:hover { color: var(--accent); }
+/* Seven equal columns: the one fixed grid here, because weeks must line up. */
+.month-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.month-grid th { padding: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-2xs); font-weight: 600; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
+.month-day {
+  height: 6.5rem;
+  padding: var(--space-2);
+  overflow: hidden;
+  border-top: 1px solid var(--line-2);
+  vertical-align: top;
+}
+.month-day + .month-day { border-left: 1px solid var(--line-2); }
+/* The last week closes on a rule of its own, so the month reads as ending
+   there and not as running on under the card's edge. */
+.month-grid tr:last-child > .month-day { border-bottom: 1px solid var(--line-2); }
+.month-day.is-weekend { background: color-mix(in srgb, var(--bg-tint) 45%, transparent); }
+.month-day.is-outside .month-date { color: var(--muted-2); }
+.month-day.is-past :is(.month-span, .month-item, .month-mark) { opacity: .62; }
+.month-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
+/* The date and the day's marks share one row, so marks take no height of
+   their own and the bars under them stay level across the week. */
+.month-day-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin-bottom: var(--space-1); }
+.month-date {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  margin-right: var(--space-1);
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+.month-date:hover { background: var(--bg-tint); }
+.month-day.is-today .month-date { background: var(--accent); color: var(--surface); }
+/* A mark is a dot in its source's color: filled once done, a ring while
+   planned, a ring struck through once missed. Shape carries the state, so the
+   source's color stays the only color. */
+.month-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--source); }
+.month-item-dot { display: none; }
+.month-mark.is-planned { background: transparent; box-shadow: inset 0 0 0 1.5px var(--source); }
+.month-mark.is-missed {
+  background: linear-gradient(135deg, transparent 44%, var(--source) 44% 56%, transparent 56%);
+  box-shadow: inset 0 0 0 1.5px var(--source);
+  opacity: .6;
+}
+/* A span is one bar across its days: rounded only where it starts and ends,
+   titled where it starts or where a week begins. A gap holds the lane open. */
+.month-span {
+  display: block;
+  height: 1.25rem;
+  margin: 0 calc(-1 * var(--space-2)) var(--space-1);
+  padding: 0 var(--space-3);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--source) 18%, var(--surface));
+  color: var(--ink);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.month-span.is-start { margin-left: 0; border-left: 3px solid var(--source); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.month-span.is-end { margin-right: 0; border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
+.month-span.is-gap { visibility: hidden; }
+.month-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-2xs);
+  line-height: 1.25rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.month-item > span { overflow: hidden; text-overflow: ellipsis; }
+/* A title cut on its one line: its names are text the cut takes, not boxes. */
+:is(.month-item > span, .month-span) :is(.token, .whole) { display: inline; }
+.month-item::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--source); transform: translateY(-1px); }
+.month-item.is-planned::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--source); }
+.month-item time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.month-item:hover > span { color: var(--accent); }
+/* All day: a filled block in its color, as a one-day bar. */
+.month-item.is-all-day { padding: 0 var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--source) 18%, var(--surface)); font-weight: 600; }
+.month-item.is-all-day::before { content: none; }
+.month-more { display: block; color: var(--muted); font-size: var(--text-3xs); font-weight: 600; text-decoration: none; }
+.month-more:hover { color: var(--accent); }
+/* The aside: the chosen day over the list of calendars. Built from the
+   shared head, record rows and facts; only a source's swatch is the calendar's. */
+/* Beside the month it keeps its basis: the month's grow outweighs it a
+   thousand to one. Wrapped under the month it is alone on its line and takes
+   the width, its day and its list of calendars side by side. */
+.calendar-aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); align-items: start; gap: var(--layout-gap); }
+.day-panel, .calendar-sources, .calendar-upcoming { padding: var(--space-5); }
+.day-panel .section-head, .calendar-upcoming .section-head { margin-bottom: var(--space-4); }
+.day-panel-entry { margin-bottom: var(--space-5); padding-bottom: var(--space-5); border-bottom: 1px solid var(--line-2); }
+.day-panel-entry h3 { margin: 0 0 var(--space-2); }
+.day-panel-entry p { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
+.day-panel-entry .page-actions { margin: var(--space-4) 0 0; }
+.day-panel-source, .calendar-sources h3 { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-2); color: var(--muted); font-size: var(--text-2xs); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.calendar-sources h3:first-child { margin-top: 0; }
+.calendar-swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
+.calendar-sources ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.calendar-sources form { margin: 0; }
+/* A source is a toggle: the whole row is the button, its box filled in its color when checked. */
+.calendar-source {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.calendar-source:hover { background: var(--bg-tint); border: 0; }
+.calendar-source > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-source small { color: var(--muted-2); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
+.calendar-source .calendar-source-failure { color: var(--warn); }
+/* What a calendar shows, under its name, where a phone can read it. */
+.calendar-source-note { display: block; white-space: normal; font-variant-numeric: normal; }
+.calendar-source:has(.calendar-source-note) { align-items: start; }
+.calendar-source:has(.calendar-source-note) .calendar-check { margin-top: var(--space-1); }
+.calendar-check { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--source); }
+.calendar-source[aria-pressed="true"] .calendar-check { background: var(--source); }
+.calendar-source[aria-pressed="false"] > span { color: var(--muted); }
+/* Compact, as the dashboard shows it: where things are, not what. Bars are
+   slivers and lines fold away; the day opens the calendar for the rest. */
+.calendar-month.is-compact .month-day { height: 2.5rem; padding: var(--space-1); }
+.calendar-month.is-compact :is(.month-item, .month-more) { display: none; }
+.calendar-month.is-compact .month-item-dot { display: inline-block; }
+/* A bar reaches across its cell's padding to meet the next, and no further. */
+.calendar-month.is-compact .month-span { height: 4px; margin: 0 calc(-1 * var(--space-1)) var(--space-1); padding: 0; background: var(--source); font-size: 0; }
+.calendar-month.is-compact .month-span.is-end { margin-right: 0; }
+.calendar-month.is-compact .month-span.is-start { margin-left: 0; border-left: 0; }
+.calendar-month.is-compact .month-date { min-width: 1.4rem; height: 1.4rem; font-size: var(--text-2xs); }
+.calendar-month.is-compact .month-mark { width: 6px; height: 6px; }
+/* A phone shows where things are, not what: dots and slivers, and the day
+   panel under the month says the rest. */
+@container month (max-width: 34rem) {
+  .month-day { height: 3.25rem; }
+  :is(.month-item, .month-more) { display: none; }
+  .month-item-dot { display: inline-block; }
+  .month-span { height: 4px; padding: 0; background: var(--source); font-size: 0; }
+  .month-date { min-width: 1.4rem; height: 1.4rem; }
+  .month-of { display: none; }
+}
+
+/* Week plan: the recurring shape of a week, in the calendar's own columns. */
+.week-plan-card { margin: 0; }
+.week-plan {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+.week-plan-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) 0 var(--space-5);
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+.week-plan-day.is-planned { background: var(--surface-2); border-color: var(--line-2); }
+.week-plan-label { color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.week-plan-day.is-planned .week-plan-label { color: var(--ink); }
+.week-plan-mark { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 8px; }
+.week-plan-mark i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+.week-plan-note { color: var(--muted); font-size: var(--text-3xs); line-height: 1.2; text-align: center; }
+.week-plan-notes { list-style: none; margin: var(--space-6) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-9); }
+.week-plan-notes li { display: flex; align-items: baseline; gap: var(--space-3); font-size: var(--text-sm); }
+
+.calendar-controls { display: flex; align-items: center; gap: var(--space-3); flex: 0 0 auto; }
+.calendar-period { color: var(--ink); font-size: var(--text-md); font-weight: 650; white-space: nowrap; }
+.calendar-nav { display: flex; gap: var(--space-2); flex: 0 0 auto; }
+/* Scoped to beat `.calendar-nav a`, which fixes the arrows at a 28px square;
+   otherwise the label is forced into that box and overlaps the next arrow. */
+.calendar-nav .calendar-now {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0 var(--space-5);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+.calendar-nav a,
+.calendar-nav span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: var(--text-xl);
+  line-height: 1;
+  text-decoration: none;
+}
+.calendar-nav a:hover { color: var(--accent); border-color: var(--accent); }
+/* The disabled end of the range keeps its box so the pair does not shift. */
+.calendar-nav span { opacity: .35; }
+.calendar-description { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
+.calendar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: var(--space-6) 0 var(--space-3);
+}
+.calendar-card .chart-legend { margin-bottom: 0; }
+.calendar-key-missed {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid var(--muted-2);
+}
+.activity-calendar { width: 100%; border-collapse: separate; border-spacing: 3px; table-layout: fixed; }
+.calendar-weekday {
+  padding: 0 0 var(--space-1);
+  color: var(--muted-2);
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.calendar-day {
+  height: 46px;
+  padding: var(--space-2) var(--space-1) var(--space-2);
+  text-align: center;
+  vertical-align: top;
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+.calendar-date { display: block; color: var(--muted); font-size: var(--text-2xs); line-height: 1; font-weight: 550; font-feature-settings: "tnum"; }
+.calendar-marks { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 10px; margin-top: var(--space-3); }
+.calendar-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.calendar-dot.is-missed { background: transparent; border: 1.5px solid var(--muted-2); }
+/* A day still ahead is drawn faintly: information, not a verdict. Drawn like a
+   miss, every plan would look broken early in the week. */
+.calendar-dot.is-planned { background: transparent; border: 1.5px dashed var(--line-2); }
+/* Trained days are the figure, everything else the ground. */
+.calendar-day.is-done { background: var(--surface-2); border-color: var(--line-2); }
+.calendar-day.is-done .calendar-date { color: var(--ink); font-weight: 650; }
+.calendar-day.is-missed .calendar-date { color: var(--muted); }
+.calendar-day.is-filler { border-color: transparent; }
+.calendar-day[data-tip] { cursor: default; }
+
+.list-rows { list-style: none; padding: 0; margin: 0; }
+.list-rows li {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--line-2);
+  display: flex; gap: var(--space-5); align-items: center; flex-wrap: wrap;
+  font-size: var(--text-sm);
+}
+.list-rows li:last-child { border-bottom: 0; }
+.list-rows li:first-child { padding-top: var(--space-2); }
+.list-rows .row-main { display: flex; align-items: center; gap: var(--space-4); min-width: 0; flex: 1; flex-wrap: wrap; }
+.list-rows .row-main > a { min-width: 0; overflow-wrap: anywhere; }
+/* The title keeps the line its marker is on. Wrapping places a flex item by
+   its full content width, so a long name would drop below its dot; a modest
+   basis keeps them together and the name wraps inside itself instead. */
+.list-rows .row-main > :is(a, strong) { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+.list-rows .row-meta { color: var(--muted); font-size: var(--text-xs); margin-left: auto; white-space: nowrap; }
+.list-rows a strong { color: var(--ink); font-weight: 600; }
+.list-rows a:hover strong { color: var(--accent); }
+
+/* Prose list: sentences, where .list-rows carries chips.
+   `.row-main` is a flex container, which is right for a row assembled from a
+   dot, a link and a badge and wrong for a sentence: every inline element in a
+   flex container becomes a block-level flex item, so emphasis inside one is
+   laid out as a separate box and the sentence comes apart at the seams. This
+   is the other list: bullets or numbers, ordinary inline flow inside, and a
+   trailing muted note. */
+.prose-list { margin: var(--space-4) 0 0; padding-left: var(--space-10); font-size: var(--text-sm); }
+.prose-list li { margin: 0 0 var(--space-4); line-height: 1.55; }
+.prose-list li:last-child { margin-bottom: 0; }
+.prose-list li::marker { color: var(--muted); }
+.prose-list strong { font-weight: 650; }
+/* A quiet link: a section head's trailing "All →", an inline "Edit". One class
+   for both. */
+.subtle-link {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+.subtle-link:hover { color: var(--accent); }
+/* After a name in a cell it wraps under the name on a narrow screen, where
+   its hit area (page.css) would hang over the name: each line of the cell is a
+   target tall instead, the name's as well as its own. Alone in a cell it is
+   the cell's text, cut as the cell cuts it. */
+td:has(> .subtle-link:not(:only-child)) { line-height: var(--target-min); }
+td > .subtle-link:not(:only-child) { display: inline-block; }
+
+.section-foot { margin: var(--space-6) 0 0; font-size: var(--text-sm); }
+.section-foot a { color: var(--muted); font-weight: 500; }
+.section-foot a:hover { color: var(--accent); }
+.dashboard-patterns .section-foot { margin-top: auto; padding-top: var(--space-6); text-align: right; }
+
+/* Empty state (partials/_empty_state.html): a card of one regular-weight line,
+   what is missing and then what would fill it. Inside another frame the
+   surface rule clears the card's frame and its inset. The card is as wide as
+   its line: one sentence across a page-wide frame is a gulf. */
+.empty.card {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin: 0 0 var(--stack-gap);
+  padding: var(--surface-inset, var(--space-6) var(--space-8));
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.empty.card:last-child { margin-bottom: 0; }
+/* The page's last word, nothing but its dialogs after it, is the page's state
+   rather than a note in it: it holds the page's width with its line centered,
+   so a clean page reads as answered instead of as a box left in a corner. A
+   list's or a search's results region is that page's body in the part its
+   script swaps, so the last word in it, the region last on the page, is the
+   page's last word too. */
+:is(main, main > :is([data-table-results], [data-search-results]):not(:has(~ :not(dialog)))) > .empty.card:not(:has(~ :not(dialog))) {
+  inline-size: auto;
+  padding-block: var(--space-12);
+  font-size: var(--text-md);
+  text-align: center;
+}
+:is(main, main > :is([data-table-results], [data-search-results]):not(:has(~ :not(dialog)))) > .empty.card:not(:has(~ :not(dialog))) p { margin-inline: auto; }
+.empty p { margin: 0; max-width: var(--measure); }
+.empty .empty-cta { color: var(--accent-2); font-weight: 500; white-space: nowrap; }
+
+/* ── KV grid ────────────────────────────────────────────────────── */
+
+/* Facts: each label beside its value, and as many pairs to a row as the
+   width holds, so seven short facts are two rows rather than seven. A label
+   wraps inside its own column; a value takes what is left of its pair. */
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(5rem, 8rem) minmax(min(13rem, 100% - 5rem - var(--space-6)), 1fr)); gap: var(--space-4) var(--space-6); padding: var(--surface-inset, var(--space-6) var(--space-8)); font-size: var(--text-sm); }
+.kv dt { color: var(--muted); font-weight: 500; }
+.kv dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+/* A pair whose value is wider than a column of facts takes a row of its own. */
+.kv > .kv-whole { grid-column: 1; }
+.kv > .kv-whole + dd { grid-column: 2 / -1; }
+/* Addresses, one to a line, each beside its network: the networks in one
+   column and the addresses in the next. */
+.address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; margin: 0; padding: 0; list-style: none; }
+.address-list li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+.address-list span { color: var(--muted); }
+.eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+
+/* While half the readings is narrower than a popover (340px), one hung from a
+   panel in the left half would run off the page, so a popover hangs from the
+   readings' right edge, which is the page's. Wider, every panel's right edge
+   leaves a popover room, whether the readings are one row or two halves. */
+@container readings (width < 680px) {
+  .glance-panel { position: static; }
+  .glance-expanded { right: 0; width: min(340px, 100%); }
+}
+
+@media (max-width: 640px) {
+  .glance-panel-head { column-gap: var(--space-3); }
+  .user-menu { flex-shrink: 1000; min-width: var(--control-size); }
+}
+
+/* A description under a row's name: two lines at most, and never wider than
+   a name column should be, so the columns beside it stay on screen. */
+.table-clamp { display: -webkit-box; max-width: 28ch; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+
+}

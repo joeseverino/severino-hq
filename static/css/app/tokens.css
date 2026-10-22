@@ -1,0 +1,335 @@
+/* Severino HQ: internal ops console. */
+
+/* Cascade layers, declared once and in priority order. Every rule sits in one
+   of them, so the layer it is in decides which rule wins rather than how many
+   classes its selector names: a single-class component still beats a base
+   element rule.
+
+   There is deliberately no fourth layer for "things that must win": narrowing
+   a component at a breakpoint is what "later in the same layer" means.
+   `StyleContractTests` fails the build if a rule lands outside a layer. The
+   sheets that fill these layers are linked in the order
+   `hq/platform/core/stylesheets.py` lists them, which is their order in the
+   cascade. */
+/* Inter, HQ's own copy, preloaded by base.html. Shown only if it is ready for
+   the first paint (optional) and never swapped in after, so text never moves;
+   cached a year, it is there from the second page on. */
+@font-face { font-family: Inter; font-style: normal; font-weight: 400 700; font-display: optional; src: url("../../fonts/inter/inter-variable-latin.woff2") format("woff2"); }
+@layer tokens, base, components;
+
+@layer tokens {
+
+/* Two palettes, one set of names. Every color token is written
+   `light-dark(<light>, <dark>)`, so each pair is decided side by side and a
+   token cannot exist in one theme only; `color-scheme` picks the half, and
+   also moves the form controls, scrollbars and other native widgets with it.
+   With no `data-theme` the page follows the operating system; the attribute,
+   rendered by the server from the operator's choice, pins one or the other.
+
+   The dark half is not the light half inverted. Surfaces step up in
+   lightness as they come forward (page, card, raised row), because a shadow
+   has nothing to fall on; hairlines are lighter than the surfaces they
+   divide; status inks lighten and their fills deepen so a tone keeps its hue
+   and its contrast; chart and category colors lift until they clear 5:1 on
+   the card they sit on. Text, muted text included, clears 4.5:1 on every
+   surface, and `core.browser_tests` samples it to keep that true. */
+:root {
+  color-scheme: light dark;
+  accent-color: var(--accent);
+  --bg: light-dark(#f6f6f3, #111215);
+  /* The tint sets a chip, a code span or the item a menu is at apart from
+     every surface it lands on, the page and the raised row included: darker
+     than them in light, lighter in dark. */
+  --bg-tint: light-dark(#eeeee8, #25262b);
+  --surface: light-dark(#ffffff, #18191c);
+  --surface-2: light-dark(#fafaf7, #1d1e22);
+  --ink: light-dark(#18181b, #ececee);
+  --ink-2: light-dark(#2a2a2e, #d6d6da);
+  --muted: light-dark(#67676f, #a4a4ad);
+  --muted-2: light-dark(#6a6a72, #97979f);
+  --line: light-dark(#e6e6e1, #303238);
+  --line-2: light-dark(#f0f0eb, #26272c);
+  --accent: light-dark(#1f4d57, #8fd0dc);
+  --accent-2: light-dark(#2a6976, #6fbccb);
+  --accent-ink: light-dark(#ffffff, #0a1b1f);
+  --accent-tint: light-dark(#e3eef0, #1a3238);
+  --danger: light-dark(#a8261c, #f08276);
+  --warn: light-dark(#9e5700, #e8a64a);
+  --ok: light-dark(#1d6b35, #62c585);
+  --attn: light-dark(#b0521a, #ef9258);
+
+  /* Code surface. Dark by intent, not by theme: a block of code reads as a
+     quoted artifact rather than as more page. On a dark page it sinks below
+     the page instead, for the same reason. */
+  --code-bg: light-dark(#161922, #0b0c0f);
+  --code-ink: light-dark(#eaeef2, #e3e7ec);
+
+  /* The border a control takes when pointed at: one step firmer than
+     --line, which is the resting rule. */
+  --line-strong: light-dark(#c4c4c0, #4c4e56);
+  /* A field's edge is what shows a reader where to type, so it clears WCAG
+     1.4.11's 3:1 on every surface a field sits on, the tint included. */
+  --field-line: light-dark(#84847f, #787a82);
+
+  /* Category identity. Like --series-* these are a set, not a list: they are
+     chosen against each other and against the page for separation under
+     normal and color-deficient vision. Changing one means re-checking all. */
+  --cat-homelab: light-dark(#2e7d8c, #5bb4c4);
+  --cat-automation: light-dark(#6c4ab5, #a18ae6);
+  --cat-wordpress-security: light-dark(#1b6b3f, #4fb47b);
+  --cat-cloudflare: light-dark(#c2691c, #e39150);
+  --cat-dns-email-security: light-dark(#7a3886, #bf82cc);
+  --cat-vps: light-dark(#21525c, #6aa6b4);
+  --cat-tailscale: light-dark(#2a5cb0, #7399e6);
+  --cat-adguard: light-dark(#1e5e3a, #56a87a);
+  --cat-networking: light-dark(#4c4f5c, #9a9fb0);
+  --cat-tls-certificates: light-dark(#8c5a16, #cc9a4c);
+  --cat-cybersecurity-labs: light-dark(#9b2a2a, #e57373);
+  --cat-other: light-dark(#6b6b73, #a4a4ad);
+
+  /* Topology node kinds: the same kind of set as --cat-*, for the graph. */
+  --topology-controller: light-dark(#6c7480, #9aa2ae);
+  --topology-ability: light-dark(#7b68a6, #a996d8);
+  --topology-target: light-dark(#b5762d, #d99a52);
+  --topology-lane-head: 44px;
+
+  /* Print is a different medium: its ink is ink, not the screen palette. */
+  --print-ink: #000;
+  --print-rule: #666;
+  --print-faint: #999;
+  --print-muted: #333;
+
+  /* Route bands, ordered warm to cool so adjacent hops stay distinguishable. */
+  --route-band-1: light-dark(#b4531f, #de7a45);
+  --route-band-2: light-dark(#c98a2b, #e2aa55);
+  --route-band-3: light-dark(#9a9a34, #c0c05c);
+  --route-band-4: light-dark(#3f9268, #62bc8d);
+  --route-band-5: light-dark(#0e7f9c, #42b3cf);
+
+  /* Typefaces: one for reading, one for anything read character by
+     character. Named so a vendored widget can be handed the same two. */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Space scale: the even rungs only. An odd value is drift, since a one-pixel
+     change to padding is visible in a dense table in a way a half-pixel change
+     to type is not. 1px is deliberately absent: it is a hairline rule, not a
+     space. */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 18px;
+  --space-10: 20px;
+  --space-12: 24px;
+  --space-14: 28px;
+  --space-16: 32px;
+  --space-20: 40px;
+  --space-24: 48px;
+  --space-32: 64px;
+  --space-40: 80px;
+
+  /* Type scale. These are the steps; a size that is not one of them is drift,
+     and the guard says so. */
+  --text-3xs: 10px;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
+  --text-3xl: 20px;
+  --text-4xl: 22px;
+  --text-display: 40px;
+
+  /* Tones. A status color is never one value: it is a fill, ink that stays
+     legible on that fill, and a border a shade deeper than both. Those three
+     have to agree, so each tone is defined once here for every component.
+
+     Named once here, a component asks for a tone and a new variant chooses
+     one. `--tone-bg/-ink/-line` are the contract a component reads; the
+     `--tone-*-*` sets below are what a variant assigns to it. The neutral
+     values are the fallbacks, so a component with no tone still renders. */
+  --tone-neutral-bg: var(--bg-tint);
+  --tone-neutral-ink: var(--ink-2);
+  --tone-neutral-line: var(--line);
+
+  --tone-positive-bg: light-dark(#e1efe5, #16301f);
+  --tone-positive-ink: light-dark(#16522a, #9adcb0);
+  --tone-positive-line: light-dark(#b8dac3, #2a5238);
+
+  --tone-caution-bg: light-dark(#fbf1d6, #302810);
+  --tone-caution-ink: light-dark(#6c5300, #ebcd6e);
+  --tone-caution-line: light-dark(#ecdba0, #574619);
+
+  --tone-critical-bg: light-dark(#f0dcdc, #3a1c1c);
+  --tone-critical-ink: light-dark(#6a1f1f, #f4afaf);
+  --tone-critical-line: light-dark(#dfb4b4, #653232);
+
+  /* The second fill level. A chip is small enough to carry a saturated tint;
+     a banner covering half the page is not, and the same value that reads as
+     a label at 20px reads as an alarm at full width. Ink and border are
+     shared with the tone above (only the fill lightens) so a banner and
+     the chip beside it are recognizably the same status. Tones without a
+     wash have no large-surface use yet; add one when they do. */
+  --tone-positive-wash: light-dark(#e8f5ec, #14261a);
+  --tone-caution-wash: light-dark(#fbf1d6, #272110);
+  --tone-critical-wash: light-dark(#fbeaea, #2d1818);
+  --tone-info-wash: light-dark(#f4f7fb, #172030);
+
+  /* The third fill, for marks that carry the strong ink rather than the muted
+     one: a tick inside a decision step, a kind badge on a hop. Paired with
+     `--ok`/`--warn`/`--danger` above, which are darker and more saturated than
+     the tone inks because they sit on less fill and often stand alone. */
+  --tone-positive-tint: light-dark(#e2efe6, #193422);
+  --tone-caution-tint: light-dark(#f4ead8, #342b15);
+  --tone-critical-tint: light-dark(#f6e2e0, #3a1d1d);
+
+  --tone-severe-bg: light-dark(#fcdcd0, #3a2212);
+  --tone-severe-ink: light-dark(#843300, #f7bb94);
+  --tone-severe-line: light-dark(#ffbfa8, #693b1d);
+
+  --tone-info-bg: light-dark(#e4ebf3, #1a2536);
+  --tone-info-ink: light-dark(#1f3656, #b0c8ea);
+  --tone-info-line: light-dark(#c9d3e3, #2f425e);
+
+  --tone-notable-bg: light-dark(#dfe6f1, #1b2640);
+  --tone-notable-ink: light-dark(#1c3463, #b0c2f2);
+  --tone-notable-line: light-dark(#c5d2e9, #314368);
+
+  --tone-special-bg: light-dark(#ebe0f0, #2a1e3a);
+  --tone-special-ink: light-dark(#4a2a72, #d4bff2);
+  --tone-special-line: light-dark(#d3c2e8, #4a3666);
+
+  /* Categorical series palette. Assigned in fixed order, never cycled: color
+     follows the entity, not its rank, so filtering a series must not repaint
+     the survivors. These are validated as a set (lightness band, chroma floor,
+     color-vision separation, normal-vision floor) against the white chart
+     surface: do not hand-tune a slot without re-validating the whole set.
+     Slots 3-5 sit under 3:1 contrast on white, so any chart using them must
+     also carry visible labels or its data table (both provided by the
+     chart primitive). Status colors above are reserved and never used as a slot.
+     The dark halves keep each hue and its order and lift it until every slot
+     clears 7:1 on the dark card. */
+  --series-1: light-dark(#0e88a8, #3fb8d8);
+  --series-2: light-dark(#eb6834, #f28a5e);
+  --series-3: light-dark(#1baf7a, #42c992);
+  --series-4: light-dark(#eda100, #f0b93e);
+  --series-5: light-dark(#e87ba4, #f098bc);
+  /* The calendar draws more sources than a chart draws series. */
+  --series-6: light-dark(#7b5cc4, #a68ef0);
+  --series-7: light-dark(#4f6b8f, #93acd0);
+  --series-8: light-dark(#a0603a, #d39470);
+  --series-9: light-dark(#2f8f8a, #6cc9c2);
+  --series-10: light-dark(#8a8f2f, #c2c76c);
+  /* A calendar source's color, set by its series class; the accent until then. */
+  --source: var(--accent);
+  --radius: 8px;
+  --radius-sm: 5px;
+  /* Every square control in the header bar (the collapsed search button and
+     the sections toggle), sized once so the two cannot drift apart. */
+  --control-size: 34px;
+  /* The least a control is hit through, either way (WCAG 2.5.8): a hit area
+     and a line of links one above another are sized from it. The browser
+     gate holds it to the criterion's 24px. */
+  --target-min: 24px;
+  /* How far a select's chevron sits in from its edge; a borderless select sets 0. */
+  --chevron-inset: var(--space-5);
+  /* Every control in the header bar reads these, so none can be drawn as a
+     different kind of thing from the ones beside it. */
+  --bar-control-bg: var(--surface-2);
+  --bar-control-bg-hover: var(--bg-tint);
+  --bar-control-line: var(--line);
+  /* Measured by the enhancement layer because the global header changes shape
+     with its contents. Dense-page navigation and floating table headings both
+     consume the same inset instead of guessing it independently. */
+  --site-header-height: 55px;
+  --page-nav-height: 0px;
+  --motion-fast: 150ms;
+  /* Fluid sizes. These scale with the viewport instead of stepping at a
+     breakpoint, so the page has no width at which padding or a heading jumps. */
+  --content-pad: clamp(14px, 2.2vw, 28px);
+  /* The page uses the window: content runs to the gutters up to this, and only
+     a very wide monitor sees margins. */
+  --content-max: 1600px;
+  /* A paragraph's measure, whatever the column: past about 80 characters a
+     line is hard to track back to the start of the next. */
+  --measure: 80ch;
+  --font-h1: clamp(19px, 0.55vw + 17.2px, 22px);
+  --font-h2: clamp(12px, 0.18vw + 11.4px, 13px);
+  /* Two spacing steps, and only two. `--layout-gap` separates siblings inside a
+     grid; `--stack-gap` separates stacked page sections. */
+  --layout-gap: var(--space-8);
+  /* How much of an identifier a table cell shows before cutting it; the row
+     expander shows the rest. A share of the table's region (`cqi`), so a wider
+     table shows more of it, between a floor a phone can read and a ceiling
+     past which a value is no easier to read whole. Left unresolved here: its
+     `ch` is the identifier's own font, its `cqi` the region it sits in. */
+  --identifier-max: clamp(28ch, 45cqi, 85ch);
+  /* Track floors for a band of a fixed number of cells, so it lays out as a
+     whole number of even rows at any width: 4, 2 or 1 columns (never 3+1),
+     or 3 or 1. Read where they are used, so 100% is that grid's width.
+     `(x - 100%) * 999` is a step, hugely positive below x and negative above
+     it, so clamp() lands on one end or the other. For gapless bands. */
+  --tracks-4-2-1: clamp(clamp(25%, (54rem - 100%) * 999, 50%), (24rem - 100%) * 999, 100%);
+  --tracks-3-1: clamp(33.333%, (36rem - 100%) * 999, 100%);
+  --tracks-2-1: clamp(50%, (24rem - 100%) * 999, 100%);
+  --tracks-5-1: clamp(20%, (55rem - 100%) * 999, 100%);
+  --tracks-6-3-1: clamp(clamp(16.666%, (66rem - 100%) * 999, 33.333%), (33rem - 100%) * 999, 100%);
+  /* For a band of more cells than one row holds: 6, 4, 3, 2 or 1 columns,
+     each a divisor of 12, so a count with divisors lays out as whole rows. */
+  --tracks-6-4-3-2-1: clamp(clamp(clamp(clamp(16.666%, (66rem - 100%) * 999, 25%), (44rem - 100%) * 999, 33.333%), (33rem - 100%) * 999, 50%), (22rem - 100%) * 999, 100%);
+  --stack-gap: var(--space-9);
+  /* The widest a chart drawing with type inside it renders. Its SVG scales
+     with its card, so uncapped its axis type and marks inflate in a wide card
+     and two charts on one page stop matching. Bar and line charts draw their
+     type as HTML over the plot, so they are exempt.
+
+     There is deliberately no matching floor: `.two-col` lays out at
+     `minmax(320px, 1fr)`, so a floor would only ever add a scrollbar. Label
+     collision is instead measured: `Chart.dense` sums the width the labels
+     need, and a container query asks how wide the card is. */
+  --chart-max: 640px;
+  /* Where one axis label sits, as a share of the drawing it labels. Set per
+     label on the element itself, because there is one per data point and the
+     position is computed from the data: this declaration is the default a
+     label falls back to if it ever arrives without one, and the reason the
+     property is a declared part of the contract rather than an invention of a
+     template. */
+  --at: 0%;
+  /* Where a chart's plot begins, as a share of its width; set per chart. */
+  --gutter: 0%;
+  /* How much of a whole one segment of an allocation is, as a share. Set per
+     segment for the same reason `--at` is set per label: it is computed from
+     the data, so the template supplies the number and this file decides what a
+     share looks like. Declared here so it is part of the contract. */
+  --part: 0%;
+  /* On a dark page a soft shadow has nothing to fall on, so there it is
+     darker and tighter, and the edge is carried by the surface's own hairline
+     and its step up in lightness. */
+  --shadow-sm: 0 1px 2px light-dark(rgba(20, 20, 30, .05), rgba(0, 0, 0, .35)), 0 1px 1px light-dark(rgba(20, 20, 30, .03), rgba(0, 0, 0, .25));
+  --shadow: 0 1px 2px light-dark(rgba(20, 20, 30, .06), rgba(0, 0, 0, .4)), 0 4px 14px light-dark(rgba(20, 20, 30, .07), rgba(0, 0, 0, .3));
+  /* A panel that floats over the page (a dropdown, the sections drawer)
+     rather than sitting on it. */
+  --shadow-pop: 0 8px 24px light-dark(rgba(20, 20, 30, .12), rgba(0, 0, 0, .55));
+  /* The small lift under a switch knob. */
+  --shadow-knob: 0 1px 2px light-dark(rgba(0, 0, 0, .18), rgba(0, 0, 0, .5));
+  /* What a modal dims the page with. */
+  --scrim: light-dark(rgba(24, 24, 27, .38), rgba(0, 0, 0, .6));
+  /* Selected text: the accent's tint, dark enough on a dark page that the
+     ink over it still reads. */
+  --selection: light-dark(#c9e0e5, #24505a);
+}
+
+/* The operator's choice, when there is one. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+/* Paper is light whatever the screen was. */
+@media print { :root { color-scheme: light; } }
+
+}

@@ -174,7 +174,7 @@
         || (cell.querySelector("a, button, select, input") ? "Actions" : "");
       if (dropped.includes(cell)) {
         const nodes = [...cell.childNodes];
-        parts.push([name, nodes]);
+        parts.push([name, nodes, cell.classList.contains("cell-data")]);
         undo.push(() => cell.append(...nodes));
         return;
       }
@@ -221,10 +221,12 @@
     if (parts.length) {
       const list = document.createElement("dl");
       list.className = "row-columns";
-      parts.forEach(([name, nodes]) => {
+      parts.forEach(([name, nodes, words]) => {
         const term = document.createElement("dt");
         term.textContent = name;
         const value = document.createElement("dd");
+        // A cell of free text keeps its rule where its words go.
+        if (words) value.className = "cell-data";
         value.append(...nodes);
         list.append(term, value);
       });
@@ -328,7 +330,6 @@
   window.addEventListener("hashchange", landOnRow);
 
   const cameIn = new WeakMap();
-  const SORT_MARK = { ascending: "\u2191\ufe0e", descending: "\u2193\ufe0e", none: "\u2195\ufe0e" };
 
   const sortRows = (table, column, direction) => {
     table.querySelectorAll(":scope > tbody").forEach((body) => {
@@ -380,7 +381,6 @@
         const mark = document.createElement("span");
         mark.className = "sort-indicator";
         mark.setAttribute("aria-hidden", "true");
-        mark.textContent = SORT_MARK.none;
         button.append(mark);
         button.setAttribute("aria-label", `Sort by ${name}`);
         heading.append(button);
@@ -394,12 +394,8 @@
     const heading = button.closest("th");
     const table = heading.closest("table");
     const next = { none: "ascending", ascending: "descending", descending: "none" }[heading.getAttribute("aria-sort")] || "ascending";
-    table.querySelectorAll(":scope > thead th[data-sort-ready]").forEach((other) => {
-      other.setAttribute("aria-sort", "none");
-      other.querySelector(".sort-indicator").textContent = SORT_MARK.none;
-    });
+    table.querySelectorAll(":scope > thead th[data-sort-ready]").forEach((other) => other.setAttribute("aria-sort", "none"));
     heading.setAttribute("aria-sort", next);
-    button.querySelector(".sort-indicator").textContent = SORT_MARK[next];
     sortRows(table, heading.cellIndex, next);
   });
 

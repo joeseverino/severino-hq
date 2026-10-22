@@ -1,0 +1,241 @@
+/* Surfaces: the one frame every container of content wears, stats inside a
+   card, the disclosure marker, and how a head, a row and a band give way when narrow. */
+
+@layer components {
+  /* ── Surface: the one frame ─────────────────────────────────────────────
+     Every box that holds content draws its frame here and nowhere else: one
+     border, one radius, one background, one shadow. A component names itself
+     in this list and declares only its layout; it never spells out a frame.
+
+     Nesting is handled once, by inheritance: a surface sets the frame
+     properties to "none" for everything inside it, so a surface inside a
+     surface (stats in a card, a list in a band) draws no second frame and adds
+     no second inset. Nothing downstream has to remember that rule.
+
+     A grid that draws its dividers with a colored background behind 1px gaps
+     keeps that background; the frame around it is still this one. */
+  :where(
+  .table-scroll:has(> .data-table), .card, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section), .control-card,
+  .control-metric, .control-summary, .service-band, .fact-band,
+  .filter-bar, .table-toolbar, .kpi-grid, .insight-grid,
+  .kv, .form,
+  .auth-card, .mail-stage, .mail-editor,
+  .topology-workspace, .github-list, .account-facts,
+  .boxed-facts, .policy-agents > li, .relation-list,
+  .posture-gaps, .posture-repos, .machine-telemetry, .machine-telemetry-metrics, .route,
+  .dashboard-counts, .dash-links) {
+    border: var(--surface-border, 1px solid var(--line));
+    border-radius: var(--surface-radius, var(--radius));
+    background: var(--surface-bg, var(--surface));
+    box-shadow: var(--surface-shadow, var(--shadow-sm));
+
+    & > * {
+      --surface-border: 0 none;
+      --surface-radius: 0;
+      --surface-bg: transparent;
+      --surface-shadow: none;
+      --surface-inset: 0;
+    }
+  }
+  /* Stats inside a card are the card's content: an even grid with real gaps,
+     no tile padding doubling the card's own. */
+  :is(.card, .highlight-card) > .kpi-grid {
+    display: grid;
+    /* Exactly the card's --kpi-columns, which the card sets from how many
+       stats it holds and how wide it is (4 or 2+2, 6 or 3+3, never 3+1). A
+       fit-as-many-as-fit grid would not hold that. */
+    grid-template-columns: repeat(var(--kpi-columns, 2), minmax(0, 1fr));
+    gap: var(--space-6) var(--space-7);
+    /* A card as tall as its neighbor keeps its figures under their heading:
+       the room it has left falls below them, not between label and value. */
+    align-content: start;
+    background: none;
+  }
+  /* A row of stats shares its lines. Each stat takes the row's three tracks
+     (label, value, note), so the labels start level and the values stand
+     level, however many lines one label wraps to. */
+  :is(.card, .highlight-card) > .kpi-grid > .kpi {
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    row-gap: var(--space-2);
+  }
+  /* What a figure looks like, beside it: dots for a part of a whole, a line
+     for a direction. A filled dot is solid and an empty one is a ring, so the
+     count does not rest on color. The line takes the room the value leaves
+     and is drawn only in a card wide enough to give it some. */
+  /* The gap keeps a short value's hit area and the first dot's apart (page.css). */
+  .kpi-figure { display: flex; align-items: center; gap: var(--space-6); min-width: 0; }
+  .kpi-dots { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); }
+  /* More than fit beside a value in a narrow column are set in two even rows,
+     filled column by column, rather than left to break wherever the column ends. */
+  .kpi-dots:has(> :nth-child(7)) { display: inline-grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); }
+  .kpi-dot { position: relative; display: block; width: 10px; height: 10px; border: 1.5px solid var(--muted-2); border-radius: 50%; }
+  .kpi-dot.is-filled { border-color: var(--ok); background: var(--ok); }
+  /* A dot that leads somewhere is hit through a square around it (page.css),
+     so dots that lead somewhere are set a square apart. */
+  .kpi-dots:has(> a) { gap: calc(var(--target-min) - 10px); }
+  a.kpi-dot:hover, a.kpi-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .kpi a.value { color: inherit; text-decoration: none; }
+  .kpi a.value:hover { text-decoration: underline; }
+  .kpi-trend { display: none; flex: 1 1 0; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
+  .kpi-trend polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .kpi-trend-hit { fill: transparent; }
+  .kpi-trend-dot { stroke: var(--accent); stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0; pointer-events: none; }
+  .kpi-trend-dot.is-latest, .kpi-trend-hit:hover + .kpi-trend-dot { opacity: 1; }
+  .kpi-grid.is-featured > :first-child .kpi-trend { height: 40px; }
+  @container kpi (min-width: 340px) {
+    .kpi-trend { display: block; }
+  }
+
+  /* The contributor's first of four figures leads the overview. The same
+     values and links appear once; supporting facts form a compact second row. */
+  .kpi-grid.is-featured .value { color: var(--accent); }
+  .kpi-grid.is-featured > .kpi { gap: var(--space-3); }
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+    row-gap: var(--space-10);
+  }
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child {
+    grid-column: 1 / -1;
+    padding-bottom: var(--space-8);
+    border-bottom: 1px solid var(--line-2);
+  }
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child .value {
+    font-size: var(--text-display);
+    letter-spacing: -.04em;
+    overflow-wrap: anywhere;
+  }
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) .value {
+    font-size: var(--text-2xl);
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  /* A lone overview card across the page (an HQ with one contributor) puts
+     its four figures on one row, the first still the largest: led from a row
+     of its own, the three under it would sit beside a page width of nothing. */
+  @container featured (min-width: 46rem) {
+    .kpi-grid.is-featured:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
+    .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { grid-column: auto; padding-bottom: 0; border-bottom: 0; }
+  }
+
+  /* The last thing in a card ends the card: its own bottom margin would be
+     dead space inside the card's padding. */
+  /* A frame's own padding is its edge: the first and last thing in it keep no
+     margin of their own, or a heading's top margin doubles the padding above it. */
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section)) > :last-child { margin-bottom: 0; }
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section)) > :first-child { margin-top: 0; }
+
+
+  /* ── Disclosure: one marker for everything that opens in place ─────────
+     Every details that is not a menu shows the same mark, turned when open,
+     so "this opens" looks the same everywhere: a folded section, raw
+     readings, a list behind "+5 more", a table's own row toggle. Menus carry
+     data-menu and dress their summary as a control instead. A connection's
+     hops and layers show their state with their own tick, in a fixed grid
+     an extra mark would shift, so they carry none. */
+  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary { list-style: none; cursor: pointer; }
+  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::-webkit-details-marker { display: none; }
+  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::before {
+    content: "▸"; display: inline-block; width: 1em; margin-inline-end: var(--space-1);
+    color: var(--muted); font-size: 1.05em; line-height: 1; text-align: center;
+    transition: transform .12s ease;
+  }
+  main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop])[open] > summary::before { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { main details:not([data-menu]):not([data-connection-layer]):not([data-connection-hop]) > summary::before { transition: none; } }
+
+  /* A section that folds: its heading is the toggle. */
+  .section-fold > summary { display: flex; align-items: baseline; }
+  .section-fold > summary:hover :is(h2, h3) { color: var(--accent-2); }
+  .section-fold > summary :is(h2, h3) { margin: 0; }
+  .section-fold[open] > summary { margin-bottom: var(--space-5); }
+
+  /* The topology's view picker, first in its own filter row. */
+  .topology-view { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin: 0; }
+  /* A view's name is a sentence: the picker takes the row and never more. */
+  .topology-view, .topology-view select { min-width: 0; max-width: 100%; }
+
+  /* What the filter bar currently shows, at its far end. */
+  .filter-bar-summary { margin: 0 0 0 auto; align-self: center; color: var(--muted); font-size: var(--text-sm); }
+  .filter-bar-summary strong { color: var(--ink); }
+
+  /* A head's controls on a phone: the lead one beside the title, the rest in
+     the overflow menu, which is hidden wherever every control fits. */
+  .page-head .page-actions > .overflow-menu { display: none; }
+  @media (max-width: 640px) {
+    .page-head .page-actions > :not(:first-child):not(.overflow-menu) { display: none; }
+    .page-head .page-actions > .overflow-menu { display: flex; }
+    .page-head .page-actions { flex-wrap: nowrap; }
+  }
+
+  /* A row's toggle: the one tables.js adds where a row says more than it
+     shows, or the one a row heading rows folded under it carries. Either is
+     the one disclosure a row has, so it is sized to be found and hit, and
+     turns when open. */
+  :is(.row-expand, .row-fold) {
+    display: inline-grid; place-items: center;
+    width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0; margin: 0;
+    border: 0; border-radius: var(--radius-sm); background: none; box-shadow: none;
+    color: var(--muted); font-size: var(--text-sm); line-height: 1; cursor: pointer;
+    vertical-align: middle;
+  }
+  :is(.row-expand, .row-fold):hover { border: 0; background: var(--line-2); color: var(--ink); }
+  /* What a row holds back until it is expanded, and the hint it replaces. A
+     cell moved to the line beneath an open row is open too. */
+  .data-table tr:not(.is-expanded, .row-detail) .row-more,
+  .data-table tr:is(.is-expanded, .row-detail) .row-less { display: none; }
+  :is(.row-expand, .row-fold) > svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s ease; }
+  :is(.row-expand, .row-fold)[aria-expanded="true"] > svg { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > svg { transition: none; } }
+  /* Every clamp in the row lifted at once. The rules it lifts are scattered and
+     each is specific to its column, so this one outranks them on purpose: an
+     expanded row shows everything, whatever clamped it. */
+  .data-table tr.is-expanded :is(td, th),
+  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *) {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    -webkit-line-clamp: unset !important;
+    line-clamp: none !important;
+    max-height: none !important;
+    max-width: none !important;
+  }
+  /* With its columns held, an uncut value breaks inside its column rather
+     than running under the next, whatever kept it whole: inside a word only
+     where the word alone is longer than its line, so what a box holds out for
+     is still its longest word. Free text (`cell-data`) already breaks
+     anywhere, open or not. */
+  .data-table tr.is-expanded :is(td, th):not(.cell-data),
+  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, .cell-data, .cell-data *) {
+    overflow-wrap: break-word !important;
+  }
+
+  /* A band too narrow for two cells is a list, like every other summary:
+     each fact one row, its label and its value at the right edge, the detail
+     under both. Asked of the band's own width, so a band in a narrow card
+     reads the same as one on a phone. 27.5rem is two 220px cells. */
+  :is(.service-band, .fact-band, .control-summary) { container: band / inline-size; }
+  @container band (max-width: 27.5rem) {
+    .band-fact { gap: var(--space-4); padding: var(--space-5) var(--space-6); align-items: center; }
+    .band-icon { width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }
+    /* The label keeps its words; a long value wraps at the right instead of
+       squeezing the label to a letter a line. */
+    .band-fact > div { flex: 1 1 auto; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; column-gap: var(--space-4); }
+    .band-fact > div > .band-label { grid-column: 1; grid-row: 1; font-size: var(--text-sm); }
+    .band-fact > div > strong { grid-column: 2; grid-row: 1; text-align: right; font-size: var(--text-md); }
+    .band-fact > div > :not(.band-label):not(strong) { grid-column: 1 / -1; }
+    .control-summary > .control-metric {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-1) var(--space-5);
+      padding: var(--space-5) var(--space-6);
+    }
+    .control-summary > .control-metric > :not(.control-label):not(strong) { flex: 1 1 100%; }
+  }
+}
