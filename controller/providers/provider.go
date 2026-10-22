@@ -119,6 +119,9 @@ type Registry struct {
 	Extensions []runtime.AdmittedExtension
 	// Profiles is whose public GitHub profile to read and whether it is due, from HQ's registry.
 	Profiles runtime.GitHubProfilePlan
+	// Updates is which repositories a dependency update run covers and whether
+	// one is due, from HQ's registry.
+	Updates runtime.DependencyUpdatesPlan
 	// Picture GETs an image of at most limit bytes: its kind and its bytes. Nil fetches over HTTPS.
 	Picture func(ctx context.Context, address string, limit int) (string, []byte, error)
 	// ACMEHTTP reaches the certificate authority; nil trusts the controller's roots.
@@ -160,6 +163,7 @@ func New(env runtime.Environment, held runtime.Connections, transport Transport)
 	r.admitCaddy()
 	r.admitGitHub()
 	r.admitGitHubProfile()
+	r.admitGitHubDependencyRun()
 	return r
 }
 

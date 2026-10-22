@@ -27,6 +27,12 @@ actions:
   # generates marshals every field, an empty conclusion included.
   - target: $.paths['/repos/{owner}/{repo}/check-runs/{check_run_id}'].patch.requestBody.content['application/json'].schema.anyOf
     remove: true
+  # An alert's dependency is an inline object the slice cannot narrow; its
+  # enums go, since nothing reads them and they generate bare package-level names.
+  - target: $.components.schemas['dependabot-alert'].properties.dependency.properties.scope
+    remove: true
+  - target: $.components.schemas['dependabot-alert'].properties.dependency.properties.relationship
+    remove: true
   # Keep enum symbols stable when trimming removes unrelated collisions.
   - target: $.components.schemas.workflow.properties.state
     update:

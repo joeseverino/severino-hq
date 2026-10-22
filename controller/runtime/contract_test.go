@@ -114,7 +114,7 @@ func TestGlancePlanResponse(t *testing.T) {
 func TestSweepVerdictResponses(t *testing.T) {
 	first := `{"carry": [], "due": true, "forced": [], "interval_seconds": 900, "ok": true, "only_kinds": [], "reason": "Nothing has been swept yet."}`
 	conforms(t, "SweepVerdict", []byte(first))
-	asked := `{"age_seconds": 120, "carry": ["ssh-host"], "due": true, "forced": [{"connection_ref": "", "kind": "adguard.rewrite", "kinds": null, "requested_at": "2026-10-03T12:00:00+00:00"}], "interval_seconds": 900, "ok": true, "only_kinds": [], "reason": "The kind tried longest ago was tried 2 minutes ago; not due every 15 minutes. Read now asked for adguard.rewrite."}`
+	asked := `{"age_seconds": 120, "carry": ["ssh-host"], "due": true, "forced": [{"connection_ref": "", "kind": "adguard.rewrite", "kinds": null, "requested_at": "2026-10-03T12:00:00+00:00"}], "interval_seconds": 900, "ok": true, "only_kinds": [], "reason": "The kind tried longest ago was tried 2 minutes ago; not due every 15 minutes. A refresh was asked for adguard.rewrite."}`
 	conforms(t, "SweepVerdict", []byte(asked))
 	verdict := strict[SweepVerdict](t, asked)
 	if !verdict.Due || len(verdict.Forced) != 1 || verdict.Forced[0].Kinds != nil {

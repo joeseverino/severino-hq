@@ -84,6 +84,16 @@ const (
 	BridgeSocket = "/run/hq-bridge/bridge.sock"
 	// ACMEDir is the controller's certificate state on the host.
 	ACMEDir = "/opt/apps/severino-hq/secrets/acme"
+
+	// RenovateSpool is root's directory on /run's tmpfs that a valid
+	// dependency handoff waits in, and each run stages its environment files
+	// in; RenovateUnit's path unit starts it when a handoff arrives.
+	RenovateSpool = "/run/severino-hq-renovate"
+	RenovateUnit  = "severino-hq-renovate.service"
+	// DependencyRunFile is the last dependency run's outcome, root's, which
+	// the next controller pass is given read-only.
+	DependencyRunFile   = StateDir + "/renovate/dependency-run.json"
+	dependencyRunTarget = RunDir + "/dependency-run.json"
 )
 
 // Renderers names each secret renderer on the host and its status document

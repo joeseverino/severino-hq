@@ -76,3 +76,11 @@ func TestTheImageMakesEveryVolumesDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestTheRenovateUnitOutlastsEveryRunItStarts(t *testing.T) {
+	// Every owner's run ends by its token's expiry, which the handoff holds
+	// within one token's life, and then its container is removed.
+	if got, bound := unitSetting(t, RenovateUnit, "TimeoutStartSec"), TokenLife+clockSkew+time.Minute; got <= bound {
+		t.Errorf("the unit stops a run at %s, before its tokens' %s", got, bound)
+	}
+}

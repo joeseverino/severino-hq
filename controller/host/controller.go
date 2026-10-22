@@ -39,6 +39,10 @@ type Controller struct {
 	CertStore string
 	// Tailscaled is the tailscale daemon's local API socket.
 	Tailscaled string
+	// Spool is root's own directory a valid dependency handoff is moved to
+	// (RenovateSpool on a host), and DependencyRun the outcome of the last
+	// run (DependencyRunFile), given to the next pass.
+	Spool, DependencyRun string
 	// Connections checks the connections document before it is read.
 	Connections func() error
 	// Lock holds the renderer's identity lock shared until the returned
@@ -72,6 +76,9 @@ func (c *Controller) Run(ctx context.Context, apply bool) error {
 	if err := c.copySecrets(ctx, run); err != nil {
 		return err
 	}
+	if err := c.prepareOut(run); err != nil {
+		return err
+	}
 	image, source, err := c.image(ctx)
 	if err != nil {
 		return err
@@ -94,6 +101,8 @@ func (c *Controller) Run(ctx context.Context, apply bool) error {
 		"--mount", readOnly(filepath.Join(run, "connections.json"), controllerConnections),
 		"--mount", readOnly(filepath.Join(run, "ssh"), controllerSSH),
 		"--mount", "type=bind,source=" + c.ACME + ",target=" + controllerACME,
+		"--mount", "type=bind,source=" + filepath.Join(run, "out") + ",target=" + controllerOut,
+		"--env", controllerOutEnv + "=" + controllerOut,
 		"--env", "HQ_CONTROLLER_CONNECTIONS=" + controllerConnections,
 		"--env", "HQ_CONTROLLER_SSH_DIR=" + controllerSSH,
 		"--env", "HQ_ACME_DIR=" + controllerACME,
@@ -115,7 +124,10 @@ func (c *Controller) Run(ctx context.Context, apply bool) error {
 	}
 	command := c.Command(ctx, "docker", args...)
 	command.Stdout, command.Stderr = c.Stdout, c.Stderr
-	return command.Run()
+	err = command.Run()
+	// A pass that failed after minting still leaves tokens worth running.
+	c.takeHandoff(run)
+	return err
 }
 
 func readOnly(source, target string) string {
@@ -343,5 +355,15 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 		}
 	}
 	args = append(args, "--env", "SEVERINO_HOST_UNITS=/run/severino-hq/units")
+
+	// The last dependency run's outcome, once there has been one.
+	if info, err := os.Lstat(c.DependencyRun); err == nil && info.Mode().IsRegular() {
+		if data, err := os.ReadFile(c.DependencyRun); err == nil {
+			if err := give("dependency-run.json", data, dependencyRunTarget); err != nil {
+				return nil, err
+			}
+			args = append(args, "--env", "SEVERINO_DEPENDENCY_RUN="+dependencyRunTarget)
+		}
+	}
 	return args, nil
 }

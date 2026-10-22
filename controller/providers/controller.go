@@ -39,6 +39,7 @@ var (
 func NewController(r *Registry, declared runtime.ControllerRegistry) *Controller {
 	r.Extensions = declared.Extensions
 	r.Profiles = declared.GithubProfiles
+	r.Updates = declared.DependencyUpdates
 	return &Controller{Registry: r, Declared: declared}
 }
 

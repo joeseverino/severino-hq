@@ -21,6 +21,8 @@ type checkHost struct {
 	runners []string
 	account string
 	rules   string
+	// unlisted makes sudo refuse to list the account's rules.
+	unlisted bool
 	// verify is what `sudo -n hq-host verify` prints and whether it passed;
 	// password makes sudo ask for one instead.
 	verify    string
@@ -30,6 +32,10 @@ type checkHost struct {
 	// it has none.
 	drift string
 	free  uint64
+	// tables and table are what root's nft lists; nftDenied makes sudo ask
+	// for a password instead.
+	tables, table string
+	nftDenied     bool
 }
 
 const goodRules = "Matching Defaults entries:\n    env_reset, secret-marker-example\nUser deployer may run the following commands:\n    (root) NOPASSWD: %s/deploy/bin/hq-host deploy *\n"
@@ -38,7 +44,10 @@ func newCheckHost(t *testing.T) *checkHost {
 	t.Helper()
 	root := t.TempDir()
 	h := &checkHost{t: t, runners: []string{"actions.runner.example.service"}, account: "deployer",
-		verify: "The host is its release.", free: 1 << 40}
+		verify: "The host is its release.", free: 1 << 40,
+		tables: "table inet host_filter\ntable ip filter\ntable inet " + EgressTable + "\n",
+		// nft lists with a tab per level and wraps a long set.
+		table: strings.Replace(EgressRules(), "100.64.0.0/10, ", "100.64.0.0/10,\n\t\t\t\t     ", 1)}
 	lib := filepath.Join(root, "lib")
 	h.rules = fmt.Sprintf(goodRules, lib)
 	h.checker = &Checker{
@@ -87,8 +96,16 @@ func (h *checkHost) command(ctx context.Context, name string, args ...string) *e
 		return answer(h.account+"\n", 0)
 	case strings.HasPrefix(call, "systemctl show --timestamp=unix"):
 		return answer("Id="+DriftUnit+"\n"+h.drift, 0)
+	case call == "sudo -n -l -U "+h.account && h.unlisted:
+		return answer("sudo: a password is required\n", 1)
 	case call == "sudo -n -l -U "+h.account:
 		return answer(h.rules, 0)
+	case strings.HasPrefix(call, "sudo -n nft list") && h.nftDenied:
+		return answer("sudo: a password is required\n", 1)
+	case call == "sudo -n nft list tables":
+		return answer(h.tables, 0)
+	case call == "sudo -n nft list table inet "+EgressTable:
+		return answer(h.table, 0)
 	case strings.HasSuffix(call, "/deploy/bin/hq-host verify"):
 		switch {
 		case h.password:
@@ -132,8 +149,12 @@ func ranAt(started time.Time, passed bool) string {
 func TestACurrentHostIsReady(t *testing.T) {
 	h := newCheckHost(t)
 
+	// The upgrade rule HQ's container-upgrade plan renders is HQ's too.
+	h.rules += fmt.Sprintf("    (root) NOPASSWD: %s/deploy/bin/hq-host upgrade *\n", h.checker.Lib)
+
 	out := h.check(CheckReady)
 
+	h.says(out, "ok      deployer may run nothing through sudo that HQ does not render")
 	h.says(out, "ok      the host is the release it runs")
 	h.says(out, "ok      every established unit is installed")
 	h.says(out, filepath.Join(h.checker.Lib, "deploy/bin/hq-host")+" is root's alone")
@@ -152,9 +173,16 @@ func TestEachHostFaultFailsAndSaysWhatItIs(t *testing.T) {
 		"a runner whose rule runs another subcommand": {func(h *checkHost) {
 			h.rules = fmt.Sprintf("    (root) NOPASSWD: %[1]s/deploy/bin/hq-host deployed, %[1]s/deploy/bin/hq-host upgrade *\n", h.checker.Lib)
 		}, "has no NOPASSWD sudo rule"},
-		"a runner that runs as root": {func(h *checkHost) { h.account = "root" }, "the Actions runner runs as 'root'"},
-		"two runners":                {func(h *checkHost) { h.runners = append(h.runners, "actions.runner.other.service") }, "expected one Actions runner unit"},
-		"a full disk":                {func(h *checkHost) { h.free = 1 << 20 }, "the deploy needs 512 MiB"},
+		"a runner granted a command HQ does not render": {func(h *checkHost) {
+			h.rules += "    (root) NOPASSWD: /usr/local/lib/example/retired *\n"
+		}, "deployer may run /usr/local/lib/example/retired * through sudo, which HQ does not render"},
+		"a runner whose HQ rule is widened": {func(h *checkHost) {
+			h.rules += fmt.Sprintf("    (root) NOPASSWD: %s/deploy/bin/hq-host *\n", h.checker.Lib)
+		}, "deployer may run <lib>/deploy/bin/hq-host * through sudo, which HQ does not render"},
+		"a runner whose sudo rules cannot be listed": {func(h *checkHost) { h.unlisted = true }, "could not list deployer's sudo rules"},
+		"a runner that runs as root":                 {func(h *checkHost) { h.account = "root" }, "the Actions runner runs as 'root'"},
+		"two runners":                                {func(h *checkHost) { h.runners = append(h.runners, "actions.runner.other.service") }, "expected one Actions runner unit"},
+		"a full disk":                                {func(h *checkHost) { h.free = 1 << 20 }, "the deploy needs 512 MiB"},
 		"an established unit missing": {func(h *checkHost) {
 			os.Remove(filepath.Join(h.checker.Systemd, "severino-hq-backup.timer"))
 		}, "severino-hq-backup.timer is not installed"},
@@ -182,6 +210,27 @@ func TestEachHostFaultFailsAndSaysWhatItIs(t *testing.T) {
 
 			h.says(h.check(CheckFailed), strings.ReplaceAll(c.says, "<lib>", h.checker.Lib))
 		})
+	}
+}
+
+// The egress table is checked where root's nft can be read: the rendered one
+// passes, another fails, an absent one waits for the next run, and an
+// unreadable one is said and leaves the verdict to the rest.
+func TestTheRenovateEgressTableIsTheRenderedOne(t *testing.T) {
+	h := newCheckHost(t)
+	h.says(h.check(CheckReady), "ok      the Renovate egress table is the one hq-host renders")
+
+	h.table = strings.Replace(EgressRules(), "\t\tiifname \"hq-renovate0\" drop\n", "", 1)
+	h.says(h.check(CheckFailed), "FAIL    the Renovate egress table "+EgressTable+" is not the one hq-host renders")
+
+	h.tables = "table inet host_filter\n"
+	h.says(h.check(CheckReady), "ok      the Renovate egress table is not loaded; each run loads it before it starts")
+
+	h.nftDenied = true
+	out := h.check(CheckReady)
+	h.says(out, "skip    the Renovate egress table cannot be read without root here")
+	if strings.Contains(out, "drop") {
+		t.Error("the check printed the table")
 	}
 }
 

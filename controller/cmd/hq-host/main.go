@@ -3,6 +3,7 @@
 //
 //	hq-host run-web          the web container (severino-hq-web.service)
 //	hq-host controller       one controller pass, planning; --apply to apply
+//	hq-host renovate         run the dependency handoff a pass spooled
 //	hq-host install          install the release in the root-owned tree
 //	hq-host deploy IMAGE     verify and pull IMAGE, then hand over to its hq-host
 //	hq-host release IMAGE    switch HQ to IMAGE, install it, or roll back
@@ -35,7 +36,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply] | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | check --release DIR --main DIR"
+const usage = "usage: hq-host run-web | controller [--apply] | renovate | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | check --release DIR --main DIR"
 
 // hostConfig is the host's own configuration, which bootstrap reads.
 const hostConfig = "/etc/severino-hq/host.json"
@@ -77,6 +78,12 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 			return 2
 		}
 		err = controller(stdout, stderr).Run(ctx, apply)
+	case "renovate":
+		if len(args) != 1 {
+			fmt.Fprintln(stderr, usage)
+			return 2
+		}
+		err = renovator(stdout).Run(ctx)
 	case "install":
 		err = machine(stdout).Install(ctx, requireConnections)
 	case "deploy":
@@ -216,17 +223,29 @@ const cosign = "/usr/local/lib/severino-hq-verifier/cosign"
 
 func controller(stdout, stderr io.Writer) *host.Controller {
 	return &host.Controller{
-		Machine:     machine(stdout),
-		SecretDir:   host.SecretDir,
-		ACME:        host.ACMEDir,
-		CertStore:   "/usr/local/share/ca-certificates",
-		Tailscaled:  "/var/run/tailscale/tailscaled.sock",
-		Connections: requireConnections,
-		Lock:        host.SharedLock(filepath.Join(host.SecretDir, "ssh.lock"), time.Minute),
-		Owner:       func(root *os.Root, name string) error { return root.Lchown(name, host.WebUID, host.WebGID) },
-		LookPath:    exec.LookPath,
-		Now:         time.Now,
-		Stdout:      stdout, Stderr: stderr,
+		Machine:       machine(stdout),
+		SecretDir:     host.SecretDir,
+		ACME:          host.ACMEDir,
+		CertStore:     "/usr/local/share/ca-certificates",
+		Tailscaled:    "/var/run/tailscale/tailscaled.sock",
+		Spool:         host.RenovateSpool,
+		DependencyRun: host.DependencyRunFile,
+		Connections:   requireConnections,
+		Lock:          host.SharedLock(filepath.Join(host.SecretDir, "ssh.lock"), time.Minute),
+		Owner:         func(root *os.Root, name string) error { return root.Lchown(name, host.WebUID, host.WebGID) },
+		LookPath:      exec.LookPath,
+		Now:           time.Now,
+		Stdout:        stdout, Stderr: stderr,
+	}
+}
+
+func renovator(stdout io.Writer) *host.Renovator {
+	return &host.Renovator{
+		Machine:    machine(stdout),
+		Spool:      host.RenovateSpool,
+		Outcome:    host.DependencyRunFile,
+		OwnerBound: host.RenovateOwnerBound,
+		Now:        time.Now,
 	}
 }
 

@@ -57,6 +57,22 @@ var (
 	githubActionsRead = githubapi.AppPermissions{Actions: githubapi.AppPermissionsActionsRead}
 )
 
+// githubRenovate is what a dependency update run's token holds: branches and
+// their commits, the pull requests, the Dependency Dashboard issue, the
+// stability status, the workflow files it pins, and the alerts a security fix
+// answers. Renovate's GitHub App guide
+// (docs.renovatebot.com/modules/platform/github/, "Running as a GitHub App")
+// also lists administration read, checks and merge queues write, and an
+// organization's members read; a run is given none of them.
+var githubRenovate = githubapi.AppPermissions{
+	Contents:            githubapi.AppPermissionsContentsWrite,
+	PullRequests:        githubapi.AppPermissionsPullRequestsWrite,
+	Issues:              githubapi.AppPermissionsIssuesWrite,
+	Statuses:            githubapi.AppPermissionsStatusesWrite,
+	Workflows:           githubapi.AppPermissionsWorkflowsWrite,
+	VulnerabilityAlerts: githubapi.AppPermissionsVulnerabilityAlertsRead,
+}
+
 // Composition is what the running image was composed from: the repository
 // that delivers it, the image, and each admitted extension.
 type Composition struct {

@@ -426,6 +426,7 @@ const (
 	ResourceKindCloudflareTunnel             ResourceKind = "cloudflare.tunnel"
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
+	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
@@ -503,6 +504,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindCloudflareZone:
 		return true
 	case ResourceKindGitHubDelivery:
+		return true
+	case ResourceKindGitHubDependencyRun:
 		return true
 	case ResourceKindGitHubProfile:
 		return true
@@ -605,6 +608,7 @@ const (
 	SweptCloudflareTunnel             SweptKind = "cloudflare.tunnel"
 	SweptCloudflareZone               SweptKind = "cloudflare.zone"
 	SweptGitHubDelivery               SweptKind = "github.delivery"
+	SweptGitHubDependencyRun          SweptKind = "github.dependency_run"
 	SweptGitHubProfile                SweptKind = "github.profile"
 	SweptGitHubRepository             SweptKind = "github.repository"
 	SweptHostFirewall                 SweptKind = "host.firewall"
@@ -666,6 +670,8 @@ func (e SweptKind) Valid() bool {
 	case SweptCloudflareZone:
 		return true
 	case SweptGitHubDelivery:
+		return true
+	case SweptGitHubDependencyRun:
 		return true
 	case SweptGitHubProfile:
 		return true
@@ -1128,6 +1134,9 @@ type ControllerRegistry struct {
 	// ConnectionProviders Each resource kind's connection providers.
 	ConnectionProviders map[string][]ConnectionProvider `json:"connection_providers"`
 
+	// DependencyUpdates Which repositories HQ's dependency update run covers, by the account that owns them, and whether to run now. HQ holds the clock: due says the latest run is a day old or somebody asked. last_started_at is when the latest run HQ holds started or was handed off, or empty: a result is news only when it started after it.
+	DependencyUpdates DependencyUpdatesPlan `json:"dependency_updates"`
+
 	// Extensions Each admitted extension the running image composes, which delivery follows.
 	Extensions []AdmittedExtension `json:"extensions"`
 
@@ -1152,6 +1161,22 @@ type ControllerReport struct {
 	// Status The provider's status for the resource; its shape belongs to the kind.
 	Status  any  `json:"status,omitempty"`
 	Success bool `json:"success"`
+}
+
+// DependencyUpdatesOwner One account's opted-in repositories, each as owner/name under that account: what one token names.
+type DependencyUpdatesOwner struct {
+	// Owner A GitHub login, lower-cased, as GitHubDependencyRunRecord's owner.
+	Owner string `json:"owner"`
+
+	// Repositories Repositories as owner/name, lower-cased, as GitHubDependencyRunRecord's repositories.
+	Repositories []string `json:"repositories"`
+}
+
+// DependencyUpdatesPlan Which repositories HQ's dependency update run covers, by the account that owns them, and whether to run now. HQ holds the clock: due says the latest run is a day old or somebody asked. last_started_at is when the latest run HQ holds started or was handed off, or empty: a result is news only when it started after it.
+type DependencyUpdatesPlan struct {
+	Due           bool                     `json:"due"`
+	LastStartedAt string                   `json:"last_started_at"`
+	Owners        []DependencyUpdatesOwner `json:"owners"`
 }
 
 // FailureClass Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.
@@ -1180,6 +1205,16 @@ type GitHubDeliverySpec struct {
 	// Repository The repository whose deploy workflow deploys HQ.
 	Repository string `json:"repository"`
 	Workflow   string `json:"workflow"`
+}
+
+// GitHubDependencyRunRecord One account's update run: what root reported of it, never its log.
+type GitHubDependencyRunRecord struct {
+	ExitCode     int      `json:"exit_code"`
+	FinishedAt   string   `json:"finished_at,omitempty"`
+	Outcome      string   `json:"outcome"`
+	Owner        string   `json:"owner"`
+	Repositories []string `json:"repositories,omitempty"`
+	StartedAt    string   `json:"started_at,omitempty"`
 }
 
 // GitHubProfilePlan Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.
@@ -1220,6 +1255,7 @@ type GitHubRepositoryRecord struct {
 	Checks            map[string]interface{}   `json:"checks,omitempty"`
 	ConnectionRef     string                   `json:"connection_ref"`
 	DefaultBranch     string                   `json:"default_branch,omitempty"`
+	DependabotAlerts  []map[string]interface{} `json:"dependabot_alerts,omitempty"`
 	Deployments       []map[string]interface{} `json:"deployments,omitempty"`
 	Environments      []map[string]interface{} `json:"environments,omitempty"`
 	Head              map[string]interface{}   `json:"head,omitempty"`

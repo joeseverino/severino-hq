@@ -1721,6 +1721,14 @@
      "name"
     ]
    },
+   "alert-html-url": {
+    "type": "string",
+    "description": "The GitHub URL of the alert resource."
+   },
+   "alert-number": {
+    "type": "integer",
+    "description": "The security alert number."
+   },
    "allowed-actions": {
     "type": "string",
     "description": "The permissions policy that controls the actions and reusable workflows that are allowed to run.",
@@ -1775,6 +1783,14 @@
        "write"
       ]
      },
+     "issues": {
+      "type": "string",
+      "description": "The level of permission to grant the access token for issues and related comments, assignees, labels, and milestones.",
+      "enum": [
+       "read",
+       "write"
+      ]
+     },
      "metadata": {
       "type": "string",
       "description": "The level of permission to grant the access token to search repositories, list collaborators, and access repository metadata.",
@@ -1815,11 +1831,26 @@
        "write"
       ]
      },
+     "statuses": {
+      "type": "string",
+      "description": "The level of permission to grant the access token for commit statuses.",
+      "enum": [
+       "read",
+       "write"
+      ]
+     },
      "vulnerability_alerts": {
       "type": "string",
       "description": "The level of permission to grant the access token to manage Dependabot alerts.",
       "enum": [
        "read",
+       "write"
+      ]
+     },
+     "workflows": {
+      "type": "string",
+      "description": "The level of permission to grant the access token to update GitHub Actions workflow files.",
+      "enum": [
        "write"
       ]
      }
@@ -2177,12 +2208,77 @@
     "type": "object",
     "description": "A Dependabot alert.",
     "properties": {
+     "number": {
+      "$ref": "#/components/schemas/alert-number"
+     },
+     "dependency": {
+      "type": "object",
+      "description": "Details for the vulnerable dependency.",
+      "properties": {
+       "package": {
+        "$ref": "#/components/schemas/dependabot-alert-package"
+       },
+       "manifest_path": {
+        "type": "string",
+        "description": "The full path to the dependency manifest file, relative to the root of the repository."
+       },
+       "scope": {
+        "type": "string",
+        "description": "The execution scope of the vulnerable dependency.",
+        "nullable": true,
+        "enum": [
+         "development",
+         "runtime"
+        ]
+       },
+       "relationship": {
+        "type": "string",
+        "description": "The vulnerable dependency's relationship to your project.\n\n> [!NOTE]\n> We are rolling out support for dependency relationship across ecosystems. This value will be \"unknown\" for all dependencies in unsupported ecosystems.\n",
+        "nullable": true,
+        "enum": [
+         "unknown",
+         "direct",
+         "transitive",
+         "inconclusive"
+        ]
+       }
+      }
+     },
      "security_advisory": {
       "$ref": "#/components/schemas/dependabot-alert-security-advisory"
+     },
+     "security_vulnerability": {
+      "$ref": "#/components/schemas/dependabot-alert-security-vulnerability"
+     },
+     "html_url": {
+      "$ref": "#/components/schemas/alert-html-url"
      }
     },
     "required": [
-     "security_advisory"
+     "number",
+     "dependency",
+     "security_advisory",
+     "security_vulnerability",
+     "html_url"
+    ],
+    "additionalProperties": false
+   },
+   "dependabot-alert-package": {
+    "type": "object",
+    "description": "Details for the vulnerable package.",
+    "properties": {
+     "ecosystem": {
+      "type": "string",
+      "description": "The package's language or package management ecosystem."
+     },
+     "name": {
+      "type": "string",
+      "description": "The unique package name within its ecosystem."
+     }
+    },
+    "required": [
+     "ecosystem",
+     "name"
     ],
     "additionalProperties": false
    },
@@ -2230,6 +2326,35 @@
       "version": "2026-03-10"
      }
     ]
+   },
+   "dependabot-alert-security-vulnerability": {
+    "type": "object",
+    "description": "Details pertaining to one vulnerable version range for the advisory.",
+    "properties": {
+     "package": {
+      "$ref": "#/components/schemas/dependabot-alert-package"
+     },
+     "first_patched_version": {
+      "type": "object",
+      "description": "Details pertaining to the package version that patches this vulnerability.",
+      "nullable": true,
+      "properties": {
+       "identifier": {
+        "type": "string",
+        "description": "The package version that patches this vulnerability."
+       }
+      },
+      "required": [
+       "identifier"
+      ],
+      "additionalProperties": false
+     }
+    },
+    "required": [
+     "package",
+     "first_patched_version"
+    ],
+    "additionalProperties": false
    },
    "deploy-key": {
     "title": "Deploy Key",
@@ -2633,10 +2758,14 @@
     "properties": {
      "token": {
       "type": "string"
+     },
+     "expires_at": {
+      "type": "string"
      }
     },
     "required": [
-     "token"
+     "token",
+     "expires_at"
     ]
    },
    "integration": {
@@ -2890,6 +3019,59 @@
      "user": {
       "$ref": "#/components/schemas/nullable-simple-user"
      },
+     "labels": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "integer"
+        },
+        "node_id": {
+         "type": "string"
+        },
+        "url": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "description": {
+         "type": "string"
+        },
+        "color": {
+         "type": "string"
+        },
+        "default": {
+         "type": "boolean"
+        },
+        "archived_by": {
+         "description": "The user who archived the label, or `null` if it has not been archived.",
+         "nullable": true,
+         "allOf": [
+          {
+           "$ref": "#/components/schemas/simple-user"
+          }
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "node_id",
+        "url",
+        "name",
+        "description",
+        "color",
+        "default",
+        "archived_at",
+        "archived_by"
+       ]
+      }
+     },
+     "created_at": {
+      "type": "string",
+      "example": "2011-01-26T19:01:12Z"
+     },
      "updated_at": {
       "type": "string",
       "example": "2011-01-26T19:01:12Z"
@@ -2933,6 +3115,8 @@
      }
     },
     "required": [
+     "labels",
+     "created_at",
      "head",
      "html_url",
      "merged_at",
