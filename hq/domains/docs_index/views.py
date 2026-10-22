@@ -28,6 +28,7 @@ from hq.platform.application.tables import (
     TableToggle,
 )
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+from hq.platform.core.templatetags.value_tags import breakable
 
 from .forms import DocumentationRecordForm, ManifestImportForm
 from .importer import ManifestImportError
@@ -160,7 +161,7 @@ class DocsDetailView(PageMixin, DetailView):
         record = self.object
         return format_html(
             '<code>{}</code> · {} · {} · <span class="pill pill-{}">{}</span> · <span class="pill pill-{}">{}</span>',
-            record.doc_id,
+            breakable(record.doc_id),
             record.get_doc_type_display(),
             record.get_environment_display(),
             record.status,

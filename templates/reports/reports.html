@@ -6,14 +6,14 @@
       <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
     {% endfor %}
   </select>
-  <button class="btn" type="submit">Apply</button>
+  <button class="btn" type="submit">Filter</button>
 </form>
 
 <section class="kpi-grid">
-  <div class="kpi"><span class="label">Expenses {{ year }}</span><span class="value">{{ expenses_total|money }}</span><span class="muted">{% if expenses_count %}<a href="{{ expenses_url }}">{{ expenses_count|counted:"expense" }}</a>{% else %}{{ expenses_count|counted:"expense" }}{% endif %}</span></div>
-  <div class="kpi"><span class="label">Deductible (est.) {{ year }}</span><span class="value">{{ expenses_deductible|money }}</span><span class="muted">Estimate, not tax advice</span></div>
-  <div class="kpi"><span class="label">Assets purchased {{ year }}</span><span class="value">{{ assets_count }}</span><span class="muted">{{ assets_total|money }} total</span></div>
-  <div class="kpi"><span class="label">Docs due for review</span><span class="value">{% if docs_needing_review_count %}<a href="{{ docs_needing_review_url }}">{{ docs_needing_review_count }}</a>{% else %}0{% endif %}</span></div>
+  <div class="kpi"><span class="label">Expenses {{ year|breakable }}</span><span class="value">{{ expenses_total|money }}</span><span class="muted">{% if expenses_count %}<a href="{{ expenses_url }}">{{ expenses_count|counted:"expense" }}</a>{% else %}{{ expenses_count|counted:"expense" }}{% endif %}</span></div>
+  <div class="kpi"><span class="label">Deductible (est.) {{ year|breakable }}</span><span class="value">{{ expenses_deductible|money }}</span><span class="muted">Estimate, not tax advice</span></div>
+  <div class="kpi"><span class="label">Assets purchased {{ year|breakable }}</span><span class="value">{{ assets_count|breakable }}</span><span class="muted">{{ assets_total|money }} total</span></div>
+  <div class="kpi"><span class="label">Docs due for review</span><span class="value">{% if docs_needing_review_count %}<a href="{{ docs_needing_review_url }}">{{ docs_needing_review_count|breakable }}</a>{% else %}0{% endif %}</span></div>
 </section>
 
 {% comment %}
@@ -22,13 +22,13 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
 {% if expenses_by_category %}
 <div class="two-col">
   <section>
-    <h2>Expenses by category, {{ year }}</h2>
+    <h2>Expenses by category, {{ year|breakable }}</h2>
     {% table_region "Expenses by category" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Category" local_sort=expenses_by_category|sortable %}{% table_heading "Total" "numeric" local_sort=expenses_by_category|sortable %}{% table_heading "Deductible (est.)" "numeric" local_sort=expenses_by_category|sortable %}</tr></thead>
       <tbody>
         {% for row in expenses_by_category %}
-          <tr><td><a href="{{ row.url }}">{{ row.label }}</a></td><td>{{ row.total|money }}</td><td>{{ row.deductible|money }}</td></tr>
+          <tr><td><a href="{{ row.url }}">{{ row.label|breakable }}</a></td><td>{{ row.total|money }}</td><td>{{ row.deductible|money }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -36,10 +36,10 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
   </section>
 
   <section>
-    <h2>Largest expenses, {{ year }}</h2>
+    <h2>Largest expenses, {{ year|breakable }}</h2>
     <ul class="list-rows">
       {% for e in largest_expenses %}
-        <li><span class="row-main">{% entity "expense"|entity_of:e.pk label=e.label %}</span><span class="row-meta">{{ e.date|when }} · {{ e.get_category_display }} · <strong>{{ e.total_cost|money }}</strong></span></li>
+        <li><span class="row-main">{% entity "expense"|entity_of:e.pk label=e.label %}</span><span class="row-meta">{{ e.date|when }} · {{ e.get_category_display|breakable }} · <strong>{{ e.total_cost|money }}</strong></span></li>
       {% endfor %}
     </ul>
   </section>
@@ -57,7 +57,7 @@ mostly empty card. A reading with nothing in it is not drawn.
     <h2>By status</h2>
     <ul class="list-rows">
       {% for group in status_groups %}
-        <li><span class="row-main"><strong>{{ group.label }}</strong></span><span class="row-meta">{% for status in group.counts %}<a href="{{ status.url }}">{{ status.label }} {{ status.count }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</span></li>
+        <li><span class="row-main"><strong>{{ group.label|breakable }}</strong></span><span class="row-meta">{% for status in group.counts %}<a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</span></li>
       {% endfor %}
     </ul>
   </section>
@@ -68,7 +68,7 @@ mostly empty card. A reading with nothing in it is not drawn.
     <h2>Assets by category</h2>
     <ul class="list-rows">
       {% for row in assets_by_category %}
-        <li><span class="row-main"><a href="{{ row.url }}">{{ row.label }}</a> <span class="muted">{{ row.n }}</span></span><span class="row-meta">{% if row.total %}<strong>{{ row.total|money }}</strong>{% endif %}</span></li>
+        <li><span class="row-main"><a href="{{ row.url }}">{{ row.label|breakable }}</a> <span class="muted">{{ row.n|breakable }}</span></span><span class="row-meta">{% if row.total %}<strong>{{ row.total|money }}</strong>{% endif %}</span></li>
       {% endfor %}
     </ul>
   </section>
@@ -100,9 +100,9 @@ not a wall of buttons.
     <span class="count">Without secrets, sensitive documents' text or receipt files</span>
   </div>
   <dl class="kv">
-    <dt>Expenses</dt><dd class="dot-list"><span><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year }} CSV</a></span><span><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></span></dd>
-    <dt>Assets</dt><dd class="dot-list"><span><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year }} CSV</a></span><span><a href="{% url 'reports:assets_csv' %}">All years CSV</a></span></dd>
-    <dt>Year summary</dt><dd class="dot-list"><span><a href="{% url 'reports:year_summary_json' %}?year={{ year }}">{{ year }} JSON</a></span><span><a href="{% url 'reports:year_summary_md' %}?year={{ year }}">{{ year }} Markdown</a></span></dd>
+    <dt>Expenses</dt><dd class="dot-list"><span><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></span><span><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></span></dd>
+    <dt>Assets</dt><dd class="dot-list"><span><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></span><span><a href="{% url 'reports:assets_csv' %}">All years CSV</a></span></dd>
+    <dt>Year summary</dt><dd class="dot-list"><span><a href="{% url 'reports:year_summary_json' %}?year={{ year }}">{{ year|breakable }} JSON</a></span><span><a href="{% url 'reports:year_summary_md' %}?year={{ year }}">{{ year|breakable }} Markdown</a></span></dd>
     <dt>Writeups and pages</dt><dd><span><a href="{% url 'reports:content_csv' %}">CSV</a></span></dd>
     <dt>Projects</dt><dd><span><a href="{% url 'reports:projects_csv' %}">CSV</a></span></dd>
     <dt>Documents</dt><dd><span><a href="{% url 'reports:documentation_csv' %}">CSV</a></span></dd>

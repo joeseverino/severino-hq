@@ -55,13 +55,13 @@ class ExpenseListTests(_Signed):
         chosen = self.client.get(reverse("expenses:list"), {"category": "hosting"})
 
         self.assertEqual(
-            [(row.label, row.total, row.url) for row in whole.context["by_category"]],
+            [(row.label, row.value, row.url) for row in whole.context["by_category"]],
             [
-                ("Hosting", Decimal("24.00"), "?year=2030&category=hosting"),
-                ("Domains", Decimal("8.00"), "?year=2030&category=domains"),
+                ("Hosting", "$24", "?year=2030&category=hosting"),
+                ("Domains", "$8", "?year=2030&category=domains"),
             ],
         )
-        self.assertIn(("Hosting $24.00", "?year=2030&category=hosting"), links(whole))
+        self.assertIn(("Hosting $24", "?year=2030&category=hosting"), links(whole))
         self.assertIn("Matching: $32.00 total", text(whole))
         # A list already narrowed to one category is not divided by category.
         self.assertEqual(chosen.context["by_category"], ())
@@ -94,8 +94,8 @@ class ExpenseListTests(_Signed):
 
         self.assertEqual(response.context["totals"].total, Decimal("13.00"))
         self.assertEqual(
-            [(row.label, row.total) for row in response.context["by_category"]],
-            [("Domains", Decimal("8.00")), ("Hosting", Decimal("5.00"))],
+            [(row.label, row.value) for row in response.context["by_category"]],
+            [("Domains", "$8"), ("Hosting", "$5")],
         )
 
     def test_adding_up_the_categories_does_not_cost_a_query_each(self):

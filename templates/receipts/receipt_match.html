@@ -20,8 +20,8 @@
           {% for exp in matches %}
             <tr>
               <td class="row-gutter">{{ exp.date|when }}{% row_toggle %}</td>
-              <td><strong>{{ exp.vendor }}</strong></td>
-              <td>{{ exp.item }}</td>
+              <td><strong>{{ exp.vendor|breakable }}</strong></td>
+              <td>{{ exp.item|breakable }}</td>
               <td>{{ exp.total_cost|money }}</td>
               <td>{% post_button "Link this" request.path name="expense_id" value=exp.pk css="btn primary small" %}</td>
             </tr>
@@ -42,7 +42,7 @@
     <dt>Vendor</dt><dd>{{ receipt.vendor|or_empty }}</dd>
     <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
     <dt>Amount</dt><dd>{{ receipt.amount|money }}</dd>
-    <dt>Original file</dt><dd>{{ receipt.original_filename }}</dd>
+    <dt>Original file</dt><dd>{{ receipt.original_filename|breakable }}</dd>
   </dl>
 </section>
 {% endblock %}

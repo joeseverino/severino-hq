@@ -1,10 +1,10 @@
 {% extends "list_page.html" %}
 {% block summary %}{% if site %}<p class="muted">Published on {% entity site %}</p>{% endif %}{% endblock %}
 {% block row %}
-  <td class="row-gutter"><a href="{{ row.get_absolute_url }}"><strong>{{ row.title }}</strong></a>{% row_toggle %}</td>
-  {% if show_type %}<td>{{ row.get_content_type_display }}</td>{% endif %}
-  <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display }}</span></td>
-  <td class="muted">{% if row.topic %}<span class="table-clamp">{{ row.topic }}</span>{% else %}{% empty_value %}{% endif %}</td>
+  <td class="row-gutter"><a href="{{ row.get_absolute_url }}"><strong>{{ row.title|breakable }}</strong></a>{% row_toggle %}</td>
+  {% if show_type %}<td>{{ row.get_content_type_display|breakable }}</td>{% endif %}
+  <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display|breakable }}</span></td>
+  <td class="muted">{% if row.topic %}<span class="table-clamp">{{ row.topic|breakable }}</span>{% else %}{% empty_value %}{% endif %}</td>
   <td class="num-col">{{ row.pageviews|or_empty }}</td>
   <td class="muted">{{ row.published_at|when }}</td>
   <td class="muted">{{ row.updated_at|when:"ago" }}</td>

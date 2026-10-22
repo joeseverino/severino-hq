@@ -70,6 +70,10 @@ class Progress:
         Job.objects.filter(pk=self._job.pk).update(**fields)
 
 
+# What a person is told when a job of the same kind is live, whatever the kind.
+ALREADY_RUNNING = "Already running."
+
+
 class JobConflict(RuntimeError):
     """A live job of this kind already exists."""
 
@@ -100,7 +104,7 @@ def _record(kind, label, *, actor, requested_by, request) -> Job:
     except IntegrityError as exc:
         # The one-live-job rule, and only that: any other refusal is itself.
         if Job.objects.filter(kind=kind, state__in=(Job.State.QUEUED, Job.State.RUNNING)).exists():
-            raise JobConflict(f"A {kind} job is already running.") from exc
+            raise JobConflict(ALREADY_RUNNING) from exc
         raise
 
 
@@ -229,7 +233,7 @@ def _work(job_id, work: Callable[[Progress], dict[str, Any]], *, own_connection=
             )
         except Failed as said:
             # A stated outcome, not a fault: the sentence is the whole record.
-            _fail(job, str(said) or "The job did not finish.", Failure(message=str(said)[:400], kind="Failed"))
+            _fail(job, str(said) or "Failed.", Failure(message=str(said)[:400], kind="Failed"))
         except Exception:  # noqa: BLE001 - a failed job is recorded, never raised
             # The whole traceback, not just the message: nobody can reproduce
             # a background failure by running it again from a terminal.
@@ -287,7 +291,8 @@ def _audit(job: Job, action: str, outcome: str, detail: dict, ended, facets=()) 
         action=action,
         obj=job,
         type_label="Background job",
-        message=f"{job.label} {outcome}{took}",
+        # The label as a title: a sentence built on it reads wrong for a verb phrase.
+        message=f"{job.label}: {outcome}{took}",
         # Timing as a facet rather than baked into the message, so how long a
         # job takes is a number that can be compared with the last one rather
         # than a phrase that has to be read.
@@ -337,12 +342,12 @@ def reap(kind: str | None = None) -> int:
         _audit(
             job,
             AuditLog.Action.FAILED,
-            "was lost",
+            "stopped early",
             {"last_said": job.note, "last_beat": job.heartbeat_at.isoformat() if job.heartbeat_at else None},
             ended,
         )
     return Job.objects.filter(pk__in=[job.pk for job in lost]).update(
         state=Job.State.LOST,
-        error="Process exited before the job finished.",
+        error="HQ stopped before it finished.",
         finished_at=ended,
     )

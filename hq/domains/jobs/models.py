@@ -31,13 +31,15 @@ HEARTBEAT_GRACE = timedelta(minutes=5)
 
 
 class JobState(models.TextChoices):
-    QUEUED = "queued", "Queued"
+    """A job's state, in the words every page says it in."""
+
+    QUEUED = "queued", "Waiting"
     RUNNING = "running", "Running"
-    SUCCEEDED = "succeeded", "Succeeded"
+    SUCCEEDED = "succeeded", "Done"
     FAILED = "failed", "Failed"
     # Distinct from FAILED: a vanished process is a restart to retry,
     # a raised exception is a traceback to read.
-    LOST = "lost", "Interrupted"
+    LOST = "lost", "Stopped early"
 
 
 class Job(models.Model):

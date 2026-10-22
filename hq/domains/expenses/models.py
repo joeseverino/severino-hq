@@ -105,7 +105,7 @@ class Expense(TimestampedModel):
     )
     about_name = models.CharField(max_length=200, blank=True, default="", editable=False)
 
-    referable = Referable(kind="expense", shows=("vendor", "item"), name="label", pickable=False)
+    referable = Referable(kind="expense", shows=("vendor", "item"), pickable=False)
 
     class Meta:
         ordering = ("-date", "-id")
@@ -118,11 +118,12 @@ class Expense(TimestampedModel):
 
     @override
     def __str__(self) -> str:
-        return f"{self.date} {self.vendor} · {self.item}"
+        return self.label
 
     @property
     def label(self) -> str:
-        """What the expense is called wherever it is named: who was paid, and for what."""
+        """What the expense is called wherever it is named: who was paid, and
+        for what. When is its note (``paid_note``), never part of its name."""
 
         return f"{self.vendor} · {self.item}"
 

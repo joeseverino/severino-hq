@@ -306,6 +306,15 @@ class RunOnTheCallingThreadTests(TestCase):
 
         self.assertEqual((ran, Job.objects.count()), ([], 0))
 
+    def test_a_state_is_called_the_same_by_a_control_the_list_and_a_read(self):
+        from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, Standing, job_standing
+
+        for state in Job.State:
+            job = Job(kind="test.words", label="Words", state=state, created_at=timezone.now())
+            self.assertEqual(job_standing(job).label, job.get_state_display())
+        for state in (QUEUED, RUNNING, DONE, FAILED):
+            self.assertIn(Standing(state).label, Job.State.labels)
+
     def test_failed_is_the_sentence_the_control_says(self):
         from hq.platform.application.asks import job_standing
 
@@ -371,7 +380,8 @@ class JobListOrderTests(TestCase):
 
 
 class JobNameTests(TestCase):
-    """A job is called what its declaration calls it; its kind is kept for detail."""
+    """A job is called what its declaration calls it; its kind is an identifier
+    nobody reading the list is shown."""
 
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
@@ -383,12 +393,16 @@ class JobNameTests(TestCase):
 
         page = text(self.client.get(reverse("jobs:list")))
 
-        self.assertIn(f"{named('sessions.clear').label} sessions.clear", page)
+        self.assertIn(named("sessions.clear").label, page)
+        self.assertNotIn("sessions.clear", page)
 
     def test_work_no_longer_declared_keeps_the_name_its_run_stored(self):
         Job.objects.create(kind="example.gone", label="Example work", state=Job.State.SUCCEEDED, actor="timer")
 
-        self.assertIn("Example work example.gone", text(self.client.get(reverse("jobs:list"))))
+        page = text(self.client.get(reverse("jobs:list")))
+
+        self.assertIn("Example work", page)
+        self.assertNotIn("example.gone", page)
 
     def test_jobs_and_the_audit_log_link_to_each_other(self):
         jobs = self.client.get(reverse("jobs:list"))

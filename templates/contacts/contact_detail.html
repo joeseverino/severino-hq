@@ -10,18 +10,18 @@
 </div>
 
 <section class="card">
-  <div class="section-head"><h2>Message</h2><span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread"|capfirst }}</span>{% if submission.pending %} <span class="pill pill-attention">Waiting for the controller</span>{% endif %}</div>
+  <div class="section-head"><h2>Message</h2><span class="pill pill-{{ submission.status|default:'unread' }}">{{ submission.status|default:"unread"|capfirst|breakable }}</span>{% if submission.pending %} <span class="pill pill-attention">{% waiting %}</span>{% endif %}</div>
   <dl class="kv">
-    <dt>Name</dt><dd>{{ submission.name }}</dd>
-    <dt>Email</dt><dd><a href="{{ reply_href }}">{{ submission.email }}</a></dd>
+    <dt>Name</dt><dd>{{ submission.name|breakable }}</dd>
+    <dt>Email</dt><dd><a href="{{ reply_href }}">{{ submission.email|breakable }}</a></dd>
   </dl>
-  <p>{{ submission.message|linebreaksbr }}</p>
+  <p>{{ submission.message|breakable|linebreaksbr }}</p>
 </section>
 
 <section class="card">
   <div class="section-head"><h2>How it arrived</h2></div>
   <dl class="kv">
-    <dt>Number</dt><dd>#{{ submission.id }}</dd>
+    <dt>Number</dt><dd>#{{ submission.id|breakable }}</dd>
     <dt>Bot check</dt><dd>{{ submission.turnstile|or_empty }}</dd>
     <dt>Sent</dt><dd>{{ submission.created_at|when }}</dd>
     <dt>Updated</dt><dd>{{ submission.updated_at|when }}</dd>
@@ -29,7 +29,7 @@
     <dt>Browser</dt><dd>{{ submission.browser|or_empty }}</dd>
     <dt>Device</dt><dd>{{ submission.device|or_empty }}</dd>
     <dt>Country</dt><dd>{{ submission.country|or_empty }}</dd>
-    {% if submission.source_url %}<dt>Sent from</dt><dd>{% if submission.source_url|web_url %}<a href="{{ submission.source_url|web_url }}" rel="noopener noreferrer">{{ submission.source_url }}</a>{% else %}{{ submission.source_url }}{% endif %}</dd>{% endif %}
+    {% if submission.source_url %}<dt>Sent from</dt><dd>{% if submission.source_url|web_url %}<a href="{{ submission.source_url|web_url }}" rel="noopener noreferrer">{{ submission.source_url|breakable }}</a>{% else %}{{ submission.source_url|breakable }}{% endif %}</dd>{% endif %}
     <dt>User agent</dt><dd class="muted">{{ submission.user_agent|or_empty }}</dd>
   </dl>
 </section>

@@ -7,10 +7,10 @@
 {% block content %}
 <div class="api-reference-status" role="status">
   <p class="api-reference-loading">Loading the reference.</p>
-  <p class="api-reference-failed">The reference did not load. The document itself is at <a href="{{ document_url }}">{{ document_url }}</a>.</p>
+  <p class="api-reference-failed">The reference did not load. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p>
 </div>
 <div class="api-reference" id="api-reference-root" data-url="{{ document_url }}"></div>
-<noscript><p>The reference needs JavaScript. The document itself is at <a href="{{ document_url }}">{{ document_url }}</a>.</p></noscript>
+<noscript><p>The reference needs JavaScript. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p></noscript>
 {% endblock %}
 {% comment %}The reference fills the page under the header; its pinned sidebar runs to the bottom.{% endcomment %}
 {% block site_footer %}{% endblock %}
