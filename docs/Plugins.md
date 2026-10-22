@@ -80,7 +80,10 @@ domain; the SDK owns integration mechanics:
 
 Imports from `application`, `core` or another host app are unsupported: they
 couple a private plugin to public implementation details.
-`python -m hq_sdk.validation src` enforces the boundary.
+`python -m hq_sdk.validation src` enforces the boundary. It also refuses a
+test whose `assertContains`, `assertNotContains`, `assertIn` or `assertNotIn`
+looks for text ending on `</td>` or `</th>`: the host may wrap what a cell
+says, so a test reads the cell's text instead.
 
 The shape of that surface is committed as `hq_sdk/contract.json`: every
 export's parameters, fields, enum members and public methods, without
@@ -387,6 +390,18 @@ Fields that shape the Command Center form:
 - `execution_notes` describe the registered read, queue and provider boundary
   in the zero-network preview.
 
+A command's words are declared on it once. `label` is its name (`Remove a
+note`), `verb` what its button says where that is shorter (`Remove`), and
+`variants` the words for a mode one button cannot say,
+`variants=(("all", "Refresh all"),)`. Every button, link, remedy and toast
+for the command reads them (`spec.words(variant)`; a press answers with
+`spec.requested(subject)`), so a call site never writes them: a control built
+for a command takes no `label`, a template says them with
+`{% words "notes.remove" %}`, and a variant nothing declares fails the
+host's checks instead of the press. The commands one connection's abilities
+run share its row, so no two of them may say the same words: a composition
+where they do fails at startup (`connection.repeated_words`).
+
 HQ gives every capability that writes an `idempotency_key`
 ([API](API.md#safe-retries)); a command type declares the field only when its
 handler keeps the key itself.
@@ -590,14 +605,19 @@ def outbound_work():
     return (
         OutboundWork(
             "notes.lookup",
-            "Look up",
+            "Look up a note",
             "Ask the registry what it lists for one note.",
             "notes.write",
             look_up,
             subject_label="Note",
+            verb="Look up",
         ),
     )
 ```
+
+`"Look up a note"` is the work's `label`, what its job, audit entry and
+command are called; `verb` is what its button and toasts say, and defaults to
+the label. `ask()` takes no words of its own.
 
 `PluginIntegration(outbound=outbound_work)` is the one declaration. HQ derives
 the rest:
@@ -607,7 +627,7 @@ the rest:
 | The job | `run` is called on a job's own thread, where reaching out is allowed. One job of a name is live at a time, held by the database, so a second press or caller starts nothing. |
 | The capability | `notes.lookup`, with the subject as its target. The API, MCP, the command center and `hq_call` ask through it with the same authorization, approval policy and denial record as any command, and are answered at once with the job's id. A command line waits for the work, because nothing there outlives the command. |
 | The route and status | The control posts to `jobs:ask` and follows `jobs:status`. The extension has no URL, view, template or script for either. |
-| The control | `ask("notes.lookup", note.slug)` is the shared Ask (`partials/_ask.html`), standing as the stored job does: live work is followed, failed work says why until asked for again. It may stand among a page's actions. One query. |
+| The control | `ask("notes.lookup", note.slug)` is the shared Ask (`partials/_ask.html`), in the work's own words, standing as the stored job does: live work is followed, failed work says why until asked for again. It may stand among a page's actions. One query. |
 | The audit entries | Who asked, how it ended, how long it took, and the `seen`, `created`, `updated` and `skipped` counts the work returns. |
 
 The page shows what is stored and puts the control beside it:
@@ -639,9 +659,12 @@ Three rules keep the work honest:
   is shown where the work was asked for and nothing stored is touched. Any
   other exception is a fault, kept with its traceback.
 - **Refuse from what HQ holds.** `refuse(subject)` returns why the work cannot
-  be asked for now, or `""`. The control is drawn unusable with that reason and
-  an ask is refused with it before a job is recorded. It runs inside requests,
-  so it reads the database and nothing else.
+  be asked for now, or `""`. Every control for the work, its `ask` and any
+  link HQ offers to its command (a connection's row, a topology node, a
+  remedy), is drawn unusable with that reason, so a page draws nothing of its
+  own for it; an ask is refused with it before a job is recorded. It runs
+  inside requests, once per subject in each, so it reads the database and
+  nothing else.
 - **One at a time is the duplicate guard.** Work that costs money or is not
   idempotent at the provider relies on the one-live-job rule, not a check of
   its own. A name is the unit: declare two names for two things that may run

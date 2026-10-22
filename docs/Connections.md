@@ -170,12 +170,17 @@ Permissions, and no others:
 - `administration: read`
 - `checks: read`
 - `code scanning alerts: read`
+- `commit statuses: write`
 - `contents: read`
+- `contents: write`
 - `deployments: read`
+- `issues: write`
 - `leaked credential alerts: read`
 - `metadata: read`
 - `packages: read`
 - `pull requests: read`
+- `pull requests: write`
+- `workflows: write`
 
 Store it as an item of any type:
 

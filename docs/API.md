@@ -149,8 +149,7 @@ reference, not a client:
 - **No request is sent from the page.** The API takes a bearer token from the
   identity provider and never the browser session, so the viewer's request
   client and its token field are off. Samples are curl, written against the
-  origin serving the page; the generated CLI and TypeScript client are the way
-  to call the API.
+  origin serving the page.
 - **Search** covers the reference only and says so; ⌘K stays HQ's.
 - **Nothing is fetched from, or links to, the vendor.** The policy is HQ's
   minus Trusted Types, which the viewer cannot satisfy.
@@ -181,14 +180,14 @@ the generic MCP tools, and global-search registration from that declaration.
 Unknown filters, repeated URL parameters, unregistered resources, unsupported
 operations, and insufficient grants fail before a domain query runs.
 
-### Read now
+### Refresh
 
 `infrastructure.controller.refresh` is the freshness loop. It marks HQ active,
 rings the credential-free controller doorbell, and lets the pull-based
 controller apply its usual cadence. The API process gets no provider
 authority, and the caller gets the due decision behind the request.
 
-With a subject it is "read now": `connection_ref` forces every kind that
+With a subject it is "Refresh": `connection_ref` forces every kind that
 connection's credential reads (derived from the observation registry through
 its provider), `kind` forces one kind, and `every_connection` forces the whole
 sweep. At most one. An unknown ref or kind is `invalid_input`; it needs
@@ -199,7 +198,7 @@ every kind the controller reads. A request is answered once each forced reading
 is stored after it, and stops forcing after `SEVERINO_READ_REQUEST_SECONDS`.
 The web form is `POST /infrastructure/connections/read/`; a GET is refused. A
 finding offers "Check again" as its verification: where a reading is involved
-it reads now and runs the check on what the controller reports; otherwise it
+it refreshes and runs the check on what the controller reports; otherwise it
 runs the check against current data.
 
 ### What each surface exposes
@@ -295,7 +294,7 @@ follow declared edges, and `depth=1..5` limits traversal. The response's
 Tracing composes with `lens`, costs no provider reads beyond deriving the
 original authorized projection, and unknown focus values leave the projection
 whole with `trace: null`. That is "what depends on this" and "what this
-reaches" for generated clients, from the one graph.
+reaches" for any client, from the one graph.
 
 Findings are another projection of that same authorized topology. General
 reads collapse several stale resource kinds onto their shared controller when
@@ -422,13 +421,8 @@ it does; a patch release adds no features. No compatibility
 translation is applied. Resource filters emit individual query parameters;
 `x-hq-query-schema` retains the aggregate schema, including unknown-field policy.
 
-Install the locked contract tools with `npm --prefix tools/clients ci`.
-`mise run checks:openapi` validates both descriptions against the specification
-and runs the generated client's runtime tests; `mise run drift` checks that the
-client is current. The TypeScript
-client and CLI are generated from the host description. Redocly marks
-its client generator experimental; generated artifacts are pinned and checked
-rather than assumed compatible across upgrades.
+`mise run checks:openapi` installs the locked Redocly from `tools/openapi` and
+validates every description against the specification.
 
 `manage.py test tests.fuzz.api_properties` generates bounded requests through Django's
 real WSGI middleware using Schemathesis from the tools dependency set. Host cases

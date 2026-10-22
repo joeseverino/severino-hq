@@ -22,7 +22,7 @@ waits on a schedule.
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
 Each CI job runs the `mise` aggregate of its name, so the gates are declared
-once, in [`mise.toml`](../mise.toml) ([Development](Development.md)).
+once, as tasks in their job's file under [`tasks/`](../tasks) ([Development](Development.md)).
 
 Production runs the composed image (`ghcr.io/joeseverino/severino-hq/composition`),
 never the host image alone. How Compose admits, fingerprints and assembles
@@ -79,7 +79,8 @@ A new failure is added there once, and named with its fix every time after.
 
 `mise run annotations RUN_ID` prints the annotations of each failed job, one
 per line (level, `path:line`, message): they appear as soon as a step fails,
-before its log can be read.
+before its log can be read. `mise run ci:timings RUN_ID` prints where a run's
+time went: each job's and step's seconds, and the jobs on its critical path.
 
 Every log is public, so each failure is reported at two levels:
 
@@ -141,9 +142,11 @@ fingerprint, then delete the old key on GitHub.
 | `/var/lib/severino-hq/release` | the digest-pinned image the web unit runs | a deploy |
 | `/run/severino-hq-secrets/` | rendered credentials, on a root-only `noswap` tmpfs (`run-severino\x2dhq\x2dsecrets.mount`) | `hq-secrets` |
 | `/run/severino-hq/` | the doorbell HQ rings when it queues controller work | `deploy/tmpfiles/severino-hq.conf` |
+| `/run/severino-hq-renovate/` | root-only: a validated dependency handoff waiting to run, and each run's environment files, removed when it ends | `hq-host controller`, `hq-host renovate` |
+| `/var/lib/severino-hq/renovate/dependency-run.json` | the last dependency run's outcome, given read-only to the next controller pass | `hq-host renovate` |
 | `/opt/apps/severino-hq/secrets/` | the renderer's lock and the controller's ACME state | `hq-secrets`, the controller |
 | docker volumes `severino-hq_severino_{data,media,exports,bridge}` | the database, uploads, exports and the bridge socket | HQ |
-| `/var/log/severino-hq/` | output a deploy keeps off the public log, and `extensions.log`: which extensions a refused deploy would have dropped | `hq-host` |
+| `/var/log/severino-hq/` | output a deploy keeps off the public log, `extensions.log`: which extensions a refused deploy would have dropped, and `renovate.log`: every dependency run's own output | `hq-host` |
 
 ### hq-host
 
@@ -153,7 +156,8 @@ from the tree, and every unit and the deploy call it.
 | Command | Does |
 | :--- | :--- |
 | `run-web` | runs the web container (`severino-hq-web.service`); waits for the rendered environment, notifies systemd once HQ is healthy |
-| `controller [--apply]` | one controller pass: plan, or claim and apply queued work |
+| `controller [--apply]` | one controller pass: plan, or claim and apply queued work. A pass may leave a dependency handoff in its own out directory; root opens it without following links, validates it (each owner's repositories by GitHub's naming rules, a token that expires within the hour, no other key) and moves it to `/run/severino-hq-renovate/`, or logs and drops it |
+| `renovate` | runs the spooled handoff: Renovate once per owner, in a container with no capability, a read-only root, no host path but `deploy/renovate/config.json`, and the token in an environment file; records each owner's outcome for the next pass. The container reaches public IPv4 addresses and nothing else: not the host, the LAN, the tailnet, link-local, multicast or another container. It runs on its own bridge, `severino-hq-renovate` (10.231.0.0/24, interface `hq-renovate0`, no IPv6), made if absent and refused unless it is exactly that, with public resolvers; before each run root loads the nftables table `inet severino_hq_renovate` (`controller/host/egress.go`) in one transaction, dropping everything the bridge sends to a private, reserved or IPv6 destination and everything it sends to the host itself. A run that cannot load the table never starts |
 | `deploy IMAGE` | verifies the signature, refuses an image that drops an extension production runs, pulls, and hands over to the image's own `hq-host release` |
 | `release IMAGE` | syncs the tree, installs the web unit, restarts HQ on the image, then `install`; rolls back on any failure, the database with it when the release migrated it |
 | `install` | installs every shipped unit, renders secrets, preflights the controller and the content index, enables every timer and path |
@@ -162,7 +166,7 @@ from the tree, and every unit and the deploy call it.
 | `bootstrap` | renders the drop-ins and sudo rule `host.json` decides |
 | `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
 | `upgrade ARGS` | moves one compose service to a pinned image, through its own sudo rule ([Container upgrades](#container-upgrades)) |
-| `check` | the host's half of `mise run preflight`, as any account and read-only: the runner's sudo rule, `verify` (or the drift unit's run since the release was installed), every program a sudo rule names is root's alone, the established units, free disk. Preflight builds it from HEAD for the host's platform and runs it from a temporary directory over SSH, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
+| `check` | the host's half of `mise run preflight`, as any account and read-only: the runner's sudo rule, and that `sudo -l` lists it no command HQ does not render (a failure names the command and the grep that finds its file), `verify` (or the drift unit's run since the release was installed), every program a sudo rule names is root's alone, the established units, free disk, and, where sudo lets it read nftables, that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). Preflight builds it from HEAD for the host's platform and runs it from a temporary directory over SSH, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
 
 ### Units
 
@@ -179,15 +183,16 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends |
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
+| `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
 | `severino-hq-script-drift.service` / `.timer` | `hq-host verify`, daily |
 
 A unit that fails is reported to HQ with no wiring of its own:
 `deploy/systemd/severino-hq-.service.d/10-on-failure.conf` (and the same for
 timers and paths) sets `OnFailure=severino-hq-job@units.read.service` for
-every unit whose name begins `severino-hq-`. The controller and the
-`units.read` job carry an empty drop-in of that name, because each would
-otherwise restart itself on failure. `controller/host/units_rules_test.go`
+every unit whose name begins `severino-hq-`. The controller, the dependency
+run and the `units.read` job carry an empty drop-in of that name, because each
+would otherwise restart itself on failure. `controller/host/units_rules_test.go`
 holds the shipped units to those rules.
 
 ## A deploy
@@ -322,6 +327,8 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_TEST_LEAK_LEDGER` | development | the file parallel test workers record leaked resources in |
 | `HQ_BROWSER_ENGINE` | development | the browser gates' engine: `webkit` by default, `chromium` or `firefox` |
 | `HQ_BROWSER_CHANNEL` | development | a Playwright browser channel for that engine |
+| `HQ_BROWSER_FACE` | development | `fallback` draws the browser gates with Inter withheld, in the stack's next face (`--fallback-face`) |
+| `HQ_BROWSER_SLOW` | development | milliseconds each animation frame comes late in the browser gates, idle callbacks waiting three times their timeout (`dev:look --slow`) |
 | `HQ_API_RECORD_EXAMPLES` | development | `1`, with `--parallel 1`, writes the API responses a run receives to `openapi-examples.json` |
 
 ## Network exposure

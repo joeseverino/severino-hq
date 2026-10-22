@@ -31,6 +31,10 @@ Every gate and server is a mise task. These are the ones to start from;
 | Task | What it is |
 | --- | --- |
 | `mise run fast` | The inner loop: the quick gates and the tests the change reaches. |
+| `mise run test <label>...` | `manage.py test` on the labels named, in parallel, as the gates run it; options after the labels reach it as typed. |
+| `mise run test --at <ref> <label>...` | The same on `<ref>`'s code with this tree's test files laid over it (every `tests/` directory and the browser gates' modules, uncommitted work included): does a new test fail on the old code, was a failure already there. The throwaway worktree goes on every exit. |
+| `mise run fix` | Write Ruff's fixes and format and `mise fmt`'s, so the lint gates have nothing to report. |
+| `mise doctor project` | Whether this checkout can compose its extensions, with the fix for each gap. |
 | `mise run check` | Does my change work: every Checks gate, the Tests gates, the composed suite. |
 | `mise run ci` | Every gate the pipeline runs. |
 | `mise run dev:scratch` | A throwaway server on loopback with a database of this checkout's own. |
@@ -68,11 +72,19 @@ with every default group omitted.
 ## The gates
 
 Every gate is a task named `<job>:<gate>` (`mise run checks:ruff` runs one),
-and each CI job runs the aggregate of its name. `mise run check` answers "does
+and each CI job runs the aggregate of its name. A gate is declared in its job's
+file under `tasks/` (`tasks/checks.toml` holds `checks:*`), or under
+`mise-tasks/` when its body is a script; `task_config.includes` in `mise.toml`
+loads both, and `mise.toml` keeps the tools, the environment, the templates,
+the development servers and the aggregates. A task in `tasks/` names no file
+in its env: mise reads an env path, and renders `config_root` inside env, from
+the directory of the file that declares the task (`GateReferenceTests`).
+`mise run check` answers "does
 my change work?"; `mise run ci` answers "will the pipeline accept it?" and
 keeps going past a failure to name every gate that failed. `fast` and `check`
 end on a verdict line (`tools/gate/verdict.py`) naming each failed task and
-test. The suite runs one worker per core (per performance core on Apple
+test, kept with every name in full in `var/gate/<gate>.txt`, whose path the
+line above it prints. The suite runs one worker per core (per performance core on Apple
 silicon); `DJANGO_TEST_PROCESSES` overrides it, and `mise run fast --parallel 1`
 rules parallelism out when a failure looks order- or isolation-dependent.
 
@@ -82,7 +94,8 @@ rules parallelism out when a failure looks order- or isolation-dependent.
 `$CHECK_BASE`, then `origin/main`, `main`) through the import graph to the
 test modules that import them directly or through one module between, plus
 every test of the changed Django apps, every test that names one (its URL
-namespace or app label), and the architecture tests. Beside them it runs
+namespace or app label), every test that reads the tasks when a task
+definition changed, and the architecture tests. Beside them it runs
 `checks:ruff`, `checks:mypy`, `checks:structural`, `tests:django`, `tests:migrations` and every
 `drift:*` gate. Each Django gate opens a database of its own, and its tests run
 with `DEBUG` on, the one pass that does. A change to what extensions render
@@ -128,8 +141,11 @@ Two suites at once exhaust a small machine's memory, so the heavy tasks (`fast`,
 which holds an exclusive lock on `~/.cache/severino/heavy.lock` (under
 `XDG_CACHE_HOME` when it is set) for as long as the task runs. Every checkout
 and worktree shares that file. A heavy task started while another holds it
-prints one line naming the holder (its pid, its mise task, how long it has run
-and its command) and waits for the turn. The wait is bounded by
+prints a line naming the holder (its pid, its mise task, how long it has held
+the turn, how long it has run and its command) and waits for the turn, naming
+the holder again every `SEVERINO_HEAVY_EVERY` seconds (a minute by default),
+so a holder that has stalled shows as that rather than as this task hanging.
+The wait is bounded by
 `SEVERINO_HEAVY_WAIT` seconds, two hours by default, the longest a heavy task
 may run; past that it exits 75 (`EX_TEMPFAIL`) naming the holder again. A
 heavy task run by one that holds the lock (`ci`
@@ -161,8 +177,7 @@ each pin lives. Beyond those:
   [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env)). `mise run tests` walks
   the list, each in its own `.venv-<version>`, with uv supplying the
   interpreter.
-- **System tools:** Go at the version `controller/go.mod` names, and
-  `ssh-keygen`, `sqlite3` and `zstd` for the shell suites.
+- **System tools:** `ssh-keygen`, `sqlite3` and `zstd` for the shell suites.
 - **A container runtime** for the `image` gates. CodeQL wants about 2 GB of
   memory.
 - **Network, the first time:** mise downloads and verifies each tool.
@@ -178,8 +193,11 @@ synthetic `example.*` estate at phone through desktop widths, with JavaScript
 off and on, and checks that nothing escapes the page sideways, a table fits
 its region at every width, nothing moves once the server's page is drawn,
 grid rows end together, siblings never overlap, and the rules of
-`hq/platform/core/browser_audit.js` hold. A failure saves a screenshot to the OS
-temporary directory. A check selects markup only through `SELECTORS`, and
+`hq/platform/core/browser_audit.js` hold. A failed subtest saves a screenshot
+of its page as it failed, at its width, named for its page, width and rule
+(`example-two-402-overflow.png`), in a `hq-browser-failure-<test>-*` folder in
+the OS temporary directory; a test that fails outside its subtests saves
+`page.png` there. CI uploads every such folder of a failed gate. A check selects markup only through `SELECTORS`, and
 `hq/platform/core/tests/test_browser_selectors.py` fails on a selector no
 template renders.
 
@@ -196,11 +214,32 @@ worst the day it exists (`dev:look derived/<app>/<name>` shows one).
 The example estate (`hq/platform/core/example_estate/`, the homelab the demo
 and `seed_demo` show) is read by `hq.platform.core.estate_browser_tests` on
 every page the navigation declares, with script on and deferred parts loaded,
-at 402, 820, 1360 and 1680 pixels, in the light palette and the dark. A
+at 402, 820, 1360 and 1680 pixels and at `WIDE_TABLES`, in the light palette
+and the dark. `WIDE_TABLES` is read from the stylesheet: the narrowest
+window where a table's region, on the page and in a card, has passed the
+breakpoint its wide rules need, so the columns that keep their line are
+measured with the least room; the stress estate is held there too. A
 finding names its check, page, width and theme.
-`HQ_BROWSER_ENGINE=chromium` or `firefox` runs both in another engine. One
-browser test runs as `mise run manage -- test <label>` once
-`mise run setup:webkit` has installed the engine.
+`HQ_BROWSER_ENGINE=chromium` or `firefox` runs both in another engine; CI
+also runs `browser:layout` in Chromium (`browser:layout-chromium`), which
+`mise run browser` leaves to CI. One browser test runs as
+`mise run test <label>` once `mise run setup:webkit` has installed the engine.
+
+The gates wait for Inter, but a reader whose copy is late is drawn in
+whatever face the platform has (`font-display: optional`), and each platform
+sets text at its own widths. `--fallback-face` on `browser:layout`,
+`browser:navigation` and `dev:look` (`HQ_BROWSER_FACE=fallback` for a
+`mise run test` label) withholds Inter's face, so every page is drawn in the
+next face of the stylesheet's stack (`--font`), the platform's system face,
+and a layout that holds only at Inter's widths fails.
+
+A loaded CI runner draws a page's frames late, so a check that reads a page
+before a script's frame or idle callback has run can fail there and pass on an
+idle machine. `HQ_BROWSER_SLOW=<ms>` on any browser gate or `mise run test`
+label, or `--slow <ms>` on `dev:look`, draws every page that way: each
+animation frame comes that many milliseconds late, and an idle callback waits
+three times its timeout. `HQ_BROWSER_SLOW=150 mise run browser:navigation`
+reproduces such a flake without loading the machine.
 
 The example estate's values have the shapes and lengths real providers give
 (both tailnet addresses and a MagicDNS name per device, long image tags, a
@@ -215,12 +254,41 @@ gating: it saves a full-page screenshot of each page at each width under
 page they link to (each record, each command form), answered by HQ's views as
 the browser asks, every request marked as a prefetch so a page that would act
 or reach out is refused and reported instead. `--rule survey` runs every
-check the example estate's gate holds, and the ones a reader would otherwise
-catch by eye: a word of running text split across lines, anything past the
-content's gutter, text over text, a column empty in every row. `mise run dev:look --deep --rule survey estate/all` walks
-the whole estate. What a rule finds on a page is printed and written beside
-its screenshot (`<page>-<width>.txt`) as each page is looked at, so a run
-stopped part way keeps what it found.
+check the gates hold (`BrowserGate.findings`) at any page and width, so what it
+finds on a page the gates read is what they fail on. Markup a vendored script
+draws (`SELECTORS["vendored"]`, the API reference's viewer) is held by its own
+tests, not judged. `mise run dev:look --deep --rule survey estate/all` walks
+the whole estate. What a rule finds is printed under its page and width, and
+written beside the screenshot (`<page>-<width>.txt`), as each page is looked
+at, so a run stopped part way keeps what it found; the run closes on a verdict
+naming every page that failed. `--base <ref>` looks at the same pages at
+`<ref>` first, in a temporary worktree it removes however the run ends, and
+prints only what is new on this checkout and what it fixed. A finding is
+matched with its numbers stripped, so one whose row number or pixel count
+moved is neither new nor fixed. `--css` takes CSS
+text or a file of it, a relative path read from the checkout.
+
+`--columns` prints each table's column widths as drawn and at min-content and
+max-content. With `--expand` an open row holds the columns at the widths they
+had before it opened (`tables.js`): a held table's line says its drawn widths
+are those, and its min and max are measured on a copy without the hold.
+
+`--eval <file.js>` reads a page the way a throwaway probe would, in one
+command: the file holds a function, called with nothing, or one expression,
+run on each page at each width once `--css`, `--open` and `--expand` have
+applied; what it returns prints under the page and width (as JSON unless it is
+text) and is kept beside the screenshot as `.eval.txt`. A computed style, or an
+element's chain of ancestors with their widths:
+
+```js
+() => {
+  const chain = [];
+  for (let el = document.querySelector('.table-scroll td'); el; el = el.parentElement) {
+    chain.push(`${el.localName}.${[...el.classList].join('.')} ${Math.round(el.getBoundingClientRect().width)}`);
+  }
+  return chain;
+}
+```
 
 ### Debug toolbar
 
@@ -259,6 +327,7 @@ composition/              the composed image
 policy/                   the extension admission policy
 demo/                     the static demo site built from HQ's own pages
 tools/                    development and CI programs, never in the image (tools/README.md)
+tasks/                    the TOML tasks, one file per CI job (checks.toml, tests.toml, ...) and operator.toml
 mise-tasks/               tasks whose body is a script, declared in its own #MISE header
 tests/                    synthetic extension fixtures, the SDK consumer, property and shell suites
 var/                      ignored local runtime state

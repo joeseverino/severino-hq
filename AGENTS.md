@@ -15,8 +15,11 @@ agents alike. Setup, tasks and layout: [Development](docs/Development.md).
    the [definition of done](#definition-of-done).
 
 `mise tasks` lists every task, `mise run <task> --help` says what it takes.
-A CI job runs the aggregate of its name, so a gate is added in `mise.toml`,
-never in a workflow. Django runs as `mise run manage -- <command>`.
+A CI job runs the aggregate of its name, so a gate is added to its job's file
+under `tasks/` (`tasks/checks.toml` for `checks:*`), never in a workflow. Django runs as `mise run manage -- <command>`, and tests by label as
+`mise run test <labels>`. Whether a new test fails on the old code, or a
+failure was already there, is `mise run test --at <ref> <labels>`: never a
+base worktree, snapshot or checkout made by hand.
 
 `fast` and `check` close on a verdict line naming each failed task and test:
 run them plain, since a pipe reports the filter's exit status. `fast` selects
@@ -27,11 +30,12 @@ The composed suite (`suite:as-image`, run as the image runs it) is where the
 host and its extensions first meet, which CI cannot reach. Name the extension
 set once in a gitignored `mise.local.toml` (copy
 `tools/dev/mise.local.example.toml`); without it the pass runs the host alone,
-covering less.
+covering less. `mise doctor project` says whether the set is named, found and
+importable.
 
 A test that reads the repository rather than running the product carries
-`@tag("source")` and runs only in `checks:source`, since no image ships those
-files. The suite runs in parallel on WAL SQLite through
+`@tag("source")` and runs only in `checks:source` (`mise run checks:source
+<labels>` for some), since no image ships those files. The suite runs in parallel on WAL SQLite through
 `hq/platform/core/test_runner.py`: read it before changing the test database.
 An agent's server is `mise run dev:scratch` in its own worktree, never
 `mise run dev`. A new host domain: [New Domain](docs/New-Domain.md).
@@ -93,7 +97,9 @@ module, and `test_admission.py` there holds that to be enough. Its Go half in
 
 Tests live in each package's `tests/` directory. When a definition moves,
 retarget every `mock.patch("module.name")` that named its old home: a patch of
-a name no longer looked up there passes and patches nothing. A check that walks
+a name no longer looked up there passes and patches nothing. Code that reads a
+patched name off its module at call time (`module.name`) is reached by the
+patch; a name imported at module top binds once and is not. A check that walks
 a path (an architecture test, a glob) fails when its path matches nothing.
 
 ## Rules that eliminate bug classes
@@ -122,7 +128,7 @@ a path (an architecture test, a glob) fails when its path matches nothing.
   `tests/sdk_consumer/consumer.py` ([Plugins](docs/Plugins.md)).
 - Derived files are never edited by hand: `mise run regen` writes them (the
   API's and the controller's OpenAPI documents, the connection registry,
-  `hq_sdk/contract.json`, `docs/Connections.md`, the clients, the Go types) and
+  `hq_sdk/contract.json`, `docs/Connections.md`, the Go types) and
   `mise run drift` names any that is behind.
 - List views use `TableListMixin`; direct view mutations and MCP model access
   are rejected by architecture tests.

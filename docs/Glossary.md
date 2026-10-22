@@ -12,6 +12,7 @@ The words these docs use for HQ's own parts, each with where it is described in 
 | Provider | An outside system HQ reads or acts on: a DNS host, a container manager, a tailnet, a repository host. |
 | Connection | A credential HQ holds for one provider, with what it is allowed to see and do. |
 | Reading | What one provider says about one kind of thing at one moment, as stored rows. [Derived Facts](Derived-Facts.md) |
+| Observation | The record a reading is stored as, declared for each kind as an `ObservationRecord` in `hq/domains/control_plane/observations/`. |
 | Controller | The Go program that takes readings and applies approved changes, run by a timer on the host. [Architecture](Architecture.md) |
 | Bridge | How the controller talks to HQ: HTTP on a Unix socket HQ's process serves. |
 | Derivation | An answer computed from stored rows (the topology, the queue, a page's figures) and kept until a table it reads changes. |
