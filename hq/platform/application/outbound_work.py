@@ -33,12 +33,15 @@ lazy from django.contrib.auth import get_user_model
 lazy from django.utils import timezone
 
 lazy from hq.domains.jobs.models import Job
-lazy from hq.domains.jobs.runner import JobConflict, Progress, due as is_due, reap, run, start
+lazy from hq.domains.jobs.runner import ALREADY_RUNNING, JobConflict, Progress, due as is_due, reap, run, start
 
 from .asks import FAILED, Ask, Standing, job_standing
 from .contracts import DOTTED_NAME
-from .integration_specs import CapabilitySpec
+from .integration_specs import CapabilitySpec, requested
+from .projection import read_once
+from .record_errors import RecordNotFound
 from .security import Principal
+lazy from .domains import host_specs
 lazy from .plugins import plugin_outbound_work
 lazy from .routes import reverse
 
@@ -46,10 +49,11 @@ lazy from .routes import reverse
 EFFECTS = frozenset({"remote_write", "destructive", "infrastructure_change"})
 # ``jobs.Job.kind`` holds the name.
 NAME_LIMIT = 64
-# The button's label, and the job's.
+# The job's label, and the button's words.
 LABEL_LIMIT = 60
 # The field a control posts its subject in.
 SUBJECT_FIELD = "subject"
+ANOTHER_RUNNING = "Busy with another one. Try again when it ends."
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +74,11 @@ class OutboundWork:
     Work about no one record may declare ``every``: once that long has passed
     since it last succeeded, the host's ``due`` timer does it, so an
     extension keeps its data current without shipping a unit of its own.
+
+    ``label`` names the work: the job, the audit entry and the command are
+    called it. ``verb`` is what its button says where that is shorter
+    ("Refresh" beside "Refresh a project"). Every control and answer for the
+    work reads its words from here.
     """
 
     name: str
@@ -84,10 +93,17 @@ class OutboundWork:
     effect: str = "remote_write"
     execution_notes: tuple[str, ...] = ()
     every: timedelta | None = None
+    verb: str = ""
 
     @property
     def takes_subject(self) -> bool:
         return bool(self.subject_label)
+
+    @property
+    def words(self) -> str:
+        """What its button says."""
+
+        return self.verb or self.label
 
 
 class _NoArguments(BaseModel):
@@ -103,7 +119,7 @@ def validate(work: object) -> OutboundWork:
         raise ImproperlyConfigured("Outbound work is declared as OutboundWork.")
     if not DOTTED_NAME.fullmatch(work.name) or len(work.name) > NAME_LIMIT:
         raise ImproperlyConfigured(f"Invalid outbound work name {work.name!r}.")
-    if not work.label or work.label != work.label.strip() or len(work.label) > LABEL_LIMIT:
+    if not work.label or any(text != text.strip() or len(text) > LABEL_LIMIT for text in (work.label, work.verb)):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} needs a short label.")
     if work.effect not in EFFECTS:
         raise ImproperlyConfigured(f"Outbound work {work.name!r} has invalid effect {work.effect!r}.")
@@ -132,7 +148,9 @@ def validate(work: object) -> OutboundWork:
 @cache
 def _declared() -> dict[str, OutboundWork]:
     declared: dict[str, OutboundWork] = {}
-    for work in plugin_outbound_work():
+    # The host's domains declare theirs as an extension does, so neither can
+    # take a name the other holds.
+    for work in (*host_specs("outbound"), *plugin_outbound_work()):
         validate(work)
         if work.name in declared:
             raise ImproperlyConfigured(f"Duplicate outbound work {work.name!r}.")
@@ -144,6 +162,12 @@ def declared_work() -> dict[str, OutboundWork]:
     """Every piece of outbound work the composition declares, by name."""
 
     return _declared()
+
+
+def capability_specs() -> tuple[CapabilitySpec, ...]:
+    """The capability each piece of declared work is asked for through."""
+
+    return tuple(capability_for(work) for work in declared_work().values())
 
 
 def clear_outbound_work_cache() -> None:
@@ -174,14 +198,40 @@ def capability_for(work: OutboundWork) -> CapabilitySpec:
         target_help=work.subject_help,
         execution_notes=(
             *work.execution_notes,
-            "Runs as a background job, one at a time. The answer says it started; the job says how it ended.",
+            "Runs in the background, one at a time.",
         ),
         label=work.label,
+        verb=work.verb,
     )
 
 
 def _refusal(work: OutboundWork, subject: str) -> str:
     return (work.refuse(subject) if work.refuse else "") or ""
+
+
+def refusal(name: str, subject: str = "") -> str:
+    """Why the work named ``name`` would be refused for ``subject`` now, or "".
+
+    What a link to the work reads, so it is drawn unusable before a press
+    rather than refused after one. "" for a name no work declares, and for
+    work about one record asked of none: that link chooses its record, and the
+    choice is answered when it is made. A refusal may read the database, so a
+    request asks each one once however many rows offer it.
+    """
+
+    work = declared_work().get(name)
+    if work is None or work.refuse is None or (work.takes_subject and not subject):
+        return ""
+
+    def answer() -> str:
+        # A refusal may say a record is missing as a capability does, by
+        # raising; the link says the same sentence.
+        try:
+            return _refusal(work, subject)
+        except RecordNotFound as exc:
+            return str(exc)
+
+    return read_once(f"outbound_work.refusal:{name}:{subject}", answer)
 
 
 def _requester(principal: Principal) -> Any:
@@ -227,15 +277,10 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> d
             "ok": True,
             "started": False,
             **({"job": str(live.pk)} if live is not None and same else {}),
-            "message": f"{work.label} is already running.",
+            "message": ALREADY_RUNNING if same else ANOTHER_RUNNING,
         }
     if not waited:
-        return {
-            "ok": True,
-            "started": True,
-            "job": str(job.pk),
-            "message": f"{job.label} started; the job reports how it ended.",
-        }
+        return {"ok": True, "started": True, "job": str(job.pk), "message": requested(work.words, subject)}
     standing = job_standing(job)
     if standing.state == FAILED:
         return {"ok": False, "error": {"code": "operation_failed", "message": standing.note}}
@@ -300,7 +345,6 @@ def ask(
     name: str,
     subject: str = "",
     *,
-    label: str = "",
     title: str = "",
     refresh: str = "",
     primary: bool = False,
@@ -310,6 +354,7 @@ def ask(
 
     Live work is followed. Work that failed says why until it is asked for
     again. Work that ended well stands idle: the page shows what it stored.
+    It says the work's declared words, which no caller overrides.
     """
 
     work = _named(name)
@@ -319,7 +364,7 @@ def ask(
         standing = Standing()
     reason = "" if standing.live else _refusal(work, subject)
     return Ask(
-        label or work.label,
+        work.words,
         reverse("jobs:ask", args=[name]),
         standing=standing,
         status_url=reverse("jobs:status", args=[job.pk]) if job is not None and standing.live else "",

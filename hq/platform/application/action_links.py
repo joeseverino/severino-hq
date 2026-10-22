@@ -20,7 +20,7 @@ from .contracts import route_url
 from .security import AuthorizationError, Principal
 from .ui import counted
 from .workflow_contracts import ActionLink
-lazy from . import capabilities
+lazy from . import capabilities, outbound_work
 lazy from .capabilities import authorize_capability
 
 
@@ -76,28 +76,64 @@ def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **que
     return f"{url}?{urlencode(params)}" if params else url
 
 
-def capability_action_link(
+def command_action(
     name: str,
-    effect: str,
-    label: str,
+    capability: str,
+    url: str,
     *,
-    principal: Principal,
-) -> ActionLink | None:
-    """Link to a command only when its canonical contract permits ``principal``."""
+    target: str = "",
+    method: str = "GET",
+    variant: str = "",
+    intent: str = "",
+    reason: str = "",
+    recommended: bool = False,
+) -> ActionLink:
+    """A link that runs a command, in the command's own words.
 
-    if _permitted_spec(name, principal) is None:
+    The one place an ``ActionLink`` names a capability (an architecture test
+    holds every other module to it), so its label and effect are read from the
+    declaration and cannot drift from it. ``variant`` picks one of the words
+    the command declares for its modes; ``intent`` is a remedy's own declared
+    words for what this particular press does ("Put an access list in front
+    of x"), where the command's name would not say it.
+
+    It also carries why the command would be refused for ``target`` now, from
+    the command's own declaration, so every renderer draws it unusable with
+    that reason instead of offering a press that fails.
+    """
+
+    spec = capabilities.capability_registry()[capability]
+    return ActionLink(
+        name,
+        intent or spec.words(variant),
+        spec.effect,
+        url,
+        method=method,
+        capability=capability,
+        target=target,
+        reason=reason,
+        recommended=recommended,
+        refusal=outbound_work.refusal(capability, target),
+    )
+
+
+def capability_action_link(
+    name: str, *, principal: Principal, variant: str = "", subject: str = ""
+) -> ActionLink | None:
+    """Link to a command only when its canonical contract permits ``principal``.
+
+    ``subject`` is the record the link is offered beside. A command about one
+    record is linked to it as its target; one about none ignores it.
+    """
+
+    spec = _permitted_spec(name, principal)
+    if spec is None:
         return None
-    url = command_url(name)
+    target = subject if spec.target_kind else ""
+    url = command_url(name, target)
     if not url:
         return None
-    return ActionLink(
-        "command",
-        label,
-        effect,
-        url,
-        capability=name,
-        reason="Its permissions were checked.",
-    )
+    return command_action("command", name, url, target=target, variant=variant, reason="Its permissions were checked.")
 
 
 def _permitted_spec(name: str, principal: Principal):
@@ -124,12 +160,12 @@ def read_now_link(
     connection_ref: str = "",
     kind: str = "",
     every_connection: bool = False,
-    label: str = "Read now",
 ) -> ActionLink | None:
     """A POST asking the controller to read a connection, a kind or everything now.
 
     None when ``principal`` may not ask. The subject rides in the URL so every
-    renderer posts the same request.
+    renderer posts the same request. Asked of everything, it says the
+    command's "all" words.
     """
 
     spec = _permitted_spec(READ_NOW_CAPABILITY, principal)
@@ -145,15 +181,14 @@ def read_now_link(
         )
         if value
     }
-    return ActionLink(
+    return command_action(
         "read_now",
-        label,
-        spec.effect,
+        READ_NOW_CAPABILITY,
         f"{destination}?{urlencode(params)}" if params else destination,
         method="POST",
-        capability=READ_NOW_CAPABILITY,
         target=connection_ref or kind,
-        reason="The controller reads it within a minute.",
+        variant="all" if every_connection else "",
+        reason="Reads it again now.",
     )
 
 

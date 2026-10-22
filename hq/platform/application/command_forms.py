@@ -12,6 +12,7 @@ from .capabilities import CapabilitySpec
 from .command_targets import CommandTargetOption
 from .forms import LinesField
 from .integration_specs import command_schema
+from .records import as_its_model_declares
 
 _EXECUTION_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -59,17 +60,34 @@ def _one_type(schema: dict[str, Any]) -> dict[str, Any]:
     return {**schema, **concrete[0], "anyOf": choices}
 
 
+def _label(name: str, title: str | None) -> str:
+    """A field's label in sentence case, as every other form says it. A title
+    the command declares is its own; the one Pydantic derives from the name
+    ("Item Name") is only the name, title-cased."""
+
+    words = name.replace("_", " ")
+    if title and title != words.title():
+        return title
+    return words.capitalize()
+
+
 def _field_for_schema(name: str, schema: dict[str, Any], *, required: bool) -> forms.Field:
     effective = _one_type(schema)
     kind = effective.get("type")
     options: dict[str, Any] = {
         "required": required,
-        "label": schema.get("title") or name.replace("_", " ").title(),
+        "label": _label(name, schema.get("title")),
         "help_text": schema.get("description", ""),
     }
     if "default" in schema and schema["default"] is not None:
         options["initial"] = schema["default"]
 
+    labeled = schema.get("oneOf")
+    if labeled and all("const" in choice for choice in labeled):
+        return forms.ChoiceField(
+            choices=[(choice["const"], choice.get("title", str(choice["const"]))) for choice in labeled],
+            **options,
+        )
     choices = effective.get("enum")
     if choices:
         return forms.ChoiceField(choices=[(value, str(value)) for value in choices], **options)
@@ -110,6 +128,7 @@ def _field_for_schema(name: str, schema: dict[str, Any], *, required: bool) -> f
     if effective.get("pattern"):
         validators.append(RegexValidator(re.compile(effective["pattern"])))
     return forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 4}) if effective.get("format") == "textarea" else None,
         min_length=effective.get("minLength"),
         max_length=effective.get("maxLength"),
         validators=validators,
@@ -187,7 +206,7 @@ def command_form_class(
 ) -> type[CapabilityCommandForm]:
     """Build the complete browser form from one canonical capability spec."""
 
-    schema = command_schema(spec.command_type)
+    schema = as_its_model_declares(spec.command_type, command_schema(spec.command_type))
     properties = schema.get("properties", {})
     required = frozenset(schema.get("required", ()))
     fields = {name: _field_for_schema(name, field, required=name in required) for name, field in properties.items()}

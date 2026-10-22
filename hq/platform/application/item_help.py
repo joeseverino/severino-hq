@@ -21,7 +21,7 @@ to it.
 from collections.abc import Iterable
 from typing import Any
 
-from .action_links import command_url
+from .action_links import command_action, command_url
 from .finding_model import Finding
 from .workflow_contracts import ActionLink, WorkflowOutcome, WorkflowPlan, WorkflowStep
 from .workflows import claim_identity
@@ -96,8 +96,11 @@ def cannot_help(key: str, reason: str) -> WorkflowPlan:
     return _plan(key, (cannot_step(reason),))
 
 
-def remedy_link(capability: str, label: str, target: str = "", *, url: str = "") -> ActionLink | None:
-    """A capability HQ runs, through its command page or the owner's own page.
+def remedy_link(
+    capability: str, target: str = "", *, url: str = "", intent: str = "", reason: str = ""
+) -> ActionLink | None:
+    """A capability HQ runs, through its command page or the owner's own page,
+    in the command's words or the remedy's declared ``intent``.
 
     Links, never executes: the destination authorizes and confirms. None when
     the command route is not mounted, so an item never offers a dead link.
@@ -107,7 +110,7 @@ def remedy_link(capability: str, label: str, target: str = "", *, url: str = "")
         url = command_url(capability, target)
         if not url:
             return None
-    return ActionLink(REMEDY, label, "remote_write", url, capability=capability, target=target, recommended=True)
+    return command_action(REMEDY, capability, url, target=target, intent=intent, reason=reason, recommended=True)
 
 
 def finding_plan(finding: Finding, key: str) -> WorkflowPlan:

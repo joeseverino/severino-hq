@@ -162,7 +162,7 @@ def run(name: str) -> dict[str, Any]:
     try:
         job = runner.run(work.name, work.label, work.run, actor=ACTOR)
     except runner.JobConflict:
-        return {"name": name, "state": "running", "note": f"{work.label} is already running."}
+        return {"name": name, "state": "running", "note": runner.ALREADY_RUNNING}
     return {"name": name, "state": job.state, "note": job_standing(job).note, "job": str(job.pk)}
 
 

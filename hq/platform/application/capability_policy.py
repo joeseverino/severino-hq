@@ -216,7 +216,7 @@ class Column:
 
 
 @dataclass(frozen=True, slots=True)
-class Cell:
+class PolicyCell:
     field: str
     scope: str
     column: str
@@ -238,18 +238,18 @@ class Row:
     effect: str
     effect_label: str
     default: str
-    cells: tuple[Cell, ...]
+    cells: tuple[PolicyCell, ...]
 
     @property
-    def everyone(self) -> tuple[Cell, ...]:
+    def everyone(self) -> tuple[PolicyCell, ...]:
         return tuple(cell for cell in self.cells if cell.scope == Scope.SURFACE)
 
     @property
-    def agents(self) -> tuple[Cell, ...]:
+    def agents(self) -> tuple[PolicyCell, ...]:
         return tuple(cell for cell in self.cells if cell.scope == Scope.AGENT)
 
     @property
-    def overrides(self) -> tuple[Cell, ...]:
+    def overrides(self) -> tuple[PolicyCell, ...]:
         return tuple(cell for cell in self.cells if cell.rule)
 
 
@@ -356,16 +356,16 @@ def _approved_types() -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
-def _cell(spec, column: Column, current, grants, ceiling) -> Cell:
+def _cell(spec, column: Column, current, grants, ceiling) -> PolicyCell:
     field = field_name(column.scope, column.subject, spec.name)
     if column.scope == Scope.AGENT and not _held_by_grant(spec, grants[column.subject]):
-        return Cell(field, column.scope, column.label, None, (), "Pocket ID does not allow this")
+        return PolicyCell(field, column.scope, column.label, None, (), "Pocket ID does not allow this")
     dormant = column.subject == "mcp" and not ceiling.permits(*spec.required_capabilities)
     options = [("", "Default"), (Rule.ALLOW, RULE_LABELS[Rule.ALLOW])]
     if spec.effect != READ_EFFECT:
         options.append((Rule.APPROVE, RULE_LABELS[Rule.APPROVE]))
     options.append((Rule.DENY, RULE_LABELS[Rule.DENY]))
-    return Cell(
+    return PolicyCell(
         field,
         column.scope,
         column.label,

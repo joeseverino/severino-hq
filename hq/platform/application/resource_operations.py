@@ -19,6 +19,7 @@ from hq.platform.core.audit import operation_context
 
 from .adoption import OBSERVES_ONLY, keep_out_declaration, observes_only
 from .approvals import AGENT_SURFACES, consent_gap
+from .asks import WAITING
 from .cadence import ring_doorbell
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
@@ -62,16 +63,6 @@ def serialize_operation(operation: OperationRequest) -> dict[str, Any]:
     }
 
 
-# What each action is called in a row of history.
-ACTION_LABELS = {
-    OperationRequest.Action.RECONCILE: "Apply HQ's settings",
-    OperationRequest.Action.RENEW: "Renew certificate",
-    OperationRequest.Action.DELETE: "Remove",
-    OperationRequest.Action.RESTART: "Restart",
-    OperationRequest.Action.START: "Start",
-    OperationRequest.Action.STOP: "Stop",
-    OperationRequest.Action.APPROVE_ROUTES: "Approve routes",
-}
 # Conditions that say something is wrong, whatever the operation's own state.
 _PROBLEM_CONDITIONS = ("Degraded", "Drifted")
 _AUTOMATIC = "controller"
@@ -99,17 +90,18 @@ def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
     result = operation.result or {}
     active = _active(result)
     said = result.get("message") or operation.reason
+    state = operation.get_state_display()
     if operation.state == OperationRequest.State.QUEUED:
-        return "paused", "Waiting", "Waiting for the controller."
+        return "paused", state, WAITING
     if operation.state == OperationRequest.State.CLAIMED:
-        return "active", "Running", "The controller is working on it."
+        return "active", state, "Working on it…"
     if operation.state == OperationRequest.State.FAILED:
         headline = (active[0].get("message") if active else "") or said or "It failed."
-        return "serious", "Failed", headline
+        return "serious", state, headline
     problem = _problem(result)
     if problem is not None:
         return "attention", "Problem found", problem.get("message") or said or "It found a problem."
-    return "good", "Done", said or "Done."
+    return "good", state, said or f"{state}."
 
 
 def requested_by(operation: OperationRequest) -> str:
@@ -133,7 +125,7 @@ def operation_summary(operation: OperationRequest) -> dict[str, Any]:
     return {
         "id": str(operation.id),
         "action": operation.action,
-        "action_label": ACTION_LABELS.get(operation.action, operation.get_action_display()),
+        "action_label": operation.get_action_display(),
         "state": operation.state,
         "state_label": label,
         "tone": tone,
