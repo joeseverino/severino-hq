@@ -56,6 +56,8 @@ lazy from hq.platform.core.models import AuditLog
 
 from .derivations import reached
 from .entity_links import entity_link, kind_label
+from .integration_specs import capability_schema
+from .payload_words import ChangeRow, changed_words, document, field_words, value_words
 from .record_errors import RecordNotFound
 from .security import AuthorizationError, Principal, internal_principal, is_interactive
 lazy from . import capabilities, resources
@@ -587,22 +589,12 @@ def reject(approval_id: str, *, principal: Principal, note: str = "") -> dict[st
 
 
 @dataclass(frozen=True, slots=True)
-class ChangeRow:
-    """One field that would move, and what it would move between."""
-
-    path: str
-    before: str
-    after: str
-    change: str
-
-
-@dataclass(frozen=True, slots=True)
 class ChangePreview:
     """The comparison a decision is taken on.
 
-    ``rows`` is the semantic reading: a document is parsed and compared by path,
-    so an access policy shows the three grants that moved rather than two walls
-    of text that differ somewhere. ``lines`` is the honest fallback for content
+    ``rows`` is the semantic reading: a document is parsed and compared value
+    by value, so an access policy shows the three grants that moved rather than
+    two walls of text that differ somewhere. ``lines`` is the honest fallback for content
     that will not parse: a policy document with comments in it, for instance,
     where a unified diff is the most that can truthfully be said.
     """
@@ -622,78 +614,35 @@ class ChangePreview:
         return any(row.change != "added" for row in self.rows)
 
 
-def _expand(value: Any) -> Any:
-    """A string that is really a document, read as one.
-
-    The field that carries an access policy is a string as far as the spec is
-    concerned, and comparing it as a string is what makes a diff unreadable.
-    Parsed, the same change is three paths and their values.
+def _text_fields(before: dict[str, Any], after: dict[str, Any]) -> tuple[str, ...]:
+    """Fields that stayed unparsed text on both sides, differ, and run over
+    lines. A one-line value is a value, said as a row like any other.
     """
 
-    if isinstance(value, str) and value.strip()[:1] in {"{", "["}:
-        try:
-            return json.loads(value)
-        except ValueError:
-            return value
-    return value
-
-
-def _flatten(value: Any, prefix: str = "") -> dict[str, str]:
-    value = _expand(value)
-    if isinstance(value, dict):
-        found: dict[str, str] = {}
-        for key, child in value.items():
-            found.update(_flatten(child, f"{prefix}.{key}" if prefix else str(key)))
-        return found
-    if isinstance(value, (list, tuple)):
-        found = {}
-        for index, child in enumerate(value):
-            found.update(_flatten(child, f"{prefix}[{index}]"))
-        return found
-    return {prefix or "value": "" if value is None else str(value)}
-
-
-def _text_fields(before: dict[str, Any], after: dict[str, Any]) -> tuple[str, ...]:
-    """Fields that stayed unparsed text on both sides and differ."""
+    def text(value: Any) -> bool:
+        return isinstance(document(value), str)
 
     return tuple(
         sorted(
             field
             for field in set(before) | set(after)
-            if isinstance(_expand(before.get(field, "")), str)
-            and isinstance(_expand(after.get(field, "")), str)
-            and str(before.get(field, "")) != str(after.get(field, ""))
+            if text(was := before.get(field, ""))
+            and text(now := after.get(field, ""))
+            and str(was) != str(now)
+            and "\n" in f"{was}{now}"
         )
     )
 
 
 def compare(before: dict[str, Any], after: dict[str, Any], *, label: str) -> ChangePreview:
-    """The paths that differ between two specs, and a line diff where they cannot."""
+    """The values that differ between two specs, each named and said in words,
+    and a line diff where a document will not parse.
+    """
 
     text = _text_fields(before, after)
     structural_before = {key: value for key, value in before.items() if key not in text}
     structural_after = {key: value for key, value in after.items() if key not in text}
-    flat_before = _flatten(structural_before)
-    flat_after = _flatten(structural_after)
-    rows = []
-    for path in sorted(set(flat_before) | set(flat_after)):
-        was = flat_before.get(path)
-        now = flat_after.get(path)
-        # Absent and empty are the same nothing. A validated declaration carries
-        # every optional field as a blank while the request that would replace it
-        # simply omits them, so read literally the diff opens with a row per
-        # unset field, each saying a blank became a blank, and the one line
-        # that matters is somewhere underneath.
-        if (was or "") == (now or ""):
-            continue
-        rows.append(
-            ChangeRow(
-                path=path,
-                before="" if was is None else was,
-                after="" if now is None else now,
-                change=("added" if was is None else "removed" if now is None else "changed"),
-            )
-        )
+    rows = changed_words(structural_before, structural_after)
     lines: list[str] = []
     for field in text:
         lines.extend(
@@ -706,7 +655,7 @@ def compare(before: dict[str, Any], after: dict[str, Any], *, label: str) -> Cha
                 n=2,
             )
         )
-    return ChangePreview(label=label, rows=tuple(rows), lines=tuple(lines))
+    return ChangePreview(label=label, rows=rows, lines=tuple(lines))
 
 
 def preview(held: ApprovalRequest) -> ChangePreview:
@@ -754,26 +703,30 @@ def _record_preview(spec, held: ApprovalRequest) -> ChangePreview:
         for key, value in held.payload.items()
         if key not in _CONTROL_FIELDS and value not in ("", None, [], {})
     }
+    schemas = capability_schema(spec).get("properties") or {}
     if spec.effect == "destructive":
-        return _field_rows(held.baseline, {}, label="Would be deleted")
+        return _field_rows(held.baseline, {}, schemas, label="Would be deleted")
     if not held.target:
-        return _field_rows({}, fields, label="Would be created")
+        return _field_rows({}, fields, schemas, label="Would be created")
     if fields:
-        return _field_rows({key: held.baseline.get(key) for key in fields}, fields, label="Would change")
+        return _field_rows({key: held.baseline.get(key) for key in fields}, fields, schemas, label="Would change")
     return ChangePreview(label=f"Would run on {held.target}", rows=(), lines=())
 
 
-def _field_rows(before: dict[str, Any], after: dict[str, Any], *, label: str) -> ChangePreview:
+def _field_rows(before: dict[str, Any], after: dict[str, Any], schemas: dict[str, Any], *, label: str) -> ChangePreview:
+    """Each field that moves, named and valued through the command's schema."""
+
     rows = []
     for key in sorted(set(before) | set(after)):
         was, now = before.get(key), after.get(key)
         if (was or "") == (now or ""):
             continue
+        schema = schemas.get(key)
         rows.append(
             ChangeRow(
-                path=key,
-                before="" if was is None else str(was),
-                after="" if now is None else str(now),
+                label=field_words(key, schema),
+                before=value_words(was, schema),
+                after=value_words(now, schema),
                 change="added" if was is None else "removed" if now is None else "changed",
             )
         )

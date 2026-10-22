@@ -33,7 +33,9 @@ from hq.platform.application.idempotency import (
 )
 from hq.platform.application.integration_specs import capability_schema
 from hq.platform.application.integrations import integration_graph
-from hq.platform.application.pages import PageAction, page_context
+from hq.platform.application.pages import page_context
+from hq.platform.application.payload_words import value_words
+from hq.platform.application.records import says_only_its_title
 from hq.platform.application.security import AuthorizationError, safe_next, web_principal
 from hq.platform.application.ui import MISSING
 
@@ -52,11 +54,7 @@ _SCALAR = (str, int, float, bool, type(None))
 
 
 def _cell(value) -> str:
-    if value is None:
-        return MISSING
-    if isinstance(value, bool):
-        return "yes" if value else "no"
-    return str(value)
+    return MISSING if value is None else value_words(value)
 
 
 def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict | None]:
@@ -164,13 +162,14 @@ class CommandView(View):
         schema = capability_schema(self.spec)
         facts, table = _result_projection(result["payload"]) if result else ((), None)
         resource_url = route_url(resource.web_route) if resource else ""
-        actions = [PageAction(f"Open {resource.label}", resource_url)] if resource_url else []
+        # The trail names where the form lives: the records it writes, or
+        # Search for a command that belongs to none.
+        trail = ((resource.label, resource_url),) if resource_url else (("Search", reverse("search")),)
         return {
             **page_context(
                 self.spec.title,
-                self.spec.summary,
-                actions=actions,
-                trail=(("Search", reverse("search")),),
+                "" if says_only_its_title(self.spec) else self.spec.summary,
+                trail=trail,
             ),
             "command": self.spec,
             "command_label": self.spec.title,
