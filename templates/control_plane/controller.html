@@ -63,7 +63,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 
 {% if controller.queue %}
 <section class="page-section" aria-labelledby="controller-queue">
-  <div class="section-head"><h2 id="controller-queue">Waiting to be applied</h2><span class="count">{{ controller.queue|length }}</span></div>
+  <h2 id="controller-queue">Waiting to be applied <span class="count">{{ controller.queue|length }}</span></h2>
   {% table_region "Waiting to be applied" narrow=2 %}
     <table class="data-table">
       <thead><tr>{% table_heading "What" "identifier" gutter=True local_sort=controller.queue|sortable %}{% table_heading "Change" drop=2 local_sort=controller.queue|sortable %}{% table_heading "State" "status" css="key-col" local_sort=controller.queue|sortable %}{% table_heading "Asked" "status" drop=1 local_sort=controller.queue|sortable %}</tr></thead>
@@ -84,7 +84,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 
 {% if controller.standing.known %}
 <section class="page-section" aria-labelledby="controller-readings">
-  <div class="section-head"><h2 id="controller-readings">Readings</h2><span class="count">{{ controller.readings|length }}</span></div>
+  <h2 id="controller-readings">Readings <span class="count">{{ controller.readings|length }}</span></h2>
   {% if controller.readings %}
   {% table_region "Readings" narrow=2 %}
     <table class="data-table">

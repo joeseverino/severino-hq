@@ -318,7 +318,7 @@
   margin: var(--layout-gap) 0;
 }
 .command-center-grid > * { margin: 0; min-width: 0; }
-.discovery-group > .section-head { margin-bottom: var(--space-4); }
+.discovery-group > h2 { margin-bottom: var(--space-4); }
 .discovery-list { list-style: none; margin: 0; padding: 0; }
 .discovery-list li { border-top: 1px solid var(--line); }
 .discovery-list li:first-child { border-top: 0; }

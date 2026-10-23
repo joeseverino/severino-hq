@@ -6,10 +6,7 @@ A group with nothing in it is not drawn.
 {% endcomment %}
 {% if items %}
 <section class="card discovery-group">
-  <div class="section-head">
-    <h2>{{ title|breakable }}</h2>
-    <span class="count">{{ items|length }}</span>
-  </div>
+  <h2>{{ title|breakable }} <span class="count">{{ items|length }}</span></h2>
   <ul class="discovery-list">
     {% for item in items %}
     <li>

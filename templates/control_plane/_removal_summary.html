@@ -28,7 +28,7 @@ is about to be deleted.
 </dl>
 {% if spec_rows.advanced %}
   <details class="control-diagnostics">
-    <summary>Other settings ({{ spec_rows.advanced|length }})</summary>
+    <summary>Other settings <span class="count">{{ spec_rows.advanced|length }}</span></summary>
     <dl class="kv compact">
       {% for label, value in spec_rows.advanced %}
         <dt>{{ label|breakable }}</dt><dd><code>{{ value|breakable }}</code></dd>

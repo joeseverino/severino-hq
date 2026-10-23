@@ -314,6 +314,14 @@ A count's plural has one owner too: `counted`, which spells a single noun
 through `labels.plural` ("2 entries"). An audit type's plural is
 `AuditLog.type_plural`: the model's `verbose_name_plural` where declared.
 
+A bare figure counting what a heading heads (`.count`) stands in that
+heading after its words: `<h2>Readings <span class="count">7</span></h2>`,
+and the same in a summary, a group row and a tab. Never in parentheses, and
+never alone at the far end of a `.section-head`, cut off from the words it
+counts; what stands there is a line about the section, a count with its
+unit ("3 events", "2 left") among them.
+*Gate:* `test_every_bare_count_stands_in_its_heading`.
+
 **Color comes from tokens.** No color literal outside `@layer tokens`, so a
 theme is a set of token values and dark mode is not a second stylesheet.
 

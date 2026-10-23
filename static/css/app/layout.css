@@ -148,13 +148,15 @@
 /* What sits beside the heading takes the next line when the two do not fit. */
 .section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
 .section-head h2 { margin: 0; flex: 1; }
-/* Wrapped, its lines are as even as its words allow, so none is left with one. */
+/* A line about the section at the head's end: a count with its unit, a
+   window, a source. Wrapped, its lines are as even as its words allow, so
+   none is left with one. */
 .section-head .count { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; text-wrap: balance; }
-/* A count is a quiet figure wherever it stands: beside a summary as in a
-   heading, never louder than the words it counts. */
+/* A bare figure counting what a heading heads stands in that heading (a
+   section's, a summary's, a group row's, a tab's), after the words it
+   counts: a quiet figure, never louder than they are. */
 .count { color: var(--muted); font-size: var(--text-xs); font-weight: 500; font-variant-numeric: tabular-nums; }
-/* A count said in its heading, after the words it counts, in a quieter voice. */
-:is(h2, h3) > .count { color: var(--muted); font-size: .8em; font-weight: 500; font-variant-numeric: tabular-nums; }
+:is(h2, h3) > .count { font-size: .8em; }
 
 /* Rich plugins emit data; HQ owns how a domain workspace is composed. Keeping
    this layout in the host means every present and future private domain gets

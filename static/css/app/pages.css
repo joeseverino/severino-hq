@@ -70,7 +70,7 @@
 .topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
 .topology-lane > header {
   display: grid; break-inside: avoid; break-after: avoid;
-  grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-3);
+  grid-template-columns: auto 1fr; align-items: center; gap: var(--space-3);
   padding: var(--space-1) var(--space-1) var(--space-4);
 }
 .topology-node-list > * { break-inside: avoid; }

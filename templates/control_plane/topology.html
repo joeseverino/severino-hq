@@ -64,8 +64,7 @@
       <section class="topology-lane" data-topology-lane="{{ group.kind }}" aria-labelledby="topology-{{ group.kind }}">
         <header>
           <span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
-          <h2 id="topology-{{ group.kind }}">{{ group.label|breakable }}</h2>
-          <span class="count" data-topology-count title="{{ group.count }}" aria-label="{{ group.count }}">{{ group.items|length }}</span>
+          <h2 id="topology-{{ group.kind }}">{{ group.label|breakable }} <span class="count" data-topology-count title="{{ group.count }}" aria-label="{{ group.count }}">{{ group.items|length }}</span></h2>
         </header>
         <div class="topology-node-list">
           {% for item in group.items %}
