@@ -393,7 +393,11 @@ has one: "Last read 3 hours ago", and "out of date" beside it past the line
 **A frame is filled.** Facts are `.kv`: each label beside its value, as many
 pairs to a row as the width holds, never a two-column table stretched to the
 page. A pair whose value is wider than a column (a machine's addresses, as
-`.address-list`) takes a row of its own: `.kv-whole` on its `dt`. A thing's
+`.address-list`) takes a row of its own: `.kv-whole` on its `dt`. A value
+goes under its label only where the box cannot hold both on one line, and
+the same holds for a node key beside its machine and a piece of evidence
+beside its kind (`.conn-rows` flows each row once it is too narrow for three
+columns): `a_value_sits_beside_its_label`. A thing's
 state sits on its title's line (`page_aside`), as words; the facts about it
 at a glance are a band under the head, as a service, a machine and HQ's own
 page open. A line that dates or sources a section goes beside its

@@ -72,13 +72,14 @@ pre { max-width: 100%; background: var(--code-bg); color: var(--code-ink); paddi
 ::selection { background: var(--selection); color: var(--ink); }
 pre ::selection { color: var(--code-ink); }
 
-/* A node key is one long unbroken token. Stacked so the machine's name sits
-   above it rather than competing for width, and broken only where a line
-   cannot hold it. */
-.conn-keys { display: grid; gap: var(--space-1); margin: var(--space-3) 0 var(--space-4); }
-.conn-keys dt { color: var(--muted); font-size: var(--text-xs); }
-.conn-keys dd { margin: 0 0 var(--space-3); }
-.conn-keys dd code { font-size: var(--text-xs); overflow-wrap: break-word; }
+/* A node key is one long unbroken token. It sits beside the machine's name
+   while the line holds both, moves under it whole when it does not, and
+   breaks only where a line cannot hold it alone. */
+.conn-keys { margin: var(--space-3) 0 var(--space-4); }
+.conn-keys :is(dt, dd) { display: inline; margin: 0; }
+.conn-keys dt { margin-inline-end: var(--space-4); color: var(--muted); font-size: var(--text-xs); }
+.conn-keys dd::after { content: ""; display: block; margin-block-end: var(--space-3); }
+.conn-keys dd code { display: inline-block; max-inline-size: 100%; font-size: var(--text-xs); overflow-wrap: break-word; }
 .node-key { font-size: var(--text-xs); overflow-wrap: anywhere; word-break: break-all; }
 
 /* A mark, not an alarm. It has to be visible while the mode is on (an

@@ -256,7 +256,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
    distance. A value breaks only where `|breakable` lets it. */
 .conn-rows {
   display: grid; grid-template-columns: fit-content(60%) max-content minmax(0, 1fr);
-  margin: 0; padding: 0; list-style: none;
+  margin: 0; padding: 0; list-style: none; container: conn-rows / inline-size;
 }
 .conn-row {
   display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
@@ -268,7 +268,7 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 .conn-row > code, .conn-row > .conn-kind { justify-self: start; }
 .conn-row-note { color: var(--muted); font-size: var(--text-xs); }
 .conn-row > .conn-row-note { grid-column: 3; }
-.conn-row > :only-child { grid-column: 1 / -1; }
+.conn-row > :only-child, .conn-rows > :not(.conn-row) { grid-column: 1 / -1; }
 .conn-row-ignored { opacity: .6; }
 .conn-current code { font-weight: 650; }
 .conn-kind {
@@ -375,17 +375,14 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
 @container conn (max-width: 36rem) {
   .conn-verdict { flex-wrap: wrap; }
   .conn-layer-body { margin-left: var(--space-6); }
-  .conn > * { --conn-rows: stacked; }
 }
-/* In a narrow panel or a fact's value, a row's value takes a line of its own
-   and its kind and note go beneath, rather than three columns that cannot
-   each hold an IPv6 address. */
-.conn .kv > dd { --conn-rows: stacked; }
-@container style(--conn-rows: stacked) {
-  .conn-rows { grid-template-columns: max-content minmax(0, 1fr); }
-  .conn-row > code { grid-column: 1 / -1; }
-  .conn-row > .conn-row-note { grid-column: 2; }
-  .conn-row > code + .conn-row-note { grid-column: 1 / -1; }
+/* A list too narrow for three columns that can each hold an IPv6 address
+   (a narrow panel, a fact's value) flows each row instead: the kind beside
+   its value and the note beside both while they fit, each wrapping under only
+   what it cannot sit beside. */
+@container conn-rows (width < 32rem) {
+  .conn-row { display: flex; flex-wrap: wrap; }
+  .conn-row > .conn-row-note { flex: 1 1 12rem; }
 }
 
 /* The two ends and the link between them. */
@@ -455,8 +452,10 @@ details[open] > summary .conn-hop-more::after { content: " ⌄"; }
    Each disclosure lends its parts to the line, so opening one leaves its
    summary where it was pressed and what it holds takes the line below. Words
    wrap whole: the cell would otherwise inherit `overflow-wrap: anywhere` and
-   fit-content would shrink to a letter. */
-.conn-carriage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4); overflow-wrap: normal; }
+   fit-content would shrink to a letter. Its rows hang from a disclosure the
+   line sizes to their content, so the value is the width they measure. */
+.conn-carriage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4); overflow-wrap: normal; container: conn-rows / inline-size; }
+.conn-carriage .conn-rows { container-type: normal; }
 .conn .kv .conn-more > summary { padding: 0; }
 .conn-carriage > details { display: contents; }
 .conn-carriage > details > :not(summary) { flex-basis: 100%; }

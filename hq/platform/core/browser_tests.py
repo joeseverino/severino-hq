@@ -255,6 +255,9 @@ SELECTORS = {
     "figure": ".kpi",
     "figure_label": ".label",
     "figure_value": ".value",
+    # The second of a label and its value: a fact's value after its term, a
+    # node key after its machine, a piece of evidence before its kind.
+    "labelled": ":is(.kv, .conn-keys) > dt + dd, .conn-row > code + .conn-kind",
     # What a heading says beside its title: a count, an age, where it is read.
     "heading_aside": ".heading-aside",
     # The same, in a heading or beside it in a section's head.
@@ -2079,6 +2082,42 @@ _FIGURE_UNDER_LABEL = r"""([figure, label_, value_]) => {
   return found;
 }"""
 
+# A value sits beside its label wherever the box holding both has room for
+# each on one line, and goes under it only where it does not. Measured on the
+# words' first lines, since a grid stretches a box to its track; the room is
+# each one's max-content width, read from a copy laid out beside them.
+_UNDER_ITS_LABEL = r"""(labelled) => {
+  const found = [];
+  const firstLine = (el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    return [...range.getClientRects()].find((rect) => rect.width) || null;
+  };
+  const widest = (el) => {
+    const copy = el.cloneNode(true);
+    copy.style.cssText = 'position: absolute; visibility: hidden; display: inline-block; inline-size: max-content; max-inline-size: none';
+    el.parentElement.append(copy);
+    const width = copy.getBoundingClientRect().width;
+    copy.remove();
+    return width;
+  };
+  for (const second of document.querySelectorAll('main :is(' + labelled + ')')) {
+    const first = second.previousElementSibling;
+    if (!first.checkVisibility() || !second.checkVisibility()) continue;
+    const a = firstLine(first), b = firstLine(second);
+    if (!a || !b) continue;
+    const level = Math.abs(a.top - b.top) < Math.min(a.height, b.height);
+    if (level && (b.left >= a.right - 1 || b.right <= a.left + 1)) continue;
+    const box = second.parentElement, style = getComputedStyle(box);
+    const room = box.clientWidth - parseFloat(style.paddingInlineStart) - parseFloat(style.paddingInlineEnd);
+    const needed = widest(first) + (parseFloat(style.columnGap) || 0) + widest(second);
+    if (needed > room) continue;
+    const words = (el) => el.textContent.trim().replace(/\s+/g, ' ').slice(0, 40);
+    found.push(`"${words(first)}": "${words(second)}" goes under it with ${Math.round(room)}px for the ${Math.round(needed)}px both take`);
+  }
+  return found;
+}"""
+
 # An identifier (an address, a host or record name, a path, an image) that
 # fits on its line moves to the next line whole. One longer than its line
 # breaks only at a seam `|breakable` marks (value_tags._BREAK_AFTER: after a
@@ -2991,6 +3030,7 @@ _PHRASES_READ = (_WRAPPED_PHRASES, SELECTORS["one_line"])
 _ROUTE_ENDS_READ = (_ROUTE_LINE_ENDS, [SELECTORS["route_line"], SELECTORS["route_mark"]])
 _EVIDENCE_READ = (_STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
 _SUMMARIES_READ = (_HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
+_UNDER_LABELS_READ = (_UNDER_ITS_LABEL, SELECTORS["labelled"])
 _SMALL_TARGETS_READ = (_SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN])
 _EMPTY_FRAMES_READ = (_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]])
 _READINGS_OF = f"(selector) => ({_READINGS})([...document.querySelectorAll(selector)])"
@@ -3025,6 +3065,7 @@ _GEOMETRY = {
     "summary marks": _SUMMARY_MARKS,
     "tokens": (_TOKEN_BREAKS, _TOKEN_SELECTORS),
     "stranded marks": (_STRANDED_MARKS, SELECTORS["seam"]),
+    "values under labels": _UNDER_LABELS_READ,
     "heading asides": (_ASIDE_BESIDE_ITS_HEADING, SELECTORS["heading_aside"]),
     "lone aside words": (_LONE_ASIDE_WORDS, SELECTORS["any_aside"]),
     "past the clamp": _PAST_THE_CLAMP,
@@ -3740,6 +3781,7 @@ class LayoutBrowserTests(BrowserGate):
             self.a_short_name_in_a_wide_table_is_one_line,
             self.nothing_is_held_back_while_its_table_has_room,
             self.a_figure_sits_under_its_label,
+            self.a_value_sits_beside_its_label,
             self.an_aside_wraps_only_under_its_heading,
             self.an_aside_leaves_no_word_alone,
             self.a_clamped_box_shows_only_its_lines,
@@ -3768,6 +3810,7 @@ class LayoutBrowserTests(BrowserGate):
                 self.only_a_table_scrolls_sideways_with_every_disclosure_open,
                 self.a_route_line_runs_from_its_first_stop_to_its_last,
                 self.a_checks_evidence_follows_its_statement,
+                self.a_value_sits_beside_its_label,
                 self.nothing_a_summary_names_is_hidden,
                 self.a_line_shows_on_its_surface,
                 self.a_fill_shows_in_both_palettes,
@@ -4036,6 +4079,12 @@ class LayoutBrowserTests(BrowserGate):
 
     @reads((_FIGURE_UNDER_LABEL, [SELECTORS[key] for key in ("figure", "figure_label", "figure_value")]))
     def a_figure_sits_under_its_label(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_UNDER_LABELS_READ)
+    def a_value_sits_beside_its_label(self, _name, found):
+        """Closed, and again with every disclosure open."""
+
         self.assertEqual(found, [])
 
     @reads((_TOKEN_BREAKS, _TOKEN_SELECTORS))

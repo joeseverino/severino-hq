@@ -597,13 +597,7 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 /* A short record list on a card reads at body size, not headline size. */
 .control-metric .list-rows strong { font-size: var(--text-sm); font-weight: 600; }
 .control-metric .list-rows li { padding: var(--space-2) 0; }
-/* Stacked, not two columns. A metric card is 220px at its narrowest and the
-   shared definition list reserves 200px for the term alone, so two columns
-   would put every value outside the card. */
-.control-metric .kv { grid-template-columns: 1fr; gap: var(--space-1) 0; padding: var(--space-5) var(--space-6); }
-.control-metric .kv dt { margin-top: var(--space-4); font-size: var(--text-xs); }
-.control-metric .kv dt:first-of-type { margin-top: 0; }
-.control-metric .kv dd { overflow-wrap: anywhere; }
+.control-metric .kv dt { font-size: var(--text-xs); }
 .control-metric > .control-diagnostics[open] > summary { margin-bottom: var(--space-3); }
 .operation-result { max-width: 34rem; overflow-wrap: anywhere; }
 .operation-result > strong { display: block; line-height: 1.35; }

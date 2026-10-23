@@ -185,7 +185,6 @@ page it falls back to. Nothing here knows which one it is in.
         <dd>
           <details class="conn-more">
             <summary>Both node keys</summary>
-            {% comment %}Stacked: a key is longer than any value column beside a label.{% endcomment %}
             <dl class="conn-keys">
               {% for label, key in connection.peer_keys %}
                 <dt>{{ label|breakable }}</dt>
