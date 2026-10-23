@@ -278,12 +278,14 @@ written beside the screenshot (`<page>-<width>.txt`), as each page is looked
 at, so a run stopped part way keeps what it found; the run closes on a verdict
 naming every page that failed. `--base <ref>` looks at the same pages at
 `<ref>` first, in a temporary worktree it removes however the run ends and
-judges by this checkout's rules, writes what is new on this checkout and what it fixed to `var/gate/look.txt`,
-and prints a line for each new finding and the verdict. Every probe reports
-all it finds, and findings are matched as a multiset by page, width, check and
-a key with every number, UUID, hex id and origin panel's id taken out, so one
-whose row number or pixel count moved, or that names a record made this run,
-is neither new nor fixed. With `--columns` or `--eval`, each line the
+judges by this checkout's rules, writes what is new on this checkout and what
+it fixed to `var/gate/look.txt` under the commits both ran at, and prints a
+line for each new finding and the verdict. Every probe reports all it finds,
+and findings are matched as a multiset by page, width, check and a key with
+every UUID, hex id and origin panel's id taken out, each size and contrast
+kept to its power of four and every other number taken out, so one whose row
+number moved, whose overflow grew by a few pixels, or that names a record made
+this run is neither new nor fixed, and one grown many times over is new. With `--columns` or `--eval`, each line the
 base measured otherwise is printed under this checkout's, marked with the ref.
 `--css` takes CSS text or a file of it, a relative path read from the
 checkout.

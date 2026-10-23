@@ -53,6 +53,7 @@ two runs.
 """
 
 import json
+import math
 import os
 import re
 import shutil
@@ -400,24 +401,42 @@ def _verdict(rule: str, found: Found) -> str:
 # What a finding names that is drawn anew on every run, so no fact of the
 # layout: an origin panel's element id (its origin's key slugged, often with a
 # record's id in it), a UUID or the start of one (a finding cuts its text
-# short), and a run of hex holding a digit. Then any number: a row's place, a
-# width, a count of pixels.
+# short), and a word of hex holding a digit.
 _DRAWN_ANEW = (
     (re.compile(r"#origin-[\w-]+"), "#origin-…"),
     (re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{1,12}){1,4}", re.IGNORECASE), "…"),
-    (re.compile(r"[0-9a-f]*\d[0-9a-f]*(?:\.\d+)?", re.IGNORECASE), "#"),
 )
+_HEX = re.compile(r"\b[0-9a-f]*\d[0-9a-f]*\b", re.IGNORECASE)
+# A size or a ratio is kept to its power of four, so a box 412px wide is
+# a box 430px wide, and one 900px past its cell is not one 2px past. Any other
+# number (a row's place, a count) is taken out.
+_MEASURE = re.compile(r"(\d+(?:\.\d+)?)(px|:1)")
+_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+# Under this a measure is a pixel's jitter, or a ratio short of any bar.
+_SMALL = 4
+
+
+def _magnitude(measure: re.Match) -> str:
+    """A measure as its power of four, spelled in letters so the numbers
+    taken out after it leave it be."""
+
+    value = float(measure.group(1))
+    order = "small" if value < _SMALL else "four to the " + "i" * math.floor(math.log(value, 4))
+    return f"~{order}{measure.group(2)}"
 
 
 def finding_key(line: str) -> str:
-    """A finding as it is matched with the base's, with what is drawn anew on
-    every run and every number taken out: a finding whose row moved, whose
-    overflow grew by a pixel, or that names a record made this run is the same
-    finding."""
+    """A finding as it is matched with the base's: what is drawn anew on every
+    run taken out, each size and ratio kept to its order of magnitude, and
+    every other number taken out. A finding whose row moved, whose overflow
+    grew by a few pixels, or that names a record made this run is the same
+    finding; one whose overflow grew many times over is not."""
 
     for drawn, mark in _DRAWN_ANEW:
         line = drawn.sub(mark, line)
-    return line
+    line = _MEASURE.sub(_magnitude, line)
+    line = _HEX.sub("#", line)
+    return _NUMBER.sub("#", line)
 
 
 def _unmatched(lines: list[str], against: list[str]) -> list[str]:
@@ -502,6 +521,19 @@ def _read_found(path: Path) -> tuple[Found, Measured]:
     entries = json.loads(path.read_text(encoding="utf-8"))
     found = {(entry["page"], entry["width"]): entry["found"] for entry in entries}
     return found, {(entry["page"], entry["width"]): entry["measured"] for entry in entries}
+
+
+def _commit(ref: str) -> str:
+    """The commit ``ref`` names in this checkout, and for HEAD whether the
+    checkout holds changes past it: what a report was looked at."""
+
+    git = ["git", "-C", str(settings.BASE_DIR)]
+    sha = subprocess.run([*git, "rev-parse", "--short", ref], capture_output=True, text=True, check=False).stdout
+    said = sha.strip() or f"{ref} (unknown)"
+    if ref == "HEAD":
+        changed = subprocess.run([*git, "status", "--porcelain"], capture_output=True, text=True, check=False).stdout
+        said += " with uncommitted changes" if changed.strip() else ""
+    return said
 
 
 def _stop(signum, _frame):
@@ -746,7 +778,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if self.base is not None:
             report, printed, new = _against(_usage("usage_base"), rule, self.base, found)
             REPORT.parent.mkdir(parents=True, exist_ok=True)
-            REPORT.write_text(report + "\n", encoding="utf-8")
+            ref = _usage("usage_base")
+            REPORT.write_text(f"{_commit('HEAD')} against {ref} at {_commit(ref)}\n{report}\n", encoding="utf-8")
             print(f"New and fixed, page by page: {REPORT}", *printed, sep="\n", flush=True)
             if new:
                 self.fail(printed[-1])

@@ -163,9 +163,20 @@ class ReportTests(SimpleTestCase):
                 "overflow: dd runs 168px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
                 "cells: div#origin-hqauditapprovala9fe19de-601b-4d02-9088-41d7ba7d5f01.modal.origin-panel"
                 " runs 102px past its cell: example-agent wants to run Change what H",
+                # The same box, past its cell by an order of magnitude more.
+                "cells: dd runs 900px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
+                "cells: dd runs 2px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
+                "contrast: span.muted 1.50:1 on 255,255,255",
+                "contrast: span.muted 4.40:1 on 255,255,255",
             )
         }
-        self.assertEqual(len(keys), 5)
+        self.assertEqual(len(keys), 9)
+        # A few pixels either way, or a contrast a hair off, is the same finding.
+        for one, other in (
+            ("cells: dd runs 412px past its cell", "cells: dd runs 430px past its cell"),
+            ("contrast: span.muted 2.10:1 on 255,255,255", "contrast: span.muted 2.30:1 on 255,255,255"),
+        ):
+            self.assertEqual(browser_look.finding_key(one), browser_look.finding_key(other))
 
     def test_alike_findings_are_counted_so_one_more_of_them_is_new(self):
         base = {("example/one", 402): [self.FIRST_RUN[1]]}
@@ -266,6 +277,15 @@ class WorktreeTests(SimpleTestCase):
                 raise KeyError("the look broke")
             self.assertFalse(tree.parent.exists())
             self.assertNotIn(str(tree), _git("worktree", "list", "--porcelain", cwd=checkout))
+
+    def test_a_report_names_the_commit_it_was_looked_at(self):
+        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
+            checkout = _repository(Path(folder))
+            head = _git("rev-parse", "--short", "HEAD", cwd=checkout).strip()
+            self.assertEqual(browser_look._commit("HEAD"), head)
+            (checkout / "page.txt").write_text("changed\n", encoding="utf-8")
+            self.assertEqual(browser_look._commit("HEAD"), f"{head} with uncommitted changes")
+            self.assertIn("unknown", browser_look._commit("example-missing"))
 
     def test_a_ref_that_names_nothing_is_said_and_leaves_nothing(self):
         with tempfile.TemporaryDirectory() as folder:
