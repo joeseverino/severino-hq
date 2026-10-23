@@ -11,20 +11,19 @@
    Two, never three: a third column is where a run of four became three and a
    stray. Anything that is not a single short field (a textarea, a group of
    boxes, errors, the actions) takes the row. */
-/* A command's fields are the same grid, inside the card that holds its notes. */
-:is(.form, .command-fields) {
+.form {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-7) var(--space-10);
   align-items: flex-start;
+  padding: var(--surface-inset, var(--space-10));
 }
-.form { padding: var(--surface-inset, var(--space-10)); }
 /* More than a third of the row, so no more than two fit it. */
-:is(.form, .command-fields) .field { flex: 1 1 max(18rem, 34%); min-width: min(100%, 18rem); }
-:is(.form, .command-fields) > :not(.field) { flex-basis: 100%; }
-:is(.form, .command-fields) > .field:has(textarea) { flex-basis: 100%; }
-:is(.form, .command-fields) > .field:has(> div > * + *) { flex-basis: 100%; }
-:is(.form, .command-fields) > .field { margin-bottom: 0; }
+.form .field { flex: 1 1 max(18rem, 34%); min-width: min(100%, 18rem); }
+.form > :not(.field) { flex-basis: 100%; }
+.form > .field:has(textarea) { flex-basis: 100%; }
+.form > .field:has(> div > * + *) { flex-basis: 100%; }
+.form > .field { margin-bottom: 0; }
 /* A lone checkbox sits beside its label, the help under both, rather than
    alone on a line under its own question. */
 .field:has(> input[type=checkbox]) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--space-4); }
@@ -352,8 +351,8 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* What a command acts on, when the page was opened for one thing. */
 .command-target p { margin: 0; }
 .command-target .field-label { display: block; color: var(--muted); font-size: var(--text-xs); }
-/* The confirmation closes the form, apart from the fields it confirms. */
-.command-form > .command-confirm { margin: var(--space-8) 0 0; }
+/* The confirmation closes the form, a row of its own under the fields it confirms. */
+.command-form > .command-confirm { flex-basis: 100%; }
 .command-effect-note { margin: 0 0 var(--space-7); }
 .command-confirm {
   padding: var(--space-6) var(--space-7);

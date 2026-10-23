@@ -196,8 +196,9 @@ beside a table, a chart beside a chart, so each row ends together.
 where there is room and none narrower than 18rem, and a row's fields share its
 whole width: pairs sit side by side and the odd one of a run takes its row, so
 no row is left with a field and a hole beside it. A textarea, a group of
-choices, errors and the actions take the row. A group of checkboxes reads
-across.
+choices, errors, a command's confirmation and the actions take the row. A
+group of checkboxes reads across. A command's form is this grid too: `.form`
+is the one form layout. *Gate:* `a_form_fills_its_rows`.
 
 **Nothing empty takes space.** A panel with nothing to show is not drawn: the
 page closes up rather than carrying a card that says "nothing here". An empty

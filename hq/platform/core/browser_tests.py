@@ -198,6 +198,8 @@ SELECTORS = {
     ),
     # A form's field: one label, its control and its help.
     "field": ".field",
+    # The grid every form's fields are laid out in.
+    "form": ".form",
     # A control a reader fills in or picks from, whose edge is what shows it.
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A row of controls that wraps when its screen is narrow.
@@ -1912,6 +1914,38 @@ _RAGGED_BARS = (
 }"""
 )
 
+# A form is two columns or one: each row of its fields holds one or two and
+# runs from its first edge to its last, so no field has a hole beside it.
+_HOLED_FORMS = (
+    "([form, field]) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + form)) {
+    if (!el.checkVisibility()) continue;
+    const style = getComputedStyle(el);
+    const frame = box(el);
+    const left = frame.left + parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth);
+    const right = frame.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
+    const rows = new Map();
+    for (const [item, , r] of inFlow(el)) {
+      const top = Math.round(r.top);
+      rows.set(top, [...(rows.get(top) || []), [item, r]]);
+    }
+    for (const row of rows.values()) {
+      const fields = row.filter(([item]) => item.matches(field)).length;
+      if (!fields) continue;
+      const names = row.map(([item]) => describe(item)).join(' / ');
+      if (fields > 2) found.push(`${describe(el)}: ${fields} fields in one row (${names})`);
+      const before = Math.min(...row.map(([, r]) => r.left)) - left;
+      const after = right - Math.max(...row.map(([, r]) => r.right));
+      if (before > 1 || after > 1) found.push(`${describe(el)}: ${names} leave ${Math.round(before)}px before and ${Math.round(after)}px after`);
+    }
+  }
+  return found;
+}"""
+)
+
 # A route is one row across its box or one column down it, never a row that
 # wrapped with its line running off the edge.
 _WRAPPED_ROUTES = (
@@ -3032,6 +3066,7 @@ _EVIDENCE_READ = (_STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["
 _SUMMARIES_READ = (_HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
 _UNDER_LABELS_READ = (_UNDER_ITS_LABEL, SELECTORS["labelled"])
 _SMALL_TARGETS_READ = (_SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN])
+_FORM_ROWS_READ = (_HOLED_FORMS, [SELECTORS["form"], SELECTORS["field"]])
 _EMPTY_FRAMES_READ = (_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]])
 _READINGS_OF = f"(selector) => ({_READINGS})([...document.querySelectorAll(selector)])"
 
@@ -3045,6 +3080,7 @@ _GEOMETRY = {
     "overlaps": _OVERLAPS,
     "overlapping text": _OVERLAPPING_TEXT,
     "grid rows": (_PAIRS, SELECTORS["paired"]),
+    "form rows": _FORM_ROWS_READ,
     "bands": (_UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]),
     "band padding": (_UNPADDED_CELLS, SELECTORS["band_cell"]),
     "tables": _TABLES,
@@ -3789,6 +3825,7 @@ class LayoutBrowserTests(BrowserGate):
             self.code_and_cards_keep_inside_the_gutter,
             self.controls_in_a_row_share_one_height,
             self.a_wrapped_bar_fills_its_rows,
+            self.a_form_fills_its_rows,
         ]
         if name in DENSE_PAGES:
             rules.append(self.dense_pages_keep_to_their_boxes)
@@ -4150,6 +4187,10 @@ class LayoutBrowserTests(BrowserGate):
 
     @reads((_RAGGED_BARS, SELECTORS["wrapping_bar"]))
     def a_wrapped_bar_fills_its_rows(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads(_FORM_ROWS_READ)
+    def a_form_fills_its_rows(self, _name, found):
         self.assertEqual(found, [])
 
     @reads((_RAGGED_QUEUES, [SELECTORS["queue_card"], SELECTORS["queue_card_end"]]))
