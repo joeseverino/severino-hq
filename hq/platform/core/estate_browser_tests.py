@@ -43,6 +43,7 @@ from hq.platform.core.browser_tests import (
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
+lazy from hq.platform.core.example_estate.network import ZONE_KEY
 
 # The gate's widths and a wide desktop: the example estate is the homelab as a
 # person reads it, on every screen up to the widest. Where a script could move
@@ -96,7 +97,7 @@ def records():
         reverse("control_plane:machine", kwargs={"name": MACHINE}),
         reverse("control_plane:service", kwargs={"hostname": hostname}),
         reverse("control_plane:detail", kwargs={"key": f"{container}-container"}),
-        reverse("control_plane:detail", kwargs={"key": "example-zone"}),
+        reverse("control_plane:detail", kwargs={"key": ZONE_KEY}),
         reverse("contacts:detail", args=[1]),
         reverse("contacts:delete", args=[1]),
     ]

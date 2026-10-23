@@ -11,9 +11,10 @@ from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_
 from hq.domains.control_plane.provider_adapters import github as delivery
 from hq.domains.jobs.models import Job
 from hq.platform.application import scheduled_work
+from hq.platform.application.images import ImageRef
 from hq.platform.application.inventory_testing import store
 
-from .names import GITHUB, HQ_DIGEST, HQ_REVISION, hexed, iso, stamp
+from .names import CONTAINERS, GITHUB, HQ_DIGEST, HQ_REVISION, NEWER, SOURCES, hexed, iso, stamp
 
 # The repositories HQ's GitHub App reads, each kept the way the repo checks ask.
 REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", "backups", "dotfiles")
@@ -127,9 +128,52 @@ def repositories():
             "followers": 12,
             "following": 9,
             "created_at": "2016-05-21T18:04:00Z",
-            "location": "Example City",
+            "location": "Fairview, IL",
+            "starred": 38,
+            "watched": _watched(),
         },
     )
+
+
+# The projects the estate runs, starred on GitHub to follow their releases:
+# image, what it is, its language, its stars, and how long ago it was starred.
+STARRED = (
+    ("immich", "Self-hosted photo and video management.", "TypeScript", 58_400, 300),
+    ("jellyfin", "The free software media system.", "C#", 39_200, 330),
+    ("forgejo", "A self-hosted lightweight software forge.", "Go", 1_900, 290),
+    ("home-automation", "Home automation server images, rebuilt weekly.", "Shell", 410, 260),
+    ("adguard", "Network-wide ads and trackers blocking DNS server.", "Go", 27_600, 380),
+    ("nginx-proxy-manager", "Expose your services easily and securely.", "TypeScript", 25_100, 380),
+    ("portainer", "Making Docker and Kubernetes management easy.", "TypeScript", 32_300, 380),
+)
+
+
+def _watched():
+    """Each starred project's latest release: the version that runs, or the
+    newer one where there is one, as the registries report them."""
+
+    tags = {name: ImageRef.parse(image).tag for name, _port, image in CONTAINERS}
+    watched = []
+    for name, about, language, stars, days in STARRED:
+        source = SOURCES[name]
+        tag = NEWER.get(name, tags[name])
+        watched.append(
+            {
+                "name": source.removeprefix("https://github.com/"),
+                "url": source,
+                "description": about,
+                "language": language,
+                "stars": stars,
+                "starred_at": stamp(timedelta(days=days)),
+                "release": {
+                    "tag": tag,
+                    "url": f"{source}/releases/tag/{tag}",
+                    "published_at": stamp(timedelta(days=4 if name in NEWER else 20)),
+                },
+                "advisories": [],
+            }
+        )
+    return watched
 
 
 def _updates(name):

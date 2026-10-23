@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from hq.platform.application import reach
 
-MACHINE = "example-docker-host-01"
+MACHINE = "docker-host-01"
 # Made up, at the length a home LAN's addresses run to.
 LAN = "10.100.200.214"
 LAN_SUBNET = "10.100.200.0/24"
@@ -15,19 +15,19 @@ HQ = "hq.example.com"
 ZONE = "example.com"
 PROXY = "172.18.0.2"
 # The tailnet's devices besides the machine, as their owner named them.
-LAPTOP_NAME = "example-macbook-pro-16"
-PHONE_NAME = "example-iphone-16-pro"
+LAPTOP_NAME = "macbook-pro-16"
+PHONE_NAME = "iphone-16-pro"
 # The home's public address, from a documentation range.
 PUBLIC = "198.51.100.7"
 OWNER = "example@example.com"
 SSO = "hq.platform.core.oidc.HQOIDCAuthenticationBackend"
 
-PORTAINER = "example-portainer"
-DNS = "example-dns"
-CLOUDFLARE = "example-cloudflare"
-PROXY_REF = "example-proxy"
-ADGUARD = "example-adguard"
-TAILSCALE = "example-tailnet"
+PORTAINER = "portainer"
+DNS = "cloudflare-dns"
+CLOUDFLARE = "cloudflare"
+PROXY_REF = "npm"
+ADGUARD = "adguard"
+TAILSCALE = "tailscale"
 # A shell connection is named for the machine it opens, which is what makes it
 # that machine rather than a fifth one.
 SSH = MACHINE

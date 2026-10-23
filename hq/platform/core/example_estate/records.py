@@ -1,23 +1,21 @@
 """What the operator keeps by hand: projects, runbooks, the calendar, and what
-running the homelab costs; and what the site's readers wrote to it."""
+running the homelab costs."""
 
-from datetime import UTC, date, time, timedelta
+from datetime import time, timedelta
 from decimal import Decimal
 
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
-from hq.domains.contacts import inbox
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
-from hq.platform.application.inventory_testing import store
 lazy from hq.domains.assets.models import Asset
 lazy from hq.domains.calendars.models import Entry
 lazy from hq.domains.content.models import ContentItem
 lazy from hq.domains.docs_index.models import DocumentationRecord
 lazy from hq.domains.expenses.models import Expense
 
-from .names import CLOUDFLARE, MACHINE
+from .names import MACHINE
 from .network import RENEWS_IN
 from .work import UPDATED
 
@@ -32,7 +30,13 @@ _RECEIPT = (
 )
 # Name, slug, repository, public address, what it is.
 PROJECTS = (
-    ("HQ", "hq", "hq", "https://hq.example.com/", "The control panel for the homelab, and the site this demo is."),
+    (
+        "HQ",
+        "hq",
+        "hq",
+        "https://hq.example.com/",
+        "The control panel for the homelab: every machine, service, renewal and bill in one place.",
+    ),
     (
         "Photo library",
         "photo-library",
@@ -78,15 +82,26 @@ WRITEUPS = (
     ("tailnet-only", "Closing every port but the tailnet", "tailnet-hardening", 60),
     ("restored-backups", "Backups you have actually restored", "offsite-backups", 25),
 )
-# doc_id, title, environment, the projects it is about.
+# doc_id, title, environment, the projects it is about, and how many days ago
+# it was first written and last reviewed.
 RUNBOOKS = (
-    ("rb-restore-backup", "Restore a volume from the offsite backup", "homelab", ("offsite-backups", "photo-library")),
-    ("rb-rotate-tailnet-keys", "Rotate the tailnet lock signing keys", "tailscale", ("tailnet-hardening",)),
+    (
+        "rb-restore-backup",
+        "Restore a volume from the offsite backup",
+        "homelab",
+        ("offsite-backups", "photo-library"),
+        125,
+        20,
+    ),
+    ("rb-rotate-tailnet-keys", "Rotate the tailnet lock signing keys", "tailscale", ("tailnet-hardening",), 140, 45),
+    ("rb-public-site", "Publish the public site and answer its contact form", "homelab", ("hq",), 380, 30),
     (
         "rb-upgrade-containers",
         "Upgrade a container to a new release",
         "homelab",
         ("media-server", "self-hosted-git", "hq"),
+        290,
+        9,
     ),
 )
 
@@ -108,8 +123,8 @@ def projects():
 
 
 def _runbooks():
-    reviewed = timezone.localdate() - timedelta(days=20)
-    for doc_id, title, environment, about in RUNBOOKS:
+    today = timezone.localdate()
+    for doc_id, title, environment, about, written, reviewed in RUNBOOKS:
         record = DocumentationRecord.objects.create(
             doc_id=doc_id,
             title=title,
@@ -117,9 +132,12 @@ def _runbooks():
             environment=environment,
             status="active",
             sensitivity="internal",
-            last_reviewed=reviewed,
+            last_reviewed=today - timedelta(days=written),
         )
         record.related_projects.set(Project.objects.filter(slug__in=about))
+        # Reviewed since, and mirrored again.
+        record.last_reviewed = today - timedelta(days=reviewed)
+        record.save()
 
 
 def _writeups():
@@ -138,81 +156,50 @@ def _writeups():
         item.related_documentation.set(DocumentationRecord.objects.filter(related_projects__slug=project))
 
 
-def messages():
-    """The site's contact form, as the controller last read its table: one
-    message answered, one read. Neither waits on the operator, so the demo's
-    first glance stays at its few things to do. D1 writes a stamp the way
-    SQLite does, in UTC with a space and no zone."""
-
-    def message(index, name, address, text, status, age):
-        sent = (timezone.now() - age).astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
-        return {
-            "connection_ref": CLOUDFLARE,
-            "account_id": "example-account",
-            "database_id": "example-contact-database",
-            "database": "contacts",
-            "id": index,
-            "created_at": sent,
-            "updated_at": sent,
-            "name": name,
-            "email": address,
-            "message": text,
-            "status": status,
-            "country": "US",
-            "turnstile": "verified",
-        }
-
-    store(
-        inbox.READING,
-        message(
-            2,
-            "Example Reader",
-            "reader@example.com",
-            "Your writeup on restoring from the offsite backup saved my weekend. Is the script public?",
-            "replied",
-            timedelta(hours=3),
-        ),
-        message(
-            1,
-            "Example Neighbor",
-            "neighbor@example.org",
-            "Is the media server open to guests?",
-            "read",
-            timedelta(days=4),
-        ),
-    )
-
-
 def calendar():
     today = timezone.localdate()
     Entry.objects.create(
         title="Restore test from offsite backup", starts_on=today + timedelta(days=2), starts_at=time(19)
     )
-    Entry.objects.create(title="Patch the host", starts_on=today, repeat="weekly", weekdays="5", starts_at=time(9))
+    Entry.objects.create(
+        title="Patch the host", starts_on=today - timedelta(weeks=26), repeat="weekly", weekdays="5", starts_at=time(9)
+    )
     Entry.objects.create(title="Renew example.com", starts_on=today + RENEWS_IN, repeat="yearly")
+
+
+# The server, bought refurbished: how long ago, from whom, what, its expense
+# category, cost, and how much of its use is the business's.
+SERVER = (200, "eBay", "Small form factor server", "hardware", "389.00", 80)
+# How long ago each monthly storage bill was paid since the backups started.
+STORAGE = (2, 32, 62, 92, 122)
 
 
 def money():
     """The host as an asset, and a year of what running it cost, every expense with its receipt."""
 
     machine = f"machine:{MACHINE}"
+    today = timezone.localdate()
     asset = Asset.objects.create(
-        item_name="Small form factor server",
-        slug="example-server",
-        purchase_date=date(2025, 3, 14),
-        total_cost=Decimal("389.00"),
+        item_name=SERVER[2],
+        slug="sff-server",
+        vendor=SERVER[1],
+        category="server_hardware",
+        purchase_date=today - timedelta(days=SERVER[0]),
+        total_cost=Decimal(SERVER[4]),
+        business_use_percentage=SERVER[5],
+        payment_method="credit",
         infrastructure=machine,
         infrastructure_name=MACHINE,
     )
     asset.related_projects.set(Project.objects.exclude(slug="offsite-backups"))
     backups = Project.objects.get(slug="offsite-backups")
-    today = timezone.localdate()
-    for days, vendor, item, category, cost, about, project in (
-        (200, "Example Hardware", "Small form factor server", "hardware", "389.00", asset, None),
-        (120, "Example Storage", "2 TB backup drive", "hardware", "79.99", None, backups),
-        (60, "Example Registrar", "example.com renewal", "domains", "10.44", None, None),
-        (30, "Example Cloud", "Offsite backup storage", "hosting", "6.00", None, backups),
-        (2, "Example Cloud", "Offsite backup storage", "hosting", "6.00", None, backups),
+    for days, vendor, item, category, cost, business_use, about, project in (
+        (*SERVER, asset, None),
+        (120, "Newegg", "2 TB backup drive", "hardware", "79.99", 50, None, backups),
+        # Renewed a year before the registration next runs out.
+        (365 - RENEWS_IN.days, "Cloudflare", "example.com renewal", "domains", "10.44", 100, None, None),
+        # Storage is billed monthly; the backups hold family photos as well as the lab's volumes.
+        *((days, "Backblaze", "Offsite backup storage", "hosting", "6.00", 50, None, backups) for days in STORAGE),
     ):
         expense = Expense.objects.create(
             date=today - timedelta(days=days),
@@ -220,13 +207,15 @@ def money():
             item=item,
             category=category,
             total_cost=Decimal(cost),
+            business_use_percentage=business_use,
+            payment_method="credit",
             related_asset=about,
             related_project=project,
             about=machine if about else "",
             about_name=MACHINE if about else "",
         )
         Receipt.objects.create(
-            file=ContentFile(_RECEIPT, name=f"example-{expense.pk}.pdf"),
+            file=ContentFile(_RECEIPT, name=f"receipt-{expense.pk}.pdf"),
             original_filename=f"{vendor} receipt.pdf",
             content_type="application/pdf",
             vendor=vendor,

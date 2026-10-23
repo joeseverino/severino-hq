@@ -24,7 +24,7 @@ from hq.platform.core.models import AuditLog
 from ..attention import infrastructure, tailnet
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
-from ..estate import Estate, attention as estate_attention, cards, estate_reading
+from ..estate import Estate, attention as estate_attention, cards, estate_reading, overview
 from ..glance import dashboard_panels
 from ..inventory_testing import store
 from ..machines import machine, machine_catalog
@@ -278,6 +278,16 @@ class EstateCardTests(TestCase):
         )
         self.assertIn("example.com", found["hq.estate.registration"]["detail"])
         self.assertEqual(found["hq.estate.registration"]["url"], reverse("zones:detail", args=["example.com"]))
+
+    def test_a_service_hq_reads_no_health_of_is_not_drawn_as_down(self):
+        with projection_scope():
+            services = estate_reading().services
+            (figure,) = (kpi for kpi in overview().kpis if kpi.url == reverse("control_plane:services"))
+        unread = [service for service in services if service.health.state == "unknown"]
+
+        self.assertTrue(unread, "the estate has no service without a health reading")
+        self.assertEqual(len(figure.drawing.dots), len(services) - len(unread))
+        self.assertIn(f"{len(services) - len(unread)} health-checked", figure.detail)
 
     def test_connections_are_counted_when_every_one_answers(self):
         ProviderConnection.objects.filter(connection_ref="example-ssh").update(reachable=True, detail="")

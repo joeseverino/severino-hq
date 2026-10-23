@@ -31,10 +31,14 @@ from django.contrib.auth import get_user_model
 from django.test import override_settings
 
 from hq.domains.receipts.models import Receipt
-from hq.platform.application import cadence
+from hq.platform.application import cadence, pins
+from hq.platform.application.linked_accounts import GITHUB, record_claimed_accounts
 
-from . import agents, docker, infra, network, records, work
+from . import agents, docker, history, infra, network, records, web, work
 from .names import HQ, HQ_REVISION, HQ_SOURCE, LAN, LAPTOP, OWNER, PROXY, SSO, container_id
+
+# The services the operator starred, to keep at the top of the list.
+FAVORITES = (HQ, "photos.example.com")
 
 __all__ = ("REQUEST", "SSO", "as_production", "build_showcase", "seed", "throwaway_media")
 
@@ -96,12 +100,17 @@ def build_showcase():
     """Seed the estate and return the user its pages are rendered for."""
 
     user = get_user_model().objects.create_user(username="example", email=OWNER, password=None, first_name="Example")
-    seed()
+    # Their sign-in names their GitHub account, as the identity provider says it.
+    record_claimed_accounts(user, {GITHUB: "example"})
+    seed(owner=user)
+    for hostname in FAVORITES:
+        pins.toggle(user, pins.SERVICE, hostname)
     return user
 
 
-def seed():
-    """Every record of the estate, written into an empty database."""
+def seed(owner=None):
+    """Every record of the estate, written into an empty database, the hand-kept
+    ones by ``owner`` (``history.settle`` says who when none is named)."""
 
     # The controller checked in a moment ago; a fresh install's never has.
     cadence.note_controller()
@@ -119,5 +128,8 @@ def seed():
     work.jobs()
     records.calendar()
     records.money()
-    records.messages()
-    agents.seen()
+    web.pages()
+    web.analytics()
+    web.contact()
+    agents.seen(owner)
+    history.settle(owner)
