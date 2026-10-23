@@ -292,6 +292,8 @@ SELECTORS = {
     "frame_exempt": ".btn, .pill, .topology-node, label",
     # Everything inside a menu or a dialog, which float over the page.
     "frame_exempt_within": "dialog, [popover], [data-menu]",
+    # What an open menu or a dialog draws over the page, its toggle aside.
+    "floating": "dialog, [popover], [data-menu] > :not(summary)",
     # The lead control renders first, so it is the one a narrow head keeps.
     "head_lead": ".page-head .page-actions > :first-child",
     "head_title": ".page-head .page-title-row",
@@ -2891,8 +2893,11 @@ _BROKEN_WORDS_IN_TEXT = (
 )
 
 # Two lines of text drawn over each other, each as much of it as is painted.
+# A layer that floats over the page (`floating`: an open menu, a dialog) covers
+# the page's text on purpose, so a line is held only against lines in its own
+# layer.
 _OVERLAPPING_TEXT = (
-    "() => {"
+    "(floating) => {"
     + _DESCRIBE
     + _PAINTED_PART
     + """
@@ -2904,16 +2909,16 @@ _OVERLAPPING_TEXT = (
     range.selectNodeContents(node);
     for (const line of range.getClientRects()) {
       const r = painted(node.parentElement, line);
-      if (r && r.width > 2 && r.height > 2) rects.push([node, r]);
+      if (r && r.width > 2 && r.height > 2) rects.push([node, r, node.parentElement.closest(floating)]);
     }
   }
   rects.sort((a, b) => a[1].top - b[1].top);
   const found = [];
   for (let i = 0; i < rects.length; i++) {
-    const [one, a] = rects[i];
+    const [one, a, layer] = rects[i];
     for (let j = i + 1; j < rects.length && rects[j][1].top < a.bottom - 2; j++) {
-      const [other, b] = rects[j];
-      if (one === other) continue;
+      const [other, b, its] = rects[j];
+      if (one === other || layer !== its) continue;
       const x = Math.min(a.right, b.right) - Math.max(a.left, b.left);
       const y = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
       if (x > 2 && y > 2) {
@@ -3096,7 +3101,7 @@ _GEOMETRY = {
     "words broken in text": (_BROKEN_WORDS_IN_TEXT, _IDENTIFIER),
     "wrapped phrases": _PHRASES_READ,
     "overlaps": _OVERLAPS,
-    "overlapping text": _OVERLAPPING_TEXT,
+    "overlapping text": (_OVERLAPPING_TEXT, SELECTORS["floating"]),
     "grid rows": (_PAIRS, SELECTORS["paired"]),
     "form rows": _FORM_ROWS_READ,
     "bands": (_UNEVEN_BANDS, [SELECTORS["band"], SELECTORS["band_aside"]]),
@@ -4625,6 +4630,38 @@ class ComponentLayoutTests(LayoutBrowserTests):
         found = self.page.evaluate(_SMALL_TARGETS, ["main :is(.example-hidden, .example-shown)", TARGET_MIN])
         self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-shown"})
 
+    def test_an_open_menu_over_the_page_text_is_no_overlap_and_text_in_one_layer_is(self):
+        """An open menu's panel covers the page's text on purpose; two lines
+        drawn over each other in the page, or in the one panel, still overlap."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const line = (text, top, left) => {
+            const p = document.createElement('p');
+            p.textContent = text;
+            for (const [name, value] of [['position', 'fixed'], ['top', top], ['left', left], ['margin', '0']]) {
+              p.style.setProperty(name, value);
+            }
+            return p;
+          };
+          const menu = document.createElement('details');
+          menu.dataset.menu = '';
+          menu.open = true;
+          const summary = document.createElement('summary');
+          summary.textContent = 'menu';
+          const panel = document.createElement('div');
+          panel.append(line('example covering', '300px', '40px'), line('example first', '400px', '40px'), line('example second', '400px', '40px'));
+          menu.append(summary, panel);
+          const main = document.querySelector('main');
+          main.append(line('example covered', '300px', '40px'), menu, line('example clashed', '500px', '40px'));
+          main.append(line('example under', '500px', '40px'));
+        }""")
+        found = self.page.evaluate(_OVERLAPPING_TEXT, SELECTORS["floating"])
+        pairs = {tuple(sorted(part.split('"')[1] for part in finding.split(" over "))) for finding in found}
+        self.assertNotIn(("example covered", "example covering"), pairs)
+        self.assertIn(("example clashed", "example under"), pairs)
+        self.assertIn(("example first", "example second"), pairs)
+
     def test_every_selector_parses(self):
         authored = authored_selectors(stylesheet())
         self.open(next(iter(PAGES)), WIDTHS[-1])
@@ -4792,7 +4829,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             with self.subTest(width=width):
                 self.open("dense/dashboard", width)
                 self.page.locator(SELECTORS["ask_note"]).wait_for(state="visible")
-                self.assertEqual(self.page.evaluate(_OVERLAPPING_TEXT), [])
+                self.assertEqual(self.page.evaluate(_OVERLAPPING_TEXT, SELECTORS["floating"]), [])
 
     def test_the_map_scrolls_with_the_page_and_draws_no_empty_lane(self):
         for width in WIDTHS:

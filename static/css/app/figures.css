@@ -457,6 +457,9 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .pie-row .chart-legend { flex-direction: column; align-items: flex-start; gap: var(--space-3); margin: 0; }
 .pie-chart path, .pie-chart circle { stroke: var(--surface); stroke-width: 2; paint-order: stroke; }
 .chart-data { margin-top: var(--space-3); color: var(--muted); font-size: var(--text-xs); }
+/* Its toggle is a line the target size (`--target-min`) tall: opened, the
+   table under it can be a scrolling pane that is a target too. */
+.chart-data > summary { line-height: var(--target-min); }
 .section-readout { margin-top: var(--space-3); font-size: var(--text-sm); }
 /* A raw reading holds paths and names of any length: wrapped, so only its
    height scrolls and never the page sideways. */
