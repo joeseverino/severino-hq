@@ -5,11 +5,10 @@ from datetime import date
 
 from django.test import SimpleTestCase
 
-from hq.platform.core.print_gate import Unprintable
-
 from ..labels import field_label
 from ..moments import when_day
 from ..payload_words import value_words
+from ..printable import Unprintable
 
 
 class ValueWordsTests(SimpleTestCase):
@@ -25,7 +24,10 @@ class ValueWordsTests(SimpleTestCase):
         self.assertEqual(value_words("2026-10-03"), when_day(date(2026, 10, 3)))
         self.assertEqual(value_words(date(2026, 10, 3)), when_day(date(2026, 10, 3)))
         self.assertNotIn("T", value_words("2026-10-03T09:29:00Z"))
-        with self.assertRaises(Unprintable):
+        for text in ("0001-01-01T00:00:00", "2026-13-45", "20261003"):
+            with self.subTest(text):
+                self.assertEqual(value_words(text), text)
+        with self.assertRaisesMessage(Unprintable, "value_words printed a builtins.object"):
             value_words(object())
 
     def test_a_list_is_counted_by_what_its_schema_calls_an_item(self):

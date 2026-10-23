@@ -28,9 +28,9 @@ from hq.platform.application.moments import (
     when_exact as _when_exact,
 )
 from hq.platform.application.money import money as _money
+from hq.platform.application.printable import admitted
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import MISSING, counted as _counted
-from hq.platform.core.print_gate import admitted
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, security
 lazy from hq.platform.application.derivations import this_year
