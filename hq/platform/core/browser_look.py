@@ -2,8 +2,9 @@
 
 `mise run dev:look -- <pages>` opens pages at a few widths, saves a screenshot
 of each under var/look/, and, given `--rule`, runs that rule of
-`LayoutBrowserTests` there and prints what it finds, page by page and width by
-width, closing on one verdict that names every page it failed on. `--css` adds
+`LayoutBrowserTests` there, writes what it finds page by page and width by
+width to var/gate/look.txt, and prints one verdict that names every page it
+failed on. `--css` adds
 CSS after the page's own, as text or a file of it: how a new rule is shown to
 fail on the defect it was written for before it lands. Not a gate: it fails
 only when the rule it was asked to run fails.
@@ -53,7 +54,6 @@ two runs.
 """
 
 import json
-import math
 import os
 import re
 import shutil
@@ -62,10 +62,8 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections import Counter
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from itertools import groupby, zip_longest
 from pathlib import Path
 from typing import override
 from unittest import mock
@@ -90,6 +88,14 @@ from hq.platform.core.browser_tests import (
     wait_for_reference,
 )
 from hq.platform.core.estate_browser_tests import ExampleEstateBrowserTests, navigation
+from hq.platform.core.look_report import (
+    Found,
+    Measured,
+    beside,
+    block,
+    closing,
+    unmatched,
+)
 from hq.platform.core.speculation import NOT_A_NAVIGATION
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
@@ -97,9 +103,10 @@ lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, bu
 OUT = Path(settings.BASE_DIR) / "var" / "look"
 # What a look against a base runs at the base as this checkout has it, so a
 # finding is new for what the change drew rather than for how it was judged:
-# this module, and the rules and probes the survey holds.
+# this module and its report, and the rules and probes the survey holds.
 LENS = tuple(
-    Path(__file__).resolve().with_name(name) for name in ("browser_look.py", "browser_tests.py", "browser_audit.js")
+    Path(__file__).resolve().with_name(name)
+    for name in ("browser_look.py", "look_report.py", "browser_tests.py", "browser_audit.js")
 )
 # A look against a base writes its whole report here and prints only its new
 # findings and its verdict, so a long report is never cut short where it is read.
@@ -129,9 +136,8 @@ _LINKS = """(notANavigation) => [...document.querySelectorAll('main a[href]')]
 # A region waiting on its answer: fragment.js marks one busy until then, and a
 # live ask is busy for as long as its job runs.
 _BUSY = "[data-fragment][aria-busy=true]:not([data-ask])"
-# Every disclosure and popover not yet open, opened, and how many: an
-# exclusive group's name is dropped and a popover is shown as a manual one,
-# so opening one closes no other.
+# Every disclosure not yet open, opened, and how many: an exclusive group's
+# name is dropped, so opening one closes no other.
 _OPEN_ONCE = """(busy) => {
   // A region already waiting is not one this round brings in.
   document.querySelectorAll(busy).forEach((region) => { region.lookWaiting = true; });
@@ -141,15 +147,21 @@ _OPEN_ONCE = """(busy) => {
     details.open = true;
     opened += 1;
   });
-  document.querySelectorAll('[popover]:not(:popover-open)').forEach((popover) => {
-    popover.popover = 'manual';
-    try {
-      popover.showPopover();
-      opened += 1;
-    } catch {}
-  });
   return opened;
 }"""
+_POPOVERS = "() => document.querySelectorAll('[popover]').length"
+# The popover at a place in the page shown, and what names it in a finding;
+# nothing for one that will not show.
+_SHOW_POPOVER = """(place) => {
+  const popover = document.querySelectorAll('[popover]')[place];
+  try {
+    popover.showPopover();
+  } catch {
+    return null;
+  }
+  return popover.id ? `#${popover.id}` : `popover ${place + 1}`;
+}"""
+_HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePopover()"
 # No region a round of opening brought in is waiting on its answer.
 _ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => region.lookWaiting)"
 # Rounds of opening, each after what the last one brought in has arrived.
@@ -309,10 +321,6 @@ _FINDINGS = "usage_found_into"
 # The instant the run that asked began, in seconds, handed to its base the
 # same way: both draw with the clock frozen there.
 _CLOCK = "usage_clock_at"
-# What a look found, by page and width, each finding a line.
-type Found = dict[tuple[str, int], list[str]]
-# What a look measured, by page and width: `columns` and `eval`, as printed.
-type Measured = dict[tuple[str, int], dict[str, str]]
 
 
 def _usage(variable: str) -> str:
@@ -363,141 +371,6 @@ def _evaluated(page: str, width: int, value) -> str:
 
     said = value if isinstance(value, str) else json.dumps(value, indent=2, ensure_ascii=False)
     return f"{page} at {width}:\n" + "\n".join(f"  {line}" for line in said.splitlines() or [""])
-
-
-def _block(name: str, found: dict[int, list[str]], rule: str) -> str:
-    """One page's findings, under its name, width by width."""
-
-    lines = [name]
-    for width, said in found.items():
-        verdict = f"{len(said)} found" if said else "holds" if rule else "looked at"
-        lines.append(f"  {width}: {verdict}")
-        lines.extend(f"    {line}" for line in said)
-    return "\n".join(lines)
-
-
-def _grouped(found: Found, rule: str) -> str:
-    """Findings page by page, in the order they were looked at."""
-
-    return "\n".join(
-        _block(name, {width: said for (_, width), said in entries}, rule)
-        for name, entries in groupby(found.items(), key=lambda entry: entry[0][0])
-    )
-
-
-def _failed(found: Found) -> list[str]:
-    return list(dict.fromkeys(name for (name, _), said in found.items() if said))
-
-
-def _verdict(rule: str, found: Found) -> str:
-    pages = list(dict.fromkeys(name for name, _ in found))
-    widths = ", ".join(map(str, dict.fromkeys(width for _, width in found)))
-    failed = _failed(found)
-    if not failed:
-        return f"{rule} holds on every page at {widths}"
-    return f"{rule} fails on {len(failed)} of {len(pages)} pages: {', '.join(failed)}"
-
-
-# What a finding names that is drawn anew on every run, so no fact of the
-# layout: an origin panel's element id (its origin's key slugged, often with a
-# record's id in it), a UUID or the start of one (a finding cuts its text
-# short), and a word of hex holding a digit.
-_DRAWN_ANEW = (
-    (re.compile(r"#origin-[\w-]+"), "#origin-…"),
-    (re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{1,12}){1,4}", re.IGNORECASE), "…"),
-)
-_HEX = re.compile(r"\b[0-9a-f]*\d[0-9a-f]*\b", re.IGNORECASE)
-# A size or a ratio is kept to its power of four, so a box 412px wide is
-# a box 430px wide, and one 900px past its cell is not one 2px past. Any other
-# number (a row's place, a count) is taken out.
-_MEASURE = re.compile(r"(\d+(?:\.\d+)?)(px|:1)")
-_NUMBER = re.compile(r"\d+(?:\.\d+)?")
-# Under this a measure is a pixel's jitter, or a ratio short of any bar.
-_SMALL = 4
-
-
-def _magnitude(measure: re.Match) -> str:
-    """A measure as its power of four, spelled in letters so the numbers
-    taken out after it leave it be."""
-
-    value = float(measure.group(1))
-    order = "small" if value < _SMALL else "four to the " + "i" * math.floor(math.log(value, 4))
-    return f"~{order}{measure.group(2)}"
-
-
-def finding_key(line: str) -> str:
-    """A finding as it is matched with the base's: what is drawn anew on every
-    run taken out, each size and ratio kept to its order of magnitude, and
-    every other number taken out. A finding whose row moved, whose overflow
-    grew by a few pixels, or that names a record made this run is the same
-    finding; one whose overflow grew many times over is not."""
-
-    for drawn, mark in _DRAWN_ANEW:
-        line = drawn.sub(mark, line)
-    line = _MEASURE.sub(_magnitude, line)
-    line = _HEX.sub("#", line)
-    return _NUMBER.sub("#", line)
-
-
-def _unmatched(lines: list[str], against: list[str]) -> list[str]:
-    """The lines with no counterpart in ``against``, matched by their keys as
-    a multiset: one counterpart each, so two alike findings against one leave
-    one unmatched."""
-
-    left = Counter(map(finding_key, against))
-    unmatched = []
-    for line in lines:
-        key = finding_key(line)
-        if left[key]:
-            left[key] -= 1
-        else:
-            unmatched.append(line)
-    return unmatched
-
-
-def _compare(base: Found, branch: Found) -> tuple[Found, Found]:
-    """What the branch finds that the base does not, and what the base found
-    on a page the branch looked at too that the branch no longer does."""
-
-    new = {key: _unmatched(said, base.get(key, [])) for key, said in branch.items()}
-    fixed = {key: _unmatched(base[key], said) for key, said in branch.items() if key in base}
-    return {key: said for key, said in new.items() if said}, {key: said for key, said in fixed.items() if said}
-
-
-def _against(ref: str, rule: str, base: Found, branch: Found) -> tuple[str, list[str], bool]:
-    """A look against a base: the whole report, new and fixed findings page by
-    page; what is printed, a line for each new finding and the verdict last;
-    and whether it found anything new."""
-
-    new, fixed = _compare(base, branch)
-    parts = []
-    if new:
-        parts.append(f"New against {ref}:\n{_grouped(new, rule)}")
-    if fixed:
-        parts.append(f"Fixed against {ref}:\n{_grouped(fixed, rule)}")
-    count = sum(map(len, new.values()))
-    fixes = f"; {sum(map(len, fixed.values()))} fixed" if fixed else ""
-    if new:
-        verdict = f"{rule} against {ref}: {count} new on {', '.join(_failed(new))}{fixes}"
-    else:
-        verdict = f"{rule} against {ref}: nothing new on {len(dict.fromkeys(n for n, _ in branch))} pages{fixes}"
-    printed = [f"new: {name} at {width}: {line}" for (name, width), said in new.items() for line in said]
-    return "\n".join([*parts, verdict]), [*printed, verdict], bool(new)
-
-
-def _beside(ref: str, ours: str, theirs: str | None) -> str:
-    """What this checkout measured, each line followed by the one the base
-    measured in its place when the two differ, marked with ``ref``."""
-
-    if theirs is None:
-        return f"{ours}\n{ref}: (not measured)"
-    lines = []
-    for here, there in zip_longest(ours.splitlines(), theirs.splitlines()):
-        if here is not None:
-            lines.append(here)
-        if there != here:
-            lines.append(f"{ref}: {'(no such line)' if there is None else there.strip()}")
-    return "\n".join(lines)
 
 
 def _bands(height: int, band: int) -> list[tuple[int, int]]:
@@ -775,23 +648,20 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         found = self.look_at_every_page(widths, rule)
         if into := _usage(_FINDINGS):
             _write_found(Path(into), found, self.measured)
-        if self.base is not None:
-            report, printed, new = _against(_usage("usage_base"), rule, self.base, found)
-            REPORT.parent.mkdir(parents=True, exist_ok=True)
-            ref = _usage("usage_base")
-            REPORT.write_text(f"{_commit('HEAD')} against {ref} at {_commit(ref)}\n{report}\n", encoding="utf-8")
-            print(f"New and fixed, page by page: {REPORT}", *printed, sep="\n", flush=True)
-            if new:
-                self.fail(printed[-1])
-        elif rule:
-            verdict = _verdict(rule, found)
-            if _failed(found):
-                self.fail(verdict)
-            print(verdict, flush=True)
+        if not rule:
+            return
+        ref = _usage("usage_base")
+        report, printed, failed = closing(rule, found, self.base, ref)
+        head = _commit("HEAD") + (f" against {ref} at {_commit(ref)}" if self.base is not None else "")
+        REPORT.parent.mkdir(parents=True, exist_ok=True)
+        REPORT.write_text(f"{head}\n{report}\n", encoding="utf-8")
+        print(f"Page by page: {REPORT}", *printed, sep="\n", flush=True)
+        if failed:
+            self.fail(printed[-1])
 
     def look_at_every_page(self, widths, rule) -> Found:
-        """Each page at each width, its findings kept beside its screenshot and
-        printed once it has been looked at, unless they are to be compared."""
+        """Each page at each width, its findings kept beside its screenshot,
+        and said once it has been looked at when no rule asks for a report."""
 
         found: Found = {}
         for name in self.asked:
@@ -802,8 +672,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
                     report.write_text("\n".join([f"{name} at {width}", *said]) + "\n", encoding="utf-8")
                 else:
                     report.unlink(missing_ok=True)
-            if self.base is None:
-                print(_block(name, {width: found[name, width] for width in widths}, rule), flush=True)
+            if not rule:
+                print(block(name, {width: found[name, width] for width in widths}, rule), flush=True)
         return found
 
     def follow(self, width):
@@ -847,6 +717,14 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if not rule:
             return []
         self.width = width
+        said = self.judged(name, width, rule)
+        if _usage("usage_open"):
+            said += self.with_each_popover(name, width, rule, said)
+        return said
+
+    def judged(self, name, width, rule) -> list[str]:
+        """What ``rule`` finds on the page as it stands."""
+
         try:
             getattr(self, rule)(name)
         except AssertionError as found:
@@ -854,6 +732,22 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         except BrowserError as broke:
             return self.shoot_failure(name, width, f"{rule} could not run ({str(broke).splitlines()[0]})")
         return []
+
+    def with_each_popover(self, name, width, rule, beneath) -> list[str]:
+        """What ``rule`` finds with each popover shown on its own, as a reader
+        shows one, past what it finds on the page ``beneath``. Shown all at
+        once they would lie over one another, which no reader sees, and where
+        each lands would hang on which drew last."""
+
+        found = []
+        for place in range(self.page.evaluate(_POPOVERS)):
+            if (shown := self.page.evaluate(_SHOW_POPOVER, place)) is None:
+                continue
+            self.settle()
+            said = self.judged(name, width, rule)
+            self.page.evaluate(_HIDE_POPOVER, place)
+            found += [f"with {shown} shown: {line}" for line in unmatched(said, beneath)]
+        return found
 
     def refused(self, name, width) -> str:
         """Why ``name`` at ``width`` is not a page to look at, if it is not."""
@@ -887,7 +781,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
                 )
 
     def open_everything(self, name, width):
-        """Every disclosure and popover open, round after round until none is
+        """Every disclosure open, round after round until none is
         left closed: a disclosure a region brings in when another opens is
         opened once the region's answer has arrived. A region that never
         answers is said, and the page is looked at as it stands."""
@@ -938,7 +832,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
         if self.base is None:
             return said
-        return _beside(_usage("usage_base"), said, self.base_measured.get((name, width), {}).get(kind))
+        return beside(_usage("usage_base"), said, self.base_measured.get((name, width), {}).get(kind))
 
     def measure_columns(self, name, width):
         """Every table's column widths here, printed and kept beside the

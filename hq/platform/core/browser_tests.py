@@ -855,12 +855,19 @@ _BROKEN_WORDS = (
     range.setEnd(node, end);
     return [...range.getClientRects()].filter((r) => r.width);
   };
+  // The line a run lays out in is its box's: the nearest one that is not
+  // inline, inside its padding (a chip's is narrower than its cell).
+  const lineOf = (node, cell) => {
+    let box = node.parentElement;
+    while (box !== cell && ['inline', 'contents'].includes(getComputedStyle(box).display)) box = box.parentElement;
+    const style = getComputedStyle(box);
+    return box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  };
   for (const cell of document.querySelectorAll('main td')) {
-    const style = getComputedStyle(cell);
-    const line = cell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       if (!node.parentElement.checkVisibility()) continue;
+      const line = lineOf(node, cell);
       for (const run of node.textContent.matchAll(/\\S+/g)) {
         const wide = across(node, run.index, run.index + run[0].length).reduce((sum, r) => sum + r.width, 0) > line;
         for (const match of run[0].matchAll(/[A-Za-z]{4,}/g)) {
@@ -4708,6 +4715,35 @@ class ComponentLayoutTests(LayoutBrowserTests):
         }""")
         found = [line for line in self.page.evaluate(_CELLS) if "example-" in line]
         self.assertEqual([line.split(" runs ")[0] for line in found], ["div.example-box"])
+
+    def test_a_word_wider_than_its_chip_may_break_and_a_short_one_in_a_wide_chip_may_not(self):
+        """A run is measured against the box it lays out in: a digest that
+        fits its cell but not the padded chip in it breaks wherever the column
+        is, while a word that would fit its line, broken anyway, is found."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const chip = (text, style) => {
+            const table = document.createElement('table');
+            const cell = table.insertRow().insertCell();
+            const box = document.createElement('span');
+            box.textContent = text;
+            box.style.cssText = `display: block; font-family: monospace; ${style}`;
+            cell.append(box);
+            document.querySelector('main').append(table);
+            return [cell, box];
+          };
+          // As wide as its cell holds, and padded past what the cell's line leaves.
+          const [cell, box] = chip('0123456789abcdef0123456789abcdef', 'overflow-wrap: anywhere; padding: 0 10px');
+          const range = document.createRange();
+          range.selectNodeContents(box.firstChild);
+          cell.style.setProperty('padding', '0');
+          cell.parentElement.closest('table').style.cssText = `table-layout: fixed; inline-size: ${range.getBoundingClientRect().width + 4}px`;
+          chip('an exampleword', 'word-break: break-all; inline-size: 10ch');
+        }""")
+        found = [line for line in self.page.evaluate(_BROKEN_WORDS) if "abcdef" in line or "example" in line]
+        self.assertEqual(len(found), 1)
+        self.assertIn("example", found[0])
 
     def test_a_small_target_under_an_open_menu_is_not_measured_and_one_in_view_is(self):
         """A target drawn under another element is out of a pointer's reach,

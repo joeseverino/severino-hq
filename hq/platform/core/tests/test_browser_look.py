@@ -10,7 +10,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase, override_settings, tag
 
-from hq.platform.core import browser_look
+from hq.platform.core import browser_look, look_report
 
 ASKED = {"usage_pages": "example"}
 
@@ -70,6 +70,57 @@ class AskedTests(SimpleTestCase):
         self.assertEqual(browser_look._evaluated("example/one", 402, None), "example/one at 402:\n  null")
 
 
+class _Popovers:
+    """A page's popovers as the look's scripts reach them: some shown, one
+    that will not show."""
+
+    def __init__(self, ids, refused=()):
+        self.ids, self.refused, self.shown = ids, set(refused), set()
+
+    def evaluate(self, script, place=None):
+        if script == browser_look._POPOVERS:
+            return len(self.ids)
+        popover = self.ids[place]
+        if script == browser_look._SHOW_POPOVER:
+            if popover in self.refused:
+                return None
+            self.shown.add(popover)
+            return f"#{popover}"
+        self.shown.discard(popover)
+        return None
+
+
+class _Lens:
+    """The look's walk over popovers, with a rule that finds a box on the page
+    beneath, one inside a popover, and two popovers lying over each other."""
+
+    with_each_popover = browser_look.Look.with_each_popover
+
+    def __init__(self, page):
+        self.page = page
+
+    def settle(self):
+        pass
+
+    def judged(self, _name, _width, _rule):
+        shown = sorted(self.page.shown)
+        found = ["frames: a box beneath"]
+        found += [f"overlaps: {one} over {other}" for one in shown for other in shown if one < other]
+        return found + [f"cut: a key in {popover}" for popover in shown]
+
+
+@tag("source")
+class PopoverTests(SimpleTestCase):
+    def test_each_popover_is_judged_alone_and_only_for_what_it_adds_to_the_page(self):
+        page = _Popovers(["origin-one", "origin-two", "origin-three"], refused=["origin-three"])
+        found = _Lens(page).with_each_popover("example/one", 820, "survey", ["frames: a box beneath"])
+        self.assertEqual(
+            found,
+            ["with #origin-one shown: cut: a key in origin-one", "with #origin-two shown: cut: a key in origin-two"],
+        )
+        self.assertEqual(page.shown, set())
+
+
 @tag("source")
 class ReportTests(SimpleTestCase):
     FOUND = {
@@ -82,7 +133,7 @@ class ReportTests(SimpleTestCase):
     }
 
     def test_findings_are_grouped_under_their_page_and_width(self):
-        lines = browser_look._grouped(self.FOUND, "survey").splitlines()
+        lines = look_report.grouped(self.FOUND, "survey").splitlines()
         for page in ("example/one", "example/two", "example/three"):
             self.assertEqual(lines.count(page), 1)
         three = lines.index("example/three")
@@ -90,11 +141,11 @@ class ReportTests(SimpleTestCase):
         self.assertEqual([line.strip() for line in lines[width + 1 : width + 3]], self.FOUND["example/three", 402])
 
     def test_the_verdict_names_every_page_that_failed_and_no_other(self):
-        verdict = browser_look._verdict("survey", self.FOUND)
+        verdict = look_report.verdict_line("survey", self.FOUND)
         self.assertIn("example/one", verdict)
         self.assertIn("example/three", verdict)
         self.assertNotIn("example/two", verdict)
-        self.assertIn("holds", browser_look._verdict("survey", {("example/two", 402): []}))
+        self.assertIn("holds", look_report.verdict_line("survey", {("example/two", 402): []}))
 
     def test_against_a_base_only_new_findings_fail_and_fixed_ones_are_named(self):
         base = {
@@ -102,28 +153,46 @@ class ReportTests(SimpleTestCase):
             ("example/gone", 402): ["x"],
         }
         branch = {("example/one", 402): ["overflow: a box past the edge", "frames: a new frame"]}
-        new, fixed = browser_look._compare(base, branch)
+        new, fixed = look_report.compare(base, branch)
         self.assertEqual(new, {("example/one", 402): ["frames: a new frame"]})
         # A page the branch did not look at is not fixed by it.
         self.assertEqual(fixed, {("example/one", 402): ["overlap: gone now"]})
-        report, printed, failed = browser_look._against("example-ref", "survey", base, branch)
+        report, printed, failed = look_report.against("example-ref", "survey", base, branch)
         self.assertTrue(failed)
         self.assertIn("frames: a new frame", report)
         self.assertIn("overlap: gone now", report)
-        self.assertNotIn("a box past the edge", report)
+        # The base's finding is kept, under all this checkout found, never as new.
+        self.assertNotIn("a box past the edge", report.split("Fixed against")[0])
+        self.assertIn("a box past the edge", report)
         # Printed: each new finding under its page and width, then the verdict.
         self.assertEqual(len(printed), 2)
         self.assertIn("example/one at 402", printed[0])
         self.assertIn("frames: a new frame", printed[0])
         self.assertTrue(printed[-1].startswith("survey against example-ref"))
-        _, printed, failed = browser_look._against("example-ref", "survey", base, {("example/one", 402): []})
+        _, printed, failed = look_report.against("example-ref", "survey", base, {("example/one", 402): []})
+        self.assertFalse(failed)
+        self.assertEqual(len(printed), 1)
+
+    def test_a_run_prints_a_line_per_new_finding_and_its_verdict_and_reports_the_rest(self):
+        base = {key: said[:1] for key, said in self.FOUND.items()}
+        report, printed, failed = look_report.closing("survey", self.FOUND, base, "example-ref")
+        self.assertTrue(failed)
+        self.assertEqual(len(printed), 1 + 1)
+        self.assertIn("frames: a frame", printed[0])
+        self.assertIn("overlap: two names", report)
+        report, printed, failed = look_report.closing("survey", self.FOUND, None, "")
+        self.assertTrue(failed)
+        self.assertEqual(printed, [look_report.verdict_line("survey", self.FOUND)])
+        for line in ("overflow: a box past the edge", "overlap: two names", "frames: a frame"):
+            self.assertIn(line, report)
+        _, printed, failed = look_report.closing("survey", self.FOUND, self.FOUND, "example-ref")
         self.assertFalse(failed)
         self.assertEqual(len(printed), 1)
 
     def test_against_a_base_a_finding_whose_numbers_moved_is_neither_new_nor_fixed(self):
         base = {("example/one", 402): ["overflow: row 3 is 412px wide", "overflow: row 5 is 430px wide"]}
         branch = {("example/one", 402): ["overflow: row 4 is 418.5px wide", "frames: row 2 framed twice"]}
-        new, fixed = browser_look._compare(base, branch)
+        new, fixed = look_report.compare(base, branch)
         self.assertEqual(new, {("example/one", 402): ["frames: row 2 framed twice"]})
         # One counterpart each: two findings of a shape against one is one fixed.
         self.assertEqual(fixed, {("example/one", 402): ["overflow: row 5 is 430px wide"]})
@@ -147,22 +216,20 @@ class ReportTests(SimpleTestCase):
 
     def test_a_finding_naming_what_each_run_makes_anew_is_the_same_finding_on_every_run(self):
         for first, second in zip(self.FIRST_RUN, self.SECOND_RUN, strict=True):
-            self.assertEqual(browser_look.finding_key(first), browser_look.finding_key(second))
-        new, fixed = browser_look._compare(
+            self.assertEqual(look_report.finding_key(first), look_report.finding_key(second))
+        new, fixed = look_report.compare(
             {("example/one", 402): self.FIRST_RUN}, {("example/one", 402): self.SECOND_RUN}
         )
         self.assertEqual((new, fixed), ({}, {}))
 
     def test_findings_that_differ_in_what_they_say_stay_apart(self):
         keys = {
-            browser_look.finding_key(line)
+            look_report.finding_key(line)
             for line in (
                 self.FIRST_RUN[0],
                 self.FIRST_RUN[1],
                 "cells: dt runs 168px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
                 "overflow: dd runs 168px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
-                "cells: div#origin-hqauditapprovala9fe19de-601b-4d02-9088-41d7ba7d5f01.modal.origin-panel"
-                " runs 102px past its cell: example-agent wants to run Change what H",
                 # The same box, past its cell by an order of magnitude more.
                 "cells: dd runs 900px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
                 "cells: dd runs 2px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
@@ -170,22 +237,27 @@ class ReportTests(SimpleTestCase):
                 "contrast: span.muted 4.40:1 on 255,255,255",
             )
         }
-        self.assertEqual(len(keys), 9)
+        self.assertEqual(len(keys), 8)
         # A few pixels either way, or a contrast a hair off, is the same finding.
         for one, other in (
             ("cells: dd runs 412px past its cell", "cells: dd runs 430px past its cell"),
             ("contrast: span.muted 2.10:1 on 255,255,255", "contrast: span.muted 2.30:1 on 255,255,255"),
+            # The same box with the same fault, on another record's row.
+            (
+                "small targets: a in td.row-gutter is hit through 112x16px: Tailnet hardening",
+                "small targets: a in td.row-gutter is hit through 101x16px: Offsite backups",
+            ),
         ):
-            self.assertEqual(browser_look.finding_key(one), browser_look.finding_key(other))
+            self.assertEqual(look_report.finding_key(one), look_report.finding_key(other))
 
     def test_alike_findings_are_counted_so_one_more_of_them_is_new(self):
         base = {("example/one", 402): [self.FIRST_RUN[1]]}
         branch = {("example/one", 402): [self.SECOND_RUN[1], self.FIRST_RUN[1]]}
-        new, fixed = browser_look._compare(base, branch)
+        new, fixed = look_report.compare(base, branch)
         self.assertEqual(sum(map(len, new.values())), 1)
         self.assertEqual(fixed, {})
         # Matched within its page and width only.
-        new, fixed = browser_look._compare(base, {("example/one", 820): [self.FIRST_RUN[1]]})
+        new, fixed = look_report.compare(base, {("example/one", 820): [self.FIRST_RUN[1]]})
         self.assertEqual(list(new), [("example/one", 820)])
 
     def test_a_tables_columns_read_as_drawn_and_at_their_intrinsic_sizes_under_their_headings(self):
@@ -236,14 +308,14 @@ class ReportTests(SimpleTestCase):
     def test_against_a_base_each_number_the_base_measured_otherwise_follows_its_line(self):
         ours = "example/one at 402:\n  inlineSize 372\n  blockSize 90"
         theirs = "example/one at 402:\n  inlineSize 360\n  blockSize 90\n  extra 1"
-        lines = browser_look._beside("example-ref", ours, theirs).splitlines()
+        lines = look_report.beside("example-ref", ours, theirs).splitlines()
         self.assertEqual(lines[:3], ["example/one at 402:", "  inlineSize 372", "example-ref: inlineSize 360"])
         # A line the two share is said once; one only the base has is still said.
         self.assertEqual(lines.count("  blockSize 90"), 1)
         self.assertNotIn("example-ref: blockSize 90", lines)
         self.assertEqual(lines[-1], "example-ref: extra 1")
-        self.assertIn("example-ref: (no such line)", browser_look._beside("example-ref", "a\nb", "a"))
-        self.assertIn("example-ref: (not measured)", browser_look._beside("example-ref", "a", None))
+        self.assertIn("example-ref: (no such line)", look_report.beside("example-ref", "a\nb", "a"))
+        self.assertIn("example-ref: (not measured)", look_report.beside("example-ref", "a", None))
 
 
 @tag("source")

@@ -273,19 +273,20 @@ check the gates hold (`BrowserGate.findings`) at any page and width, so what it
 finds on a page the gates read is what they fail on. Markup a vendored script
 draws (`SELECTORS["vendored"]`, the API reference's viewer) is held by its own
 tests, not judged. `mise run dev:look --deep --rule survey estate/all` walks
-the whole estate. What a rule finds is printed under its page and width, and
-written beside the screenshot (`<page>-<width>.txt`), as each page is looked
-at, so a run stopped part way keeps what it found; the run closes on a verdict
-naming every page that failed. `--base <ref>` looks at the same pages at
+the whole estate. What a rule finds is written beside the screenshot
+(`<page>-<width>.txt`) as each page is looked at, so a run stopped part way
+keeps what it found, and page by page to `var/gate/look.txt` once the run
+ends; the run prints only the checks it ran and a verdict naming every page
+that failed. `--base <ref>` looks at the same pages at
 `<ref>` first, in a temporary worktree it removes however the run ends and
 judges by this checkout's rules, writes what is new on this checkout and what
 it fixed to `var/gate/look.txt` under the commits both ran at, and prints a
 line for each new finding and the verdict. Every probe reports all it finds,
 and findings are matched as a multiset by page, width, check and a key with
 every UUID, hex id and origin panel's id taken out, each size and contrast
-kept to its power of four and every other number taken out, so one whose row
-number moved, whose overflow grew by a few pixels, or that names a record made
-this run is neither new nor fixed, and one grown many times over is new. With `--columns` or `--eval`, each line the
+kept to its power of four, and every other number and the record named after
+a measure taken out, so one whose row number moved, whose overflow grew by a
+few pixels, or that names another record is neither new nor fixed, and one grown many times over is new. With `--columns` or `--eval`, each line the
 base measured otherwise is printed under this checkout's, marked with the ref.
 `--css` takes CSS text or a file of it, a relative path read from the
 checkout.
@@ -297,9 +298,11 @@ taller than the window is also cut into window-sized bands beside its full
 screenshot (`<page>-<width>.band-01.png` on), one screen to read at a time.
 A page that could not be looked at (refused, no `main`, a rule that could not
 run) is shot as it stands, as `<page>-<width>.failed.png`, and its path
-printed. `--open` opens every disclosure and shows every popover, round after
-round until nothing more opens, so a disclosure a region brings in when
-another opens is opened too. `--engine chromium` or `firefox` draws in
+printed. `--open` opens every disclosure, round after round until nothing
+more opens, so a disclosure a region brings in when another opens is opened
+too; then a rule is run again with each popover shown on its own, as a reader
+shows one, and what it finds past the page beneath is said under the
+popover's id. `--engine chromium` or `firefox` draws in
 another engine, installed first (`webkit` by default).
 
 `--columns` prints each table's column widths as drawn and at min-content and
