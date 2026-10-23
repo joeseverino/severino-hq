@@ -415,6 +415,15 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(heading.words, "Policy 2")
         self.assertNotIn("data-kind", heading.attrs)
 
+    def test_a_group_in_a_table_without_headings_spans_its_widest_row(self):
+        html = _render(
+            '{% table_region "Queue" %}<table class="data-table"><tbody>{% row_group "Example" 2 %}'
+            '<tr><td>a</td><td>b</td><td>c</td></tr><tr><td colspan="2">a</td></tr></tbody>'
+            "</table>{% endtable_region %}"
+        )
+        (heading,) = select(html, "scope", "rowgroup")
+        self.assertEqual(heading.attrs["colspan"], "3")
+
     def test_a_folded_group_starts_closed_and_names_the_row_its_rows_fold_under(self):
         html = _render('{% row_group "Policy" folds="example-policy" %}')
         (row,) = elements(html, "tr")

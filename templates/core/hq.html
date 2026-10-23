@@ -174,7 +174,7 @@ they share a row; either alone takes it.
       <thead><tr>{% table_heading "Reading" local_sort=sight.rows|sortable gutter=True %}{% table_heading "State" "status" css="key-col" local_sort=sight.rows|sortable %}{% table_heading "Records" "numeric" local_sort=sight.rows|sortable drop=2 %}{% table_heading "Last read" "status" css="optional-col" local_sort=sight.rows|sortable drop=1 %}</tr></thead>
       {% for provider, rows in sight.groups %}
       <tbody>
-        <tr class="row-group"><th colspan="4" scope="rowgroup">{{ provider|breakable }} <span class="count">{{ rows|length }}</span></th></tr>
+        {% row_group provider rows|length %}
         {% for row in rows %}
           <tr>
             <td class="row-gutter">

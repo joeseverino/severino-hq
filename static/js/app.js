@@ -254,7 +254,7 @@ document.addEventListener("click", (event) => {
       const step = dismissing ? -1 : 1;
       const counts = new Set();
       for (let box = row.parentElement; box; box = box.parentElement) {
-        const count = box.querySelector(":scope > tr.row-group [data-queue-count], :scope > .section-head [data-queue-count]");
+        const count = box.querySelector(":scope > tr.row-group .count, :scope > .section-head [data-queue-count]");
         if (count) counts.add(count);
       }
       const family = row.dataset.folded && document.getElementById(row.dataset.folded);

@@ -29,7 +29,7 @@ part's heading shows only when there is more than one.
       </thead>
       {% for purpose, purpose_rows in connections.purposes %}
       <tbody>
-        {% if connections.purposes|length > 1 %}<tr class="row-group"><th colspan="5" scope="rowgroup">{{ purpose|breakable }} <span class="count">{{ purpose_rows|length }}</span></th></tr>{% endif %}
+        {% if connections.purposes|length > 1 %}{% row_group purpose purpose_rows|length %}{% endif %}
         {% for row in purpose_rows %}
           {% with connection=row.connection group=row.group %}
           <tr id="{{ connection.instance.label|connection_anchor }}">

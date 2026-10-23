@@ -176,8 +176,9 @@ class _Cells(HTMLParser):
         kinds = _kinds(heads)
         lines = {index: kind for index, kind in kinds.items() if kind in ("status", "numeric")}
         named = _naming_column(heads)
-        empty = _empty_columns(heads, named, [row for row in self.rows if row.section == "tbody" and not row.group])
-        width = _width(heads)
+        records = [row for row in self.rows if row.section == "tbody" and not row.group]
+        empty = _empty_columns(heads, named, records)
+        width = _width(heads, records)
         for row in self.rows:
             if row.group:
                 self._span(row, width)
@@ -242,10 +243,12 @@ def _kinds(heads: list[list[_Cell]]) -> dict[int, str]:
     return {index: kind for cells in heads for index, cell in enumerate(cells) if (kind := cell.attrs.get("data-kind"))}
 
 
-def _width(heads: list[list[_Cell]]) -> int:
-    """How many columns the headings declare: what a group's heading row spans."""
+def _width(heads: list[list[_Cell]], body: list[_Row]) -> int:
+    """How many columns the headings declare, or in a table with none its widest
+    row: what a group's heading row spans."""
 
-    return max((sum(int(cell.attrs.get("colspan") or 1) for cell in cells) for cells in heads), default=0)
+    rows = heads or [row.cells for row in body]
+    return max((sum(int(cell.attrs.get("colspan") or 1) for cell in cells) for cells in rows), default=0)
 
 
 def _naming_column(heads: list[list[_Cell]]) -> int:

@@ -12,7 +12,7 @@ twice.
   <table class="data-table queue-table">
     {% for group in groups %}
     <tbody>
-      {% if titled != 0 %}<tr class="row-group"><th colspan="3" scope="rowgroup">{{ group.label|breakable }}&nbsp;<span class="count" data-queue-count>{{ group.items|length }}</span></th></tr>{% endif %}
+      {% if titled != 0 %}{% row_group group.label group.items|length %}{% endif %}
       {% for entry in group.entries %}
         {% if entry.folded %}
           {% with family_row=prefix|add:"-"|add:entry.id|slugify %}
