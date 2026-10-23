@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from django import forms
 from django.conf import settings
 from django.template.base import Lexer, TokenType, filter_re
 from django.test import SimpleTestCase, tag
@@ -59,10 +60,7 @@ KEEPS_MARKUP = {"linebreaksbr"}
 
 # Values that are markup by the time a template prints them, built by Django
 # or by their author: `|breakable` passes markup as it is.
-MARKUP = {
-    "field": "a form field's widget, as Django renders it",
-    "block.super": "the parent template's block",
-}
+MARKUP = {"block.super": "the parent template's block"}
 MARKUP_ATTRIBUTES = {
     "errors": "a form's error list, as Django renders it",
     "non_field_errors": "a form's error list, as Django renders it",
@@ -75,6 +73,15 @@ MARKUP_FILTERS = {"safe": "markup its author wrote"}
 PLAIN_TEXT = {"title", "option", "textarea", "script", "style", "svg", "time"}
 
 _TAG = re.compile(r"<(/?)([A-Za-z][\w-]*)")
+
+# A form's field is markup: Django renders a bound field as its widget and
+# gives it `__html__`. A template read without its context cannot see a
+# value's type, so it knows a field by how the template gets or uses it: a
+# loop over a form or one of a form's field lists, or a read of an attribute
+# only a field has. A name used as a field in one place is a field everywhere
+# in that template.
+_FIELD_LOOP = re.compile(r"for\s+(\w+)\s+in\s+form(?:\.\w+)?")
+_FIELD_READ = re.compile(r"\b(\w+)\.(?:id_for_label|errors|auto_id|html_name|widget_type|label_tag|is_hidden)\b")
 
 
 @dataclass(frozen=True)
@@ -168,15 +175,43 @@ def holds_a_literal(contents: str) -> bool:
     return literal and bool(HOLDING.intersection(filters(contents)))
 
 
-def holds(contents: str) -> bool:
+def form_fields(source: str) -> set[str]:
+    """The names ``source`` gets as a form's fields or uses as one."""
+
+    names = set()
+    for token in Lexer(source).tokenize():
+        if token.token_type == TokenType.BLOCK and (loop := _FIELD_LOOP.fullmatch(token.contents.strip())):
+            names.add(loop[1])
+        if token.token_type in (TokenType.BLOCK, TokenType.VAR):
+            names.update(found[1] for found in _FIELD_READ.finditer(token.contents))
+    return names
+
+
+def is_markup(contents: str, fields=frozenset()) -> bool:
+    """Whether a printed variable is markup before any filter: a field of
+    ``fields``, a block's parent, or a form's error list."""
+
+    printed = contents.split("|")[0].strip()
+    return (
+        printed in MARKUP or printed in fields or ("." in printed and printed.rpartition(".")[2] in MARKUP_ATTRIBUTES)
+    )
+
+
+def holds_markup(contents: str, fields=frozenset()) -> bool:
+    """Whether a printed variable hands markup to a hold, which passes it as
+    it is, so the hold only hides what the value is."""
+
+    return is_markup(contents, fields) and bool(HOLDING.intersection(filters(contents)))
+
+
+def holds(contents: str, fields=frozenset()) -> bool:
     """Whether a printed variable holds the names in it, or has none to hold."""
 
     names = filters(contents)
     while names and names[-1] in KEEPS_MARKUP:
         names.pop()
     if not names:
-        printed = contents.split("|")[0].strip()
-        return printed in MARKUP or ("." in printed and printed.rpartition(".")[2] in MARKUP_ATTRIBUTES)
+        return is_markup(contents, fields)
     return names[-1] in HOLDING or names[-1] in WORDS_ONLY or names[-1] in MARKUP_FILTERS
 
 
@@ -188,12 +223,13 @@ WRITES_MARKUP = HOLDING | {"linebreaksbr", "safe"}
 @dataclass
 class Reading:
     """What one template prints: the values it prints as text without holding
-    their names, the words it writes itself and hands to a hold, markup it
-    prints where text belongs, and the blocks it opens where text belongs, for
-    a template that fills them."""
+    their names, the words it writes itself and the markup it hands to a hold,
+    markup it prints where text belongs, and the blocks it opens where text
+    belongs, for a template that fills them."""
 
     unheld: list = field(default_factory=list)
     literals: list = field(default_factory=list)
+    markup: list = field(default_factory=list)
     misplaced: list = field(default_factory=list)
     plain_blocks: set = field(default_factory=set)
 
@@ -208,6 +244,7 @@ def read(source: str, plain_blocks=frozenset()) -> Reading:
 
     markup = _Markup()
     reading = Reading()
+    fields = form_fields(source)
     commented = False
     blocks: list[str] = []
     for token in Lexer(source).tokenize():
@@ -228,7 +265,9 @@ def read(source: str, plain_blocks=frozenset()) -> Reading:
             in_text = markup.in_text and not plain_blocks.intersection(blocks)
             if in_text and holds_a_literal(token.contents):
                 reading.literals.append(token)
-            elif in_text and not holds(token.contents):
+            elif in_text and holds_markup(token.contents, fields):
+                reading.markup.append(token)
+            elif in_text and not holds(token.contents, fields):
                 reading.unheld.append(token)
             elif not in_text and WRITES_MARKUP.intersection(filters(token.contents)):
                 reading.misplaced.append(token)
@@ -245,6 +284,12 @@ def held_literals(source: str, path: str = "", plain_blocks=frozenset()) -> list
     """Each word ``source`` writes itself and hands to a hold, which leaves it as it is."""
 
     return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks).literals]
+
+
+def held_markup(source: str, path: str = "", plain_blocks=frozenset()) -> list[Site]:
+    """Each value ``source`` knows is markup and hands to a hold."""
+
+    return [Site(path, token.lineno, token.contents) for token in read(source, plain_blocks).markup]
 
 
 def misplaced(source: str, path: str = "", plain_blocks=frozenset()) -> list[Site]:
@@ -346,9 +391,38 @@ class UnheldTests(SimpleTestCase):
         )
 
     def test_markup_passes(self):
-        self.assertEqual(
-            self.values("<div>{{ field }} {{ form.non_field_errors }} {{ field.help_text|safe }}</div>"), []
+        source = (
+            "{% for field in form %}<div>{{ field }} {{ form.non_field_errors }} {{ field.help_text|safe }}</div>"
+            "{% endfor %}{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}"
         )
+
+        self.assertEqual(self.values(source), [])
+
+    def test_a_name_used_as_a_field_is_markup(self):
+        source = '<label for="{{ field.id_for_label }}">x</label>{{ field }}{{ field.errors }}'
+
+        self.assertEqual(self.values(source), [])
+
+    def test_a_name_that_is_not_a_field_is_text(self):
+        source = "{% for field in publication.fields %}<code>{{ field }}</code>{% endfor %}"
+
+        self.assertEqual(self.values(source), ["field"])
+
+    def test_markup_handed_to_a_hold_is_found(self):
+        source = (
+            "{% for hidden in form.hidden_fields %}{{ hidden|breakable }}{% endfor %}"
+            "{% block x %}{{ block.super|breakable }}{% endblock %}<p>{{ field.errors|breakable }}</p>"
+        )
+
+        found = [site.value for site in held_markup(source)]
+
+        self.assertEqual(found, ["hidden|breakable", "block.super|breakable", "field.errors|breakable"])
+        self.assertEqual(self.values(source), [])
+
+    def test_a_value_named_like_a_field_but_not_one_may_be_held(self):
+        source = "{% for field in node.unconfirmed_fields %}<code>{{ field|breakable }}</code>{% endfor %}"
+
+        self.assertEqual(held_markup(source), [])
 
     def test_an_svg_drawing_passes(self):
         self.assertEqual(self.values("<svg><text>{{ mark.label }}</text></svg><p>{{ b }}</p>"), ["b"])
@@ -407,6 +481,11 @@ class StrandedMarkTests(SimpleTestCase):
         self.assertEqual(self.found('{% if x %}<code>{{ x|breakable:"." }}</code>{% else %}.{% endif %}'), [])
 
 
+class _ExampleForm(forms.Form):
+    name = forms.CharField()
+    key = forms.CharField(widget=forms.HiddenInput)
+
+
 class HoldingFilterTests(SimpleTestCase):
     """The filters the check counts on hold any value they are given."""
 
@@ -435,6 +514,13 @@ class HoldingFilterTests(SimpleTestCase):
 
         self.assertEqual(breakable(markup), markup)
 
+    def test_a_forms_fields_and_errors_are_markup(self):
+        form = _ExampleForm()
+
+        for value in (*form, *form.hidden_fields(), form["name"].errors, form.non_field_errors()):
+            with self.subTest(value=type(value).__name__):
+                self.assertTrue(hasattr(value, "__html__"))
+
     def test_text_that_names_no_moment_is_held(self):
         for printed in (when("example-docker-host-01"), readable("example-docker-host-01")):
             with self.subTest(printed=printed):
@@ -461,6 +547,15 @@ class TemplateValueTests(SimpleTestCase):
             [],
             "Django marks a template's own string safe, and a hold passes safe text through as markup, so the hold"
             " does nothing: write the word held in the template, inside a `.whole` span as `|breakable` writes one",
+        )
+
+    def test_no_markup_is_handed_to_a_hold(self):
+        found = [site for path, source in self.sources.items() for site in held_markup(source, path, self.plain)]
+
+        self.assertEqual(
+            [str(site) for site in found],
+            [],
+            "A hold passes markup as it is, so it only hides that the value is markup: print it bare",
         )
 
     def test_no_markup_is_printed_where_text_belongs(self):
