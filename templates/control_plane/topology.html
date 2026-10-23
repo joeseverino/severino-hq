@@ -110,7 +110,7 @@
     <h2 id="topology-relations-heading">Links shown</h2>
     <span class="muted">{{ topology_edges|length|counted:"link" }}</span>
   </header>
-  {% table_region "Links shown" pane=True narrow=2 %}
+  {% table_region "Links shown" pane=True %}
     <table class="data-table">
       <thead><tr>{% table_heading "From" "identifier" gutter=True local_sort=topology_edges|sortable %}{% table_heading "Link" drop=3 local_sort=topology_edges|sortable %}{% table_heading "To" "identifier" drop=2 local_sort=topology_edges|sortable %}{% table_heading "State" "status" drop=1 local_sort=topology_edges|sortable %}</tr></thead>
       <tbody>

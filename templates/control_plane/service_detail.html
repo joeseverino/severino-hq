@@ -283,7 +283,7 @@ it is not what anyone opens this page to read.
 {% endcomment %}
   <details class="control-diagnostics">
     <summary>{{ service.alias_summary|breakable }}</summary>
-    {% table_region "Other names" narrow=2 %}
+    {% table_region "Other names" %}
       <table class="data-table">
         <thead><tr>{% table_heading "Record" "identifier" gutter=True local_sort=service.alias_claims|sortable %}{% table_heading "Type" drop=2 local_sort=service.alias_claims|sortable %}{% table_heading "For" "identifier" drop=1 local_sort=service.alias_claims|sortable %}{% table_heading "State" "status" css="key-col" local_sort=service.alias_claims|sortable %}</tr></thead>
         <tbody>

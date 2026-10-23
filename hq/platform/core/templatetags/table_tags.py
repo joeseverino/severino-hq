@@ -314,8 +314,6 @@ def _region(
     chart: bool = False,
     pane: bool = False,
     room: str = "",
-    mid: Any = None,
-    narrow: Any = None,
 ) -> dict[str, Any]:
     """The labeled region a table sits in: the box it fits.
     An identifier in it is cut at a share of the region's width; ``room``
@@ -327,9 +325,6 @@ def _region(
     a table sized to its content) and a ``chart``'s table scroll in it, and
     those are reachable from the keyboard."""
 
-    # TODO(note-hq-chokepoints-and-tables-plan, wave 1 item 6): ``mid`` and
-    # ``narrow`` are accepted and ignored until no template passes them.
-    del mid, narrow
     if room not in _ROOMS:
         raise ValueError(f"A region's room is one of {sorted(_ROOMS)}, not {room!r}.")
     classes = [

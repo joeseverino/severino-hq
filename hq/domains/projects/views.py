@@ -72,8 +72,6 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
     page_title = "Projects"
     table_search_scope = "projects"
     table_selectable = True
-    # A technology list runs to a sentence, so a phone keeps the name and its status.
-    table_drop_narrow = 5
     table_columns = (
         TableColumn("Name", "name"),
         TableColumn("Status", "status", css="key-col"),

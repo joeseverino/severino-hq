@@ -10,7 +10,7 @@ from django.test import RequestFactory, SimpleTestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.routes import routed
-from hq.platform.application.tables import TableColumn, TableListMixin, named_first, ranked, typed
+from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 from hq.platform.core.templatetags import table_tags
@@ -206,14 +206,6 @@ class TableTagTests(SimpleTestCase):
         )
         ranks = {heading.text.strip(): heading.attrs.get("data-drop") for heading in elements(_render(source), "th")}
         self.assertEqual(ranks, {"Name": None, "A": "1", "B": "3", "D": None})
-
-    def test_a_regions_counts_are_accepted_and_change_nothing(self):
-        table = (
-            '<table class="data-table"><thead><tr>{% table_heading "Name" %}{% table_heading "Note" drop=1 %}'
-            "</tr></thead><tbody><tr><td>a</td><td>b</td></tr></tbody></table>{% endtable_region %}"
-        )
-        counted = _render('{% table_region "Things" mid=3 narrow=1 %}' + table)
-        self.assertEqual(counted, _render('{% table_region "Things" %}' + table))
 
     def test_a_region_refuses_what_it_does_not_take(self):
         for source in (
@@ -450,9 +442,9 @@ class TableColumnTests(SimpleTestCase):
 
     def test_the_column_that_names_each_row_never_drops(self):
         with self.assertRaises(ValueError):
-            named_first((TableColumn("Name", drop=1), TableColumn("Note")))
+            ranked((TableColumn("Name", drop=1), TableColumn("Note")))
         columns = (TableColumn("Name"), TableColumn("Note", drop=1))
-        self.assertEqual(named_first(columns), columns)
+        self.assertEqual(ranked(columns), columns)
 
     def _ranks(self, *columns):
         return {column.label: column.drop for column in ranked(columns)}
@@ -473,15 +465,11 @@ class TableColumnTests(SimpleTestCase):
         keyed = (TableColumn("Name"), TableColumn("State", css="key-col"), TableColumn("Cost", css="num-col"))
         self.assertEqual(self._ranks(*keyed), {"Name": 0, "State": 0, "Cost": 1})
 
-    def _list_ranks(self, **counts):
-        view = type("Listed", (TableListMixin,), {"table_columns": _LIST_COLUMNS, **counts})()
+    def test_a_list_ranks_its_columns(self):
+        view = type("Listed", (TableListMixin,), {"table_columns": _LIST_COLUMNS})()
         view.request = RequestFactory().get("/")
-        return {column.label: column.drop for column in view.table_context()["columns"]}
-
-    def test_a_list_ranks_its_columns_whatever_it_counts(self):
-        ranks = {"Name": 0, "Note": 0, "When": 1}
-        self.assertEqual(self._list_ranks(), ranks)
-        self.assertEqual(self._list_ranks(table_drop_mid=1, table_drop_narrow=2), ranks)
+        ranks = {column.label: column.drop for column in view.table_context()["columns"]}
+        self.assertEqual(ranks, {"Name": 0, "Note": 0, "When": 1})
 
     def test_a_declared_rank_stands(self):
         ranks = self._ranks(TableColumn("Name"), TableColumn("Note", drop=2), TableColumn("When", drop=1))

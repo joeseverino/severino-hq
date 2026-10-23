@@ -44,7 +44,7 @@ connected is in one place.
             <li>
               <strong>Store it</strong>
               <p>In the vault the controller reads, as {{ setup.item|breakable }} with these fields:</p>
-              {% table_region "Fields of "|add:setup.item narrow=1 %}
+              {% table_region "Fields of "|add:setup.item %}
                 <table class="data-table">
                   <thead><tr>{% table_heading "Field" "identifier" gutter=True local_sort=setup.fields|sortable %}{% table_heading "Value" "identifier" drop=2 local_sort=setup.fields|sortable %}{% table_heading "What it is" css="optional-col" drop=1 local_sort=setup.fields|sortable %}</tr></thead>
                   <tbody>

@@ -3060,7 +3060,7 @@ _COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 # part of a list, so the gutter is kept at every width, and a row's value is
 # cut off there too.
 _ROW_TOGGLE_TABLES = """
-{% table_region "Dropping" narrow=1 %}<table class="data-table"><thead><tr>
+{% table_region "Dropping" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
 <tr data-probe="dropped"><td class="row-gutter">Dropped{% row_toggle %}</td><td>Short</td><td>Something to say</td></tr>
 <tr data-probe="dropped-blank"><td class="row-gutter">Blank{% row_toggle %}</td><td>Short</td><td>–</td></tr>

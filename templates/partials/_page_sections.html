@@ -20,7 +20,7 @@
   a control belonging to nothing.
   {% endcomment %}
   {% if section.folded %}<details class="section-fold"><summary><h2>{{ section.label|breakable }} <span class="heading-aside">{{ section.records|length }}</span></h2></summary>{% else %}<h2>{{ section.label|breakable }}</h2>{% endif %}
-  {% table_region section.label narrow=section.columns|length|add:-2 %}
+  {% table_region section.label %}
     <table class="data-table{% if section.compact %} compact-table{% endif %}">
       <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=section.records|sortable gutter=True %}{% elif section.columns|length > 2 %}{% table_heading column local_sort=section.records|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=section.records|sortable %}{% endif %}{% endfor %}</tr></thead>
       <tbody>

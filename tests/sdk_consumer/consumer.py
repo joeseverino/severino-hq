@@ -190,9 +190,6 @@ class Things(tables.TableListMixin, pages.PageMixin):
     )
     table_search_fields = ("name",)
     table_default_sort = "name"
-    # How many ranked columns leave a mid-width box and a narrow one.
-    table_drop_mid = 0
-    table_drop_narrow = 1
     # An identifier beside a wide prose column takes what it leaves.
     table_room = "shared"
 
@@ -200,7 +197,6 @@ class Things(tables.TableListMixin, pages.PageMixin):
 class WronglyDeclared(tables.TableListMixin):
     table_empty = None  # type: ignore[assignment]
     table_columns = ("Name",)  # type: ignore[assignment]
-    table_drop_narrow = "1"  # type: ignore[assignment]
     table_room = "wide"  # type: ignore[assignment]
 
 

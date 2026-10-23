@@ -105,7 +105,7 @@ they share a row; either alone takes it.
   {% if work.unread %}
     <p class="muted">{{ work.unread|breakable }}</p>
   {% elif work.jobs %}
-    {% table_region "Jobs" narrow=3 %}
+    {% table_region "Jobs" %}
       <table class="data-table">
         <thead><tr>{% table_heading "Unit" "identifier" local_sort=work.jobs|sortable gutter=True %}{% table_heading "Runs" "identifier" local_sort=work.jobs|sortable drop=3 %}{% table_heading "Last run" "status" local_sort=work.jobs|sortable drop=2 %}{% table_heading "Result" "status" css="key-col" local_sort=work.jobs|sortable %}{% table_heading "Next run" "status" css="optional-col" local_sort=work.jobs|sortable drop=1 %}</tr></thead>
         <tbody>
@@ -123,7 +123,7 @@ they share a row; either alone takes it.
     {% endtable_region %}
   {% endif %}
   {% if work.scheduled %}
-    {% table_region "Scheduled work" narrow=3 %}
+    {% table_region "Scheduled work" %}
       <table class="data-table">
         <thead><tr>{% table_heading "Scheduled work" local_sort=work.scheduled|sortable gutter=True %}{% table_heading "How often" "status" css="optional-col" local_sort=work.scheduled|sortable drop=2 %}{% table_heading "Recent runs" "status" local_sort=work.scheduled|sortable drop=3 %}{% table_heading "Last result" "status" css="key-col" local_sort=work.scheduled|sortable %}{% table_heading "Next due" "status" css="optional-col" local_sort=work.scheduled|sortable drop=1 %}</tr></thead>
         <tbody>
@@ -143,7 +143,7 @@ they share a row; either alone takes it.
   {% if work.renderers_unread %}
     <p class="muted">{{ work.renderers_unread|breakable }}</p>
   {% elif work.renderers %}
-    {% table_region "Credentials refresh" narrow=2 %}
+    {% table_region "Credentials refresh" %}
       <table class="data-table compact-table">
         <thead><tr>{% table_heading "Credentials refresh" "identifier" local_sort=work.renderers|sortable gutter=True %}{% table_heading "Last run" "status" css="key-col" local_sort=work.renderers|sortable %}{% table_heading "Tried" "status" local_sort=work.renderers|sortable drop=2 %}{% table_heading "Last confirmed current" "status" local_sort=work.renderers|sortable drop=1 %}</tr></thead>
         <tbody>
@@ -169,7 +169,7 @@ they share a row; either alone takes it.
   {% if sight.never == sight.rows|length %}
   <p class="card">None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label|breakable }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>
   {% else %}
-  {% table_region "Readings" narrow=2 %}
+  {% table_region "Readings" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Reading" local_sort=sight.rows|sortable gutter=True %}{% table_heading "State" "status" css="key-col" local_sort=sight.rows|sortable %}{% table_heading "Records" "numeric" local_sort=sight.rows|sortable drop=2 %}{% table_heading "Last read" "status" css="optional-col" local_sort=sight.rows|sortable drop=1 %}</tr></thead>
       {% for provider, rows in sight.groups %}

@@ -87,10 +87,6 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     def types_held(self) -> frozenset[str]:
         return frozenset(content_type for content_type, _url in self._held)
 
-    # A title runs to a dozen words, so a tablet lets the description and the
-    # last edit go, and a phone keeps only the title and its status.
-    table_drop_mid, table_drop_narrow = 2, 6
-
     @cached_property
     def table_columns(self) -> tuple[TableColumn, ...]:
         typed = (TableColumn("Type", "content_type", drop=6),) if len(self.types_held) > 1 else ()

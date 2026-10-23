@@ -64,7 +64,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 {% if controller.queue %}
 <section class="page-section" aria-labelledby="controller-queue">
   <h2 id="controller-queue">Waiting to be applied <span class="count">{{ controller.queue|length }}</span></h2>
-  {% table_region "Waiting to be applied" narrow=2 %}
+  {% table_region "Waiting to be applied" %}
     <table class="data-table">
       <thead><tr>{% table_heading "What" "identifier" gutter=True local_sort=controller.queue|sortable %}{% table_heading "Change" drop=2 local_sort=controller.queue|sortable %}{% table_heading "State" "status" css="key-col" local_sort=controller.queue|sortable %}{% table_heading "Asked" "status" drop=1 local_sort=controller.queue|sortable %}</tr></thead>
       <tbody>
@@ -86,7 +86,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 <section class="page-section" aria-labelledby="controller-readings">
   <h2 id="controller-readings">Readings <span class="count">{{ controller.readings|length }}</span></h2>
   {% if controller.readings %}
-  {% table_region "Readings" narrow=2 %}
+  {% table_region "Readings" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Reading" gutter=True local_sort=controller.readings|sortable %}{% table_heading "Last tried" "status" drop=3 local_sort=controller.readings|sortable %}{% table_heading "Last succeeded" "status" drop=2 local_sort=controller.readings|sortable %}{% table_heading "Items" css="num-col" drop=1 local_sort=controller.readings|sortable %}{% table_heading "Result" "status" css="key-col" local_sort=controller.readings|sortable %}</tr></thead>
       <tbody>

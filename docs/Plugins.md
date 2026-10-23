@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=4,
+    api_version=5,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -508,9 +508,7 @@ the page. A row that holds more than it shows ends its naming cell with
 carry `row-gutter`; the stylesheet shows the toggle only where the row holds
 something back. A `TableListMixin` list declares the same through
 `TableColumn(kind=)`, its ranks derived from the columns unless one says
-`drop=`, and its region's `room=` as `table_room`. A region's `mid=` and
-`narrow=`, and a list's `table_drop_mid` and `table_drop_narrow`, are still
-accepted and do nothing.
+`drop=`, and its region's `room=` as `table_room`.
 
 <!-- sdk_contract: shared UI contract, written by `mise run regen` from hq_sdk/template_contract.py -->
 

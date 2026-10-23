@@ -33,9 +33,6 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
     page_title = "Expenses"
     table_search_scope = "expenses"
     table_selectable = True
-    # A vendor runs to a sentence beside a date and a six-figure cost, so a phone
-    # keeps the vendor and the cost, and a tablet the date too.
-    table_drop_mid, table_drop_narrow = 1, 5
     table_columns = (
         TableColumn("Vendor", "vendor", "Vendor A–Z", "Vendor Z–A"),
         TableColumn("Date", "date", "Oldest expense", "Newest expense", css="date-col"),

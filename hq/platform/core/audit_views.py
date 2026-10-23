@@ -35,8 +35,6 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     )
     # Off until asked for: an ask for a fresh reading changes nothing.
     table_toggles = (TableToggle(READS, "Read requests"),)
-    table_drop_mid = 1
-    table_drop_narrow = 3
     # The Message column is prose, so what a row names gets what it leaves.
     table_room = "shared"
     table_columns = (

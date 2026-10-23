@@ -267,10 +267,6 @@ class WorktreeTests(SimpleTestCase):
             self.assertFalse(tree.parent.exists())
             self.assertNotIn(str(tree), _git("worktree", "list", "--porcelain", cwd=checkout))
 
-    def test_the_lens_a_base_is_judged_by_is_files_of_this_checkout(self):
-        for lens in browser_look.LENS:
-            self.assertTrue(lens.is_file(), lens)
-
     def test_a_ref_that_names_nothing_is_said_and_leaves_nothing(self):
         with tempfile.TemporaryDirectory() as folder:
             checkout = _repository(Path(folder))

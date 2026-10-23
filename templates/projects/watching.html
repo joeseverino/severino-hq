@@ -27,7 +27,7 @@ would be a page about anybody.
   </section>
 
   <h2>Starred <span class="heading-aside">newest first · {% include "partials/_reading_age.html" with at=profile.observed_at only %}</span></h2>
-  {% table_region "Starred" narrow=2 %}
+  {% table_region "Starred" %}
     <table class="data-table">
       <thead><tr>{% table_heading "Repository" local_sort=profile.watched|sortable gutter=True %}{% table_heading "Latest release" "identifier" local_sort=profile.watched|sortable drop=2 %}{% table_heading "Advisories" local_sort=profile.watched|sortable drop=1 %}{% table_heading "Starred" "status" local_sort=profile.watched|sortable %}</tr></thead>
       <tbody>

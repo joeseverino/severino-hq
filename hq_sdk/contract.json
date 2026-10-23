@@ -1,5 +1,5 @@
 {
-  "api_version": 4,
+  "api_version": 5,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -1407,14 +1407,6 @@
           "table_default_sort": {
             "kind": "attribute",
             "type": "str"
-          },
-          "table_drop_mid": {
-            "kind": "attribute",
-            "type": "int"
-          },
-          "table_drop_narrow": {
-            "kind": "attribute",
-            "type": "int"
           },
           "table_empty": {
             "kind": "attribute",
@@ -2895,9 +2887,7 @@
           "css=",
           "chart=",
           "pane=",
-          "room=",
-          "mid=",
-          "narrow="
+          "room="
         ]
       }
     }

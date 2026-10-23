@@ -21,7 +21,7 @@ button named for what it does. How it is built belongs to the API reference.
     </dl>
   {% endif %}
   {% if result_table %}
-    {% table_region result_table.label narrow=result_table.columns|length|add:-2 %}
+    {% table_region result_table.label %}
       <table class="data-table command-result-table">
         <caption>{{ result_table.label|breakable }} · {{ result_table.rows|length }}</caption>
         <thead><tr>{% for column in result_table.columns %}{% if forloop.first %}{% table_heading column local_sort=result_table.rows|sortable gutter=True %}{% elif result_table.columns|length > 2 %}{% table_heading column local_sort=result_table.rows|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=result_table.rows|sortable %}{% endif %}{% endfor %}</tr></thead>

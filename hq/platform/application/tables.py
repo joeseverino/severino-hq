@@ -89,14 +89,6 @@ def check_drop(drop: int, css: str, label: str) -> None:
         raise ValueError(f"Column {label!r} is kept at every width, so it has no drop rank.")
 
 
-def named_first(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
-    """The columns, refused when the one that names each row could be dropped."""
-
-    if columns and columns[0].drop:
-        raise ValueError(f"Column {columns[0].label!r} names each row, so it has no drop rank.")
-    return columns
-
-
 def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
     """The columns, each with the order a narrow table lets it go in.
 
@@ -106,7 +98,8 @@ def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
     table that marks no key.
     """
 
-    columns = named_first(columns)
+    if columns and columns[0].drop:
+        raise ValueError(f"Column {columns[0].label!r} names each row, so it has no drop rank.")
     if any(column.drop for column in columns):
         return columns
     keyed = any("key-col" in column.css.split() for column in columns)
@@ -192,11 +185,6 @@ class TableListMixin:
     table_search_scope = ""
     table_filters: tuple[TableFilter, ...] = ()
     table_columns: tuple[TableColumn, ...] = ()
-    # TODO(note-hq-chokepoints-and-tables-plan, wave 1 item 6): accepted and
-    # ignored until views, hq_sdk and the extensions stop declaring them; a
-    # column leaves where its table no longer fits (tables.js).
-    table_drop_mid = 0
-    table_drop_narrow = 0
     # How much of a row an identifier in it may take: `{% table_region %}`'s
     # ``room`` ("shared" beside a wide prose column, "snug" beside other
     # identifiers).

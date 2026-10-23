@@ -31,7 +31,7 @@
 {% else %}
 <p class="muted">{{ submissions|length|counted:"message" }}{% if selected_status or q %} match{% endif %}.</p>
 
-{% table_region "Messages" mid=1 narrow=4 %}
+{% table_region "Messages" %}
 <table class="data-table">
   <thead>
     <tr>

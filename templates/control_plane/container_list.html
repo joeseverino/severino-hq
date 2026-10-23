@@ -46,7 +46,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
 
   {% if need_sections %}
     <h2>{{ need_heading|breakable }} <span class="heading-aside">{{ needs|length|counted:"image" }}{% if need_running != needs|length %}, {{ need_running|counted:"container" }}{% endif %}</span></h2>
-    {% table_region need_heading narrow=2 %}
+    {% table_region need_heading %}
       <table class="data-table">
         <thead>
           <tr>
@@ -92,7 +92,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
   {% endif %}
 
   <h2>Every container <span class="heading-aside">{{ containers|length }}</span></h2>
-  {% table_region "Every container" mid=3 narrow=5 %}
+  {% table_region "Every container" %}
     <table class="data-table container-table">
       <thead>
         <tr>
