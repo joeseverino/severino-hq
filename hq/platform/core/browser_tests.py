@@ -4662,7 +4662,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
           document.querySelector('main').prepend(region);
           await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
           // The part alone, in the face the name is drawn in.
-          const style = getComputedStyle(region.querySelector('.token'));
+          const style = getComputedStyle(region.querySelector('code').firstElementChild);
           const free = document.createElement('span');
           free.textContent = part;
           for (const property of ['font-family', 'font-size', 'font-weight', 'letter-spacing']) {
@@ -4688,14 +4688,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
           table.style.setProperty('width', '200px');
           table.style.setProperty('table-layout', 'fixed');
           const cell = table.insertRow().insertCell();
-          for (const name of ['example-popover', 'example-box']) {
+          const [popover] = ['example-popover', 'example-box'].map((name) => {
             const box = document.createElement('div');
             box.className = name;
             box.textContent = name;
             box.style.setProperty('inline-size', '600px');
             cell.append(box);
-          }
-          const popover = cell.querySelector('.example-popover');
+            return box;
+          });
           popover.popover = 'manual';
           document.querySelector('main').append(table);
           popover.showPopover();

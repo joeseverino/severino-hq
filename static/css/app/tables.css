@@ -527,7 +527,10 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* A column holds out for the longest part its cells say that cannot break
    (`--part-floor`, tables.js), so an open row, its columns held, breaks no
    part where it has no seam. */
-.data-table > thead > tr:last-child > th::after { content: ""; display: block; inline-size: var(--part-floor, 0px); }
+.data-table > thead > tr:last-child > th {
+  --part-floor: 0px;
+}
+.data-table > thead > tr:last-child > th::after { content: ""; display: block; inline-size: var(--part-floor); }
 .data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * .row-more), :has(> tbody > tr > * .row-below), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* A value found cut opens its row only where the gutter is already kept. */
 @container style(--gutter: kept) {

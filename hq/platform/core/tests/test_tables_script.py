@@ -18,6 +18,7 @@ MEASURES_IN = {
     "holdColumns": "every column at the width the reader saw while a row is open",
     "openDetail": "the open row's line beneath: what its row left out, each part under its own column",
     "pinColumnWidths": "the columns of a table a sort, search or page turn swaps in",
+    "longestPart": "the longest part of a column's words that cannot break, which the fit holds the column to",
 }
 
 _MEASURES = re.compile(
