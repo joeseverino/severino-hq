@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DeleteView, RedirectView, TemplateView, UpdateView
 
-from hq.platform.application.calendar import calendar_day, calendar_month, month_of
+from hq.platform.application.calendar import calendar_day, calendar_month, month_of, month_url, new_entry_url
 from hq.platform.application.calendar_entries import (
     calendar_choices,
     choose_source,
@@ -42,17 +42,6 @@ def _day(value: str) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
-
-
-def month_url(month: date, day: date | None = None) -> str:
-    query = f"?month={month:%Y-%m}"
-    return f"{reverse('calendar:month')}{query}{f'&day={day.isoformat()}' if day else ''}"
-
-
-def new_entry_url(day: date) -> str:
-    """The form for a new entry, on ``day``."""
-
-    return f"{reverse('calendar:entry_new')}?on={day.isoformat()}"
 
 
 class CalendarView(PageMixin, TemplateView):
@@ -95,7 +84,6 @@ class CalendarView(PageMixin, TemplateView):
             next_url=month_url(calendar.next, selected),
             today_url=month_url(today.replace(day=1), today),
             here=self.request.get_full_path(),
-            new_entry_url=new_entry_url(selected) if selected else "",
         )
         return context
 

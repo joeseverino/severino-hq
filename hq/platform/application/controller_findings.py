@@ -55,7 +55,7 @@ def _the_others(count: int, noun: str) -> str:
 def _when(label: str, at: date | str | None) -> tuple[str, str]:
     """A "last read" or "last seen" fact: how long ago, or never."""
 
-    return (label, ago(at or ""))
+    return (label, "never" if at is None else ago(at))
 
 
 def _read_again(variant: str = "") -> FindingRemedy:

@@ -228,7 +228,9 @@ class CalendarCell:
 
     @property
     def url(self) -> str:
-        return day_url(self.day)
+        """This day, open beside its month."""
+
+        return month_url(self.day, self.day)
 
     @property
     def anchor(self) -> str:
@@ -274,17 +276,29 @@ class CalendarDayView:
 
     @property
     def previous_url(self) -> str:
-        return day_url(self.day - timedelta(days=1))
+        previous = self.day - timedelta(days=1)
+        return month_url(previous, previous)
 
     @property
     def next_url(self) -> str:
-        return day_url(self.day + timedelta(days=1))
+        following = self.day + timedelta(days=1)
+        return month_url(following, following)
+
+    @property
+    def new_entry_url(self) -> str:
+        return new_entry_url(self.day)
 
 
-def day_url(day: date) -> str:
-    """A day, open beside its month."""
+def month_url(month: date, day: date | None = None) -> str:
+    """A month, with ``day`` open beside it."""
 
-    return f"{reverse('calendar:month')}?month={day:%Y-%m}&day={day.isoformat()}"
+    return f"{reverse('calendar:month')}?month={month:%Y-%m}{f'&day={day.isoformat()}' if day else ''}"
+
+
+def new_entry_url(day: date) -> str:
+    """The form for a new entry, on ``day``."""
+
+    return f"{reverse('calendar:entry_new')}?on={day.isoformat()}"
 
 
 # ----- Sources ----------------------------------------------------------------

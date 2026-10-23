@@ -386,6 +386,9 @@ class PageTests(TestCase):
         form = self.client.get(reverse("calendar:entry_new"))
 
         self.assertEqual(text(month).count("Add event"), 2)  # the head and the day panel
+        # Both open the form on the day that is open.
+        on_the_day = f"{reverse('calendar:entry_new')}?on={timezone.localdate().isoformat()}"
+        self.assertEqual(hrefs(month).count(on_the_day), 2)
         self.assertEqual(texts(form, "h1"), ["Add event"])
         self.assertIn("Add event", [button.words for button in select(form, "type", "submit")])
         for gone in ("New entry", "Add to calendar"):

@@ -47,7 +47,7 @@ opening a day ask this page for the `calendar` part and take it in place.
         {% empty %}
           {% if not entry %}<p class="muted">Nothing on this day.</p>{% endif %}
         {% endfor %}
-        <p><a href="{{ new_entry_url }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></p>
+        <p><a href="{{ day.new_entry_url }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></p>
       </section>
     {% endif %}
 
