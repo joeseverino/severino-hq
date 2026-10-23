@@ -293,8 +293,8 @@ depends = ["image:verify:*"]
 # Whether this checkout can compose its extensions: `mise doctor project` names
 # each gap with its fix. Without a set, `fast` skips the composed pass and says
 # nothing, and an agent's worktree has none until its mise.local.toml is copied
-# in. A check that needs the set passes when none is named, so one missing file
-# is reported once.
+# in. A check that needs the set depends on it, so without one it is reported
+# blocked and one missing file is reported once.
 [doctor.checks."local:extensions"]
 description = "mise.local.toml names an extension set, so the composed suite and dev servers load it"
 run = 'test -n "$HQ_LOCAL_PLUGINS"'
@@ -302,11 +302,13 @@ hint = "cp tools/dev/mise.local.example.toml mise.local.toml and name your exten
 
 [doctor.checks."local:extension-sources"]
 description = "Every directory on HQ_LOCAL_PYTHONPATH exists"
-run = '[ -z "$HQ_LOCAL_PLUGINS" ] || { IFS=:; for d in $HQ_LOCAL_PYTHONPATH; do test -d "$d" || exit 1; done; }'
+depends = "local:extensions"
+run = 'IFS=:; for d in $HQ_LOCAL_PYTHONPATH; do test -d "$d" || exit 1; done'
 hint = "Point HQ_LOCAL_PYTHONPATH in mise.local.toml at each extension checkout's src directory"
 
 [doctor.checks."local:extension-imports"]
 description = "Every module HQ_LOCAL_PLUGINS names imports with the host's libraries"
-run = '''[ -z "$HQ_LOCAL_PLUGINS" ] || PYTHONPATH="$HQ_LOCAL_PYTHONPATH" uv run --no-sync python -c 'import importlib, os; [importlib.import_module(p.split(":")[0]) for p in os.environ["HQ_LOCAL_PLUGINS"].split(",")]' '''
+depends = "local:extensions"
+run = '''PYTHONPATH="$HQ_LOCAL_PYTHONPATH" uv run --no-sync python -c 'import importlib, os; [importlib.import_module(p.split(":")[0]) for p in os.environ["HQ_LOCAL_PLUGINS"].split(",")]' '''
 hint = "Run uv sync; if it still fails, the extension needs a newer host: update both checkouts to main"
 timeout = "30s"
