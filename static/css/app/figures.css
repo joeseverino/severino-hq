@@ -165,8 +165,11 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
    no more than its column's share (`--hold`, tables.css): asking for its whole
    length would take the room a column that wraps in full needs. A name the
    cell cuts (below, and code: tables.css) asks for its whole length instead,
-   since every character the row can give it is one less cut away. */
-.data-table td :is([data-entity], .cell-line):not(strong > *, .row-gutter > *, :has(> code), :has(> .token[data-sole] > .cut), :has(> .cut)) { max-width: var(--hold); }
+   since every character the row can give it is one less cut away. Its
+   longest word is its least: the more columns a table keeps, the smaller
+   their share, and a name held under one of its words would break inside
+   it while the table counted itself as fitting. */
+.data-table td :is([data-entity], .cell-line):not(strong > *, .row-gutter > *, :has(> code), :has(> .token[data-sole] > .cut), :has(> .cut)) { max-width: var(--hold); min-width: min-content; }
 /* Any other name that is one token is cut inside a hyphenated part rather
    than broken there ("example-" over "wildcard" reads as two names), and so
    is a `.cell-line`. Each is a grid whose track asks for its whole length but

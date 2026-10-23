@@ -249,11 +249,12 @@
     display: inline-block; width: max-content; max-width: var(--hold); vertical-align: top;
     white-space: normal; overflow-wrap: break-word;
   }
-  /* A line of plain words, or one label (`.exposure`), is never narrower than
-     its longest word. A line with an icon, a tip or parts of its own keeps
-     no floor: its pieces add up past the share in a table of many such
-     columns. */
-  .data-table > tbody td > .kept-line:not(:has(:not(.exposure))) { min-width: min-content; overflow-wrap: normal; }
+  /* A line is never narrower than what in it cannot wrap: held under that,
+     it would run out of its cell while the table counted itself as fitting,
+     and a table with too many such columns lets one go instead. A line of
+     plain words, or one label (`.exposure`), never breaks inside a word. */
+  .data-table > tbody td > .kept-line { min-width: min-content; }
+  .data-table > tbody td > .kept-line:not(:has(:not(.exposure))) { overflow-wrap: normal; }
   .data-table > tbody td > .kept-line .token { overflow-wrap: anywhere; }
   .data-table > tbody td > .kept-line:has(.pill, time) { max-width: none; }
   /* An opened row holds its columns and lifts every cap in it, so its line
