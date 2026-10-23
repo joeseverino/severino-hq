@@ -2238,7 +2238,9 @@ class FragmentPrimitiveTests(SimpleTestCase):
         self.assertEqual(source.count("window.setTimeout("), 1)
         self.assertNotIn("setInterval(", source)
         # The parser is not handed out: nothing outside the closure can reach it.
-        self.assertIn("return { swap, reveal, fail };", source)
+        exported = re.search(r"return \{([^}]*)\};\s*\}\)\(\);\s*window\.hqFragment = hqFragment;", source)
+        self.assertIsNotNone(exported, "hqFragment's closure no longer ends in the object it hands out")
+        self.assertNotIn("parse", re.findall(r"\w+", exported.group(1)))
         self.assertFalse(re.search(r"window\.\w+\s*=\s*parse\b", source), "the parser left the closure")
 
     def test_the_primitive_loads_before_the_scripts_that_use_it(self):

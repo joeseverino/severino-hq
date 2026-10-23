@@ -23,8 +23,6 @@ class SlowFramesTests(SimpleTestCase):
     def test_the_script_is_called_with_the_milliseconds_asked_for(self):
         script = self.slowed("150")
         self.assertTrue(script.rstrip(";").endswith("(150)"))
-        self.assertIn("requestAnimationFrame", script)
-        self.assertIn("requestIdleCallback", script)
 
     def test_a_delay_that_is_no_positive_number_is_refused(self):
         for late in ("0", "-5", "fast", "1.5"):

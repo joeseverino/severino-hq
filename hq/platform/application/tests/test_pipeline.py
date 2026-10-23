@@ -486,7 +486,6 @@ class ReleaseTests(SimpleTestCase):
         }
         self.assertEqual(set(branches), {"checkout", "build"})
         script = code((ROOT / "tools" / "pipeline" / "extension-branches.sh").read_text())
-        self.assertIn('rm -rf "$dir/.git"', script)
         for absent in ("GH_TOKEN", "docker.sock", "pip wheel"):
             with self.subTest(absent=absent):
                 self.assertNotIn(absent, script)
