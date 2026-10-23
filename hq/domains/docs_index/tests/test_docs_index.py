@@ -97,9 +97,12 @@ class CommittedSchemaMatchesMcpTests(SimpleTestCase):
 
 
 class ReviewQueueTests(TestCase):
-    def test_a_frozen_report_is_never_queued_for_review_but_a_runbook_is(self):
+    def test_a_frozen_report_and_a_generated_queue_note_are_never_queued_for_review_but_a_runbook_is(self):
         DocumentationRecord.objects.create(
             doc_id="report-example", title="Example report", doc_type="report", status="active"
+        )
+        DocumentationRecord.objects.create(
+            doc_id="queue-example", title="Example queue", doc_type="queue", status="active"
         )
         DocumentationRecord.objects.create(
             doc_id="rb-example", title="Example runbook", doc_type="runbook", status="active"
