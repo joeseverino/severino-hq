@@ -188,8 +188,12 @@ SELECTORS = {
     "readings": ".dash-readings .glance-panel-head",
     "patterns": ".dashboard-patterns > .card",
     # What reads as one unit and so never breaks across lines: a state, a
-    # time, one part of a value told in several ("Up 1 week", "healthy").
-    "one_line": '.pill, td time, td .cell-part, td[data-kind="control"] :is(.btn, button)',
+    # time, one part of a value told in several ("Up 1 week", "healthy"), a
+    # control's label in a row's controls, a page's head or a list's filters.
+    "one_line": (
+        ".pill, td time, td .cell-part,"
+        ' :is(td[data-kind="control"], .page-head, .filter-bar, .table-toolbar) :is(.btn, button)'
+    ),
     # A control one line tall, drawn on its own rather than inside a label
     # that is the control a reader sees.
     "line_control": (
@@ -910,6 +914,9 @@ _WRAPPED_PHRASES = (
     if (!pill.getClientRects().length) continue;
     const probe = pill.cloneNode(false);
     probe.textContent = 'X';
+    // Drawn as the phrase is, wherever it lands: a rule that hides whatever
+    // follows a row's lead control would otherwise measure nothing.
+    probe.style.display = getComputedStyle(pill).display;
     pill.after(probe);
     const one = probe.getBoundingClientRect().height;
     probe.remove();
