@@ -28,11 +28,11 @@ fi
 root=$(cd "$(dirname "$0")/../.." && pwd)
 
 # The root secret renderer's sandbox, scored by systemd itself. --threshold
-# takes the exposure level times ten: the shipped unit scores 2.1, so a
-# directive dropped from it scores above 21 and fails here.
-sudo systemd-analyze security --no-pager --offline=yes --threshold=21 \
+# takes the exposure level times ten: offline, the shipped unit scores 2.0,
+# so a directive dropped from it scores above 20 and fails here.
+sudo systemd-analyze security --no-pager --offline=yes --threshold=20 \
   "$root/deploy/systemd/severino-hq-secrets.service" || {
-  echo "::error title=Host boot drill::severino-hq-secrets.service is more exposed than its 2.1."
+  echo "::error title=Host boot drill::severino-hq-secrets.service is more exposed than its 2.0."
   exit 1
 }
 
