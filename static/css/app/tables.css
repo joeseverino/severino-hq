@@ -251,9 +251,11 @@
   }
   /* A line is never narrower than what in it cannot wrap: held under that,
      it would run out of its cell while the table counted itself as fitting,
-     and a table with too many such columns lets one go instead. A line of
-     plain words, or one label (`.exposure`), never breaks inside a word. */
-  .data-table > tbody td > .kept-line { min-width: min-content; }
+     and a table with too many such columns lets one go instead. An
+     identifier in it (`.token`) is cut or breaks at its seams, so a line
+     holding one keeps no floor. A line of plain words, or one label
+     (`.exposure`), never breaks inside a word. */
+  .data-table > tbody td > .kept-line:not(:has(.token)) { min-width: min-content; }
   .data-table > tbody td > .kept-line:not(:has(:not(.exposure))) { overflow-wrap: normal; }
   .data-table > tbody td > .kept-line .token { overflow-wrap: anywhere; }
   .data-table > tbody td > .kept-line:has(.pill, time) { max-width: none; }
