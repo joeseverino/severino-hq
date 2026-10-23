@@ -99,25 +99,23 @@ class ExpenseListTests(_Signed):
         )
 
     def test_adding_up_the_categories_does_not_cost_a_query_each(self):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
+        from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
-        def sums() -> int:
-            with CaptureQueriesContext(connection) as queries:
-                self.client.get(reverse("expenses:list"))
-            return len([query for query in queries if "SUM(" in query["sql"]])
+        categories = ("hosting", "domains", "software", "hardware", "miscellaneous")
 
-        for category in ("hosting", "domains"):
-            Expense.objects.create(
-                date="2030-01-02", vendor="Example Host", item="Hosting", category=category, total_cost=Decimal(1)
-            )
-        two = sums()
-        for category in ("software", "hardware", "miscellaneous"):
-            Expense.objects.create(
-                date="2030-01-02", vendor="Example Host", item="Hosting", category=category, total_cost=Decimal(1)
-            )
+        def arrange(count):
+            for category in categories[Expense.objects.count() : count]:
+                Expense.objects.create(
+                    date="2030-01-02", vendor="Example Host", item="Hosting", category=category, total_cost=Decimal(1)
+                )
 
-        self.assertEqual(sums(), two)
+        assert_cost_does_not_grow(
+            self,
+            sizes=(2, len(categories)),
+            arrange=arrange,
+            draw=lambda _count: self.client.get(reverse("expenses:list")),
+            rows=lambda response: len(response.context["by_category"]),
+        )
 
     def test_an_expense_names_its_document_by_title(self):
         record = DocumentationRecord.objects.create(doc_id="rb-example-renewal", title="Renew the example domain")
