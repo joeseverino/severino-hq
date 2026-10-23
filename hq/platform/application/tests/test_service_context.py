@@ -263,14 +263,39 @@ class OneWindowSourceTests(SimpleTestCase):
         ]
         self.assertEqual(offenders, [])
 
-    def test_the_template_does_not_restate_the_window(self):
-        import pathlib
 
-        template = (
-            pathlib.Path(__file__).resolve().parents[4] / "templates/control_plane/_topology_node_body.html"
-        ).read_text()
-        self.assertIn("{{ traffic_window_days|counted", template)
-        self.assertNotIn("Traffic · 7 days", template)
+class TopologyWindowTests(TestCase):
+    def test_a_node_names_the_window_its_traffic_was_counted_over(self):
+        from datetime import timedelta
+        from unittest import mock
+
+        from django.utils import timezone
+
+        from hq.domains.analytics.models import AnalyticsSite, RumDaily
+
+        from ..security import web_principal
+        from ..topology import derive_topology
+        from .markup import text
+
+        user = get_user_model().objects.create_superuser("operator", password="x" * 20)
+        self.client.force_login(user)
+        a_service("measured.example.com")
+        site = AnalyticsSite.objects.create(site_tag="tag-measured", host="measured.example.com")
+        RumDaily.objects.create(
+            site=site,
+            date=timezone.now().date() - timedelta(days=1),
+            dimension=RumDaily.Dimension.PATH,
+            value="/",
+            pageviews=412,
+            visits=300,
+            sample_interval=1,
+        )
+        (node,) = [node for node in derive_topology(principal=web_principal(user)).nodes if node.pageviews]
+
+        with mock.patch("hq.domains.control_plane.topology_views.HOST_TRAFFIC_DAYS", 30):
+            body = self.client.get(reverse("control_plane:topology_node"), {"node": node.id})
+
+        self.assertIn("Traffic · 30 days", text(body))
 
 
 class PartRowTests(TestCase):
