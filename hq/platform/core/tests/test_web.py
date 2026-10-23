@@ -52,7 +52,7 @@ from hq.platform.application.action_links import command_url
 from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
-from hq.platform.application.tests.markup import elements, hrefs, select, text
+from hq.platform.application.tests.markup import elements, hrefs, select, text, within
 from hq.platform.core.audit import operation_context
 from hq.platform.core.logging import JsonFormatter, reset_request_id, set_request_id
 from hq.platform.core.middleware import CurrentUserMiddleware, get_current_user, set_current_user
@@ -1466,6 +1466,27 @@ class AuditDetailPageTests(_AuthedTestCase):
         page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
 
         self.assertIn(reverse("core:audit_detail", args=[other.pk]), hrefs(page))
+
+    def test_the_operation_and_the_objects_history_are_one_table_whose_history_folds(self):
+        with operation_context(interface="cli", actor="op", operation="test.bulk", operation_id="op-1"):
+            project = Project.objects.create(name="One", status=Project.Status.IDEA)
+            Project.objects.create(name="Two", status=Project.Status.IDEA)
+        project.name = "Renamed"
+        project.save()
+        created = AuditLog.objects.get(object_id=str(project.pk), action=AuditLog.Action.CREATED)
+        updated = AuditLog.objects.get(object_id=str(project.pk), action=AuditLog.Action.UPDATED)
+
+        page = self.client.get(reverse("core:audit_detail", args=[created.pk]))
+
+        inside = within(page, "aria-label", "Other events")
+        self.assertEqual(len([each for each in inside if each.tag == "table"]), 1)
+        self.assertEqual(len([each for each in inside if each.attrs.get("scope") == "rowgroup"]), 2)
+        (group,) = [each for each in inside if "data-folds" in each.attrs]
+        (folded,) = [each for each in inside if "data-folded" in each.attrs]
+        self.assertEqual(folded.attrs["data-folded"], group.attrs["id"])
+        # The object's own history is what folds; the rest of the operation stays open.
+        (link,) = [each for each in inside if each.attrs.get("href") == reverse("core:audit_detail", args=[updated.pk])]
+        self.assertTrue(any(ancestor is folded for ancestor in link.ancestors))
 
     def test_the_detail_page_needs_a_session(self):
         project = Project.objects.create(name="Private", status=Project.Status.IDEA)

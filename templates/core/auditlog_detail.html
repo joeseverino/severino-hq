@@ -57,43 +57,26 @@
 
 {% endif %}
 
-{% if siblings and not approval %}
+{% if other_events %}
 <section class="card">
-  <div class="section-head"><h2>Rest of this operation</h2><span class="count">{{ siblings|length }}</span></div>
-  {% table_region "Rest of this operation" narrow=2 %}
+  <div class="section-head"><h2>Other events</h2></div>
+  {% table_region "Other events" narrow=3 %}
     <table class="data-table compact-table">
-      <thead><tr>{% table_heading "When" "status" local_sort=siblings|sortable gutter=True %}{% table_heading "Action" local_sort=siblings|sortable %}{% table_heading "Object" local_sort=siblings|sortable drop=2 %}{% table_heading "Message" local_sort=siblings|sortable drop=1 %}</tr></thead>
+      <thead><tr>{% table_heading "When" "status" local_sort=other_rows|sortable gutter=True %}{% table_heading "Action" local_sort=other_rows|sortable %}{% table_heading "Object" local_sort=other_rows|sortable drop=3 %}{% table_heading "Who" local_sort=other_rows|sortable drop=2 %}{% table_heading "Message" local_sort=other_rows|sortable drop=1 %}</tr></thead>
+      {% for label, rows, folds in other_events %}
       <tbody>
-        {% for row in siblings %}
-        <tr>
+        {% row_group label rows|length folds=folds %}
+        {% for row in rows %}
+        <tr{% if folds %} data-folded="{{ folds }}"{% endif %}>
           <td class="row-gutter"><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a>{% row_toggle %}</td>
           <td>{{ row.get_action_display|breakable }}</td>
           <td>{{ row.object_repr|default:row.type_label|or_empty }}</td>
-          <td class="cell-data">{% if row.message %}{{ row.message|truncatewords:12|breakable }}{% else %}{% empty_value %}{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endtable_region %}
-</section>
-{% endif %}
-
-{% if history %}
-<section class="card">
-  <div class="section-head"><h2>Everything else to this object</h2><span class="count">{{ history|length }}</span></div>
-  {% table_region "Everything else to this object" narrow=2 %}
-    <table class="data-table compact-table">
-      <thead><tr>{% table_heading "When" "status" local_sort=history|sortable gutter=True %}{% table_heading "Action" local_sort=history|sortable %}{% table_heading "Who" local_sort=history|sortable drop=2 %}{% table_heading "Message" local_sort=history|sortable drop=1 %}</tr></thead>
-      <tbody>
-        {% for row in history %}
-        <tr>
-          <td class="row-gutter"><a href="{% url 'core:audit_detail' row.pk %}">{{ row.created_at|when }}</a>{% row_toggle %}</td>
-          <td>{{ row.get_action_display|breakable }}</td>
           <td>{{ row.actor_label|breakable }}</td>
           <td class="cell-data">{% if row.message %}{{ row.message|truncatewords:12|breakable }}{% else %}{% empty_value %}{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
+      {% endfor %}
     </table>
   {% endtable_region %}
 </section>
