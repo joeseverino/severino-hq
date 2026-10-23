@@ -180,7 +180,9 @@ class _Cells(HTMLParser):
         kinds = _kinds(heads)
         marked = {index: kind for index, kind in kinds.items() if kind in _MARKED_KINDS}
         named = _naming_column(heads)
-        if rank := next((cell.attrs.get("data-drop") for cells in heads[-1:] for cell in cells[named : named + 1]), None):
+        if rank := next(
+            (cell.attrs.get("data-drop") for cells in heads[-1:] for cell in cells[named : named + 1]), None
+        ):
             raise ValueError(f"The column that names each row has no drop rank, not {rank}.")
         records = [row for row in self.rows if row.section == "tbody" and not row.group]
         empty = _empty_columns(heads, named, records)
@@ -298,8 +300,6 @@ def mark_cells(markup: str) -> str:
         last = offset
     parts.append(markup[last:])
     return "".join(parts)
-
-
 
 
 # The shares of its region an identifier may take, besides the whole row's

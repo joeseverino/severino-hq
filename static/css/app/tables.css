@@ -80,7 +80,8 @@
      row is what the row is read by, so its cells hold out for half a share
      more, and the other half is left for what holds out unbounded (a pill, a
      control beside a name). A table without headings is read as one column. */
-  --columns: var(--showing, 1);
+  --showing: 1;
+  --columns: var(--showing);
   /* Whole until it is wider than its region once all it lets go has left:
      then narrow (`data-narrow`, tables.js). */
   --box: whole;

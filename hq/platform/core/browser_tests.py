@@ -4434,9 +4434,7 @@ class ScriptedLayoutTests(LayoutBrowserTests):
 
         self.spoke = 0
         for name in names:
-            widths = (
-                SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES)
-            )
+            widths = SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES)
             for width in sorted(set(widths)):
                 if self.loaded(name, width, script="on"):
                     self.page.evaluate(_SETTLED)
