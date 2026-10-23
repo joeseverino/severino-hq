@@ -47,7 +47,10 @@ Every gate and server is a mise task. These are the ones to start from;
 Each server is a mise task, and its env says where it listens and which
 database it opens; `tools/dev/dev.sh` refuses what env cannot express. Every one
 collects versioned assets and runs Uvicorn with reload on the production ASGI
-path, watching this checkout and each extension's sources. The extension set
+path, watching this checkout and each extension's sources through watchfiles
+(the `dev` group): a Python file or a template restarts it, and nothing under
+`.claude/worktrees`, `.venv` or `var/` does, so another worktree's edits leave
+it running. The extension set
 is the one `mise.local.toml` names ([The extension set](#the-extension-set)).
 `dev:scratch` is the throwaway one; `dev` is the long-lived server behind a TLS
 proxy, configured by the gitignored `dev.local.toml` (copy

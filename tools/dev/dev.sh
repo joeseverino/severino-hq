@@ -46,20 +46,23 @@ case "$profile" in
     *) die "Unknown profile: $profile" ;;
 esac
 
-# The checkout and each extension's sources are watched for changes. The list
-# is split on spaces, so a path with one is refused rather than half-watched.
-case "${PYTHONPATH:-}" in
-    *' '*) die "PYTHONPATH holds a path with a space, which the reload list cannot carry: $PYTHONPATH" ;;
+# The checkout and each extension's sources are watched for changes, but for
+# what this server never runs: other worktrees, the environment, var/. The
+# list is split on spaces, so a path with one is refused rather than
+# half-watched.
+case "$root${PYTHONPATH:-}" in
+    *' '*) die "The checkout or PYTHONPATH holds a path with a space, which the reload list cannot carry: $root:${PYTHONPATH:-}" ;;
 esac
 reload_dirs="$root"
 for dir in $(printf '%s' "${PYTHONPATH:-}" | tr ':' ' '); do
     reload_dirs="$reload_dirs $dir"
 done
+reload_skipped="$root/.claude/worktrees $root/.venv $root/var"
 
 if [ "${usage_plan:-false}" = true ]; then
     # Before any secret is read or any file touched, so the plan holds neither.
     env | grep -E '^(DJANGO_|SEVERINO_|UVICORN_|HQ_DEV_|PYTHONPATH=)' | grep -Ev '^[A-Z_]*(SECRET_KEY|_SECRET)=' | sort
-    echo "serve: $host:$port, reloading on changes in $reload_dirs"
+    echo "serve: $host:$port, reloading on changes to Python and templates in $reload_dirs, but for $reload_skipped"
     exit 0
 fi
 
@@ -118,8 +121,18 @@ fi
 
 uv run python manage.py collectstatic --noinput --verbosity 0
 
-set -- --reload
+# Uvicorn watches with watchfiles (the dev group), the reloader that reads
+# --reload-include and --reload-exclude. A template edit restarts it too: with
+# DEBUG off, as `dev` runs, templates are cached until the server restarts.
+set -- --reload --reload-include '*.html'
 for dir in $reload_dirs; do
     set -- "$@" --reload-dir "$dir"
+done
+# Uvicorn reads an exclude that is no directory as a pattern, which an
+# absolute path cannot be.
+for dir in $reload_skipped; do
+    if [ -d "$dir" ]; then
+        set -- "$@" --reload-exclude "$dir"
+    fi
 done
 exec uv run python -m uvicorn hq.config.asgi:application --host "$host" --port "$port" "$@"

@@ -38,6 +38,7 @@ default-groups = ["dev", "tools"]
 [dependency-groups]
 dev = [
     "django-debug-toolbar==8.0.0",
+    "watchfiles==1.3.0",
 ]
 tools = [
     "coverage==7.16.2",

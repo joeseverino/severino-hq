@@ -382,9 +382,9 @@ ROOT_URLCONF = "hq.config.urls"
 
 # Whether a rendered template is reused rather than re-read from disk. Left
 # implicit, Django always wraps the loaders in the cached loader, whatever DEBUG
-# says, and only runserver's autoreloader clears it; under uvicorn an edited
-# template would not show until a restart. Explicit loaders make caching a
-# switch of its own, on by default only with DEBUG off.
+# says, and only runserver's autoreloader clears it. Explicit loaders make
+# caching a switch of its own, on by default only with DEBUG off; there the
+# development server restarts on a template edit (tools/dev/dev.sh).
 TEMPLATE_CACHE = env_bool("DJANGO_TEMPLATE_CACHE", default=not DEBUG)
 
 _TEMPLATE_LOADERS = [
