@@ -29,7 +29,3 @@ SEVERINO_HQ_DEPLOY_HOST = "deploy.example.test"
 # Optional. The Django Debug Toolbar on the dev server. Needs DJANGO_DEBUG on;
 # the suite ignores it. See hq/config/devtools.py.
 # SEVERINO_DEBUG_TOOLBAR = "1"
-
-# Optional. A code graph already serving this machine refuses a second build of
-# itself; point the structural bar at the one that is running.
-# CODEBASE_MEMORY_BIN = "{{env.HOME}}/.local/bin/codebase-memory-mcp"
