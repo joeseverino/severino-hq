@@ -35,7 +35,7 @@ jobs:
   resolve:
     name: Resolve
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -102,7 +102,7 @@ jobs:
     # wait is cancelled, so the queue holds the build that includes everything
     # and a superseded release ends as cancelled, not as a refusal. Cancelling
     # a wait changes nothing on the host; the deploy itself is never cancelled.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     environment: production
     concurrency:
@@ -165,7 +165,7 @@ jobs:
     # and what fixes it. On a hosted runner, so HQ's key never reaches the
     # homelab one.
     if: always() && needs.resolve.outputs.image != ''
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read

@@ -22,7 +22,7 @@ concurrency:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     # In Playwright's image, with its browsers, as CI's Browser job runs.
     container:
@@ -42,7 +42,7 @@ jobs:
   publish:
     name: Publish
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     # Can publish Pages; cannot write to the repository.
     permissions:

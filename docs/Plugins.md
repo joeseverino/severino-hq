@@ -118,7 +118,7 @@ jobs:
     name: Admit
     if: github.event_name != 'pull_request'
     needs: checks
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     environment: admission
     permissions:
       contents: read
