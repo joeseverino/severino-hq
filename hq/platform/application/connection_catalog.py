@@ -480,25 +480,26 @@ def serialize_connection(connection: ConnectionView) -> dict:
         "credential_model": instance.credential_model or None,
         "lifecycle": connection.lifecycle,
         "authority": connection.authority,
-        "abilities": [
-            {
-                "name": state.ability.name,
-                "label": state.ability.label,
-                "effect": state.ability.effect,
-                "required_scopes": list(state.ability.required_scopes),
-                "grant": state.ability.grant or None,
-                "evidence": state.evidence,
-                "available": state.available,
-                "missing_scopes": list(state.missing_scopes),
-                "capability": state.ability.capability or None,
-                "subject_resource": state.ability.subject_resource or None,
-                "action": asdict(state.action) if state.action else None,
-            }
-            for state in connection.abilities
-        ],
+        "abilities": [serialize_ability(state) for state in connection.abilities],
         "targets": [asdict(link) for link in instance.targets],
         "dependencies": [asdict(link) for link in instance.dependencies],
         "facts": [asdict(fact) for fact in instance.facts],
         "controller_id": instance.controller_id or None,
         "actions": [asdict(action) for action in connection.actions],
+    }
+
+
+def serialize_ability(state: ConnectionAbilityState) -> dict:
+    return {
+        "name": state.ability.name,
+        "label": state.ability.label,
+        "effect": state.ability.effect,
+        "required_scopes": list(state.ability.required_scopes),
+        "grant": state.ability.grant or None,
+        "evidence": state.evidence,
+        "available": state.available,
+        "missing_scopes": list(state.missing_scopes),
+        "capability": state.ability.capability or None,
+        "subject_resource": state.ability.subject_resource or None,
+        "action": asdict(state.action) if state.action else None,
     }

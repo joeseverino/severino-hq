@@ -29,6 +29,7 @@ from .connection_catalog import (
     ConnectionGroup,
     ConnectionView,
     connection_catalog,
+    serialize_ability,
     serialize_connection,
 )
 from .connection_contracts import ConnectionInstance
@@ -44,7 +45,7 @@ from .connection_setup import ProviderSetup, guide_url, setups
 from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, sight_by_connection
-from .derived_reads import serialize_path, serialize_provider_sight
+from .derived_reads import serialize_path, serialize_provider_sight, serialize_sight
 from .entity_links import entity_link
 from .freshness import freshness
 from .hq_self import hq_hostnames
@@ -183,9 +184,15 @@ class ConnectionRow:
         return not self._permissions_missing and self.connection.state_line_quiet
 
     def as_dict(self) -> dict[str, Any]:
+        # Every ability and every sight is under ``reads`` or ``changes``, the
+        # lists the page draws, so no client rebuilds them from the parts.
+        connection = serialize_connection(self.connection)
+        del connection["abilities"]
         sight = self.sight
         return {
-            **serialize_connection(self.connection),
+            **connection,
+            "reads": [_read(read) for read in self.reads],
+            "changes": [serialize_ability(state) for state in self.changes],
             "family": self.group.spec.name,
             "family_label": self.group.spec.label,
             "used_for": self.used_for or None,
@@ -216,11 +223,21 @@ def _moment(value: datetime | None) -> str | None:
 
 def _sight(sight: ProviderSight) -> dict[str, Any]:
     found = serialize_provider_sight(sight)
-    for item, seen in zip(found["sights"], sight.sights, strict=True):
-        aged = freshness(seen.kind, seen.observed_at)
-        item["freshness"] = aged.state
-        item["freshness_label"] = aged.label
+    del found["sights"]
     return found
+
+
+def _read(read: Read) -> dict[str, Any]:
+    return {
+        "label": read.label,
+        "sight": _seen(read.sight) if read.sight is not None else None,
+        "ability": serialize_ability(read.ability) if read.ability is not None else None,
+    }
+
+
+def _seen(sight: Sight) -> dict[str, Any]:
+    aged = freshness(sight.kind, sight.observed_at)
+    return {**serialize_sight(sight), "freshness": aged.state, "freshness_label": aged.label}
 
 
 def _fix(fix: CredentialFix) -> dict[str, Any]:

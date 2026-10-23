@@ -92,6 +92,33 @@ def populate():
     connect("example-host", "ssh", "100.64.0.5:22")
 
 
+def page_lists(client, connection_ref):
+    """What the connections page draws for one connection: each read as
+    (label, kind swept, ability), and the name of each thing it may change."""
+
+    response = client.get(reverse("control_plane:connections"))
+    (row,) = [row for row in response.context["connections"].rows if row.instance.connection_ref == connection_ref]
+    return (
+        [
+            (read.label, read.sight.kind if read.sight else None, read.ability.ability.name if read.ability else None)
+            for read in row.reads
+        ],
+        [state.ability.name for state in row.changes],
+    )
+
+
+def served_lists(item):
+    """``page_lists`` as an adapter returned the connection."""
+
+    return (
+        [
+            (read["label"], read["sight"] and read["sight"]["kind"], read["ability"] and read["ability"]["name"])
+            for read in item["reads"]
+        ],
+        [state["name"] for state in item["changes"]],
+    )
+
+
 def without_request(payload):
     return {key: value for key, value in payload.items() if key != "request"}
 
@@ -229,7 +256,7 @@ class ConnectionProjectionTests(TestCase):
             rows["example-tailnet"]["would_also_see"],
             ["Would also see Tailnet user with users:read"],
         )
-        sights = {item["kind"]: item for item in rows["example-tailnet"]["sight"]["sights"]}
+        sights = {read["sight"]["kind"]: read["sight"] for read in rows["example-tailnet"]["reads"] if read["sight"]}
         self.assertEqual(sights["tailscale.device"]["freshness"], "current")
 
     def test_the_page_renders_the_projection(self):
