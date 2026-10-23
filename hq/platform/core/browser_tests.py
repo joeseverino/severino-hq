@@ -259,7 +259,7 @@ SELECTORS = {
     "figure_value": ".value",
     # The second of a label and its value: a fact's value after its term, a
     # node key after its machine, a piece of evidence before its kind.
-    "labelled": ":is(.kv, .conn-keys) > dt + dd, .conn-row > code + .conn-kind",
+    "labeled": ":is(.kv, .conn-keys) > dt + dd, .conn-row > code + .conn-kind",
     # What a heading says beside its title: a count, an age, where it is read.
     "heading_aside": ".heading-aside",
     # The same, in a heading or beside it in a section's head.
@@ -2120,7 +2120,7 @@ _FIGURE_UNDER_LABEL = r"""([figure, label_, value_]) => {
 # each on one line, and goes under it only where it does not. Measured on the
 # words' first lines, since a grid stretches a box to its track; the room is
 # each one's max-content width, read from a copy laid out beside them.
-_UNDER_ITS_LABEL = r"""(labelled) => {
+_UNDER_ITS_LABEL = r"""(labeled) => {
   const found = [];
   const firstLine = (el) => {
     const range = document.createRange();
@@ -2135,7 +2135,7 @@ _UNDER_ITS_LABEL = r"""(labelled) => {
     copy.remove();
     return width;
   };
-  for (const second of document.querySelectorAll('main :is(' + labelled + ')')) {
+  for (const second of document.querySelectorAll('main :is(' + labeled + ')')) {
     const first = second.previousElementSibling;
     if (!first.checkVisibility() || !second.checkVisibility()) continue;
     const a = firstLine(first), b = firstLine(second);
@@ -3064,7 +3064,7 @@ _PHRASES_READ = (_WRAPPED_PHRASES, SELECTORS["one_line"])
 _ROUTE_ENDS_READ = (_ROUTE_LINE_ENDS, [SELECTORS["route_line"], SELECTORS["route_mark"]])
 _EVIDENCE_READ = (_STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
 _SUMMARIES_READ = (_HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
-_UNDER_LABELS_READ = (_UNDER_ITS_LABEL, SELECTORS["labelled"])
+_UNDER_LABELS_READ = (_UNDER_ITS_LABEL, SELECTORS["labeled"])
 _SMALL_TARGETS_READ = (_SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN])
 _FORM_ROWS_READ = (_HOLED_FORMS, [SELECTORS["form"], SELECTORS["field"]])
 _EMPTY_FRAMES_READ = (_EMPTY_FRAMES, [SELECTORS["frame"], SELECTORS["frame_content"]])
