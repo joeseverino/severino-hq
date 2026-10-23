@@ -1955,6 +1955,14 @@
                     "title": "Decision record"
                   },
                   {
+                    "const": "report",
+                    "title": "Report"
+                  },
+                  {
+                    "const": "queue",
+                    "title": "Queue"
+                  },
+                  {
                     "const": "task",
                     "title": "Task"
                   }
@@ -2307,6 +2315,14 @@
                   {
                     "const": "decision_record",
                     "title": "Decision record"
+                  },
+                  {
+                    "const": "report",
+                    "title": "Report"
+                  },
+                  {
+                    "const": "queue",
+                    "title": "Queue"
                   },
                   {
                     "const": "task",

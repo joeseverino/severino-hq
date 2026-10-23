@@ -76,6 +76,8 @@ class DocumentationRecord(TimestampedModel):
         RECOVERY_PROCEDURE = "recovery_procedure", "Recovery procedure"
         PUBLIC_ARTICLE_DRAFT = "public_article_draft", "Public article draft"
         DECISION_RECORD = "decision_record", "Decision record"
+        REPORT = "report", "Report"
+        QUEUE = "queue", "Queue"
         TASK = "task", "Task"
 
     class Environment(models.TextChoices):
