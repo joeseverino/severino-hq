@@ -19,6 +19,8 @@ from django.urls import reverse
 from hq.domains.jobs.models import Job
 from hq.platform.application.action_links import command_action, command_url
 from hq.platform.application.connections import ConnectionAbility, ConnectionInstance, ConnectionSpec
+from hq.platform.application.derivations import uncached
+from hq.platform.application.integrations import clear_integration_graph_cache
 from hq.platform.application.plugins import clear_plugin_composition_cache
 from hq.platform.application.workflow_contracts import ActionLink
 from hq_sdk.testing import held_jobs
@@ -71,6 +73,9 @@ class ConnectionsPage(ComposedExample):
             spec, instance_provider=lambda: tuple(replace(item, ability_names=abilities) for item in provider())
         )
         with mock.patch("hq.platform.application.plugins.plugin_connection_specs", return_value=(spec,)):
+            # The graph holds the families it was compiled with, so each page
+            # is drawn from these notes rather than an earlier call's.
+            clear_integration_graph_cache()
             return self.client.get(reverse("control_plane:connections"))
 
     def close_the_registry(self):
@@ -113,7 +118,9 @@ class ARefusedCommandIsDrawnUnusableTests(ConnectionsPage):
         self.close_the_registry()
 
         def cost(*notes):
-            with CaptureQueriesContext(connection) as queries:
+            # Every derivation runs on each call, so the count measures the
+            # page rather than what the derived cache still holds.
+            with uncached(), CaptureQueriesContext(connection) as queries:
                 self.connections(*notes, abilities=("notes.refresh",))
             return len(queries)
 
