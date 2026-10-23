@@ -153,7 +153,10 @@ so a holder that has stalled shows as that rather than as this task hanging.
 The wait is bounded by
 `SEVERINO_HEAVY_WAIT` seconds, two hours by default, the longest a heavy task
 may run; past that it exits 75 (`EX_TEMPFAIL`) naming the holder again. A
-heavy task run by one that holds the lock (`ci`
+holder whose processes together use under 1% of a core for
+`SEVERINO_HEAVY_IDLE` seconds (ten minutes by default) is hung: the waiting
+task names it, how long it has been idle and the `kill` that stops it, and
+exits 75 then. It stops nothing itself. A heavy task run by one that holds the lock (`ci`
 running `browser`, `check` running `suite:as-image`) runs inside its turn. The
 lock goes with the process, so a killed gate frees it. CI runs one job per
 machine and takes no lock.
