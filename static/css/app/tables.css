@@ -343,19 +343,29 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* Cut to one line, a token is plain text: the ellipsis lands in it, and no part of it draws a box past the cut. */
 .data-table td code :is(.token, .whole) { display: contents; }
 /* An identifier that is one token asks for its whole length and holds out
-   for only a few characters of it, so the room another column leaves goes to
-   it before it is cut. Its code is a grid whose track asks for the token's
-   whole length but holds out for none of it; the floor is the code's. The
-   token draws the chip, so a value shorter than the floor is not padded out
-   to it; set at the start of its track, it is held to the track's width, or
-   its unbroken line would set its width and run past the code. The track is
-   sized in whole layout units and the words are not, so the chip keeps a
-   pixel of slack at its end: without it a value that fits loses its last
-   character to the ellipsis. */
+   for its longest piece, the most an opened row cannot break, so the room
+   another column leaves goes to it before it is cut, and opening the row
+   breaks no piece where it has no seam. Its code is a grid whose one track is
+   sized by the name's strut (value_tags), which wraps where the opened name
+   does and is never seen: its least width is the longest piece, its most the
+   whole name. The token draws the chip and asks for nothing of its own, so it
+   is as wide as the track; a value shorter than the code's floor is not
+   padded out to it. The track is sized in whole layout units and the words
+   are not, so the chip and the strut keep a pixel of slack at their end:
+   without it a value that fits loses its last character to the ellipsis. */
 .data-table td code:not(.cell-whole):has(> .token[data-sole]) {
-  display: inline-grid; grid-template-columns: minmax(0, max-content);
+  display: inline-grid; grid-template-columns: minmax(min-content, max-content);
   min-width: var(--cut-floor); max-width: none; padding: 0; background: none;
 }
+.strut { display: none; }
+.data-table td code:not(.cell-whole) > .strut {
+  display: block; visibility: hidden; block-size: 0; overflow-wrap: normal; white-space: normal;
+  padding-inline: var(--space-2) calc(var(--space-2) + 1px);
+  /* No piece holds out for more than half its region: one longer breaks
+     where it must (value_tags.breakable), so the table still fits. */
+  max-width: 50cqi;
+}
+.data-table td code:not(.cell-whole) > .strut::before { content: attr(data-strut); }
 /* An opened row lifts every cut in it (surfaces.css), and the floor a cut
    value held out for goes with the cut: with its columns held, a floor wider
    than its column would run the value past it. Only the floor goes: a
@@ -371,7 +381,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    and a run with no seam in it would push past the column. */
 .data-table > tbody > tr.is-expanded > td :is(code:not(.cell-whole) > .token[data-sole], [data-entity] > :is(.token[data-sole], .cut)) { width: 100%; }
 .data-table td code:not(.cell-whole) > .token[data-sole] {
-  display: block; justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  display: block; contain: inline-size; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
   padding: 1px calc(var(--space-2) + 1px) 1px var(--space-2); border-radius: 4px; background: var(--bg-tint);
 }
 /* An identifier the row is read by (a container's image), in a row of many
@@ -524,13 +534,6 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    keeps it reads only what the server drew and the box's width, and says so
    (`--gutter`), so nothing a script marks after paint moves a name. */
 .data-table .row-gutter { position: relative; }
-/* A column holds out for the longest part its cells say that cannot break
-   (`--part-floor`, tables.js), so an open row, its columns held, breaks no
-   part where it has no seam. */
-.data-table > thead > tr:last-child > th {
-  --part-floor: 0px;
-}
-.data-table > thead > tr:last-child > th::after { content: ""; display: block; inline-size: var(--part-floor); }
 .data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * .row-more), :has(> tbody > tr > * .row-below), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* A value found cut opens its row only where the gutter is already kept. */
 @container style(--gutter: kept) {

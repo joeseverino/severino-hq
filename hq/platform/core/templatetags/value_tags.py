@@ -429,7 +429,12 @@ def _token(word: str, sole: bool) -> str:
     # (figures.css).
     if any(_INNER_HYPHEN.search(part) for part in parts):
         inside = f'<span class="cut">{inside}</span>'
-    return f'<span class="token" data-sole{_short(word)}>{inside}</span>'
+    # The name again, unseen and with nothing to copy, broken only where the
+    # name breaks once a row opens it: a table cell that cuts the name sizes
+    # its column by it, so the column already holds the longest piece
+    # (tables.css). First, so a mark after the name lands in the name.
+    strut = f'<span class="strut" data-strut="{"&#8203;".join(parts)}" aria-hidden="true"></span>'
+    return f'{strut}<span class="token" data-sole{_short(word)}>{inside}</span>'
 
 
 # The characters a value a cell cuts holds out for (`--cut-floor`,

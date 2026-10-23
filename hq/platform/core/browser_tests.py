@@ -4647,22 +4647,26 @@ class ComponentLayoutTests(LayoutBrowserTests):
     def test_a_column_holds_out_for_the_longest_part_its_cut_names_cannot_break(self):
         """A name cut short in a narrow table opens whole in its row, its
         columns held where they were, so its column is already as wide as
-        the longest run of the name between hyphens, measured unconstrained."""
+        the longest run of the name between hyphens, measured unconstrained,
+        where that run is within the column's share."""
+
+        from hq.platform.core.templatetags.value_tags import breakable
 
         self.open(next(iter(PAGES)), PHONE_SCREEN[0])
-        widths = self.page.evaluate("""async () => {
-          const part = 'examplecontrollerunit.path';
+        widths = self.page.evaluate(
+            """async ([part, name]) => {
+          const prose = 'example words that wrap over many lines of a cell of its own '.repeat(3);
           const region = document.createElement('div');
           region.className = 'table-scroll';
-          region.style.setProperty('inline-size', '260px');
+          region.style.setProperty('inline-size', '500px');
           region.innerHTML = '<table class="data-table"><thead><tr><th class="row-gutter">Unit</th>'
             + '<th>Runs</th><th>Result</th></tr></thead><tbody><tr><td class="row-gutter"><code>'
-            + `<span class="token" data-sole><span class="cut"><span class="whole">example-${part}</span></span></span>`
-            + '</code></td><td>example words that wrap</td><td>example words that wrap</td></tr></tbody></table>';
+            + name
+            + `</code></td><td>${prose}</td><td>${prose}</td></tr></tbody></table>`;
           document.querySelector('main').prepend(region);
           await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
           // The part alone, in the face the name is drawn in.
-          const style = getComputedStyle(region.querySelector('code').firstElementChild);
+          const style = getComputedStyle(region.querySelector('code').lastElementChild);
           const free = document.createElement('span');
           free.textContent = part;
           for (const property of ['font-family', 'font-size', 'font-weight', 'letter-spacing']) {
@@ -4674,7 +4678,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
           const pad = getComputedStyle(heading);
           const inside = heading.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
           return [inside, free.getBoundingClientRect().width];
-        }""")
+        }""",
+            ["examplehost.path", str(breakable("example-examplehost.path"))],
+        )
         column, part = widths
         self.assertGreaterEqual(column, part)
 

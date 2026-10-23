@@ -143,10 +143,23 @@ class BreakableTests(SimpleTestCase):
         a sentence, has nothing to cut inside and no box."""
 
         cut = '<span class="token" data-sole><span class="cut"><span class="whole">'
-        self.assertTrue(str(breakable("example-docker-host-01")).startswith(cut))
+        self.assertIn(cut, breakable("example-docker-host-01"))
         self.assertNotIn('class="cut"', breakable("hq.example.com"))
         self.assertNotIn('class="cut"', breakable("Receipt for example-docker-host-01"))
         self.assertIn('class="cut"', cell_line("on example-web"))
+
+    def test_a_name_a_cell_may_cut_carries_an_unseen_strut_of_its_pieces(self):
+        """A cell sizes its column by the strut, so it holds the longest piece
+        an opened row cannot break; the strut says nothing a reader hears or
+        copies, and a word of a sentence has none."""
+
+        (strut,) = with_class(str(breakable("example.com/example-path")), "strut")
+        self.assertEqual(strut.attrs.get("aria-hidden"), "true")
+        self.assertEqual(strut.words, "")
+        pieces = strut.attrs["data-strut"].split("​")
+        self.assertEqual("".join(pieces), "example.com/example-path")
+        self.assertGreater(len(pieces), 1)
+        self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "strut"), [])
 
     def test_a_word_that_breaks_nowhere_stays_text(self):
         self.assertEqual(breakable("Example Finance"), "Example Finance")
