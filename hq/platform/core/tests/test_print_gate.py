@@ -190,16 +190,19 @@ class ScopeTests(SimpleTestCase):
         self.addCleanup(print_gate._ours.cache_clear)
 
     def test_an_extension_app_template_is_held_and_a_third_party_one_is_not(self):
-        app = apps.get_app_config("mozilla_django_oidc")
+        app = apps.get_app_config("humanize")
         origin = Origin(str(Path(app.path) / "templates" / "example.html"), template_name="example.html")
 
         self.assertEqual(printed("{{ value }}", origin=origin, value=True), "True")
-        print_gate._ours.cache_clear()
-        with (
-            mock.patch("hq.platform.core.print_gate.installed_plugin_apps", return_value=[app.name]),
-            self.assertRaises(Unprintable),
-        ):
-            printed("{{ value }}", origin=origin, value=True)
+        # A manifest names its app by module or by AppConfig.
+        for named in (app.name, f"{type(app).__module__}.{type(app).__qualname__}"):
+            print_gate._ours.cache_clear()
+            with (
+                self.subTest(named),
+                mock.patch("hq.platform.core.print_gate.installed_plugin_apps", return_value=[named]),
+                self.assertRaises(Unprintable),
+            ):
+                printed("{{ value }}", origin=origin, value=True)
 
     def test_a_template_built_from_a_string_is_not_held(self):
         self.assertEqual(engines["django"].from_string("{{ value }}").render({"value": True}), "True")

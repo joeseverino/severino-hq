@@ -46,7 +46,8 @@ _node: ContextVar[base.Node] = ContextVar("hq_print_node")
 def _ours() -> tuple[str, ...]:
     """The template directories of HQ and its installed extension apps."""
 
-    extensions = set(installed_plugin_apps())
+    # A manifest may name an app by its module or by its AppConfig.
+    extensions = {apps.get_containing_app_config(app).name for app in installed_plugin_apps()}
     directories = [
         *(directory for backend in settings.TEMPLATES for directory in backend.get("DIRS", ())),
         *(
