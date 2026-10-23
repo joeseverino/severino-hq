@@ -129,9 +129,8 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
   color: var(--surface);
 }
 .zone-switch-note { font-size: var(--text-2xs); font-weight: 500; opacity: 0.75; }
-/* A record's value is data, not prose: an IPv4 address broken across lines to
-   fit a narrow column is unreadable, and the table already scrolls. */
-.zone-value { font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: normal; }
+/* A record's value is data, set as code is; where it wraps is `breakable`'s. */
+.zone-value { font-family: var(--font-mono); font-size: var(--text-xs); }
 /* A status pill is a label, not a paragraph: wrapped, it grows the row it sits
    in. The table already scrolls horizontally, so the label stays whole. */
 .data-table .pill { white-space: nowrap; }

@@ -9,12 +9,6 @@
    alone, which is how CSS is meant to express 'and at this width, this
    instead'. Nothing here needs to outrank anything by specificity. */
 
-/* The folded half of a zone. Its table keeps the same styling as the one above
-   it, so opening it reads as more of the same list rather than a new thing. */
-.zone-policy { margin-top: var(--stack-gap); }
-.zone-policy summary { cursor: pointer; font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); }
-.zone-policy .table-scroll { margin-top: var(--space-5); }
-
 /* A starred domain reads as chosen, not as merely another control. */
 .btn.pinned { border-color: var(--accent); color: var(--accent); }
 .zone-switch a > span[aria-hidden] { color: var(--accent); }

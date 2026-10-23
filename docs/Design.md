@@ -82,10 +82,12 @@ chart's (`chart=True`) scrolls, pins its heading to its own edge, and takes
 focus. A drop rank in a region that counts no drops is refused at render. A
 table never stacks into cards and is not swiped through. A key/value table (row headers,
 no `thead`) sizes its label column to its longest label. Rows that belong to
-sections share one table as a `tbody` per group with a `.row-group` heading
-row, never two tables kept aligned by hand. Rows that belong under one row
+sections share one table as a `tbody` per group, headed by
+`{% row_group label count %}`, which spans every column the headings declare,
+never two tables kept aligned by hand. Rows that belong under one row
 name it (`data-folded`) and show while it is open (`data-folds`, its toggle
-in the same gutter as the row toggle); with no script they all show. A row
+in the same gutter as the row toggle); with no script they all show. A group
+folded away is `row_group ... folds=<id>`, its rows naming that id. A row
 reads from its first line: the toggle stands there, so every cell is set at
 the top, and no page sets its table's cells otherwise.
 *Gates:* `a_table_fits_its_box_at_every_width`, `a_row_reads_from_its_first_line`,

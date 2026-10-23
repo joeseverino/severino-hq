@@ -177,7 +177,11 @@ class _Cells(HTMLParser):
         lines = {index: kind for index, kind in kinds.items() if kind in ("status", "numeric")}
         named = _naming_column(heads)
         empty = _empty_columns(heads, named, [row for row in self.rows if row.section == "tbody" and not row.group])
+        width = _width(heads)
         for row in self.rows:
+            if row.group:
+                self._span(row, width)
+                continue
             body = row.section == "tbody"
             for index, cell in enumerate(row.cells):
                 marks = [" data-blank"] if body and cell.says_nothing else []
@@ -189,6 +193,13 @@ class _Cells(HTMLParser):
                         marks.append(" data-long")
                 if marks:
                     self.marks[cell.start] = marks
+
+    def _span(self, row: _Row, width: int) -> None:
+        """A group's heading row spans every column its table declares."""
+
+        for cell in row.cells:
+            if width and "colspan" not in cell.attrs:
+                self.marks[cell.start] = [f' colspan="{width}"']
 
 
 def _classes(attrs: dict[str, str | None]) -> list[str]:
@@ -231,6 +242,12 @@ def _kinds(heads: list[list[_Cell]]) -> dict[int, str]:
     return {index: kind for cells in heads for index, cell in enumerate(cells) if (kind := cell.attrs.get("data-kind"))}
 
 
+def _width(heads: list[list[_Cell]]) -> int:
+    """How many columns the headings declare: what a group's heading row spans."""
+
+    return max((sum(int(cell.attrs.get("colspan") or 1) for cell in cells) for cells in heads), default=0)
+
+
 def _naming_column(heads: list[list[_Cell]]) -> int:
     """The place of the column that names the row: the first, or the second
     after a column of tick-boxes."""
@@ -259,8 +276,9 @@ def mark_cells(markup: str) -> str:
     a body cell that says nothing (``data-blank``), so it is not counted as
     something a row holds back; a cell of a column that leaves in a narrower
     box (``data-drop-tier``, its heading's); and a cell of a column blank in
-    every row (``data-blank-column``), which is not drawn; and a cell of prose
-    longer than its floor (``data-long``). What a cell of a
+    every row (``data-blank-column``), which is not drawn; a cell of prose
+    longer than its floor (``data-long``); and a group's heading row spanning
+    every column its headings declare (``colspan``). What a cell of a
     column that keeps its line says is one ``.kept-line``, so the stylesheet
     can hold the line whole up to the column's share of its region and let it
     wrap past that."""
@@ -461,6 +479,18 @@ def sortable(rows: Any) -> bool:
     of a table's rows where they come in groups (``local_sort=count|sortable``)."""
 
     return (rows if isinstance(rows, int) else len(rows)) > 1
+
+
+@register.inclusion_tag("partials/_row_group.html")
+def row_group(label: str, count: int | None = None, *, folds: str = "") -> dict[str, Any]:
+    """The heading row of one group of a table's rows, first in that group's
+    ``tbody``: its name and, given one, how many rows it holds. It spans every
+    column, which its region counts from the table's headings, and its name
+    keeps the edge of the rows' names. ``folds`` is the row's id when the group
+    starts folded away: its rows name it in ``data-folded``, and its toggle
+    stands in the rows' gutter."""
+
+    return {"label": label, "count": count, "folds": folds}
 
 
 @register.inclusion_tag("partials/_row_toggle.html")

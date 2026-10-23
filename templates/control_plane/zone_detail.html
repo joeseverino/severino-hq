@@ -99,21 +99,13 @@ four domains behind a click and then need a second one to go anywhere.
   {% endif %}
 </div>
 
-{% if zone.policy %}{% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled label="Records that send traffic" empty_message="None of this domain's records sends traffic anywhere. They are all below." %}{% else %}{% include "control_plane/_zone_records.html" with rows=zone.routing zone=zone public_dns_enabled=public_dns_enabled label="Records that send traffic" %}{% endif %}
-
 {% comment %}
-Verification strings and issuance rules, folded away. A domain apex answers
-"where does traffic go" underneath CAA records and ownership proofs, and
-sorted with the rest they would come first: the least interesting rows in the
-zone at the top of the page.
+Verification strings and issuance rules are folded away last. A domain apex
+answers "where does traffic go" underneath CAA records and ownership proofs,
+and sorted with the rest they would come first: the least interesting rows in
+the zone at the top of the page.
 {% endcomment %}
-{% if zone.policy %}
-  <details class="control-diagnostics zone-policy">
-    <summary>Policy and verification records ({{ zone.policy|length }})</summary>
-    {% include "control_plane/_zone_records.html" with rows=zone.policy zone=zone public_dns_enabled=public_dns_enabled label="Policy and verification records" drop_mid=1 %}
-  </details>
-{% endif %}
-
+{% include "control_plane/_zone_records.html" with routing=zone.routing policy=zone.policy zone=zone public_dns_enabled=public_dns_enabled %}
 
 {% comment %}
 What the domain relates to, each thing once (`zone_views._page_relationships`).

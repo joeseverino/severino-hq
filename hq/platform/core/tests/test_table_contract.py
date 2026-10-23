@@ -403,6 +403,26 @@ class TableTagTests(SimpleTestCase):
         (two,) = elements(_render(source, {"count": 2}), "th")
         self.assertEqual(two.attrs["aria-sort"], "none")
 
+    def test_a_groups_heading_row_spans_every_column_its_table_declares(self):
+        html = _render(
+            '{% table_region "Records" %}<table class="data-table"><thead><tr>'
+            '{% table_heading "Name" %}{% table_heading "Type" %}{% table_heading "Value" %}</tr></thead>'
+            '<tbody>{% row_group "Policy" 2 %}<tr><td>a</td><td>b</td><td>c</td></tr></tbody>'
+            "</table>{% endtable_region %}"
+        )
+        (heading,) = select(html, "scope", "rowgroup")
+        self.assertEqual(heading.attrs["colspan"], "3")
+        self.assertEqual(heading.words, "Policy 2")
+        self.assertNotIn("data-kind", heading.attrs)
+
+    def test_a_folded_group_starts_closed_and_names_the_row_its_rows_fold_under(self):
+        html = _render('{% row_group "Policy" folds="example-policy" %}')
+        (row,) = elements(html, "tr")
+        self.assertEqual(row.attrs["id"], "example-policy")
+        self.assertIn("data-folds", row.attrs)
+        (toggle,) = select(html, "data-fold-toggle")
+        self.assertEqual(toggle.attrs["aria-expanded"], "false")
+
     def test_a_row_toggle_starts_closed(self):
         html = _render('<td class="row-gutter">a{% row_toggle %}</td>')
         (toggle,) = select(html, "data-row-toggle")
