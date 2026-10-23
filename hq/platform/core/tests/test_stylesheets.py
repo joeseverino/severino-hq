@@ -13,6 +13,9 @@ LAYER_ORDER = re.compile(r"@layer\s+([\w\s,.-]+);")
 LAYER_BLOCK = re.compile(r"@layer\s+([\w.-]+)\s*\{")
 CONTAINER_QUERY = re.compile(r"@container\s+([^{]+)\{")
 QUERY_NAME = re.compile(r"([a-zA-Z_][\w-]*)\s*(?=\(|not\b|style\()")
+# A query of a custom property's value, asked or negated: a style query is
+# asked of the element's parent, never of a size container.
+STYLE_QUERY = re.compile(r"(?:not\s+)?style\(")
 CONTAINER_NAMES = re.compile(r"(?:^|[{;])\s*container(?:-name)?\s*:\s*([^;{}/]+)")
 # A rule with no rule nested in it: its selector and its declarations.
 RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
@@ -64,10 +67,10 @@ class SheetTests(SimpleTestCase):
         declared = {name for names in CONTAINER_NAMES.findall(css) for name in names.split()}
         unnamed, undeclared = [], []
         for prelude in (query.strip() for query in CONTAINER_QUERY.findall(css)):
-            if prelude.startswith("style("):
+            if STYLE_QUERY.match(prelude):
                 continue
             named = QUERY_NAME.match(prelude)
-            if named is None or named.group(1) in {"not", "style"}:
+            if named is None or named.group(1) == "not":
                 unnamed.append(prelude)
             elif named.group(1) not in declared:
                 undeclared.append(prelude)
