@@ -57,7 +57,7 @@ def _on(day, *key) -> datetime:
     return min(at, timezone.now() - timedelta(minutes=1))
 
 
-def _ago(days, *key) -> datetime:
+def _days_back(days, *key) -> datetime:
     return _on(timezone.localdate() - timedelta(days=days), *key)
 
 
@@ -76,16 +76,20 @@ def _resource_days(key: str) -> int:
 # Each kind the estate writes: its model, who makes it, and when a record of
 # it was made and last changed.
 KINDS = (
-    (Project, "operator", lambda p: (_ago(PROJECTS[p.slug][0], p.slug), _ago(PROJECTS[p.slug][1], p.slug))),
-    (ManagedResource, "operator", lambda r: (_ago(_resource_days(r.key), r.key),) * 2),
+    (Project, "operator", lambda p: (_days_back(PROJECTS[p.slug][0], p.slug), _days_back(PROJECTS[p.slug][1], p.slug))),
+    (ManagedResource, "operator", lambda r: (_days_back(_resource_days(r.key), r.key),) * 2),
     (ContentItem, "operator", lambda c: (_on(c.published_at - timedelta(days=3), c.slug), _on(c.published_at, c.slug))),
     (Expense, "operator", lambda e: (_on(e.date, "expense", e.pk),) * 2),
     (Receipt, "operator", lambda r: (_on(r.date, "receipt", r.pk),) * 2),
     (Asset, "operator", lambda a: (_on(a.purchase_date, a.slug),) * 2),
-    (Entry, "operator", lambda e: (_ago(20 + int(hexed(e.title), 16) % 180, e.title),) * 2),
-    (LinkedAccount, "operator", lambda a: (_ago(MACHINE_DAYS, a.provider),) * 2),
-    (DocumentationRecord, "agent", lambda d: (_ago(MIRRORED[d.doc_id], d.doc_id), _on(d.last_reviewed, d.doc_id))),
-    (AgentIdentity, "agent", lambda a: (_ago(AGENT_DAYS, a.client_id),) * 2),
+    (Entry, "operator", lambda e: (_days_back(20 + int(hexed(e.title), 16) % 180, e.title),) * 2),
+    (LinkedAccount, "operator", lambda a: (_days_back(MACHINE_DAYS, a.provider),) * 2),
+    (
+        DocumentationRecord,
+        "agent",
+        lambda d: (_days_back(MIRRORED[d.doc_id], d.doc_id), _on(d.last_reviewed, d.doc_id)),
+    ),
+    (AgentIdentity, "agent", lambda a: (_days_back(AGENT_DAYS, a.client_id),) * 2),
     (Job, "system", lambda j: (j.created_at,) * 2),
 )
 
