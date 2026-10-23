@@ -12,7 +12,7 @@ the reason, and ``ObservationSpec.requires`` says what the credential needs.
 from importlib import import_module
 from pkgutil import iter_modules
 
-from .contract import ObservationRecord, ObservationSpec, ReadingPart, registry
+from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp, registry
 
 # Every module beside this one is a provider's readings, and declares them as
 # ``OBSERVATIONS``: adding one is adding its file. A spec is only a schema; what
@@ -32,5 +32,6 @@ __all__ = [
     "ObservationRecord",
     "ObservationSpec",
     "ReadingPart",
+    "Stamp",
     "registry",
 ]

@@ -12,7 +12,7 @@ from typing import Any
 from ..certificate_authorities import authority_name
 from ..consoles import cloudflare_dashboard, cloudflare_zero_trust
 from ..names import normalized_hostname
-from .contract import ObservationRecord, ObservationSpec, ReadingPart
+from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 CONTACT_SUBMISSION_KIND = "cloudflare.contact_submission"
 
@@ -38,7 +38,7 @@ class PagesProjectRecord(ObservationRecord):
     # The latest production deployment.
     deployment_id: str = ""
     deployment_commit: str = ""
-    deployment_created_on: str = ""
+    deployment_created_on: Stamp = None
 
 
 class D1DatabaseRecord(ObservationRecord):
@@ -46,7 +46,7 @@ class D1DatabaseRecord(ObservationRecord):
     account_id: str = ""
     name: str
     uuid: str
-    created_at: str = ""
+    created_at: Stamp = None
     version: str = ""
     file_size: int | None = None
 
@@ -63,8 +63,8 @@ class ContactSubmissionRecord(ObservationRecord):
     database_id: str = ""
     database: str = ""
     id: int
-    created_at: str = ""
-    updated_at: str = ""
+    created_at: Stamp = None
+    updated_at: Stamp = None
     name: str = ""
     email: str = ""
     message: str = ""
@@ -107,8 +107,8 @@ class AccessServiceTokenRecord(ObservationRecord):
     connection_ref: str = ""
     id: str
     name: str = ""
-    expires_at: str = ""
-    created_at: str = ""
+    expires_at: Stamp = None
+    created_at: Stamp = None
     # Applications with a policy whose include rules admit this token.
     apps: tuple[AccessAppRef, ...] = ()
 
@@ -130,8 +130,8 @@ class TunnelRecord(ObservationRecord):
     id: str
     name: str = ""
     status: str = ""
-    created_at: str = ""
-    conns_active_at: str = ""
+    created_at: Stamp = None
+    conns_active_at: Stamp = None
     # "cloudflare" when the ingress is managed remotely, "local" when it lives
     # in the connector's own file and the API does not hold it.
     config_source: str = ""
@@ -149,7 +149,7 @@ class EdgeCertificateRecord(ObservationRecord):
     status: str = ""
     certificate_authority: str = ""
     # The earliest expiry among the pack's certificates.
-    expires_on: str = ""
+    expires_on: Stamp = None
 
 
 class RedirectRecord(ObservationRecord):

@@ -15,7 +15,7 @@ from hq.platform.application.ui import counted
 lazy from hq.platform.application.reach import network_of
 
 from ..names import normalized_hostname
-from .contract import ObservationRecord, ObservationSpec, ReadingPart
+from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 CLIENT_KIND = "adguard.client"
 QUERY_KIND = "adguard.query_summary"
@@ -71,7 +71,7 @@ class AdGuardQuerySummaryRecord(ObservationRecord):
     client_count: int = 0
     # The busiest clients, at most ``CLIENTS_KEPT``.
     clients: tuple[QueryClientRecord, ...] = ()
-    last_seen: str = ""
+    last_seen: Stamp = None
     # The span the aggregate covers, in hours.
     window_hours: float = 0.0
 

@@ -6,7 +6,7 @@ carries beyond that is a field here, so the schema drops it: no path, query,
 header value, body or user agent.
 """
 
-from .contract import ObservationRecord, ObservationSpec
+from .contract import ObservationRecord, ObservationSpec, Stamp
 
 ARRIVAL_KIND = "hq.request_path"
 
@@ -22,7 +22,7 @@ class ArrivalRecord(ObservationRecord):
     # The trusted proxy's address when one forwarded the request, else "".
     forwarded_by: str = ""
     first_seen: str = ""
-    last_seen: str = ""
+    last_seen: Stamp = None
     # Requests counted since ``window_start``.
     count: int = 0
     window_start: str = ""

@@ -10,7 +10,7 @@ same ingest as a sweep.
 from typing import Any
 
 from ..names import normalized_hostname, organization_name
-from .contract import ObservationRecord, ObservationSpec
+from .contract import ObservationRecord, ObservationSpec, Stamp
 
 ADDRESS_KIND = "registry.address"
 DOMAIN_KIND = "registry.domain"
@@ -28,17 +28,17 @@ class AddressHolderRecord(ObservationRecord):
     handle: str = ""
     country: str = ""
     range: str = ""
-    read_at: str = ""
+    read_at: Stamp = None
     unread: str = ""
 
 
 class DomainRegistrationRecord(ObservationRecord):
     domain: str
     registrar: str = ""
-    registered_at: str = ""
-    expires_at: str = ""
+    registered_at: Stamp = None
+    expires_at: Stamp = None
     status: tuple[str, ...] = ()
-    read_at: str = ""
+    read_at: Stamp = None
     unread: str = ""
 
 
@@ -58,7 +58,7 @@ class PublishedImageRecord(ObservationRecord):
     source: str = ""
     revision: str = ""
     version: str = ""
-    read_at: str = ""
+    read_at: Stamp = None
     unread: str = ""
 
 
@@ -71,7 +71,7 @@ class UpstreamReleasesRecord(ObservationRecord):
     # Published security advisories: ``{id, severity, summary, url,
     # published_at, vulnerabilities: [[vulnerable range, patched versions]]}``.
     advisories: tuple[dict[str, Any], ...] = ()
-    read_at: str = ""
+    read_at: Stamp = None
     unread: str = ""
 
 
@@ -82,7 +82,7 @@ class ProvenanceRecord(ObservationRecord):
     source: str = ""
     revision: str = ""
     builder: str = ""
-    finished_at: str = ""
+    finished_at: Stamp = None
     # What it was built on, ``pkg:docker/…`` with its digest.
     materials: tuple[str, ...] = ()
 
@@ -98,7 +98,7 @@ class DigestRecord(ObservationRecord):
     packages: tuple[str, ...] = ()
     sbom: str = ""
     provenance: ProvenanceRecord | None = None
-    read_at: str = ""
+    read_at: Stamp = None
     unread: str = ""
 
 
@@ -112,7 +112,7 @@ class VulnerabilityFinding(ObservationRecord):
     summary: str = ""
     aliases: tuple[str, ...] = ()
     url: str = ""
-    modified: str = ""
+    modified: Stamp = None
 
 
 class VulnerabilitiesRecord(ObservationRecord):
@@ -123,7 +123,7 @@ class VulnerabilitiesRecord(ObservationRecord):
     findings: tuple[VulnerabilityFinding, ...] = ()
     # Ids whose detail is still to be read, which makes the digest due again.
     unresolved: tuple[str, ...] = ()
-    read_at: str = ""
+    read_at: Stamp = None
     unread: str = ""
 
 

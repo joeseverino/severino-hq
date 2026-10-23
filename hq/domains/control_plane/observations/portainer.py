@@ -12,7 +12,7 @@ credentials are never named, so the schema drops them.
 from collections.abc import Mapping
 from typing import Any
 
-from .contract import ObservationRecord, ObservationSpec, container_key
+from .contract import ObservationRecord, ObservationSpec, Stamp, container_key
 
 PROVIDER = "portainer"
 # The API key acts as its user; the user must be granted each environment.
@@ -54,7 +54,7 @@ class EnvironmentRecord(ObservationRecord):
     docker_version: str = ""
     containers_running: int | None = None
     containers_total: int | None = None
-    snapshot_at: str = ""
+    snapshot_at: Stamp = None
 
 
 class NetworkRecord(_OnMachine):
@@ -83,7 +83,7 @@ class VolumeRecord(_OnMachine):
     source: str = ""
     # The compose project that created a named volume.
     stack: str = ""
-    created_at: str = ""
+    created_at: Stamp = None
     used_by: tuple[MountUser, ...] = ()
 
 
@@ -99,7 +99,7 @@ class ImageRecord(_OnMachine):
     id: str = ""
     tags: tuple[str, ...] = ()
     digests: tuple[str, ...] = ()
-    created_at: str = ""
+    created_at: Stamp = None
     size: int | None = None
     containers: tuple[ImageUser, ...] = ()
 
@@ -170,7 +170,7 @@ class RuntimeRecord(_OnMachine):
     healthcheck: bool = False
     health: str = ""
     restart_count: int = 0
-    started_at: str = ""
+    started_at: Stamp = None
 
 
 def _machine(record: Mapping[str, Any]) -> tuple[str, ...]:
