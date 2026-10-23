@@ -482,10 +482,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 .figure-stats > span { display: inline-flex; flex-direction: column; gap: var(--space-1); }
 .figure-stats b { font-size: var(--text-lg); font-weight: 650; font-feature-settings: "tnum"; }
-.figure-stats i {
-  font-style: normal; color: var(--muted); font-size: var(--text-3xs);
-  text-transform: uppercase; letter-spacing: .055em; font-weight: 600;
-}
+.figure-stats i { font-style: normal; color: var(--muted); font-size: var(--text-xs); }
 
 /* One number a page is built around, where a KPI tile would make it one of
    four equals. Tabular so it does not reflow as it changes. */
@@ -623,7 +620,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
   grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6);
   padding: var(--space-5) var(--space-6); border-radius: var(--radius); background: var(--bg-tint);
 }
-.row-detail > td > .row-columns > dt { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.row-detail > td > .row-columns > dt { color: var(--muted); font-size: var(--text-xs); }
 .data-table .row-detail:hover { background: none; }
 
 }

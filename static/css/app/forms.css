@@ -380,7 +380,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   gap: var(--space-4);
   margin: var(--space-6) 0 0;
 }
-.command-result-facts dt { font-size: var(--text-3xs); font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.command-result-facts dt { color: var(--muted); font-size: var(--text-xs); }
 .command-result-facts dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-weight: 600; }
 .command-result .table-scroll { margin-top: var(--space-6); }
 .command-result-table caption { caption-side: top; text-align: left; padding: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; }

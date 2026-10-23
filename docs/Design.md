@@ -172,7 +172,10 @@ cells (not a dialog a cell opens, not its note) and takes the tracks for that
 count, two to six (`--tracks-2-1` up to `--tracks-6-3-1`), and a lone cell takes
 the band, so no page says how many it holds. A band is listed once, in the band rule in `css/app/figures.css`; its
 cells keep their own padding. Too narrow for two cells, a band reads as a
-list: label left, value right. A list of short steps (`.step-list`) is read
+list: label left, value right. What names a value (`.band-label`, a tile's
+label, a `<dt>`) is sentence case in the muted voice; capitals are for a
+kicker over a group (`.eyebrow`), never a value's name
+(`test_no_value_is_named_in_capitals`). A list of short steps (`.step-list`) is read
 down its columns, so its columns end within a step of each other. The
 dashboard's readings are one row when each has room and a list when not.
 *Gates:* `a_band_cell_keeps_its_padding`, `a_band_lays_out_as_whole_rows`.

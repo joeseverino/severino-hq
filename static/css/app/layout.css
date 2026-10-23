@@ -121,7 +121,6 @@
 .dashboard-counts { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-9); padding: var(--surface-inset, var(--space-5) var(--space-8)); margin-bottom: var(--stack-gap); }
 .dashboard-counts .kpi { display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); padding: 0; background: none; }
 .dashboard-counts .kpi .value { font-size: var(--text-md); order: -1; }
-.dashboard-counts .kpi .label { font-size: var(--text-xs); text-transform: none; letter-spacing: 0; }
 .dashboard-counts .kpi .muted { font-size: var(--text-2xs); }
 .dashboard-patterns > .card { display: flex; flex-direction: column; min-width: 0; margin: 0; padding: var(--space-6); }
 .dashboard-patterns .chart-card figcaption p { min-height: 0; }
