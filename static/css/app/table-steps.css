@@ -1,5 +1,5 @@
 /* Written by `manage.py table_steps` from `DROP_STEPS` and `MOST_COLUMNS`
-   (hq/platform/application/tables.py): `mise run regen` rewrites it and
+   (hq/platform/application/table_fit.py): `mise run regen` rewrites it and
    `mise run drift` holds it to them. A container query reads no variable, so
    each width a column may leave at has its own rule, and a table's region
    marks the table and its cells with the widths that are theirs

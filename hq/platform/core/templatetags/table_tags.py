@@ -6,7 +6,7 @@ rank and its sort control, and ``{% row_toggle %}`` draws the disclosure of a
 row that holds more than it shows. All of it is in the HTML on first paint, so
 nothing about a table's shape waits on a script: the region marks each cell
 with what its column does and the width its column leaves below, derived from
-what the column holds (`tables.fit`); the stylesheet drops a column there, and
+what the column holds (`table_fit`); the stylesheet drops a column there, and
 shows a row's toggle where the row has something hidden.
 """
 
@@ -23,16 +23,18 @@ from django.template.base import token_kwargs
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from hq.platform.application.tables import (
+from hq.platform.application.table_fit import (
+    CELL_TEXT,
+    CH,
     CUT,
+    LONG,
     NAME_HOLD,
+    ColumnText,
     Fit,
     FitColumn,
-    check_drop,
-    column_floor,
-    column_kind,
     fit,
 )
+from hq.platform.application.tables import check_drop, column_kind
 
 register = template.Library()
 
@@ -43,12 +45,31 @@ _SAYS_NOTHING = re.compile(r"[\s\u2013\u2014-]*")
 
 _SECTIONS = ("thead", "tbody", "tfoot")
 
-# The characters a cell of prose or a status holds out for (`data-long`,
-# `css/app/tables.css`), and the line that holds out for it: one that would
-# stand three lines tall at the floor. A shorter line wraps as it likes, since
-# held to the floor its column could stand wider than all it says.
-_FLOOR = 16
-_LONG = 3 * _FLOOR
+# How wide a character is set, in ems: Inter's mean advance over the words
+# tables hold, and a monospace face's.
+_ADVANCE = 0.54
+_MONO_ADVANCE = 0.6
+# The sizes, in pixels, text is set at besides a cell's: a heading's
+# (`--text-xs`), a pill's (`--text-2xs`) and code's (`.88em`, base.css).
+_HEAD_TEXT = 12
+_PILL_TEXT = 11
+_CODE_TEXT = 0.88 * CELL_TEXT
+# What a box set whole adds to its words, in pixels: a pill's padding and
+# border (cards.css), a button's (page.css) and a select's with its chevron
+# (base.css); and the sort control after a heading's label, its gap and arrow
+# (tables.css).
+_PILL = 2 * 8 + 2
+_BUTTON = 2 * 12 + 2
+_SELECT = 10 + 10 + 14 + 2
+_SORT_MARK = 4 + 15 * 10 / 16
+# The classes of a box set whole with chrome of its own, besides a button and
+# a select: its words never wrap and are never cut.
+_BOXES = frozenset({"pill", "btn", "table-sort-link"})
+# The classes whose words the stylesheet sets on one line (`white-space:
+# nowrap` in tables.css, figures.css and base.css), and a time's.
+_WHOLE = _BOXES | frozenset(
+    {"date-col", "num-col", "tight-col", "actions-col", "row-actions", "cell-part", "whole", "readout", "joined"}
+)
 
 # What a cell holds that is not on its row's line: words for assistive
 # technology alone, and what the row keeps for its open line or shows only in
@@ -57,6 +78,9 @@ _OFF_LINE = frozenset({"visually-hidden", "row-below", "row-more", "narrow-only"
 # Text that breaks wherever it must, and a part of a phrase, which holds out
 # for none of its length (figures.css): no run of either holds its column open.
 _HOLDS_NOTHING = frozenset({"cell-data", "part"})
+# The kinds a column's body cells say they are, for the stylesheet to set
+# them: a status's and a figure's line is kept, and a control's never wraps.
+_MARKED_KINDS = frozenset({"status", "numeric", "control"})
 # A column of tick-boxes is as wide as `.select-column` (tables.css).
 _TICK_BOXES = 38
 
@@ -69,6 +93,26 @@ _CUTS = frozenset({"[data-entity]", "[data-sole]", "cut"})
 _LINE_ENDS = frozenset({"br", "div", "p", "li", "dt", "dd"})
 
 
+@dataclass(frozen=True, slots=True)
+class _Setting:
+    """How text at a place in a cell is set: its size in pixels, in the
+    monospace face or not, whole (never wrapping) or not, and how much of a run
+    of it holds its column open, in `ch` (None: all of it)."""
+
+    size: float
+    mono: bool = False
+    whole: bool = False
+    hold: int | None = None
+
+    @property
+    def ch(self) -> float:
+        return _MONO_ADVANCE if self.mono else CH
+
+
+def _set_width(characters: int, setting: _Setting) -> float:
+    return characters * setting.size * (_MONO_ADVANCE if setting.mono else _ADVANCE)
+
+
 @dataclass(slots=True)
 class _Cell:
     start: tuple[int, int]
@@ -76,43 +120,80 @@ class _Cell:
     # Where its content starts (past the start tag) and, when the cell closes
     # with its own end tag, where that tag is.
     opened: tuple[int, int]
+    header: bool = False
     closed: tuple[int, int] | None = None
     says_nothing: bool = True
+    # The tag of its first element: a cell that leads with a name holds out
+    # for one.
+    first: str = ""
     # The characters of text on its line so far, and on its longest line,
-    # spaces collapsed.
+    # spaces collapsed; and how wide each is set, in CSS pixels.
     line: int = 0
     longest: int = 0
-    # The characters of the run with no break in it so far, the most of it
-    # that holds the column open (None: all of it), and the longest run held:
-    # a line breaks at a space and at a name's seams.
-    run: int = 0
-    hold: int | None = None
-    widest: int = 0
+    line_width: float = 0
+    widest_line: float = 0
+    # Whether its line holds a pill or a time, which it keeps whole, and
+    # whether it is plain words, which keep their longest word.
+    pinned: bool = False
+    plain: bool = True
+    # How wide the run with no break in it so far is set and the most of it
+    # that holds the column open (None: all of it), and the widest run held
+    # only so far and the widest held whole: a line breaks at a space, at a
+    # name's seams and either side of a box set whole.
+    run: float = 0
+    hold: float | None = None
+    widest_held: float = 0
+    widest_whole: float = 0
 
     @property
     def classes(self) -> frozenset[str]:
         return frozenset(_classes(self.attrs))
 
-    def say(self, text: str, hold: int | None) -> None:
-        self.line += len(" ".join(text.split()))
+    def say(self, text: str, setting: _Setting) -> None:
+        words = " ".join(text.split())
+        self.line += len(words)
         self.longest = max(self.longest, self.line)
-        for place, run in enumerate(re.split(r"\s+", text)):
+        self.widen(_set_width(len(words), setting))
+        runs = [text] if setting.whole else re.split(r"\s+", text)
+        for place, run in enumerate(runs):
             if place:
                 self.end_run()
             if run:
+                hold = None if setting.hold is None else setting.hold * setting.size * setting.ch
                 if not self.run:
                     self.hold = hold
                 elif hold is not None:
                     self.hold = hold if self.hold is None else min(self.hold, hold)
-                self.run += len(run)
+                self.run += _set_width(len(" ".join(run.split())), setting)
+
+    def widen(self, width: float) -> None:
+        self.line_width += width
+        self.widest_line = max(self.widest_line, self.line_width)
+
+    def box(self, width: float) -> None:
+        """A box set whole starts a run, its chrome part of it."""
+
+        self.end_run()
+        self.widen(width)
+        self.run = width
+
+    def mark(self, width: float) -> None:
+        """A mark of ``width`` that goes on with the run it is in."""
+
+        self.widen(width)
+        self.run += width
 
     def end_run(self) -> None:
-        self.widest = max(self.widest, self.run if self.hold is None else min(self.run, self.hold))
+        if self.hold is None:
+            self.widest_whole = max(self.widest_whole, self.run)
+        else:
+            self.widest_held = max(self.widest_held, min(self.run, self.hold))
         self.run, self.hold = 0, None
 
     def end_line(self) -> None:
         self.end_run()
         self.line = 0
+        self.line_width = 0
 
 
 @dataclass(slots=True)
@@ -143,6 +224,8 @@ class _Cells(HTMLParser):
         # The content of each cell that keeps its line, from where it starts
         # to its cell's end tag.
         self.held: list[tuple[tuple[int, int], tuple[int, int]]] = []
+        # What the fit read of each own table's columns, table by table.
+        self.columns: list[tuple[FitColumn, ...]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         own = self.tables == 1
@@ -167,7 +250,7 @@ class _Cells(HTMLParser):
             # The start tag can run over lines: its content starts where its text ends.
             *above, last = tag_text.split("\n")
             opened = (line + len(above), (0 if above else column) + len(last))
-            self.cell = _Cell((line, column), dict(attrs), opened)
+            self.cell = _Cell((line, column), dict(attrs), opened, header=tag == "th")
             self.rows[-1].cells.append(self.cell)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -178,27 +261,82 @@ class _Cells(HTMLParser):
         assert self.cell is not None
         named = dict(attrs)
         classes = frozenset(_classes(named))
+        # The line the region wraps a kept cell in is its own mark, read again
+        # when the page is: what the cell holds is inside it.
+        if "kept-line" not in classes:
+            self._element(tag, named, classes)
+        if not void and tag not in _VOID:
+            marks = {f"[{name}]" for name in ("data-entity", "data-sole") if name in named}
+            self.open.append((tag, classes | marks))
+
+    def _element(self, tag: str, named: dict[str, str | None], classes: frozenset[str]) -> None:
+        """What an element opening in the cell says of its line."""
+
+        assert self.cell is not None
         if tag in _LINE_ENDS:
             self.cell.end_line()
         elif "seam" in classes:
             self.cell.end_run()
         if tag != "br" and "empty-value" not in classes and not self._within({"empty-value"}):
             self.cell.says_nothing = False
-        if not void and tag not in _VOID:
-            marks = {f"[{name}]" for name in ("data-entity", "data-sole") if name in named}
-            self.open.append((tag, classes | marks))
+        if not self.cell.first and all("kept-line" in classes for _tag, classes in self.open):
+            self.cell.first = tag
+        if tag == "time" or "pill" in classes:
+            self.cell.pinned = True
+        elif "exposure" not in classes and tag != "br":
+            self.cell.plain = False
+        if "data-row-toggle" not in named:
+            self._set_box(tag, classes)
+
+    def _set_box(self, tag: str, classes: frozenset[str]) -> None:
+        """What a box adds to the line: a select is as wide as its widest
+        option, a button, a pill and a sort control are set whole with their
+        chrome, and a sort control's arrow goes on with its label."""
+
+        assert self.cell is not None
+        if tag == "option":
+            self.cell.end_line()
+            self.cell.box(_SELECT)
+        elif tag == "select":
+            self.cell.end_run()
+        elif "table-sort-link" in classes:
+            self.cell.box(0)
+        elif tag == "button" or "btn" in classes:
+            self.cell.box(_BUTTON)
+        elif "pill" in classes:
+            self.cell.box(_PILL)
+        elif "sort-indicator" in classes:
+            self.cell.mark(_SORT_MARK)
 
     def _within(self, names: Iterable[str]) -> bool:
         assert self.cell is not None
         return any(classes.intersection(names) for classes in (self.cell.classes, *(c for _t, c in self.open)))
 
+    def _setting(self) -> _Setting:
+        """How text is set here: in a pill's size, code's or a heading's, or a
+        cell's; whole where the stylesheet keeps it on one line, and never cut
+        inside a box set whole."""
+
+        tags = {tag for tag, _classes in self.open}
+        mono = "code" in tags
+        if self._within({"pill"}):
+            size = _PILL_TEXT
+        elif mono:
+            size = _CODE_TEXT
+        else:
+            size = _HEAD_TEXT if self.section == "thead" else CELL_TEXT
+        boxed = bool(tags & {"button", "select"}) or self._within(_BOXES)
+        whole = boxed or "time" in tags or self._within(_WHOLE)
+        return _Setting(size, mono=mono, whole=whole, hold=None if boxed else self._hold())
+
     def _hold(self) -> int | None:
         """How much of a run with no break in it holds its column open here:
-        all of an identifier shown whole (`cell-whole`), none of text that
+        all of an identifier shown whole (`cell-whole`) and of a heading's
+        label, none of text that
         breaks anywhere or of a phrase's part, the first characters of a value
         the stylesheet cuts, and of anything else a name's hold."""
 
-        if self._within({"cell-whole"}):
+        if self._within({"cell-whole"}) or self.section == "thead":
             return None
         if self._within(_HOLDS_NOTHING):
             return 0
@@ -210,6 +348,8 @@ class _Cells(HTMLParser):
         if self.cell is not None:
             for depth in range(len(self.open) - 1, -1, -1):
                 if self.open[depth][0] == tag:
+                    if tag in ("button", "select") or self.open[depth][1] & _BOXES:
+                        self.cell.end_run()
                     del self.open[depth:]
                     break
         if tag == "table":
@@ -229,7 +369,7 @@ class _Cells(HTMLParser):
         if self.cell is None or self._within({"empty-value"}):
             return
         if not self._within(_OFF_LINE):
-            self.cell.say(data, self._hold())
+            self.cell.say(data, self._setting())
         if not _SAYS_NOTHING.fullmatch(data):
             self.cell.says_nothing = False
 
@@ -245,12 +385,14 @@ class _Cells(HTMLParser):
 
         heads = [row.cells for row in self.rows if row.section == "thead"]
         kinds = _kinds(heads)
-        lines = {index: kind for index, kind in kinds.items() if kind in ("status", "numeric")}
+        marked = {index: kind for index, kind in kinds.items() if kind in _MARKED_KINDS}
         named = _naming_column(heads)
         records = [row for row in self.rows if row.section == "tbody" and not row.group]
         empty = _empty_columns(heads, named, records)
         width = _width(heads, records)
-        table = fit(_fit_columns(heads, records, named, empty, width))
+        columns = _fit_columns(heads, records, named, empty, width)
+        self.columns.append(columns)
+        table = fit(columns)
         self.marks[self.table] = _table_marks(table, heads)
         for row in self.rows:
             if row.group:
@@ -261,11 +403,13 @@ class _Cells(HTMLParser):
                 marks = [" data-blank"] if body and cell.says_nothing else []
                 if "colspan" not in cell.attrs:
                     marks += _column_marks(
-                        cell, table.leaves.get(index), lines.get(index) if body else None, index in empty
+                        cell, table.leaves.get(index), marked.get(index) if body else None, index in empty
                     )
-                    if body and index in lines and cell.closed and not cell.says_nothing:
+                    long = cell.longest > LONG
+                    kept = marked.get(index) in ("status", "numeric")
+                    if body and kept and cell.closed and not cell.says_nothing and not long:
                         self.held.append((cell.opened, cell.closed))
-                    if body and index != named and kinds.get(index) in ("prose", "status") and cell.longest > _LONG:
+                    if body and index != named and kinds.get(index) in ("prose", "status") and long:
                         marks.append(" data-long")
                 if marks:
                     self.marks[cell.start] = marks
@@ -285,10 +429,9 @@ def _classes(attrs: dict[str, str | None]) -> list[str]:
 def _fit_columns(
     heads: list[list[_Cell]], body: list[_Row], named: int, empty: set[int], width: int
 ) -> tuple[FitColumn, ...]:
-    """What the table's fit reads of each column, by place: its floor, from
-    its kind, its longest line and run and its heading's label, and its rank.
-    Without headings, a column of row headers keeps its line and any other is
-    prose."""
+    """What the table's fit reads of each column, by place: what it holds, by
+    its kind, and its rank. Without headings, a column of row headers keeps its
+    line and any other is prose."""
 
     headings = {index: cell for cells in heads for index, cell in enumerate(cells)}
     if rank := _rank(headings.get(named)):
@@ -305,17 +448,29 @@ def _fit_columns(
             continue
         cells = [cells[index] for cells in rows if index < len(cells)]
         headers = bool(cells) and all(cell.attrs.get("scope") == "row" for cell in cells)
-        floor = column_floor(
-            (heading.attrs.get("data-kind") if heading else None) or ("status" if headers else "prose"),
-            max((cell.longest for cell in cells), default=0),
-            max((cell.widest for cell in cells), default=0),
-            heading.longest if heading else 0,
-            sorts=heading is not None and "aria-sort" in heading.attrs,
-            names_row=index == named,
-            gutter=index == named and any("row-gutter" in cell.classes for cell in cells),
-        )
-        columns.append(FitColumn(floor, _rank(heading)))
+        kind = (heading.attrs.get("data-kind") if heading else None) or ("status" if headers else "prose")
+        columns.append(FitColumn(_column_text(kind, cells, heading, names_row=index == named), _rank(heading)))
     return tuple(columns)
+
+
+def _column_text(kind: str, cells: list[_Cell], heading: _Cell | None, *, names_row: bool) -> ColumnText:
+    """What a column's cells and heading hold. A control is set whole however
+    long; any other line past `LONG` wraps, so it keeps none."""
+
+    kept = [cell for cell in cells if kind == "control" or cell.longest <= LONG]
+    return ColumnText(
+        kind=kind,
+        line=max((cell.widest_line for cell in kept if cell.plain and not cell.pinned), default=0),
+        parts=max((cell.widest_line for cell in kept if not (cell.plain or cell.pinned)), default=0),
+        pinned=max((cell.widest_line for cell in kept if cell.pinned), default=0),
+        held=max((cell.widest_held for cell in cells), default=0),
+        whole=max((cell.widest_whole for cell in cells), default=0),
+        label=max(heading.widest_held, heading.widest_whole) if heading else 0,
+        long=len(kept) < len(cells),
+        names_row=names_row,
+        leads=names_row and any(cell.first == "strong" and not cell.header for cell in cells),
+        gutter=names_row and any("row-gutter" in cell.classes for cell in cells),
+    )
 
 
 def _rank(heading: _Cell | None) -> int:
@@ -422,6 +577,17 @@ def mark_cells(markup: str) -> str:
         last = offset
     parts.append(markup[last:])
     return "".join(parts)
+
+
+def fit_columns(markup: str) -> list[tuple[FitColumn, ...]]:
+    """What the fit reads of each column of each of the markup's own tables,
+    as its region reads them: what dev:look's floors rule sets beside the
+    browser's min-content."""
+
+    cells = _Cells()
+    cells.feed(markup)
+    cells.close()
+    return cells.columns
 
 
 # The shares of its region an identifier may take, besides the whole row's

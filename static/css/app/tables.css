@@ -222,7 +222,7 @@
    stands many lines taller than the rest. */
 .data-table > thead th:is([data-kind="status"], [data-kind="numeric"], [data-kind="control"]) { width: 1px; }
 /* A cell of prose or a status with a long line (`data-long`,
-   table_tags._LONG) holds out for a floor (`_FLOOR`) up to its column's share;
+   table_fit.LONG) holds out for a floor (`_PROSE`) up to its column's share;
    the column that names the row holds out on its own terms. A status column
    asks for a pixel, so short of the floor a long status stands as many lines
    as it has words. And a sentence whose longest piece is cut asks for almost
@@ -231,10 +231,10 @@
    name gets less than its text needs and stands lines taller. The floor is a
    box inside the cell, which both engines size. */
 .data-table > tbody td[data-long]::before { content: ""; display: block; inline-size: min(16ch, var(--hold)); }
-/* Asked for a pixel, a column is as wide as its longest word, so a control in
-   it keeps its label on one line: "Link this" broken over two is a taller
-   button than the one beside it, and reads as two. */
-.data-table > tbody td[data-kind="control"] :is(.btn, button) { white-space: nowrap; }
+/* A control cell keeps its line, as its column's floor counts it
+   (table_fit): "Link this" broken over two is a taller button than the one
+   beside it, and reads as two. */
+.data-table > tbody td[data-kind="control"] { white-space: nowrap; }
 /* Outside a narrow box the columns showing have the room their floors ask
    (table-steps.css), so such a line keeps it. */
 @container style(--box: whole) {

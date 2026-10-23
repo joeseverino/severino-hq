@@ -2,14 +2,14 @@ from typing import override
 
 from django.core.management.base import BaseCommand, CommandError
 
-from hq.platform.application.tables import DROP_STEPS, MOST_COLUMNS
+from hq.platform.application.table_fit import DROP_STEPS, MOST_COLUMNS
 from hq.platform.core.stylesheets import STATIC
 
 SHEET = STATIC / "css" / "app" / "table-steps.css"
 
 _HEAD = """\
 /* Written by `manage.py table_steps` from `DROP_STEPS` and `MOST_COLUMNS`
-   (hq/platform/application/tables.py): `mise run regen` rewrites it and
+   (hq/platform/application/table_fit.py): `mise run regen` rewrites it and
    `mise run drift` holds it to them. A container query reads no variable, so
    each width a column may leave at has its own rule, and a table's region
    marks the table and its cells with the widths that are theirs

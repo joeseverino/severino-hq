@@ -10,20 +10,9 @@ from django.test import RequestFactory, SimpleTestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.routes import routed
-from hq.platform.application.tables import (
-    DROP_STEPS,
-    FitColumn,
-    TableColumn,
-    TableListMixin,
-    column_floor,
-    drop_step,
-    fit,
-    named_first,
-    ranked,
-    typed,
-)
+from hq.platform.application.table_fit import DROP_STEPS, ColumnText, FitColumn, fit, floors_at
+from hq.platform.application.tables import TableColumn, TableListMixin, named_first, ranked, typed
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
-from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 from hq.platform.core.templatetags import table_tags
 
@@ -326,6 +315,35 @@ class TableTagTests(SimpleTestCase):
         marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
         self.assertEqual(marked, ["status", "long"])
 
+    def test_a_control_holds_its_column_open_by_its_widest_option_and_keeps_its_line(self):
+        """A select is as wide as its widest option, whichever is chosen, and
+        a control's cell never wraps, so its column's floor counts all of it."""
+
+        def table(options):
+            source = (
+                '{% table_region "Rules" %}<table class="data-table"><thead><tr>{% table_heading "Action" %}'
+                '{% table_heading "Agent" "control" %}</tr></thead><tbody><tr><td>a</td>'
+                f'<td><select name="a">{"".join(f"<option>{each}</option>" for each in options)}</select></td>'
+                "</tr></tbody></table>{% endtable_region %}"
+            )
+            return [each for each in all_elements(_render(source)) if each.tag in ("table", "td")]
+
+        short, *_cells = table(["Allow", "Deny"])
+        wide, _name, control = table(["Allow", "Ask me first for everything", "Deny"])
+        self.assertGreater(int(wide.attrs["data-narrow-at"]), int(short.attrs["data-narrow-at"]))
+        self.assertEqual(control.attrs.get("data-kind"), "control")
+
+    def test_a_status_too_long_to_keep_wraps(self):
+        long = "Ask me first for container stack and tailnet policy changes"
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "State" "status" %}</tr></thead><tbody>'
+            f'<tr><td>a</td><td data-col="long">{long}</td></tr><tr><td>b</td><td data-col="short">Up</td></tr>'
+            "</tbody></table>{% endtable_region %}"
+        )
+        kept = with_class(_render(source), "kept-line")
+        self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["short"])
+
     def test_a_run_shown_whole_holds_its_column_open_and_a_cut_one_does_not(self):
         run = "a-worker-image-with-a-deliberately-long-name"
 
@@ -615,50 +633,57 @@ class ListTableTests(_AuthedTestCase):
 class FitTests(SimpleTestCase):
     """Where a table's columns leave is derived from what each holds."""
 
-    # The audit log's columns, as its list declares them, with the longest
-    # line of each in characters: a type and name, a time, a user, an action
-    # and a message.
-    LONGEST = {"What": 40, "When": 12, "Who": 8, "Action": 7, "Message": 90}
+    # A table's columns, in CSS pixels: a name, a time, a state, a note and a
+    # control, the last three let go in that order.
+    COLUMNS = (
+        FitColumn(ColumnText(whole=120, names_row=True, leads=True)),
+        FitColumn(ColumnText(kind="status", pinned=150)),
+        FitColumn(ColumnText(kind="status", line=200, held=60), 3),
+        FitColumn(ColumnText(held=90, long=True), 2),
+        FitColumn(ColumnText(kind="control", line=110), 1),
+    )
 
-    def _audit(self):
-        """The list's columns, ranked as it ranks them, each with its floor."""
-
-        columns = ranked(typed(AuditLogListView.table_columns, AuditLogListView.model))
-        floors = [
-            column_floor(
-                column.kind, self.LONGEST[column.label], label=len(column.label), sorts=True, names_row=not index
-            )
-            for index, column in enumerate(columns)
-        ]
-        return columns, floors
-
-    def test_each_column_leaves_below_the_floors_of_what_still_shows(self):
-        columns, floors = self._audit()
-        table = fit(tuple(FitColumn(floor, column.drop) for floor, column in zip(floors, columns, strict=True)))
-        self.assertEqual({columns[index].label for index in table.leaves}, {"Who", "Message", "Action"})
-        showing = set(range(len(columns)))
-        for index in sorted(table.leaves, key=lambda index: columns[index].drop):
+    def test_each_column_leaves_below_the_least_width_what_still_shows_fits_at(self):
+        table = fit(self.COLUMNS)
+        showing = set(range(len(self.COLUMNS)))
+        for index in sorted(table.leaves, key=lambda index: self.COLUMNS[index].rank):
             width = table.leaves[index]
-            needed = sum(floors[each] for each in showing)
-            with self.subTest(columns[index].label):
+            with self.subTest(index):
                 # It stays only where every column showing has its floor, and
                 # leaves at the first declared width past that.
                 self.assertIn(width, DROP_STEPS)
-                self.assertGreaterEqual(width, needed)
-                self.assertTrue(all(step < needed for step in DROP_STEPS if step < width))
+                self.assertLessEqual(sum(floors_at(self.COLUMNS, showing, width).values()), width)
+                self.assertTrue(
+                    all(
+                        sum(floors_at(self.COLUMNS, showing, step).values()) > step
+                        for step in DROP_STEPS
+                        if step < width
+                    )
+                )
             showing.discard(index)
         self.assertEqual(table.narrow, min(table.leaves.values()))
 
-    def test_a_status_keeps_its_whole_line_and_prose_holds_out_for_its_floor(self):
-        columns, floors = self._audit()
-        kinds = {column.label: column.kind for column in columns}
-        self.assertEqual((kinds["When"], kinds["Action"], kinds["Message"]), ("status", "status", "prose"))
-        floor = dict(zip(kinds, floors, strict=True))
-        self.assertGreater(floor["When"], floor["Who"])
-        self.assertGreater(column_floor("status", 30), column_floor("prose", 30))
-        self.assertEqual(floor["Message"], column_floor("prose", 200))
-        # A status too long for one line wraps at the prose floor.
-        self.assertEqual(column_floor("status", 90), column_floor("prose", 90))
+    def test_a_line_kept_whole_is_held_whatever_the_share(self):
+        """A control's line and a line holding a pill or a time keep their
+        width at any share, as does a status's line of plain words; one of
+        parts of its own holds out only up to the share."""
+
+        for text in (
+            ColumnText(kind="control", line=300),
+            ColumnText(kind="status", pinned=300),
+            ColumnText(kind="status", line=300),
+        ):
+            with self.subTest(text.kind):
+                self.assertGreaterEqual(text.floor(400, 60), 300)
+        status = ColumnText(kind="status", parts=300)
+        self.assertGreaterEqual(status.floor(1600, 400), 300)
+        self.assertLess(status.floor(400, 60), 300)
+
+    def test_prose_holds_out_for_its_floor_only_when_a_line_is_too_long_to_keep(self):
+        short, long = ColumnText(held=40), ColumnText(held=40, long=True)
+        self.assertLess(short.floor(1600, 400), long.floor(1600, 400))
+        # Bounded by the share, so a narrow region still fits it.
+        self.assertLess(long.floor(400, 60), long.floor(1600, 400))
 
     def test_columns_of_one_rank_leave_together_and_the_share_counts_what_shows(self):
         columns = (FitColumn(200), FitColumn(150, 1), FitColumn(150, 1), FitColumn(40, shares=False), FitColumn(100, 2))
@@ -669,4 +694,4 @@ class FitTests(SimpleTestCase):
 
     def test_a_table_with_nothing_to_let_go_is_narrow_below_its_floors(self):
         table = fit((FitColumn(300), FitColumn(130)))
-        self.assertEqual((table.leaves, table.narrow), ({}, drop_step(430)))
+        self.assertEqual((table.leaves, table.narrow), ({}, 440))

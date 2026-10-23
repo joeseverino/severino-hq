@@ -75,6 +75,7 @@ from django.db import connections
 from django.test import Client, override_settings
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.core.browser_floors import NAME, judged, measured
 from hq.platform.core.browser_tests import (
     ALL_PAGES,
     PHONE_SCREEN,
@@ -138,19 +139,9 @@ _EXTENT = "() => [document.documentElement.scrollWidth, document.documentElement
 # Each table as a reader finds it: which columns show, which are gone and
 # whether for being blank or for want of room, which rows offer to open and
 # have the gutter for it, the sort controls, and what each open row lists.
-# A heading's words as a reader hears them, without the marks beside them.
-_NAME = r"""
-  const name = (el) => {
-    if (!el) return '';
-    const copy = el.cloneNode(true);
-    copy.querySelectorAll('[aria-hidden=true]').forEach((mark) => mark.remove());
-    return copy.textContent.trim().replace(/\s+/g, ' ');
-  };
-"""
-
 _TABLES = (
     "() => {"
-    + _NAME
+    + NAME
     + r"""
   const blank = (cell) => !cell || (/^[\s\u2013\u2014-]*$/.test(cell.textContent)
     && !cell.querySelector(':not(.empty-value, .empty-value *, br)'));
@@ -211,7 +202,7 @@ _TABLES = (
 # screen and removed at once. The drawn table is never restyled.
 _COLUMNS = (
     "() => {"
-    + _NAME
+    + NAME
     + r"""
   const across = (table) => [...((table.tHead?.rows[table.tHead.rows.length - 1] || table.rows[0])?.cells || [])];
   const width = (el) => Math.round(el.getBoundingClientRect().width);
@@ -910,6 +901,17 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         shot = _shot(name, self.width)
         shot.with_name(shot.stem + suffix).write_text(said + "\n", encoding="utf-8")
         print(said, flush=True)
+
+    def floors(self, name):
+        """Each table column's derived floor beside its min-content, at each
+        width a column leaves at (`browser_floors`)."""
+
+        said, wrong = judged(measured(self.page))
+        said = "\n".join([f"{name} at {self.width}", *(said or ["(no tables)"])])
+        _shot(name, self.width).with_suffix(".floors.txt").write_text(said + "\n", encoding="utf-8")
+        print(said, flush=True)
+        if wrong:
+            raise AssertionError("\n".join(wrong))
 
     def survey(self, name):
         """Every check the layout gates hold, on any page at any width."""

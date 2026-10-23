@@ -64,16 +64,23 @@ from what it holds. Each column that may leave has a rank, 1 first
 `optional-col` first, then from the far end, never the column that names the
 row, one marked `key-col`, or the closing figure of a table that marks none).
 No page says where a column leaves: the region derives it from what each
-column holds (`fit`, `hq/platform/application/tables.py`). A column's floor
-is the least width its kind lets it stand at: a status, a figure and a control
-never wrap, so theirs is their longest line (a status longer than three
-floors' worth wraps at a prose floor); prose holds out for a floor of
-characters, an identifier for the length it is cut at, and the name that reads
-the row for a name's length; a sortable heading's label never wraps either.
-Ranked columns leave in turn, each below the sum of the floors of every column
-still showing, cell padding and the row's gutter included, raised to the next
-of one declared list of widths (`DROP_STEPS`), so a column leaves a little
-early, never late. Every cell of a column that may leave carries its width
+column holds (`hq/platform/application/table_fit.py`). A column's floor is
+the width the browser lays it out at, at its min-content, read from its text
+as the stylesheet sets it (each piece's size and face, a pill's, button's and
+select's chrome, what never wraps): never narrower than its longest unbroken
+run or its heading. A control keeps its whole line, a select as wide as its
+widest option; a status or a figure keeps its line of plain words, or one with
+a pill or a time, and one with parts of its own up to the column's share; a
+line too long to keep wraps, prose and a status held out to a prose floor up
+to the share; an identifier holds out for the length it is cut at, and a name
+that leads the row's cell for a name's width. Ranked columns leave in turn,
+each below the narrowest of one declared list of widths (`DROP_STEPS`) at
+which every column still showing fits at its floor there, cell padding and the
+row's gutter included, so a column leaves a little early, never late.
+`mise run dev:look -- all --rule floors` sets each column's floor beside the
+browser's own min-content for it at each of those widths, and fails a floor
+below it (the table would overflow) or far above it (the column would leave
+while it still fit). Every cell of a column that may leave carries its width
 (`data-drop-at`), and the table says how many columns share its width at each
 (`data-columns`, for `--hold`). Container queries read no variable and the
 page allows no inline style, so `manage.py table_steps` writes one
