@@ -85,13 +85,31 @@ def _found(pattern, css, what):
 
 def wide_tables(css):
     """Where a table's region is wide, and the narrowest viewports that make
-    it so: the page's own region, inside the content's padding
-    (`--content-pad: clamp(a, b vw, c)`), and one in a card, which adds its
-    border and inline padding. Just past the breakpoint the columns that keep
-    their line take what they need from the least room the wide rules get;
-    narrower, columns drop by tier instead."""
+    it so. Just past the breakpoint the columns that keep their line take
+    what they need from the least room the wide rules get; narrower, columns
+    drop by tier instead."""
 
     region = int(_found(r"@container table-region \(width >= (\d+)px\)", css, "where a region is wide").group(1))
+    page, card = first_viewports(css, region)
+    # Two viewports this close stretch the same columns, so the wider holds both.
+    return region, (card,) if card - page <= 50 else (page, card)
+
+
+def narrow_table(css):
+    """The narrowest viewport whose own table region is past the narrowest
+    tier."""
+
+    _found(r"@container table-region \(width < \d+px\)", css, "where a region is narrow")
+    region = min(int(px) for px in re.findall(r"@container table-region \(width < (\d+)px\)", css))
+    return first_viewports(css, region)[0]
+
+
+def first_viewports(css, region):
+    """The narrowest viewports whose table region is ``region`` wide: the
+    page's own region, inside the content's padding
+    (`--content-pad: clamp(a, b vw, c)`) and the border of the surface that
+    scrolls it, and one in a card, which adds its border and inline padding."""
+
     low, share, high = map(
         float, _found(r"--content-pad: clamp\((\d+)px, ([\d.]+)vw, (\d+)px\)", css, "the content's padding").groups()
     )
@@ -107,9 +125,7 @@ def wide_tables(css):
             width += 1
         return width
 
-    page, card = first(0), first(padding + border)
-    # Two viewports this close stretch the same columns, so the wider holds both.
-    return region, (card,) if card - page <= 50 else (page, card)
+    return first(border), first(padding + border)
 
 
 # Where a table region is wide (tables.css's `width >= 1000px` queries), its
@@ -118,6 +134,11 @@ def wide_tables(css):
 # laptop windows where a table's region has only just become wide, which a
 # sweep that judges a table's columns reads besides WIDTHS.
 WIDE_REGION, WIDE_TABLES = wide_tables(stylesheet())
+# Where a region stops being narrow (tables.css's `width < 640px` queries),
+# what a row kept for its open line (`narrow-more`) is back in the row, in
+# columns with the least room they get: the window where a page's own table
+# has only just left that tier.
+NARROW_TABLE = narrow_table(stylesheet())
 # Every page, from the sparse estate and the dense one. The overflow and
 # density checks run all of them at WIDTHS.
 ALL_PAGES = (*PAGES, *DENSE_PAGES)
@@ -4390,28 +4411,37 @@ class ScriptedLayoutTests(LayoutBrowserTests):
     def sweep(self, names):
         """Every layout check holds, at a laptop window's width too; pressing
         a control moves nothing; a table fits its box with every disclosure
-        open. Script reads the width a page loads at, so each width is a load."""
+        open. Script reads the width a page loads at, so each width is a load.
+        At NARROW_TABLE only the words a row keeps for its open line are
+        read, back in columns with the least room."""
 
         self.spoke = 0
         for name in names:
-            widths = SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES)
+            widths = (
+                SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES, NARROW_TABLE)
+            )
             for width in sorted(set(widths)):
-                if not self.loaded(name, width, script="on"):
-                    continue
-                self.page.evaluate(_SETTLED)
-                read = name in ALL_PAGES and width in (*WIDTHS, *WIDE_TABLES)
-                if read and width in WIDTHS:
-                    self.hold(name, width, self.scripted_reads(), script="on")
-                    # Light is held by every layout check below.
-                    self.in_scheme("dark")
-                    self.hold(name, width, [self.every_palette_check_holds], script="on", scheme="dark")
-                    self.in_scheme("light")
-                if read:
-                    self.hold(name, width, [self.every_layout_check_holds], script="on")
-                if width in SPEAKING_WIDTHS:
-                    self.pressing_a_control_moves_nothing(name, width)
-                if read:
-                    self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
+                if self.loaded(name, width, script="on"):
+                    self.page.evaluate(_SETTLED)
+                    self.read_loaded(name, width)
+
+    def read_loaded(self, name, width):
+        if width == NARROW_TABLE:
+            self.hold(name, width, [self.words_stay_inside_the_box_that_holds_them], script="on")
+            return
+        read = name in ALL_PAGES and width in (*WIDTHS, *WIDE_TABLES)
+        if read and width in WIDTHS:
+            self.hold(name, width, self.scripted_reads(), script="on")
+            # Light is held by every layout check below.
+            self.in_scheme("dark")
+            self.hold(name, width, [self.every_palette_check_holds], script="on", scheme="dark")
+            self.in_scheme("light")
+        if read:
+            self.hold(name, width, [self.every_layout_check_holds], script="on")
+        if width in SPEAKING_WIDTHS:
+            self.pressing_a_control_moves_nothing(name, width)
+        if read:
+            self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
 
 
 class ScriptedSparseLayoutTests(ScriptedLayoutTests):

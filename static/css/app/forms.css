@@ -403,10 +403,12 @@ a.discovery-link:hover strong { color: var(--accent); }
    cell's larger line and sit above the words beside them. */
 .connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
 /* Where a connection is reached from is one line. Sized to nothing and
-   stretched to the cell, it never widens its column; its words keep their
-   length and the machine's name, a name in a context line, is cut at the
-   cell's edge (figures.css). */
+   stretched to the cell, it never widens its column. With a machine, its
+   words keep their length and the machine's name, a name in a context line,
+   is cut at the cell's edge (figures.css); with none, the words are, as any
+   context line's are. */
 .connection-reach { display: flex; gap: .3em; width: 0; min-width: 100%; white-space: nowrap; }
+.connection-reach:not(:has([data-entity])) { display: block; overflow: hidden; text-overflow: ellipsis; }
 /* Its own section under the table, not a second compartment of a card around it. */
 /* How to connect each provider not yet connected: one row each, opened for its steps. */
 .connection-setup { margin-top: var(--stack-gap); }
