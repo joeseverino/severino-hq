@@ -115,10 +115,10 @@ class RelatedDocumentsTests(TestCase):
         found = related_documents(records)
 
         self.assertEqual(
-            [(group.heading, [item.link.label for item in group.items], group.folded) for group in found.groups],
+            [(group.heading, [item.link.label for item in group.items]) for group in found.groups],
             [
-                ("Runbooks", ["Add an example", "Back up the example"], False),
-                ("Architecture notes", ["Example design"], False),
+                ("Runbooks", ["Add an example", "Back up the example"]),
+                ("Architecture notes", ["Example design"]),
             ],
         )
         self.assertEqual(found.groups[0].items[0].link.title, "rb-example-a")

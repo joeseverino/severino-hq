@@ -1021,8 +1021,7 @@
         "bases": [],
         "constructor": [
           "heading",
-          "items",
-          "folded="
+          "items"
         ],
         "fields": [],
         "kind": "dataclass",
