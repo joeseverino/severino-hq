@@ -1,5 +1,6 @@
 import re
 
+from django import forms
 from django.test import SimpleTestCase
 from django.utils.safestring import mark_safe
 
@@ -102,6 +103,13 @@ class BreakableTests(SimpleTestCase):
     def test_markup_in_the_value_stays_text(self):
         self.assertNotIn("<b>", str(breakable("<b>x</b>.y")))
         self.assertEqual("".join(pieces(breakable("<b>x</b>.y"))), "&lt;b&gt;x&lt;/b&gt;.y")
+
+    def test_a_form_field_passes_as_the_markup_it_renders(self):
+        class Form(forms.Form):
+            key = forms.CharField(widget=forms.HiddenInput, initial="web:example-key")
+
+        field = Form()["key"]
+        self.assertEqual(str(breakable(field)), str(field))
 
     def test_nothing_is_added_at_either_end(self):
         self.assertEqual(pieces(breakable("dev/app.hidden:")), ["dev/", "app.hidden:"])

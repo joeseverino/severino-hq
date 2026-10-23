@@ -28,6 +28,8 @@ MACHINE_VALUES = {
     "a dumped record": re.compile(r"\{'[^']*': "),
     "a dumped list": re.compile(r"\[(?:'[^']*'|\{)"),
     "a bare flag": re.compile(r"(?<![\w-])(?:True|False)(?![\w-])"),
+    # A widget printed as text: a filter that escaped it splits its tag.
+    "markup": re.compile(r"<[a-z][\w-]*[\s/>]|(?<![\w-])[a-z][\w-]*=\"[^\"]*\""),
 }
 # A field's name as code writes it, where a label is printed.
 _KEY = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
@@ -90,6 +92,8 @@ class MachineValuesTests(TestCase):
             "<p>{'a': 1}</p>",
             "<p>confirm_prune to True</p>",
             "<table><tr><th>confirm_prune</th></tr></table>",
+            '<p>value="web:key" id="id_key"&gt;</p>',
+            "<p>&lt;input type</p>",
         ):
             with self.subTest(html=html):
                 self.assertTrue(machine_values(html))

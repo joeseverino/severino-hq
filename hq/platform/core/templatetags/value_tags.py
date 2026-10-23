@@ -449,8 +449,10 @@ def breakable(value, mark=""):
     """
 
     mark = _mark(mark)
-    if isinstance(value, SafeData):
-        return value + conditional_escape(mark)
+    # Markup is whatever renders itself: a form field is not SafeData until
+    # Django renders it.
+    if hasattr(value, "__html__"):
+        return conditional_escape(value) + conditional_escape(mark)
     # Escaped first, so the only markup in the result is what is added here.
     text = str(conditional_escape(value))
     words = _WORDS.split(text)
