@@ -571,6 +571,8 @@ _CELLS = (
   // past the edge is not caught by anything else: it lands under the next
   // column, readable in neither. What a box inside the cell cuts (a line cut
   // with an ellipsis) shows only as far as that box, which is held on its own.
+  // A popover or a modal dialog shown is drawn in the top layer, over the
+  // page, so the cell it sits in does not hold it.
   const found = [];
   const cut = (el, cell) => {
     for (let b = el.parentElement; b && b !== cell; b = b.parentElement) {
@@ -582,7 +584,7 @@ _CELLS = (
     const edge = box(cell).right;
     for (const el of cell.querySelectorAll('*')) {
       const r = box(el);
-      if (r.width < 2 || r.height < 2 || !el.checkVisibility()) continue;
+      if (r.width < 2 || r.height < 2 || !el.checkVisibility() || el.closest(':popover-open, :modal')) continue;
       if (r.right > edge + 1 && !cut(el, cell)) {
         found.push(`${describe(el)} runs ${Math.round(r.right - edge)}px past its cell: ${el.textContent.trim().slice(0, 40)}`);
       }
@@ -4640,6 +4642,31 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertTrue(widened)
         found = self.page.evaluate(_SPILLED_LABELS, "main :is(.example-star, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
+
+    def test_a_popover_open_over_a_table_cell_is_not_held_to_the_cell_and_a_box_in_the_cell_is(self):
+        """A shown popover is drawn in the top layer, over the page, wherever
+        its markup sits; a box drawn in the cell still runs past it."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const table = document.createElement('table');
+          table.style.setProperty('width', '200px');
+          table.style.setProperty('table-layout', 'fixed');
+          const cell = table.insertRow().insertCell();
+          for (const name of ['example-popover', 'example-box']) {
+            const box = document.createElement('div');
+            box.className = name;
+            box.textContent = name;
+            box.style.setProperty('inline-size', '600px');
+            cell.append(box);
+          }
+          const popover = cell.querySelector('.example-popover');
+          popover.popover = 'manual';
+          document.querySelector('main').append(table);
+          popover.showPopover();
+        }""")
+        found = [line for line in self.page.evaluate(_CELLS) if "example-" in line]
+        self.assertEqual([line.split(" runs ")[0] for line in found], ["div.example-box"])
 
     def test_a_small_target_under_an_open_menu_is_not_measured_and_one_in_view_is(self):
         """A target drawn under another element is out of a pointer's reach,
