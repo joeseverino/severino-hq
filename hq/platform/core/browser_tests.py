@@ -706,13 +706,24 @@ _SMALL_TARGETS = (
     }
     return false;
   };
+  // Under something drawn over it (an open menu): no pointer reaches it there,
+  // whatever its size. What covers it is an element whose own box holds the
+  // target's center, so a neighbor's hit area hung over it is not a cover.
+  const covered = (el, r) => {
+    const x = (r.left + r.right) / 2, y = (r.top + r.bottom) / 2;
+    const top = document.elementFromPoint(x, y);
+    if (!top || el.contains(top) || top.contains(el)) return false;
+    if (el.labels && [...el.labels].some((label) => label.contains(top))) return false;
+    const over = top.getBoundingClientRect();
+    return over.left <= x && x <= over.right && over.top <= y && y <= over.bottom;
+  };
   try {
     const targets = [];
     for (const el of new Set([...document.querySelectorAll(selector)])) {
       if (el.matches(':disabled') || !el.checkVisibility({visibilityProperty: true})) continue;
       const drawn = box(el);
       // Out of sight until focused (a skip link), or drawn by its label.
-      if (drawn.width <= 1 || drawn.height <= 1) continue;
+      if (drawn.width <= 1 || drawn.height <= 1 || covered(el, drawn)) continue;
       targets.push({el, drawn, r: area(el)});
     }
     const nested = (a, b) => a.el.contains(b.el) || b.el.contains(a.el);
@@ -4089,6 +4100,8 @@ class LayoutBrowserTests(BrowserGate):
           draws, the size of a copy no author style reaches. One HQ draws or
           sizes, a styled tick box included, is held to the size.
 
+        A target another element is drawn over at its center (an open menu
+        lying on the page) is not reachable there, so it is not measured.
         A tick box is hit through its labels too. The stylesheet's
         `--target-min` is held to the same size. Held on every page and width
         the layout checks read (`every_layout_check_holds`).
@@ -4576,6 +4589,41 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertTrue(widened)
         found = self.page.evaluate(_SPILLED_LABELS, "main :is(.example-star, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
+
+    def test_a_small_target_under_an_open_menu_is_not_measured_and_one_in_view_is(self):
+        """A target drawn under another element is out of a pointer's reach,
+        so the size rule skips it; the same target left in view still fails."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const place = (el, top, left) => {
+            el.style.setProperty('position', 'fixed');
+            el.style.setProperty('top', top);
+            el.style.setProperty('left', left);
+          };
+          // Two side by side, so neither is spaced clear of the other.
+          for (const [name, top] of [['example-hidden', '300px'], ['example-shown', '500px']]) {
+            for (const left of ['40px', '50px']) {
+              const link = document.createElement('a');
+              link.href = '#';
+              link.className = name;
+              link.textContent = 'x';
+              link.style.setProperty('font-size', '8px');
+              link.style.setProperty('line-height', '8px');
+              place(link, top, left);
+              document.querySelector('main').append(link);
+            }
+          }
+          const menu = document.createElement('div');
+          menu.style.setProperty('width', '200px');
+          menu.style.setProperty('height', '100px');
+          menu.style.setProperty('z-index', '10');
+          menu.style.setProperty('background', 'white');
+          place(menu, '260px', '0');
+          document.body.append(menu);
+        }""")
+        found = self.page.evaluate(_SMALL_TARGETS, ["main :is(.example-hidden, .example-shown)", TARGET_MIN])
+        self.assertEqual({finding.split(" in ")[0] for finding in found}, {"a.example-shown"})
 
     def test_every_selector_parses(self):
         authored = authored_selectors(stylesheet())
