@@ -307,8 +307,12 @@
 .bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
 
 /* Vitals sit under the breakdowns, not above them: they are the check you run
-   after the question you came to ask. */
-.vitals-strip { display: flex; flex-wrap: wrap; gap: var(--space-6) var(--space-16); margin: 0; }
+   after the question you came to ask. Each takes an equal share of the card,
+   so a wide card is filled rather than gathered at its start. */
+.vitals-strip {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-6) var(--space-16); margin: 0;
+}
 .vital { display: flex; flex-direction: column; gap: var(--space-1); }
 .vital dt { font-size: var(--text-2xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .vital dd { margin: 0; display: flex; align-items: baseline; gap: var(--space-4); font-size: var(--text-lg); }
