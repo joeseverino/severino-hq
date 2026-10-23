@@ -1,9 +1,10 @@
 {% extends "page.html" %}
 {% comment %}
 Every running container (application.containers), led by what to act on. The
-band counts; "Update now" is each image and version once, however many
-containers run it, with what is newer and what is known against it; the table
-is every container, one row each. Nothing here reads a registry: the public
+band counts; what to act on is one table, a group per reason ("Update now", or
+vulnerable with nothing newer), each image and version once, however many
+containers run it, with what is newer and what is known against it; the last
+table is every container, one row each. Nothing here reads a registry: the public
 refresh does, daily and whenever a sweep finds a new image, and the band says when.
 {% endcomment %}
 {% block page %}
@@ -43,19 +44,21 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
     </div>
   </div>
 
-  {% for heading, listed, running in need_sections %}
-    <h2>{{ heading|breakable }} <span class="heading-aside">{{ listed|length|counted:"image" }}{% if running != listed|length %}, {{ running|counted:"container" }}{% endif %}</span></h2>
-    {% table_region heading narrow=2 %}
+  {% if need_sections %}
+    <h2>{{ need_heading|breakable }} <span class="heading-aside">{{ needs|length|counted:"image" }}{% if need_running != needs|length %}, {{ need_running|counted:"container" }}{% endif %}</span></h2>
+    {% table_region need_heading narrow=2 %}
       <table class="data-table">
         <thead>
           <tr>
-            {% table_heading "Image" "identifier" gutter=True local_sort=listed|sortable %}
-            {% table_heading "Change" drop=2 local_sort=listed|sortable %}
-            {% table_heading "Known" "status" drop=1 local_sort=listed|sortable %}
-            {% table_heading "Runs as" css="key-col" local_sort=listed|sortable %}
+            {% table_heading "Image" "identifier" gutter=True local_sort=needs|sortable %}
+            {% table_heading "Change" drop=2 local_sort=needs|sortable %}
+            {% table_heading "Known" "status" drop=1 local_sort=needs|sortable %}
+            {% table_heading "Runs as" css="key-col" local_sort=needs|sortable %}
           </tr>
         </thead>
+        {% for heading, listed in need_sections %}
         <tbody>
+          {% if need_sections|length > 1 %}{% row_group heading listed|length %}{% endif %}
           {% for group in listed %}{% with standing=group.standing plan=group.plan %}
             <tr>
               <td class="row-gutter">
@@ -83,9 +86,10 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
             </tr>
           {% endwith %}{% endfor %}
         </tbody>
+        {% endfor %}
       </table>
     {% endtable_region %}
-  {% endfor %}
+  {% endif %}
 
   <h2>Every container <span class="heading-aside">{{ containers|length }}</span></h2>
   {% table_region "Every container" mid=3 narrow=5 %}

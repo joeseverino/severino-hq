@@ -76,17 +76,21 @@ class ContainerListView(PageMixin, TemplateView):
         update_now = [group for group in needs if group["standing"].newer]
         no_update = [group for group in needs if not group["standing"].newer]
         updates = [item.standing.update_state for item in found]
+        need_sections = [
+            (heading, listed)
+            for heading, listed in (
+                ("Update now", update_now),
+                ("Vulnerable, no update yet, and the internet may reach it", no_update),
+            )
+            if listed
+        ]
         context.update(
             containers=found,
             needs=needs,
-            need_sections=[
-                (heading, listed, sum(len(group["containers"]) for group in listed))
-                for heading, listed in (
-                    ("Update now", update_now),
-                    ("Vulnerable, no update yet, and the internet may reach it", no_update),
-                )
-                if listed
-            ],
+            need_sections=need_sections,
+            # One reason is the table's own heading; two are its groups.
+            need_heading=need_sections[0][0] if len(need_sections) == 1 else "To act on",
+            need_running=sum(len(group["containers"]) for group in needs),
             machines=len({item.machine.name for item in found}),
             vulnerable=sum(1 for group in groups.values() if group["standing"].state == VULNERABLE),
             vulnerable_containers=sum(1 for item in found if item.standing.state == VULNERABLE),
