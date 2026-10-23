@@ -175,6 +175,9 @@ def graph_pairs(pages):
         raise ValueError("graph answer is not whole")
     if len(rows) != total:
         raise ValueError("graph row count mismatch")
+    if not rows:
+        # Tests alone hold similar pairs, so a tree with none was never indexed.
+        raise ValueError("graph holds no similar pairs: the index is empty")
     result = []
     for row in rows:
         if len(row) != 4 or not all(isinstance(cell, str) and cell for cell in row):

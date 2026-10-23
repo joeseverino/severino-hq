@@ -9,6 +9,8 @@ it still one system?". A file's size is a test's (FileSizeTests).
 The graph is codebase-memory-mcp at the release mise.toml pins, installed and
 found through mise, since the answer's shape is that release's. It is lazy
 there, so this installs it first. Exit 3 when mise cannot, which fails the gate.
+An answer the classifier refuses fails it too, among them one with no pairs at
+all: the tests alone hold some, so that graph indexed nothing.
 """
 
 from __future__ import annotations
@@ -107,12 +109,21 @@ def main(argv: list[str]) -> int:
         for part in ("cache", "run"):
             (store / part).mkdir(mode=0o700)
         cli(binary, store, "index_repository", {"repo_path": str(ROOT), "mode": "full", "name": project})
-        current = similar_pairs(ROOT, build_inspector(store), graph_pages(binary, store, project))
+        try:
+            current = similar_pairs(ROOT, build_inspector(store), graph_pages(binary, store, project))
+        except ValueError as refused:
+            print(f"the structural bar cannot trust the graph: {refused}", file=sys.stderr)
+            return 1
 
     if args.record:
         BASELINE.write_text(HEADER + "".join(f"{line}\n" for line in current))
         print("structural baseline recorded")
         return 0
+    return compare(current)
+
+
+def compare(current: list[str]) -> int:
+    """Fail on each pair the baseline does not list; a listed pair that left passes."""
 
     known = set(BASELINE.read_text().splitlines())
     new = [line for line in current if line not in known]
