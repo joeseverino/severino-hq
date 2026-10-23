@@ -282,7 +282,7 @@ An extension leaves production only by being named. `hq-host deploy` reads the
 lock in the running image and in the one being deployed, both covered by the
 signature over their digests, and refuses an image that drops an extension the
 running release carries unless the image's composition lists its id under
-`retired` (shipped in the image as `/opt/severino/plugin-retired.json`).  To remove one, move
+`retired` (shipped in the image as `/opt/severino/plugin-retired.json`). To remove one, move
 its id from `extensions` to `retired`, run Compose and deploy; once production
 runs without it, the `retired` entry may go.
 

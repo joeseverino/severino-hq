@@ -35,7 +35,8 @@ self-hosted runner. The runner dials out to GitHub; nothing inbound is opened.
 To redeploy or roll back, run **Deploy** with the commit to put back. To
 rebuild the current set, run **Compose**. A rollback to a composition from
 before an extension was added drops it, so Deploy refuses it; run Compose at
-that commit instead, which composes today's extensions onto that host commit.
+that commit instead, which composes the extensions admitted now onto that host
+commit.
 
 A release that fails is undone whole. Its boot keeps a copy of the database
 before migrating it (`manage.py boot_migrate`, at the path `hq-host run-web`
@@ -51,8 +52,8 @@ release that cannot serve and proves the previous one comes back on its schema.
 ### Checked once
 
 When a pull request merges, the push to `main` asks
-`tools/pipeline/proven-on-pr.sh` whether the pull request already proved it: its last
-CI run passed, its image carries a `dev.severino.hq.tree` label equal to the
+`tools/pipeline/proven-on-pr.sh` whether the pull request already proved it:
+its last CI run passed, its image carries a `dev.severino.hq.tree` label equal to the
 pushed commit's tree, and it is signed by that run. With all three, Checks,
 Tests and Browser are skipped and Image promotes that image by digest to the
 commit's tag. Short of all three, every gate runs again.
@@ -390,8 +391,8 @@ account cannot already reach Docker. HQ's own host has `hq-host` in its tree.
 Any other machine needs its own root-owned copy: the plan's fetch step takes
 it from the composed image HQ runs, by digest, after `cosign` verifies the
 compose workflow's signature, and stops if the image's platform is not the
-machine's. HQ does not yet queue an upgrade to another machine, so the helper
-is run by hand with the plan's values.
+machine's. HQ queues no upgrade to another machine, so there the helper is
+run by hand with the plan's values.
 
 A machine whose rule names a program other than `hq-host upgrade` admits
 nothing: re-run the plan's allow step there to write the current rule.

@@ -1,0 +1,24 @@
+# One change to HQ: mapped, built by workers in parallel, integrated and gated in one place, with each lesson fed back into the rules.
+title: Building HQ with agents
+subtitle: .claude/agents · .claude/skills
+direction: down
+
+Map [icon: monitor, note: read only · classes · file owners]
+
+# The layout draws this group's last member first, so B, C, A reads A, B, C.
+Workers [dashed] {
+  hq-worker B [icon: bot, note: own worktree · own files]
+  hq-worker C [icon: bot, note: own worktree · own files]
+  hq-worker A [icon: bot, note: own worktree · own files]
+}
+
+Main session [icon: terminal, anchor, note: lands each branch]
+Gates [icon: shield, note: fast · check · browser · drift]
+Pull request [icon: code, note: CI runs the same tasks]
+Rules [icon: key, note: AGENTS.md · skills]
+
+Map > Workers: one brief each
+Workers > Main session: commits · report · lessons
+Main session > Gates > Pull request
+Main session --> Rules: a lesson becomes a rule [dashed]
+Rules --> Workers: the next brief starts there [dashed]

@@ -3,6 +3,7 @@
 Setup, the gates, and where things live. Read [`AGENTS.md`](../AGENTS.md)
 first: it is the engineering contract, with the architecture map, placement
 rules, the host/extension boundary and the definition of done.
+How agents work on HQ through these gates: [AI](AI.md).
 
 ## Setup
 

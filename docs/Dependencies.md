@@ -28,7 +28,7 @@ and Renovate moves that workflow's own action and image too.
 - **One weekly pull request**, `deps: update dependencies`, opened on Monday:
   every minor, patch and digest update across uv, mise, Actions, Go, npm,
   Docker, the runner image, Trivy, Cordon and the API reference bundle. A
-  release is proposed once it is 14 days old.
+  release is proposed once it is 7 days old.
 - **Lock maintenance**, `deps: lock file maintenance`, the same day: it
   refreshes what only `uv.lock`, `mise.lock` and the npm lock name. Renovate
   never groups it with other updates.
@@ -36,7 +36,9 @@ and Renovate moves that workflow's own action and image too.
   breaking change never holds the weekly one. A new Python or Go minor is
   treated as one: the matrix and the target versions move with it.
 - **Security fixes at once**, outside the schedule, from GitHub's alerts and
-  the OSV database, in one pull request.
+  the OSV database, in one pull request. A Go patch release is a security
+  release that OSV sees only through a `go.mod` toolchain line, so it opens
+  at once too, as `go patch`.
 - At most three of these are open at a time, security fixes aside. Nothing
   merges itself: a merge to `main` deploys after an approval, and that
   approval is the review.

@@ -29,7 +29,8 @@ touches. How is in [Derived Facts](docs/Derived-Facts.md) and
 ![Derived estate: the controller reads what each credential sees, readings are joined into one relation graph that every surface reads, and every write passes the manages gate](docs/diagrams/derived-estate.png)
 
 <sup>Diagram source: [`docs/diagrams/derived-estate.mmd`](docs/diagrams/derived-estate.mmd),
-pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram).</sup>
+pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram)
+by `mise run docs:diagrams`.</sup>
 
 ## Stack
 
@@ -49,8 +50,9 @@ pre-rendered with [`diagram`](https://github.com/joeseverino/tools/blob/main/bin
 
 ## Security
 
-- Tailnet only. No public route, registration, or Django admin; every URL but
-  sign-in, health and static needs a session.
+- Tailnet only. No public route, registration, or Django admin. Every URL but
+  sign-in, health probes, browser policy reports and static files needs a
+  session, or a token for the API and MCP.
 - One write path. Every mutation is a capability: authorized in the
   application layer, schema-validated, atomic, audited, and idempotent for
   machines. Agents can be held for approval or paused globally.
@@ -142,6 +144,7 @@ boundary, frontend standards and the definition of done.
 | [New Domain](docs/New-Domain.md) | adding a host domain, and the test behind each rule |
 | [Design](docs/Design.md) | the UI's primitives and rules |
 | [Development](docs/Development.md) | setup, gates, browser checks, repository layout |
+| [AI and HQ](docs/AI.md) | how agents build HQ, and how they operate it |
 | [Dependencies](docs/Dependencies.md) | where every pin lives and how to move one |
 | [Structural Gate](docs/Structural-Gate.md) | how the duplication gate classifies source |
 | [Deployment](docs/Deployment.md) | the pipeline, the host, `hq-host`, a new host |

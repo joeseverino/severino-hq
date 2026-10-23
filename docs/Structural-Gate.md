@@ -1,18 +1,19 @@
 # Structural Gate
 
-The gate retains the executable near-duplicate baseline; file size is
-`FileSizeTests`, a fixed ceiling in the suite.
-Source-derived classifications remove only these forms from the executable-pair
-check; there are no pair, symbol, or source-path exemption lists.
+The gate fails a near-duplicate pair of executable code that its baseline
+does not list; file size is `FileSizeTests`, a fixed ceiling in the suite.
+Three forms, classified from the source, leave the pair check. There is no
+list of exempt pairs, symbols or paths.
 
 * Generated Go: the parser finds a `// Code generated ... DO NOT EDIT.` comment
   before the package statement. The generated file, adjacent generation source,
   generator config and schema must be tracked. An adjacent `go:generate go tool
   oapi-codegen -config CONFIG SCHEMA` directive must resolve to existing files
   inside the checkout; the config must have one simple top-level `output` scalar
-  resolving to this file. This is provenance correspondence, not proof of
-  freshness or authenticity. `controller/scripts/check.sh` regeneration with no
-  diff remains mandatory in CI and `mise run ci`. A marker alone never qualifies.
+  resolving to this file. That shows where the file came from; whether it is
+  current is `controller/scripts/check.sh`, which regenerates every generated
+  file and fails on a diff, in CI and `mise run ci`. A marker alone never
+  qualifies.
 * Python immutable metadata: a module-level undecorated function has no runtime
   arguments and exactly one return statement. Its returned tree contains only
   constants, names, attribute references, tuples, and calls to the imported
@@ -34,15 +35,16 @@ check; there are no pair, symbol, or source-path exemption lists.
   of a map[string]string literal. Map keys must be literal strings, and values
   literal/constant strings, that parameter, or prefix-plus-parameter. Nested calls,
   operators other than that concatenation, side effects and control flow reject
-  the decorator. Parameter/credential shadowing and constant/parameter collisions
-  reject ambiguous resolution. This separates orchestration shape; it
-  does not prove producer or shared-helper purity.
+  the nested call. Parameter/credential shadowing and constant/parameter
+  collisions reject ambiguous resolution. The classifier reads the shape of
+  the orchestration and makes no claim about the purity of the producer or
+  the shared helper.
 
 The AST inspector uses Go's standard-library parser, never imports or executes
 provider code. Python uses `ast`. Missing, unreadable, malformed or escaped source
 paths and missing Go graph symbols fail the classification command. Unresolved or
-unsupported executable patterns remain in the similarity gate; they do not become
-an inferred exemption. Typed NPM projection loops remain gated in this iteration.
+unsupported executable patterns stay in the similarity gate. Typed projection
+loops over Nginx Proxy Manager's records stay gated too.
 
 The inspector is `controller/cmd/structural-inspector`, held by the
 controller's gate like the rest of its module. The adversarial tests are

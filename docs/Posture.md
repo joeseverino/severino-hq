@@ -50,5 +50,5 @@ Two checks are shown only on the connection panel, because they describe
 one visit: whether the device's owner is the person signed in, and whether
 HQ's own machine measured the link.
 
-Single sign-on is in the standard rather than on every HQ because not every
-homelab runs an identity provider.
+Single sign-on belongs to the standard, since not every homelab runs an
+identity provider.

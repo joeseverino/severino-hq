@@ -1,15 +1,15 @@
 # Architecture
 
 HQ has one application core and several delivery adapters over it: the web UI,
-the `/api/v2/` machine API, MCP, the CLI and the extension SDK. A fourth or
-fifth interface adds an adapter, never a second implementation.
+the `/api/v2/` machine API, MCP, the CLI and the extension SDK. Another
+interface adds an adapter, never a second implementation.
 
 ![Web, MCP, and CLI converging on one application core and the domain-specific sources of truth](diagrams/application-core.png)
 
 <sup>Diagram source:
-[`application-core.mmd`](diagrams/application-core.mmd), rendered with the
-canonical [`diagram`](https://github.com/joeseverino/tools/tree/main/bin/diagram)
-tool.</sup>
+[`application-core.mmd`](diagrams/application-core.mmd), pre-rendered with
+[`diagram`](https://github.com/joeseverino/tools/blob/main/bin/diagram) by
+`mise run docs:diagrams`.</sup>
 
 ## The boundary
 
@@ -102,9 +102,14 @@ refresh keeps the previous reading visible until a new one arrives.
 
 Dashboard cards are grouped by contributing domain. Card providers run once per
 projection scope and are still checked for cross-domain collisions. A
-contributor with several metrics may supply a typed `DomainOverview`. The host
-never infers a domain from a card ID or invents a contributor's reporting
-window. The machine snapshot keeps flat cards; the grouping is presentation.
+contributor with several metrics may supply a typed `DomainOverview`. A domain
+holds a highlight card of its own when it has a chart to lead with or at least
+three figures (`dashboard.CARD_FIGURES`); one with fewer reads its figures in
+the compact strip. Below the highlights, each domain's leading chart takes a
+row of its own, and the calendar, recent projects and the rest share the next,
+as many to a row as fit. The host never infers a domain from a card ID or
+invents a contributor's reporting window. The machine snapshot keeps flat
+cards; the grouping is presentation.
 
 ### Priority work
 
@@ -282,10 +287,8 @@ delete triggers on every model table move it inside the writing statement, so
 `save()`, `QuerySet.update()`, `bulk_create()`, a cascade and raw SQL all move
 it, and a counter never commits apart from its rows.
 `hq.platform.core.revisions.install` restores the triggers after every
-`migrate` (SQLite drops them when a migration rebuilds a table), creates the
-cache table. A value an older build stored is never read: the cache's key
-carries the identity of the running code (`hq.platform.application.code_identity`).
-Reading the revisions also reads which triggers exist, in one statement; a
+`migrate` (SQLite drops them when a migration rebuilds a table) and creates
+the cache table. Reading the revisions also reads which triggers exist, in one statement; a
 table without its triggers has no revision, and its derivations run on every
 call.
 
@@ -495,7 +498,7 @@ locally cached instances. Static discovery never calls instance providers; the
 Connections workspace and machine list do, after authorization. Instances have
 no secret field; links are local or HTTP(S); URL userinfo, query strings and
 fragments are rejected when controller inventory enters HQ and when an
-extension's instance leaves its provider. Permission is evidence, not a label:
+extension's instance leaves its provider. A permission is something proven:
 an ability declares how its authority is proven, an instance reports the
 credential observed, and HQ derives per-ability evidence and a per-connection
 lifecycle from the two, failing closed on a missing or rejected grant and
@@ -555,8 +558,8 @@ boundaries. How readings become edges is in
 
 ## Source of truth
 
-Each domain has its own source of truth. One database owning everything would
-make the system less honest, not more unified.
+Each domain has its own source of truth, and HQ's database holds only what
+nothing else is the authority for.
 
 | Domain | Source of truth | What HQ stores |
 |---|---|---|

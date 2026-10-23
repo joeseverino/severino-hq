@@ -49,9 +49,8 @@ secrets with either approach.
 The certificate publisher's service-account token is an item in the vault the
 reader token reads, projected like any other connection (`service_account`).
 A holder of the reader token can therefore read it, and that token is write
-authority over the vault the publisher writes to. This is a deliberate
-decision: every credential the controller uses is one item in one vault,
-delivered one way. Credentials that can mint other credentials are the
+authority over the vault the publisher writes to. That is by design: every
+credential the controller uses is one item in one vault, delivered one way. Credentials that can mint other credentials are the
 exception and stay out of that vault; see "Minting observer credentials".
 
 ## Network and execution boundaries
@@ -59,9 +58,9 @@ exception and stay out of that vault; see "Minting observer credentials".
 - Connect binds only to IPv4 loopback. Do not publish it through a reverse proxy,
   Tailscale Serve/Funnel, LAN listener, or a tailnet address.
 - Connect is published on a loopback port below 1024. The loopback rule proves
-  the address, not who is listening: a port any account may bind could be taken
-  while Connect is down, by any local process or a container on the host's
-  network, and the reader token sent to whoever took it. Only root can listen
+  the address and says nothing of who is listening: a port any account may
+  bind could be taken while Connect is down, by any local process or a
+  container on the host's network, and the reader token sent to whoever took it. Only root can listen
   below 1024, so only root's Connect can answer there. The renderer refuses an
   endpoint on any other port, its dialer refuses to connect to one, and it
   refuses to run on a host whose `net.ipv4.ip_unprivileged_port_start` is not
@@ -90,8 +89,9 @@ exception and stay out of that vault; see "Minting observer credentials".
   and results. The socket's directory is a volume only the web account can
   enter, mounted read-only into the controller's container; each side checks
   the directory, the socket and the peer's uid before a byte is exchanged
-  ([Architecture](Architecture.md#infrastructure-control-plane)). The controller's container is given
-  neither HQ's database nor its application environment, so the process that
+  ([Architecture](Architecture.md#infrastructure-control-plane)). The
+  controller's container is given neither HQ's database nor its application
+  environment, so the process that
   holds every provider credential holds none of HQ's, and the reverse.
 
 Connect needs outbound cloud synchronization. Cached availability does not mean
@@ -119,8 +119,8 @@ Connect stays locked after a restart until an authenticated request arrives, so
 readiness is the authenticated vault listing, never `/health`. No answer, a
 timeout and a 5xx are retried with backoff under one deadline
 (`-connect-timeout`, 75 seconds); a refused token and a malformed answer are
-final. The unit's `TimeoutStartSec` is the outer bound. A change to the item is live
-at the next hourly run, or at once with `systemctl start
+final. The unit's `TimeoutStartSec` is the outer bound. A change to the item
+is live at the next hourly run, or at once with `systemctl start
 severino-hq-secrets.service`; the web container restarts only when its
 environment changed.
 
@@ -143,7 +143,8 @@ which is for `ssh`. An empty application environment, or one without a
 variable HQ cannot run without, is refused, and the refusal names each one
 missing. Which variables those are is declared once, as
 `REQUIRED_APP_VARIABLES` in `hq/config/settings.py`, and `manage.py
-bridge_contract` writes them into the registry as `required_app_variables`: `DJANGO_ALLOWED_HOSTS` and `DJANGO_SECRET_KEY`. Any other variable is
+bridge_contract` writes them into the registry as `required_app_variables`:
+`DJANGO_ALLOWED_HOSTS` and `DJANGO_SECRET_KEY`. Any other variable is
 optional.
 
 A vault that resolves no connection renders an empty connections document
@@ -158,18 +159,18 @@ a connection. HQ remembers what each controller last reported, and a
 controller that reported connections and then reports none raises the serious
 finding `connections-lost`, which is what catches an emptied vault on a host
 that had nothing installed to keep.
-In the application environment a carriage return or a variable set
-twice is refused, because readers would disagree about the value. A
-connections document larger than the controller reads is refused as content,
-so the last good one stays. An SSH host or user that
-could read as an option, and an `env_prefix` in a namespace the controller's
+
+In the application environment a carriage return or a variable set twice is
+refused, because readers would disagree about the value. A connections
+document larger than the controller reads is refused as content, so the last
+good one stays. An SSH host or user that could read as an option, and an `env_prefix` in a namespace the controller's
 own settings use (`HQ`, `SEVERINO`, `DJANGO`, `PYTHON`, `OP`, `SSL`, `LC`), are
 refused. A bootstrap reference is compared to the vault's
 names without regard to case or surrounding spaces. `known_hosts` names a host
 as ssh looks it up: bare on port 22, `[host]:port` otherwise.
 
-Refresh takes an exclusive lock on the runtime tmpfs, checks the host, and only then reads Connect.
-Everything is read and validated in memory, and what is renamed into place is
+Refresh takes an exclusive lock on the runtime tmpfs, checks the host, and
+only then reads Connect. Everything is read and validated in memory, and what is renamed into place is
 staged on the private tmpfs, before any installed file is touched. Retrieval or
 validation failure preserves the previous files. A staging directory a killed
 run left is removed by the next run, under the lock.
@@ -249,17 +250,16 @@ The launcher copies the document into the run's directory on the same tmpfs,
 gives it to the controller's account with mode 0400, bind-mounts it read-only
 and passes `HQ_CONTROLLER_CONNECTIONS`, its path. The controller refuses a
 document that is not its own account's private, single-link regular file, and
-a connection set in its environment. No connection value is an environment variable, so
-`docker inspect` and the container's on-disk configuration show none. This is
-not protection against Docker administrators or host root, who can read the
-mount.
+a connection set in its environment. No connection value is an environment
+variable, so `docker inspect` and the container's on-disk configuration show
+none. Docker administrators and host root can still read the mount.
 
 The application environment keeps its name, format and place
 (`web/severino_hq_env`, shell-quoted `KEY='value'` lines) and its inode, for
 the existing Docker bind mount. Its update is in place, and the install as a
 whole is not a multi-file transaction: an interruption can leave mixed or
 partial files. A destination that is not a regular single-link file owned by
-the web account is refused, not written through.
+the web account is refused, and nothing is written through it.
 
 SSH identities and signing keys are written beside the document, in `ssh/`:
 `<ref>` and `<ref>.pub`, `<ref>.key` and `<ref>.key.pub`, and `known_hosts`.
@@ -299,7 +299,8 @@ reported, reduced to short words. Every string in the document besides its
 times is one short word (`WordPattern`).
 
 `controller/secretstatus` imports nothing of the renderer or the controller.
-The renderer writes the document and the controller reads it with the same strict decoder (`secretstatus.Decode`): an unknown or
+The renderer writes the document and the controller reads it with the same
+strict decoder (`secretstatus.Decode`): an unknown or
 repeated member, another `schema_version`, an outcome that is not one of the
 three, or a string that is not a short word is refused.
 
@@ -317,8 +318,8 @@ from. A name is passed whether or not its document exists.
 The controller reports each as one record of the `host.render_status` reading:
 the renderer's name, `state` `read` with the document, or `state` `unreadable`
 with one reason word (`missing`, `unreadable`, `oversized`, `invalid`). A
-document that cannot be read is a record, not a refused read, so HQ can say
-which renderer went quiet. HQ stores it through a schema that admits only the
+document that cannot be read is still a record, so HQ can say which renderer
+went quiet. HQ stores it through a schema that admits only the
 fields above and stores any string that is not a short word as `unreadable`.
 
 What is mounted holds no secret, and the mount adds no way to write: the
@@ -341,8 +342,9 @@ The allowance is three runs at their latest, derived from the timer's interval
 and randomized delay (`deploy/systemd/severino-hq-secrets.timer`), so a
 renderer two runs behind is raised as the third falls due. A full read is
 forced every 24 hours (`FullEvery`), so it is overdue that allowance later.
-Both are measured against now and not against when the reading was taken: a controller that cannot start
-because its secrets are gone still raises them. Each finding names the command
+Both are measured against the present moment, whenever the reading was
+taken, so a controller that cannot start because its secrets are gone still
+raises them. Each finding names the command
 to run on the machine for a renderer whose unit HQ knows (`RENDERER_UNITS`).
 
 ## Connections
@@ -418,8 +420,8 @@ from the connection item's optional `bootstrap` field, an `op://<vault>/<item>`
 reference shaped like the connection. The renderer refuses a bootstrap in the
 vault it reads, because a reader of that vault could then mint.
 
-Two tasks mint read-only credentials, both over `tools/credentials.py`. Both take the bootstrap credential
-from the environment. Without `--store` they print what they would create and
+Two tasks mint read-only credentials, both over `tools/credentials.py`. Both
+take the bootstrap credential from the environment. Without `--store` they print what they would create and
 create nothing: a secret goes into 1Password and nowhere else.
 
 - `mise run mint:cloudflare` needs a bootstrap token with API Tokens
@@ -445,7 +447,7 @@ holding both uses Connect, which is read-only. The renderer does not run `op`
 and refuses a token in its environment, so the two cannot be confused.
 The publisher is the only `op` caller left, and it is given one token.
 
-**The credential is named for the consumer, not the protocol.** A host may run
+**The credential is named for its consumer.** A host may run
 more than one renderer, and `LoadCredentialEncrypted=` with a shared name means
 two units overwrite each other's credential.
 
@@ -453,7 +455,7 @@ two units overwrite each other's credential.
 comparison someone can loosen. The dialer's check is on the address the socket
 is about to connect to, after resolution.
 
-**The lock is not about speed.** Two renderers interleaving their installs is how
+**The lock keeps one read whole.** Two renderers interleaving their installs is how
 a host ends up holding files from two different reads of the vault.
 
 **Installs preserve the inode deliberately.** Replacing it breaks single-file
@@ -461,23 +463,23 @@ bind mounts: the running container keeps the old file indefinitely. The cost is
 that this is not an atomic swap, as stated above. A generation-directory layout
 would make it transactional and requires moving the mounts first.
 
-**The validators are not defensive padding.** Each rejects a specific way a
+**Each validator has a failure it stops.** Each rejects a specific way a
 render can succeed while producing something unusable: an unresolved reference,
 an empty file, a variable with no value, a missing required variable, or a
 vault that resolves no connection after holding one.
 
-**The skip is verified, not assumed.** A matching content version only skips
+**The skip is verified.** A matching content version only skips
 the read when every installed file still matches its recorded digest. The state
 lives on the tmpfs, so the first run of every boot is a full read.
 
-**An identity is compared as a key, not as bytes.** The OpenSSH encoding holds
+**An identity is compared as a key.** Its bytes cannot be: the OpenSSH encoding holds
 random check bytes, so the same key encodes differently on every render.
 
-**The certificate publisher still runs `op`.** 1Password's Go SDK embeds a
-closed-source WebAssembly core run in process, would put a vault client inside
-the image the web container shares, which lending the host's `op` to one run
-avoids, and is pre-1.0. Revisit when the SDK reaches 1.0 or Connect gains file
-upload.
+**The certificate publisher runs `op`.** 1Password's Go SDK runs a
+closed-source WebAssembly core in process, is pre-1.0, and would put a vault
+client inside the image the web container shares; lending the host's `op` to
+one run avoids all three. The SDK at 1.0, or file upload in Connect, would
+change this.
 
 ## Checking the renderer on a host
 

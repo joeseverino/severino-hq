@@ -1,5 +1,6 @@
 # What a developer runs by hand beside the servers: a look at pages, manage.py,
-# CI's timings and caches, the README's pictures, an extension's contract check.
+# CI's timings and caches, the docs' pictures and diagrams, an extension's
+# contract check.
 
 ["dev:look"]
 extends = "django-heavy"
@@ -49,6 +50,10 @@ description = "Retake the README's pictures from the showcase demo"
 depends = ["setup:webkit", "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m demo.screenshot"
+
+["docs:diagrams"]
+description = "Render the docs' Mermaid diagrams (docs/diagrams/*.mmd) to the PNGs beside them, with the diagram tool on PATH"
+run = "diagram docs/diagrams/"
 
 ["plugin:check"]
 description = "One extension package's contract check against this host, as its CI runs it"

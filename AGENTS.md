@@ -39,6 +39,7 @@ A test that reads the repository rather than running the product carries
 `hq/platform/core/test_runner.py`: read it before changing the test database.
 An agent's server is `mise run dev:scratch` in its own worktree, never
 `mise run dev`. A new host domain: [New Domain](docs/New-Domain.md).
+The project's agent and skills, and a pass: [AI](docs/AI.md).
 
 ## Architecture in one minute
 
