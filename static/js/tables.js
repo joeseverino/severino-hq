@@ -17,10 +17,11 @@
   const selectedIds = new Set(readSelection());
 
   // A table fits its box. While it is wider than its region, a ranked column
-  // showing leaves (`data-drop` 1 first, the rightmost of a rank first), and
-  // once none is left to go the table is in a narrow box; as
-  // the region grows they come back, the last to leave first, each only if
-  // the table still fits. A row's toggle shows what left. Only the browser
+  // showing leaves (`data-drop` 1 first, the rightmost of a rank first);
+  // once none is left to go the table is in a narrow box, and if it is still
+  // wider, what keeps its line whole gives way too (`data-tight`); as the
+  // region grows they come back, the last to leave first, each only if the
+  // table still fits. A row's toggle shows what left. Only the browser
   // knows how wide a table is, and a ResizeObserver tells it in the frame it
   // is laid out, before that frame is painted: this script loads in the head
   // without `defer`, so every region is watched from the moment it is parsed
@@ -33,8 +34,8 @@
     .filter(([rank, , heading]) => rank && !heading.hasAttribute("data-blank-column"))
     .sort((left, right) => left[0] - right[0] || right[1] - left[1])
     .map(([, place]) => place);
-  // How far each table has given way: how many of its columns have left, and
-  // one more once it is in a narrow box.
+  // How far each table has given way: how many of its columns have left, one
+  // more once it is in a narrow box, and one more once it is tight.
   const gaveWay = new WeakMap();
   const giveWay = (table, steps) => {
     const order = dropOrder(table);
@@ -45,6 +46,7 @@
       [...row.children].forEach((cell, place) => cell.toggleAttribute("data-dropped", left.has(place)));
     });
     table.toggleAttribute("data-narrow", steps > order.length);
+    table.toggleAttribute("data-tight", steps > order.length + 1);
     // The columns that share the region's width (tables.css, `--share`).
     const sharing = headingsOf(table).filter((heading) => !left.has(heading.cellIndex)
       && !heading.matches(".select-column, [data-blank-column]")).length;
@@ -57,7 +59,7 @@
   // Whether the table gave way any further or came back any.
   const fit = (table) => {
     const was = gaveWay.get(table) ?? 0;
-    const most = dropOrder(table).length + 1;
+    const most = dropOrder(table).length + 2;
     let steps = Math.min(was, most);
     giveWay(table, steps);
     while (steps < most && overflows(table)) giveWay(table, ++steps);

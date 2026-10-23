@@ -132,7 +132,7 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* A record's value is data, set as code is; where it wraps is `breakable`'s. */
 .zone-value { font-family: var(--font-mono); font-size: var(--text-xs); }
 /* A status pill is a label, not a paragraph: wrapped, it grows the row it sits
-   in. The table already scrolls horizontally, so the label stays whole. */
+   in, so it stays whole until its table is tight (tables.css). */
 .data-table .pill { white-space: nowrap; }
 /* A name in a table cell takes two lines at most, and so does a `.cell-line`:
    one fact written as a line. Clamped, it still breaks where it must, so its

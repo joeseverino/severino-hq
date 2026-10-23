@@ -4312,9 +4312,9 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertEqual(found, [])
 
     def a_table_fits_its_box_at_every_width(self, name):
-        """A table never overflows its box: while it is wider, its ranked
-        columns leave (tables.js). Every table on every page, with every
-        disclosure open.
+        """A table never overflows its box, down to the narrowest phone: while
+        it is wider, its ranked columns leave, then it is narrow, then tight
+        (tables.js). Every table on every page, with every disclosure open.
         """
 
         self.open_every_disclosure(name)
@@ -4452,7 +4452,7 @@ class ScriptedLayoutTests(LayoutBrowserTests):
             self.hold(name, width, [self.every_layout_check_holds], script="on")
         if width in SPEAKING_WIDTHS:
             self.pressing_a_control_moves_nothing(name, width)
-        if read:
+        if name in ALL_PAGES:
             self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
 
 
@@ -4508,10 +4508,13 @@ class LongestValueLayoutTests(LayoutBrowserTests):
 
         held = [self.a_table_fits_its_box_at_every_width, self.a_token_breaks_only_where_it_may]
         for name in self.lists:
-            for width in (*WIDTHS, *WIDE_TABLES):
+            for width in (NARROWEST, *WIDTHS, *WIDE_TABLES):
                 if not self.loaded(name, width, script="on"):
                     continue
                 self.page.evaluate(_SETTLED)
+                if width == NARROWEST:
+                    self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
+                    continue
                 self.hold(name, width, [self.every_layout_check_holds, *held], script="on")
                 self.page.locator(SELECTORS["row_toggle"]).evaluate_all(_PRESS_EVERY_SHOWN)
                 self.page.evaluate(_SETTLED)

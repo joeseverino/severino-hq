@@ -544,6 +544,12 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    in a narrow box (tables.js). A row with something in a column that left
    shows its toggle, and its table keeps the gutter the toggle stands in. */
 .data-table[data-narrow] { --box: narrow; }
+/* A table still wider than its region in a narrow box is tight
+   (`data-tight`, tables.js): what keeps a line whole there (a heading, a
+   time, a status, a value's parts) wraps at its spaces, and its cells stand
+   closer, so a phone's narrowest screen holds it. */
+.data-table[data-tight] > * > tr > * { padding-inline: var(--space-3); }
+.data-table[data-tight] :is(.table-sort-link, time, .date-col, .nowrap, .cell-part, .pill) { white-space: normal; }
 .data-table > * > tr > [data-dropped] { display: none; }
 .data-table > tbody > tr:has(> td[data-dropped]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }
 .data-table:has(> tbody > tr > td[data-dropped]:not([data-blank])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }

@@ -65,7 +65,7 @@ Only the browser knows how wide a table is, so `tables.js` decides what shows,
 the established responsive-table pattern: while a table is wider than its
 region, its next ranked column leaves (rank 1 first, the rightmost of a rank
 first, `data-dropped` on its cells), and once none is left to go the table is
-in a narrow box (`data-narrow`); as the region grows they come back, the last
+in a narrow box (`data-narrow`), then tight (below); as the region grows they come back, the last
 to leave first, each only if the table still fits. A ResizeObserver on every
 region does it in the frame the table is laid out, before that frame is
 painted, and the script loads in the head without `defer` so every region is
@@ -77,7 +77,11 @@ box (`--box: narrow`, else `whole`, read by `@container style()`) a table gets
 roomier rows and holds back what is marked `narrow-more`, and what is marked
 `narrow-only` shows there alone, a few words in the cell that names the row
 standing in for the columns that left (the audit log's action under its
-name). With no script nothing leaves and the table scrolls in its region.
+name). A table still wider in a narrow box is tight (`data-tight`): its
+headings, times, statuses and a value's parts wrap at their spaces and its
+cells stand closer, so the narrowest phone (320px) holds every table the
+gates draw (`a_table_fits_its_box_at_every_width`). With no script nothing
+leaves and the table scrolls in its region.
 The region marks each body cell that says
 nothing (`data-blank`) and every cell of a column blank in every row
 (`data-blank-column`), which is not drawn. Since a
