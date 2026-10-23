@@ -243,13 +243,13 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 }
 /* There a part is text, wrapping at its hyphens with the words around it. */
 .data-table td :is(td > strong:first-child, td > a:first-child > strong, .attention-title, .cell-data) .whole { display: contents; }
-/* A wide table has room in the columns that wrap (a sentence, an address and
-   where it points), so those columns give way first. A name of plain parts
-   ("hq.example.com") holds out for its whole length, up to a cap bounded by
-   its column's share (`--name-hold`, tables.css), past which it wraps at its
-   seams. A name in a context line (`.muted`) holds out for nothing (below):
-   it is cut at the line's edge. */
-@container table-region (width >= 1000px) {
+/* Outside a narrow box a table has room in the columns that wrap (a
+   sentence, an address and where it points), so those columns give way
+   first. A name of plain parts ("hq.example.com") holds out for its whole
+   length, up to a cap bounded by its column's share (`--name-hold`,
+   tables.css), past which it wraps at its seams. A name in a context line
+   (`.muted`) holds out for nothing (below): it is cut at the line's edge. */
+@container style(--box: whole) {
   .data-table td [data-entity]:not(strong > *, .row-gutter > *, .muted *):has(> .token[data-sole]):not(:has(> .token > .cut)) { width: max-content; max-width: var(--name-hold); }
 }
 /* A cell that leads with the row's name keeps room to show it, rather than
@@ -271,7 +271,7 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
    (`narrow-only`) are never cut away, so such a line is cut only where they
    are not shown. */
 .data-table td.row-gutter > br + .muted:not(:has([data-entity], .narrow-only)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@container table-region (width >= 640px) {
+@container style(--box: whole) {
   .data-table td.row-gutter > br + .muted:not(:has([data-entity])) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 /* A value quoted in a cell (a record's text, a message, a key) can hold a run
@@ -480,7 +480,9 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .relation-group + .relation-group { border-top: 1px solid var(--line); }
 .relation-group dt { flex: 0 0 12rem; color: var(--muted); font-weight: 600; }
 .relation-group dd { flex: 1 1 18rem; min-width: 0; margin: 0; }
-.relation-ends { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin: 0; padding: 0; list-style: none; }
+/* Its ends are links that wrap onto lines of their own, so each line is a
+   target tall (`--target-min`). */
+.relation-ends { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin: 0; padding: 0; list-style: none; line-height: var(--target-min); }
 .relation-ends li { min-width: 0; overflow-wrap: anywhere; }
 .relation-source { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
 /* Policy names and ports, the row wrapping between them. In

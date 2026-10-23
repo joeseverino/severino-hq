@@ -26,6 +26,7 @@ SHEETS: tuple[str, ...] = tuple(
         "page",
         "figures",
         "tables",
+        "table-steps",
         "cards",
         "layout",
         "forms",

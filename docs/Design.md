@@ -63,24 +63,39 @@ from what it holds. Each column that may leave has a rank, 1 first
 (`{% table_heading ... drop=N %}`; a list's are derived by `ranked`:
 `optional-col` first, then from the far end, never the column that names the
 row, one marked `key-col`, or the closing figure of a table that marks none).
-The region says how many ranks leave in a box under 1000px (`mid=`) and under
-640px (`narrow=`; a list view's `table_drop_mid` and `table_drop_narrow`), so
-each heading carries the widest box it leaves in (`data-drop-tier`), the
-region writes it on every cell beneath, and the column goes there with no
-limit on how many a table has. The column that names the row has no tier.
-What leaves is in the row's toggle. A table in a narrow
-box, a phone or half a page beside a chart, also gets roomier rows and holds
-back what is marked `narrow-more`; what is marked `narrow-only` shows there
-alone, a few words in the cell that names the row standing in for the columns
-that left (the audit log's action under its name). The region marks each body cell that says
+No page says where a column leaves: the region derives it from what each
+column holds (`fit`, `hq/platform/application/tables.py`). A column's floor
+is the least width its kind lets it stand at: a status, a figure and a control
+never wrap, so theirs is their longest line (a status longer than three
+floors' worth wraps at a prose floor); prose holds out for a floor of
+characters, an identifier for the length it is cut at, and the name that reads
+the row for a name's length; a sortable heading's label never wraps either.
+Ranked columns leave in turn, each below the sum of the floors of every column
+still showing, cell padding and the row's gutter included, raised to the next
+of one declared list of widths (`DROP_STEPS`), so a column leaves a little
+early, never late. Every cell of a column that may leave carries its width
+(`data-drop-at`), and the table says how many columns share its width at each
+(`data-columns`, for `--hold`). Container queries read no variable and the
+page allows no inline style, so `manage.py table_steps` writes one
+`@container` rule per width into `css/app/table-steps.css`, and
+`mise run drift` holds it to the list. What leaves is in the row's toggle.
+Below the width where its last column leaves (for a table with none to give,
+where its columns press their floors: `data-narrow-at`) a table is in a
+narrow box (`--box: narrow`, else `whole`, read by `@container style()`): it gets roomier
+rows and holds back what is marked `narrow-more`, and what is marked
+`narrow-only` shows there alone, a few words in the cell that names the row
+standing in for the columns that left (the audit log's action under its
+name). This is the per-component container query of the mature systems
+(Primer's data table keeps a column at least as wide as what it holds and
+removes the less important ones on a small screen), with the widths derived
+rather than set by hand. The region marks each body cell that says
 nothing (`data-blank`) and every cell of a column blank in every row
 (`data-blank-column`), which is not drawn. Since a
 table fits, its region is no scroll box and its heading pins under the page's
 chrome; only a region declared a pane (`pane=True`: a height of its own, as a
 chart's data or the topology ledger, or a table sized to its content) or a
 chart's (`chart=True`) scrolls, pins its heading to its own edge, and takes
-focus. A drop rank in a region that counts no drops is refused at render. A
-table never stacks into cards and is not swiped through. A key/value table (row headers,
+focus. A table never stacks into cards and is not swiped through. A key/value table (row headers,
 no `thead`) sizes its label column to its longest label. Rows that belong to
 sections share one table as a `tbody` per group, headed by
 `{% row_group label count %}`, which spans every column the headings declare,
@@ -136,7 +151,7 @@ identifier sits beside wide columns (it gets little until the region is wide),
 length); a list view says it as `table_room`. An identifier the row is read
 by, in a row of many columns (a container's image), is `code.cell-whole`: it
 wraps at its seams instead, so its column gives way without hiding any of it.
-In a wide region a status keeps its line and a one-token name is never cut; a
+Outside a narrow box a status keeps its line and a one-token name is never cut; a
 value told in several parts marks each `cell-part`, and where its line is
 short it wraps only between them. Every such hold, and an identifier's cut,
 asks for at most its column's even share of the region (`--hold`, counted

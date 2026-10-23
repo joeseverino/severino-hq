@@ -9,10 +9,21 @@ from django.template.defaulttags import IfNode
 from django.test import RequestFactory, SimpleTestCase, tag
 from django.urls import reverse
 
-from hq.domains.expenses.views import ExpenseListView
 from hq.platform.application.routes import routed
-from hq.platform.application.tables import TableColumn, TableListMixin, named_first, ranked, typed
+from hq.platform.application.tables import (
+    DROP_STEPS,
+    FitColumn,
+    TableColumn,
+    TableListMixin,
+    column_floor,
+    drop_step,
+    fit,
+    named_first,
+    ranked,
+    typed,
+)
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
+from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 from hq.platform.core.templatetags import table_tags
 
@@ -193,31 +204,23 @@ class TableTagTests(SimpleTestCase):
         (named,) = elements(_render('{% table_heading "Name" "identifier" %}'), "th")
         self.assertEqual(named.attrs["data-kind"], "identifier")
 
-    def test_a_heading_leaves_in_the_widest_box_its_rank_and_region_say(self):
+    def test_a_heading_carries_its_rank(self):
         source = (
-            '{% table_region "Things" mid=1 narrow=3 %}'
             '{% table_heading "Name" %}{% table_heading "A" drop=1 %}{% table_heading "B" drop=3 %}'
-            '{% table_heading "C" drop=4 %}{% table_heading "D" css="key-col" %}{% endtable_region %}'
+            '{% table_heading "D" css="key-col" %}'
         )
-        tiers = {
-            heading.text.strip(): heading.attrs.get("data-drop-tier") for heading in elements(_render(source), "th")
-        }
-        self.assertEqual(tiers, {"Name": None, "A": "mid", "B": "narrow", "C": None, "D": None})
+        ranks = {heading.text.strip(): heading.attrs.get("data-drop") for heading in elements(_render(source), "th")}
+        self.assertEqual(ranks, {"Name": None, "A": "1", "B": "3", "D": None})
 
-    def test_a_rank_no_count_reaches_is_refused(self):
-        for source in (
-            '{% table_heading "A" drop=1 %}',
-            '{% table_region "Things" %}{% table_heading "A" drop=1 %}{% endtable_region %}',
-            '{% table_region "Things" narrow=0 %}{% table_heading "A" drop=1 %}{% endtable_region %}',
-        ):
-            with self.subTest(source), self.assertRaises(ValueError):
-                _render(source)
-        (kept,) = elements(_render('{% table_region "Things" %}{% table_heading "A" %}{% endtable_region %}'), "th")
-        self.assertNotIn("data-drop-tier", kept.attrs)
+    def test_a_regions_counts_are_accepted_and_change_nothing(self):
+        table = (
+            '<table class="data-table"><thead><tr>{% table_heading "Name" %}{% table_heading "Note" drop=1 %}'
+            "</tr></thead><tbody><tr><td>a</td><td>b</td></tr></tbody></table>{% endtable_region %}"
+        )
+        counted = _render('{% table_region "Things" mid=3 narrow=1 %}' + table)
+        self.assertEqual(counted, _render('{% table_region "Things" %}' + table))
 
-    def test_a_region_refuses_counts_that_cannot_be(self):
-        with self.assertRaises(ValueError):
-            _render('{% table_region "Things" mid=3 narrow=1 %}{% endtable_region %}')
+    def test_a_region_refuses_what_it_does_not_take(self):
         for source in (
             "{% table_region %}{% endtable_region %}",
             '{% table_region "Things" wide=2 %}{% endtable_region %}',
@@ -251,13 +254,13 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(marked, {"dash", "empty", "empty value", "line break"})
         self.assertEqual(len(blank), 4, "a table inside a cell is that cell's content")
 
-    def test_each_cell_carries_the_tier_its_heading_declares_however_wide_the_table(self):
+    def test_each_cell_carries_the_width_its_column_leaves_below_however_wide_the_table(self):
         # Fourteen columns: the name, then each that may leave, the far end first.
         headings = "".join(f'{{% table_heading "C{n}" drop={15 - n} %}}' for n in range(2, 15))
         cells = "".join(f'<td data-col="{n}">{n}</td>' for n in range(3, 15))
         nested = "<table><tbody><tr><td>a</td><td>b</td><td>c</td></tr></tbody></table>"
         source = (
-            '{% table_region "Things" mid=2 narrow=13 %}<table class="data-table"><thead><tr>'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
             '{% table_heading "Name" %}' + headings + "</tr></thead><tbody>"
             '<tr class="row-group"><th colspan="14">Group</th></tr>'
             f'<tr><th>one</th><td data-col="2">2</td>{cells}</tr>'
@@ -266,15 +269,20 @@ class TableTagTests(SimpleTestCase):
             "</tbody></table>{% endtable_region %}"
         )
         html = _render(source)
-        tier = {heading.text.strip(): heading.attrs.get("data-drop-tier") for heading in elements(html, "th")}
-        self.assertEqual((tier["C2"], tier["C13"], tier["C14"]), ("narrow", "mid", "mid"))
+        leaves = {heading.text.strip(): heading.attrs.get("data-drop-at") for heading in elements(html, "th")}
+        self.assertIsNone(leaves["Name"])
+        # The far end leaves first, so at the widest.
+        widths = [int(leaves[f"C{n}"]) for n in range(14, 1, -1)]
+        self.assertEqual(widths, sorted(widths, reverse=True))
         found = elements(html, "td")
         for cell in (each for each in found if "data-col" in each.attrs):
             with self.subTest(column=cell.attrs["data-col"]):
-                self.assertEqual(cell.attrs.get("data-drop-tier"), tier[f"C{cell.attrs['data-col']}"])
+                self.assertEqual(cell.attrs.get("data-drop-at"), leaves[f"C{cell.attrs['data-col']}"])
         others = [each for each in found if "data-col" not in each.attrs]
         self.assertEqual(len(others), 4, "the three cells of the table in a cell, and the one spanning the row")
-        self.assertEqual([each for each in others if "data-drop-tier" in each.attrs], [])
+        self.assertEqual([each for each in others if "data-drop-at" in each.attrs], [])
+        (table,) = [each for each in all_elements(html) if each.tag == "table" and "data-table" in each.classes]
+        self.assertEqual(table.attrs["data-narrow-at"], str(min(widths)))
 
     def test_a_column_with_nothing_in_any_row_is_marked_in_every_row(self):
         source = (
@@ -304,24 +312,40 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["said"])
         self.assertEqual(kept[0].words, "Ask me first for this")
 
-    def test_only_a_long_cell_of_prose_holds_out_for_a_floor(self):
+    def test_only_a_long_cell_of_prose_or_a_status_holds_out_for_a_floor(self):
         long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
         lines = "Two lines, each of them short<br>and the second one as short"
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
             '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
-            f'<tr><td>{long}</td><td>{long}</td><td data-col="long">{long}</td></tr>'
+            f'<tr><td>{long}</td><td data-col="status">{long}</td><td data-col="long">{long}</td></tr>'
             f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}</td></tr>'
             '<tr><td>c</td><td>Up</td><td data-col="blank"><span class="empty-value">——————————————————</span></td></tr>'
             "</tbody></table>{% endtable_region %}"
         )
         marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
-        self.assertEqual(marked, ["long"])
+        self.assertEqual(marked, ["status", "long"])
 
-    def test_a_tier_on_the_column_that_names_the_row_is_refused(self):
+    def test_a_run_shown_whole_holds_its_column_open_and_a_cut_one_does_not(self):
+        run = "a-worker-image-with-a-deliberately-long-name"
+
+        def narrow_at(cell):
+            source = (
+                '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+                '{% table_heading "Image" "identifier" %}</tr></thead>'
+                f"<tbody><tr><td>a</td><td>{cell}</td></tr></tbody></table>{{% endtable_region %}}"
+            )
+            (table,) = [each for each in all_elements(_render(source)) if each.tag == "table"]
+            return int(table.attrs["data-narrow-at"])
+
+        whole = narrow_at(f'<code class="cell-whole"><span class="cut">{run}</span></code>')
+        self.assertGreater(whole, narrow_at(f"<code>{run}</code>"))
+        self.assertGreater(whole, narrow_at(f'<span class="cell-data">{run}</span>'))
+
+    def test_a_rank_on_the_column_that_names_the_row_is_refused(self):
         source = (
-            '{% table_region "Things" narrow=1 %}<table class="data-table"><thead><tr>'
-            '<th data-drop-tier="narrow">Name</th>{% table_heading "Value" %}</tr></thead>'
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+            '<th data-drop="1">Name</th>{% table_heading "Value" %}</tr></thead>'
             "<tbody><tr><td>a</td><td>b</td></tr></tbody></table>{% endtable_region %}"
         )
         with self.assertRaises(ValueError):
@@ -337,10 +361,14 @@ class TableTagTests(SimpleTestCase):
                 _render(source)
 
     def test_a_control_column_may_drop(self):
-        source = '{% table_region "Things" narrow=1 %}{% table_heading "Actions" css="actions-col" hidden=True drop=1 %}{% endtable_region %}'
-        (heading,) = elements(_render(source), "th")
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            '{% table_heading "Actions" css="actions-col" hidden=True drop=1 %}</tr></thead>'
+            "<tbody><tr><td>a</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
+        )
+        _name, heading = elements(_render(source), "th")
         self.assertEqual(heading.attrs["data-kind"], "control")
-        self.assertEqual(heading.attrs["data-drop-tier"], "narrow")
+        self.assertIn(int(heading.attrs["data-drop-at"]), DROP_STEPS)
 
     def test_a_heading_note_stands_beside_its_label(self):
         for source in (
@@ -495,25 +523,15 @@ class TableColumnTests(SimpleTestCase):
         keyed = (TableColumn("Name"), TableColumn("State", css="key-col"), TableColumn("Cost", css="num-col"))
         self.assertEqual(self._ranks(*keyed), {"Name": 0, "State": 0, "Cost": 1})
 
-    def _list_headings(self, **counts):
+    def _list_ranks(self, **counts):
         view = type("Listed", (TableListMixin,), {"table_columns": _LIST_COLUMNS, **counts})()
         view.request = RequestFactory().get("/")
-        source = (
-            '{% table_region "Things" mid=table.drop.mid narrow=table.drop.narrow %}'
-            "{% for column in table.columns %}{% table_heading column.label drop=column.drop %}{% endfor %}"
-            "{% endtable_region %}"
-        )
-        return {
-            heading.text.strip(): heading.attrs.get("data-drop-tier")
-            for heading in elements(_render(source, {"table": view.table_context()}), "th")
-        }
+        return {column.label: column.drop for column in view.table_context()["columns"]}
 
-    def test_a_list_that_counts_its_drops_ranks_its_columns(self):
-        self.assertEqual(self._list_headings(table_drop_narrow=1), {"Name": None, "Note": None, "When": "narrow"})
-        self.assertEqual(self._list_headings(table_drop_mid=1, table_drop_narrow=1)["When"], "mid")
-
-    def test_a_list_that_counts_nothing_ranks_nothing(self):
-        self.assertEqual(self._list_headings(), {"Name": None, "Note": None, "When": None})
+    def test_a_list_ranks_its_columns_whatever_it_counts(self):
+        ranks = {"Name": 0, "Note": 0, "When": 1}
+        self.assertEqual(self._list_ranks(), ranks)
+        self.assertEqual(self._list_ranks(table_drop_mid=1, table_drop_narrow=2), ranks)
 
     def test_a_declared_rank_stands(self):
         ranks = self._ranks(TableColumn("Name"), TableColumn("Note", drop=2), TableColumn("When", drop=1))
@@ -551,11 +569,11 @@ class ListTableTests(_AuthedTestCase):
         self.assertTrue(marks)
         self.assertEqual([mark.text for mark in marks if mark.text], [])
 
-    def test_a_list_drops_the_columns_its_view_counts(self):
+    def test_a_list_drops_its_ranked_columns(self):
         page = self.client.get(reverse("expenses:list"))
-        tiers = {heading.text.strip(): heading.attrs.get("data-drop-tier") for heading in elements(page, "th")}
-        dropped = {label for label, tier in tiers.items() if tier}
-        self.assertEqual(len(dropped), ExpenseListView.table_drop_narrow)
+        leaves = {heading.text.strip(): heading.attrs.get("data-drop-at") for heading in elements(page, "th")}
+        dropped = {label for label, width in leaves.items() if width}
+        self.assertTrue(dropped)
         # The column that names the row and the key column stay.
         self.assertFalse(dropped & {"Vendor", "Cost"})
 
@@ -592,3 +610,63 @@ class ListTableTests(_AuthedTestCase):
                     self.assertIsNotNone(lead)
                     self.assertTrue(lead.words and cell.words.startswith(lead.words))
         self.assertGreater(read, 5, "The example estate fills almost no list")
+
+
+class FitTests(SimpleTestCase):
+    """Where a table's columns leave is derived from what each holds."""
+
+    # The audit log's columns, as its list declares them, with the longest
+    # line of each in characters: a type and name, a time, a user, an action
+    # and a message.
+    LONGEST = {"What": 40, "When": 12, "Who": 8, "Action": 7, "Message": 90}
+
+    def _audit(self):
+        """The list's columns, ranked as it ranks them, each with its floor."""
+
+        columns = ranked(typed(AuditLogListView.table_columns, AuditLogListView.model))
+        floors = [
+            column_floor(
+                column.kind, self.LONGEST[column.label], label=len(column.label), sorts=True, names_row=not index
+            )
+            for index, column in enumerate(columns)
+        ]
+        return columns, floors
+
+    def test_each_column_leaves_below_the_floors_of_what_still_shows(self):
+        columns, floors = self._audit()
+        table = fit(tuple(FitColumn(floor, column.drop) for floor, column in zip(floors, columns, strict=True)))
+        self.assertEqual({columns[index].label for index in table.leaves}, {"Who", "Message", "Action"})
+        showing = set(range(len(columns)))
+        for index in sorted(table.leaves, key=lambda index: columns[index].drop):
+            width = table.leaves[index]
+            needed = sum(floors[each] for each in showing)
+            with self.subTest(columns[index].label):
+                # It stays only where every column showing has its floor, and
+                # leaves at the first declared width past that.
+                self.assertIn(width, DROP_STEPS)
+                self.assertGreaterEqual(width, needed)
+                self.assertTrue(all(step < needed for step in DROP_STEPS if step < width))
+            showing.discard(index)
+        self.assertEqual(table.narrow, min(table.leaves.values()))
+
+    def test_a_status_keeps_its_whole_line_and_prose_holds_out_for_its_floor(self):
+        columns, floors = self._audit()
+        kinds = {column.label: column.kind for column in columns}
+        self.assertEqual((kinds["When"], kinds["Action"], kinds["Message"]), ("status", "status", "prose"))
+        floor = dict(zip(kinds, floors, strict=True))
+        self.assertGreater(floor["When"], floor["Who"])
+        self.assertGreater(column_floor("status", 30), column_floor("prose", 30))
+        self.assertEqual(floor["Message"], column_floor("prose", 200))
+        # A status too long for one line wraps at the prose floor.
+        self.assertEqual(column_floor("status", 90), column_floor("prose", 90))
+
+    def test_columns_of_one_rank_leave_together_and_the_share_counts_what_shows(self):
+        columns = (FitColumn(200), FitColumn(150, 1), FitColumn(150, 1), FitColumn(40, shares=False), FitColumn(100, 2))
+        table = fit(columns)
+        self.assertEqual(table.leaves[1], table.leaves[2])
+        self.assertEqual(table.columns, 4)
+        self.assertEqual(dict(table.columns_below), {table.leaves[1]: 2, table.leaves[4]: 1})
+
+    def test_a_table_with_nothing_to_let_go_is_narrow_below_its_floors(self):
+        table = fit((FitColumn(300), FitColumn(130)))
+        self.assertEqual((table.leaves, table.narrow), ({}, drop_step(430)))

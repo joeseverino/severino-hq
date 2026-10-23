@@ -495,9 +495,9 @@ list is the host's, and an override of it is refused rather than silently
 ignored the day the frame stops rendering it.
 
 A data table is declared through the table tags, so its shape is in the HTML on
-first paint. `{% table_region "Label" mid=1 narrow=3 %}…{% endtable_region %}`
-wraps it in its labeled scroll region, saying how many columns, by rank,
-leave in a box under 1000px and under 640px; each column heading is
+first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in
+its labeled region, which derives from what each column holds the width its
+columns leave at, by rank ([Design](Design.md)); each column heading is
 `{% table_heading "Name" "identifier" %}`, with its kind (`prose`,
 `identifier`, `numeric`, `status` or `control`, following from `num-col`,
 `date-col` or `actions-col` when left out), `drop=` the order a narrow table
@@ -508,8 +508,9 @@ the page. A row that holds more than it shows ends its naming cell with
 carry `row-gutter`; the stylesheet shows the toggle only where the row holds
 something back. A `TableListMixin` list declares the same through
 `TableColumn(kind=)`, its ranks derived from the columns unless one says
-`drop=`, its counts as `table_drop_mid` and `table_drop_narrow`, and its region's
-`room=` as `table_room`.
+`drop=`, and its region's `room=` as `table_room`. A region's `mid=` and
+`narrow=`, and a list's `table_drop_mid` and `table_drop_narrow`, are still
+accepted and do nothing.
 
 <!-- sdk_contract: shared UI contract, written by `mise run regen` from hq_sdk/template_contract.py -->
 

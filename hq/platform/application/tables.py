@@ -122,6 +122,120 @@ def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
     return tuple(replace(column, drop=rank.get(index, 0)) for index, column in enumerate(columns))
 
 
+# The region widths, in CSS pixels, a column may leave at, about a tenth
+# apart and up to the page's `--content-max`. `manage.py table_steps` writes
+# the stylesheet's rule for each.
+DROP_STEPS = (280, 320, 360, 400, 440, 480, 540, 600, 660, 720, 800, 880, 960, 1040, 1120, 1200, 1300, 1400, 1500, 1600)
+# The most columns a table's share of its region counts.
+MOST_COLUMNS = 16
+
+# What the stylesheet sets a cell in, in CSS pixels: a character of its text,
+# rounded up, and the `ch` its floors are given in; its inline padding (`--space-6` either side); the room a row
+# toggle's gutter adds to the cell that names the row (`--row-gutter` past the
+# padding it replaces); and the width that cell holds out for (figures.css,
+# `11rem`).
+_ADVANCE = 7
+_CH = 8.1
+_PADDING = 24
+_GUTTER = 24
+_NAME = 176
+# In characters: the sort control beside a heading's label; what a line that
+# wraps holds out for (`data-long`); the length a value the stylesheet cuts
+# holds out for (`--cut-floor`), and a name it holds whole (`--name-hold`). A
+# line that keeps its line but runs past three prose floors wraps at one.
+_SORT_MARK = 2
+_PROSE = 16
+CUT = 12
+NAME_HOLD = 28
+_LONG = 3 * _PROSE
+
+
+def column_floor(
+    kind: str,
+    line: int,
+    run: int = 0,
+    label: int = 0,
+    *,
+    sorts: bool = False,
+    names_row: bool = False,
+    gutter: bool = False,
+) -> int:
+    """The least width, in CSS pixels, a column stands at, from the characters
+    of its longest line and of its longest run with no break in it (across its
+    rows), and of its heading's label, which a sort control stands beside on
+    one line. A status or a figure keeps its whole line; any other column, or
+    a line too long to keep, holds out for a floor of it; none is narrower than
+    its longest run. The cell that names the row holds out for a name's width,
+    its name wrapping or cut past that."""
+
+    inset = _PADDING + (_GUTTER if gutter else 0)
+    if names_row:
+        return min(_NAME, round(line * _ADVANCE) + inset)
+    if kind in ("status", "numeric") and line <= _LONG:
+        held = line * _ADVANCE
+    else:
+        held = min(line * _ADVANCE, (CUT if kind == "identifier" else _PROSE) * _CH)
+    return round(max(held, (max(run, label + (_SORT_MARK if sorts else 0))) * _ADVANCE)) + inset
+
+
+@dataclass(frozen=True, slots=True)
+class FitColumn:
+    """What a table's fit reads of one column: its floor, its rank (0 stays),
+    and whether it counts toward the share of the region each column holds
+    out for (a column of tick-boxes and a blank one do not)."""
+
+    floor: int
+    rank: int = 0
+    shares: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class Fit:
+    """Where a table's columns leave, derived from what they hold."""
+
+    # The width each ranked column leaves below, by place.
+    leaves: dict[int, int]
+    # Below it the table shows only what it keeps.
+    narrow: int
+    # How many columns share the region: at full width, then below each
+    # width a column leaves at, the widest first.
+    columns: int
+    columns_below: tuple[tuple[int, int], ...]
+
+
+def drop_step(width: int) -> int:
+    """The declared width a derived one is raised to: a column leaves a little
+    early, never late."""
+
+    return next((step for step in DROP_STEPS if step >= width), DROP_STEPS[-1])
+
+
+def fit(columns: tuple[FitColumn, ...]) -> Fit:
+    """Each ranked column, in rank order, leaves below the sum of the floors of
+    every column still showing; columns of one rank leave together. Below the
+    width the last leaves at, or in a table where none may, below the sum of
+    the floors of what it keeps, the table is in a narrow box."""
+
+    showing = sum(column.floor for column in columns)
+    sharing = whole = sum(column.shares for column in columns)
+    leaves: dict[int, int] = {}
+    below: dict[int, int] = {}
+    for rank in sorted({column.rank for column in columns} - {0}):
+        width = drop_step(showing)
+        for index, column in enumerate(columns):
+            if column.rank == rank:
+                leaves[index] = width
+                showing -= column.floor
+                sharing -= column.shares
+        below[width] = sharing
+    return Fit(
+        leaves=leaves,
+        narrow=min(leaves.values(), default=drop_step(showing)),
+        columns=min(whole, MOST_COLUMNS),
+        columns_below=tuple((width, min(count, MOST_COLUMNS)) for width, count in below.items()),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class TableColumn:
     """One column: its heading, and the field it sorts by if it sorts.
@@ -192,8 +306,9 @@ class TableListMixin:
     table_search_scope = ""
     table_filters: tuple[TableFilter, ...] = ()
     table_columns: tuple[TableColumn, ...] = ()
-    # How many columns, taken by rank, leave in a mid-width box and in a narrow
-    # one: `{% table_region %}`'s ``mid`` and ``narrow``.
+    # TODO(note-hq-chokepoints-and-tables-plan, wave 1 item 6): accepted and
+    # ignored until views, hq_sdk and the extensions stop declaring them; where
+    # a column leaves is derived (`fit`).
     table_drop_mid = 0
     table_drop_narrow = 0
     # How much of a row an identifier in it may take: `{% table_region %}`'s
@@ -334,11 +449,7 @@ class TableListMixin:
                 else self.request.GET.get("sort", self.table_default_sort)
             ),
             "toggles": toggles,
-            # A rank says when a column leaves; with no count it never would.
-            "columns": (ranked if self.table_drop_mid or self.table_drop_narrow else named_first)(
-                typed(self.table_columns, getattr(self, "model", None))
-            ),
-            "drop": {"mid": self.table_drop_mid, "narrow": self.table_drop_narrow},
+            "columns": ranked(typed(self.table_columns, getattr(self, "model", None))),
             "room": self.table_room,
             "selectable": self.table_selectable,
             "active_count": active_count,

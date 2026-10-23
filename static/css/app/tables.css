@@ -75,15 +75,15 @@
      region, so however many columns hold out at once, together they never ask
      for more than the region has: a line that fits its share stays whole, and
      one past it wraps (a status, a name) or is cut (an identifier). The share
-     counts the columns the box draws, from the headings: those that stay, and
-     those that leave only in a narrower box than this one, and one more: the
-     column that names the row is what the row is read by, so its cells hold
-     out for half a share more, and the other half is left for what holds out
-     unbounded (a pill, a control beside a name). */
-  --kept: 1;
-  --mid: 0;
-  --narrow: 0;
-  --columns: calc(var(--kept) + var(--narrow) + var(--mid));
+     counts the columns the box draws, as the region says at each width
+     (`data-columns`, table-steps.css), and one more: the column that names the
+     row is what the row is read by, so its cells hold out for half a share
+     more, and the other half is left for what holds out unbounded (a pill, a
+     control beside a name). A table without headings is read as one column. */
+  --columns: 1;
+  /* Whole until its region is narrower than its columns' floors, once all it
+     lets go has left: then narrow (table-steps.css). */
+  --box: whole;
   --share: calc((100cqi - var(--row-gutter)) / (var(--columns) + 1));
   --hold: calc(var(--share) - 2 * var(--space-6));
   /* How long a name of plain parts holds out on one line in a wide table. */
@@ -215,61 +215,29 @@
    rather than spreading it over every column as a gulf after each value.
    Only a wide box has room to spare; a narrower one shares out what it has. */
 .data-table > * > tr > :is(.row-gutter, th[scope="row"]) { --hold: calc(1.5 * var(--share) - 2 * var(--space-6)); }
-.data-table:has(> thead > tr > :nth-child(1 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 1; }
-.data-table:has(> thead > tr > :nth-child(2 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 2; }
-.data-table:has(> thead > tr > :nth-child(3 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 3; }
-.data-table:has(> thead > tr > :nth-child(4 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 4; }
-.data-table:has(> thead > tr > :nth-child(5 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 5; }
-.data-table:has(> thead > tr > :nth-child(6 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 6; }
-.data-table:has(> thead > tr > :nth-child(7 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 7; }
-.data-table:has(> thead > tr > :nth-child(8 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 8; }
-.data-table:has(> thead > tr > :nth-child(9 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 9; }
-.data-table:has(> thead > tr > :nth-child(10 of :not(.select-column, [data-blank-column], [data-drop-tier]))) { --kept: 10; }
-.data-table:has(> thead > tr > :nth-child(1 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 1; }
-.data-table:has(> thead > tr > :nth-child(2 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 2; }
-.data-table:has(> thead > tr > :nth-child(3 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 3; }
-.data-table:has(> thead > tr > :nth-child(4 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 4; }
-.data-table:has(> thead > tr > :nth-child(5 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 5; }
-.data-table:has(> thead > tr > :nth-child(6 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 6; }
-.data-table:has(> thead > tr > :nth-child(7 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 7; }
-.data-table:has(> thead > tr > :nth-child(8 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 8; }
-.data-table:has(> thead > tr > :nth-child(9 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 9; }
-.data-table:has(> thead > tr > :nth-child(10 of [data-drop-tier="narrow"]:not([data-blank-column]))) { --narrow: 10; }
-.data-table:has(> thead > tr > :nth-child(1 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 1; }
-.data-table:has(> thead > tr > :nth-child(2 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 2; }
-.data-table:has(> thead > tr > :nth-child(3 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 3; }
-.data-table:has(> thead > tr > :nth-child(4 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 4; }
-.data-table:has(> thead > tr > :nth-child(5 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 5; }
-.data-table:has(> thead > tr > :nth-child(6 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 6; }
-.data-table:has(> thead > tr > :nth-child(7 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 7; }
-.data-table:has(> thead > tr > :nth-child(8 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 8; }
-.data-table:has(> thead > tr > :nth-child(9 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 9; }
-.data-table:has(> thead > tr > :nth-child(10 of [data-drop-tier="mid"]:not([data-blank-column]))) { --mid: 10; }
-@container table-region (width < 1000px) {
-  .data-table { --columns: calc(var(--kept) + var(--narrow)); }
-}
-@container table-region (width < 640px) {
-  .data-table { --columns: var(--kept); }
-}
 /* A column that keeps its line asks a fixed width no wider than its content,
    so the table lays it out first at what its cells need. Left to share the
    room with the columns that wrap, WebKit raises it to its content and takes
    the difference back from the rightmost wrapping column alone, which then
    stands many lines taller than the rest. */
 .data-table > thead th:is([data-kind="status"], [data-kind="numeric"], [data-kind="control"]) { width: 1px; }
-/* A cell of prose with a long line (`data-long`, table_tags._LONG) holds out
-   for a floor (`_FLOOR`) up to its column's share; the column that names the
-   row holds out on its own terms. Otherwise a sentence whose longest piece is
-   cut asks for almost nothing, and Chromium shares the row's room past each
-   column's least in proportion to the rest, so the column beside one whose
-   least is a whole name gets less than its text needs and stands lines
-   taller. The floor is a box inside the cell, which both engines size. */
+/* A cell of prose or a status with a long line (`data-long`,
+   table_tags._LONG) holds out for a floor (`_FLOOR`) up to its column's share;
+   the column that names the row holds out on its own terms. A status column
+   asks for a pixel, so short of the floor a long status stands as many lines
+   as it has words. And a sentence whose longest piece is cut asks for almost
+   nothing, and Chromium shares the row's room past each column's least in
+   proportion to the rest, so the column beside one whose least is a whole
+   name gets less than its text needs and stands lines taller. The floor is a
+   box inside the cell, which both engines size. */
 .data-table > tbody td[data-long]::before { content: ""; display: block; inline-size: min(16ch, var(--hold)); }
 /* Asked for a pixel, a column is as wide as its longest word, so a control in
    it keeps its label on one line: "Link this" broken over two is a taller
    button than the one beside it, and reads as two. */
 .data-table > tbody td[data-kind="control"] :is(.btn, button) { white-space: nowrap; }
-@container table-region (width >= 1000px) {
+/* Outside a narrow box the columns showing have the room their floors ask
+   (table-steps.css), so such a line keeps it. */
+@container style(--box: whole) {
   /* The region wraps what such a cell says in one `.kept-line`: as wide as
      its whole line, up to the share. An identifier in the line (a version,
      `|breakable`) breaks where it must past the share, so one long version
@@ -496,11 +464,12 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 .figure-hero-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); font-feature-settings: "tnum"; }
 
-/* A table in a narrow box: a phone, or half a page beside a chart, asked of
-   the table's own region. Its rows are something to put a thumb on, so they
-   get the room a control in them needs; and within a column that stays, what is
-   marked `narrow-more` waits in the line beneath the row. */
-@container table-region (width < 640px) {
+/* A table in a narrow box: its region narrower than its columns' floors,
+   once all it lets go has left (`--box`, table-steps.css). Its rows are
+   something to put a thumb on, so they get the room a control in them needs;
+   and within a column that stays, what is marked `narrow-more` waits in the
+   line beneath the row. */
+@container style(--box: narrow) {
   .data-table > tbody { --row-pad: var(--space-6); }
   /* A column held to a width that suits a wide table gives it back here, so
      the room goes to the column that names the row. */
@@ -520,9 +489,9 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table :is(.key-col, .optional-col) { }
 /* What a row says only in a narrow box (`narrow-only`): a few words in the
    cell that names it, standing in for the columns that leave there. Where
-   those columns stay, a wide box or a page with no script, it would say
+   those columns stay, a wider box or a page with no script, it would say
    their words twice. */
-@container table-region (width >= 640px) {
+@container style(--box: whole) {
   .data-table .narrow-only { display: none; }
 }
 @media (scripting: none) {
@@ -534,11 +503,11 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    nothing either. */
 .data-table [data-row-toggle]:not([data-fold-toggle]) { display: none; }
 @media (scripting: enabled) {
-@container table-region (width < 640px) {
+@container style(--box: narrow) {
   .data-table > tbody > tr:not(.row-detail) .narrow-more { display: none; }
 }
 /* A row's toggle shows only where the row holds something back: a column
-   dropped below (each tier's rules), a part kept for the open row, a value
+   that left (table-steps.css), a part kept for the open row, a value
    tables.js found cut (`data-cut`), or a row already open. The server draws
    one in every row that can open, so the HTML says what a row offers and the
    stylesheet says whether it offers it now. */
@@ -556,16 +525,11 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 @container style(--gutter: kept) {
   .data-table tr[data-cut] > .row-gutter > [data-row-toggle] { display: inline-grid; }
 }
-/* Columns leave by the box's width, in the order the page ranked them: a
-   heading says the widest box it leaves in (`data-drop-tier`, from its rank
-   and its region's counts), the region writes it on every cell under that
-   heading, and each cell goes with it. A row with anything in a column that
-   left shows its toggle, and its table keeps the gutter. */
-@container table-region (width < 640px) {
+@container style(--box: narrow) {
   /* A narrow box has no width to hold out with: a cut value takes what its
      neighbors leave, down to its first few characters, so the words beside
      it keep their lines. */
-  .data-table { --cut-floor: min(4ch, var(--hold)); }
+  .data-table > * { --cut-floor: min(4ch, var(--hold)); }
   .data-table td :is(:has(> .token[data-short="16"]), .cell-line:has(> .cut > .token[data-short="16"]), .service-name strong:has(> [data-entity] > .token[data-short="16"])):not(.muted *) { --cut-floor: inherit; }
   .data-table > tbody > tr:not(.row-detail):has(> * .narrow-more) > * > [data-row-toggle] { display: inline-grid; }
   .data-table:has(> tbody > tr > * .narrow-more) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
@@ -573,14 +537,6 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
      server made openable keeps the gutter: a value cut there can always be
      opened. */
   .data-table:has(> tbody > tr > * > [data-row-toggle]:not([data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
-  .data-table > * > tr > [data-drop-tier] { display: none; }
-  .data-table > tbody > tr:has(> td[data-drop-tier]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }
-  .data-table:has(> tbody > tr > td[data-drop-tier]:not([data-blank])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
-}
-@container table-region (width < 1000px) {
-  .data-table > * > tr > [data-drop-tier="mid"] { display: none; }
-  .data-table > tbody > tr:has(> td[data-drop-tier="mid"]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }
-  .data-table:has(> tbody > tr > td[data-drop-tier="mid"]:not([data-blank])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 }
 }
 /* A column with nothing in any row is not drawn: the server marks each cell

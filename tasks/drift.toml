@@ -12,6 +12,7 @@ run = [
   "uv run python manage.py bridge_contract",
   "cd controller && go generate ./...",
   "uv run python manage.py connections_reference",
+  "uv run python manage.py table_steps",
 ]
 
 ["drift:sdk-contract"]
@@ -33,3 +34,8 @@ run = "uv run python manage.py bridge_contract --check"
 description = "docs/Connections.md is what the providers declare"
 extends = "django"
 run = "uv run python manage.py connections_reference --check"
+
+["drift:table-steps"]
+description = "css/app/table-steps.css holds a rule for each width a table's column may leave at"
+extends = "django"
+run = "uv run python manage.py table_steps --check"

@@ -83,24 +83,17 @@ def _found(pattern, css, what):
     return match
 
 
-def wide_tables(css):
-    """Where a table's region is wide, and the narrowest viewports that make
-    it so. Just past the breakpoint the columns that keep their line take
-    what they need from the least room the wide rules get; narrower, columns
-    drop by tier instead."""
+def wide_tables(css, region):
+    """The narrowest viewports whose table region is ``region`` wide."""
 
-    region = int(_found(r"@container table-region \(width >= (\d+)px\)", css, "where a region is wide").group(1))
     page, card = first_viewports(css, region)
     # Two viewports this close stretch the same columns, so the wider holds both.
     return region, (card,) if card - page <= 50 else (page, card)
 
 
-def narrow_table(css):
-    """The narrowest viewport whose own table region is past the narrowest
-    tier."""
+def narrow_table(css, region):
+    """The narrowest viewport whose own table region is ``region`` wide."""
 
-    _found(r"@container table-region \(width < \d+px\)", css, "where a region is narrow")
-    region = min(int(px) for px in re.findall(r"@container table-region \(width < (\d+)px\)", css))
     return first_viewports(css, region)[0]
 
 
@@ -128,17 +121,14 @@ def first_viewports(css, region):
     return first(border), first(padding + border)
 
 
-# Where a table region is wide (tables.css's `width >= 1000px` queries), its
-# columns that wrap have room to give, so a name there is never cut as a
-# whole; only a part past its cap (figures.css) is cut, inside itself. And the
-# laptop windows where a table's region has only just become wide, which a
-# sweep that judges a table's columns reads besides WIDTHS.
-WIDE_REGION, WIDE_TABLES = wide_tables(stylesheet())
-# Where a region stops being narrow (tables.css's `width < 640px` queries),
-# what a row kept for its open line (`narrow-more`) is back in the row, in
-# columns with the least room they get: the window where a page's own table
-# has only just left that tier.
-NARROW_TABLE = narrow_table(stylesheet())
+# TODO(note-hq-chokepoints-and-tables-plan, the browser sweep): read each
+# table's own derived widths (`data-narrow-at`, `data-drop-at`); until then
+# the sweep keeps the region widths it was written for. A region this wide
+# reads a name as never cut whole, and the laptop windows where a region has
+# only just become so are read besides WIDTHS.
+WIDE_REGION, WIDE_TABLES = wide_tables(stylesheet(), 1000)
+# The window where a page's own table region has only just become this wide.
+NARROW_TABLE = narrow_table(stylesheet(), 640)
 # Every page, from the sparse estate and the dense one. The overflow and
 # density checks run all of them at WIDTHS.
 ALL_PAGES = (*PAGES, *DENSE_PAGES)
