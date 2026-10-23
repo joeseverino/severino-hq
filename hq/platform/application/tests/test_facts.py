@@ -4,9 +4,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -14,6 +12,7 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec, registry
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, assert_subject_cost_does_not_grow
 
 from ..facts import OBSERVED, STALE, UNREADABLE, facts_about
 from ..projection import projection_scope
@@ -250,40 +249,35 @@ class QueryCountTests(TestCase):
             *({"name": f"c{i}", "host": f"host-{i}", "host_address": f"10.0.3.{i}"} for i in range(count)),
         )
 
-    def _count(self, subjects):
-        with CaptureQueriesContext(connection) as captured, projection_scope():
-            for index in range(subjects):
+    def _facts(self, subjects):
+        with projection_scope():
+            return [
                 facts_about((f"host-{index}", f"n{index}.example.com"), (f"198.51.100.{index}",))
-        return len(captured)
+                for index in range(subjects)
+            ]
 
     def test_more_machines_cost_no_more_queries(self):
         self._inventory(10)
 
-        self.assertEqual(self._count(1), self._count(10))
+        assert_cost_does_not_grow(
+            self, sizes=(1, 10), draw=self._facts, rows=lambda answers: sum(1 for facts in answers if facts)
+        )
 
     def test_more_records_cost_no_more_queries(self):
-        self._inventory(2)
-        small = self._count(2)
-        self._inventory(40)
-
-        self.assertEqual(small, self._count(2))
+        assert_subject_cost_does_not_grow(
+            self, sizes=(2, 40), arrange=self._inventory, draw=lambda _count: self._facts(2)
+        )
 
     def test_the_machine_page_does_not_scale_with_records(self):
         user = get_user_model().objects.create_user("facts-op", password="x" * 20)
         self.client.force_login(user)
 
-        def page(count):
-            self._inventory(count)
-            with CaptureQueriesContext(connection) as captured:
-                response = self.client.get(reverse("control_plane:machine", kwargs={"name": "host-1"}))
+        def page(_count):
+            response = self.client.get(reverse("control_plane:machine", kwargs={"name": "host-1"}))
             self.assertEqual(response.status_code, 200)
-            return len(captured)
+            return response
 
-        small = page(3)
-        large = page(40)
-
-        # Counts only, never the SQL: this repository is public.
-        self.assertLessEqual(large, small, f"the page scales with records ({small} then {large})")
+        assert_subject_cost_does_not_grow(self, sizes=(3, 40), arrange=self._inventory, draw=page)
 
 
 class InZoneTests(TestCase):
