@@ -368,7 +368,9 @@
 .calendar-month.is-compact .month-span { height: 4px; margin: 0 calc(-1 * var(--space-1)) var(--space-1); padding: 0; background: var(--source); font-size: 0; }
 .calendar-month.is-compact .month-span.is-end { margin-right: 0; }
 .calendar-month.is-compact .month-span.is-start { margin-left: 0; border-left: 0; }
-.calendar-month.is-compact .month-date { min-width: 1.4rem; height: 1.4rem; font-size: var(--text-2xs); }
+/* A day drawn small is still drawn the size of a target, so its own box is
+   what is hit, and a dot that names it stands in on it. */
+.calendar-month.is-compact .month-date { min-width: var(--target-min); height: var(--target-min); font-size: var(--text-2xs); }
 .calendar-month.is-compact .month-mark { width: 6px; height: 6px; }
 /* A phone shows where things are, not what: dots and slivers, and the day
    panel under the month says the rest. */
@@ -377,7 +379,7 @@
   :is(.month-item, .month-more) { display: none; }
   .month-item-dot { display: inline-block; }
   .month-span { height: 4px; padding: 0; background: var(--source); font-size: 0; }
-  .month-date { min-width: 1.4rem; height: 1.4rem; }
+  .month-date { min-width: var(--target-min); height: var(--target-min); }
   .month-of { display: none; }
 }
 
