@@ -499,7 +499,7 @@ class HoldingFilterTests(SimpleTestCase):
 
         printed = entity({}, link, mark=",")
 
-        (hidden,) = select(printed, "aria-hidden", "true")
+        (hidden,) = [element for element in select(printed, "aria-hidden", "true") if "mark" in element.classes]
 
         self.assertEqual(hidden.text, ",")
         self.assertIn(hidden.ancestors[0], elements(printed, "a"))

@@ -719,7 +719,7 @@ class RelationListTests(TestCase):
             Relationship(EntityLink("beta"), source, timezone.now()),
         )
 
-        self.assertEqual(html.count("example-reader"), 1)
+        self.assertEqual(text(html).count("example-reader"), 1)
 
     def test_ends_read_by_different_sources_each_say_theirs(self):
         from django.utils import timezone
@@ -731,5 +731,5 @@ class RelationListTests(TestCase):
             Relationship(EntityLink("beta"), EntityLink("example-other"), timezone.now()),
         )
 
-        self.assertEqual(html.count("example-reader"), 1)
-        self.assertEqual(html.count("example-other"), 1)
+        self.assertEqual(text(html).count("example-reader"), 1)
+        self.assertEqual(text(html).count("example-other"), 1)
