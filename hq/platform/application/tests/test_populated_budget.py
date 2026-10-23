@@ -2,9 +2,7 @@
 
 from datetime import timedelta
 
-from django.db import connection as database
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from hq.domains.control_plane.models import (
@@ -15,9 +13,9 @@ from hq.domains.control_plane.models import (
     WeatherObservation,
 )
 from hq.domains.projects.models import Project
-from hq.platform.application.derivations import uncached
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..dashboard import dashboard_highlights, operating_snapshot
 from ..projection import projection_scope
@@ -157,27 +155,29 @@ def populate(size: int = 8) -> None:
     )
 
 
-def dashboard_queries() -> list[str]:
-    with (
-        host_only(),
-        CaptureQueriesContext(database) as queries,
-        projection_scope(),
-        # What the page costs to derive; a stored answer costs less.
-        uncached(),
-    ):
-        operating_snapshot(principal=cli_principal())
+def dashboard(_size: int) -> dict:
+    with host_only(), projection_scope():
+        snapshot = operating_snapshot(principal=cli_principal())
         dashboard_highlights()
-    return [query["sql"] for query in queries.captured_queries]
+    return snapshot
+
+
+def machines(snapshot: dict) -> int:
+    """How many machines the estate card counts: those online and those offline."""
+
+    card = next(card for card in snapshot["cards"] if card["id"] == "hq.estate.machines")
+    offline = card.get("detail", "").removesuffix(" offline")
+    return int(card["value"]) + (int(offline) if offline.isdigit() else 0)
+
+
+def repopulate(size: int) -> None:
+    for model in (ManagedResource, ProviderConnection, ProviderInventory, Project):
+        model.objects.all().delete()
+    DashboardConfiguration.objects.all().delete()
+    WeatherObservation.objects.all().delete()
+    populate(size=size)
 
 
 class PopulatedDashboardBudgetTests(TestCase):
     def test_the_cost_does_not_grow_with_the_estate(self):
-        populate(size=3)
-        small = len(dashboard_queries())
-        for model in (ManagedResource, ProviderConnection, ProviderInventory, Project):
-            model.objects.all().delete()
-        DashboardConfiguration.objects.all().delete()
-        WeatherObservation.objects.all().delete()
-        populate(size=9)
-
-        self.assertEqual(len(dashboard_queries()), small)
+        assert_cost_does_not_grow(self, sizes=(3, 9), arrange=repopulate, draw=dashboard, rows=machines)

@@ -1,15 +1,14 @@
 """Capability policy: what an operator decided must happen before a credential acts."""
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AgentIdentity, AuditLog
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..approvals import DELETING_FLAGS, approve
 from ..capabilities import capability_registry, execute_capability, validate_command
@@ -442,19 +441,18 @@ class PageTests(PolicyTestCase):
         self.assertEqual(human_label("tls.certificate"), "TLS Certificate")
 
     def test_the_matrix_costs_the_same_however_many_agents(self):
-        def cost():
-            with CaptureQueriesContext(connection) as queries:
-                matrix()
-            return len(queries)
+        def arrange(count):
+            for index in range(AgentIdentity.objects.count(), count):
+                AgentIdentity.objects.create(client_id=f"agent-{index}", granted=["read"])
+                CapabilityRule.objects.create(
+                    scope=Scope.AGENT, subject=f"agent-{index}", capability="project.create", rule=Rule.DENY
+                )
 
-        few = cost()
-        for index in range(8):
-            AgentIdentity.objects.create(client_id=f"agent-{index}", granted=["read"])
-            CapabilityRule.objects.create(
-                scope=Scope.AGENT, subject=f"agent-{index}", capability="project.create", rule=Rule.DENY
-            )
+        def agents(drawn):
+            columns, _groups = drawn
+            return sum(column.scope == Scope.AGENT for column in columns)
 
-        self.assertEqual(cost(), few)
+        assert_cost_does_not_grow(self, sizes=(1, 8), arrange=arrange, draw=lambda _count: matrix(), rows=agents)
 
 
 class CommandTitleTests(TestCase):
