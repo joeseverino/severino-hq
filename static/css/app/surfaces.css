@@ -218,7 +218,7 @@
      sized to its content (a part, a code chip) would otherwise hold out for
      its longest word, wider than the column it is held in. */
   .data-table[data-rows-held] tr.is-expanded :is(td, th),
-  .data-table[data-rows-held] tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *) {
+  .data-table[data-rows-held] tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) {
     overflow-wrap: anywhere !important;
   }
 

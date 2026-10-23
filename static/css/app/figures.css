@@ -501,8 +501,8 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 /* A name that is one box (a cut token, a chip in a table) leaves a break
    after it whatever follows, so its link lays the name and the arrow out as
    one row: the name gives way and the arrow stays on its line. */
-.external-link:has(> .token:only-child), td .external-link:has(> code:only-child) { display: inline-flex; align-items: baseline; max-width: 100%; }
-:is(.external-link:has(> .token:only-child), td .external-link:has(> code:only-child)) > * { min-width: 0; }
+.external-link:has(> .token[data-sole]), td .external-link:has(> code:only-child) { display: inline-flex; align-items: baseline; max-width: 100%; }
+:is(.external-link:has(> .token[data-sole]), td .external-link:has(> code:only-child)) > * { min-width: 0; }
 /* A chip that wraps is a box as wide as its line, so the arrow after it would
    fall to a line of its own. In a link the chip and its token run inline, a
    chip on each line, and the arrow follows the last of them. A table lays out

@@ -354,18 +354,25 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    are not, so the chip and the strut keep a pixel of slack at their end:
    without it a value that fits loses its last character to the ellipsis. */
 .data-table td code:not(.cell-whole):has(> .token[data-sole]) {
-  display: inline-grid; grid-template-columns: minmax(min-content, max-content);
+  display: inline-grid; grid-template-columns: minmax(0, max-content);
   min-width: var(--cut-floor); max-width: none; padding: 0; background: none;
 }
+/* A panel shown from the cell is not the column: there the token sets the
+   track and is held to it, and only the column holds out for the longest
+   piece. */
+.data-table td code:not(.cell-whole, [popover] *):has(> .token[data-sole]) {
+  grid-template-columns: minmax(min-content, max-content);
+  & > .token[data-sole] { contain: inline-size; justify-self: stretch; }
+}
 .strut { display: none; }
-.data-table td code:not(.cell-whole) > .strut {
+.data-table td code:not(.cell-whole, [popover] *) > .strut {
   display: block; visibility: hidden; block-size: 0; overflow-wrap: normal; white-space: normal;
   padding-inline: var(--space-2) calc(var(--space-2) + 1px);
   /* No piece holds out for more than half its region: one longer breaks
      where it must (value_tags.breakable), so the table still fits. */
   max-width: 50cqi;
 }
-.data-table td code:not(.cell-whole) > .strut::before { content: attr(data-strut); }
+.data-table td code:not(.cell-whole, [popover] *) > .strut::before { content: attr(data-strut); }
 /* An opened row lifts every cut in it (surfaces.css), and the floor a cut
    value held out for goes with the cut: with its columns held, a floor wider
    than its column would run the value past it. Only the floor goes: a
@@ -381,7 +388,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    and a run with no seam in it would push past the column. */
 .data-table > tbody > tr.is-expanded > td :is(code:not(.cell-whole) > .token[data-sole], [data-entity] > :is(.token[data-sole], .cut)) { width: 100%; }
 .data-table td code:not(.cell-whole) > .token[data-sole] {
-  display: block; contain: inline-size; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  display: block; justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
   padding: 1px calc(var(--space-2) + 1px) 1px var(--space-2); border-radius: 4px; background: var(--bg-tint);
 }
 /* An identifier the row is read by (a container's image), in a row of many
