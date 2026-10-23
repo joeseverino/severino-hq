@@ -40,11 +40,16 @@
   const giveWay = (table, steps) => {
     const order = dropOrder(table);
     const left = new Set(order.slice(0, steps));
+    const before = new Set(order.slice(0, gaveWay.get(table) ?? 0));
+    // Only the cells of a column that left or came back are marked again.
+    const changed = order.filter((place) => left.has(place) !== before.has(place));
     const width = headingsOf(table).length;
-    table.querySelectorAll(":scope > * > tr").forEach((row) => {
-      if (row.children.length !== width) return;
-      [...row.children].forEach((cell, place) => cell.toggleAttribute("data-dropped", left.has(place)));
-    });
+    if (changed.length) {
+      table.querySelectorAll(":scope > * > tr").forEach((row) => {
+        if (row.children.length !== width) return;
+        changed.forEach((place) => row.children[place].toggleAttribute("data-dropped", left.has(place)));
+      });
+    }
     table.toggleAttribute("data-narrow", steps > order.length);
     table.toggleAttribute("data-tight", steps > order.length + 1);
     // The columns that share the region's width (tables.css, `--share`).
@@ -116,41 +121,51 @@
   const overflows = (table) => table.offsetWidth > table.parentElement.clientWidth;
   // A hidden region has no width to fit.
   const shown = (region) => region.clientWidth > 0;
-  // Whether the table gave way any further or came back any.
-  const fit = (table) => {
+  // A table that overflows gives way until it fits. One that fits takes back
+  // what left, the last first, while it still fits; a region that only
+  // narrowed has nothing to give back, so that is not tried.
+  const fit = (table, mayReturn = true) => {
     const was = gaveWay.get(table) ?? 0;
     const most = dropOrder(table).length + 2;
     floorParts(table);
     let steps = Math.min(was, most);
-    giveWay(table, steps);
-    while (steps < most && overflows(table)) giveWay(table, ++steps);
-    while (steps > 0) {
+    if (steps !== was) giveWay(table, steps);
+    if (overflows(table)) {
+      while (steps < most && overflows(table)) giveWay(table, ++steps);
+      return;
+    }
+    while (mayReturn && steps > 0) {
       giveWay(table, steps - 1);
       if (overflows(table)) {
         giveWay(table, steps);
-        break;
+        return;
       }
       steps -= 1;
     }
-    return steps !== was;
   };
   const tableIn = (region) => region.querySelector(":scope > .data-table");
-  const fitted = new ResizeObserver((entries) => {
-    new Set(entries.map(({ target }) => target.closest(REGION))).forEach((region) => {
-      const table = tableIn(region);
-      if (!region.isConnected) fitted.unobserve(region);
-      if (!region.isConnected || !table) return;
-      fitted.observe(table);
-      // A table whose columns are held while a row is open is fitted again
-      // as it lets them go.
-      if (!shown(region) || "rowsHeld" in table.dataset || !fit(table)) return;
-      // What changed the table's size was this, in this frame: watched again
-      // from the next, rather than told of it once more in this one.
+  // A table whose columns are held while a row is open is fitted as it lets
+  // them go.
+  const refit = (table) => {
+    if (table && shown(table.parentElement) && !("rowsHeld" in table.dataset)) fit(table);
+  };
+  // The region is an inline-size container, so its width never follows the
+  // table's: it is the one thing watched, and only a change of its width
+  // fits again. What changes a table's content (its faces arriving, a swap,
+  // a fold, a row closing) fits it where it happens.
+  const regionWidths = new WeakMap();
+  const fitted = new ResizeObserver((entries) => entries.forEach(({ target: region, contentBoxSize }) => {
+    if (!region.isConnected) {
       fitted.unobserve(region);
-      fitted.unobserve(table);
-      requestAnimationFrame(() => fitted.observe(region));
-    });
-  });
+      return;
+    }
+    const width = contentBoxSize[0].inlineSize;
+    const before = regionWidths.get(region);
+    if (width === before) return;
+    regionWidths.set(region, width);
+    const table = tableIn(region);
+    if (table && width > 0 && !("rowsHeld" in table.dataset)) fit(table, before === undefined || width > before);
+  }));
   new MutationObserver((changes) => changes.forEach(({ addedNodes }) => addedNodes.forEach((node) => {
     if (!(node instanceof Element)) return;
     if (node.matches(REGION)) fitted.observe(node);
@@ -410,7 +425,10 @@
       closeDetail(row);
     }
     row.classList.toggle("is-expanded", expanding);
-    if (!table.querySelector(":scope > tbody > tr.is-expanded")) releaseColumns(table);
+    if (!table.querySelector(":scope > tbody > tr.is-expanded")) {
+      releaseColumns(table);
+      refit(table);
+    }
     button.setAttribute("aria-expanded", String(expanding));
     button.setAttribute("aria-label", expanding ? "Show less of this row" : "Show all of this row");
     // Open what was folded, and on the way back close only what this opened.
@@ -437,6 +455,7 @@
       if (!opening && row.classList.contains("is-expanded")) row.querySelector(".row-expand")?.click();
       row.toggleAttribute("data-open", opening);
     });
+    refit(head.closest("table"));
     markTablesSoon();
   };
   document.addEventListener("click", (event) => {
@@ -526,6 +545,7 @@
         button.setAttribute("aria-label", `Sort by ${name}`);
         heading.append(button);
       });
+      refit(table);
     });
   }
 
@@ -547,12 +567,13 @@
   const settleOpenRows = () => {
     document.querySelectorAll(".data-table[data-rows-held]").forEach((table) => {
       releaseColumns(table);
-      fit(table);
       const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
       open.forEach((row) => {
         row.classList.remove("is-expanded");
         closeDetail(row);
       });
+      // Fitted as it stands with every row closed, which is what is held.
+      refit(table);
       if (!open.length) return;
       holdColumns(table);
       open.forEach((row) => {
@@ -600,10 +621,7 @@
   // So is how wide a name's longest part is, which a table sized the same
   // as before is not observed to change.
   document.fonts?.ready.then(() => {
-    document.querySelectorAll(REGION).forEach((region) => {
-      const table = tableIn(region);
-      if (table && shown(region) && !("rowsHeld" in table.dataset)) fit(table);
-    });
+    document.querySelectorAll(REGION).forEach((region) => refit(tableIn(region)));
     markTables();
   });
 
@@ -662,8 +680,17 @@
   }
 
   // Auto table layout recomputes column widths from whichever rows are
-  // visible, so sorting or paging makes columns jitter. Pin the incoming
-  // table to the current widths; a full page load re-derives natural widths.
+  // visible, so sorting or paging makes columns jitter. The incoming table is
+  // pinned to the current widths while it is swapped in, and let go once it
+  // is in, so it fits its region again as the window changes.
+  const pinned = new WeakSet();
+  const unpin = (table) => {
+    if (!pinned.has(table)) return;
+    pinned.delete(table);
+    table.querySelectorAll("thead th").forEach((heading) => heading.style.removeProperty("width"));
+    table.style.removeProperty("table-layout");
+    refit(table);
+  };
   function pinColumnWidths(next) {
     const currentTables = document.querySelectorAll(".table-scroll table");
     const nextTables = next.querySelectorAll(".table-scroll table");
@@ -679,6 +706,7 @@
         if (width) nextHeads[index].style.width = `${width}px`;
       });
       nextTable.style.tableLayout = "fixed";
+      pinned.add(nextTable);
     });
   }
 
@@ -715,6 +743,7 @@
         history,
       });
       tableLocation = `${window.location.pathname}${window.location.search}`;
+      document.querySelectorAll(".table-scroll table").forEach(unpin);
       initializeSelection();
       markTables();
     } catch (error) {
@@ -782,6 +811,9 @@
   });
 
   document.addEventListener("DOMContentLoaded", () => {
+    // Every row is in now, which a region watched since it was parsed may
+    // not have held when it was first fitted.
+    document.querySelectorAll(REGION).forEach((region) => refit(tableIn(region)));
     initializeSelection();
     markTables();
     landOnRow();

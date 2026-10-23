@@ -442,6 +442,24 @@ class ExampleEstateControlTests(BrowserGate):
                 self.page.wait_for_function(_LET_GO, arg=["q", _NOTHING])
                 self.assertEqual(self.rows(), every)
 
+    def test_a_list_sorted_in_place_still_fits_a_window_that_narrows(self):
+        """A sort swaps the table in pinned to the widths it had, and lets go
+        once it is in, so a narrower window drops a column rather than
+        holding the table at its old width past its region."""
+
+        self.visit(reverse("projects:list"), 1360)
+        link = self.page.locator(SELECTORS["sort_link"]).first
+        asked = dict(parse_qsl(urlsplit(link.get_attribute("href")).query))["sort"]
+        link.click()
+        self.page.wait_for_function(_ASKED, arg=["sort", asked])
+        self.page.set_viewport_size({"width": 400, "height": PHONE_SCREEN[1]})
+        fits = """(region) => {
+          const table = document.querySelector(region + ' > table');
+          return table.offsetWidth <= table.parentElement.clientWidth
+            && [...table.tHead.rows[0].cells].some((heading) => heading.hasAttribute('data-dropped'));
+        }"""
+        self.page.wait_for_function(fits, arg=SELECTORS["table_scroll"], timeout=5_000)
+
     def test_a_sort_heading_orders_its_list_and_says_which_way(self):
         path = reverse("projects:list")
         for width in PRESSED_AT:
