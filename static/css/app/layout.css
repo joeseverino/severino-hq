@@ -301,8 +301,9 @@
   white-space: nowrap;
 }
 .month-item > span { overflow: hidden; text-overflow: ellipsis; }
-/* A title cut on its one line: its names are text the cut takes, not boxes. */
-:is(.month-item > span, .month-span) :is(.token, .whole) { display: inline; }
+/* A title cut on its one line: its names are text the cut takes, not boxes,
+   so no part of one draws past the cut, beyond the day's edge. */
+:is(.month-item > span, .month-span) :is(.token, .whole, .part) { display: contents; }
 .month-item::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--source); transform: translateY(-1px); }
 .month-item.is-planned::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--source); }
 .month-item time { color: var(--muted); font-variant-numeric: tabular-nums; }

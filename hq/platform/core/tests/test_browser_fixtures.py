@@ -352,7 +352,8 @@ _THROUGH_THE_PROXY = {
 
 def _calendar():
     """A full month: a trip over a weekend, a timed visit with a
-    long name and a place, a day too busy for its cell, and a weekly class."""
+    long name and a place, a day too busy for its cell, a weekly class, and
+    a long title in the last column, beside the month's edge."""
 
     from hq.domains.calendars.models import Entry
 
@@ -373,6 +374,15 @@ def _calendar():
     for index in range(5):
         Entry.objects.create(title=f"Example errand {index}", starts_on=today + timedelta(days=1))
     Entry.objects.create(title="Example class", starts_on=today, repeat="weekly", weekdays="0,2", starts_at=time(18))
+    # Every Saturday the month shows, so one holds it beside the edge however
+    # busy the day after today is.
+    Entry.objects.create(
+        title="Example review of the self-hosted-git mirrors",
+        starts_on=sunday - timedelta(weeks=6),
+        repeat="weekly",
+        weekdays="5",
+        starts_at=time(9),
+    )
 
 
 ASSET = "example-server"
@@ -447,10 +457,11 @@ _MESSAGE = {
     "database_id": "example-database",
     "database": "contacts",
     "id": 1,
-    "created_at": "2026-07-18 12:00:00",
-    "updated_at": "2026-07-18 12:00:00",
+    # The widest moment a list writes: another year's, at a two-digit hour.
+    "created_at": "2025-12-28 17:58:00",
+    "updated_at": "2025-12-28 17:58:00",
     "name": "Example Person",
-    "email": "person@example.com",
+    "email": "bartholomew.featherstonehaugh@example.com",
     "message": "Hello from the contact form.",
     "status": "unread",
     "country": "US",
