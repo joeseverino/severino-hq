@@ -17,7 +17,6 @@
     "recovery_procedure",
     "report",
     "runbook",
-    "task",
     "troubleshooting_guide"
   ],
   "environments": [
@@ -52,17 +51,6 @@
     "deprecated",
     "draft"
   ],
-  "task_required_fields": [
-    "doc_id",
-    "title",
-    "doc_type",
-    "status"
-  ],
-  "task_statuses": [
-    "active",
-    "done",
-    "open",
-    "parked",
-    "wontfix"
-  ]
+  "task_required_fields": [],
+  "task_statuses": []
 }

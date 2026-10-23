@@ -55,22 +55,6 @@ class ModelChoicesMatchSchemaTests(SimpleTestCase):
                 f"docs_index/schema.json.",
             )
 
-    def test_status_field_covers_both_doc_and_task_statuses(self):
-        # The status field holds either a standard doc status or a task lifecycle
-        # status, so its choices must cover the union, otherwise admin/ModelForm
-        # rejects a task's "open"/"done" that the importer legitimately writes.
-        self.assertEqual(
-            _values(DocumentationRecord.TaskStatus.choices),
-            set(frontmatter_schema.TASK_STATUSES),
-            "TaskStatus choices drifted from the schema's task_statuses.",
-        )
-        field_values = {value for value, _label in DocumentationRecord._meta.get_field("status").choices}
-        self.assertEqual(
-            field_values,
-            set(frontmatter_schema.STATUSES) | set(frontmatter_schema.TASK_STATUSES),
-            "The status field choices must cover STATUSES | TASK_STATUSES.",
-        )
-
 
 @tag("source")
 class CommittedSchemaMatchesMcpTests(SimpleTestCase):
@@ -119,12 +103,10 @@ class RelatedDocumentsTests(TestCase):
     def _document(self, doc_id, title, doc_type="runbook", status="active"):
         return DocumentationRecord.objects.create(doc_id=doc_id, title=title, doc_type=doc_type, status=status)
 
-    def test_groups_follow_the_type_order_and_tasks_come_last(self):
+    def test_groups_follow_the_type_order(self):
         from hq.platform.application.documentation import related_documents
 
         records = [
-            self._document("task-example-done", "Ship it", "task", "done"),
-            self._document("task-example-parked", "Wait for it", "task", "parked"),
             self._document("note-example-design", "Example design", "architecture_note"),
             self._document("rb-example-b", "Back up the example"),
             self._document("rb-example-a", "Add an example"),
@@ -137,8 +119,6 @@ class RelatedDocumentsTests(TestCase):
             [
                 ("Runbooks", ["Add an example", "Back up the example"], False),
                 ("Architecture notes", ["Example design"], False),
-                ("Open tasks", ["Wait for it"], False),
-                ("Done tasks", ["Ship it"], True),
             ],
         )
         self.assertEqual(found.groups[0].items[0].link.title, "rb-example-a")

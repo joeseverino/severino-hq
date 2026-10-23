@@ -32,7 +32,6 @@ MAX_MANIFEST_ITEMS = 2000
 # A project's own note in the vault is ``project-<slug>``: the document that
 # stands for the project, so a page links the project and not the note.
 PROJECT_NOTE_PREFIX = "project-"
-CLOSED_TASK_STATUSES = frozenset({DocumentationRecord.TaskStatus.DONE, DocumentationRecord.TaskStatus.WONTFIX})
 
 
 def document_link(record: DocumentationRecord, *, label: str = "") -> EntityLink:
@@ -45,7 +44,7 @@ def document_link(record: DocumentationRecord, *, label: str = "") -> EntityLink
 class RelatedDocuments:
     """A record's documents as its page lists them."""
 
-    # One group per type; closed tasks fold.
+    # One group per type.
     groups: tuple[Mentions, ...] = ()
     # Projects whose own note is among the documents.
     projects: tuple[EntityLink, ...] = ()
@@ -66,17 +65,6 @@ def _noted_projects(records: list[DocumentationRecord]) -> dict[int, Project]:
     return {noted[project.slug].pk: project for project in Project.objects.filter(slug__in=noted)}
 
 
-def _task_groups(tasks: list[DocumentationRecord]) -> list[Mentions]:
-    groups = []
-    for label, closed in (("Open tasks", False), ("Done tasks", True)):
-        found = tuple(
-            Mention(document_link(record)) for record in tasks if (record.status in CLOSED_TASK_STATUSES) == closed
-        )
-        if found:
-            groups.append(Mentions(label, found, folded=closed))
-    return groups
-
-
 def related_documents(
     records: Iterable[DocumentationRecord],
     *,
@@ -89,24 +77,20 @@ def related_documents(
     A project's own note becomes a link to that project. The note of the
     project the page is ``about`` is left out, and so is a project the page has
     already ``listed``. With ``sources`` an article draft is the page's own
-    source document, named by where it is in the vault. Tasks come last, open
-    ones before closed ones, and closed ones fold.
+    source document, named by where it is in the vault.
     """
 
     records = sorted(records, key=lambda record: record.title.lower())
     projects = _noted_projects(records)
     said = {project.slug for project in listed} | ({about.slug} if about else set())
     draft = DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT
-    task = DocumentationRecord.DocType.TASK
     own = [record for record in records if sources and record.doc_type == draft]
     rest = [record for record in records if record.pk not in projects and record not in own]
     groups = [
         Mentions(plural(str(label)), found)
         for value, label in DocumentationRecord.DocType.choices
-        if value != task
-        and (found := tuple(Mention(document_link(record)) for record in rest if record.doc_type == value))
+        if (found := tuple(Mention(document_link(record)) for record in rest if record.doc_type == value))
     ]
-    groups += _task_groups([record for record in rest if record.doc_type == task])
     return RelatedDocuments(
         groups=tuple(groups),
         projects=tuple(

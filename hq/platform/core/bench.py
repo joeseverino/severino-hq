@@ -190,15 +190,7 @@ def _assets(rng: random.Random, scale: float, today: date, projects: list[Projec
 def _documentation(scale: float, today: date, projects, assets) -> list[DocumentationRecord]:
     doc_types = _choices(DocumentationRecord, "doc_type")
     environments = _choices(DocumentationRecord, "environment")
-    # A task carries the task lifecycle and every other doc the doc one.
-    statuses = {
-        doc_type: (
-            DocumentationRecord.TaskStatus.values
-            if doc_type == DocumentationRecord.DocType.TASK
-            else DocumentationRecord.Status.values
-        )
-        for doc_type in doc_types
-    }
+    statuses = _choices(DocumentationRecord, "status")
     sensitivities = _choices(DocumentationRecord, "sensitivity")
     records = _create(
         DocumentationRecord,
@@ -206,10 +198,10 @@ def _documentation(scale: float, today: date, projects, assets) -> list[Document
             DocumentationRecord(
                 doc_id=f"example-doc-{index}",
                 title=f"Example runbook {index}",
-                doc_type=(doc_type := doc_types[index % len(doc_types)]),
+                doc_type=doc_types[index % len(doc_types)],
                 system_service=f"example-service-{index % 12}",
                 environment=environments[index % len(environments)],
-                status=statuses[doc_type][index % len(statuses[doc_type])],
+                status=statuses[index % len(statuses)],
                 sensitivity=sensitivities[index % len(sensitivities)],
                 obsidian_path=f"example/Example runbook {index}.md",
                 last_reviewed=today - timedelta(days=index % 400),

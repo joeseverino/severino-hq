@@ -28,15 +28,13 @@ class DocumentationQuerySet(models.QuerySet):
         The one shared definition used by the dashboard, the docs list filter,
         and the reports page.
 
-        Four doc types are excluded because they are not documentation about a
+        Three doc types are excluded because they are not documentation about a
         system and so have no review cycle to fall behind. A public article
-        draft belongs to the Content pipeline. A task belongs to the task
-        lifecycle: it is open until it is done, and "last reviewed: never" is
-        not a finding about a task, it is what every task says from the moment
-        it is written. A report is a frozen record, so reviewing it has nothing
-        to clear. A queue note is generated from its items, so it is current
-        whenever the tool writes it and reviewing it clears nothing. Each would put an item in the queue that reviewing cannot
-        clear, which is the one thing a queue must never contain.
+        draft belongs to the Content pipeline. A report is a frozen record, so
+        reviewing it has nothing to clear. A queue note is generated from its
+        items, so it is current whenever the tool writes it and reviewing it
+        clears nothing. Each would put an item in the queue that reviewing
+        cannot clear, which is the one thing a queue must never contain.
         """
         review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
 
@@ -47,7 +45,6 @@ class DocumentationQuerySet(models.QuerySet):
         ).exclude(
             doc_type__in=(
                 self.model.DocType.PUBLIC_ARTICLE_DRAFT,
-                self.model.DocType.TASK,
                 self.model.DocType.REPORT,
                 self.model.DocType.QUEUE,
             )
@@ -61,16 +58,6 @@ class DocStatus(models.TextChoices):
     ARCHIVED = "archived", "Archived"
 
 
-class DocTaskStatus(models.TextChoices):
-    # A task doc carries its own lifecycle (the importer writes these into the
-    # same status field). Mirrors the schema's task_statuses: guarded in tests.
-    OPEN = "open", "Open"
-    ACTIVE = "active", "Active"
-    PARKED = "parked", "Parked"
-    DONE = "done", "Done"
-    WONTFIX = "wontfix", "Won't fix"
-
-
 class DocumentationRecord(TimestampedModel):
     class DocType(models.TextChoices):
         RUNBOOK = "runbook", "Runbook"
@@ -82,7 +69,6 @@ class DocumentationRecord(TimestampedModel):
         DECISION_RECORD = "decision_record", "Decision record"
         REPORT = "report", "Report"
         QUEUE = "queue", "Queue"
-        TASK = "task", "Task"
 
     class Environment(models.TextChoices):
         HOMELAB = "homelab", "Homelab"
@@ -95,15 +81,8 @@ class DocumentationRecord(TimestampedModel):
         LOCAL_MAC = "local_mac", "Local Mac"
         OTHER = "other", "Other"
 
-    # Declared above the model so the rule in ``Meta`` can name their values.
+    # Declared above the model so the rule in ``Meta`` can name its values.
     Status = DocStatus
-    TaskStatus = DocTaskStatus
-
-    # The status field holds a standard doc status OR a task lifecycle status.
-    # Union the two, deduped by value (both declare "active"), so forms
-    # accept and label every value the importer writes instead of rejecting a
-    # task's "open"/"done". Guarded against the schema union in tests.
-    STATUS_CHOICES = list(dict.fromkeys([*Status.choices, *TaskStatus.choices]))
 
     class Sensitivity(models.TextChoices):
         PUBLIC = "public", "Public"
@@ -128,7 +107,7 @@ class DocumentationRecord(TimestampedModel):
         choices=Environment.choices,
         default=Environment.OTHER,
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=Status.DRAFT)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     sensitivity = models.CharField(
         max_length=20,
         choices=Sensitivity.choices,
@@ -176,16 +155,9 @@ class DocumentationRecord(TimestampedModel):
         ]
         constraints = [
             Rule(
-                # A task carries the task lifecycle; every other doc the doc one.
-                condition=(
-                    Q(doc_type="task", status__in=DocTaskStatus.values)
-                    | (~Q(doc_type="task") & Q(status__in=DocStatus.values))
-                ),
-                name="documentation_status_fits_its_type",
-                violation_error_message=(
-                    f"A task is one of: {', '.join(DocTaskStatus.values)}. "
-                    f"Any other doc is one of: {', '.join(DocStatus.values)}."
-                ),
+                condition=Q(status__in=DocStatus.values),
+                name="documentation_status_is_a_doc_status",
+                violation_error_message=f"A doc's status is one of: {', '.join(DocStatus.values)}.",
                 field="status",
             ),
         ]

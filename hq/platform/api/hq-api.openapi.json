@@ -1961,10 +1961,6 @@
                   {
                     "const": "queue",
                     "title": "Queue"
-                  },
-                  {
-                    "const": "task",
-                    "title": "Task"
                   }
                 ],
                 "title": "Doc Type",
@@ -2133,22 +2129,6 @@
                   {
                     "const": "archived",
                     "title": "Archived"
-                  },
-                  {
-                    "const": "open",
-                    "title": "Open"
-                  },
-                  {
-                    "const": "parked",
-                    "title": "Parked"
-                  },
-                  {
-                    "const": "done",
-                    "title": "Done"
-                  },
-                  {
-                    "const": "wontfix",
-                    "title": "Won't fix"
                   }
                 ],
                 "title": "Status",
@@ -2323,10 +2303,6 @@
                   {
                     "const": "queue",
                     "title": "Queue"
-                  },
-                  {
-                    "const": "task",
-                    "title": "Task"
                   }
                 ],
                 "title": "Doc Type",
@@ -2495,22 +2471,6 @@
                   {
                     "const": "archived",
                     "title": "Archived"
-                  },
-                  {
-                    "const": "open",
-                    "title": "Open"
-                  },
-                  {
-                    "const": "parked",
-                    "title": "Parked"
-                  },
-                  {
-                    "const": "done",
-                    "title": "Done"
-                  },
-                  {
-                    "const": "wontfix",
-                    "title": "Won't fix"
                   }
                 ],
                 "title": "Status",

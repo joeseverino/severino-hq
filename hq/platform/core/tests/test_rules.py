@@ -111,7 +111,7 @@ class RuleTests(TestCase):
             "job_percent_at_most_100": changed(job, percent=101),
             "job_state_is_declared": changed(job, state="paused"),
             "analytics_rumdaily_sample_interval": changed(row, sample_interval=0),
-            "documentation_status_fits_its_type": changed(runbook, status="open"),
+            "documentation_status_is_a_doc_status": changed(runbook, status="open"),
             "agent_access_is_one_row": lambda: AgentAccess.objects.create(pk=2),
             "dashboard_configuration_is_one_row": lambda: DashboardConfiguration.objects.create(pk=2),
             "analytics_vitalsdaily_sample_interval": lambda: site.vitals.create(date=DAY, sample_interval=0),

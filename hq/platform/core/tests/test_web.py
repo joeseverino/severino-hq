@@ -1153,50 +1153,15 @@ class ManifestImportTests(TestCase):
         self.assertEqual(project.technologies_used, "Django, PostgreSQL")
         self.assertNotIn("projects_tech_backfilled", stats)
 
-    def test_task_doc_imports_with_its_own_status_lifecycle(self):
-        # A task carries open/active/parked/done/wontfix: the standard status
-        # set rejects these, so the importer must validate tasks per-doc-type
-        # rather than against the standard status set.
-        stats = import_manifest_data(
-            [
-                {
-                    "doc_id": "task-ship-the-thing",
-                    "title": "Ship the thing",
-                    "doc_type": "task",
-                    "status": "open",
-                    "related_projects": [],
-                }
-            ]
-        )
-        self.assertEqual(stats["created"], 1)
-        record = DocumentationRecord.objects.get(doc_id="task-ship-the-thing")
-        self.assertEqual(record.status, "open")
-
-    def test_task_status_set_is_distinct_from_standard_docs(self):
-        # "parked" is a task status, never a standard-doc status; "deprecated" is
-        # the reverse. Each doc_type is held to its own vocabulary.
-        with self.assertRaises(ManifestImportError):
-            import_manifest_data(
-                [
-                    {
-                        "doc_id": "rb-x",
-                        "title": "x",
-                        "doc_type": "runbook",
-                        "status": "parked",
-                    }
-                ]
-            )
-        with self.assertRaises(ManifestImportError):
-            import_manifest_data(
-                [
-                    {
-                        "doc_id": "task-x",
-                        "title": "x",
-                        "doc_type": "task",
-                        "status": "deprecated",
-                    }
-                ]
-            )
+    def test_a_task_note_is_not_a_doc_the_vault_writes(self):
+        # The vault keeps no task notes: their type and lifecycle are refused.
+        for case, entry in (
+            ("task type", {**self.STANDARD_DOC, "doc_id": "rb-x", "doc_type": "task"}),
+            ("task status", {**self.STANDARD_DOC, "doc_id": "rb-x", "status": "parked"}),
+        ):
+            with self.subTest(case), self.assertRaises(ManifestImportError):
+                import_manifest_data([entry])
+        self.assertEqual(DocumentationRecord.objects.count(), 0)
 
     def test_validate_manifest_data_flags_bad_enums_without_db(self):
         # The read-only preflight catches the contract-drift class (an invalid
@@ -1214,17 +1179,20 @@ class ManifestImportTests(TestCase):
                     "sensitivity": "internal",
                 },
                 {
-                    "doc_id": "task-bad",
+                    "doc_id": "rb-bad-status",
                     "title": "bad",
-                    "doc_type": "task",
-                    "status": "deprecated",
+                    "doc_type": "runbook",
+                    "status": "open",
+                    "system": "Example service",
+                    "environment": "other",
+                    "sensitivity": "internal",
                 },
                 {"doc_id": "rb-bad-env", "doc_type": "runbook", "environment": "nope"},
             ]
         )
         by = {p["doc_id"]: p for p in problems}
         self.assertNotIn("rb-ok", by)
-        self.assertIn("task-bad", by)
+        self.assertIn("rb-bad-status", by)
         self.assertIn("rb-bad-env", by)
         self.assertEqual(DocumentationRecord.objects.count(), 0)
 
@@ -1239,12 +1207,6 @@ class ManifestImportTests(TestCase):
         "environment": "other",
         "status": "active",
         "sensitivity": "internal",
-    }
-    TASK_DOC = {
-        "doc_id": "task-complete",
-        "title": "Complete",
-        "doc_type": "task",
-        "status": "open",
     }
 
     def _assert_rejected(self, entry, *fragments):
@@ -1275,7 +1237,6 @@ class ManifestImportTests(TestCase):
             ("prefix", {**self.STANDARD_DOC, "doc_id": "wiki-complete"}, ("rb-",)),
             ("missing", without(self.STANDARD_DOC, "environment", "sensitivity"), ("environment", "sensitivity")),
             ("blank", {**self.STANDARD_DOC, "system": ""}, ("system",)),
-            ("task missing", without(self.TASK_DOC, "title"), ("title",)),
             # The schema's prefixes bind every vault doc: a runbook cannot pass with a writeup's id.
             ("vault doc with a content id", {**self.STANDARD_DOC, "doc_id": "writeup-complete"}, ()),
             # Not routed to ContentItem, so held to the schema's prefixes.
@@ -1293,28 +1254,18 @@ class ManifestImportTests(TestCase):
                 entry = {**self.CONTENT_DOC, "doc_id": doc_id}
                 self.assertEqual(validate_manifest_data([entry]), [])
 
-    def test_valid_standard_doc_and_task_pass(self):
-        # A task owes only the slimmer set: no system/environment/sensitivity.
-        manifest = [self.STANDARD_DOC, self.TASK_DOC]
+    def test_valid_standard_doc_passes(self):
+        manifest = [self.STANDARD_DOC]
         self.assertEqual(validate_manifest_data(manifest), [])
         stats = import_manifest_data(manifest)
-        self.assertEqual(stats["created"], 2)
+        self.assertEqual(stats["created"], 1)
 
     def test_check_only_command_gates_an_invalid_manifest(self):
-        bad = json.dumps(
-            [
-                {
-                    "doc_id": "task-x",
-                    "title": "x",
-                    "doc_type": "task",
-                    "status": "deprecated",
-                }
-            ]
-        )
+        bad = json.dumps([{**self.STANDARD_DOC, "status": "open"}])
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             f.write(bad)
             bad_path = f.name
-        ok = json.dumps([{"doc_id": "task-x", "title": "x", "doc_type": "task", "status": "open"}])
+        ok = json.dumps([self.STANDARD_DOC])
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             f.write(ok)
             ok_path = f.name
