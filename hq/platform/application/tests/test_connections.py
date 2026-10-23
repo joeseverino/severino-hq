@@ -26,7 +26,7 @@ from ..derivations import counting
 from ..provider_choices import container_stack, zone
 from ..report_testing import report_connections
 from ..security import cli_principal
-from .markup import hrefs, text
+from .markup import all_elements, hrefs, text
 from .sentinel import CONNECTION, SentinelMixin, plant_credentials
 
 A_PORTAINER = {
@@ -258,6 +258,41 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         self.assertEqual(row.lifecycle, "ready")
         self.assertContains(response, A_PORTAINER["endpoint"])
         self.assertContains(response, AUTHORITY_LABELS["whole_account"])
+
+    def test_the_reads_column_names_what_the_tally_counts_and_nothing_it_only_changes(self):
+        """The row's three, its "Also reads" and its tally are one list: each
+        reading the sweep counts is named once, in one set of words, and a kind
+        the credential may change but no sweep reads is under "Changes"."""
+
+        sweep(A_PORTAINER)
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        (row,) = [
+            row
+            for _purpose, rows in response.context["connections"].purposes
+            for row in rows
+            if row.instance.connection_ref == "a-portainer"
+        ]
+        page = all_elements(response)
+        (tr,) = [element for element in page if element.tag == "tr" and "a-portainer" in element.attrs.get("id", "")]
+        reads_cell = [element for element in page if element.tag == "td" and element.ancestors[-1:] == (tr,)][1]
+        items = [
+            element for element in page if element.tag == "li" and element.ancestors[-1].ancestors[-1:] == (reads_cell,)
+        ]
+        # Each item's name is its first element; a state word may follow it.
+        named = [
+            next(element for element in page if element.ancestors[-1:] == (item,)).words
+            for item in items
+            if item.ancestors[-1].attrs.get("data-label") != "Changes"
+        ]
+        changes = [item.words for item in items if item.ancestors[-1].attrs.get("data-label") == "Changes"]
+
+        self.assertTrue(named)
+        self.assertEqual(sorted(named), sorted(sight.label for sight in row.sight.sights))
+        self.assertEqual(len(named), sum(count for count, _state in row.sight.tally))
+        self.assertIn(PROVIDERS[CONTAINER_STACK_KIND].label, changes)
+        self.assertNotIn(PROVIDERS[CONTAINER_STACK_KIND].label, named)
 
     def test_the_page_never_carries_a_secret(self):
         plant_credentials()

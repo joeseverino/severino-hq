@@ -25,6 +25,7 @@ from .action_links import read_now_link
 from .cadence import forced_reads
 from .connection_catalog import (
     CONTROLLER_CONNECTIONS,
+    ConnectionAbilityState,
     ConnectionGroup,
     ConnectionView,
     connection_catalog,
@@ -42,7 +43,7 @@ from .connection_security import (
 from .connection_setup import ProviderSetup, guide_url, setups
 from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
-from .credential_sight import ProviderSight, sight_by_connection
+from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, sight_by_connection
 from .derived_reads import serialize_path, serialize_provider_sight
 from .entity_links import entity_link
 from .freshness import freshness
@@ -59,6 +60,26 @@ from .security import Principal
 from .ui import counted
 from .workflow_contracts import ActionLink
 lazy from . import domains
+
+
+@dataclass(frozen=True, slots=True)
+class Read:
+    """One thing a connection reads, named once for every place the row lists it.
+
+    ``sight`` is what the last sweep found of it, for a kind a sweep reads.
+    ``ability`` is what grants it, when the connection declares one.
+    """
+
+    label: str
+    sight: Sight | None = None
+    ability: ConnectionAbilityState | None = None
+
+    @property
+    def whole(self) -> bool:
+        """Whether its label is one name, kept on one line: the parts of another
+        provider's kind are named together, and wrap between them."""
+
+        return self.sight is None or self.sight.source != PART_SOURCE
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +105,35 @@ class ConnectionRow:
     def problems_url(self) -> str:
         about = entity_link("connection", self.instance.label).url
         return f"{reverse('action_items')}?{urlencode({'about': about})}" if self.problems else ""
+
+    @property
+    def reads(self) -> tuple[Read, ...]:
+        """Everything the connection reads, by name.
+
+        Every kind a sweep reads through this connection, as the sweep found it,
+        and each reading ability no sweep makes (a lookup, an observer). A kind
+        a sweep reads through another connection of the same provider is that
+        connection's, so it is not listed here as an ability either.
+        """
+
+        granted = {state.ability.name: state for state in self.connection.abilities}
+        sights = self.sight.sights if self.sight is not None else ()
+        swept = set(fed_kinds(self.sight.provider)) if self.sight is not None else set()
+        reads = (
+            *(Read(sight.label, sight=sight, ability=granted.get(sight.kind)) for sight in sights),
+            *(
+                Read(state.ability.label, ability=state)
+                for state in self.connection.abilities
+                if state.ability.effect == "read" and state.ability.name not in swept
+            ),
+        )
+        return tuple(sorted(reads, key=lambda read: read.label))
+
+    @property
+    def changes(self) -> tuple[ConnectionAbilityState, ...]:
+        """What the connection's credential lets HQ change."""
+
+        return tuple(state for state in self.connection.abilities if state.ability.effect != "read")
 
     @property
     def more_scope(self) -> tuple[str, ...]:

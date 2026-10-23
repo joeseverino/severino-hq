@@ -422,25 +422,22 @@ a.discovery-link:hover strong { color: var(--accent); }
 .setup-list > .setup-other { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0 var(--space-4) calc(1.05em + var(--space-1) + var(--space-5)); }
 .setup-permissions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin: var(--space-2) 0; padding: 0; list-style: none; font-size: var(--text-xs); }
 .setup-permissions code { white-space: nowrap; }
-.connection-sight,
 .connection-more-scope { margin-top: var(--space-2); }
-.connection-sight-tally { display: block; font-size: var(--text-xs); color: var(--muted); }
 /* Styled by their own class: opened, they move to the line beneath the row,
    out of the cell they were written in. */
 .connection-sight-list,
 .cell-notes { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
-.connection-sight-list ul { margin: var(--space-1) 0 0; padding-left: var(--space-6); }
-.connection-sight-list > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); }
-.connection-sight-list > li > ul { flex-basis: 100%; }
+.connection-sight-list > li { font-size: var(--text-xs); }
 .connection-credential-steps { font-size: var(--text-xs); }
-/* Opened beneath the row, the things it reads fill the line, row by row. */
-.row-detail .connection-sight-list { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
+/* Opened beneath the row, what it reads and what it would also see fill the
+   line, row by row. */
+.row-detail :is(.connection-sight-list, .connection-read-list) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
+.row-detail :is(.connection-sight-list, .connection-read-list) > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
 /* Each reading carries its state's color, so what needs reading again shows. */
-.row-detail .connection-sight-list > li::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
-.row-detail .connection-sight-list > li:is(.connection-sight-partial)::before { background: var(--warn); }
-.row-detail .connection-sight-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
-.row-detail .connection-sight-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
-.row-detail .connection-sight-list > li.muted::before { content: none; }
+.row-detail :is(.connection-sight-list, .connection-read-list) > li::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.row-detail .connection-read-list > li.connection-sight-partial::before { background: var(--warn); }
+.row-detail .connection-read-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
+.row-detail .connection-read-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
 /* The fix is the one thing to do, so it reads as a callout, its notes
    numbered steps at a reading width. */
 .row-detail .connection-credential-steps {
@@ -452,7 +449,7 @@ a.discovery-link:hover strong { color: var(--accent); }
   display: grid; grid-template-columns: 1.5em minmax(0, 1fr); margin-top: var(--space-2); color: var(--ink-2);
 }
 .row-detail .connection-credential-steps .operator-step p::before { counter-increment: fix-step; content: counter(fix-step) "."; color: var(--warn); font-weight: 650; }
-/* The rest of what it reads, as chips. They sit on the opened row's tinted
+/* What it lets HQ change, as chips. They sit on the opened row's tinted
    panel, which `--accent-tint` all but matches in light, so the chip is a
    wash of the accent over whatever is behind it: darker than the panel in
    light, lighter in dark. */
@@ -462,9 +459,10 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-sight-refused .connection-sight-state,
 .connection-sight-unreadable .connection-sight-state,
 .connection-sight-refusal { color: var(--danger); }
-.connection-sight-refusal { margin: var(--space-2) 0 0; font-size: var(--text-xs); }
+/* Lines under a connection's name share `.connection-row-meta`'s size. */
+.connection-sight-refusal { margin: var(--space-2) 0 0; font-size: var(--text-2xs); }
 .connection-sight-partial .connection-sight-state { color: var(--warn); }
-.connection-credential-fix { margin-top: var(--space-2); font-size: var(--text-xs); }
+.connection-credential-fix { margin-top: var(--space-2); font-size: var(--text-2xs); }
 .connection-credential-fix-headline { display: block; color: var(--warn); }
 .operator-step { margin-top: var(--space-2); }
 .operator-step p { margin: var(--space-1) 0 0; }

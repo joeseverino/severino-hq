@@ -46,9 +46,8 @@ part's heading shows only when there is more than one.
               {% if connection.instance.facts %}<span class="connection-row-meta narrow-more">{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value|breakable }}{% else %}{{ fact.label|breakable:":" }} {{ fact.value|breakable }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}
               {% with sight=row.sight %}
               {% if sight.credential_refusal %}<p class="connection-sight-refusal">{{ sight.label|breakable }} refused this credential: {{ sight.credential_refusal|breakable }}</p>{% endif %}
-              {% if sight.sights %}
-                {% include "control_plane/_connection_sight.html" with sight=sight %}
-              {% endif %}
+              {% comment %}The count of what it reads, said once for the connection; each one is in the Reads column.{% endcomment %}
+              {% if sight.sights %}<span class="connection-row-meta">{{ sight.summary|breakable }}{% if sight.read_at %} · {% include "partials/_reading_age.html" with at=sight.read_at only %}{% endif %}</span>{% endif %}
               {% endwith %}
               {% if row.more_scope %}
                 <div class="connection-more-scope row-below" data-label="Also sees">
@@ -65,23 +64,31 @@ part's heading shows only when there is more than one.
             {% endcomment %}
             <td>
               {% comment %}
-              Three, then "+N more": a controller credential governs a dozen
+              Three, then "+N more": a controller credential reads a dozen
               kinds, and a dozen stacked would make the row a dozen lines tall.
-              Opened, the rest run beneath the row across its width.
+              Opened, the rest run beneath the row across its width, from the
+              same list, and so does what the credential lets HQ change.
               {% endcomment %}
-              {% if connection.abilities %}
-                {% with folded=connection.abilities|length|add:"-4" %}
-                <ul class="connection-ability-list{% if folded > 0 %} connection-ability-preview{% endif %}">
-                  {% for state in connection.abilities %}{% if forloop.counter <= 3 or folded <= 0 %}{% include "control_plane/_connection_ability.html" %}{% endif %}{% endfor %}
+              {% with reads=row.reads %}
+              {% if reads %}
+                {% with folded=reads|length|add:"-4" %}
+                <ul class="connection-ability-list connection-read-list">
+                  {% for read in reads %}{% if forloop.counter <= 3 or folded <= 0 %}{% include "control_plane/_connection_read.html" %}{% endif %}{% endfor %}
                 </ul>
                 {% if folded > 0 %}
-                  <span class="connection-ability-more cell-part row-less">+{{ connection.abilities|length|add:"-3"|breakable }} more</span>
-                  <ul class="connection-ability-list connection-ability-all row-below" data-label="Also reads">
-                    {% for state in connection.abilities|slice:"3:" %}{% include "control_plane/_connection_ability.html" %}{% endfor %}
+                  <span class="connection-ability-more cell-part row-less">+{{ reads|length|add:"-3"|breakable }} more</span>
+                  <ul class="connection-ability-list connection-read-list row-below" data-label="Also reads">
+                    {% for read in reads|slice:"3:" %}{% include "control_plane/_connection_read.html" %}{% endfor %}
                   </ul>
                 {% endif %}
                 {% endwith %}
               {% else %}{% empty_value %}{% endif %}
+              {% endwith %}
+              {% if row.changes %}
+                <ul class="connection-ability-list connection-ability-all row-below" data-label="Changes">
+                  {% for state in row.changes %}{% include "control_plane/_connection_ability.html" %}{% endfor %}
+                </ul>
+              {% endif %}
             </td>
             {% comment %}
             Inline and wrapping rather than one line per link: stacked links make
