@@ -2879,7 +2879,7 @@ _PAST_THE_GUTTER = (
       found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px, gutter ${Math.round(left)}..${Math.round(right)}px`);
     }
   }
-  if (!text) return [...new Set(found)].slice(0, 15);
+  if (!text) return [...new Set(found)];
   const range = document.createRange();
   const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -2897,7 +2897,7 @@ _PAST_THE_GUTTER = (
     const far = Math.max(...lines.map((r) => r.right));
     if (far > inner + 1) found.push(`${describe(block)}: "${node.data.trim().slice(0, 40)}" runs ${Math.round(far - inner)}px past its padding`);
   }
-  return [...new Set(found)].slice(0, 15);
+  return [...new Set(found)];
 }"""
 )
 
@@ -2924,7 +2924,7 @@ _BROKEN_WORDS_IN_TEXT = (
       if (lines.size > 1) found.push(`${describe(el)} breaks the word "${word[0]}"`);
     }
   }
-  return [...new Set(found)].slice(0, 15);
+  return [...new Set(found)];
 }"""
 )
 
@@ -4642,6 +4642,41 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertTrue(widened)
         found = self.page.evaluate(_SPILLED_LABELS, "main :is(.example-star, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
+
+    @with_script
+    def test_a_column_holds_out_for_the_longest_part_its_cut_names_cannot_break(self):
+        """A name cut short in a narrow table opens whole in its row, its
+        columns held where they were, so its column is already as wide as
+        the longest run of the name between hyphens, measured unconstrained."""
+
+        self.open(next(iter(PAGES)), PHONE_SCREEN[0])
+        widths = self.page.evaluate("""async () => {
+          const part = 'examplecontrollerunit.path';
+          const region = document.createElement('div');
+          region.className = 'table-scroll';
+          region.style.setProperty('inline-size', '260px');
+          region.innerHTML = '<table class="data-table"><thead><tr><th class="row-gutter">Unit</th>'
+            + '<th>Runs</th><th>Result</th></tr></thead><tbody><tr><td class="row-gutter"><code>'
+            + `<span class="token" data-sole><span class="cut"><span class="whole">example-${part}</span></span></span>`
+            + '</code></td><td>example words that wrap</td><td>example words that wrap</td></tr></tbody></table>';
+          document.querySelector('main').prepend(region);
+          await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+          // The part alone, in the face the name is drawn in.
+          const style = getComputedStyle(region.querySelector('.token'));
+          const free = document.createElement('span');
+          free.textContent = part;
+          for (const property of ['font-family', 'font-size', 'font-weight', 'letter-spacing']) {
+            free.style.setProperty(property, style.getPropertyValue(property));
+          }
+          free.style.setProperty('white-space', 'nowrap');
+          document.body.append(free);
+          const heading = region.querySelector('th');
+          const pad = getComputedStyle(heading);
+          const inside = heading.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+          return [inside, free.getBoundingClientRect().width];
+        }""")
+        column, part = widths
+        self.assertGreaterEqual(column, part)
 
     def test_a_popover_open_over_a_table_cell_is_not_held_to_the_cell_and_a_box_in_the_cell_is(self):
         """A shown popover is drawn in the top layer, over the page, wherever

@@ -524,6 +524,10 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    keeps it reads only what the server drew and the box's width, and says so
    (`--gutter`), so nothing a script marks after paint moves a name. */
 .data-table .row-gutter { position: relative; }
+/* A column holds out for the longest part its cells say that cannot break
+   (`--part-floor`, tables.js), so an open row, its columns held, breaks no
+   part where it has no seam. */
+.data-table > thead > tr:last-child > th::after { content: ""; display: block; inline-size: var(--part-floor, 0px); }
 .data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * .row-more), :has(> tbody > tr > * .row-below), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* A value found cut opens its row only where the gutter is already kept. */
 @container style(--gutter: kept) {

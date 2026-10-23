@@ -53,6 +53,66 @@
     table.style.setProperty("--showing", Math.min(Math.max(sharing, 1), 16));
     gaveWay.set(table, steps);
   };
+  // A column is never narrower than the longest part of what its cells say
+  // that cannot break: a run of a name between its seams and hyphens, a word.
+  // An open row lifts every cut and holds its columns where they were, so a
+  // narrower column would break such a part where it has no seam, and fitting
+  // the table again then would move it. Free text breaks anywhere, so it asks
+  // for nothing. Measured in the face it is drawn in, since an engine lays out
+  // none of a cut text past its ellipsis; each heading holds its column's
+  // floor (`--part-floor`), so the fit counts it before a row opens.
+  const PART = /[^\s-]+-*|-+/g;
+  const pen = document.createElement("canvas").getContext("2d");
+  const drawnWidth = (words, style) => {
+    pen.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const spacing = parseFloat(style.letterSpacing) || 0;
+    return pen.measureText(words).width + spacing * words.length;
+  };
+  // What lies between a text and its cell's content edges: each box's
+  // padding and border. The cell's own padding is its heading's too (the
+  // gutter's rules hold both), so the floor is the heading's content width.
+  const insets = (el, cell) => {
+    let sum = 0;
+    for (let box = el; box !== cell; box = box.parentElement) {
+      const style = getComputedStyle(box);
+      sum += parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+        + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+    }
+    return sum;
+  };
+  // Whether a box inside the cell hides the words: the cell itself may be a
+  // column that left or a row folded away, which still asks for its floor.
+  const hiddenIn = (el, cell) => {
+    for (let box = el; box !== cell; box = box.parentElement) {
+      if (getComputedStyle(box).display === "none") return true;
+    }
+    return false;
+  };
+  const longestPart = (cell) => {
+    let most = 0;
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      const holder = text.parentElement;
+      if (unseen(holder) || holder.closest("[data-row-toggle], .cell-data")) continue;
+      const words = text.data.match(PART);
+      if (!words || hiddenIn(holder, cell)) continue;
+      const style = getComputedStyle(holder);
+      const widest = Math.max(...words.map((word) => drawnWidth(word, style)));
+      most = Math.max(most, widest + insets(holder, cell));
+    }
+    return most;
+  };
+  const floorParts = (table) => {
+    const headings = headingsOf(table);
+    const most = headings.map(() => 0);
+    table.querySelectorAll(":scope > tbody > tr:not(.row-detail)").forEach((row) => {
+      if (row.children.length !== headings.length) return;
+      [...row.children].forEach((cell, place) => {
+        most[place] = Math.max(most[place], longestPart(cell));
+      });
+    });
+    headings.forEach((heading, place) => heading.style.setProperty("--part-floor", `${Math.ceil(most[place])}px`));
+  };
   const overflows = (table) => table.offsetWidth > table.parentElement.clientWidth;
   // A hidden region has no width to fit.
   const shown = (region) => region.clientWidth > 0;
@@ -60,6 +120,7 @@
   const fit = (table) => {
     const was = gaveWay.get(table) ?? 0;
     const most = dropOrder(table).length + 2;
+    floorParts(table);
     let steps = Math.min(was, most);
     giveWay(table, steps);
     while (steps < most && overflows(table)) giveWay(table, ++steps);
@@ -536,7 +597,15 @@
   window.addEventListener("resize", markTablesSoon);
   // Whether a value is cut depends on the face it is drawn in, so it is asked
   // again when the faces are in.
-  document.fonts?.ready.then(markTables);
+  // So is how wide a name's longest part is, which a table sized the same
+  // as before is not observed to change.
+  document.fonts?.ready.then(() => {
+    document.querySelectorAll(REGION).forEach((region) => {
+      const table = tableIn(region);
+      if (table && shown(region) && !("rowsHeld" in table.dataset)) fit(table);
+    });
+    markTables();
+  });
 
   const persistSelection = () => {
     try {
