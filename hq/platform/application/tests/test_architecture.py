@@ -1752,6 +1752,30 @@ class OnePrimitiveTests(SimpleTestCase):
         ]
         self.assertEqual(found, [])
 
+    def test_templates_write_dates_through_the_when_filter(self):
+        """A day and its month are written by ``when`` ("Oct 3", "Oct 3, 2025"),
+        never by a format of a template's own. A month or a weekday alone (a
+        calendar's heading, its column labels) is not a date, and digits only
+        (``Y-m-d`` in an address or a ``datetime``) are for a machine to read."""
+
+        formatted = re.compile(r"""\{%\s*now\s+(["'])(.*?)\1|\|date(?::(["'])(.*?)\3|(?![:\w]))""")
+        day, month = set("djS"), set("mnMFNbE")
+
+        def a_whole_date(layout: str) -> bool:
+            letters = set(re.sub(r"\\.", "", layout)) - set(" ,.-:/")
+            if letters <= set("YmdHis"):
+                return False
+            return bool(letters & day and letters & month)
+
+        found = [
+            f"{path.relative_to(self.ROOT).as_posix()}:{number}: {match.group(0)}"
+            for path in sorted((self.ROOT / "templates").rglob("*.html"))
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+            for match in formatted.finditer(line)
+            if a_whole_date(match.group(2) or match.group(4) or "N j, Y")
+        ]
+        self.assertEqual(found, [])
+
     def test_templates_say_byte_counts_through_the_bytes_filter(self):
         found = [
             path.relative_to(self.ROOT).as_posix()

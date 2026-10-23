@@ -54,7 +54,7 @@ would be a page about anybody.
 
   <h2>Your GitHub account</h2>
   <dl class="github-facts account-facts">
-    {% if profile.since %}<div><dt>On GitHub since</dt><dd>{{ profile.since|date:"F Y" }}</dd></div>{% endif %}
+    {% if profile.since %}<div><dt>On GitHub since</dt><dd>{{ profile.since|when:"day" }}</dd></div>{% endif %}
     {% if profile.company %}<div><dt>Company</dt><dd>{{ profile.company|breakable }}</dd></div>{% endif %}
     {% if profile.location %}<div><dt>Location</dt><dd>{{ profile.location|breakable }}</dd></div>{% endif %}
     {% if profile.website|web_url %}<div><dt>Website</dt><dd><a class="external-link" href="{{ profile.website|web_url }}" rel="noopener">{{ profile.website|cut:"https://"|breakable }}</a></dd></div>{% endif %}

@@ -177,6 +177,14 @@ def ago(value):
 
 
 @register.filter
+def day(value):
+    """``{{ moment|day }}``: the day ``when:"day"`` names, as bare words, for
+    a day written where only text may go."""
+
+    return _when_day(value)
+
+
+@register.filter
 def signed_in(request):
     """``{{ request|signed_in }}``: how long ago this session's sign-in was, in hours or days.
 
@@ -685,7 +693,8 @@ def not_urgent(problems):
 
 
 @register.simple_tag
-def rendered_copy() -> bool:
-    """Whether this render is a saved copy of HQ (``SEVERINO_RENDERED_COPY``)."""
+def rendered_copy() -> datetime | None:
+    """When this saved copy of HQ was saved (``SEVERINO_RENDERED_COPY``), which
+    is the moment it was rendered; None for a running HQ."""
 
-    return bool(settings.SEVERINO_RENDERED_COPY)
+    return timezone.now() if settings.SEVERINO_RENDERED_COPY else None

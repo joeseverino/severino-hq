@@ -297,10 +297,15 @@ no-break spaces, so neither wraps inside itself. A page shows them through the b
 filter, which wraps the words in `<time datetime title>`: `{{ at|when }}` on a
 detail page, `{{ at|when:"ago" }}` in a list (the exact moment on hover),
 `"day"` and `"exact"` for the other two. The `datetime` is what a table sorts
-on, so a date column needs nothing else. No template carries a `|date:` clock
-format or prints a datetime bare; `|ago` is the same age as plain words, for a
-sentence or an attribute. A run of days is `when_range` ("Oct 3 – Oct 9"), a
-year both ends share said once. Extensions get all five from `hq_sdk.ui`.
+on, so a date column needs nothing else. No template writes a day and its
+month in a `|date:` or `{% now %}` format of its own, or prints a datetime
+bare; a month or a weekday alone (a calendar's heading and columns) is not a
+date, and digits only (`Y-m-d` in an address) are for a machine. `|ago` and
+`|day` are the same age and day as plain words, for a sentence, an attribute or
+a label where a `<time>` cannot go. A run of days is
+`when_range` ("Oct 3 – Oct 9"), a year both ends share said once. Extensions
+get all five from `hq_sdk.ui`.
+*Gate:* `test_templates_write_dates_through_the_when_filter`.
 
 A count's plural has one owner too: `counted`, which spells a single noun
 through `labels.plural` ("2 entries"). An audit type's plural is

@@ -37,6 +37,7 @@ WORDS_ONLY = {
     "span": "a length of time",
     "ago": "an age in words",
     "ago_short": "an age in words",
+    "day": "a day in words",
     "expiry": "a date and a count of days",
     "length": "a number",
     "floatformat": "a number",

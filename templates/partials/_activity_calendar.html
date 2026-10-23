@@ -49,10 +49,10 @@ can be linked to directly and works without JavaScript.
             {% if day.filler %}
               <td class="calendar-day is-filler"></td>
             {% else %}
-              <td class="calendar-day is-{{ day.state }}"{% if day.detail %} data-tip="{{ day.when|date:'D M j' }} · {{ day.detail }}"{% endif %}>
+              <td class="calendar-day is-{{ day.state }}"{% if day.detail %} data-tip="{{ day.when|date:"D" }} {{ day.when|day }} · {{ day.detail }}"{% endif %}>
                 <span class="calendar-date" aria-hidden="true">{{ day.when|date:"j" }}</span>
                 {% comment %}Without this a screen reader gets a grid of bare numbers.{% endcomment %}
-                <span class="visually-hidden">{{ day.when|date:"F j" }}: {{ day.detail|default:"nothing logged"|breakable }}</span>
+                <span class="visually-hidden">{{ day.when|day }}: {{ day.detail|default:"nothing logged"|breakable }}</span>
                 <span class="calendar-marks" aria-hidden="true">
                   {% for slot in day.slots %}<i class="calendar-dot chart-series-{{ slot }}"></i>{% endfor %}
                   {% if day.state == "missed" %}<i class="calendar-dot is-missed"></i>{% endif %}

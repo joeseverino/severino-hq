@@ -9,7 +9,7 @@ here names one.
 {% endcomment %}
 <header class="page-head dash-head">
   <div class="dash-hello">
-    <p class="dash-date">{% now "l, F j" %}</p>
+    <p class="dash-date">{{ calendar.today|date:"l" }}, {{ calendar.today|when:"day" }}</p>
     <h1>{{ greeting|breakable }}</h1>
     <p class="dash-status">
       {% if action_queue_count %}
