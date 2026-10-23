@@ -50,15 +50,50 @@ def assert_cost_does_not_grow[T](
 
     For each size, ``arrange(size)`` lays out that many rows outside the count,
     then ``draw(size)`` is counted and ``rows`` of what it produced must be the
-    size, so a draw served from an earlier one fails here. ``slack`` is the
-    queries the largest draw may add over the smallest.
+    size, so a draw served from an earlier one fails here. The first size is
+    drawn once uncounted, so what a process loads on its first page does not
+    pad the smaller count. ``slack`` is the queries the largest draw may add
+    over the smallest.
     """
 
-    costs = []
+    def held(produced: T, size: int) -> None:
+        case.assertEqual(rows(produced), size, f"the draw for {size} rows did not hold {size}")
+
+    _assert_flat(case, sizes, draw, arrange, held, slack)
+
+
+def assert_subject_cost_does_not_grow(
+    case: SimpleTestCase,
+    *,
+    sizes: Sequence[int],
+    draw: Callable[[int], object],
+    arrange: Callable[[int], object],
+) -> None:
+    """``draw``, about one subject, costs no more queries in a larger estate.
+
+    Only for a draw whose answer names its own subject and none of the rows
+    ``arrange`` lays out, so nothing in it can count them; each draw runs
+    uncached, so the larger count is still of the larger estate.
+    """
+
+    _assert_flat(case, sizes, draw, arrange, lambda _produced, _size: None, 0)
+
+
+def _assert_flat[T](
+    case: SimpleTestCase,
+    sizes: Sequence[int],
+    draw: Callable[[int], T],
+    arrange: Callable[[int], object],
+    held: Callable[[T, int], None],
+    slack: int,
+) -> None:
+    costs: list[int] = []
     for size in sizes:
         arrange(size)
+        if not costs:
+            _drawn(lambda size=size: draw(size))
         produced, cost = _drawn(lambda size=size: draw(size))
-        case.assertEqual(rows(produced), size, f"the draw for {size} rows did not hold {size}")
+        held(produced, size)
         costs.append(cost)
     case.assertLessEqual(costs[-1], costs[0] + slack, f"the cost grows with the rows: {costs} for {list(sizes)}")
 

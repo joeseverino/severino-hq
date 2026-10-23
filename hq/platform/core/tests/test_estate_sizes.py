@@ -3,7 +3,7 @@ from django.test import TestCase
 
 from hq.platform.application import derivations
 
-from .estate_sizes import assert_cost_does_not_grow, distinct
+from .estate_sizes import assert_cost_does_not_grow, assert_subject_cost_does_not_grow, distinct
 
 
 def _rows(size: int) -> list[int]:
@@ -38,7 +38,16 @@ class CostDoesNotGrowTests(TestCase):
             laid.extend(_rows(1)[0] for _ in range(size))
 
         assert_cost_does_not_grow(self, sizes=(1, 6), arrange=arrange, draw=draw, rows=len)
-        self.assertEqual(seen, [True, True])
+        # The first size is drawn once more, uncounted, before its count.
+        self.assertEqual(seen, [True, True, True])
+
+    def test_a_subject_whose_cost_grows_with_the_estate_fails(self):
+        laid = []
+
+        with self.assertRaisesMessage(AssertionError, "the cost grows with the rows"):
+            assert_subject_cost_does_not_grow(
+                self, sizes=(1, 6), arrange=laid.append, draw=lambda _size: [_rows(1) for _ in laid]
+            )
 
     def test_distinct_counts_different_names_in_a_body(self):
         self.assertEqual(distinct(r"app-\d+")(b"app-1 app-2 app-1 web-3"), 2)
