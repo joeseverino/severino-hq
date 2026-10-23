@@ -290,7 +290,10 @@ Chromium breaks at a `<wbr>` even under `white-space: nowrap`, and WebKit
 does not. Chromium also breaks a part held to one line (`.whole`) that has no
 box (`display: contents`) at an element's edge inside it when the box around
 the part has `overflow-wrap: break-word`, so a box that cuts such a part sets
-`overflow-wrap: normal`.
+`overflow-wrap: normal`. An external link's arrow (`.external-link`) is joined
+to its last word by a no-break space, and a link whose name is one box (a cut
+token, a chip in a table) lays the name and the arrow out as one row, since a
+line may break after any box: `an_external_links_arrow_keeps_to_its_last_word`.
 
 A moment, a date and an age are each written one way, by `hq/platform/application/moments.py`:
 `when` ("Oct 3, 9:29 AM"), `when_day` ("Oct 3"), `ago` ("5 days ago", one

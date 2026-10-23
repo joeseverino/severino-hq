@@ -287,6 +287,7 @@ SELECTORS = {
     "labeled": ":is(.kv, .conn-keys) > dt + dd, .conn-row > code + .conn-kind",
     # What a heading says beside its title: a count, an age, where it is read.
     "heading_aside": ".heading-aside",
+    "external_link": ".external-link",
     # The same, in a heading or beside it in a section's head.
     "any_aside": ".heading-aside, .section-head .count",
     # A page's title, and the controls that share its head.
@@ -645,6 +646,29 @@ _RAISED_LINKS = (
     }
   }
   return [...new Set(found)].slice(0, 10);
+}"""
+)
+
+# An external link's arrow on a line of its own, below every word of the
+# link it marks: the link's last line box holds nothing but the arrow.
+_LONE_ARROWS = (
+    "(selector) => {"
+    + _DESCRIBE
+    + """
+  const found = [];
+  const range = document.createRange();
+  for (const link of document.querySelectorAll('main ' + selector)) {
+    if (!link.checkVisibility()) continue;
+    const lines = [...link.getClientRects()].filter((r) => r.width);
+    if (lines.length < 2) continue;
+    range.selectNodeContents(link);
+    const words = [...range.getClientRects()].filter((r) => r.width);
+    if (!words.length) continue;
+    if (lines.at(-1).top >= Math.max(...words.map((r) => r.bottom)) - 1) {
+      found.push(`${describe(link)} leaves its arrow on a line of its own: ${link.textContent.trim().slice(0, 40)}`);
+    }
+  }
+  return found.slice(0, 10);
 }"""
 )
 
@@ -3140,6 +3164,7 @@ _GEOMETRY = {
     "control labels": _SPILLED_CONTROLS,
     "cell labels": _SPILLED_CELLS,
     "raised links": _RAISED_LINKS,
+    "lone arrows": (_LONE_ARROWS, SELECTORS["external_link"]),
     "small targets": _SMALL_TARGETS_READ,
     "row disclosures": _NESTED_DISCLOSURES,
     "summary marks": _SUMMARY_MARKS,
@@ -4101,6 +4126,10 @@ class LayoutBrowserTests(BrowserGate):
 
     @reads(_RAISED_LINKS)
     def a_link_sits_on_the_line_it_continues(self, _name, found):
+        self.assertEqual(found, [])
+
+    @reads((_LONE_ARROWS, SELECTORS["external_link"]))
+    def an_external_links_arrow_keeps_to_its_last_word(self, _name, found):
         self.assertEqual(found, [])
 
     @reads(_SMALL_TARGETS_READ)
