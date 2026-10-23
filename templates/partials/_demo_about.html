@@ -1,0 +1,24 @@
+{% comment %}
+What a saved copy of HQ is and how it is made: the body of the About dialog
+base.html draws on a saved copy (SEVERINO_RENDERED_COPY) and nowhere else.
+`saved_copy` is the moment the copy was rendered, which is when it was saved.
+{% endcomment %}
+<p class="demo-about-lede">HQ is the app one person runs a homelab from: its hosts, containers, certificates and DNS, and the agents that work on them. This demo shows it with sample data. The pages are HQ's own, saved as static files by the same build that CI and development run.</p>
+<h3 class="demo-about-heading">Things to try</h3>
+<ul>
+  <li>Read the DNS change an agent is waiting for you to approve.</li>
+  <li>Open a container and follow it down to the host it runs on.</li>
+  <li>See what needs doing, and dismiss one.</li>
+  <li>Search from the header, or switch the theme in the menu.</li>
+</ul>
+<h3 class="demo-about-heading">What stays put</h3>
+<p>No server answers these pages, so a form that would change something says so and changes nothing. Dismissals and your theme are kept in this browser until you choose Reset demo in the menu.</p>
+<h3 class="demo-about-heading">Behind it</h3>
+<ul>
+  <li><a href="https://github.com/joeseverino/severino-hq">The repository</a></li>
+  <li><a href="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md">How the demo is built</a>, with <code>mise run browser:demo</code></li>
+  <li><a href="https://github.com/joeseverino/severino-hq/blob/main/.github/workflows/demo.yml">The workflow</a> that publishes it when a change lands on main, and once a week</li>
+  <li><a href="https://github.com/joeseverino/severino-hq/blob/main/docs/Development.md">Developing HQ</a></li>
+  <li><a href="https://github.com/joeseverino/severino-hq/blob/main/docs/AI.md">AI and HQ</a></li>
+</ul>
+<p class="muted">Saved {{ saved_copy|when:"day" }}.</p>

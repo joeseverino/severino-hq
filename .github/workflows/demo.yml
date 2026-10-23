@@ -1,11 +1,14 @@
 name: Demo
 
-# On each push to main: builds the demo, checks it (browser:demo), and
-# publishes the checked folder to GitHub Pages. The custom domain is set in
-# the repository's Pages settings.
+# On each push to main, once a week and by hand: builds the demo, checks it
+# (browser:demo), and publishes the checked folder to GitHub Pages. The
+# weekly run keeps the pages' dates and ages current while nothing lands. The
+# custom domain is set in the repository's Pages settings.
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "23 6 * * 1"
   workflow_dispatch:
 
 permissions:

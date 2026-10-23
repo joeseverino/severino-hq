@@ -831,8 +831,8 @@ LOGGING = {
 SEVERINO_SITE_NAME = env_str("SEVERINO_SITE_NAME", "Severino HQ")
 # True only for a saved copy of HQ's pages (the public demo): what a page says
 # about the reader's connection then describes the visit the copy was rendered
-# for. Set in code by hq.platform.core.example_estate.as_production, never from
-# the environment, so a live HQ cannot be switched into it.
+# for. Set in code by demo/build.py, never from the environment, so a live HQ
+# cannot be switched into it.
 SEVERINO_RENDERED_COPY = False
 # The month the fiscal year starts, for the dashboard's expense window.
 SEVERINO_FISCAL_YEAR_START_MONTH = 1

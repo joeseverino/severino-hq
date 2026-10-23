@@ -34,7 +34,7 @@ from contextlib import contextmanager
 from functools import cache
 from html import escape, unescape
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -60,13 +60,22 @@ _INJECT = '<script src="/static/js/demo-theme.js"></script><script defer src="/s
 _CHARSET = '<meta charset="utf-8">'
 # Directives a meta tag can't carry; browsers ignore them there and say so.
 _HEADER_ONLY = ("frame-ancestors", "report-uri", "report-to", "sandbox")
-# Links with a query, a filter's on-or-off choice, and addresses a script
-# reads with one (a Map node's details).
-_QUERY_HREF = re.compile(r'href="(/[^"#?]*\?[^"#]*)"')
-_TOGGLE = re.compile(r'<label class="table-toggle"><input type="checkbox" name="([^"]+)" value="([^"]*)"')
+# Links with a query, from the root or from the page they are on ("?page=2"),
+# and addresses a script reads with one (a Map node's details).
+_QUERY_HREF = re.compile(r'href="((?:/[^"#?]*)?\?[^"#]*)"')
 _READ_WITH_QUERY = re.compile(r'\sdata-(?!fragment)[\w-]+="(/[^"#?]*\?[^"#]*)"')
-# A sort or a page of a list is the same rows again: not saved.
-_SAME_ROWS = {"sort", "page"}
+# A filter's choices: each checkbox and each option of a form that asks by GET.
+_GET_FORM = re.compile(r'<form\b(?=[^>]*\bmethod="get")([^>]*)>(.*?)</form>', re.DOTALL)
+_ACTION = re.compile(r'\saction="([^"]*)"')
+_CHECKBOX = re.compile(r'<input type="checkbox" name="([^"]+)" value="([^"]*)"')
+_SELECT = re.compile(r'<select\b[^>]*\sname="([^"]+)"[^>]*>(.*?)</select>', re.DOTALL)
+_OPTION = re.compile(r'<option value="([^"]*)"')
+# "Page 2 of 7" under a list.
+_PAGE_COUNT = re.compile(r'<span class="muted">Page \d+ of (\d+)</span>')
+# A sort is the same rows again: not saved, and demo.js says so.
+_SAME_ROWS = {"sort"}
+# The pages of a list saved, from its first; demo.js says the rest are not.
+_MOST_PAGES_OF_A_LIST = 6
 # The most query answers kept, so a page of many links cannot fill the demo.
 _MOST_VARIANTS = 400
 # Searches answered: each word of a page's name, up to this many.
@@ -77,6 +86,8 @@ _FORMS = {"Add", "Delete", "Edit", "Import", "Look", "New", "Publish", "Refresh"
 _FILLER = {"and", "but", "the", "you", "your", "for", "off", "has", "why", "every", "actually", "itself", "finds"}
 # What HQ answers a search that finds nothing, for a word the demo has no answer for.
 _NOTHING = "zz-nothing"
+# What the API reference says of the server it names.
+_NO_SERVER = "The example HQ this demo was saved from. It does not exist, so a request sent from here is not answered."
 # Headers that describe one response, not HQ's policy.
 _PER_RESPONSE = {"set-cookie", "content-length", "content-type", "date", "vary", "expires", "cache-control"}
 
@@ -95,8 +106,39 @@ def query_key(path: str, query: str) -> str:
 
 def _variant_worth_saving(address: str) -> bool:
     parts = urlsplit(address)
-    names = {name for name, _value in parse_qsl(parts.query)}
-    return _wanted(parts.path) and bool(names) and not names & _SAME_ROWS
+    pairs = dict(parse_qsl(parts.query))
+    if not _wanted(parts.path) or not pairs or pairs.keys() & _SAME_ROWS:
+        return False
+    page = pairs.get("page", "1")
+    return page.isdigit() and int(page) <= _MOST_PAGES_OF_A_LIST
+
+
+def _list_pages(address: str, page: str) -> list[str]:
+    """The saved pages of the list ``page`` draws at ``address``, with the
+    rest of its query kept. The first is saved by its number too, since
+    Prev links to it so."""
+
+    pages = _PAGE_COUNT.search(page)
+    if not pages:
+        return []
+    parts = urlsplit(address)
+    kept = [(name, value) for name, value in parse_qsl(parts.query) if name != "page"]
+    last = min(int(pages.group(1)), _MOST_PAGES_OF_A_LIST)
+    return [f"{parts.path}?{urlencode([*kept, ('page', number)])}" for number in range(1, last + 1)]
+
+
+def _filter_choices(path: str, page: str) -> set[str]:
+    """Each choice a GET form on ``page`` offers, one at a time: a checkbox
+    ticked, or an option of a select chosen."""
+
+    choices: set[str] = set()
+    for attributes, body in _GET_FORM.findall(page):
+        action = _ACTION.search(attributes)
+        target = unescape(action.group(1)) if action and action.group(1) else path
+        pairs = _CHECKBOX.findall(body)
+        pairs += [(name, value) for name, options in _SELECT.findall(body) for value in _OPTION.findall(options)]
+        choices.update(f"{target}?{urlencode({name: unescape(value)})}" for name, value in pairs if value)
+    return choices
 
 
 # Icons a browser asks for at the site root, by their own names.
@@ -245,10 +287,11 @@ class _Offered:
         self.words: set[str] = set()
 
     def read(self, path: str, page: str) -> None:
+        links = {urljoin(path, unescape(address)) for address in _QUERY_HREF.findall(page)}
+        links.update(_list_pages(path, page))
         self.variants.update(
-            address for address in map(unescape, _QUERY_HREF.findall(page)) if _variant_worth_saving(address)
+            address for address in links | _filter_choices(path, page) if _variant_worth_saving(address)
         )
-        self.variants.update(f"{path}?{urlencode({name: unescape(value)})}" for name, value in _TOGGLE.findall(page))
         self.reads.update(unescape(address) for address in _READ_WITH_QUERY.findall(page))
         title = _TITLE.search(page)
         name = unescape(title.group(1)) if title else ""
@@ -265,7 +308,13 @@ class DemoBuild(TestCase):
             shutil.rmtree(OUT)
         OUT.mkdir(parents=True)
         seed, seeded_settings = _SEEDS[os.environ.get("HQ_DEMO_SEED") or "showcase"]
-        with as_production(), override_settings(**seeded_settings), _hashed_static() as collected:
+        # A saved copy: what a page says about the reader is an example, not
+        # the reader's, and each page says what the copy is.
+        with (
+            as_production(),
+            override_settings(SEVERINO_RENDERED_COPY=True, **seeded_settings),
+            _hashed_static() as collected,
+        ):
             client = _Browser(**REQUEST)
             client.force_login(seed(), backend=SSO)
             # Demo data on for every page; demo.js keeps the switch from turning it off.
@@ -377,14 +426,18 @@ class DemoBuild(TestCase):
         for address in asked:
             parts = urlsplit(address)
             key = query_key(parts.path, parts.query)
+            if key in variants:
+                continue
             response = client.get(address)
-            if key in variants or response.status_code != 200 or not _is_page(response):
+            if response.status_code != 200 or not _is_page(response):
                 continue
             target = f"/__q/{len(variants)}/"
             page = response.content.decode()
             self._save_fragments(client, page, fragments)
             _write(target, _inject(page, response, address=key))
             variants[key] = target
+            # A filtered list has pages of its own.
+            asked.extend(_list_pages(address, page))
         for address in sorted(offered.reads):
             self._save_answer(client, address, "", fragments)
         for word in [*searches, _NOTHING]:
@@ -416,10 +469,18 @@ class DemoBuild(TestCase):
         # By the collected name: only content-named copies are kept.
         for icon in _ROOT_ICONS:
             shutil.copyfile(OUT / "static" / staticfiles_storage.stored_name(f"img/{icon}"), OUT / icon)
-        # The API docs page loads this.
+        # The API docs page loads this. HQ names no server, so Scalar offers
+        # the page's own origin, which in the demo is GitHub Pages: it is
+        # named as the example HQ the pages were saved from instead.
         document = client.get("/api/v2/openapi.json")
         if document.status_code == 200:
-            _write("/api/v2/openapi.json", document.content, page=False)
+            served = json.loads(document.content)
+            served["servers"] = [{"url": f"https://{HQ}", "description": _NO_SERVER}]
+            _write("/api/v2/openapi.json", json.dumps(served).encode(), page=False)
+        # GitHub Pages answers an address it has no file for with this.
+        missing = client.get("/__not-in-the-demo__/")
+        if missing.status_code == 404 and _is_page(missing):
+            (OUT / "404.html").write_bytes(_inject(missing.content.decode(), missing))
         rules = client.get("/speculation-rules.json")
         if rules.status_code == 200:
             (OUT / "speculation-rules.json").write_bytes(rules.content)

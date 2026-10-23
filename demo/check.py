@@ -1,16 +1,16 @@
 """Checks the built demo (``mise run browser:demo``).
 
-Serves the build over plain HTTP and checks that every link points to a file
-that exists, that pages load in WebKit with no errors and nothing from another
-site, that a dismissal survives a reload until Reset demo clears it, and that
-the first pages a visitor sees show a healthy homelab with demo data locked on.
+Serves the build over plain HTTP and checks what demo/README.md lists under
+"What the checks hold".
 """
 
+import json
 import os
 import re
 import unittest
 from html import unescape
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from demo.serve import serving
 
@@ -23,9 +23,50 @@ _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infras
 # What a healthy homelab never says on its dashboard.
 _ALARMS = ("No reading yet", "Not set up yet", "not fully set up", "not answering", " failed", "not confirmed")
 # The showcase leaves three things to do on purpose (an image update, a
-# certificate to renew, a route to approve); anything more is the seed missing
-# a reading.
+# certificate to renew, an agent's request to approve); anything more is the
+# seed missing a reading.
 _MOST_ITEMS = 3
+
+
+_MARK = re.compile(r'\sclass="([^"]*)"|\s(data-[\w-]+)')
+# The repository the About dialog links into.
+_SOURCE = "https://github.com/joeseverino/severino-hq"
+_ROOT = Path(__file__).resolve().parents[1]
+# The pages of a list demo/build.py saves, from its first (its _MOST_PAGES_OF_A_LIST).
+_MOST_PAGES_OF_A_LIST = 6
+
+
+def _sample() -> list[str]:
+    """The address of every saved page that draws a class or a script hook no
+    earlier page drew, so each template, and each part a template can show, is
+    loaded at least once without loading every record's page."""
+
+    seen: set[str] = set()
+    picked = []
+    for page in sorted(page for page in OUT.rglob("index.html") if "__fragments__" not in page.parts):
+        text = page.read_text(encoding="utf-8")
+        if 'http-equiv="refresh"' in text:
+            continue
+        marks = {mark for classes, hook in _MARK.findall(text) for mark in (classes.split() if classes else [hook])}
+        if marks - seen:
+            seen |= marks
+            path = page.parent.relative_to(OUT).as_posix()
+            picked.append("/" if path == "." else f"/{path}/")
+    return picked
+
+
+def _pages_linked(here: str, page: str) -> list[str]:
+    """The saved-copy key of each page of a list that ``page``, shown at
+    ``here``, links under its list, up to the pages the build keeps."""
+
+    keys = []
+    for nav in re.findall(r'<nav class="pagination">.*?</nav>', page, re.DOTALL):
+        for href in re.findall(r'href="([^"]+)"', nav):
+            address = urlsplit(urljoin(here, unescape(href)))
+            pairs = sorted((name, value) for name, value in parse_qsl(address.query) if value)
+            if pairs and int(dict(pairs).get("page", "1")) <= _MOST_PAGES_OF_A_LIST:
+                keys.append(f"{address.path}?{urlencode(pairs)}")
+    return keys
 
 
 def _exists(path: str) -> bool:
@@ -72,10 +113,34 @@ class DemoSiteTests(unittest.TestCase):
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
         self.assertEqual(re.findall(r'class="conn-layer conn-layer-(?!holds")(\w+)"', connection), [])
 
+    def test_a_list_s_next_page_is_saved(self):
+        # Next under a list, filtered or not, opens a saved copy, up to the
+        # pages demo/build.py keeps.
+        variants = json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["variants"]
+        missing = set()
+        for file in (page for page in OUT.rglob("index.html") if "__fragments__" not in page.parts):
+            text = file.read_text(encoding="utf-8")
+            shown = re.search(r'name="hq-demo-address" content="([^"]+)"', text)
+            saved = file.parent.relative_to(OUT).as_posix()
+            here = unescape(shown.group(1)) if shown else ("/" if saved == "." else f"/{saved}/")
+            missing.update(f"{here} -> {key}" for key in _pages_linked(here, text) if key not in variants)
+        self.assertEqual(sorted(missing)[:20], [])
+
+    def test_every_expense_has_its_receipt(self):
+        # The README's account of the showcase: a year of costs, each receipted.
+        expenses = [page for page in (OUT / "expenses").glob("*/index.html") if page.parent.name.isdigit()]
+        self.assertTrue(expenses, "the showcase has expenses")
+        for page in expenses:
+            with self.subTest(expense=page.parent.name):
+                lines = _visible_lines(page.read_text(encoding="utf-8"))
+                self.assertFalse([line for line in lines if line.startswith("No receipts.")])
+
     def test_each_thing_to_do_offers_a_way_to_do_it(self):
         queue = (OUT / "action-items" / "index.html").read_text(encoding="utf-8")
         rows = re.split(r"<tr [^>]*data-attention-item", queue)[1:]
         self.assertEqual(len(rows), _MOST_ITEMS)
+        # One of them is the change the example agent asked for, held for a person.
+        self.assertEqual(len([row for row in rows if 'href="/audit/approval/' in row]), 1)
         for row in rows:
             title = re.search(r'class="attention-title"[^>]*>([^<]*)', row)
             with self.subTest(item=title.group(1) if title else row[:80]):
@@ -124,19 +189,88 @@ class DemoSiteTests(unittest.TestCase):
             browser = playwright.webkit.launch()
             page = browser.new_page()
             errors, elsewhere = [], []
-            page.on("pageerror", lambda error: errors.append(str(error)))
-            page.on("console", lambda message: message.type == "error" and errors.append(message.text))
+            at = [""]
+            page.on("pageerror", lambda error: errors.append(f"{at[0]}: {error}"))
+            page.on("console", lambda message: message.type == "error" and errors.append(f"{at[0]}: {message.text}"))
             page.on("request", lambda request: request.url.startswith(self.origin) or elsewhere.append(request.url))
-            for path in _VISITED:
+            for path in dict.fromkeys([*_VISITED, *_sample()]):
+                at[0] = path
+                page.goto(self.origin + path, wait_until="networkidle")
+                if path not in _VISITED:
+                    continue
                 with self.subTest(path=path):
-                    page.goto(self.origin + path, wait_until="networkidle")
                     self.assertTrue(page.locator(".demo-reset").count(), "Reset demo is in the user menu")
                     switch = page.locator('form[action="/demo/"] [role="switch"]')
                     self.assertEqual(switch.get_attribute("aria-checked"), "true")
                     self.assertTrue(switch.is_disabled(), "Demo data can't be turned off")
             browser.close()
-        self.assertEqual(errors, [])
+        self.assertEqual(errors[:20], [])
         self.assertEqual(elsewhere, [])
+
+    def test_the_about_links_lead_to_files_in_the_repository(self):
+        # The dialog's links and the corner control's own address, which is
+        # where it leads without script. Each names a file on main, held here
+        # to the checkout the demo was built from.
+        dashboard = (OUT / "index.html").read_text(encoding="utf-8")
+        about = re.search(r'<dialog[^>]*id="modal-demo-about".*?</dialog>', dashboard, re.DOTALL)
+        self.assertTrue(about, "the About dialog is on the page")
+        mark = re.search(r'<a class="demo-about" href="([^"]+)"', dashboard)
+        self.assertTrue(mark, "the corner control is a link")
+        links = [mark.group(1), *re.findall(r'<a href="([^"]+)"', about.group(0))]
+        self.assertIn(_SOURCE, links)
+        for link in links:
+            with self.subTest(link=link):
+                self.assertTrue(link == _SOURCE or link.startswith(f"{_SOURCE}/blob/main/"), link)
+                file = link.removeprefix(f"{_SOURCE}/blob/main/")
+                if link == _SOURCE:
+                    continue
+                self.assertTrue((_ROOT / file).is_file(), f"{file} is in the repository")
+        # The day it was saved, written the way HQ writes a day.
+        self.assertRegex(about.group(0), r'Saved <time datetime="[^"]+" title="[^"]+">[^<]+</time>\.')
+
+    def test_the_corner_control_opens_about_by_keyboard(self):
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.webkit.launch()
+            for width in (390, 402, 820, 1360):
+                page = browser.new_page(viewport={"width": width, "height": 700})
+                page.goto(self.origin + "/", wait_until="load")
+                with self.subTest(width=width):
+                    control = page.get_by_role("link", name="About this demo")
+                    self.assertTrue(control.is_visible())
+                    box = control.bounding_box()
+                    self.assertLess(box["x"] + box["width"], width / 2, "it sits on the left")
+                    self.assertGreater(box["y"], 700 / 2, "it sits at the bottom")
+                    # At the end of the page the content has scrolled clear of it.
+                    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+                    content_end = page.evaluate(
+                        "Math.max(...[...document.querySelectorAll('#content, .site-footer')]"
+                        ".map((part) => part.getBoundingClientRect().bottom))"
+                    )
+                    self.assertLessEqual(content_end, control.bounding_box()["y"], "it covers nothing")
+                    self._assert_opens_and_closes(page, control)
+                page.close()
+            browser.close()
+
+    def _assert_opens_and_closes(self, page, trigger):
+        dialog = page.locator("#modal-demo-about")
+        trigger.focus()
+        page.keyboard.press("Enter")
+        self.assertTrue(dialog.evaluate("dialog => dialog.open"), "Enter opens it")
+        self.assertTrue(dialog.get_by_role("heading", name="About this demo").is_visible())
+        page.keyboard.press("Escape")
+        self.assertFalse(dialog.evaluate("dialog => dialog.open"), "Escape closes it")
+
+    def test_a_missing_address_is_answered_by_hq_s_own_not_found_page(self):
+        # GitHub Pages serves 404.html for an address it has no file for.
+        page = (OUT / "404.html").read_text(encoding="utf-8")
+        self.assertIn('class="site-header"', page)
+        self.assertIn("/static/js/demo.js", page)
+
+    def test_the_api_reference_names_no_server_of_the_demo_s_own(self):
+        document = json.loads((OUT / "api" / "v2" / "openapi.json").read_text(encoding="utf-8"))
+        self.assertTrue(document.get("servers"), "Scalar would offer the page's own origin")
 
     def test_the_dashboard_keeps_its_readings_once_it_settles(self):
         # The strip asks for its due readings as the page opens; the demo

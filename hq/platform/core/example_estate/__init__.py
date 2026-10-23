@@ -73,8 +73,6 @@ def as_production():
                 # The commit this build says it is, and where it came from.
                 SEVERINO_HQ_REVISION=HQ_REVISION,
                 SEVERINO_HQ_SOURCE=HQ_SOURCE,
-                # A saved copy: what a page says about the reader is an example, not the reader's.
-                SEVERINO_RENDERED_COPY=True,
             )
         )
         # Facts about the host HQ runs on, which no database row holds.

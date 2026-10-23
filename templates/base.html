@@ -1,6 +1,8 @@
 {% load static %}
 {% load humanize %}
 {% load stylesheet_tags %}
+{% load value_tags %}
+{% rendered_copy as saved_copy %}
 <!doctype html>
 <html lang="en"{% if THEME == "light" or THEME == "dark" %} data-theme="{{ THEME }}"{% endif %}>
 <head>
@@ -274,6 +276,15 @@
     nobody opens.
     {% endcomment %}
     {% include "partials/_modal.html" with id="connection" title="Your connection" lede="How you are connected to HQ right now." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
+    {% if saved_copy %}
+      {% comment %}
+      A saved copy of HQ (the public demo) says what it is from the corner of
+      every page, where it is found without covering anything. Without script
+      it is a link to the demo's README, so no page is made for the copy alone.
+      {% endcomment %}
+      <a class="demo-about" href="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" data-modal-open="demo-about" aria-haspopup="dialog" aria-controls="modal-demo-about"><span class="demo-about-dot" aria-hidden="true"></span>About this demo</a>
+      {% include "partials/_modal.html" with id="demo-about" title="About this demo" body_template="partials/_demo_about.html" %}
+    {% endif %}
   {% endif %}
 
   <script src="{% static 'js/fragment.js' %}" defer></script>

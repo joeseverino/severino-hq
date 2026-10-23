@@ -3,8 +3,9 @@
 // The demo has no server, so this script:
 // - serves partial page loads from the copies in __fragments__/, and one with a
 //   query from the saved copy of that address (demo-theme.js), and stops polling;
-//   one that posts is answered with the region as it was saved;
-// - says so on a page whose query the demo has no copy of;
+//   one that posts is answered with nothing changed;
+// - says so, by kind (a sort, a page, a filter), on a page whose query the demo
+//   has no copy of;
 // - answers the connection panel's header read with the headers HQ sent at build;
 // - saves dismissals in localStorage and shows "Demo only: nothing was saved"
 //   for any other form that posts;
@@ -73,8 +74,10 @@
       // region is found in; else nothing, and the link it enhanced is followed.
       const copy = (await demo.routes()).variants[demo.key(url)];
       if (copy) return plainFetch(copy);
+      // A post with no saved answer (a page asking for its readings as it
+      // opens) is answered with nothing changed, as above.
+      if (method !== "GET") return new Response("", { status: 200 });
       if (url.search) return new Response("", { status: 404 });
-      if (method !== "GET") return plainFetch(url);
     }
     return plainFetch(input, init);
   };
@@ -96,8 +99,15 @@
     main.scrollIntoView({ block: "start" });
   };
 
-  // A filter or search the demo has no saved copy of: the page is shown without it, and says so.
-  const unanswered = () => say("This filter isn't in the demo, so the page is shown without it.");
+  // A query the demo has no saved copy of: the page is shown without it, and
+  // says what was left out. demo/build.py saves no sorts, the first pages of
+  // a list (_MOST_PAGES_OF_A_LIST) and every filter a page offers.
+  const unanswered = () => {
+    const asked = new URLSearchParams(location.search);
+    if (asked.has("sort")) say("Sorting isn't saved in the demo, so the list is shown in its usual order.");
+    else if (asked.has("page")) say("Only the first pages of a list are saved in the demo, so this shows the first.");
+    else say("This filter isn't in the demo, so the page is shown without it.");
+  };
   const answeredAs = () => say(`The demo has no saved search for that, so this shows results for “${demo.answeredAs}”.`);
   document.addEventListener("hq-demo:unanswered", () => {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", unanswered);
@@ -125,14 +135,15 @@
       demoSwitch.title = "Always on in the public demo";
     }
 
-    // Reset demo, at the bottom of the user menu.
-    const menu = document.querySelector(".user-menu-panel");
+    // Reset demo, among the user menu's places, before Sign out.
+    const places = document.querySelector(".menu-places");
     const reset = document.createElement("button");
     reset.type = "button";
     reset.className = "menu-item demo-reset";
     reset.textContent = "Reset demo";
     reset.addEventListener("click", () => { try { localStorage.removeItem(STORE); } catch { /* private window */ } location.assign("/"); });
-    (menu || document.querySelector(".site-header"))?.append(reset);
+    if (places) places.insertBefore(reset, places.querySelector(":scope > form"));
+    else document.querySelector(".site-header")?.append(reset);
   });
 
   // Say where the connection panel's headers came from.
