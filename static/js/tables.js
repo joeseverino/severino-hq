@@ -52,6 +52,8 @@
     gaveWay.set(table, steps);
   };
   const overflows = (table) => table.offsetWidth > table.parentElement.clientWidth;
+  // A hidden region has no width to fit.
+  const shown = (region) => region.clientWidth > 0;
   // Whether the table gave way any further or came back any.
   const fit = (table) => {
     const was = gaveWay.get(table) ?? 0;
@@ -76,9 +78,9 @@
       if (!region.isConnected) fitted.unobserve(region);
       if (!region.isConnected || !table) return;
       fitted.observe(table);
-      // A hidden region has no width to fit, and a table whose columns are
-      // held while a row is open is fitted again as it lets them go.
-      if (!region.clientWidth || "rowsHeld" in table.dataset || !fit(table)) return;
+      // A table whose columns are held while a row is open is fitted again
+      // as it lets them go.
+      if (!shown(region) || "rowsHeld" in table.dataset || !fit(table)) return;
       // What changed the table's size was this, in this frame: watched again
       // from the next, rather than told of it once more in this one.
       fitted.unobserve(region);

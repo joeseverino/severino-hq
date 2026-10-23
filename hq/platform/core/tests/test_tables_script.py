@@ -1,6 +1,6 @@
-"""tables.js lays no table out: the server's markup and the stylesheet do, before
-paint. The script measures only to hold a table still once a reader has acted
-on it, in the places named here."""
+"""tables.js reads layout only in the places named here: the fit, which asks
+whether a table is wider than its region before the frame is painted, and the
+places that hold a table still once a reader has acted on it."""
 
 import re
 from pathlib import Path
@@ -9,9 +9,11 @@ from django.test import SimpleTestCase, tag
 
 SCRIPT = Path(__file__).resolve().parents[4] / "static" / "js" / "tables.js"
 
-# Where tables.js may read layout, and what each read holds still. A function
-# that only these call (`droppedCells` for `openDetail`) is part of its caller.
-HOLDS_STILL = {
+# Where tables.js may read layout, and what each read is for. A function that
+# only these call (`droppedCells` for `openDetail`) is part of its caller.
+MEASURES_IN = {
+    "overflows": "whether a table is wider than its region, the one question the fit asks",
+    "shown": "whether a region has a width to fit at all",
     "isCut": "a row whose value is cut short, which only a layout knows; markCut marks it and moves nothing",
     "holdColumns": "every column at the width the reader saw while a row is open",
     "openDetail": "the open row's line beneath: what its row left out, each part under its own column",
@@ -97,7 +99,7 @@ def unheld_measurements(source: str) -> list[str]:
     def within(at: int, names: set[str]) -> bool:
         return any(start <= at < end for name, start, end in spans if name in names)
 
-    allowed = set(HOLDS_STILL)
+    allowed = set(MEASURES_IN)
     # A helper whose every call is in an allowed place measures for that place.
     while True:
         lent = {
@@ -119,14 +121,14 @@ def unheld_measurements(source: str) -> list[str]:
 
 @tag("source")
 class TablesScriptTests(SimpleTestCase):
-    def test_the_table_script_measures_only_to_hold_a_table_still(self):
+    def test_the_table_script_measures_only_where_named(self):
         self.assertEqual(unheld_measurements(SCRIPT.read_text(encoding="utf-8")), [])
 
     def test_each_place_named_measures_and_one_added_elsewhere_is_found(self):
         source = SCRIPT.read_text(encoding="utf-8")
         code = code_only(source)
         measuring = {name for name, start, end in functions(code) if _MEASURES.search(code, start, end)}
-        self.assertEqual(set(HOLDS_STILL) - measuring, set())
+        self.assertEqual(set(MEASURES_IN) - measuring, set())
 
         sorting = "const sortRows = (table, column, direction) => {"
         self.assertIn(sorting, source)
