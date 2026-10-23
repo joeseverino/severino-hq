@@ -156,11 +156,39 @@ class ReportTests(SimpleTestCase):
         head = browser_look._columns("example/services", 402, table).split(": ", 1)[0]
         self.assertIn("held by an open row", head)
 
-    def test_findings_survive_the_trip_from_the_base_run(self):
+    def test_findings_and_measures_survive_the_trip_from_the_base_run(self):
+        measured = {("example/one", 402): {"columns": "example/one table 1 at 402", "eval": "example/one at 402:\n  1"}}
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder, "found.json")
-            browser_look._write_found(path, self.FOUND)
-            self.assertEqual(browser_look._read_found(path), self.FOUND)
+            browser_look._write_found(path, self.FOUND, measured)
+            found, read = browser_look._read_found(path)
+        self.assertEqual(found, self.FOUND)
+        self.assertEqual(read[("example/one", 402)], measured[("example/one", 402)])
+        self.assertEqual(read[("example/two", 402)], {})
+
+    def test_against_a_base_each_number_the_base_measured_otherwise_follows_its_line(self):
+        ours = "example/one at 402:\n  inlineSize 372\n  blockSize 90"
+        theirs = "example/one at 402:\n  inlineSize 360\n  blockSize 90\n  extra 1"
+        lines = browser_look._beside("example-ref", ours, theirs).splitlines()
+        self.assertEqual(lines[:3], ["example/one at 402:", "  inlineSize 372", "example-ref: inlineSize 360"])
+        # A line the two share is said once; one only the base has is still said.
+        self.assertEqual(lines.count("  blockSize 90"), 1)
+        self.assertNotIn("example-ref: blockSize 90", lines)
+        self.assertEqual(lines[-1], "example-ref: extra 1")
+        self.assertIn("example-ref: (no such line)", browser_look._beside("example-ref", "a\nb", "a"))
+        self.assertIn("example-ref: (not measured)", browser_look._beside("example-ref", "a", None))
+
+
+@tag("source")
+class BandTests(SimpleTestCase):
+    def test_a_tall_page_is_cut_into_window_sized_bands_that_cover_it_once(self):
+        bands = browser_look._bands(2000, 900)
+        self.assertEqual(bands, [(0, 900), (900, 900), (1800, 200)])
+        self.assertEqual(sum(height for _, height in bands), 2000)
+
+    def test_a_page_the_window_holds_is_not_cut(self):
+        self.assertEqual(browser_look._bands(900, 900), [])
+        self.assertEqual(browser_look._bands(400, 900), [])
 
 
 @tag("source")

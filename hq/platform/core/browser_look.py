@@ -12,7 +12,15 @@ only when the rule it was asked to run fails.
 worktree of it with this checkout's copy of this module, and then prints only
 what is new here and what is no longer found: what a change caused, apart
 from what was already there. Findings are matched with their numbers
-stripped, so one whose row or pixel count moved is neither.
+stripped, so one whose row or pixel count moved is neither. With `--columns`
+or `--eval`, a line the base measured otherwise follows this checkout's.
+
+Each run's clock is frozen at the moment the run that asked began, its base's
+too, so a time a script reads is drawn alike in both; screenshots are taken
+with animations finished. A page taller than the window is also cut into
+window-sized bands beside its full screenshot (`<page>-<width>.band-01.png`),
+and a page that could not be looked at is shot as it stands
+(`<page>-<width>.failed.png`), its path printed.
 
 What it was asked comes from the task's `usage_*` environment, so it runs only
 as the task: a run through `manage` without it is refused rather than guessed.
@@ -51,11 +59,13 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from itertools import groupby
+from itertools import groupby, zip_longest
 from pathlib import Path
+from typing import override
 from unittest import mock
 from urllib.parse import urlsplit
 
@@ -85,14 +95,45 @@ lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, bu
 OUT = Path(settings.BASE_DIR) / "var" / "look"
 REFERENCE_PAGES = (REFERENCE, REFERENCE_DARK)
 ESTATE = "estate"
-# Request headers the browser sends that are not the view's to read.
-_TRANSPORT = frozenset({"host", "cookie", "content-length", "connection"})
+# Request headers the browser sends that are not the view's to read. The
+# answer goes back with its type alone, so it is never asked to be compressed.
+_TRANSPORT = frozenset({"host", "cookie", "content-length", "connection", "accept-encoding"})
 
 # The links a page offers a reader to go to: same origin, a page rather than a
 # file, a dialog or a region answered in place, as speculation judges them.
 _LINKS = """(notANavigation) => [...document.querySelectorAll('main a[href]')]
   .filter((a) => a.origin === location.origin && !a.matches(notANavigation))
   .map((a) => a.pathname + a.search)"""
+
+# A region waiting on its answer: fragment.js marks one busy until then, and a
+# live ask is busy for as long as its job runs.
+_BUSY = "[data-fragment][aria-busy=true]:not([data-ask])"
+# Every disclosure and popover not yet open, opened, and how many: an
+# exclusive group's name is dropped and a popover is shown as a manual one,
+# so opening one closes no other.
+_OPEN_ONCE = """(busy) => {
+  // A region already waiting is not one this round brings in.
+  document.querySelectorAll(busy).forEach((region) => { region.lookWaiting = true; });
+  let opened = 0;
+  document.querySelectorAll('details:not([open])').forEach((details) => {
+    details.removeAttribute('name');
+    details.open = true;
+    opened += 1;
+  });
+  document.querySelectorAll('[popover]:not(:popover-open)').forEach((popover) => {
+    popover.popover = 'manual';
+    try {
+      popover.showPopover();
+      opened += 1;
+    } catch {}
+  });
+  return opened;
+}"""
+# No region a round of opening brought in is waiting on its answer.
+_ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => region.lookWaiting)"
+# Rounds of opening, each after what the last one brought in has arrived.
+_OPEN_ROUNDS = 10
+_EXTENT = "() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]"
 
 # Each table as a reader finds it: which columns show, which are gone and
 # whether for being blank or for want of room, which rows offer to open and
@@ -254,8 +295,13 @@ _ASKED = "usage_pages"
 # Where a look at the base writes what it found, for the run that asked for it:
 # a usage variable of the task's no person sets, given only by that run.
 _FINDINGS = "usage_found_into"
+# The instant the run that asked began, in seconds, handed to its base the
+# same way: both draw with the clock frozen there.
+_CLOCK = "usage_clock_at"
 # What a look found, by page and width, each finding a line.
 type Found = dict[tuple[str, int], list[str]]
+# What a look measured, by page and width: `columns` and `eval`, as printed.
+type Measured = dict[tuple[str, int], dict[str, str]]
 
 
 def _usage(variable: str) -> str:
@@ -388,13 +434,42 @@ def _against(ref: str, rule: str, base: Found, branch: Found) -> tuple[str, bool
     return "\n".join([*parts, verdict]), bool(new)
 
 
-def _write_found(path: Path, found: Found) -> None:
-    entries = [{"page": name, "width": width, "found": said} for (name, width), said in found.items()]
+def _beside(ref: str, ours: str, theirs: str | None) -> str:
+    """What this checkout measured, each line followed by the one the base
+    measured in its place when the two differ, marked with ``ref``."""
+
+    if theirs is None:
+        return f"{ours}\n{ref}: (not measured)"
+    lines = []
+    for here, there in zip_longest(ours.splitlines(), theirs.splitlines()):
+        if here is not None:
+            lines.append(here)
+        if there != here:
+            lines.append(f"{ref}: {'(no such line)' if there is None else there.strip()}")
+    return "\n".join(lines)
+
+
+def _bands(height: int, band: int) -> list[tuple[int, int]]:
+    """Where a page ``height`` tall is cut into bands ``band`` tall, as each
+    band's top and height, top to bottom: none for a page one band holds."""
+
+    if height <= band:
+        return []
+    return [(top, min(band, height - top)) for top in range(0, height, band)]
+
+
+def _write_found(path: Path, found: Found, measured: Measured) -> None:
+    entries = [
+        {"page": name, "width": width, "found": said, "measured": measured.get((name, width), {})}
+        for (name, width), said in found.items()
+    ]
     path.write_text(json.dumps(entries), encoding="utf-8")
 
 
-def _read_found(path: Path) -> Found:
-    return {(entry["page"], entry["width"]): entry["found"] for entry in json.loads(path.read_text(encoding="utf-8"))}
+def _read_found(path: Path) -> tuple[Found, Measured]:
+    entries = json.loads(path.read_text(encoding="utf-8"))
+    found = {(entry["page"], entry["width"]): entry["found"] for entry in entries}
+    return found, {(entry["page"], entry["width"]): entry["measured"] for entry in entries}
 
 
 def _stop(signum, _frame):
@@ -425,28 +500,28 @@ def _worktree(checkout: Path, ref: str) -> Iterator[Path]:
         signal.signal(signal.SIGTERM, previous)
 
 
-def _look_at(ref: str, rule: str) -> Found:
-    """What this run finds, looked for at ``ref``: the same task's run, in a
-    worktree of it, through this checkout's copy of this module so both
-    report alike. Its environment is this run's, but for a database of its
-    own and the CSS already read, since a relative path names this checkout."""
+def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured]:
+    """What this run finds and measures, looked for at ``ref``: the same
+    task's run, in a worktree of it, through this checkout's copy of this
+    module so both report alike. Its environment is this run's, but for a
+    database of its own, this run's clock, and the CSS already read and the
+    script's absolute path, since a relative path names this checkout."""
 
     checkout = Path(settings.BASE_DIR)
     with _worktree(checkout, ref) as tree:
         lens = Path(__file__).resolve()
         shutil.copyfile(lens, tree / lens.relative_to(checkout.resolve()))
         found, log = tree.parent / "found.json", tree.parent / "look.log"
-        env = {
-            name: value
-            for name, value in os.environ.items()
-            if name not in {"usage_base", "usage_columns", "usage_eval", "VIRTUAL_ENV"}
-        }
+        env = {name: value for name, value in os.environ.items() if name not in {"usage_base", "VIRTUAL_ENV"}}
         env |= {
             _FINDINGS: str(found),
+            _CLOCK: str(clock_at),
             "SEVERINO_DATABASE_PATH": str(tree.parent / "look.sqlite3"),
             "usage_rule": rule,
             "usage_css": _css(_usage("usage_css")),
         }
+        if script := _usage("usage_eval"):
+            env["usage_eval"] = str(Path(settings.BASE_DIR, script).resolve())
         print(f"Looking at {ref} first, in {tree}", flush=True)
         with log.open("w", encoding="utf-8") as sink:
             # The command this run was started with, run there by its own environment.
@@ -498,10 +573,17 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @classmethod
     def setUpClass(cls):
+        cls.clock_at = float(_usage(_CLOCK) or round(time.time()))
         # The base first, while nothing of this run's holds memory but Django.
         ref = _usage("usage_base")
-        cls.base = _look_at(ref, cls.rule_asked()) if ref else None
+        cls.base, cls.base_measured = _look_at(ref, cls.rule_asked(), cls.clock_at) if ref else (None, {})
         super().setUpClass()
+
+    @override
+    def start(self, **options):
+        super().start(**options)
+        # Date reads the same instant all run, timers still run.
+        self.page.clock.set_fixed_time(self.clock_at)
 
     @classmethod
     def rule_asked(cls):
@@ -625,9 +707,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if _usage("usage_deep"):
             self.follow(widths[0])
         print(f"Screenshots in {OUT}", flush=True)
+        self.measured: Measured = {}
         found = self.look_at_every_page(widths, rule)
         if into := _usage(_FINDINGS):
-            _write_found(Path(into), found)
+            _write_found(Path(into), found, self.measured)
         if self.base is not None:
             report, new = _against(_usage("usage_base"), rule, self.base, found)
             print(report, flush=True)
@@ -685,29 +768,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def look(self, name, width, rule) -> list[str]:
         """Screenshot ``name`` at ``width``, and what ``rule`` finds there."""
 
-        try:
-            self.open(name, width)
-        except BrowserError as refused:
-            return [f"not a page ({str(refused).splitlines()[0]})"]
-        if _is_estate(name) and (said := self.answered.get(_address(self.page.url))) != (200, ""):
-            return [f"answered {said}, not looked at"]
-        if not self.page.locator("main").count():
-            return ["not a page of HQ's (no main), not looked at"]
-        if self.css:
-            add_css(self.page, self.css)
-        if _usage("usage_open"):
-            self.open_every_disclosure(name)
-        if _usage("usage_expand"):
-            # Only the toggles a reader can press: one a row does not offer is
-            # drawn, but not shown. A fold first, so the rows it holds show
-            # their own toggles before those are pressed.
-            for toggles in ("main button[data-fold-toggle]", "main button[data-row-toggle]:not([data-fold-toggle])"):
-                self.page.evaluate(
-                    "(toggles) => document.querySelectorAll(toggles)"
-                    ".forEach((toggle) => toggle.checkVisibility() && toggle.click())",
-                    toggles,
-                )
-        self.page.screenshot(path=_shot(name, width), full_page=True)
+        _shot(name, width).with_suffix(".failed.png").unlink(missing_ok=True)
+        if refused := self.refused(name, width):
+            return self.shoot_failure(name, width, refused)
+        self.draw_as_asked(name, width)
+        self.screenshot(name, width)
         if _usage("usage_columns"):
             self.measure_columns(name, width)
         if self.script:
@@ -720,8 +785,93 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         except AssertionError as found:
             return [line.strip() for line in str(found).splitlines() if line.strip()]
         except BrowserError as broke:
-            return [f"{rule} could not run ({str(broke).splitlines()[0]})"]
+            return self.shoot_failure(name, width, f"{rule} could not run ({str(broke).splitlines()[0]})")
         return []
+
+    def refused(self, name, width) -> str:
+        """Why ``name`` at ``width`` is not a page to look at, if it is not."""
+
+        try:
+            self.open(name, width)
+        except BrowserError as refused:
+            return f"not a page ({str(refused).splitlines()[0]})"
+        if _is_estate(name) and (said := self.answered.get(_address(self.page.url))) != (200, ""):
+            return f"answered {said}, not looked at"
+        if not self.page.locator("main").count():
+            return "not a page of HQ's (no main), not looked at"
+        return ""
+
+    def draw_as_asked(self, name, width):
+        """The page with ``--css`` added, and ``--open`` and ``--expand`` done."""
+
+        if self.css:
+            add_css(self.page, self.css)
+        if _usage("usage_open"):
+            self.open_everything(name, width)
+        if _usage("usage_expand"):
+            # Only the toggles a reader can press: one a row does not offer is
+            # drawn, but not shown. A fold first, so the rows it holds show
+            # their own toggles before those are pressed.
+            for toggles in ("main button[data-fold-toggle]", "main button[data-row-toggle]:not([data-fold-toggle])"):
+                self.page.evaluate(
+                    "(toggles) => document.querySelectorAll(toggles)"
+                    ".forEach((toggle) => toggle.checkVisibility() && toggle.click())",
+                    toggles,
+                )
+
+    def open_everything(self, name, width):
+        """Every disclosure and popover open, round after round until none is
+        left closed: a disclosure a region brings in when another opens is
+        opened once the region's answer has arrived. A region that never
+        answers is said, and the page is looked at as it stands."""
+
+        for _round in range(_OPEN_ROUNDS):
+            if not self.page.evaluate(_OPEN_ONCE, _BUSY):
+                return
+            self.settle()
+            try:
+                self.page.wait_for_function(_ANSWERED, arg=_BUSY)
+            except BrowserError as waited:
+                print(f"{name} at {width}: --open left a region loading ({str(waited).splitlines()[0]})", flush=True)
+                return
+
+    def screenshot(self, name, width):
+        """The whole page, and, when it is taller than the window, the same
+        cut into window-sized bands beside it, so each can be read at once."""
+
+        shot = _shot(name, width)
+        for stale in OUT.glob(f"{shot.stem}.band-*.png"):
+            stale.unlink()
+        self.page.screenshot(path=shot, full_page=True, animations="disabled")
+        wide, tall = self.page.evaluate(_EXTENT)
+        for number, (top, height) in enumerate(_bands(tall, self.page.viewport_size["height"]), start=1):
+            self.page.screenshot(
+                path=shot.with_name(f"{shot.stem}.band-{number:02}.png"),
+                full_page=True,
+                clip={"x": 0, "y": top, "width": wide, "height": height},
+                animations="disabled",
+            )
+
+    def shoot_failure(self, name, width, said) -> list[str]:
+        """``said`` as the finding, with the page as it stands kept beside the
+        screenshots (``.failed.png``) and its path printed."""
+
+        path = _shot(name, width).with_suffix(".failed.png")
+        try:
+            self.page.screenshot(path=path, full_page=True, animations="disabled")
+        except BrowserError as broke:
+            print(f"{name} at {width}: {said}; no screenshot ({str(broke).splitlines()[0]})", flush=True)
+        else:
+            print(f"{name} at {width}: {said}; screenshot {path}", flush=True)
+        return [said]
+
+    def beside_base(self, name, width, kind, said) -> str:
+        """What was measured here, with the base's numbers beside it when
+        there is a base."""
+
+        if self.base is None:
+            return said
+        return _beside(_usage("usage_base"), said, self.base_measured.get((name, width), {}).get(kind))
 
     def measure_columns(self, name, width):
         """Every table's column widths here, printed and kept beside the
@@ -732,7 +882,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         said = said or f"{name} at {width}: (no tables)"
         shot = _shot(name, width)
         shot.with_name(shot.stem + ".columns.txt").write_text(said + "\n", encoding="utf-8")
-        print(said, flush=True)
+        self.measured.setdefault((name, width), {})["columns"] = said
+        print(self.beside_base(name, width, "columns", said), flush=True)
 
     def evaluate_script(self, name, width):
         """What ``--eval``'s script returns here, printed and kept beside the
@@ -745,7 +896,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             said = f"{name} at {width}: --eval threw ({str(threw).splitlines()[0]})"
         shot = _shot(name, width)
         shot.with_name(shot.stem + ".eval.txt").write_text(said + "\n", encoding="utf-8")
-        print(said, flush=True)
+        self.measured.setdefault((name, width), {})["eval"] = said
+        print(self.beside_base(name, width, "eval", said), flush=True)
 
     def tables(self, name):
         """What each table shows here, printed and kept beside the screenshot

@@ -276,8 +276,22 @@ naming every page that failed. `--base <ref>` looks at the same pages at
 `<ref>` first, in a temporary worktree it removes however the run ends, and
 prints only what is new on this checkout and what it fixed. A finding is
 matched with its numbers stripped, so one whose row number or pixel count
-moved is neither new nor fixed. `--css` takes CSS
-text or a file of it, a relative path read from the checkout.
+moved is neither new nor fixed. With `--columns` or `--eval`, each line the
+base measured otherwise is printed under this checkout's, marked with the ref.
+`--css` takes CSS text or a file of it, a relative path read from the
+checkout.
+
+A look holds still: the page's clock is frozen at the moment the run began
+(its `--base` run shares that instant), so a time a script reads is drawn
+alike in both, and each screenshot is taken with animations finished. A page
+taller than the window is also cut into window-sized bands beside its full
+screenshot (`<page>-<width>.band-01.png` on), one screen to read at a time.
+A page that could not be looked at (refused, no `main`, a rule that could not
+run) is shot as it stands, as `<page>-<width>.failed.png`, and its path
+printed. `--open` opens every disclosure and shows every popover, round after
+round until nothing more opens, so a disclosure a region brings in when
+another opens is opened too. `--engine chromium` or `firefox` draws in
+another engine, installed first (`webkit` by default).
 
 `--columns` prints each table's column widths as drawn and at min-content and
 max-content. With `--expand` an open row holds the columns at the widths they

@@ -19,8 +19,11 @@ Only looking does, and it is done before the change is handed on.
    mise run dev:look <pages> --expand --open
    ```
 
-   Read every screenshot under `var/look/`. The pages `dev:look` names and
-   its options are in `docs/Development.md#browser-layout`. A page or
+   Read every screenshot under `var/look/`: a tall page is also cut into
+   window-sized bands (`.band-01.png` on), read one at a time, and a page
+   that could not be looked at leaves a `.failed.png`. `--open` opens nested
+   disclosures and popovers too. The pages `dev:look` names and its options
+   are in `docs/Development.md#browser-layout`. A page or
    state it does not draw: run `mise run dev:scratch --seed showcase` and take
    a session from `mise run dev:session`.
 
