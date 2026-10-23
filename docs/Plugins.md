@@ -577,6 +577,24 @@ which `page.html` draws, and put the stable `id` on each section; HQ owns overfl
 scroll-aware current state and fragment history. Labels may change; section
 IDs are durable links.
 
+### What a template prints
+
+A `{{ value }}` in an extension's templates prints text, markup, a number
+(not a flag), a UUID or a path. Anything else is refused: a flag, None, a date
+or a length of time, a mapping, a list, bytes, a plain enum member, a model
+instance or any other object. The view or projection says it in words first:
+`when` or `when_day` for a moment, the missing mark for nothing, a count, a
+name. The same holds for `{% firstof %}`, `{% cycle %}`, the translation tags
+and a `simple_tag`'s result. Text always prints as it is, even text that looks
+like a date.
+
+Under test and with DEBUG a refusal raises `Unprintable`, naming the template
+and line, so an extension's suite finds it. In production the page prints the
+missing mark and logs the value's type and place. The host holds only its own
+and its extensions' templates, so Django's widgets and other third-party
+templates print as they always have. The rule arrives with
+`PLUGIN_API_VERSION` 5.
+
 ## Outbound work
 
 A request never waits on anything outside the process. While one is served HQ
