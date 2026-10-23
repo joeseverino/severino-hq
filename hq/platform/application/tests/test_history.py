@@ -3,15 +3,14 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..conditions import held_since, stamped
 from ..history import moments, near
@@ -324,17 +323,23 @@ class AuditHistoryPageTests(TestCase):
     def test_the_page_costs_the_same_queries_however_much_history_there_is(self):
         self.stored()
 
-        def cost():
-            with CaptureQueriesContext(connection) as queries:
-                self.assertEqual(self.client.get(self.url()).status_code, 200)
-            return len(queries)
+        def arrange(count):
+            for index in range(AuditLog.objects.count(), count):
+                event(ago=timedelta(minutes=index), repr_=f"entry-{index}", type_=f"Kind{index}")
 
-        for index in range(5):
-            event(ago=timedelta(minutes=index), repr_=f"a{index}", type_=f"Kind{index}")
-        few = cost()
-        for index in range(120):
-            event(ago=timedelta(minutes=10 + index), repr_=f"b{index}", type_=f"Other{index}")
-        self.assertEqual(cost(), few)
+        def draw(_count):
+            response = self.client.get(self.url())
+            self.assertEqual(response.status_code, 200)
+            return response
+
+        # A page holds fifty, so fifty is the most a page can prove it drew.
+        assert_cost_does_not_grow(
+            self,
+            sizes=(5, 50),
+            arrange=arrange,
+            draw=draw,
+            rows=distinct(r"\bentry-\d+\b"),
+        )
 
 
 class NoSecondHistoryTests(TestCase):
