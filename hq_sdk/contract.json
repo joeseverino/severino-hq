@@ -2598,13 +2598,22 @@
       "ago": {
         "argument": "none"
       },
+      "breakable": {
+        "argument": "optional"
+      },
       "counted": {
         "argument": "required"
+      },
+      "day": {
+        "argument": "none"
       },
       "money": {
         "argument": "optional"
       },
       "or_empty": {
+        "argument": "none"
+      },
+      "readout": {
         "argument": "none"
       },
       "sortable": {

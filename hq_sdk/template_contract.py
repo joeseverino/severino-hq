@@ -85,7 +85,19 @@ TAGS = (
     "table_heading",
     "table_region",
 )
-FILTERS = ("ago", "counted", "money", "or_empty", "sortable", "span", "when", "web_url")
+FILTERS = (
+    "ago",
+    "breakable",
+    "counted",
+    "day",
+    "money",
+    "or_empty",
+    "readout",
+    "sortable",
+    "span",
+    "when",
+    "web_url",
+)
 
 # Django's own libraries an extension may ``{% load %}`` beside its own.
 LIBRARIES = ("humanize", "static")
