@@ -55,11 +55,16 @@ def execute_once(
     request_sha256: str,
     operation: Callable[[], tuple[dict[str, Any], int]],
     scope: str = "",
+    keep: Callable[[dict[str, Any], int], bool],
 ) -> tuple[dict[str, Any], int, bool]:
     """Run once, or replay the committed response for the same request.
 
     ``scope`` separates keys that arrive by different routes: a key in a
     command's payload and the same text in a transport's header are two keys.
+
+    ``keep`` says whether a response is the outcome of the call. One that is
+    not (a refusal, a call held for a person) frees its key while what the
+    operation wrote commits, so the same key runs once the cause has gone.
 
     The reservation and domain operation share a transaction. A crashed
     process therefore leaves neither a partial domain write nor a poisoned
@@ -91,6 +96,9 @@ def execute_once(
             return record.response, record.status_code, True
 
         response, status_code = operation()
+        if not keep(response, status_code):
+            record.delete()
+            return response, status_code, False
         record.response = response
         record.status_code = status_code
         record.save(update_fields=("response", "status_code"))

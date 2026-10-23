@@ -291,6 +291,20 @@ class CommandViewTests(TestCase):
         self.assertContains(response, "already used for a different request", status_code=409)
         self.assertFalse(Project.objects.filter(slug="changed-request").exists())
 
+    def test_a_refused_command_keeps_nothing_under_its_key(self):
+        """The same key runs once what refused it has gone."""
+
+        taken = Project.objects.create(name="Taken", slug="taken-slug")
+        payload = self._create_payload(name="Second", slug="taken-slug")
+
+        refused = self.client.post("/commands/project.create/", payload)
+        taken.delete()
+        ran = self.client.post("/commands/project.create/", payload)
+
+        self.assertNotEqual(refused.status_code, 302)
+        self.assertEqual(ran.status_code, 302)
+        self.assertTrue(Project.objects.filter(name="Second").exists())
+
     def test_unknown_and_repeated_fields_fail_before_execution(self):
         payload = self._create_payload(slug="strict-browser")
         unknown = self.client.post("/commands/project.create/", {**payload, "surprise": "no"})

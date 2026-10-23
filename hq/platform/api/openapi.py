@@ -308,6 +308,12 @@ class _Builder:
                 }
             else:
                 responses[code] = {"$ref": f"#/components/responses/{_pascal(HTTPStatus(status).phrase)}"}
+            named = sorted(name for name, mapped in view.__hq_codes__.items() if mapped == status)
+            if named:
+                codes = ", ".join(f"`{name}`" for name in named)
+                responses[code]["description"] = (
+                    f"{HTTPStatus(status).phrase}. The capability's own error codes here: {codes}."
+                )
         return responses
 
     def operation(

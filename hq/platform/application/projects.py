@@ -454,15 +454,14 @@ def set_dependency_updates(
     """
 
     principal.require(records_of("projects").write)
-    with operation_context(interface=principal.interface, actor=principal.actor, operation=DEPENDENCY_UPDATES):
-        project = _locked(current_slug, expected_updated_at)
-        refused = _updates_refusal(project, enabling=command.enabled)
-        if refused:
-            return {"ok": False, "error": {"code": "precondition", "message": refused}}
-        if project.dependency_updates != command.enabled:
-            project.dependency_updates = command.enabled
-            project.full_clean()
-            project.save()
+    project = _locked(current_slug, expected_updated_at)
+    refused = _updates_refusal(project, enabling=command.enabled)
+    if refused:
+        return {"ok": False, "error": {"code": "precondition", "message": refused}}
+    if project.dependency_updates != command.enabled:
+        project.dependency_updates = command.enabled
+        project.full_clean()
+        project.save()
     return {"ok": True, "project": serialize_project(project, relationships=True)}
 
 

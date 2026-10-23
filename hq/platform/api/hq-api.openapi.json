@@ -4867,16 +4867,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -4885,7 +4888,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -4954,16 +4958,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -4972,7 +4979,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5041,16 +5049,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5059,7 +5070,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5128,16 +5140,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5146,7 +5161,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5215,16 +5231,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5233,7 +5252,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5302,16 +5322,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5320,7 +5343,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5389,16 +5413,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5407,7 +5434,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5476,16 +5504,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5494,7 +5525,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5563,16 +5595,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5581,7 +5616,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5650,16 +5686,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5668,7 +5707,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5733,16 +5773,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5751,7 +5794,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5820,16 +5864,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5838,7 +5885,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5907,16 +5955,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -5925,7 +5976,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -5994,16 +6046,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6012,7 +6067,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6081,16 +6137,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6099,7 +6158,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6168,16 +6228,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6186,7 +6249,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6255,16 +6319,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6273,7 +6340,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6342,16 +6410,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6360,7 +6431,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6429,16 +6501,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6447,7 +6522,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6516,16 +6592,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6534,7 +6613,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6603,16 +6683,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6621,7 +6704,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6690,16 +6774,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6708,7 +6795,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6778,16 +6866,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6796,7 +6887,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6865,16 +6957,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6883,7 +6978,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -6952,16 +7048,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -6970,7 +7069,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7039,16 +7139,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7057,7 +7160,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7126,16 +7230,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7144,7 +7251,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7213,16 +7321,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7231,7 +7342,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7300,16 +7412,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7318,7 +7433,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7383,16 +7499,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7401,7 +7520,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7466,16 +7586,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7484,7 +7607,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7651,10 +7775,11 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
@@ -7679,7 +7804,7 @@
                 }
               }
             },
-            "description": "Conflict."
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7707,7 +7832,8 @@
             "description": "Unsupported Media Type."
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7776,16 +7902,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7794,7 +7923,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7863,16 +7993,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7881,7 +8014,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7951,16 +8085,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -7969,7 +8106,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8038,16 +8176,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -8056,7 +8197,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8125,16 +8267,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -8143,7 +8288,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8212,16 +8358,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -8230,7 +8379,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8299,16 +8449,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -8317,7 +8470,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8386,16 +8540,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -8404,7 +8561,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8473,16 +8631,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -8491,7 +8652,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8560,16 +8722,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -8578,7 +8743,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8647,16 +8813,19 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/NotFound",
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -8665,7 +8834,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8795,7 +8965,8 @@
             "description": "Unauthorized."
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/Forbidden",
+            "description": "Forbidden. The capability's own error codes here: `denied_by_policy`, `forbidden`."
           },
           "404": {
             "content": {
@@ -8817,13 +8988,14 @@
                 }
               }
             },
-            "description": "Not Found."
+            "description": "Not Found. The capability's own error codes here: `approval_subject_unreadable`, `not_found`, `unknown_capability`."
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/Conflict",
+            "description": "Conflict. The capability's own error codes here: `conflict`, `idempotency_conflict`, `operation_failed`, `precondition`."
           },
           "413": {
             "$ref": "#/components/responses/ContentTooLarge"
@@ -8832,7 +9004,8 @@
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "#/components/responses/TooManyRequests",
+            "description": "Too Many Requests. The capability's own error codes here: `too_many_pending_approvals`."
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"

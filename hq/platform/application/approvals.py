@@ -351,6 +351,15 @@ def hold_for_approval(
     return _awaiting(held, repeated=False)
 
 
+AWAITING_APPROVAL = "awaiting_approval"
+
+
+def is_held(result: dict[str, Any]) -> bool:
+    """Whether a capability's answer is a call waiting for a person."""
+
+    return result.get("status") == AWAITING_APPROVAL
+
+
 def _awaiting(held: ApprovalRequest, *, repeated: bool) -> dict[str, Any]:
     """What a non-interactive caller is told, which is not an error.
 
@@ -364,7 +373,7 @@ def _awaiting(held: ApprovalRequest, *, repeated: bool) -> dict[str, Any]:
 
     return {
         "ok": True,
-        "status": "awaiting_approval",
+        "status": AWAITING_APPROVAL,
         "queued": False,
         "applied": False,
         "message": (

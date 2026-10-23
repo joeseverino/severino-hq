@@ -8,7 +8,7 @@ from typing import Any, TypedDict
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
-from hq.platform.core.audit import audit_connection
+from hq.platform.core.audit import audit_connection, operation_context
 
 from .approvals import RefusedHold, hold_for_approval
 from .capability_policy import Rule, decide
@@ -305,8 +305,9 @@ def _once(
     """Run ``act`` under the caller's key, or return what it returned the first time.
 
     The key belongs to the actor and to one request: the same key with another
-    capability, target or payload is a conflict. A call that raises commits
-    nothing, so its key is free for the corrected request.
+    capability, target or payload is a conflict. A call that raises, or answers
+    with a refusal of its own, keeps nothing, so its key is free for the
+    corrected request.
     """
 
     result, _status, _replayed = execute_once(
@@ -315,6 +316,7 @@ def _once(
         request_sha256=request_fingerprint(spec.name, request, api_version=2),
         operation=lambda: (act(), 200),
         scope="command",
+        keep=lambda answer, _status: answer.get("ok", False),
     )
     return result
 
@@ -372,14 +374,18 @@ def _run(
 ) -> dict[str, Any]:
     """Bind the target and run the handler, in one place.
 
-    A command that names a connection attributes its audit events to it. The
+    Every audit event the handler records names the caller and the capability,
+    and a command that names a connection attributes them to it too. The
     stale-write token goes only to a handler that declares it.
     """
 
     arguments = _target_keyword(spec, target)
     if takes_stale_write_token(spec.handler):
         arguments[STALE_WRITE_KEYWORD] = expected_updated_at
-    with audit_connection(getattr(command, "connection_ref", "") or ""):
+    with (
+        operation_context(interface=principal.interface, actor=principal.actor, operation=spec.name),
+        audit_connection(getattr(command, "connection_ref", "") or ""),
+    ):
         return spec.handler(command, principal=principal, **arguments)
 
 
