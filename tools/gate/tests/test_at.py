@@ -104,6 +104,38 @@ class TestAtRefTests(GateTestCase):
         self.assertIn(f"at {self.old} ", out.strip().splitlines()[-1])
         self.assert_nothing_left()
 
+    def run_unittest_at_old(self, test: str) -> tuple[int, str]:
+        """The label run by the real test loader, so its report reads as a real one does."""
+        self.write("tests/test_app.py", test)
+        with patch.object(at, "UV_RUN", [sys.executable, "-m", "unittest"]):
+            return self.run_main("--at", self.old, "tests.test_app")
+
+    def test_a_label_that_does_not_import_at_the_ref_is_not_a_failing_test(self):
+        code, out = self.run_unittest_at_old(
+            "import unittest\nfrom app import RENAMED\n\n"
+            "class Case(unittest.TestCase):\n    def test_renamed(self):\n        self.assertTrue(RENAMED)\n"
+        )
+
+        self.assertEqual(code, 3)
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("DOES NOT IMPORT", verdict)
+        self.assertIn(self.old, verdict)
+        self.assertIn("test_app", verdict)
+        kept = Path(out.strip().splitlines()[-2].rsplit(" ", 1)[-1]).read_text()
+        self.assertIn("cannot import name 'RENAMED'", kept)
+        self.assert_nothing_left()
+
+    def test_a_test_that_imports_and_fails_at_the_ref_is_a_failure(self):
+        code, out = self.run_unittest_at_old(
+            "import unittest\nfrom app import VALUE\n\n"
+            "class Case(unittest.TestCase):\n    def test_value(self):\n        self.assertEqual(VALUE, 2)\n"
+        )
+
+        self.assertEqual(code, 1)
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("FAILED", verdict)
+        self.assertNotIn("DOES NOT IMPORT", verdict)
+
     def test_an_interrupted_run_leaves_no_worktree(self):
         with patch.object(at, "run", side_effect=KeyboardInterrupt):
             code, _ = self.run_main("--at", self.old, "label")

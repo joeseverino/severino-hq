@@ -8,7 +8,8 @@ tree's test files laid over it, so one command says whether a new test fails
 on the old code, or whether a failure was already there. Test files are those
 under a `tests` directory and the browser gates' modules; everything else is
 the ref's. The worktree goes on every exit, and the exit status is the test
-run's.
+run's, except when a label does not import at the ref: that run says nothing
+about the tests, so it has a verdict of its own and exits 3.
 """
 
 import os
@@ -19,13 +20,17 @@ import sys
 import time
 from pathlib import Path
 
-from tools.gate.verdict import close, run
+from tools.gate.verdict import Step, close, run
 
 ROOT = Path(__file__).resolve().parents[2]
 # Everything after it is the developer's, so a later --parallel or -k wins.
 TEST = ["manage.py", "test", "--noinput", "--parallel", "auto"]
 # The ref's own dependencies, as `mise run test` installs them here.
 UV_RUN = ["uv", "run", "--group", "browser", "python"]
+# How the test loader reports a label whose module raised on import.
+FAILED_IMPORT = "unittest.loader._FailedTest."
+IMPORT_ERROR = "ImportError: Failed to import test module:"
+UNIMPORTED = 3
 
 
 class RefError(Exception):
@@ -87,8 +92,26 @@ def run_at(ref: str, args: list[str]) -> int:
     finally:
         remove(tree)
     laid = f", with {len(present) + len(deleted)} test files from this tree"
+    if unimported(step):
+        close(name, started, [step], outcome="DOES NOT IMPORT at the ref, so no test ran on its code")
+        return UNIMPORTED
     close(name, started, [step], laid)
     return step.code
+
+
+def unimported(step: Step) -> bool:
+    """Whether a label's module raised on import at the ref; its name then stands for the module the loader tried."""
+
+    failed = [
+        test
+        for test in step.tests
+        if test.startswith(FAILED_IMPORT) and any(line.startswith(IMPORT_ERROR) for line in step.reports.get(test, ()))
+    ]
+    for test in failed:
+        module = test.removeprefix(FAILED_IMPORT)
+        step.tests[step.tests.index(test)] = module
+        step.reports[module] = step.reports.pop(test, [])
+    return bool(failed)
 
 
 def stop(signum: int, _frame: object) -> None:

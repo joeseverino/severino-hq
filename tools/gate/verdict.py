@@ -146,19 +146,21 @@ def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
     return step
 
 
-def verdict(name: str, started: float, steps: list[Step], passed: str = "") -> str:
+def verdict(name: str, started: float, steps: list[Step], passed: str = "", outcome: str = "FAILED") -> str:
     elapsed = f"{time.monotonic() - started:.1f}s"
     failed = [failure for step in steps for failure in step.failures()]
     if failed:
-        return f"[{name}] FAILED in {elapsed}: {'; '.join(failed)}"
+        return f"[{name}] {outcome} in {elapsed}: {'; '.join(failed)}"
     return f"[{name}] passed in {elapsed}{passed}"
 
 
-def close(name: str, started: float, steps: list[Step], passed: str = "", failed: str = "") -> None:
+def close(
+    name: str, started: float, steps: list[Step], passed: str = "", failed: str = "", outcome: str = "FAILED"
+) -> None:
     """Print the closing verdict, after the path of the file that keeps it whole."""
 
     named = [failure for step in steps for failure in step.everything_failed()]
-    line = verdict(name, started, steps, passed) + (failed if named else "")
+    line = verdict(name, started, steps, passed, outcome) + (failed if named else "")
     path = VERDICTS / f"{re.sub(r'[^\w.-]+', '-', name).strip('-')}.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
     kept = [traceback for step in steps for traceback in step.tracebacks()]
