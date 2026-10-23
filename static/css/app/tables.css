@@ -364,15 +364,27 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
   grid-template-columns: minmax(min-content, max-content);
   & > .token[data-sole] { contain: inline-size; justify-self: stretch; }
 }
+/* The strut is the name twice in the track, both unseen: one holds out for
+   the longest piece, and one asks for the whole name and holds out for none
+   of it, so a cap on what the column holds out for never caps what it asks. */
 .strut { display: none; }
-.data-table td code:not(.cell-whole, [popover] *) > .strut {
-  display: block; visibility: hidden; block-size: 0; overflow-wrap: normal; white-space: normal;
+.data-table td code:not(.cell-whole, [popover] *) > .strut { display: contents; }
+.data-table td code:not(.cell-whole, [popover] *) > .strut::before,
+.data-table td code:not(.cell-whole, [popover] *) > .strut::after {
+  content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden; white-space: normal;
   padding-inline: var(--space-2) calc(var(--space-2) + 1px);
+}
+.data-table td code:not(.cell-whole, [popover] *) > .strut::before {
+  overflow-wrap: normal;
   /* No piece holds out for more than half its region: one longer breaks
      where it must (value_tags.breakable), so the table still fits. */
   max-width: 50cqi;
 }
-.data-table td code:not(.cell-whole, [popover] *) > .strut::before { content: attr(data-strut); }
+.data-table td code:not(.cell-whole, [popover] *) > .strut::after { overflow-wrap: anywhere; }
+/* A narrow box has no width to hold out with (its `--cut-floor`), so a cut
+   name holds out for no piece of itself there either. Read from the table's
+   mark: a style query does not reach a pseudo-element in every engine. */
+.data-table[data-narrow] td code > .strut::before { display: none; }
 /* An opened row lifts every cut in it (surfaces.css), and the floor a cut
    value held out for goes with the cut: with its columns held, a floor wider
    than its column would run the value past it. Only the floor goes: a
@@ -564,6 +576,13 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
    in a narrow box (tables.js). A row with something in a column that left
    shows its toggle, and its table keeps the gutter the toggle stands in. */
 .data-table[data-narrow] { --box: narrow; }
+/* With no script nothing measures the table, so a phone's box is narrow by
+   its width alone. */
+@media (scripting: none) {
+  @container table-region (width < 640px) {
+    .data-table { --box: narrow; }
+  }
+}
 /* A table still wider than its region in a narrow box is tight
    (`data-tight`, tables.js): what keeps a line whole there (a heading, a
    time, a status, a value's parts) wraps at its spaces, and its cells stand

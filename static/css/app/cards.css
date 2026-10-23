@@ -226,9 +226,14 @@ a.kpi:hover { background: var(--surface-2); }
 /* A table with no headings is read as one column, so the queue counts its
    own for the share: what is wrong and what can be pressed both hold out, and
    the dismiss beside the buttons is the unbounded half the share leaves. In a
-   narrow box the buttons wait in the line beneath, so the share is the
-   title's. */
+   narrow box the buttons wait in the line beneath; with no script they stay
+   in the row there, and the title and they share it as one column. */
 .data-table.queue-table { --columns: 2; }
+@media (scripting: none) {
+  @container table-region (width < 640px) {
+    .data-table.queue-table { --columns: 1; }
+  }
+}
 .queue-table .queue-what { min-width: 10rem; }
 .queue-table .queue-act { width: 1%; text-align: right; white-space: nowrap; padding-block-start: calc(var(--row-pad) - var(--space-1)); padding-inline-end: var(--space-4); }
 /* What a row offers, then the reader's own dismiss, side by side on one line

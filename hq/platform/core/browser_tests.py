@@ -3069,7 +3069,8 @@ _COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 _ROW_TOGGLE_TABLES = """
 {% table_region "Dropping" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
-<tr data-probe="dropped"><td class="row-gutter">Dropped{% row_toggle %}</td><td>Short</td><td>Something to say</td></tr>
+<tr data-probe="dropped"><td class="row-gutter">Dropped{% row_toggle %}</td><td>Short</td>
+<td><span style="display: inline-block; inline-size: 30rem">Something too wide for a phone to keep</span></td></tr>
 <tr data-probe="dropped-blank"><td class="row-gutter">Blank{% row_toggle %}</td><td>Short</td><td>–</td></tr>
 <tr data-probe="screen-reader"><td class="row-gutter">Chest{% row_toggle %}</td>
 <td><span class="cadence-mark is-hit" aria-hidden="true"></span>
@@ -4847,11 +4848,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
     def test_a_row_toggle_is_owed_only_to_what_a_reader_cannot_see(self):
         """Every row the server made openable has its toggle in the HTML, in
         the cell that names it, and shows it only while the row holds
-        something back: a column a narrow box dropped with something in it, a
-        part of a list it folds, or a value cut short, which opens its row only
-        where the gutter is kept already. A narrow box keeps it for every table
-        whose rows open, since touch has no hover title; a wide one only for a
-        table with something else to open. A dash in a dropped column says
+        something back: a column that left a table wider than its box, with
+        something in it, a part of a list it folds, or a value cut short,
+        which opens its row only where the gutter is kept already. A narrow
+        box keeps it for every table whose rows open, since touch has no
+        hover title; a wide one only for a table with something else to open. A dash in a dropped column says
         nothing, screen-reader text is clipped to a pixel by design and a
         decoration is hidden from assistive technology: none is content a row
         withholds. Whether a value is cut is measured, so script is on.

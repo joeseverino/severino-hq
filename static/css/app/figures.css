@@ -137,8 +137,10 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* A name in a table cell takes two lines at most, and so does a `.cell-line`:
    one fact written as a line. Clamped, it still breaks where it must, so its
    column can narrow to fit the page, and the row stays within the height
-   core/browser_tests.py holds it to. The whole name is the record's own page. */
-.data-table td [data-entity],
+   core/browser_tests.py holds it to. The whole name is the record's own page.
+   A link of code is clamped by its code (tables.css), and clamped again it
+   would count the unseen lines of the code's strut. */
+.data-table td [data-entity]:not(:has(> code)),
 .data-table td .cell-line {
   display: -webkit-inline-box;
   max-width: 100%;

@@ -65,9 +65,11 @@
   // what left, the last first, while it still fits; a region that only
   // narrowed has nothing to give back, so that is not tried.
   const fit = (table, mayReturn = true) => {
-    const was = gaveWay.get(table) ?? 0;
+    const was = gaveWay.get(table);
     const most = dropOrder(table).length + 2;
-    let steps = Math.min(was, most);
+    let steps = Math.min(was ?? 0, most);
+    // A table first fitted is told how many columns share its region
+    // before it is measured, so its first measure is the one it keeps.
     if (steps !== was) giveWay(table, steps);
     if (overflows(table)) {
       while (steps < most && overflows(table)) giveWay(table, ++steps);
