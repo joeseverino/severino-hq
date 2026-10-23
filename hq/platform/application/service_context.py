@@ -31,6 +31,7 @@ lazy from hq.domains.projects.models import Project
 lazy from hq.platform.core.network import split_host_port
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
+from .display_words import display
 from .entity_links import EntityLink, entity_link, kind_label
 from .moments import ago
 from .published_sites import projects_by_hostname
@@ -45,7 +46,7 @@ lazy from .path_dependencies import consequence_of
 lazy from .paths import hq_path
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class Cell:
     """One value in a section's table, and where it goes if anywhere."""
 

@@ -4,11 +4,12 @@ A ``Kpi`` takes one drawing or none: dots for a part of a whole, a trend for
 recent readings. ``hq_sdk.ui`` hands these to extensions.
 """
 
-from dataclasses import dataclass
 from typing import ClassVar
 
+from .display_words import display
 
-@dataclass(frozen=True, slots=True)
+
+@display
 class Dot:
     """One of the things a figure counts: a machine among the machines.
 
@@ -21,7 +22,7 @@ class Dot:
     url: str = ""
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class Dots:
     """A part of a whole, drawn as one dot each beside the value.
 
@@ -64,7 +65,7 @@ class Dots:
         return any(dot.url for dot in self.shown)
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class Trend:
     """A figure's recent readings, oldest first, drawn as a line beside it.
 

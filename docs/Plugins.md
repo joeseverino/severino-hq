@@ -479,6 +479,13 @@ in scope, or a host tag, filter, class or `data-` hook not listed. The record is
 `templates` section of `hq_sdk/contract.json`, derived from the host's own
 templates by `manage.py sdk_contract`, which writes these tables too.
 
+Every view model `hq_sdk.ui` hands an extension says its values in words, and
+refuses one that is not with a `ValueError` where it is built: a date-time
+stamp, a dumped record or list, a bare `True` or `False`, markup, a flag or
+`None` where text belongs, or a field's snake_case name as a label. A moment
+goes in its typed field (`ListRow.at`, `Insight.since`) or through
+`hq_sdk.ui.when`.
+
 A page extends a frame and fills its blocks. It never extends `base.html` or
 draws its own head: the view declares the page (`hq_sdk.pages`), and a head
 action that opens a dialog declares that as well,

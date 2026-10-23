@@ -2,7 +2,6 @@
 
 import math
 import re
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from .chart_numbers import (
@@ -13,9 +12,9 @@ from .chart_numbers import (
     _nice_ceiling,
     _table_heading,
 )
+from .display_words import display, in_words
 from .drawings import Dots, Trend
 from .labels import plural
-from .timestamps import moment
 from .workflow_contracts import ActionLink, WorkflowPlan
 
 # The one status vocabulary. Every surface that shows state (dashboard cards,
@@ -84,7 +83,7 @@ def ended(text: str) -> str:
 PAGE_SECTION_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class PageSection:
     """One stable destination in a dense page.
 
@@ -111,7 +110,7 @@ class PageSection:
         return f"#{self.id}"
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class PageNavigation:
     """The ordered map of a single page, rendered by HQ."""
 
@@ -128,7 +127,7 @@ class PageNavigation:
             raise ValueError("PageNavigation section ids must be unique.")
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class Kpi:
     label: str
     value: str | int
@@ -145,7 +144,7 @@ class Kpi:
     drawing: Dots | Trend | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class Insight:
     """A reading, what it means, and the next action.
 
@@ -212,9 +211,11 @@ class Insight:
 
     def __post_init__(self) -> None:
         _one_of("Insight status", self.status, STATUS_VALUES)
+        for label, _value in self.facts:
+            in_words(label, label=True)
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class ListRow:
     """One line of a compact record list: what it is, and when.
 
@@ -248,12 +249,9 @@ class ListRow:
         _one_of("ListRow status", self.status, STATUS_VALUES, or_empty=True)
         if self.status and not self.badge:
             raise ValueError("ListRow status needs a badge: state is never carried by color alone.")
-        # A stamp handed over as text would be printed as the machine wrote it.
-        if not isinstance(self.meta, str) or moment(self.meta) is not None:
-            raise ValueError(f"ListRow meta is words; a moment goes in `at`. Got {self.meta!r}.")
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class TimelineItem:
     """One dated event in the host-owned planning horizon.
 
@@ -273,7 +271,7 @@ class TimelineItem:
         _one_of("TimelineItem status", self.status, STATUS_VALUES)
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class Timeline:
     """A chronological, dependency-free planning surface."""
 
@@ -325,14 +323,14 @@ LABEL_GAP_PX = 8.0
 NARROW_PLOT_PX = 420.0
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class ChartSeries:
     label: str
     values: tuple[float, ...]
     slot: int
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class ChartBar:
     x: float
     y: float
@@ -348,19 +346,19 @@ class ChartBar:
     tooltip: str = ""
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class ChartTick:
     y: float
     label: str
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class ChartCategory:
     x: float
     label: str
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class PlacedLabel:
     """An axis label and where it sits, as a share of the drawing.
 
@@ -375,13 +373,13 @@ class PlacedLabel:
     label: str
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class ChartRow:
     label: str
     values: tuple[float, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class ChartTableRow:
     """One row of a chart's data table, as the words it shows."""
 
@@ -389,7 +387,7 @@ class ChartTableRow:
     cells: tuple[str, ...]
 
 
-@dataclass(frozen=True, kw_only=True)
+@display(kw_only=True)
 class Chart:
     """What every chart in HQ is, and the one place its axis is derived.
 
@@ -474,7 +472,7 @@ class Chart:
         return tuple(PlacedLabel(item.y / self.height * 100, item.label) for item in self.ticks)
 
 
-@dataclass(frozen=True, kw_only=True)
+@display(kw_only=True)
 class StackedBarChart(Chart):
     """Quantities that add up, on a zero-based axis."""
 
@@ -482,7 +480,7 @@ class StackedBarChart(Chart):
     bars: tuple[ChartBar, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class LinePoint:
     """One reading, placed."""
 
@@ -493,7 +491,7 @@ class LinePoint:
     tooltip: str = ""
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class LineSeries:
     """One line, already projected into the plot's coordinates."""
 
@@ -515,7 +513,7 @@ class LineSeries:
         return len(self.points) <= self.DOT_LIMIT
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class LineMark:
     """A vertical rule at a date: the day something began."""
 
@@ -523,7 +521,7 @@ class LineMark:
     label: str
 
 
-@dataclass(frozen=True, kw_only=True)
+@display(kw_only=True)
 class LineChart(Chart):
     """A measure over time, on an axis fitted to the measure.
 
@@ -724,7 +722,7 @@ def _trend_path(points, place_x, place_y) -> str:
 CALENDAR_STATES = frozenset({"done", "missed", "planned", "empty"})
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class CalendarDay:
     """One day: what the plan asked for, and what actually happened.
 
@@ -751,7 +749,7 @@ class CalendarDay:
             raise ValueError(f"A {self.state!r} day is by definition planned; set planned=True.")
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class ActivityCalendar:
     """Plan against execution, day by day, laid out as weeks.
 
@@ -810,7 +808,7 @@ class ActivityCalendar:
         return f"{kept}/{due}" if due else ""
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class PlannedDay:
     """One weekday in a recurring plan.
 
@@ -830,13 +828,13 @@ class PlannedDay:
         return bool(self.slots)
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class PlanNote:
     label: str
     value: str
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class WeekPlan:
     """The recurring shape of a week: what is scheduled, on which days.
 
@@ -856,7 +854,7 @@ class WeekPlan:
             raise ValueError(f"A week plan needs 7 days; got {len(self.days)}.")
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class DomainOverview:
     """One plugin's useful contribution to a cross-domain surface.
 
