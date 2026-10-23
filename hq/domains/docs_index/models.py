@@ -28,12 +28,13 @@ class DocumentationQuerySet(models.QuerySet):
         The one shared definition used by the dashboard, the docs list filter,
         and the reports page.
 
-        Two doc types are excluded because they are not documentation about a
+        Three doc types are excluded because they are not documentation about a
         system and so have no review cycle to fall behind. A public article
         draft belongs to the Content pipeline. A task belongs to the task
         lifecycle: it is open until it is done, and "last reviewed: never" is
         not a finding about a task, it is what every task says from the moment
-        it is written. Both put an item in the queue that reviewing cannot
+        it is written. A report is a frozen record, so reviewing it has nothing
+        to clear. Each would put an item in the queue that reviewing cannot
         clear, which is the one thing a queue must never contain.
         """
         review_days = getattr(settings, "SEVERINO_DOC_REVIEW_INTERVAL_DAYS", 180)
@@ -46,6 +47,7 @@ class DocumentationQuerySet(models.QuerySet):
             doc_type__in=(
                 self.model.DocType.PUBLIC_ARTICLE_DRAFT,
                 self.model.DocType.TASK,
+                self.model.DocType.REPORT,
             )
         )
 

@@ -96,6 +96,20 @@ class CommittedSchemaMatchesMcpTests(SimpleTestCase):
         )
 
 
+class ReviewQueueTests(TestCase):
+    def test_a_frozen_report_is_never_queued_for_review_but_a_runbook_is(self):
+        DocumentationRecord.objects.create(
+            doc_id="report-example", title="Example report", doc_type="report", status="active"
+        )
+        DocumentationRecord.objects.create(
+            doc_id="rb-example", title="Example runbook", doc_type="runbook", status="active"
+        )
+
+        queued = DocumentationRecord.objects.needing_review().values_list("doc_id", flat=True)
+
+        self.assertEqual(list(queued), ["rb-example"])
+
+
 class RelatedDocumentsTests(TestCase):
     """A record's documents as its page lists them: by type, by title."""
 
