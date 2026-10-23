@@ -228,9 +228,13 @@ class CalendarCell:
 
     @property
     def url(self) -> str:
-        """This day, open beside its month."""
+        return day_url(self.day)
 
-        return f"{reverse('calendar:month')}?month={self.day:%Y-%m}&day={self.day.isoformat()}"
+    @property
+    def anchor(self) -> str:
+        """The id of this day in its month, which a day's links target."""
+
+        return f"day-{self.day.isoformat()}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,12 +273,18 @@ class CalendarDayView:
     groups: tuple[tuple[SourceView, tuple[CalendarEvent, ...]], ...] = field(default=())
 
     @property
-    def previous(self) -> date:
-        return self.day - timedelta(days=1)
+    def previous_url(self) -> str:
+        return day_url(self.day - timedelta(days=1))
 
     @property
-    def next(self) -> date:
-        return self.day + timedelta(days=1)
+    def next_url(self) -> str:
+        return day_url(self.day + timedelta(days=1))
+
+
+def day_url(day: date) -> str:
+    """A day, open beside its month."""
+
+    return f"{reverse('calendar:month')}?month={day:%Y-%m}&day={day.isoformat()}"
 
 
 # ----- Sources ----------------------------------------------------------------

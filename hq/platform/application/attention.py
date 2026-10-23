@@ -558,7 +558,7 @@ def finding_insight(finding: Any, findings_url: str) -> Insight:
         subject=finding.subject_link,
         since=finding.since,
         workflow=finding_plan(finding, finding_key(finding)),
-        facts=tuple((str(label), str(value)) for label, value in finding.evidence),
+        facts=finding.evidence,
         links=_dedupe_links((*finding.investigations, *finding.offers)),
     )
 

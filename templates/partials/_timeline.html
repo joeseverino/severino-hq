@@ -21,21 +21,10 @@ band of page spent on the absence of news.
     {% if timeline.items %}<span class="count">{{ timeline.items|length|counted:"event" }}</span>{% endif %}
   </div>
   {% if timeline.items %}
-    {% comment %}
-    The year appears only when it is not this one. A horizon can run years out
-    (a passport, a license), and month-and-day alone makes a correctly sorted
-    list read as a sorting bug. Stamping every row with the current year
-    would be noise on the rows that are actually soon.
-    {% endcomment %}
-    {% now "Y" as current_year %}
     <ol class="timeline-list">
       {% for item in timeline.items %}
         <li class="timeline-item timeline-{{ item.status }}">
-          <time datetime="{{ item.when|date:'Y-m-d' }}">
-            <span class="timeline-month">{{ item.when|date:"M" }}</span>
-            <span class="timeline-day">{{ item.when|date:"j" }}</span>
-            {% if item.when|date:"Y" != current_year %}<span class="timeline-year">{{ item.when|date:"Y" }}</span>{% endif %}
-          </time>
+          {{ item.when|when:"mark" }}
           <span class="timeline-copy">
             {% if item.url %}<a href="{{ item.url }}"><strong>{{ item.title|breakable }}</strong></a>{% else %}<strong>{{ item.title|breakable }}</strong>{% endif %}
             {% if item.detail %}<span class="muted">{{ item.detail|breakable }}</span>{% endif %}

@@ -515,6 +515,9 @@ RUNNING_TESTS = sys.argv[1:2] == ["test"]
 # Whether a list read raises on a relation or deferred field it did not fetch
 # (see ``application.projection.guarded``). On where a developer sees it.
 SEVERINO_STRICT_FETCH = DEBUG or RUNNING_TESTS
+# Whether a template printing a value that is neither text nor a number raises
+# (see ``core.print_gate``); elsewhere it prints the missing mark and logs.
+SEVERINO_STRICT_PRINT = DEBUG or RUNNING_TESTS
 if RUNNING_TESTS:
     from hq.config.warning_policy import enforce as _enforce_warning_policy
 

@@ -49,6 +49,12 @@ def month_url(month: date, day: date | None = None) -> str:
     return f"{reverse('calendar:month')}{query}{f'&day={day.isoformat()}' if day else ''}"
 
 
+def new_entry_url(day: date) -> str:
+    """The form for a new entry, on ``day``."""
+
+    return f"{reverse('calendar:entry_new')}?on={day.isoformat()}"
+
+
 class CalendarView(PageMixin, TemplateView):
     template_name = "calendars/calendar.html"
     page_title = "Calendar"
@@ -62,7 +68,7 @@ class CalendarView(PageMixin, TemplateView):
         return (
             PageAction(
                 capability_words("calendar.entry.create"),
-                f"{reverse('calendar:entry_new')}?on={day.isoformat()}",
+                new_entry_url(day),
                 primary=True,
             ),
         )
@@ -89,7 +95,7 @@ class CalendarView(PageMixin, TemplateView):
             next_url=month_url(calendar.next, selected),
             today_url=month_url(today.replace(day=1), today),
             here=self.request.get_full_path(),
-            new_entry_url=reverse("calendar:entry_new"),
+            new_entry_url=new_entry_url(selected) if selected else "",
         )
         return context
 

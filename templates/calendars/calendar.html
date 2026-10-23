@@ -25,8 +25,8 @@ opening a day ask this page for the `calendar` part and take it in place.
         <div class="section-head">
           <h2 id="day-panel-title">{% if day.day == day.today %}Today{% else %}{{ day.day|date:"l" }}{% endif %} <span class="muted">{{ day.day|when:"day" }}</span></h2>
           <nav class="calendar-nav" aria-label="Change day">
-            <a href="?month={{ day.previous|date:'Y-m' }}&amp;day={{ day.previous|date:'Y-m-d' }}" rel="prev" aria-label="Previous day">&lsaquo;</a>
-            <a href="?month={{ day.next|date:'Y-m' }}&amp;day={{ day.next|date:'Y-m-d' }}" rel="next" aria-label="Next day">&rsaquo;</a>
+            <a href="{{ day.previous_url }}" rel="prev" aria-label="Previous day">&lsaquo;</a>
+            <a href="{{ day.next_url }}" rel="next" aria-label="Next day">&rsaquo;</a>
             <a href="?month={{ calendar.month|date:'Y-m' }}" aria-label="Close this day" data-hotkey="Escape">&times;</a>
           </nav>
         </div>
@@ -47,7 +47,7 @@ opening a day ask this page for the `calendar` part and take it in place.
         {% empty %}
           {% if not entry %}<p class="muted">Nothing on this day.</p>{% endif %}
         {% endfor %}
-        <p><a href="{{ new_entry_url }}?on={{ day.day|date:'Y-m-d' }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></p>
+        <p><a href="{{ new_entry_url }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></p>
       </section>
     {% endif %}
 

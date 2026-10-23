@@ -9,10 +9,15 @@ entries, confirm prune to yes".
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
+from hq.platform.core.print_gate import admitted, is_stamp
+
 from .labels import field_label, lower_first
+from .timestamps import moment
 from .ui import counted
+lazy from .moments import when
 
 # How many plain facts a record may carry and still be said whole. Past this it
 # is counted, because a sentence of twenty facts is not read.
@@ -59,7 +64,19 @@ def value_words(value: Any, schema: Mapping[str, Any] | None = None) -> str:
             return ", ".join(value_words(item) for item in items)
         noun = lower_first(_items_title(schema))
         return counted(len(items), noun if noun and " " not in noun else "entry")
-    return str(value)
+    return _plain_words(value)
+
+
+def _plain_words(value: Any) -> str:
+    """A value that is neither a record nor a list: a moment as HQ says one,
+    text and numbers as they are, and nothing a page would refuse to print."""
+
+    if isinstance(value, str) and is_stamp(value):
+        text = value.strip()
+        value = date.fromisoformat(text) if len(text) == len("YYYY-MM-DD") else moment(text)
+    if isinstance(value, date):
+        return when(value)
+    return str(admitted(value))
 
 
 def field_words(name: str, schema: Mapping[str, Any] | None = None) -> str:

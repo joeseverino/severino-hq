@@ -1,9 +1,14 @@
 """A value read the way a person reads it: the words every held request,
 audit entry and command result is described in."""
 
+from datetime import date
+
 from django.test import SimpleTestCase
 
+from hq.platform.core.print_gate import Unprintable
+
 from ..labels import field_label
+from ..moments import when_day
 from ..payload_words import value_words
 
 
@@ -15,6 +20,13 @@ class ValueWordsTests(SimpleTestCase):
         self.assertEqual(value_words({"created": 3, "dns_name": "a.example"}), "created 3, DNS name a.example")
         self.assertEqual(value_words({"spec": {"a": 1}}), "1 field")
         self.assertEqual(value_words(None), "")
+
+    def test_a_moment_reads_as_hq_says_one_and_an_object_is_refused(self):
+        self.assertEqual(value_words("2026-10-03"), when_day(date(2026, 10, 3)))
+        self.assertEqual(value_words(date(2026, 10, 3)), when_day(date(2026, 10, 3)))
+        self.assertNotIn("T", value_words("2026-10-03T09:29:00Z"))
+        with self.assertRaises(Unprintable):
+            value_words(object())
 
     def test_a_list_is_counted_by_what_its_schema_calls_an_item(self):
         self.assertEqual(value_words([{}, {}], {"items": {"title": "Runbook"}}), "2 runbooks")

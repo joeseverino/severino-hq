@@ -252,7 +252,7 @@
     {% if messages %}
       <ul class="messages">
         {% for message in messages %}
-          <li class="msg msg-{{ message.tags|default:'info' }}">{{ message|breakable }}</li>
+          <li class="msg msg-{{ message.tags|default:'info' }}">{{ message.message|breakable }}</li>
         {% endfor %}
       </ul>
     {% endif %}

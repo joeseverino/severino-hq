@@ -42,7 +42,7 @@ four would turn a typo in a DKIM selector into a mail outage.
         {% for term in spf.terms %}
           {% if term.mechanism != "all" %}
             <div class="name-list-row">
-              <input type="text" name="rule" value="{{ term }}" spellcheck="false" autocapitalize="off">
+              <input type="text" name="rule" value="{{ term.rule }}" spellcheck="false" autocapitalize="off">
               <button type="button" class="btn ghost" data-name-list-remove>Remove</button>
             </div>
           {% endif %}

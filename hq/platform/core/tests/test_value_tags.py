@@ -6,6 +6,7 @@ from django.utils.safestring import mark_safe
 
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.tests.markup import with_class
+from hq.platform.core.print_gate import Unprintable
 from hq.platform.core.templatetags.value_tags import breakable, cell_line, entity, or_empty, readout
 
 
@@ -160,7 +161,8 @@ class BreakableTests(SimpleTestCase):
         self.assertIn("empty-value", or_empty(None))
         self.assertEqual(or_empty(0), 0)
         named = type("Named", (), {"__str__": lambda self: "example-operator"})()
-        self.assertIn('<span class="whole">example-operator</span>', or_empty(named))
+        with self.assertRaises(Unprintable):
+            or_empty(named)
         self.assertEqual(or_empty(mark_safe("<b>x-y</b>")), "<b>x-y</b>")
 
     def test_a_cell_line_holds_each_name_in_it(self):

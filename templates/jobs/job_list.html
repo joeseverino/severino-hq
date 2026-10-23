@@ -16,5 +16,5 @@ What failed on its last run, said once above the rows that lead the list.
   <td class="date-col">{{ row.created_at|when }}</td>
   <td class="num-col">{% if row.duration_seconds %}{{ row.duration_seconds|seconds }}{% else %}{% empty_value %}{% endif %}</td>
   <td>{{ row.note|or_empty }}</td>
-  <td>{{ row.requested_by|or_empty }}</td>
+  <td>{{ row.requested_by.get_username|or_empty }}</td>
 {% endblock %}

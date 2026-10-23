@@ -234,7 +234,10 @@ class SpfTerm:
     def costs_lookup(self) -> bool:
         return self.mechanism in SPF_LOOKUP_MECHANISMS
 
-    def __str__(self) -> str:
+    @property
+    def rule(self) -> str:
+        """The term as an SPF record writes it."""
+
         prefix = "" if self.qualifier == "+" else self.qualifier
         return f"{prefix}{self.mechanism}" + (f":{self.argument}" if self.argument else "")
 
@@ -296,7 +299,7 @@ def parse_spf(value: str) -> SpfPolicy:
 
 
 def compose_spf(terms: tuple[SpfTerm, ...]) -> str:
-    return " ".join([f"v={SPF_VERSION}", *(str(term) for term in terms)])
+    return " ".join([f"v={SPF_VERSION}", *(term.rule for term in terms)])
 
 
 SPF_DEFAULTS: tuple[Choice, ...] = (

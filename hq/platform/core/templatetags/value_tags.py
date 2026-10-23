@@ -1,14 +1,14 @@
 import re
-from datetime import date, datetime, time
+from datetime import date, datetime
 from html import unescape
 from numbers import Number
 from urllib.parse import parse_qs, unquote, urlsplit
 lazy from dataclasses import replace
 
 from django import template
-from django.utils import timezone
+from django.utils import dateformat, timezone
 from django.utils.html import conditional_escape, format_html
-from django.utils.safestring import SafeData, mark_safe
+from django.utils.safestring import mark_safe
 lazy from django.conf import settings
 
 from hq.platform.application.entity_links import (
@@ -30,8 +30,10 @@ from hq.platform.application.moments import (
 from hq.platform.application.money import money as _money
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import MISSING, counted as _counted
+from hq.platform.core.print_gate import admitted
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, security
+lazy from hq.platform.application.derivations import this_year
 lazy from hq.platform.application.problems import problems_about as _problems_about
 lazy from hq.platform.application.references import reference_of
 lazy from hq.platform.application.where_it_runs import named_links as _named_links, where_it_runs as _where_it_runs
@@ -93,15 +95,14 @@ def or_empty(value):
     """The value, or the one muted mark for a value that is not there.
 
     Built in, so every HQ and extension template has it without a load. Zero is
-    a value and is shown; only None and the empty string are missing. What
-    shows as text (a string, a record's name) holds the names in it
-    (``breakable``); markup, numbers and dates pass as they are.
+    a value and is shown; only None and the empty string are missing. A number
+    passes as it is; anything else is what ``breakable`` makes of it.
     """
     if value is None or value == "":
         return format_html('<span class="empty-value" title="None">{}</span>', MISSING)
-    if not isinstance(value, (SafeData, Number, date, time)):
-        return breakable(value)
-    return value
+    if isinstance(value, Number) and not isinstance(value, bool):
+        return value
+    return breakable(value)
 
 
 def _instant(value) -> date | datetime | None:
@@ -119,12 +120,33 @@ def _instant(value) -> date | datetime | None:
         return None
 
 
+def _dated_mark(value: date):
+    """A day as a mark beside a dated row: its month over its day, and its year
+    under them only when it is not this one. A horizon can run years out (a
+    passport, a license), and month-and-day alone makes a correctly sorted list
+    read as a sorting bug; the current year on every row would be noise on the
+    rows that are actually soon."""
+
+    if isinstance(value, datetime):
+        value = timezone.localtime(value) if timezone.is_aware(value) else value
+    year = (
+        "" if value.year == this_year() else format_html('<span class="timeline-year">{}</span>', breakable(value.year))
+    )
+    return format_html(
+        '<span class="timeline-month">{}</span><span class="timeline-day">{}</span>{}',
+        breakable(dateformat.format(value, "M")),
+        breakable(value.day),
+        year,
+    )
+
+
 # What ``when`` can be asked for, and the words each one shows.
 _WHEN_FORMS = {
     "": _when,
     "ago": lambda value: _ago(value) if isinstance(value, datetime) else _when_day(value),
     "day": _when_day,
     "exact": _when_exact,
+    "mark": _dated_mark,
 }
 
 
@@ -140,6 +162,7 @@ def when(value, form=""):
     - ``{{ at|when:"ago" }}``: "5 days ago", the moment itself on hover.
     - ``{{ at|when:"day" }}``: the day a moment fell on.
     - ``{{ at|when:"exact" }}``: "Oct 3, 2026, 9:29:15 AM CDT".
+    - ``{{ at|when:"mark" }}``: the day as a dated mark, month over day.
 
     Takes a datetime, a date or an ISO stamp. Nothing shows the mark for a
     missing value; text that names no instant is shown as it came, its names held.
@@ -449,6 +472,7 @@ def breakable(value, mark=""):
     """
 
     mark = _mark(mark)
+    value = admitted(value)
     # Markup is whatever renders itself: a form field is not SafeData until
     # Django renders it.
     if hasattr(value, "__html__"):
@@ -644,7 +668,7 @@ def readout(value):
     copy, and put a gray chip around each number in a list of three numbers.
     """
 
-    text = str(value)
+    text = str(admitted(value))
     if " " not in text.strip() and _IDENTIFIER.search(text):
         return format_html("<code>{}</code>", breakable(text))
     # A phrase can still name something ("restart example-web"): its names
