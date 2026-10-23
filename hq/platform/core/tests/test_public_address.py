@@ -3,13 +3,16 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.template.loader import render_to_string
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import AddressReading
-from hq.platform.application.tests.markup import text
+from hq.platform.application.request_connection import connection
+from hq.platform.application.tests.markup import select, text
 from hq.platform.application.tests.test_lookup import GLOBAL as ADDRESS
+from hq.platform.application.tests.test_request_connection import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
 
 STORED = {
     "ok": True,
@@ -78,10 +81,15 @@ class PublicAddressViewTests(TestCase):
         self.assertRedirects(response, reverse("connection"), fetch_redirect_response=False)
         look.assert_not_called()
 
-    def test_the_connection_panel_loads_the_fragment_as_a_placeholder(self):
-        from django.template.loader import get_template
+    @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
+    def test_the_connection_panel_loads_this_fragment_for_the_peers_public_address(self):
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS, direct_endpoint=f"{ADDRESS}:41641"),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+        panel = render_to_string("core/_connection_panel.html", {"connection": connection(a_request())})
+        (region,) = select(panel, "data-fragment-load")
+        AddressReading.objects.create(address=ADDRESS, reading=STORED, observed_at=timezone.now())
 
-        source = get_template("core/_connection_panel.html").template.source
-        self.assertIn("data-fragment=\"{% url 'tool_public_address' %}?address=", source)
-        self.assertIn("data-fragment-load", source)
-        self.assertIn("data-fragment-failure=", source)
+        self.assertTrue(region.attrs.get("data-fragment-failure"))
+        self.assertIn("host.example.net", text(self.client.get(region.attrs["data-fragment"])))
