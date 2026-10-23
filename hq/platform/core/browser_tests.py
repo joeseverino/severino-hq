@@ -91,12 +91,6 @@ def wide_tables(css, region):
     return region, (card,) if card - page <= 50 else (page, card)
 
 
-def narrow_table(css, region):
-    """The narrowest viewport whose own table region is ``region`` wide."""
-
-    return first_viewports(css, region)[0]
-
-
 def first_viewports(css, region):
     """The narrowest viewports whose table region is ``region`` wide: the
     page's own region, inside the content's padding
@@ -121,14 +115,9 @@ def first_viewports(css, region):
     return first(border), first(padding + border)
 
 
-# TODO(note-hq-chokepoints-and-tables-plan, the browser sweep): read each
-# table's own derived widths (`data-narrow-at`, `data-drop-at`); until then
-# the sweep keeps the region widths it was written for. A region this wide
-# reads a name as never cut whole, and the laptop windows where a region has
-# only just become so are read besides WIDTHS.
+# A region this wide reads a name as never cut whole, and the laptop windows
+# where a region has only just become so are read besides WIDTHS.
 WIDE_REGION, WIDE_TABLES = wide_tables(stylesheet(), 1000)
-# The window where a page's own table region has only just become this wide.
-NARROW_TABLE = narrow_table(stylesheet(), 640)
 # Every page, from the sparse estate and the dense one. The overflow and
 # density checks run all of them at WIDTHS.
 ALL_PAGES = (*PAGES, *DENSE_PAGES)
@@ -1666,6 +1655,7 @@ _DRAWN = """() => document.readyState !== 'loading'
   && document.fonts.status === 'loaded'"""
 # The scripts the parser stops for, which are drawn before the page is.
 _PARSER_SCRIPTS = "() => [...document.scripts].filter((s) => s.src && !s.defer && !s.async).map((s) => s.src)"
+_IN_THE_HEAD = "() => !document.body"
 # Where every element that shows stands on the page as first drawn, kept on
 # the window for _MOVED_SINCE_DRAWN to read once the scripts have run.
 _DRAWN_BOXES = """() => {
@@ -1679,11 +1669,19 @@ _DRAWN_BOXES = """() => {
   return boxes.size;
 }"""
 # One frame's look at a page being drawn: until it is, the scripts its parser
-# waits for; once it is, where everything stands (null), in the same task.
+# waits for; once it is, where everything stands (null) in the next frame it
+# paints. A ResizeObserver's first answer comes after layout and the page's
+# own observers (tables.js fits a table in one), just before that paint.
 _UNTIL_DRAWN = f"""() => {{
   if (!({_DRAWN})()) return ({_PARSER_SCRIPTS})();
-  ({_DRAWN_BOXES})();
-  return null;
+  return new Promise((done) => {{
+    const painting = new ResizeObserver(() => {{
+      painting.disconnect();
+      ({_DRAWN_BOXES})();
+      done(null);
+    }});
+    painting.observe(document.documentElement);
+  }});
 }}"""
 # Every element that still shows and no longer stands where it was drawn. A
 # child carried by its parent, the same distance and at the same size, is the
@@ -3612,7 +3610,10 @@ class BrowserGate(SimpleTestCase):
             for route in waiting:
                 self.held.remove(route)
                 self.answer(route)
-            self.page.evaluate(_SETTLED)
+            # A parser stopped in the head has no frame to draw, so it is
+            # asked again at once rather than waited on for one.
+            if not waiting and not self.page.evaluate(_IN_THE_HEAD):
+                self.page.evaluate(_SETTLED)
         else:
             raise AssertionError(f"{url} at {width}px was never drawn")
         held, self.held = self.held, None
@@ -4311,10 +4312,9 @@ class LayoutBrowserTests(BrowserGate):
                 self.assertEqual(found, [])
 
     def a_table_fits_its_box_at_every_width(self, name):
-        """Not only on a phone. A table's columns leave by its region's tier
-        in the order its headings rank them, so nothing a reader came for is
-        off the edge at a tablet or a laptop width either. Every page, with
-        every disclosure open.
+        """A table never overflows its box: while it is wider, its ranked
+        columns leave (tables.js). Every table on every page, with every
+        disclosure open.
         """
 
         self.open_every_disclosure(name)
@@ -4430,14 +4430,12 @@ class ScriptedLayoutTests(LayoutBrowserTests):
     def sweep(self, names):
         """Every layout check holds, at a laptop window's width too; pressing
         a control moves nothing; a table fits its box with every disclosure
-        open. Script reads the width a page loads at, so each width is a load.
-        At NARROW_TABLE only the words a row keeps for its open line are
-        read, back in columns with the least room."""
+        open. Script reads the width a page loads at, so each width is a load."""
 
         self.spoke = 0
         for name in names:
             widths = (
-                SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES, NARROW_TABLE)
+                SPEAKING_WIDTHS if name in SPEAKING_HEADS else (*WIDTHS, *SPEAKING_WIDTHS, *WIDE_TABLES)
             )
             for width in sorted(set(widths)):
                 if self.loaded(name, width, script="on"):
@@ -4445,9 +4443,6 @@ class ScriptedLayoutTests(LayoutBrowserTests):
                     self.read_loaded(name, width)
 
     def read_loaded(self, name, width):
-        if width == NARROW_TABLE:
-            self.hold(name, width, [self.words_stay_inside_the_box_that_holds_them], script="on")
-            return
         read = name in ALL_PAGES and width in (*WIDTHS, *WIDE_TABLES)
         if read and width in WIDTHS:
             self.hold(name, width, self.scripted_reads(), script="on")

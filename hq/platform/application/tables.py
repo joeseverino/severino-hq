@@ -193,8 +193,8 @@ class TableListMixin:
     table_filters: tuple[TableFilter, ...] = ()
     table_columns: tuple[TableColumn, ...] = ()
     # TODO(note-hq-chokepoints-and-tables-plan, wave 1 item 6): accepted and
-    # ignored until views, hq_sdk and the extensions stop declaring them; where
-    # a column leaves is derived (`table_fit.fit`).
+    # ignored until views, hq_sdk and the extensions stop declaring them; a
+    # column leaves where its table no longer fits (tables.js).
     table_drop_mid = 0
     table_drop_narrow = 0
     # How much of a row an identifier in it may take: `{% table_region %}`'s

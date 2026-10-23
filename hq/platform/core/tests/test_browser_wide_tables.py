@@ -2,7 +2,7 @@
 
 from django.test import SimpleTestCase
 
-from hq.platform.core.browser_tests import narrow_table, wide_tables
+from hq.platform.core.browser_tests import wide_tables
 
 
 def css(pad="clamp(14px, 2.2vw, 28px)", card_space="--space-9", space=18, border=1):
@@ -30,7 +30,3 @@ class WideTableWidthTests(SimpleTestCase):
     def test_a_declaration_the_gate_cannot_read_fails_loudly(self):
         with self.assertRaisesMessage(AssertionError, "the content's padding"):
             wide_tables(css(pad="28px"), 1000)
-
-    def test_the_narrow_width_is_where_a_pages_region_first_reaches_the_region(self):
-        # 672 less 14.8px of padding and a 1px border a side is 640.4px.
-        self.assertEqual(narrow_table(css(), 640), 672)

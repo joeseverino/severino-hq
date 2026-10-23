@@ -53,7 +53,7 @@
 .notice-body { margin: 0 0 var(--space-10); color: var(--muted); line-height: 1.6; }
 .notice-page .page-actions { justify-content: center; display: flex; }
 
-/* In a narrow box (table-steps.css) the cadence matrix drops its oldest
+/* In a narrow box (tables.js) the cadence matrix drops its oldest
    periods rather than scrolling. A
    sideways scrollbar under a five-column grid of dots is both ugly and
    useless: the columns only mean anything lined up against each other, and

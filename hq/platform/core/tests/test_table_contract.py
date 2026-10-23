@@ -10,7 +10,6 @@ from django.test import RequestFactory, SimpleTestCase, tag
 from django.urls import reverse
 
 from hq.platform.application.routes import routed
-from hq.platform.application.table_fit import DROP_STEPS, ColumnText, FitColumn, fit, floors_at
 from hq.platform.application.tables import TableColumn, TableListMixin, named_first, ranked, typed
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
@@ -93,6 +92,11 @@ def _templates() -> dict[str, str]:
 
 
 @tag("source")
+# What tables.js marks as it fits a table to its region: in a ResizeObserver,
+# so in the frame the table is laid out, before that frame is painted.
+FITTED = {"dropped", "narrow"}
+
+
 class TableContractTests(SimpleTestCase):
     maxDiff = None
 
@@ -135,6 +139,8 @@ class TableContractTests(SimpleTestCase):
             for key in re.findall(r"dataset\.(\w+)\s*=", script)
         }
         marked |= set(re.findall(r'toggleAttribute\("data-([\w-]+)"', script))
+        # A table's fit is marked in the frame it is laid out, before paint.
+        marked -= FITTED
         self.assertIn("cut", marked)
         stylesheet = re.sub(r"/\*.*?\*/", " ", whole_stylesheet(), flags=re.DOTALL)
         gutters = [
@@ -243,36 +249,6 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(marked, {"dash", "empty", "empty value", "line break"})
         self.assertEqual(len(blank), 4, "a table inside a cell is that cell's content")
 
-    def test_each_cell_carries_the_width_its_column_leaves_below_however_wide_the_table(self):
-        # Fourteen columns: the name, then each that may leave, the far end first.
-        headings = "".join(f'{{% table_heading "C{n}" drop={15 - n} %}}' for n in range(2, 15))
-        cells = "".join(f'<td data-col="{n}">{n}</td>' for n in range(3, 15))
-        nested = "<table><tbody><tr><td>a</td><td>b</td><td>c</td></tr></tbody></table>"
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Name" %}' + headings + "</tr></thead><tbody>"
-            '<tr class="row-group"><th colspan="14">Group</th></tr>'
-            f'<tr><th>one</th><td data-col="2">2</td>{cells}</tr>'
-            f'<tr><th>two</th><td data-col="2">{nested}</td>{cells}</tr>'
-            '<tr><td colspan="14">Nothing else</td></tr>'
-            "</tbody></table>{% endtable_region %}"
-        )
-        html = _render(source)
-        leaves = {heading.text.strip(): heading.attrs.get("data-drop-at") for heading in elements(html, "th")}
-        self.assertIsNone(leaves["Name"])
-        # The far end leaves first, so at the widest.
-        widths = [int(leaves[f"C{n}"]) for n in range(14, 1, -1)]
-        self.assertEqual(widths, sorted(widths, reverse=True))
-        found = elements(html, "td")
-        for cell in (each for each in found if "data-col" in each.attrs):
-            with self.subTest(column=cell.attrs["data-col"]):
-                self.assertEqual(cell.attrs.get("data-drop-at"), leaves[f"C{cell.attrs['data-col']}"])
-        others = [each for each in found if "data-col" not in each.attrs]
-        self.assertEqual(len(others), 4, "the three cells of the table in a cell, and the one spanning the row")
-        self.assertEqual([each for each in others if "data-drop-at" in each.attrs], [])
-        (table,) = [each for each in all_elements(html) if each.tag == "table" and "data-table" in each.classes]
-        self.assertEqual(table.attrs["data-narrow-at"], str(min(widths)))
-
     def test_a_column_with_nothing_in_any_row_is_marked_in_every_row(self):
         source = (
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Pick" select_all=True %}'
@@ -315,24 +291,6 @@ class TableTagTests(SimpleTestCase):
         marked = [each.attrs.get("data-col") for each in elements(_render(source), "td") if "data-long" in each.attrs]
         self.assertEqual(marked, ["status", "long"])
 
-    def test_a_control_holds_its_column_open_by_its_widest_option_and_keeps_its_line(self):
-        """A select is as wide as its widest option, whichever is chosen, and
-        a control's cell never wraps, so its column's floor counts all of it."""
-
-        def table(options):
-            source = (
-                '{% table_region "Rules" %}<table class="data-table"><thead><tr>{% table_heading "Action" %}'
-                '{% table_heading "Agent" "control" %}</tr></thead><tbody><tr><td>a</td>'
-                f'<td><select name="a">{"".join(f"<option>{each}</option>" for each in options)}</select></td>'
-                "</tr></tbody></table>{% endtable_region %}"
-            )
-            return [each for each in all_elements(_render(source)) if each.tag in ("table", "td")]
-
-        short, *_cells = table(["Allow", "Deny"])
-        wide, _name, control = table(["Allow", "Ask me first for everything", "Deny"])
-        self.assertGreater(int(wide.attrs["data-narrow-at"]), int(short.attrs["data-narrow-at"]))
-        self.assertEqual(control.attrs.get("data-kind"), "control")
-
     def test_a_status_too_long_to_keep_wraps(self):
         long = "Ask me first for container stack and tailnet policy changes"
         source = (
@@ -343,22 +301,6 @@ class TableTagTests(SimpleTestCase):
         )
         kept = with_class(_render(source), "kept-line")
         self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["short"])
-
-    def test_a_run_shown_whole_holds_its_column_open_and_a_cut_one_does_not(self):
-        run = "a-worker-image-with-a-deliberately-long-name"
-
-        def narrow_at(cell):
-            source = (
-                '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-                '{% table_heading "Image" "identifier" %}</tr></thead>'
-                f"<tbody><tr><td>a</td><td>{cell}</td></tr></tbody></table>{{% endtable_region %}}"
-            )
-            (table,) = [each for each in all_elements(_render(source)) if each.tag == "table"]
-            return int(table.attrs["data-narrow-at"])
-
-        whole = narrow_at(f'<code class="cell-whole"><span class="cut">{run}</span></code>')
-        self.assertGreater(whole, narrow_at(f"<code>{run}</code>"))
-        self.assertGreater(whole, narrow_at(f'<span class="cell-data">{run}</span>'))
 
     def test_a_rank_on_the_column_that_names_the_row_is_refused(self):
         source = (
@@ -377,16 +319,6 @@ class TableTagTests(SimpleTestCase):
         ):
             with self.subTest(source), self.assertRaises(ValueError):
                 _render(source)
-
-    def test_a_control_column_may_drop(self):
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            '{% table_heading "Actions" css="actions-col" hidden=True drop=1 %}</tr></thead>'
-            "<tbody><tr><td>a</td><td><button>Go</button></td></tr></tbody></table>{% endtable_region %}"
-        )
-        _name, heading = elements(_render(source), "th")
-        self.assertEqual(heading.attrs["data-kind"], "control")
-        self.assertIn(int(heading.attrs["data-drop-at"]), DROP_STEPS)
 
     def test_a_heading_note_stands_beside_its_label(self):
         for source in (
@@ -587,14 +519,6 @@ class ListTableTests(_AuthedTestCase):
         self.assertTrue(marks)
         self.assertEqual([mark.text for mark in marks if mark.text], [])
 
-    def test_a_list_drops_its_ranked_columns(self):
-        page = self.client.get(reverse("expenses:list"))
-        leaves = {heading.text.strip(): heading.attrs.get("data-drop-at") for heading in elements(page, "th")}
-        dropped = {label for label, width in leaves.items() if width}
-        self.assertTrue(dropped)
-        # The column that names the row and the key column stay.
-        self.assertFalse(dropped & {"Vendor", "Cost"})
-
     def test_every_list_leads_each_row_with_its_name(self):
         """A row's name looks the same on every list: its first cell leads with
         it, set as a name, so no list reads as a column of plain links."""
@@ -628,70 +552,3 @@ class ListTableTests(_AuthedTestCase):
                     self.assertIsNotNone(lead)
                     self.assertTrue(lead.words and cell.words.startswith(lead.words))
         self.assertGreater(read, 5, "The example estate fills almost no list")
-
-
-class FitTests(SimpleTestCase):
-    """Where a table's columns leave is derived from what each holds."""
-
-    # A table's columns, in CSS pixels: a name, a time, a state, a note and a
-    # control, the last three let go in that order.
-    COLUMNS = (
-        FitColumn(ColumnText(whole=120, names_row=True, leads=True)),
-        FitColumn(ColumnText(kind="status", pinned=150)),
-        FitColumn(ColumnText(kind="status", line=200, held=60), 3),
-        FitColumn(ColumnText(held=90, long=True), 2),
-        FitColumn(ColumnText(kind="control", line=110), 1),
-    )
-
-    def test_each_column_leaves_below_the_least_width_what_still_shows_fits_at(self):
-        table = fit(self.COLUMNS)
-        showing = set(range(len(self.COLUMNS)))
-        for index in sorted(table.leaves, key=lambda index: self.COLUMNS[index].rank):
-            width = table.leaves[index]
-            with self.subTest(index):
-                # It stays only where every column showing has its floor, and
-                # leaves at the first declared width past that.
-                self.assertIn(width, DROP_STEPS)
-                self.assertLessEqual(sum(floors_at(self.COLUMNS, showing, width).values()), width)
-                self.assertTrue(
-                    all(
-                        sum(floors_at(self.COLUMNS, showing, step).values()) > step
-                        for step in DROP_STEPS
-                        if step < width
-                    )
-                )
-            showing.discard(index)
-        self.assertEqual(table.narrow, min(table.leaves.values()))
-
-    def test_a_line_kept_whole_is_held_whatever_the_share(self):
-        """A control's line and a line holding a pill or a time keep their
-        width at any share, as does a status's line of plain words; one of
-        parts of its own holds out only up to the share."""
-
-        for text in (
-            ColumnText(kind="control", line=300),
-            ColumnText(kind="status", pinned=300),
-            ColumnText(kind="status", line=300),
-        ):
-            with self.subTest(text.kind):
-                self.assertGreaterEqual(text.floor(400, 60), 300)
-        status = ColumnText(kind="status", parts=300)
-        self.assertGreaterEqual(status.floor(1600, 400), 300)
-        self.assertLess(status.floor(400, 60), 300)
-
-    def test_prose_holds_out_for_its_floor_only_when_a_line_is_too_long_to_keep(self):
-        short, long = ColumnText(held=40), ColumnText(held=40, long=True)
-        self.assertLess(short.floor(1600, 400), long.floor(1600, 400))
-        # Bounded by the share, so a narrow region still fits it.
-        self.assertLess(long.floor(400, 60), long.floor(1600, 400))
-
-    def test_columns_of_one_rank_leave_together_and_the_share_counts_what_shows(self):
-        columns = (FitColumn(200), FitColumn(150, 1), FitColumn(150, 1), FitColumn(40, shares=False), FitColumn(100, 2))
-        table = fit(columns)
-        self.assertEqual(table.leaves[1], table.leaves[2])
-        self.assertEqual(table.columns, 4)
-        self.assertEqual(dict(table.columns_below), {table.leaves[1]: 2, table.leaves[4]: 1})
-
-    def test_a_table_with_nothing_to_let_go_is_narrow_below_its_floors(self):
-        table = fit((FitColumn(300), FitColumn(130)))
-        self.assertEqual((table.leaves, table.narrow), ({}, 440))

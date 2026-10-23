@@ -76,13 +76,13 @@
      for more than the region has: a line that fits its share stays whole, and
      one past it wraps (a status, a name) or is cut (an identifier). The share
      counts the columns the box draws, as the region says at each width
-     (`data-columns`, table-steps.css), and one more: the column that names the
+     (`--showing`, tables.js), and one more: the column that names the
      row is what the row is read by, so its cells hold out for half a share
      more, and the other half is left for what holds out unbounded (a pill, a
      control beside a name). A table without headings is read as one column. */
-  --columns: 1;
-  /* Whole until its region is narrower than its columns' floors, once all it
-     lets go has left: then narrow (table-steps.css). */
+  --columns: var(--showing, 1);
+  /* Whole until it is wider than its region once all it lets go has left:
+     then narrow (`data-narrow`, tables.js). */
   --box: whole;
   --share: calc((100cqi - var(--row-gutter)) / (var(--columns) + 1));
   --hold: calc(var(--share) - 2 * var(--space-6));
@@ -222,7 +222,7 @@
    stands many lines taller than the rest. */
 .data-table > thead th:is([data-kind="status"], [data-kind="numeric"], [data-kind="control"]) { width: 1px; }
 /* A cell of prose or a status with a long line (`data-long`,
-   table_fit.LONG) holds out for a floor (`_PROSE`) up to its column's share;
+   table_tags.LONG) holds out for a floor up to its column's share;
    the column that names the row holds out on its own terms. A status column
    asks for a pixel, so short of the floor a long status stands as many lines
    as it has words. And a sentence whose longest piece is cut asks for almost
@@ -232,11 +232,11 @@
    box inside the cell, which both engines size. */
 .data-table > tbody td[data-long]::before { content: ""; display: block; inline-size: min(16ch, var(--hold)); }
 /* A control cell keeps its line, as its column's floor counts it
-   (table_fit): "Link this" broken over two is a taller button than the one
+   (tables.js): "Link this" broken over two is a taller button than the one
    beside it, and reads as two. */
 .data-table > tbody td[data-kind="control"] { white-space: nowrap; }
-/* Outside a narrow box the columns showing have the room their floors ask
-   (table-steps.css), so such a line keeps it. */
+/* Outside a narrow box the columns showing have the room they ask
+   (tables.js), so such a line keeps it. */
 @container style(--box: whole) {
   /* The region wraps what such a cell says in one `.kept-line`: as wide as
      its whole line, up to the share. An identifier in the line (a version,
@@ -464,8 +464,8 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 .figure-hero-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); font-feature-settings: "tnum"; }
 
-/* A table in a narrow box: its region narrower than its columns' floors,
-   once all it lets go has left (`--box`, table-steps.css). Its rows are
+/* A table in a narrow box: wider than its region
+   once all it lets go has left (`--box`, tables.js). Its rows are
    something to put a thumb on, so they get the room a control in them needs;
    and within a column that stays, what is marked `narrow-more` waits in the
    line beneath the row. */
@@ -507,7 +507,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
   .data-table > tbody > tr:not(.row-detail) .narrow-more { display: none; }
 }
 /* A row's toggle shows only where the row holds something back: a column
-   that left (table-steps.css), a part kept for the open row, a value
+   that left (`data-dropped`), a part kept for the open row, a value
    tables.js found cut (`data-cut`), or a row already open. The server draws
    one in every row that can open, so the HTML says what a row offers and the
    stylesheet says whether it offers it now. */
@@ -539,6 +539,13 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
   .data-table:has(> tbody > tr > * > [data-row-toggle]:not([data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 }
 }
+/* A column the table let go while it was wider than its region, and a table
+   in a narrow box (tables.js). A row with something in a column that left
+   shows its toggle, and its table keeps the gutter the toggle stands in. */
+.data-table[data-narrow] { --box: narrow; }
+.data-table > * > tr > [data-dropped] { display: none; }
+.data-table > tbody > tr:has(> td[data-dropped]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }
+.data-table:has(> tbody > tr > td[data-dropped]:not([data-blank])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* A column with nothing in any row is not drawn: the server marks each cell
    that says nothing (`data-blank`), and every cell of a column where all of
    them do (`data-blank-column`), never the column that names the row. */

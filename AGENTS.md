@@ -166,9 +166,11 @@ adding UI; grow a primitive rather than styling a page.
   (`hq/platform/core/speculation.py`).
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
-- Scripts are deferred and respect `prefers-reduced-motion`; the one
-  exception is the page-transition listener, which must run before the first
-  frame (`test_script_loading.py`). Nothing moves once a page is drawn: a
+- Scripts are deferred and respect `prefers-reduced-motion`; two load in the
+  head and run before the first frame (`test_script_loading.py`): the
+  page-transition listener, and `tables.js`, which lets a table's ranked
+  columns go while it is wider than its region, since CSS has no query for
+  "this content overflows". Nothing moves once a page is drawn: a
   script fills space the server's HTML already holds. No inline
   scripts or event handlers; `style-src 'unsafe-inline'` exists only
   for a per-datum custom property on a chart mark (`style="--at: 62%"`).

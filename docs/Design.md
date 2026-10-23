@@ -55,47 +55,30 @@ transitions from nothing, so every button fades in on load.
 (`WIDTHS` in `browser_tests.py`); `test_viewport_breakpoints_only_go_down`, a ceiling that
 only falls.
 
-**A table fits its box, at every width, from its HTML.** No screen width is
-asked anywhere in the table primitive: its region (`{% table_region %}`) is a
-size container, and what a table shows is decided by the stylesheet on first
-paint. A table takes its box's width and wraps, the browser sizing each column
-from what it holds. Each column that may leave has a rank, 1 first
-(`{% table_heading ... drop=N %}`; a list's are derived by `ranked`:
+**A table fits its box, at every width.** No screen width is asked anywhere
+in the table primitive. A table takes its box's width and wraps, the browser
+sizing each column from what it holds. Each column that may leave has a rank,
+1 first (`{% table_heading ... drop=N %}`; a list's are derived by `ranked`:
 `optional-col` first, then from the far end, never the column that names the
 row, one marked `key-col`, or the closing figure of a table that marks none).
-No page says where a column leaves: the region derives it from what each
-column holds (`hq/platform/application/table_fit.py`). A column's floor is
-the width the browser lays it out at, at its min-content, read from its text
-as the stylesheet sets it (each piece's size and face, a pill's, button's and
-select's chrome, what never wraps): never narrower than its longest unbroken
-run or its heading. A control keeps its whole line, a select as wide as its
-widest option; a status or a figure keeps its line of plain words, or one with
-a pill or a time, and one with parts of its own up to the column's share; a
-line too long to keep wraps, prose and a status held out to a prose floor up
-to the share; an identifier holds out for the length it is cut at, and a name
-that leads the row's cell for a name's width. Ranked columns leave in turn,
-each below the narrowest of one declared list of widths (`DROP_STEPS`) at
-which every column still showing fits at its floor there, cell padding and the
-row's gutter included, so a column leaves a little early, never late.
-`mise run dev:look -- all --rule floors` sets each column's floor beside the
-browser's own min-content for it at each of those widths, and fails a floor
-below it (the table would overflow) or far above it (the column would leave
-while it still fit). Every cell of a column that may leave carries its width
-(`data-drop-at`), and the table says how many columns share its width at each
-(`data-columns`, for `--hold`). Container queries read no variable and the
-page allows no inline style, so `manage.py table_steps` writes one
-`@container` rule per width into `css/app/table-steps.css`, and
-`mise run drift` holds it to the list. What leaves is in the row's toggle.
-Below the width where its last column leaves (for a table with none to give,
-where its columns press their floors: `data-narrow-at`) a table is in a
-narrow box (`--box: narrow`, else `whole`, read by `@container style()`): it gets roomier
-rows and holds back what is marked `narrow-more`, and what is marked
+Only the browser knows how wide a table is, so `tables.js` decides what shows,
+the established responsive-table pattern: while a table is wider than its
+region, its next ranked column leaves (rank 1 first, the rightmost of a rank
+first, `data-dropped` on its cells), and once none is left to go the table is
+in a narrow box (`data-narrow`); as the region grows they come back, the last
+to leave first, each only if the table still fits. A ResizeObserver on every
+region does it in the frame the table is laid out, before that frame is
+painted, and the script loads in the head without `defer` so every region is
+watched from the moment it is parsed: nothing moves once a page is drawn
+(`test_nothing_moves_once_a_sparse_page_is_drawn` reads each box as that frame
+paints it). What leaves is in the row's toggle. The columns showing set
+`--showing`, which bounds what a held line asks for (`--hold`). In a narrow
+box (`--box: narrow`, else `whole`, read by `@container style()`) a table gets
+roomier rows and holds back what is marked `narrow-more`, and what is marked
 `narrow-only` shows there alone, a few words in the cell that names the row
 standing in for the columns that left (the audit log's action under its
-name). This is the per-component container query of the mature systems
-(Primer's data table keeps a column at least as wide as what it holds and
-removes the less important ones on a small screen), with the widths derived
-rather than set by hand. The region marks each body cell that says
+name). With no script nothing leaves and the table scrolls in its region.
+The region marks each body cell that says
 nothing (`data-blank`) and every cell of a column blank in every row
 (`data-blank-column`), which is not drawn. Since a
 table fits, its region is no scroll box and its heading pins under the page's

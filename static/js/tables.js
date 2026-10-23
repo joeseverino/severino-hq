@@ -16,6 +16,82 @@
 
   const selectedIds = new Set(readSelection());
 
+  // A table fits its box. While it is wider than its region, a ranked column
+  // showing leaves (`data-drop` 1 first, the rightmost of a rank first), and
+  // once none is left to go the table is in a narrow box; as
+  // the region grows they come back, the last to leave first, each only if
+  // the table still fits. A row's toggle shows what left. Only the browser
+  // knows how wide a table is, and a ResizeObserver tells it in the frame it
+  // is laid out, before that frame is painted: this script loads in the head
+  // without `defer`, so every region is watched from the moment it is parsed
+  // and nothing moves once a page is drawn.
+  const REGION = ".table-scroll";
+  const headingsOf = (table) => [...table.querySelectorAll(":scope > thead > tr:last-child > th")];
+  // The order the table's columns leave in, by place.
+  const dropOrder = (table) => headingsOf(table)
+    .map((heading, place) => [Number(heading.dataset.drop) || 0, place, heading])
+    .filter(([rank, , heading]) => rank && !heading.hasAttribute("data-blank-column"))
+    .sort((left, right) => left[0] - right[0] || right[1] - left[1])
+    .map(([, place]) => place);
+  // How far each table has given way: how many of its columns have left, and
+  // one more once it is in a narrow box.
+  const gaveWay = new WeakMap();
+  const giveWay = (table, steps) => {
+    const order = dropOrder(table);
+    const left = new Set(order.slice(0, steps));
+    const width = headingsOf(table).length;
+    table.querySelectorAll(":scope > * > tr").forEach((row) => {
+      if (row.children.length !== width) return;
+      [...row.children].forEach((cell, place) => cell.toggleAttribute("data-dropped", left.has(place)));
+    });
+    table.toggleAttribute("data-narrow", steps > order.length);
+    // The columns that share the region's width (tables.css, `--share`).
+    const sharing = headingsOf(table).filter((heading) => !left.has(heading.cellIndex)
+      && !heading.matches(".select-column, [data-blank-column]")).length;
+    table.style.setProperty("--showing", Math.min(Math.max(sharing, 1), 16));
+    gaveWay.set(table, steps);
+  };
+  const overflows = (table) => table.offsetWidth > table.parentElement.clientWidth;
+  // Whether the table gave way any further or came back any.
+  const fit = (table) => {
+    const was = gaveWay.get(table) ?? 0;
+    const most = dropOrder(table).length + 1;
+    let steps = Math.min(was, most);
+    giveWay(table, steps);
+    while (steps < most && overflows(table)) giveWay(table, ++steps);
+    while (steps > 0) {
+      giveWay(table, steps - 1);
+      if (overflows(table)) {
+        giveWay(table, steps);
+        break;
+      }
+      steps -= 1;
+    }
+    return steps !== was;
+  };
+  const tableIn = (region) => region.querySelector(":scope > .data-table");
+  const fitted = new ResizeObserver((entries) => {
+    new Set(entries.map(({ target }) => target.closest(REGION))).forEach((region) => {
+      const table = tableIn(region);
+      if (!region.isConnected) fitted.unobserve(region);
+      if (!region.isConnected || !table) return;
+      fitted.observe(table);
+      // A hidden region has no width to fit, and a table whose columns are
+      // held while a row is open is fitted again as it lets them go.
+      if (!region.clientWidth || "rowsHeld" in table.dataset || !fit(table)) return;
+      // What changed the table's size was this, in this frame: watched again
+      // from the next, rather than told of it once more in this one.
+      fitted.unobserve(region);
+      fitted.unobserve(table);
+      requestAnimationFrame(() => fitted.observe(region));
+    });
+  });
+  new MutationObserver((changes) => changes.forEach(({ addedNodes }) => addedNodes.forEach((node) => {
+    if (!(node instanceof Element)) return;
+    if (node.matches(REGION)) fitted.observe(node);
+    node.querySelectorAll(REGION).forEach((region) => fitted.observe(region));
+  }))).observe(document.documentElement, { childList: true, subtree: true });
+
   // A row can say more than it shows: a clamped name, an ellipsis, a list
   // folded behind "+5 more". Such a row's toggle shows all of it, every
   // cut-off value in full and every folded part open, and puts it back. The
@@ -406,6 +482,7 @@
   const settleOpenRows = () => {
     document.querySelectorAll(".data-table[data-rows-held]").forEach((table) => {
       releaseColumns(table);
+      fit(table);
       const open = [...table.querySelectorAll(":scope > tbody > tr.is-expanded")];
       open.forEach((row) => {
         row.classList.remove("is-expanded");
@@ -452,8 +529,6 @@
     });
   }
 
-  markTables();
-  landOnRow();
   window.addEventListener("resize", markTablesSoon);
   // Whether a value is cut depends on the face it is drawn in, so it is asked
   // again when the faces are in.
@@ -525,6 +600,7 @@
       const currentHeads = table.querySelectorAll("thead th");
       const nextHeads = nextTable.querySelectorAll("thead th");
       if (!currentHeads.length || currentHeads.length !== nextHeads.length) return;
+      giveWay(nextTable, gaveWay.get(table) ?? 0);
       currentHeads.forEach((th, index) => {
         const width = th.getBoundingClientRect().width;
         if (width) nextHeads[index].style.width = `${width}px`;
@@ -635,5 +711,6 @@
   document.addEventListener("DOMContentLoaded", () => {
     initializeSelection();
     markTables();
+    landOnRow();
   });
 })();
