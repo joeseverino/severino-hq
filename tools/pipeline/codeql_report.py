@@ -22,14 +22,13 @@ def main(argv: list[str]) -> int:
     parser.add_argument("sarif", type=Path)
     parser.add_argument("--exclude", action="append", default=[], metavar="RULE")
     args = parser.parse_args(argv)
-    sarif = json.loads(args.sarif.read_text())
+    runs = json.loads(args.sarif.read_text()).get("runs") or []
+    if not runs:
+        # An analysis that ran writes a run even when it finds nothing.
+        print("[security] CodeQL wrote no analysis run.", file=sys.stderr)
+        return 1
 
-    alerts = [
-        result
-        for run in sarif.get("runs", [])
-        for result in run.get("results", [])
-        if result.get("ruleId") not in args.exclude
-    ]
+    alerts = [result for run in runs for result in run.get("results", []) if result.get("ruleId") not in args.exclude]
 
     for alert in alerts:
         location = alert.get("locations", [{}])[0].get("physicalLocation", {})

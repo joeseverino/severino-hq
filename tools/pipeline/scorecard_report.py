@@ -27,9 +27,8 @@ CHECKS = (
     "Vulnerabilities",
 )
 
-# Any warning in these fails, whatever the score. Elsewhere a warning can be
-# informational (SAST warns about a branch it does not score), so the score
-# decides.
+# Any warning in these fails, even at 10. Elsewhere a warning beside a 10 is
+# informational (SAST warns about a branch it does not score).
 STRICT = {
     "Binary-Artifacts",
     "Dangerous-Workflow",
@@ -46,11 +45,9 @@ def main(path: str) -> int:
     for check in report.get("checks", []):
         name, score = check["name"], check["score"]
         warnings = [d for d in check.get("details") or [] if d.startswith("Warn:")]
-        if name in STRICT:
-            ok = not warnings and score >= 0
-        else:
-            ok = score == 10 or (not warnings and score >= 0)
-            warnings = [] if score == 10 else warnings
+        ok = score == 10 and not (name in STRICT and warnings)
+        if score == 10 and name not in STRICT:
+            warnings = []
         print(f"  {name}: {score}/10")
         for detail in warnings:
             print(f"      {detail}")
