@@ -65,8 +65,8 @@ Only the browser knows how wide a table is, so `tables.js` decides what shows,
 the established responsive-table pattern: while a table is wider than its
 region, its next ranked column leaves (rank 1 first, the rightmost of a rank
 first, `data-dropped` on its cells), and once none is left to go the table is
-in a narrow box (`data-narrow`), then tight (below); as the region grows they come back, the last
-to leave first, each only if the table still fits. A ResizeObserver on every
+in a narrow box (`data-narrow`), then tight (below); as the region grows
+they come back, the last to leave first, each only if the table still fits. A ResizeObserver on every
 region does it in the frame the table is laid out, before that frame is
 painted, and the script loads in the head without `defer` so every region is
 watched from the moment it is parsed: nothing moves once a page is drawn
