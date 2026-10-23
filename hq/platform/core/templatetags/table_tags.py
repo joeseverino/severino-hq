@@ -344,14 +344,21 @@ class _Cells(HTMLParser):
             return CUT
         return NAME_HOLD
 
+    def _end_element(self, tag: str) -> None:
+        """The innermost open ``tag`` closes, with what opened inside it; a box
+        set whole ends its run."""
+
+        assert self.cell is not None
+        for depth in range(len(self.open) - 1, -1, -1):
+            if self.open[depth][0] == tag:
+                if tag in ("button", "select") or self.open[depth][1] & _BOXES:
+                    self.cell.end_run()
+                del self.open[depth:]
+                return
+
     def handle_endtag(self, tag: str) -> None:
         if self.cell is not None:
-            for depth in range(len(self.open) - 1, -1, -1):
-                if self.open[depth][0] == tag:
-                    if tag in ("button", "select") or self.open[depth][1] & _BOXES:
-                        self.cell.end_run()
-                    del self.open[depth:]
-                    break
+            self._end_element(tag)
         if tag == "table":
             if self.tables == 1:
                 if self.cell is not None:
