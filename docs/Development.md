@@ -277,8 +277,8 @@ the whole estate. What a rule finds is printed under its page and width, and
 written beside the screenshot (`<page>-<width>.txt`), as each page is looked
 at, so a run stopped part way keeps what it found; the run closes on a verdict
 naming every page that failed. `--base <ref>` looks at the same pages at
-`<ref>` first, in a temporary worktree it removes however the run ends,
-writes what is new on this checkout and what it fixed to `var/gate/look.txt`,
+`<ref>` first, in a temporary worktree it removes however the run ends and
+judges by this checkout's rules, writes what is new on this checkout and what it fixed to `var/gate/look.txt`,
 and prints a line for each new finding and the verdict. Every probe reports
 all it finds, and findings are matched as a multiset by page, width, check and
 a key with every number, UUID, hex id and origin panel's id taken out, so one

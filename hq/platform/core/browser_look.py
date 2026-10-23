@@ -9,7 +9,7 @@ fail on the defect it was written for before it lands. Not a gate: it fails
 only when the rule it was asked to run fails.
 
 `--base <ref>` runs the same look at another commit first, in a temporary
-worktree of it with this checkout's copy of this module, and then reports
+worktree of it judged by this checkout's rules (`LENS`), and then reports
 what is new here and what is no longer found: what a change caused, apart
 from what was already there. Findings are matched by `finding_key`, as a
 multiset, so one whose row or pixel count moved, or that names a record made
@@ -94,6 +94,12 @@ from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 
 OUT = Path(settings.BASE_DIR) / "var" / "look"
+# What a look against a base runs at the base as this checkout has it, so a
+# finding is new for what the change drew rather than for how it was judged:
+# this module, and the rules and probes the survey holds.
+LENS = tuple(
+    Path(__file__).resolve().with_name(name) for name in ("browser_look.py", "browser_tests.py", "browser_audit.js")
+)
 # A look against a base writes its whole report here and prints only its new
 # findings and its verdict, so a long report is never cut short where it is read.
 REPORT = Path(settings.BASE_DIR) / "var" / "gate" / "look.txt"
@@ -528,15 +534,15 @@ def _worktree(checkout: Path, ref: str) -> Iterator[Path]:
 
 def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured]:
     """What this run finds and measures, looked for at ``ref``: the same
-    task's run, in a worktree of it, through this checkout's copy of this
-    module so both report alike. Its environment is this run's, but for a
+    task's run, in a worktree of it, through this checkout's copy of the
+    lens (`LENS`) so both are judged alike. Its environment is this run's, but for a
     database of its own, this run's clock, and the CSS already read and the
     script's absolute path, since a relative path names this checkout."""
 
     checkout = Path(settings.BASE_DIR)
     with _worktree(checkout, ref) as tree:
-        lens = Path(__file__).resolve()
-        shutil.copyfile(lens, tree / lens.relative_to(checkout.resolve()))
+        for lens in LENS:
+            shutil.copyfile(lens, tree / lens.relative_to(checkout.resolve()))
         found, log = tree.parent / "found.json", tree.parent / "look.log"
         env = {name: value for name, value in os.environ.items() if name not in {"usage_base", "VIRTUAL_ENV"}}
         env |= {
