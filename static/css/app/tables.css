@@ -232,10 +232,10 @@
    name gets less than its text needs and stands lines taller. The floor is a
    box inside the cell, which both engines size. */
 .data-table > tbody td[data-long]::before { content: ""; display: block; inline-size: min(16ch, var(--hold)); }
-/* A control cell keeps its line, as its column's floor counts it
-   (tables.js): "Link this" broken over two is a taller button than the one
-   beside it, and reads as two. */
-.data-table > tbody td[data-kind="control"] { white-space: nowrap; }
+/* Asked for a pixel, a column is as wide as its longest word, so a control in
+   it keeps its label on one line: "Link this" broken over two is a taller
+   button than the one beside it, and reads as two. */
+.data-table > tbody td[data-kind="control"] :is(.btn, button) { white-space: nowrap; }
 /* Outside a narrow box the columns showing have the room they ask
    (tables.js), so such a line keeps it. */
 @container style(--box: whole) {
