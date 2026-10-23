@@ -5,9 +5,7 @@ from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
@@ -18,6 +16,7 @@ from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.markup import elements, links, select, text, texts, with_class, within
 from hq.platform.application.ui import MISSING
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 User = get_user_model()
 
@@ -181,20 +180,19 @@ class CommandViewTests(TestCase):
             frozenset({Capability.READ, Capability.REQUEST_CERTIFICATE_RENEWAL}),
         )
 
-        def options_and_cost():
-            with CaptureQueriesContext(connection) as queries:
-                options = capability_target_options(capability_registry()["certificate.renew"], principal=principal)
-            return [option.value for option in options or ()], len(queries)
+        def arrange(count):
+            for index in range(ManagedResource.objects.count(), count):
+                ManagedResource.objects.create(key=f"example-certificate-{index}", kind="tls.certificate", spec={})
 
-        ManagedResource.objects.create(key="example-certificate", kind="tls.certificate", spec={})
-        one, one_cost = options_and_cost()
-        for index in range(4):
-            ManagedResource.objects.create(key=f"example-certificate-{index}", kind="tls.certificate", spec={})
-        many, many_cost = options_and_cost()
-
-        self.assertEqual(one, ["example-certificate"])
-        self.assertEqual(len(many), 5)
-        self.assertEqual(many_cost, one_cost)
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 5),
+            arrange=arrange,
+            draw=lambda _count: capability_target_options(
+                capability_registry()["certificate.renew"], principal=principal
+            ),
+            rows=lambda options: len(options or ()),
+        )
 
     def test_discovery_context_filters_and_explains_infrastructure_targets(self):
         ManagedResource.objects.create(
