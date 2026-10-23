@@ -21,6 +21,7 @@ from ..audit import (
     record_event,
 )
 from ..models import AuditLog
+from .estate_sizes import assert_cost_does_not_grow
 
 
 def _event(action, object_type="", *, days_old=0, connection="", user=None, message=""):
@@ -139,18 +140,17 @@ class ConnectionAttributionTests(TestCase):
 
 class LastActivityTests(TestCase):
     def test_the_latest_event_per_connection_costs_what_one_connection_does(self):
-        for ref in ("a", "b", "c"):
+        refs = ("a", "b", "c")
+        for ref in refs:
             _event(AuditLog.Action.UPDATED, connection=ref, days_old=3, message="older")
             _event(AuditLog.Action.UPDATED, connection=ref, message=f"latest {ref}")
 
-        with CaptureQueriesContext(connection) as one:
-            last_activity(["a"])
-        with CaptureQueriesContext(connection) as many:
-            found = last_activity(["a", "b", "c", "none"])
+        assert_cost_does_not_grow(
+            self, sizes=(1, 3), draw=lambda count: last_activity([*refs[:count], "none"]), rows=len
+        )
 
-        self.assertEqual(len(many), len(one))
-
-        self.assertEqual(set(found), {"a", "b", "c"})
+        found = last_activity([*refs, "none"])
+        self.assertEqual(set(found), set(refs))
         self.assertEqual(found["b"].message, "latest b")
 
     def test_after_a_prune_the_latest_remaining_event_is_shown(self):

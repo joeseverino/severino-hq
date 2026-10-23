@@ -14,6 +14,7 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import service_or_prospect
@@ -211,21 +212,24 @@ class TrafficSectionTests(TestCase):
         )
 
     def test_traffic_for_many_hosts_costs_no_more_than_for_one(self):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
         from ..analytics import traffic_for_hosts
 
-        hosts = {f"h{index}.example.com" for index in range(5)}
-        for host in hosts:
-            self._measure(host)
+        def hosts(count):
+            return {f"h{index}.example.com" for index in range(count)}
 
-        with CaptureQueriesContext(connection) as one:
-            self.assertEqual(len(traffic_for_hosts({"h0.example.com"}, days=7)), 1)
-        with CaptureQueriesContext(connection) as many:
-            self.assertEqual(len(traffic_for_hosts(hosts, days=7)), 5)
+        def arrange(count):
+            from hq.domains.analytics.models import AnalyticsSite
 
-        self.assertEqual(len(many), len(one))
+            for host in hosts(count) - set(AnalyticsSite.objects.values_list("host", flat=True)):
+                self._measure(host)
+
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 5),
+            arrange=arrange,
+            draw=lambda count: traffic_for_hosts(hosts(count), days=7),
+            rows=len,
+        )
 
 
 class OneWindowTests(TestCase):
