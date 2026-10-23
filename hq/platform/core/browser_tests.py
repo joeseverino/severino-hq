@@ -883,7 +883,9 @@ _TABLES = (
   let seen = 0;
   for (const table of document.querySelectorAll('main table')) {
     const r = box(table);
-    if (!r.width) continue;
+    // A table in a closed disclosure is not drawn, so it has no box to fit
+    // until it opens; the rules read with every disclosure open read it then.
+    if (!r.width || !table.checkVisibility()) continue;
     seen += 1;
     const name = describe(table);
     if (getComputedStyle(table).display !== 'table') found.push(`${name} is not laid out as a table`);
