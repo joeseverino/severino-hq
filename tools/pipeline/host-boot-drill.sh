@@ -8,7 +8,8 @@
 # start nothing, and leave the file's path alone, then come up healthy once
 # the file is there. A crash and a reboot must bring it back the same way. A
 # release that cannot serve must fail its start, and the previous release
-# must come back, as a deploy's rollback brings it back.
+# must come back, as a deploy's rollback brings it back. Before any of it, the
+# secrets unit's sandbox must score no worse than it ships.
 #
 # Needs systemd as PID 1, docker, and passwordless sudo: a CI runner, not a
 # laptop. Elsewhere it says it did not run and passes, unless CI is set.
@@ -25,6 +26,16 @@ if [ "$(cat /proc/1/comm 2>/dev/null || true)" != systemd ] || ! sudo -n true 2>
 fi
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+
+# The root secret renderer's sandbox, scored by systemd itself. --threshold
+# takes the exposure level times ten: the shipped unit scores 2.1, so a
+# directive dropped from it scores above 21 and fails here.
+sudo systemd-analyze security --no-pager --offline=yes --threshold=21 \
+  "$root/deploy/systemd/severino-hq-secrets.service" || {
+  echo "::error title=Host boot drill::severino-hq-secrets.service is more exposed than its 2.1."
+  exit 1
+}
+
 lib=/usr/local/lib/severino-hq
 secrets=/run/severino-hq-secrets/web
 env_file="$secrets/severino_hq_env"
