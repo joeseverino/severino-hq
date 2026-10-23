@@ -201,6 +201,25 @@ sys.exit(1)
 """
 
 
+# A failure and an error, for the runner to report as it reports them.
+RUNNER_FAILURES = """
+import unittest
+
+
+def missing():
+    raise LookupError("no example.invalid record")
+
+
+class Case(unittest.TestCase):
+    def test_compares(self):
+        self.assertEqual("expected", "found")
+
+    def test_raises(self):
+        \"\"\"A description the runner prints under the header.\"\"\"
+        missing()
+"""
+
+
 # `python -m tools.gate.verdict`, keeping its verdict in the folder named first.
 VERDICT_IN = (
     "import sys; from pathlib import Path; from tools.gate import verdict;"
@@ -241,6 +260,18 @@ class GateVerdictTests(GateTestCase):
         self.assertEqual(line, last)
         self.assertIn("and 2 more", last)
         self.assertEqual(every, ["checks:ruff", *tests])
+
+    def test_the_kept_verdict_says_why_each_test_failed(self):
+        """The runner's own report, so the file is read as a real failure prints."""
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, "test_example.py").write_text(RUNNER_FAILURES)
+            result = self.gate(sys.executable, "-m", "unittest", "discover", "-s", folder, "-t", folder)
+        self.assertEqual(result.returncode, 1)
+        kept = Path(gate_verdict.VERDICTS, "check.txt").read_text().splitlines()
+        self.assertIn("test_example.Case.test_compares: AssertionError: 'expected' != 'found'", kept)
+        self.assertIn("test_example.Case.test_raises: LookupError: no example.invalid record", kept)
+        traceback = kept[kept.index("test_example.Case.test_raises:") :]
+        self.assertTrue(any("missing()" in line for line in traceback), traceback)
 
     def test_a_pass_says_passed(self):
         result = self.gate(sys.executable, "-c", "print('FAIL: test_z (a.B.test_z)')")
