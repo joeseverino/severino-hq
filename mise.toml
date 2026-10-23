@@ -25,7 +25,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.10.15"
+min_version = "2026.10.18"
 
 [settings.task]
 # Gates that run together print one after another, each whole and labeled,
