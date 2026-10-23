@@ -9,9 +9,7 @@ being given a credential rather than by anything here being edited.
 from collections import Counter
 
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase, override_settings
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
@@ -19,6 +17,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_STACK_KIND
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..connection_catalog import AUTHORITY_LABELS, CONTROLLER_CONNECTIONS, connection_catalog
 from ..connections import connection_readings, connections_for, reachable_through
@@ -295,24 +294,21 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         # reads, so the invariant is growth rather than one host-only absolute.
         # It never probes a provider and twenty more rows cost no more queries
         # than one. No connection at all skips the activity read entirely.
-        sweep(A_PORTAINER)
-        with CaptureQueriesContext(connection) as baseline:
-            self.client.get(reverse("control_plane:connections"))
-
-        sweep(
-            *(
-                {
-                    **A_PORTAINER,
-                    "connection_ref": f"portainer-{index}",
-                    "reaches": [f"host-{index}"],
-                }
-                for index in range(20)
+        def arrange(count):
+            sweep(
+                *(
+                    {**A_PORTAINER, "connection_ref": f"portainer-{index}", "reaches": [f"host-{index}"]}
+                    for index in range(count)
+                )
             )
-        )
-        with CaptureQueriesContext(connection) as expanded:
-            self.client.get(reverse("control_plane:connections"))
 
-        self.assertLessEqual(len(expanded), len(baseline))
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 20),
+            arrange=arrange,
+            draw=lambda _count: self.client.get(reverse("control_plane:connections")),
+            rows=distinct(r"\bportainer-\d+\b"),
+        )
 
     def test_a_second_visit_derives_nothing(self):
         sweep(A_PORTAINER, A_DNS_TOKEN)

@@ -1,15 +1,14 @@
 """Each connection's last activity: stored on the event, read in bounded queries."""
 
 from django.contrib.auth import get_user_model
-from django.db import connection as db_connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderConnection
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE
 from hq.platform.core.models import AuditLog
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..connection_context import get_connection_standing
 from ..report_testing import report_connections
@@ -132,14 +131,17 @@ class LastActivityPageTests(TestCase):
         self.assertEqual(row["last_activity"]["audit_id"], event.pk)
 
     def test_last_activity_does_not_cost_a_query_per_row(self):
-        def queries_with(count):
+        def arrange(count):
             ProviderConnection.objects.all().delete()
             for index in range(count):
                 ref = f"example-{index}"
                 self._connection(ref)
                 AuditLog.objects.create(action=AuditLog.Action.UPDATED, connection=ref, message="x")
-            with CaptureQueriesContext(db_connection) as captured:
-                self.client.get(reverse("control_plane:connections"))
-            return len(captured)
 
-        self.assertEqual(queries_with(1), queries_with(4))
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 4),
+            arrange=arrange,
+            draw=lambda _count: self.client.get(reverse("control_plane:connections")),
+            rows=distinct(r"\bexample-\d+\b"),
+        )

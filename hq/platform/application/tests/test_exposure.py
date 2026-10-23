@@ -2,6 +2,8 @@
 
 from django.test import TestCase
 
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
+
 from ..exposure import GATED, OPEN, PRIVATE, UNKNOWN, UNROUTED, exposure_of_name, status_at
 from ..projection import projection_scope
 from .markup import select, text
@@ -159,15 +161,17 @@ class ServiceReachTests(TestCase):
         self.assertIn(reverse("login"), self.page()["Location"])
 
     def test_more_names_cost_no_more_queries(self):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
+        def arrange(count):
+            store(
+                "cloudflare.dns_record",
+                *(record(f"extra-{index}.example.com", "A", "198.51.100.20") for index in range(count)),
+            )
 
-        with CaptureQueriesContext(connection) as few:
-            self.page()
-        store(
-            "cloudflare.dns_record", *(record(f"extra-{index}.example.com", "A", "198.51.100.20") for index in range(8))
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 8),
+            arrange=arrange,
+            draw=lambda _count: self.page(),
+            rows=distinct(r"\bextra-\d+\b"),
+            slack=2,
         )
-        with CaptureQueriesContext(connection) as many:
-            self.page()
-
-        self.assertLessEqual(len(many), len(few) + 2)
