@@ -9,11 +9,12 @@ fail on the defect it was written for before it lands. Not a gate: it fails
 only when the rule it was asked to run fails.
 
 `--base <ref>` runs the same look at another commit first, in a temporary
-worktree of it with this checkout's copy of this module, and then prints only
+worktree of it with this checkout's copy of this module, and then reports
 what is new here and what is no longer found: what a change caused, apart
-from what was already there. Findings are matched with their numbers
-stripped, so one whose row or pixel count moved is neither. With `--columns`
-or `--eval`, a line the base measured otherwise follows this checkout's.
+from what was already there. Findings are matched by `finding_key`, as a
+multiset, so one whose row or pixel count moved, or that names a record made
+this run, is neither. With `--columns` or `--eval`, a line the base measured
+otherwise follows this checkout's.
 
 Each run's clock is frozen at the moment the run that asked began, its base's
 too, so a time a script reads is drawn alike in both; screenshots are taken
@@ -93,6 +94,9 @@ from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST, SSO, as_production, build_showcase
 
 OUT = Path(settings.BASE_DIR) / "var" / "look"
+# A look against a base writes its whole report here and prints only its new
+# findings and its verdict, so a long report is never cut short where it is read.
+REPORT = Path(settings.BASE_DIR) / "var" / "gate" / "look.txt"
 REFERENCE_PAGES = (REFERENCE, REFERENCE_DARK)
 ESTATE = "estate"
 # A heading's words as a reader hears them, without the marks beside them.
@@ -387,21 +391,40 @@ def _verdict(rule: str, found: Found) -> str:
     return f"{rule} fails on {len(failed)} of {len(pages)} pages: {', '.join(failed)}"
 
 
-# A number in a finding: a row's place, a width, a count of pixels.
-_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+# What a finding names that is drawn anew on every run, so no fact of the
+# layout: an origin panel's element id (its origin's key slugged, often with a
+# record's id in it), a UUID or the start of one (a finding cuts its text
+# short), and a run of hex holding a digit. Then any number: a row's place, a
+# width, a count of pixels.
+_DRAWN_ANEW = (
+    (re.compile(r"#origin-[\w-]+"), "#origin-…"),
+    (re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{1,12}){1,4}", re.IGNORECASE), "…"),
+    (re.compile(r"[0-9a-f]*\d[0-9a-f]*(?:\.\d+)?", re.IGNORECASE), "#"),
+)
+
+
+def finding_key(line: str) -> str:
+    """A finding as it is matched with the base's, with what is drawn anew on
+    every run and every number taken out: a finding whose row moved, whose
+    overflow grew by a pixel, or that names a record made this run is the same
+    finding."""
+
+    for drawn, mark in _DRAWN_ANEW:
+        line = drawn.sub(mark, line)
+    return line
 
 
 def _unmatched(lines: list[str], against: list[str]) -> list[str]:
-    """The lines with no counterpart in ``against``, read with their numbers
-    stripped, one counterpart each: a finding whose row moved or whose
-    overflow grew by a pixel is the same finding."""
+    """The lines with no counterpart in ``against``, matched by their keys as
+    a multiset: one counterpart each, so two alike findings against one leave
+    one unmatched."""
 
-    left = Counter(_NUMBER.sub("#", line) for line in against)
+    left = Counter(map(finding_key, against))
     unmatched = []
     for line in lines:
-        shape = _NUMBER.sub("#", line)
-        if left[shape]:
-            left[shape] -= 1
+        key = finding_key(line)
+        if left[key]:
+            left[key] -= 1
         else:
             unmatched.append(line)
     return unmatched
@@ -416,8 +439,10 @@ def _compare(base: Found, branch: Found) -> tuple[Found, Found]:
     return {key: said for key, said in new.items() if said}, {key: said for key, said in fixed.items() if said}
 
 
-def _against(ref: str, rule: str, base: Found, branch: Found) -> tuple[str, bool]:
-    """The report of a look against a base, and whether it found anything new."""
+def _against(ref: str, rule: str, base: Found, branch: Found) -> tuple[str, list[str], bool]:
+    """A look against a base: the whole report, new and fixed findings page by
+    page; what is printed, a line for each new finding and the verdict last;
+    and whether it found anything new."""
 
     new, fixed = _compare(base, branch)
     parts = []
@@ -431,7 +456,8 @@ def _against(ref: str, rule: str, base: Found, branch: Found) -> tuple[str, bool
         verdict = f"{rule} against {ref}: {count} new on {', '.join(_failed(new))}{fixes}"
     else:
         verdict = f"{rule} against {ref}: nothing new on {len(dict.fromkeys(n for n, _ in branch))} pages{fixes}"
-    return "\n".join([*parts, verdict]), bool(new)
+    printed = [f"new: {name} at {width}: {line}" for (name, width), said in new.items() for line in said]
+    return "\n".join([*parts, verdict]), [*printed, verdict], bool(new)
 
 
 def _beside(ref: str, ours: str, theirs: str | None) -> str:
@@ -712,10 +738,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if into := _usage(_FINDINGS):
             _write_found(Path(into), found, self.measured)
         if self.base is not None:
-            report, new = _against(_usage("usage_base"), rule, self.base, found)
-            print(report, flush=True)
+            report, printed, new = _against(_usage("usage_base"), rule, self.base, found)
+            REPORT.parent.mkdir(parents=True, exist_ok=True)
+            REPORT.write_text(report + "\n", encoding="utf-8")
+            print(f"New and fixed, page by page: {REPORT}", *printed, sep="\n", flush=True)
             if new:
-                self.fail(report.splitlines()[-1])
+                self.fail(printed[-1])
         elif rule:
             verdict = _verdict(rule, found)
             if _failed(found):

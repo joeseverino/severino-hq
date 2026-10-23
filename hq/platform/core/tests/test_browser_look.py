@@ -106,12 +106,19 @@ class ReportTests(SimpleTestCase):
         self.assertEqual(new, {("example/one", 402): ["frames: a new frame"]})
         # A page the branch did not look at is not fixed by it.
         self.assertEqual(fixed, {("example/one", 402): ["overlap: gone now"]})
-        report, failed = browser_look._against("example-ref", "survey", base, branch)
+        report, printed, failed = browser_look._against("example-ref", "survey", base, branch)
         self.assertTrue(failed)
         self.assertIn("frames: a new frame", report)
+        self.assertIn("overlap: gone now", report)
         self.assertNotIn("a box past the edge", report)
-        _, failed = browser_look._against("example-ref", "survey", base, {("example/one", 402): []})
+        # Printed: each new finding under its page and width, then the verdict.
+        self.assertEqual(len(printed), 2)
+        self.assertIn("example/one at 402", printed[0])
+        self.assertIn("frames: a new frame", printed[0])
+        self.assertTrue(printed[-1].startswith("survey against example-ref"))
+        _, printed, failed = browser_look._against("example-ref", "survey", base, {("example/one", 402): []})
         self.assertFalse(failed)
+        self.assertEqual(len(printed), 1)
 
     def test_against_a_base_a_finding_whose_numbers_moved_is_neither_new_nor_fixed(self):
         base = {("example/one", 402): ["overflow: row 3 is 412px wide", "overflow: row 5 is 430px wide"]}
@@ -120,6 +127,55 @@ class ReportTests(SimpleTestCase):
         self.assertEqual(new, {("example/one", 402): ["frames: row 2 framed twice"]})
         # One counterpart each: two findings of a shape against one is one fixed.
         self.assertEqual(fixed, {("example/one", 402): ["overflow: row 5 is 430px wide"]})
+
+    # Findings as two runs of the same checkout wrote them: each run makes its
+    # records anew, so their UUIDs and ids differ, and a finding cuts its text.
+    FIRST_RUN = [
+        "cells: div#origin-hqauditapprovala9fe19de-601b-4d02-9088-41d7ba7d5f01.modal.origin-panel"
+        " runs 102px past its cell: an-example-agent-with-a-long-name wants",
+        "cells: dd runs 168px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
+        "cells: div#origin-hqinfrastructurefindingcontroller-sweep-stalecontrollere3d7aae8ff21.modal.origin-panel"
+        " runs 40px past its cell: The controller on example-controller has",
+    ]
+    SECOND_RUN = [
+        "cells: div#origin-hqauditapproval53dac582-0ef6-43e8-a5e8-80f01bcdc43b.modal.origin-panel"
+        " runs 135px past its cell: an-example-agent-with-a-long-name wants",
+        "cells: dd runs 79px past its cell: hq.audit:approval:53dac582-0ef6-43e8-a5e",
+        "cells: div#origin-hqinfrastructurefindingcontroller-sweep-stalecontrollerfa0be9c1d7aa.modal.origin-panel"
+        " runs 41px past its cell: The controller on example-controller has",
+    ]
+
+    def test_a_finding_naming_what_each_run_makes_anew_is_the_same_finding_on_every_run(self):
+        for first, second in zip(self.FIRST_RUN, self.SECOND_RUN, strict=True):
+            self.assertEqual(browser_look.finding_key(first), browser_look.finding_key(second))
+        new, fixed = browser_look._compare(
+            {("example/one", 402): self.FIRST_RUN}, {("example/one", 402): self.SECOND_RUN}
+        )
+        self.assertEqual((new, fixed), ({}, {}))
+
+    def test_findings_that_differ_in_what_they_say_stay_apart(self):
+        keys = {
+            browser_look.finding_key(line)
+            for line in (
+                self.FIRST_RUN[0],
+                self.FIRST_RUN[1],
+                "cells: dt runs 168px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
+                "overflow: dd runs 168px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
+                "cells: div#origin-hqauditapprovala9fe19de-601b-4d02-9088-41d7ba7d5f01.modal.origin-panel"
+                " runs 102px past its cell: example-agent wants to run Change what H",
+            )
+        }
+        self.assertEqual(len(keys), 5)
+
+    def test_alike_findings_are_counted_so_one_more_of_them_is_new(self):
+        base = {("example/one", 402): [self.FIRST_RUN[1]]}
+        branch = {("example/one", 402): [self.SECOND_RUN[1], self.FIRST_RUN[1]]}
+        new, fixed = browser_look._compare(base, branch)
+        self.assertEqual(sum(map(len, new.values())), 1)
+        self.assertEqual(fixed, {})
+        # Matched within its page and width only.
+        new, fixed = browser_look._compare(base, {("example/one", 820): [self.FIRST_RUN[1]]})
+        self.assertEqual(list(new), [("example/one", 820)])
 
     def test_a_tables_columns_read_as_drawn_and_at_their_intrinsic_sizes_under_their_headings(self):
         table = {

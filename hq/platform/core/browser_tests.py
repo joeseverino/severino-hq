@@ -481,7 +481,7 @@ _ESCAPES = (
     }
     if (!held) found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -511,7 +511,7 @@ _NESTED_FRAMES = (
       if (!exempt(up) && framed(up)) { found.push(`${describe(el)} framed inside ${describe(up)}`); break; }
     }
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -559,7 +559,7 @@ _SIDEWAYS = (
       found.push(`${describe(el)} spans ${Math.round(r.left)}..${Math.round(r.right)}px`);
     }
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -588,7 +588,7 @@ _CELLS = (
       }
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -624,7 +624,7 @@ _RAISED_LINKS = (
       found.push(`${describe(link)} sits ${Math.round(words.bottom - linked.bottom)}px off the words before it`);
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -647,7 +647,7 @@ _LONE_ARROWS = (
       found.push(`${describe(link)} leaves its arrow on a line of its own: ${link.textContent.trim().slice(0, 40)}`);
     }
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -793,7 +793,7 @@ _SMALL_TARGETS = (
   } finally {
     host.remove();
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -834,8 +834,7 @@ _NESTED_DISCLOSURES = (
     + """
   return [...document.querySelectorAll('main table > tbody > tr')]
     .filter((row) => row.querySelector('button[aria-expanded]') && row.querySelector(':is(td, th) details'))
-    .map((row) => `${describe(row)} has a row toggle and a dropdown`)
-    .slice(0, 10);
+    .map((row) => `${describe(row)} has a row toggle and a dropdown`);
 }"""
 )
 
@@ -870,7 +869,7 @@ _BROKEN_WORDS = (
       }
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -986,7 +985,7 @@ _OVERLAPS = (
       }
     }
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -1079,7 +1078,7 @@ _ROW_HEIGHTS = (
       }
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -1169,7 +1168,7 @@ _CONTRAST = (
       }
     }
   }
-  return {sampled, found: [...new Set(found)].slice(0, 10)};
+  return {sampled, found: [...new Set(found)]};
 }"""
 )
 
@@ -1201,7 +1200,7 @@ _FAINT_LINES = (
       }
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -1233,7 +1232,7 @@ _FIELD_EDGES = (
     );
     if (measured < least) found.push(`${describe(frame)} ${measured.toFixed(2)}:1 on ${behind.slice(0, 3).map(Math.round)}`);
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -1286,7 +1285,7 @@ def lost_fills(steps, least):
             lost = "dark" if dark < light else "light"
             said = read[lost][1] or read["light" if lost == "dark" else "dark"][1]
             found.append(f"{lost} loses {said}: {light:.2f}:1 in light, {dark:.2f}:1 in dark")
-    return found[:10]
+    return found
 
 
 # Every color each element is painted in, and the element, in document order:
@@ -1330,7 +1329,7 @@ _OFF_CENTER_MARKS = (
     const dx = glyph.left + glyph.width / 2 - (at.left + at.width / 2);
     if (Math.abs(dy) > 1 || Math.abs(dx) > 1) found.push(`${describe(el)}: glyph ${dx.toFixed(1)}, ${dy.toFixed(1)} off its center`);
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -1350,7 +1349,7 @@ _NARROW_FRAMES = (
     const width = box(el).width;
     if (width < room - 2) found.push(`${describe(el)} in ${describe(parent)}: ${Math.round(width)}px of ${Math.round(room)}px`);
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -1373,7 +1372,7 @@ _MOVING_SUMMARIES = (
       found.push(`${describe(details)}: "${summary.textContent.trim().slice(0, 30)}" moved ${Math.round(after.left - before.left)}, ${Math.round(after.top - before.top)} when opened`);
     }
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -1537,7 +1536,7 @@ _UNPADDED_TILES = (
       }
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -1641,7 +1640,7 @@ _SPILLED_LABELS = (
       found.push(`${describe(el)} holds ${held}px of label in ${el.clientWidth}px`);
     }
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -1736,7 +1735,7 @@ _CELLS_OFF_THE_FIRST_LINE = (
       if (align !== 'top') found.push(`${describe(cell)} in ${describe(table)} is set ${align}`);
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -1815,7 +1814,7 @@ _MOVED_BY_SPEAKING = (
     for (const [el, hidden, nodes] of parts) { el.replaceChildren(...nodes); el.hidden = hidden; }
   }
   await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -2377,7 +2376,7 @@ _TOKEN_BREAKS = (
       if (at > 0) found.push(`${describe(el)} breaks "${word[0].slice(0, at)}|${word[0].slice(at)}" where it has no seam`.slice(0, 140));
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 _TOKEN_SELECTORS = [
@@ -2437,7 +2436,7 @@ _SCRAPS = (
       found.push(`${describe(el)} leaves "${line.map((c) => c.ch).join('')}" alone on a line of "${text}"`.slice(0, 160));
     });
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 # A mark that closes what it follows (".", ",", ")") or opens what follows it
@@ -2482,7 +2481,7 @@ _STRANDED_MARKS = (
       }
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
@@ -2501,7 +2500,7 @@ _CUT_NAMES = (
       }
     }
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 # A name of plain parts there that fits within the length it holds out for
@@ -2542,7 +2541,7 @@ _SPLIT_NAMES = (
       }
     }
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -2741,7 +2740,7 @@ _CUT_WITH_ROOM = (
         + `while its table leaves ${Math.round(room)}px unused (${where.join(', ')}; ${Math.round(scroll.clientWidth)}px region)`);
     }
   }
-  return found.slice(0, 10);
+  return found;
 }"""
 )
 
@@ -2961,7 +2960,7 @@ _OVERLAPPING_TEXT = (
       }
     }
   }
-  return [...new Set(found)].slice(0, 10);
+  return [...new Set(found)];
 }"""
 )
 
