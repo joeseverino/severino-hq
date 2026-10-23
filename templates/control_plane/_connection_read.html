@@ -12,7 +12,7 @@ neighbors or cannot be used: the state column says it once for the connection.
     {% if sight.state != "readable" %}<span class="connection-sight-state cell-part row-more">{{ sight.state_label|breakable }}</span>{% endif %}
     {% if sight.state == "readable" or sight.state == "partial" %}<span class="muted row-more">{{ sight.records|breakable }}</span>{% endif %}
     {% if sight.state != "readable" %}
-      {% if sight.part_reasons %}<span class="row-more">{% for reason in sight.part_reasons %}{{ reason|breakable }}{% if not forloop.last %}; {% endif %}{% endfor %}</span>
+      {% if sight.part_reasons %}<span class="row-more">{% for reason in sight.part_reasons %}{% if forloop.last %}{{ reason|breakable }}{% else %}{{ reason|breakable:";" }} {% endif %}{% endfor %}</span>
       {% elif sight.remedy %}<span class="row-more">{{ sight.remedy|breakable:"." }}{% if sight.error %} <span class="muted">{{ sight.error|breakable }}</span>{% endif %}</span>
       {% elif sight.error %}<span class="muted row-more">{{ sight.error|breakable }}</span>{% endif %}
     {% endif %}
