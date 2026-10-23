@@ -5,14 +5,17 @@
     "report-",
     "project-",
     "note-",
-    "task-"
+    "task-",
+    "queue-"
   ],
   "doc_types": [
     "architecture_note",
     "decision_record",
     "deployment_guide",
     "public_article_draft",
+    "queue",
     "recovery_procedure",
+    "report",
     "runbook",
     "task",
     "troubleshooting_guide"
