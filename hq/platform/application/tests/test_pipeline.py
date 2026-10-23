@@ -493,6 +493,35 @@ class ReleaseTests(SimpleTestCase):
                 self.assertNotIn(absent, branches["build"])
 
 
+# The jobs in ci.yml that gate nothing: the cache writer and the two verdicts.
+NOT_GATES = {"caches", "ready", "release"}
+# Gates Ready waits for and Release does not: code scanning holds a merge, not a release.
+MERGE_ONLY = {"codeql"}
+
+
+def pull_request_only(job: str) -> bool:
+    """Whether a job's ``if:`` requires a pull request event, so a push skips it."""
+    expression = " ".join(block(job, "if", 4))
+    return "github.event_name == 'pull_request'" in expression and "||" not in expression
+
+
+@tag("source")
+class VerdictNeedsTests(SimpleTestCase):
+    """A gate added to CI is one the verdicts wait for, so neither reports a pass the gate did not give."""
+
+    def setUp(self):
+        self.jobs = jobs(workflow("ci.yml"))
+
+    def test_ready_waits_for_every_gate(self):
+        self.assertEqual(needed(self.jobs["ready"]), set(self.jobs) - NOT_GATES)
+
+    def test_release_waits_for_every_gate_a_push_runs(self):
+        skipped_on_push = {name for name, job in self.jobs.items() if pull_request_only(job)}
+        self.assertTrue(pull_request_only(self.jobs["ready"]))
+        self.assertFalse(pull_request_only(self.jobs["release"]))
+        self.assertEqual(needed(self.jobs["release"]), set(self.jobs) - NOT_GATES - MERGE_ONLY - skipped_on_push)
+
+
 @tag("source")
 class ExtensionsAgainstHostTests(SimpleTestCase):
     """A pull request cannot pass its composition while an extension fails its checks against that host."""

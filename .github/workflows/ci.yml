@@ -491,7 +491,9 @@ jobs:
   # On main, CI starts the build of HQ for this commit once every gate has
   # passed, and names the commit, so what Compose builds is exactly what CI
   # checked. Nothing else about a push starts it. CodeQL is not waited for:
-  # code scanning holds a merge, not a release.
+  # code scanning holds a merge, not a release. Image checks and Composition
+  # run only for a pull request: on a push, Image checks what it builds or
+  # promotes the image its pull request checked, and Compose follows this job.
   release:
     name: Release
     needs: [proven, checks, tests, browser, controller, image]
