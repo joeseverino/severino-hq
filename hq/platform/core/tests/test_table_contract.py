@@ -91,12 +91,12 @@ def _templates() -> dict[str, str]:
     }
 
 
-@tag("source")
 # What tables.js marks as it fits a table to its region: in a ResizeObserver,
 # so in the frame the table is laid out, before that frame is painted.
 FITTED = {"dropped", "narrow"}
 
 
+@tag("source")
 class TableContractTests(SimpleTestCase):
     maxDiff = None
 
