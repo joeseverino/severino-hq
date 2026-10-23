@@ -34,6 +34,36 @@ _SOURCE = "https://github.com/joeseverino/severino-hq"
 _ROOT = Path(__file__).resolve().parents[1]
 # The pages of a list demo/build.py saves, from its first (its _MOST_PAGES_OF_A_LIST).
 _MOST_PAGES_OF_A_LIST = 6
+# The widths HQ's browser gate reads (browser_tests.WIDTHS), and a small phone's.
+_WIDTHS = (390, 402, 820, 1360)
+# Each control About this demo is drawn over at some scroll stop: where its
+# box meets the control's, the point at the middle of the two is the chip's.
+# A control under the sticky header there is the header's, and not counted.
+_COVERED_BY_ABOUT = """() => {
+  const chip = document.querySelector('.demo-about');
+  const targets = [...document.querySelectorAll(
+    "a[href], button, summary, select, textarea, input:not([type=hidden]), [tabindex]:not([tabindex='-1'])"
+  )].filter((el) => !chip.contains(el) && !el.closest('dialog') && el.checkVisibility());
+  const covered = new Set();
+  const root = document.documentElement;
+  for (let y = 0; ; y += innerHeight / 2) {
+    scrollTo(0, y);
+    const c = chip.getBoundingClientRect();
+    for (const el of targets) {
+      const r = el.getBoundingClientRect();
+      const left = Math.max(c.left, r.left), right = Math.min(c.right, r.right);
+      const top = Math.max(c.top, r.top), bottom = Math.min(c.bottom, r.bottom);
+      if (right - left < 1 || bottom - top < 1) continue;
+      const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+      if (!hit || !chip.contains(hit)) continue;
+      const said = (el.textContent || el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
+      covered.add(`${el.tagName.toLowerCase()} ${said.slice(0, 40)}`);
+    }
+    if (y + innerHeight >= root.scrollHeight) break;
+  }
+  scrollTo(0, 0);
+  return [...covered].slice(0, 10);
+}"""
 
 
 def _sample() -> list[str]:
@@ -228,28 +258,38 @@ class DemoSiteTests(unittest.TestCase):
         # The day it was saved, written the way HQ writes a day.
         self.assertRegex(about.group(0), r'Saved <time datetime="[^"]+" title="[^"]+">[^<]+</time>\.')
 
-    def test_the_corner_control_opens_about_by_keyboard(self):
+    def test_about_this_demo_opens_by_keyboard_from_the_page_s_end(self):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
             browser = playwright.webkit.launch()
-            for width in (390, 402, 820, 1360):
+            for width in _WIDTHS:
                 page = browser.new_page(viewport={"width": width, "height": 700})
                 page.goto(self.origin + "/", wait_until="load")
                 with self.subTest(width=width):
                     control = page.get_by_role("link", name="About this demo")
                     self.assertTrue(control.is_visible())
-                    box = control.bounding_box()
-                    self.assertLess(box["x"] + box["width"], width / 2, "it sits on the left")
-                    self.assertGreater(box["y"], 700 / 2, "it sits at the bottom")
-                    # At the end of the page the content has scrolled clear of it.
                     page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
-                    content_end = page.evaluate(
-                        "Math.max(...[...document.querySelectorAll('#content, .site-footer')]"
-                        ".map((part) => part.getBoundingClientRect().bottom))"
-                    )
-                    self.assertLessEqual(content_end, control.bounding_box()["y"], "it covers nothing")
+                    content_end = page.evaluate("document.getElementById('content').getBoundingClientRect().bottom")
+                    self.assertLessEqual(content_end, control.bounding_box()["y"], "it follows the page's content")
                     self._assert_opens_and_closes(page, control)
+                page.close()
+            browser.close()
+
+    def test_about_this_demo_covers_no_control(self):
+        # Pages with controls along their left edge and at their foot: a
+        # list's tick boxes and pages, the dashboard's calendar. Read at every
+        # scroll stop, so a control drawn over the page at any one is found.
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.webkit.launch()
+            for width in _WIDTHS:
+                page = browser.new_page(viewport={"width": width, "height": 700})
+                for path in ("/", "/infrastructure/containers/", "/action-items/"):
+                    page.goto(self.origin + path, wait_until="load")
+                    with self.subTest(path=path, width=width):
+                        self.assertEqual(page.evaluate(_COVERED_BY_ABOUT), [])
                 page.close()
             browser.close()
 

@@ -260,7 +260,18 @@
     {% block content %}{% endblock %}
   </main>
 
-  {% block site_footer %}{% endblock %}
+  {% block site_footer %}
+    {% if saved_copy and user.is_authenticated %}
+      {% comment %}
+      A saved copy of HQ (the public demo) says what it is at the foot of every
+      page, after the content, so it covers nothing. Without script it is a
+      link to the demo's README, so no page is made for the copy alone.
+      {% endcomment %}
+      <footer class="demo-foot">
+        <a class="demo-about" href="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" data-modal-open="demo-about" aria-haspopup="dialog" aria-controls="modal-demo-about"><span class="demo-about-dot" aria-hidden="true"></span>About this demo</a>
+      </footer>
+    {% endif %}
+  {% endblock %}
 
   {% if user.is_authenticated %}
     {% comment %}
@@ -277,12 +288,6 @@
     {% endcomment %}
     {% include "partials/_modal.html" with id="connection" title="Your connection" lede="How you are connected to HQ right now." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
     {% if saved_copy %}
-      {% comment %}
-      A saved copy of HQ (the public demo) says what it is from the corner of
-      every page, where it is found without covering anything. Without script
-      it is a link to the demo's README, so no page is made for the copy alone.
-      {% endcomment %}
-      <a class="demo-about" href="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" data-modal-open="demo-about" aria-haspopup="dialog" aria-controls="modal-demo-about"><span class="demo-about-dot" aria-hidden="true"></span>About this demo</a>
       {% include "partials/_modal.html" with id="demo-about" title="About this demo" body_template="partials/_demo_about.html" %}
     {% endif %}
   {% endif %}
