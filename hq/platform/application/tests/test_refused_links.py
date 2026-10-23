@@ -10,19 +10,17 @@ from dataclasses import replace
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
-from django.db import connection
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.jobs.models import Job
 from hq.platform.application.action_links import command_action, command_url
 from hq.platform.application.connections import ConnectionAbility, ConnectionInstance, ConnectionSpec
-from hq.platform.application.derivations import uncached
 from hq.platform.application.integrations import clear_integration_graph_cache
 from hq.platform.application.plugins import clear_plugin_composition_cache
 from hq.platform.application.workflow_contracts import ActionLink
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from hq_sdk.testing import held_jobs
 from tests.fixtures.example_hq_plugin import outbound as example
 
@@ -117,15 +115,12 @@ class ARefusedCommandIsDrawnUnusableTests(ConnectionsPage):
     def test_the_page_asks_each_refusal_once_however_many_rows_offer_it(self):
         self.close_the_registry()
 
-        def cost(*notes):
-            # Every derivation runs on each call, so the count measures the
-            # page rather than what the derived cache still holds.
-            with uncached(), CaptureQueriesContext(connection) as queries:
-                self.connections(*notes, abilities=("notes.refresh",))
-            return len(queries)
-
-        cost("first-note")
-        self.assertEqual(cost(*(f"note-{n}" for n in range(6))), cost("first-note"))
+        assert_cost_does_not_grow(
+            self,
+            sizes=(1, 6),
+            draw=lambda size: self.connections(*(f"note-{n}" for n in range(size)), abilities=("notes.refresh",)),
+            rows=lambda page: len(select(page, "aria-disabled", "true")),
+        )
 
 
 class TheLinkCarriesTheRefusalTests(ComposedExample):

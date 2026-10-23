@@ -7,13 +7,16 @@ from io import StringIO
 from unittest import mock
 
 from django.core.management import call_command
-from django.db import connection
 from django.test import TestCase, override_settings
-from django.test.utils import CaptureQueriesContext
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.platform.api.tests.test_api import ISSUER, RESOURCE, _serving, _token
+from hq.platform.core.tests.estate_sizes import (
+    assert_cost_does_not_grow,
+    assert_subject_cost_does_not_grow,
+    distinct,
+)
 from hq.platform.mcp import services as mcp_services
 from hq.platform.mcp.identity import reset_principal, set_principal
 from hq_sdk import resources as sdk_resources
@@ -255,29 +258,65 @@ class NoSecretTests(TestCase):
             self.assertNotIn(PLANTED, json.dumps(answer, default=str))
 
 
-class QueryBudgetTests(TestCase):
-    """A list costs the same number of queries however large the estate is."""
+def _records(kind):
+    """How many records of ``kind`` an answer says were read, over its readings or sights."""
 
-    def cost(self, size, call):
+    def count(answer):
+        items = answer.get("items", [answer])
+        return sum(sight["records"] for item in items for sight in item.get("sights", [item]) if sight["kind"] == kind)
+
+    return count
+
+
+def _machines_online(answer):
+    return int(next(item["value"] for item in answer["items"] if item["id"] == "hq.estate.machines"))
+
+
+HOSTS, NAMES = distinct(r"example-host-\d+"), distinct(r"\bs\d+\.example\.com")
+# The reads whose answer holds a row for each machine, name or gate in the estate.
+COUNTED_LISTS = {
+    "estate": _machines_online,
+    "machines": HOSTS,
+    "domains": NAMES,
+    "readings": _records("cloudflare.access_app"),
+    "credentials": _records("cloudflare.access_app"),
+    "search": HOSTS,
+}
+COUNTED_DETAILS = {"domains": NAMES, "credentials": _records("cloudflare.access_app")}
+
+
+class QueryBudgetTests(TestCase):
+    """A read costs the same number of queries however large the estate is."""
+
+    def arrange(self, size):
         reset()
         estate(size)
-        with CaptureQueriesContext(connection) as captured:
-            call()
-        return len(captured)
 
-    def assert_flat(self, name, call):
-        small, large = self.cost(2, call), self.cost(10, call)
-        self.assertLessEqual(large, small, f"{name} grows with the estate ({small} then {large})")
+    def assert_flat(self, call, rows):
+        assert_cost_does_not_grow(self, sizes=(2, 10), arrange=self.arrange, draw=lambda _size: call(), rows=rows)
 
     def test_lists(self):
-        for name, query in LISTS.items():
+        for name, rows in COUNTED_LISTS.items():
             with self.subTest(name):
-                self.assert_flat(name, partial(list_resource, name, query, principal=READER))
+                self.assert_flat(partial(list_resource, name, LISTS[name], principal=READER), rows)
 
     def test_details(self):
-        for name, identifier in DETAILS.items():
+        for name, rows in COUNTED_DETAILS.items():
             with self.subTest(name):
-                self.assert_flat(name, partial(get_resource, name, identifier, principal=READER))
+                self.assert_flat(partial(get_resource, name, DETAILS[name], principal=READER), rows)
+
+    def test_reads_of_one_subject(self):
+        # These answer about one subject, or about none of the estate.
+        calls = {f"list {name}": partial(list_resource, name, query, principal=READER) for name, query in LISTS.items()}
+        calls |= {f"get {name}": partial(get_resource, name, key, principal=READER) for name, key in DETAILS.items()}
+        counted = {f"list {name}" for name in COUNTED_LISTS} | {f"get {name}" for name in COUNTED_DETAILS}
+        for name, call in calls.items():
+            if name in counted:
+                continue
+            with self.subTest(name):
+                assert_subject_cost_does_not_grow(
+                    self, sizes=(2, 10), arrange=self.arrange, draw=lambda _size, call=call: call()
+                )
 
 
 class ServedMachineReadTests(TestCase):

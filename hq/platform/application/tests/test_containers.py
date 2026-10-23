@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, attention, containers
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
@@ -423,20 +424,21 @@ class QueryBudgetTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
 
-    def queries_for(self, count):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
+    def arrange(self, count):
         estate()
         inventory(
             "portainer.container", [running(f"app-{index}", "ghcr.io/example/app:v1.2.0") for index in range(count)]
         )
-        with CaptureQueriesContext(connection) as captured:
-            self.assertEqual(self.client.get(reverse("control_plane:containers")).status_code, 200)
-        return len(captured)
+
+    def draw(self, _count):
+        response = self.client.get(reverse("control_plane:containers"))
+        self.assertEqual(response.status_code, 200)
+        return response
 
     def test_the_cost_does_not_grow_with_the_containers(self):
-        self.assertEqual(self.queries_for(3), self.queries_for(30))
+        assert_cost_does_not_grow(
+            self, sizes=(3, 30), arrange=self.arrange, draw=self.draw, rows=distinct(r"\bapp-\d+\b")
+        )
 
 
 class RetryTests(TestCase):

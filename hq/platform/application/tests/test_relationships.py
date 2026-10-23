@@ -13,6 +13,11 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.tests.estate_sizes import (
+    assert_cost_does_not_grow,
+    assert_subject_cost_does_not_grow,
+    distinct,
+)
 
 from ..entity_links import NODE_KINDS, EntityLink, entity_link, kind_label
 from ..facts import Subject, readings, unreadable_labels
@@ -360,27 +365,40 @@ def estate(size):
 class PageCostTests(TestCase):
     """The machine, service and domain pages do not cost more as the estate grows."""
 
-    def cost(self, size, url):
+    def arrange(self, size):
         ManagedResource.objects.all().delete()
         ProviderConnection.objects.all().delete()
         ProviderInventory.objects.all().delete()
         estate(size)
-        with CaptureQueriesContext(connection) as captured:
-            response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        return len(captured)
 
-    def test_the_machine_service_and_domain_pages_do_not_grow_with_the_estate(self):
+    def page(self, url):
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_the_machine_and_domain_pages_do_not_grow_with_the_estate(self):
         login(self.client)
-        for url in (
-            reverse("control_plane:machine", args=["example-host-0"]),
-            reverse("control_plane:service", args=["s0.example.com"]),
-            reverse("zones:detail", args=["example.com"]),
+        # Each page names every machine or every name the estate holds, so
+        # the larger count is of the larger estate.
+        for url, named in (
+            (reverse("control_plane:machine", args=["example-host-0"]), r"example-host-\d+"),
+            (reverse("zones:detail", args=["example.com"]), r"\bs\d+\.example\.com"),
         ):
             with self.subTest(url):
-                small, large = self.cost(2, url), self.cost(12, url)
-                # Counts only, never the SQL: this repository is public.
-                self.assertLessEqual(large, small, f"{url} grows with the estate ({small} then {large})")
+                assert_cost_does_not_grow(
+                    self,
+                    sizes=(2, 12),
+                    arrange=self.arrange,
+                    draw=lambda _size, url=url: self.page(url),
+                    rows=distinct(named),
+                )
+
+    def test_the_service_page_does_not_grow_with_the_estate(self):
+        # A service's page names only its own machine and name.
+        login(self.client)
+        url = reverse("control_plane:service", args=["s0.example.com"])
+
+        assert_subject_cost_does_not_grow(self, sizes=(2, 12), arrange=self.arrange, draw=lambda _size: self.page(url))
 
     def test_the_relation_graph_is_read_once_per_page(self):
         estate(3)
