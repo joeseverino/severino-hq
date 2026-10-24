@@ -152,12 +152,13 @@ with git's refs on stdin.
 
 Two suites at once exhaust a small machine's memory, so the heavy tasks (`fast`,
 `check`, `ci`, `checks`, `tests`, `preflight`, the suites, the browser gates,
-`demo:build`, `dev:look`, `docs:screenshot`) run under `tools/lib/heavy.sh`,
+`demo:build`, `docs:screenshot`, and `dev:look` except a look at named pages
+with no `--base`, `--perf` or `--deep`) run under `tools/lib/heavy.sh`,
 which holds an exclusive lock on `~/.cache/severino/heavy.lock` (under
 `XDG_CACHE_HOME` when it is set) for as long as the task runs. Every checkout
 and worktree shares that file. A heavy task started while another holds it
-prints a line naming the holder (its pid, its mise task, how long it has held
-the turn, how long it has run and its command) and waits for the turn, naming
+prints a line naming the holder (its mise task and checkout, how long it has
+held the turn, and its pid) and waits for the turn, naming
 the holder again every `SEVERINO_HEAVY_EVERY` seconds (a minute by default),
 so a holder that has stalled shows as that rather than as this task hanging.
 The wait is bounded by
@@ -304,6 +305,10 @@ host name outside the reserved and shared ranges it names.
 `mise run dev:look -- <pages>` is the same browser for looking rather than
 gating: it saves a full-page screenshot of each page at each width under
 `var/look/`, which each run empties first so every shot there is its own.
+The look keeps its test database in `var/dev-look/` through Django's
+`--keepdb`, so a second run creates nothing; a run that did not finish makes
+the next one start fresh, a look with `--base` keeps none, and an edited
+migration needs `rm -r var/dev-look`.
 The pages and the rule asked are checked before anything is drawn, and a rule
 that does not exist is refused with the list of those that do. A stress page
 builds only its own estate, and the dense one, which answers what a page asks
@@ -350,7 +355,8 @@ for its parts to load; `--eval` and the rule run again there.
 `mise run perf:report [pages] [--image] [--seed <name>] [--base <ref>]
 [--host-alone] [--fresh] [--requests <n>]` measures how light and fast HQ is,
 page by page: server time, queries, the rows its tables hold and its HTML
-size, then bytes, requests, script time and layout shift in Chromium, memory
+size, then bytes, requests, first and largest contentful paint (first visit
+and repeat), script time and layout shift in Chromium, memory
 and cold start. `pages` names the example estate's pages as `dev:look` does
 (`estate/infrastructure`, any address as `estate/<path>`), by default every
 page its navigation lists. `--seed` names the data set the servers are seeded
