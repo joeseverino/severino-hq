@@ -98,7 +98,7 @@ def _refusals(tree: ast.AST):
                 yield node.exc
 
 
-@tag("source")
+@tag("source", "tree")
 class RefusalTextTests(SimpleTestCase):
     def test_every_refusal_is_a_fixed_sentence(self):
         """A capability answers with this text, so it can carry no value from the request."""

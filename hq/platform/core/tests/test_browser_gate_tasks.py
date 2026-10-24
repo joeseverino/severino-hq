@@ -53,7 +53,7 @@ def browser_labels() -> set[str]:
     return {word for name, task in mise_tasks().items() if name.startswith("browser:") for word in body(task).split()}
 
 
-@tag("source")
+@tag("source", "tree")
 class BrowserGateTaskTests(SimpleTestCase):
     def test_every_browser_test_class_is_named_by_a_browser_task(self):
         classes = gate_classes()

@@ -75,7 +75,7 @@ class StartTests(TransactionTestCase):
             self.assertFalse(scheduled_work.start("example.work"))
 
 
-@tag("source")
+@tag("source", "tree")
 class ShippedUnitTests(TestCase):
     """The shipped units and the declarations name the same work: a timer
     starts it on a schedule, or a failed unit starts it through OnFailure."""

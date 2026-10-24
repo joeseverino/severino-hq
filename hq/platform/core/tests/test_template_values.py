@@ -664,7 +664,7 @@ class HoldingFilterTests(SimpleTestCase):
                 self.assertIn("data-sole", printed)
 
 
-@tag("source")
+@tag("source", "tree")
 class TemplateValueTests(SimpleTestCase):
     def setUp(self):
         root = Path(settings.BASE_DIR)
@@ -898,7 +898,7 @@ class UnheldBuilderTests(SimpleTestCase):
         self.assertEqual(self.values("format_html('{} {} {}', MISSING, 'x', row.get_status_display())"), [])
 
 
-@tag("source")
+@tag("source", "tree")
 class BuilderValueTests(SimpleTestCase):
     def test_every_value_a_builder_prints_as_text_holds_its_names(self):
         root = Path(settings.BASE_DIR)

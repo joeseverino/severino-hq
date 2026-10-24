@@ -17,7 +17,7 @@ def hand_drawn_groups(source: str) -> int:
     return len(_HAND_DRAWN.findall(source))
 
 
-@tag("source")
+@tag("source", "tree")
 class RowGroupTests(SimpleTestCase):
     def test_every_group_row_is_drawn_by_the_tag(self):
         found = {

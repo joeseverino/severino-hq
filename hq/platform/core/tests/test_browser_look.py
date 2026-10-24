@@ -688,7 +688,7 @@ class ProgressTests(SimpleTestCase):
         self.assertEqual(sink.getvalue(), "Looking at example at 402\ndone\n")
 
 
-@tag("source")
+@tag("source", "tree")
 class WorktreeTests(SimpleTestCase):
     def test_a_report_names_the_commit_it_was_looked_at(self):
         with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):

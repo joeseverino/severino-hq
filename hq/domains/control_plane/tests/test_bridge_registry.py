@@ -78,7 +78,7 @@ class JoinTests(SimpleTestCase):
             bridge_registry.schemas()
 
 
-@tag("source")
+@tag("source", "tree")
 class WrittenFileTests(SimpleTestCase):
     def test_python_reads_no_fact_back_from_a_file_it_writes(self):
         """Only ``bridge_contract`` names the written files, and only to write them."""

@@ -136,7 +136,7 @@ class CorrectedCallSiteTests(SimpleTestCase):
         self.assertIsNone(_parse_date(None))
 
 
-@tag("source")
+@tag("source", "tree")
 class OneParserTests(SimpleTestCase):
     """A new ``datetime.fromisoformat`` outside the kept list is a new copy."""
 

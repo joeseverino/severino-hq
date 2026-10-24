@@ -40,7 +40,7 @@ class LowerFirstTests(SimpleTestCase):
         self.assertEqual(lower_first(""), "")
 
 
-@tag("source")
+@tag("source", "tree")
 class LowerFirstSourceTests(SimpleTestCase):
     """One definition of lower_first in the source."""
 

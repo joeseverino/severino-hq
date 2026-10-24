@@ -115,7 +115,7 @@ def _layout_features(font: Path) -> set[str]:
     }
 
 
-@tag("source")
+@tag("source", "tree")
 class ServedFontTests(SimpleTestCase):
     def test_every_character_hq_prints_has_a_glyph(self):
         missing = undrawn(ROOT, SERVED)

@@ -32,7 +32,7 @@ sys.exit(int(sys.argv[2]))
 """
 
 
-@tag("source")
+@tag("source", "tree")
 class TestAtRefTests(GateTestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
@@ -207,7 +207,7 @@ class TestAtRefTests(GateTestCase):
             self.assertEqual(self.run_main("label", at_ref="")[0], 2)
 
 
-@tag("source")
+@tag("source", "tree")
 class TestHereTests(GateTestCase):
     def test_without_at_what_follows_the_labels_reaches_manage_py_test_as_typed(self):
         typed = ["hq.example.tests", "--parallel", "1", "-k", "example"]

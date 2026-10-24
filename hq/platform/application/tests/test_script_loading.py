@@ -23,7 +23,7 @@ TABLES = "js/tables.js"
 BEFORE_DRAWING = (TRANSITION, TABLES)
 
 
-@tag("source")
+@tag("source", "tree")
 class ScriptLoadingTests(SimpleTestCase):
     def test_every_script_is_deferred_but_the_two_answering_before_the_first_frame(self):
         blocking = [

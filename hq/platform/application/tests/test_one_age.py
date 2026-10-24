@@ -35,7 +35,7 @@ class AgePhrasingTests(SimpleTestCase):
         self.assertEqual(ago(NOW + timedelta(minutes=5), NOW), "just now")
 
 
-@tag("source")
+@tag("source", "tree")
 class OneAgeFunctionTests(SimpleTestCase):
     def test_no_module_but_its_owners_define_ago_or_imports_it_under_another_name(self):
         found = []

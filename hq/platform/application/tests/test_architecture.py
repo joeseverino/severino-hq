@@ -129,7 +129,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         self.assertEqual(model_imports, [])
         self.assertEqual(manager_access, [])
 
-    @tag("source")
+    @tag("source", "tree")
     def test_web_views_do_not_mutate_models_directly(self):
         """Web adapters may query for rendering, but writes belong to use cases."""
         root = Path(__file__).resolve().parents[4]
@@ -159,7 +159,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         self.assertEqual(violations, [])
 
-    @tag("source")
+    @tag("source", "tree")
     def test_paginated_list_views_use_the_shared_table_engine(self):
         root = Path(__file__).resolve().parents[4]
         violations = []
@@ -179,7 +179,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         self.assertEqual(violations, [])
 
-    @tag("source")
+    @tag("source", "tree")
     def test_every_module_defining_a_view_is_one_these_checks_read(self):
         """A view split into its own module must not step outside the checks.
 
@@ -207,7 +207,7 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         self.assertEqual(escaped, [])
 
 
-@tag("source")
+@tag("source", "tree")
 class StyleContractTests(SimpleTestCase):
     """The style bundle is a contract that extensions render against.
 
@@ -730,7 +730,7 @@ class StyleContractTests(SimpleTestCase):
             )
 
 
-@tag("source")
+@tag("source", "tree")
 class SharedPrimitiveStyleTests(SimpleTestCase):
     """Shared partials may only use classes the style bundle actually defines.
 
@@ -794,7 +794,7 @@ class TemplateCommentTests(SimpleTestCase):
         self.assertIs(testing.unclosed_template_comments, interface_text.unclosed_template_comments)
 
 
-@tag("source")
+@tag("source", "tree")
 class PageTitleTests(SimpleTestCase):
     """A page names itself; the site name is appended once, by the layout.
 
@@ -840,7 +840,7 @@ class PageTitleTests(SimpleTestCase):
         )
 
 
-@tag("source")
+@tag("source", "tree")
 class AssertionPrecisionTests(SimpleTestCase):
     """A comparison belongs in the assertion, not inside a boolean.
 
@@ -886,7 +886,7 @@ class AssertionPrecisionTests(SimpleTestCase):
         self.assertEqual(offenders, [])
 
 
-@tag("source")
+@tag("source", "tree")
 class CellMarkupTests(SimpleTestCase):
     """A test reads a table cell by its text: the host may wrap what a cell says.
 
@@ -937,7 +937,7 @@ class CellMarkupTests(SimpleTestCase):
         self.assertIn("read the cell's text", said)
 
 
-@tag("source")
+@tag("source", "tree")
 class CommentHistoryTests(SimpleTestCase):
     """A comment says what the code does and why, in the present tense.
 
@@ -1297,7 +1297,7 @@ class PostButtonTests(SimpleTestCase):
         self.assertIn("&lt;b&gt;", html)
 
 
-@tag("source")
+@tag("source", "tree")
 class OnePrimitiveTests(SimpleTestCase):
     """Questions asked in many places are answered by one function."""
 
@@ -1525,7 +1525,7 @@ class OnePrimitiveTests(SimpleTestCase):
         self.assertEqual(found, [])
 
 
-@tag("source")
+@tag("source", "tree")
 class CognitiveComplexityTests(SimpleTestCase):
     """No function asks a reader to hold more than twenty units of nesting.
 
@@ -1615,7 +1615,7 @@ class CognitiveComplexityTests(SimpleTestCase):
         self.assertEqual(over, {}, "split these into named steps")
 
 
-@tag("source")
+@tag("source", "tree")
 class FileSizeTests(SimpleTestCase):
     """No source file is longer than ``LIMIT`` lines.
 
@@ -1685,7 +1685,7 @@ class FileSizeTests(SimpleTestCase):
         self.assertEqual(problems, [], "split the test file by the behavior it holds")
 
 
-@tag("source")
+@tag("source", "tree")
 class OneDefinitionTests(SimpleTestCase):
     """A module-level name is assigned once.
 
@@ -1729,7 +1729,7 @@ def _defaulted_settings_reads(tree: ast.AST) -> list[int]:
     ]
 
 
-@tag("source")
+@tag("source", "tree")
 class SettingsReadTests(SimpleTestCase):
     """A setting is declared once, in ``hq/config/settings.py``, and read as ``settings.NAME``.
 
@@ -1766,7 +1766,7 @@ def _operation_writes(tree: ast.AST) -> list[int]:
     ]
 
 
-@tag("source")
+@tag("source", "tree")
 class OperationQueueTests(SimpleTestCase):
     """An operation enters the queue through ``resource_operations.enqueue``.
 
@@ -1803,7 +1803,7 @@ def _user_reads(tree: ast.AST) -> list[int]:
     ]
 
 
-@tag("source")
+@tag("source", "tree")
 class SignedInTests(SimpleTestCase):
     """Who a request's session signed in is ``request_identity.signed_in``.
 
@@ -1829,7 +1829,7 @@ class SignedInTests(SimpleTestCase):
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
 
-    @tag("source")
+    @tag("source", "tree")
     def test_the_application_resolves_routes_through_its_one_owner(self):
         root = Path(__file__).resolve().parents[4]
         modules = [
@@ -1915,7 +1915,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
         ):
             RequestContextMiddleware(view)(RequestFactory().get("/example/"))
 
-    @tag("source")
+    @tag("source", "tree")
     def test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed(self):
         from hq.platform.core.outbound import ALLOWED
 
@@ -1935,13 +1935,13 @@ class RequestNeverWaitsTests(SimpleTestCase):
         for name, reason in ALLOWED.items():
             self.assertGreater(len(reason), 60, name)
 
-    @tag("source")
+    @tag("source", "tree")
     def test_only_a_job_leaves_the_request_that_started_it(self):
         leaving = {relative for relative, source in self.sources() if "off_request" in source}
 
         self.assertEqual(leaving, {"hq/platform/core/outbound.py", "hq/domains/jobs/runner.py"})
 
-    @tag("source")
+    @tag("source", "tree")
     def test_asked_for_work_is_followed_by_one_script_behavior(self):
         script = (self.ROOT / "static" / "js" / "ask.js").read_text(encoding="utf-8")
         templates = "\n".join(
@@ -1956,7 +1956,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
         self.assertEqual(script.count("[data-ask][data-ask-status]"), 1)
 
 
-@tag("source")
+@tag("source", "tree")
 class FragmentPrimitiveTests(SimpleTestCase):
     """Reads are one component: `static/js/fragment.js` and the part it asks for.
 
@@ -2034,7 +2034,7 @@ class FragmentPrimitiveTests(SimpleTestCase):
         self.assertEqual(named - defined, set())
 
 
-@tag("source")
+@tag("source", "tree")
 class TestPlacementTests(SimpleTestCase):
     """Every test lives in its package's tests/ directory (CLAUDE.md), so
     coverage, discovery and the fast gate's selection see the same tree."""
@@ -2122,7 +2122,7 @@ def _restated_trails(tree: ast.AST) -> list[int]:
     return found
 
 
-@tag("source")
+@tag("source", "tree")
 class PageTrailTests(SimpleTestCase):
     """A view says its trail with ``page_trail`` and ``trail_label``, not a ``get_page_trail`` that restates them.
 

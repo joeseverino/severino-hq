@@ -45,7 +45,7 @@ class DaysUntilTests(SimpleTestCase):
         self.assertEqual(renewal_opens_at(NOW, 30), NOW - timedelta(days=30))
 
 
-@tag("source")
+@tag("source", "tree")
 class DaysUntilSourceTests(SimpleTestCase):
     """No other module counts days itself."""
 

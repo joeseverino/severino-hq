@@ -438,7 +438,7 @@ class AppTokenScopeTests(SimpleTestCase):
                 self.assertEqual(beyond_declaration(requested, declared), [])
 
 
-@tag("source")
+@tag("source", "tree")
 class RenovateTests(SimpleTestCase):
     def test_every_command_the_configuration_runs_is_one_the_workflow_allows(self):
         """Renovate skips a post-upgrade command its runner does not allow, and the

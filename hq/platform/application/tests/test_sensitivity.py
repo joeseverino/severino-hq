@@ -55,7 +55,7 @@ class SafeSensitivityTests(SimpleTestCase):
                 self.assertNotIn(level, SAFE_SENSITIVITIES)
 
 
-@tag("source")
+@tag("source", "tree")
 class SafeSensitivitySourceTests(SimpleTestCase):
     """No other module states its own safe set."""
 

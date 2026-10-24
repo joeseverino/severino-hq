@@ -4,7 +4,8 @@ Changed files against the merge base are mapped to the test modules that reach
 them, by the import graph of the tree itself (nothing here lists an app), a
 changed task definition to the tests that read the tasks, and a changed file
 that is not Python to the tests that name its path. The
-architecture tests always run. Every other check is a mise task, run here by
+architecture tests always run, and a change to a module under hq/ or hq_sdk/
+runs every test tagged tree, which finds its files by walking. Every other check is a mise task, run here by
 name, so each exists once, and only when the change touches a path it reads
 (TASKS). A change to what extensions render through
 (templates, static, hq_sdk, the shared page and table layer) also runs the
@@ -61,6 +62,10 @@ EVERY_TASK = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "tasks/*.to
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 ALWAYS = ("architecture", "new_domain")
+# A test that walks a directory finds a module there through no import, so a
+# change to a module here runs every test tagged tree
+# (hq/platform/application/tests/test_tree_tag.py holds the tag to the walks).
+TREE = ("hq/*.py", "hq_sdk/*.py")
 # The module every test that reads the tasks goes through; a change to a task
 # definition reaches those tests as a change to it would.
 TASK_READER = "tests.mise_tasks"
@@ -99,6 +104,10 @@ def defines_tasks(path: str, sources: tuple[str, ...]) -> bool:
 
 def touches_shared_ui(paths: list[str]) -> bool:
     return any(path.startswith(SHARED_UI) or "/templatetags/" in path for path in paths)
+
+
+def reaches_tree(paths: list[str]) -> bool:
+    return any(fnmatch(path, pattern) for path in paths for pattern in TREE)
 
 
 def selected_tasks(paths: list[str]) -> tuple[str, ...]:
@@ -371,6 +380,20 @@ def test_labels(
     return sorted(chosen), len(tests)
 
 
+def test_commands(labels: list[str], parallel: str, *, tree: bool) -> list[tuple[str, list[str]]]:
+    """The test runs, each with its label: the selected modules, then with
+    `tree` every test tagged tree, once, in a pass of its own.
+
+    The label "." is the whole tree; named, the runner keeps the source tests
+    a bare run leaves out.
+    """
+
+    test = [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel]
+    if not tree:
+        return [("tests", [*test, *labels])]
+    return [("tests", [*test, "--exclude-tag", "tree", *labels]), ("tree tests", [*test, "--tag", "tree", "."])]
+
+
 def step(label: str, cmd: list[str]) -> Step:
     print(f"[fast] {label}", flush=True)
     return run(label, cmd)
@@ -391,6 +414,9 @@ def main(asked: Usage) -> int:
     if total and len(labels) / total > WIDE:
         print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
 
+    tree = reaches_tree([*changed, *deleted])
+    if tree:
+        print("[fast] a module under hq/ or hq_sdk/ changed: every test tagged tree runs too")
     if list_only:
         print("\n".join(labels))
         return 0
@@ -401,7 +427,7 @@ def main(asked: Usage) -> int:
         steps.append(step("quick gates", tasks_command(tasks, parallel)))
     else:
         print("[fast] no quick gate reads what changed")
-    steps.append(step("tests", [sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]))
+    steps.extend(step(label, cmd) for label, cmd in test_commands(labels, parallel, tree=tree))
     if os.environ.get("HQ_LOCAL_PLUGINS") and touches_shared_ui([*changed, *deleted]):
         # suite:as-image hands what follows to manage.py test.
         steps.append(

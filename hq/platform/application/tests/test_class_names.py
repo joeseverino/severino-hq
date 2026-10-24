@@ -44,7 +44,7 @@ def collisions(root: Path, packages: tuple[str, ...]) -> dict[str, list[str]]:
     return {name: where for name, where in found.items() if len(where) > 1}
 
 
-@tag("source")
+@tag("source", "tree")
 class ClassNameTests(SimpleTestCase):
     def test_a_public_class_name_is_defined_once(self):
         for package in ROOTS:

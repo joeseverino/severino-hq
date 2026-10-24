@@ -34,7 +34,7 @@ def hidden_clauses(source: str) -> list[int]:
     return sorted(hidden)
 
 
-@tag("source")
+@tag("source", "tree")
 class ScannableComprehensionTests(SimpleTestCase):
     def test_no_comment_sits_between_a_comprehensions_clauses(self):
         found = [

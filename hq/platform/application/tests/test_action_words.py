@@ -108,7 +108,7 @@ def pressed_words(text: str, words: set[str]) -> list[str]:
     return pattern.findall(text)
 
 
-@tag("source")
+@tag("source", "tree")
 class CallSiteWordsTests(SimpleTestCase):
     """No button, link or toast for a command brings text of its own."""
 
@@ -210,7 +210,7 @@ class CallSiteWordsTests(SimpleTestCase):
                 self.assertIn(f">{text}<", (ROOT / template).read_text(encoding="utf-8"))
 
 
-@tag("source")
+@tag("source", "tree")
 class DeclaredWordsTests(SimpleTestCase):
     """Every action has the words a surface asks it for."""
 

@@ -40,7 +40,7 @@ def _template_roots() -> list[Path]:
 FITTED = {"dropped", "narrow"}
 
 
-@tag("source")
+@tag("source", "tree")
 class TableContractTests(SimpleTestCase):
     maxDiff = None
 

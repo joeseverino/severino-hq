@@ -140,7 +140,7 @@ class OneOwnerTests(SimpleTestCase):
         self.assertEqual(handed.TIME_FORMAT, moments.CLOCK_FORMAT)
 
 
-@tag("source")
+@tag("source", "tree")
 class TimeOfDayTemplateTests(SimpleTestCase):
     """A page asks ``|when``; it does not spell a clock of its own."""
 

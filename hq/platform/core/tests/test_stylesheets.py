@@ -34,7 +34,7 @@ def _uncommented(css: str) -> str:
     return re.sub(r"/\*.*?\*/", " ", css, flags=re.DOTALL)
 
 
-@tag("source")
+@tag("source", "tree")
 class SheetTests(SimpleTestCase):
     def test_every_sheet_in_the_directory_is_linked(self):
         """A sheet left out of the list is never linked, and every check of the

@@ -971,7 +971,7 @@ class FormActionTests(SimpleTestCase):
                     self.assertEqual(policy, ["'self'"])
 
 
-@tag("source")
+@tag("source", "tree")
 class SourceBoundaryTests(SimpleTestCase):
     """What the shipped sources may contain, read from the checkout."""
 

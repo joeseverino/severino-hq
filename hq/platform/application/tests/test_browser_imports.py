@@ -91,7 +91,7 @@ def imported(tree: ast.Module) -> set[str]:
     return names
 
 
-@tag("source")
+@tag("source", "tree")
 class BrowserImportTests(SimpleTestCase):
     def test_only_a_browser_module_imports_what_the_browser_group_alone_installs(self):
         forbidden = browser_only_imports(tomllib.loads((ROOT / "uv.lock").read_text()))

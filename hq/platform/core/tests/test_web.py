@@ -323,7 +323,7 @@ class SecurityBoundaryTests(TestCase):
         self.assertIsNone(request_context.current())
 
 
-@tag("source")
+@tag("source", "tree")
 class TemplateSourceTests(SimpleTestCase):
     def test_application_templates_do_not_bypass_csp(self):
         violations = []

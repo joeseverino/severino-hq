@@ -71,7 +71,7 @@ def _walks(tree: ast.AST) -> list[int]:
     ]
 
 
-@tag("source")
+@tag("source", "tree")
 class OneWalkTests(SimpleTestCase):
     def test_only_routed_walks_into_a_mount(self):
         """A second walk drifts from the first: one skips a namespace, one

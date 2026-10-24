@@ -254,7 +254,7 @@ def product_sources():
                 yield path.read_text(encoding="utf-8")
 
 
-@tag("source")
+@tag("source", "tree")
 class ConfigurationTableTests(SimpleTestCase):
     """Every variable HQ reads is in docs/Deployment.md's table, and nothing else is."""
 

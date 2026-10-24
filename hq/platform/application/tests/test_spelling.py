@@ -85,7 +85,7 @@ def checked_files() -> list[Path]:
     return found
 
 
-@tag("source")
+@tag("source", "tree")
 class AmericanSpellingTests(SimpleTestCase):
     def test_the_tree_has_walked_files(self):
         self.assertGreater(len(checked_files()), 500)

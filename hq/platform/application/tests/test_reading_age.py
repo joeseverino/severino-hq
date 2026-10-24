@@ -99,7 +99,7 @@ def _insights(scope: ast.AST) -> Iterator[ast.Call]:
             yield node
 
 
-@tag("source")
+@tag("source", "tree")
 class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
     def test_every_item_built_from_a_stored_reading_carries_observed_at(self):
         """Without it a card cannot say how old its claim is, and an old
@@ -141,7 +141,7 @@ PARTIAL = TEMPLATES / "partials/_reading_age.html"
 OWN_WORDING = re.compile(r"\bread\b[^{<]{0,4}\{\{[^}]*\|(?:ago|ago_short|when:\"ago\")", re.IGNORECASE)
 
 
-@tag("source")
+@tag("source", "tree")
 class OneWordingTests(SimpleTestCase):
     def test_a_page_says_a_readings_age_through_the_partial(self):
         """Each page worded it its own way ("read 5 minutes ago", "as of",

@@ -198,7 +198,7 @@ class OutsideLinkTests(SimpleTestCase):
                 self.assertIn("abc", html)
 
 
-@tag("source")
+@tag("source", "tree")
 class SharedMarkupTemplateTests(SimpleTestCase):
     """No template writes by hand what a shared partial or tag draws."""
 

@@ -15,6 +15,7 @@ from unittest.mock import patch
 from django.test import tag
 
 from hq.config.sandbox import PREFIX, sweep_abandoned
+from hq.platform.core.test_runner import excluded_tags
 from hq.platform.core.tests.task import Usage
 from tests.mise_tasks import mise_tasks
 from tools.gate import fast as fast_gate, verdict as gate_verdict
@@ -24,7 +25,7 @@ from tools.gate.verdict import FailedTest
 ROOT = Path(__file__).resolve().parents[3]
 
 
-@tag("source")
+@tag("source", "tree")
 class FastGateMappingTests(GateTestCase):
     def setUp(self):
         self.files = fast_gate.python_files()
@@ -113,7 +114,7 @@ class FastGateMappingTests(GateTestCase):
         self.assertLessEqual({"expenses", "core", "projects"}, set(fast_gate.django_apps().values()))
 
 
-@tag("source")
+@tag("source", "tree")
 class FastGateTaskSelectionTests(GateTestCase):
     def test_every_quick_gate_declares_paths_that_name_files_of_this_tree(self):
         tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True, capture_output=True, text=True)
@@ -152,6 +153,31 @@ class FastGateTaskSelectionTests(GateTestCase):
 
 
 @tag("source")
+class FastGateTreeTests(GateTestCase):
+    def test_a_module_under_hq_or_hq_sdk_reaches_the_tree_tests(self):
+        for path in ("hq/domains/example/models.py", "hq_sdk/ui.py", "hq/platform/core/tests/task.py"):
+            with self.subTest(path=path):
+                self.assertTrue(fast_gate.reaches_tree(["docs/Example.md", path]))
+        for path in ("tools/gate/fast.py", "static/css/app.css", "templates/base.html", "docs/Example.md"):
+            with self.subTest(path=path):
+                self.assertFalse(fast_gate.reaches_tree([path]))
+
+    def test_the_tree_tests_run_once_in_a_pass_that_finds_them(self):
+        (selected, selected_cmd), (walk, walk_cmd) = fast_gate.test_commands(["hq.a.tests.test_b"], "2", tree=True)
+        self.assertEqual((selected, walk), ("tests", "tree tests"))
+        self.assertIn("--exclude-tag tree", " ".join(selected_cmd))
+        self.assertIn("--tag tree", " ".join(walk_cmd))
+        # A labeled run keeps the source tests a bare whole-suite run leaves out.
+        labels = walk_cmd[walk_cmd.index("tree") + 1 :]
+        self.assertEqual(excluded_tags(labels, {"tree"}, set()), set())
+
+    def test_without_a_module_change_the_selected_tests_run_whole(self):
+        ((label, cmd),) = fast_gate.test_commands(["hq.a.tests.test_b"], "2", tree=False)
+        self.assertEqual(label, "tests")
+        self.assertNotIn("tree", cmd)
+
+
+@tag("source")
 class FastGateBaseTests(GateTestCase):
     REFS = {"main": "aaa", "topic": "bbb"}
 
@@ -182,7 +208,7 @@ class FastGateBaseTests(GateTestCase):
         self.assertEqual(self.resolve(None), "aaa")
 
 
-@tag("source")
+@tag("source", "tree")
 class FastGateNestedLayoutTests(GateTestCase):
     def test_app_config_label_can_differ_from_source_directory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -255,7 +281,7 @@ VERDICT_IN = (
 )
 
 
-@tag("source")
+@tag("source", "tree")
 class GateVerdictTests(GateTestCase):
     def gate(self, *cmd: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
