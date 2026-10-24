@@ -6,23 +6,29 @@ page the layout survey walks (`estate.navigation`): the server's time, p50
 and p95 over `--requests` requests, and its queries; in Chromium at the phone
 and the wide desktop, bytes and requests on a first and a repeat visit, main
 thread script time, long tasks and layout shift; memory idle and after one
-pass over every page; and the cold start to /health/ready/. It writes the JSON
-to var/perf/<commit>.json and prints one table.
+pass over every page; and the cold start to /health/ready/.
+
+Each run is kept in var/perf/<run>.json (tools/perf/runs.py), rewritten as
+each measurement finishes: one that fails is recorded with its error and the
+rest go on, and a server that fails to stop keeps what it served. The table
+goes beside it as <run>.txt.
 
 `--base <ref>` measures the ref first, its own server in a throwaway worktree
 made and removed as `mise run test --at` makes one (tools/gate/at.py), with
 this checkout's harness and page list, and prints each number beside how far
-it moved. A report, never a gate: it exits 0 whenever it measured, 1 when a
-server would not start or answer, 2 for a ref that names no commit.
+it moved. A complete report of the ref's commit under the same plan, kept by
+an earlier run, stands in for measuring it again unless `--fresh`. A report,
+never a gate: it exits 0 when every measurement finished, 1 when any failed,
+2 for a ref that names no commit.
 """
 
-import json
+import copy
 import os
 import shutil
 import signal
 import sys
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -33,7 +39,7 @@ lazy import django
 lazy from playwright.sync_api import sync_playwright
 
 from tools.gate.at import RefError, git, remove
-from tools.perf import measure, table
+from tools.perf import measure, runs, table
 from tools.perf.targets import COLD_STARTS, Image, NotMeasured, Scratch, clean_env, run
 lazy from hq.platform.core.tests.browser.estate import navigation
 lazy from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, viewport
@@ -58,6 +64,22 @@ class Plan:
     viewports: list[dict[str, int]]
     requests: int
     image: bool
+    extensions: list[str]
+
+    @property
+    def target(self) -> str:
+        return "image" if self.image else "dev:scratch"
+
+    def key(self) -> dict[str, Any]:
+        """What a kept report must have been asked to stand in for a measurement under this plan."""
+
+        return {
+            "target": self.target,
+            "pages": self.pages,
+            "widths": [shown["width"] for shown in self.viewports],
+            "requests": self.requests,
+            "extensions": self.extensions,
+        }
 
 
 def plan() -> Plan:
@@ -70,6 +92,7 @@ def plan() -> Plan:
         viewports=[viewport(PHONE_SCREEN[0]), viewport(WIDE)],
         requests=int(usage("requests") or 20),
         image=usage("image") == "true",
+        extensions=[spec for spec in os.environ.get("SEVERINO_HQ_PLUGINS", "").split(",") if spec],
     )
 
 
@@ -95,18 +118,17 @@ def chromium() -> Iterator[Any]:
 
 
 @contextmanager
-def worktree(ref: str) -> Iterator[tuple[Path, str]]:
-    """A detached worktree of ``ref`` outside this checkout, so mise reads only its config, with this
+def worktree(commit: str) -> Iterator[Path]:
+    """A detached worktree of ``commit`` outside this checkout, so mise reads only its config, with this
     checkout's mise.local.toml, so its server composes the same extensions; gone however the block ends."""
 
-    commit = git("rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}")[0]
     folder = Path(tempfile.mkdtemp(prefix="hq-perf-base-"))
     tree = folder / "checkout"
     try:
         git("worktree", "add", "--detach", "--quiet", str(tree), commit)
         if LOCAL.is_file():
             shutil.copy2(LOCAL, tree / LOCAL.name)
-        yield tree, commit[:12]
+        yield tree
     finally:
         remove(tree)
         shutil.rmtree(folder, ignore_errors=True)
@@ -125,82 +147,161 @@ def image_of(tree: Path, commit: str, here: bool) -> str:
     return tag
 
 
-def measure_target(target: Scratch | Image, asked: Plan) -> dict[str, Any]:
-    """Every number for one started target, in the order that keeps each clean: memory before any page."""
+@dataclass
+class Recorder:
+    """One side's report, saved with its run each time a measurement finishes or fails."""
 
+    report: runs.Report
+    save: Callable[[], None]
+
+    def fail(self, step: str, error: BaseException) -> None:
+        said = str(error).strip() or type(error).__name__
+        self.report["failures"].append({"step": step, "error": said})
+        print(f"  {step} failed, the rest goes on: {said.splitlines()[0]}", flush=True)
+        self.save()
+
+    def attempt(self, step: str, measured: Callable[[], None]) -> None:
+        """``measured``, which writes its numbers into the report; its failure is recorded, never raised."""
+
+        try:
+            measured()
+        except Exception as error:  # noqa: BLE001 - whatever stops one measurement is recorded, and the rest go on
+            self.fail(step, error)
+            return
+        self.save()
+
+
+def measure_target(target: Scratch | Image, asked: Plan, recorder: Recorder) -> None:
+    """Every number for one started target, in the order that keeps each clean: memory before any page.
+
+    Signing in and the first pass are what every later measurement stands on, so their failure raises."""
+
+    report = recorder.report
     pages = asked.pages
+    entries = {page: {"page": page, "server": {}, "browser": {}} for page in pages}
+    report["pages"] = list(entries.values())
+    memory = report["memory"] = {"idle_bytes": None, "after_pass_bytes": None, "measured": target.measured}
     cookie = target.session()
-    idle = target.memory()
+    recorder.attempt("memory idle", lambda: memory.update(idle_bytes=target.memory()))
     answered = measure.one_pass(target.url, cookie, pages)
-    after = target.memory()
     if 200 not in answered.values():
         raise NotMeasured(f"no page answered 200 to the session dev_session minted: {answered}")
+    recorder.attempt("memory after a pass", lambda: memory.update(after_pass_bytes=target.memory()))
+
+    def server() -> None:
+        for page, numbers in measure.server_times(target.url, cookie, pages, asked.requests).items():
+            entries[page]["server"].update(numbers)
+
+    def browser() -> None:
+        with chromium() as launched:
+            costs = measure.browser_costs(launched, target.url, cookie, pages, asked.viewports)
+        for page, seen in costs.items():
+            entries[page]["browser"] = seen
+
+    def queries() -> None:
+        for page, count in target.queries(pages).items():
+            entries[page]["server"]["queries"] = count
+
+    def cold_start() -> None:
+        starts = [round(target.cold_start(), 1) for _ in range(COLD_STARTS)]
+        report["cold_start"] = {"runs_ms": starts, "median_ms": sorted(starts)[len(starts) // 2]}
+
     print(f"  server time over {asked.requests} requests a page", flush=True)
-    server = measure.server_times(target.url, cookie, pages, asked.requests)
+    recorder.attempt("server time", server)
     print("  in Chromium", flush=True)
-    with chromium() as launched:
-        browser = measure.browser_costs(launched, target.url, cookie, pages, asked.viewports)
-    queries = target.queries(pages)
+    recorder.attempt("browser", browser)
+    recorder.attempt("queries", queries)
     print(f"  cold start, {COLD_STARTS} times", flush=True)
-    starts = [round(target.cold_start(), 1) for _ in range(COLD_STARTS)]
-    return {
-        "pages": [
-            {"page": page, "server": server[page] | {"queries": queries.get(page)}, "browser": browser[page]}
-            for page in pages
-        ],
-        "memory": {"idle_bytes": idle, "after_pass_bytes": after, "measured": target.measured},
-        "cold_start": {"runs_ms": starts, "median_ms": sorted(starts)[len(starts) // 2]},
-    }
+    recorder.attempt("cold start", cold_start)
 
 
-def measure_tree(tree: Path, commit: str, here: bool, asked: Plan) -> dict[str, Any]:
-    """One tree's report, written to var/perf/<commit>.json."""
+def measure_tree(tree: Path, commit: str, here: bool, asked: Plan, kept: runs.Run, side: str) -> runs.Report:
+    """One tree's report, kept under ``side`` in its run as each measurement finishes."""
 
-    kind = "image" if asked.image else "dev:scratch"
-    log = OUT / f"{commit}.log"
-    print(f"Measuring {commit} ({kind}); its server's output is in {log}", flush=True)
-    target = Image(image_of(tree, commit, here), log) if asked.image else Scratch(tree, log, trusted=not here)
-    with target:
-        measured = measure_target(target, asked)
-    report = {
-        "commit": commit,
-        "target": kind,
-        "measured_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "requests": asked.requests,
-        "widths": [shown["width"] for shown in asked.viewports],
-        **measured,
-    }
-    (OUT / f"{commit}.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    report = kept.doc[side] = runs.side(commit, asked.key())
+    recorder = Recorder(report, kept.save)
+    kept.save()
+    log = OUT / f"{kept.name}.{side}.log"
+    print(f"Measuring {commit} ({asked.target}); its server's output is in {log}", flush=True)
+    try:
+        target = Image(image_of(tree, commit, here), log) if asked.image else Scratch(tree, log, trusted=not here)
+        target.__enter__()
+    except Exception as error:  # noqa: BLE001 - a server that will not start is this side's one failure
+        recorder.fail("start", error)
+        return report
+    try:
+        measure_target(target, asked, recorder)
+    except NotMeasured as error:
+        recorder.fail("sign in and first pass", error)
+    finally:
+        try:
+            target.__exit__(None, None, None)
+        except Exception as error:  # noqa: BLE001 - what was measured stands whether or not the server stops cleanly
+            recorder.fail("stop", error)
+    report["finished_at"] = runs.now()
+    kept.save()
     return report
+
+
+def failures(doc: dict[str, Any]) -> list[str]:
+    """Each failure in the run, as its side, its step and the first line of its error."""
+
+    return [
+        f"{side} {failure['step']}: {failure['error'].splitlines()[0]}"
+        for side in ("base", "here")
+        for failure in (doc.get(side) or {}).get("failures", [])
+    ]
+
+
+def closing(kept: runs.Run, here: runs.Report, base: runs.Report | None) -> str:
+    said = f"perf:report {here['commit']}" + (f" beside {base['commit']}" if base else "")
+    said += f" ({here['target']})"
+    if reused := kept.doc.get("base_reused_from"):
+        said += f", the base kept from run {reused}"
+    failed = failures(kept.doc)
+    said += f": {len(failed)} failed, the rest kept ({'; '.join(failed)})" if failed else ": every measurement finished"
+    return said + f"; kept in {kept.path.relative_to(ROOT)}"
 
 
 def stop(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
 
 
+def measure_base(commit: str, asked: Plan, kept: runs.Run, fresh: bool) -> runs.Report:
+    """The base's report: a complete one kept under the same plan, unless ``fresh``, else measured now."""
+
+    short = commit[:12]
+    if not fresh and (found := runs.saved(OUT, short, asked.key())):
+        source, report = found
+        print(f"Base {short}: a complete report under the same plan, kept by run {source} (--fresh measures it)")
+        kept.doc["base"] = copy.deepcopy(report)
+        kept.doc["base_reused_from"] = source
+        kept.save()
+        return kept.doc["base"]
+    with worktree(commit) as tree:
+        return measure_tree(tree, short, False, asked, kept, "base")
+
+
 def main() -> int:
     signal.signal(signal.SIGTERM, stop)
-    OUT.mkdir(parents=True, exist_ok=True)
     ref = usage("base")
     asked = plan()
+    here_commit = commit_of(ROOT)
     try:
-        base = None
-        if ref:
-            with worktree(ref) as (tree, commit):
-                base = measure_tree(tree, commit, False, asked)
-        here = measure_tree(ROOT, commit_of(ROOT), True, asked)
+        base_commit = git("rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}")[0] if ref else None
     except RefError as error:
         print(f"perf:report --base {ref}: {error}", file=sys.stderr)
         return 2
-    except NotMeasured as error:
-        print(f"perf:report measured nothing: {error}", file=sys.stderr)
-        return 1
+    stem = runs.name(here_commit, base_commit and base_commit[:12], asked.target, datetime.now(UTC))
+    kept = runs.Run.start(OUT, stem, target=asked.target, plan=asked.key())
+    base = measure_base(base_commit, asked, kept, usage("fresh") == "true") if base_commit else None
+    here = measure_tree(ROOT, here_commit, True, asked, kept, "here")
     rendered = table.render(here, base)
     print(rendered)
-    # The session log shows this table as printed, beside the report it renders.
-    (OUT / f"{here['commit']}.txt").write_text(rendered + "\n", encoding="utf-8")
-    print(f"\nWritten to {OUT}/{here['commit']}.json and .txt" + (f", and {base['commit']}.json" if base else ""))
-    return 0
+    # The session log shows this table as printed, beside the run it renders.
+    kept.path.with_suffix(".txt").write_text(rendered + "\n", encoding="utf-8")
+    print("\n" + closing(kept, here, base))
+    return 1 if failures(kept.doc) else 0
 
 
 if __name__ == "__main__":

@@ -6,9 +6,10 @@
 #MISE timeout="2h"
 #USAGE flag "--image" help="Measure the built image instead of dev:scratch: the one IMAGE names, else one image:build makes for the commit"
 #USAGE flag "--base <ref>" help="Also measure <ref>, in a temporary worktree removed however the run ends, and print each number beside how far it moved"
+#USAGE flag "--fresh" help="Measure the base even when an earlier run kept a complete report of its commit under the same plan"
 #USAGE flag "--requests <n>" default="20" help="Requests a page for the server's p50 and p95"
 
-# The harness is tools/perf/report.py; its JSON goes to var/perf/<commit>.json.
+# The harness is tools/perf/report.py; each run is kept as var/perf/<run>.json.
 set -eu
 
 # shellcheck source=tools/lib/heavy-turn.sh
