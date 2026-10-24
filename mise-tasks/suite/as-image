@@ -52,8 +52,11 @@ for path in ${excluded}; do
     rm -rf "${tree:?}/${path}"
 done
 
-# The checkout's environment, not a new one in the copy.
-environment="${UV_PROJECT_ENVIRONMENT:-.venv}"
+# The image installs the runtime dependencies alone, so the suite runs in an
+# environment of the checkout's that holds only those: a test module that loads
+# a development tool fails here as it does in the image. It lives beside the
+# checkout's own environment, not in the copy, so it outlives the run.
+environment="${UV_PROJECT_ENVIRONMENT:-.venv}-image"
 case "${environment}" in /*) ;; *) environment="${MISE_CONFIG_ROOT}/${environment}" ;; esac
 
 revision="$(git rev-parse HEAD)"
@@ -63,5 +66,5 @@ env \
     UV_PROJECT_ENVIRONMENT="${environment}" \
     SEVERINO_HQ_SOURCE="${source_url}" \
     SEVERINO_HQ_REVISION="${revision}" \
-    uv run python manage.py test --noinput --parallel auto "$@" || status=$?
+    uv run --locked --no-default-groups python manage.py test --noinput --parallel auto "$@" || status=$?
 exit "${status}"
