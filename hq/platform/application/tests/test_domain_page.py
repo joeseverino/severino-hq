@@ -122,7 +122,7 @@ class RecordTableTests(SimpleTestCase):
         )
 
         self.assertNotIn("Healthy", html)
-        self.assertEqual(html.count("Needs attention"), 1)
+        self.assertEqual(text(html).count("Needs attention"), 1)
 
     def test_a_ttl_is_said_with_its_unit_and_only_when_it_was_set(self):
         html = self.table(self.record(), self.record(name="slow.example.com", ttl=300))
