@@ -29,6 +29,7 @@ lazy from django.test import override_settings
 lazy from playwright.sync_api import sync_playwright
 
 from hq.platform.core.tests import task
+from hq.platform.core.tests.browser.in_flight import SETTLED
 from hq.platform.core.tests.task import ESTATE, PageRefused, RefError, estate_name, usage, worktree
 from tools.perf import measure, parse, runs, table
 from tools.perf.targets import COLD_STARTS, Image, NotMeasured, Scratch, clean_env, run
@@ -74,7 +75,7 @@ class Plan:
             "requests": self.requests,
             "seed": self.seed,
             "extensions": self.extensions,
-            "browser_waits_for": measure.SETTLED,
+            "browser_waits_for": SETTLED,
         }
 
 

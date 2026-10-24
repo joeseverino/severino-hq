@@ -26,6 +26,7 @@ from django.urls import reverse
 lazy from django.db import transaction
 
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
+from hq.platform.core.tests.browser.in_flight import InFlight
 from hq.platform.core.tests.browser.probes.boxes import _SIDEWAYS, _UNPADDED_TILES
 from hq.platform.core.tests.browser.probes.settle import _FINISH_TRANSITIONS, _FONTS_READY, _SETTLED
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -142,20 +143,8 @@ class ExampleEstateGate(BrowserGate):
     def start(self, **options):
         super().start(**options)
         self.unanswered = []
-        # Requests not yet answered. `respond` answers every one, so zero after
-        # the load event means loaded; `networkidle` only guesses from 500 ms of
-        # silence.
-        self.in_flight = 0
-
-        def opened(_request):
-            self.in_flight += 1
-
-        def closed(_request):
-            self.in_flight -= 1
-
-        self.page.on("request", opened)
-        self.page.on("requestfinished", closed)
-        self.page.on("requestfailed", closed)
+        # `answer` answers every request, so the count comes back to zero.
+        self.in_flight = InFlight(self.page)
 
     @override
     def answer(self, route):
@@ -178,19 +167,8 @@ class ExampleEstateGate(BrowserGate):
     def visit(self, path, width):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}{path}", wait_until="load")
-        self.finish(path, width)
+        self.in_flight.settle(f"{path} at {width}px")
         self.page.evaluate(_FONTS_READY)
-
-    def finish(self, path, width):
-        # Each frame lets a script start what an answer asked for; two quiet
-        # frames in a row with nothing in flight is a page that has finished.
-        quiet = 0
-        for _frame in range(600):
-            self.page.evaluate(_SETTLED)
-            quiet = quiet + 1 if self.in_flight == 0 else 0
-            if quiet == 2:
-                return
-        raise AssertionError(f"{path} at {width}px still had {self.in_flight} requests in flight")
 
 
 class ExampleEstateBrowserTests(ExampleEstateGate):

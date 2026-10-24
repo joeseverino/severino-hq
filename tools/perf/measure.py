@@ -11,20 +11,13 @@ browser is Chromium: WebKit reports neither layout shifts nor long tasks.
 
 import http.client
 import statistics
-import time
 from contextlib import ExitStack, closing
 from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 
+from hq.platform.core.tests.browser.in_flight import InFlight
 from tools.perf import parse
 
-# What a visit waits for after the load event before it reads what the page fetched: the deferred
-# parts a page asks for once up are requests it is still waiting on. Kept in the plan, so a report
-# that waited otherwise never stands in for one measured so.
-SETTLED = "no request in flight a frame after load"
-SETTLE_S = 30
-# Two frames: a part answered in one has asked for the parts inside it by the next.
-_FRAMES = "() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
 # Asked of each page before its timed requests, so a first request's caching is not its cost.
 WARM = 2
 # Installed before any of a page's own script, in every document a visit
@@ -175,30 +168,12 @@ def _script_seconds(session: Any) -> float:
     return next((metric["value"] for metric in metrics if metric["name"] == "ScriptDuration"), 0.0)
 
 
-class InFlight:
-    """The requests a page has asked for and not had answered, counted from its own events."""
-
-    def __init__(self, page: Any) -> None:
-        self.count = 0
-        page.on("request", lambda _request: self.moved(1))
-        page.on("requestfinished", lambda _request: self.moved(-1))
-        page.on("requestfailed", lambda _request: self.moved(-1))
-
-    def moved(self, by: int) -> None:
-        self.count += by
-
-
 def _visit(page: Any, address: str, waiting: InFlight) -> dict[str, float | None]:
     """What loading ``address`` fetched and when it painted, read once it has loaded and nothing it
     asked for is pending."""
 
     page.goto(address, wait_until="load")
-    deadline = time.monotonic() + SETTLE_S
-    page.evaluate(_FRAMES)
-    while waiting.count > 0:
-        if time.monotonic() > deadline:
-            raise TimeoutError(f"{address} still waited on {waiting.count} requests after {SETTLE_S}s")
-        page.evaluate(_FRAMES)
+    waiting.settle(address)
     return page.evaluate(FETCHED)
 
 
