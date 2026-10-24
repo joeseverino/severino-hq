@@ -752,14 +752,24 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (*WIDTHS, 1200):
             for menu in ("", "#sections"):
                 self.page.set_viewport_size(viewport(width))
-                self.page.goto(f"{ORIGIN}/{name}/{menu}", wait_until="load")
-                ended = self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
+                ended = self.header_parts(f"{ORIGIN}/{name}/{menu}")
                 for at, cut in enumerate(cuts):
                     with self.subTest(width=width, menu=menu or "closed", cut=cut):
-                        self.page.goto(f"{ORIGIN}/cut-{at}/{menu}", wait_until="load")
-                        arrived = self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
+                        arrived = self.header_parts(f"{ORIGIN}/cut-{at}/{menu}")
                         self.assertGreater(len(arrived), 2, "the cut left too little of the header to judge")
-                        self.assertEqual(arrived, {part: ended[part] for part in arrived})
+                        self.assertEqual(arrived, {part: ended.get(part) for part in arrived})
+
+    def header_parts(self, url):
+        """Where each part of the site header stands on ``url``, read once the
+        header is the target the address names or no longer is: WebKit can
+        fire load before it matches ``:target``, which opens the sections."""
+
+        self.page.goto(url, wait_until="load")
+        self.page.wait_for_function(
+            "([selector, open]) => document.querySelector(selector).matches(':target') === open",
+            arg=[SELECTORS["site_header"], url.endswith("#sections")],
+        )
+        return self.page.evaluate(_HEADER_PARTS, SELECTORS["site_header"])
 
     @with_script
     def test_the_survey_finds_the_same_twice_on_a_page_that_answers_changes_to_its_tree(self):
