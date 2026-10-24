@@ -17,9 +17,7 @@ twice.
         {% if entry.folded %}
           {% with family_row=prefix|add:"-"|add:entry.id|slugify %}
           <tr class="queue-family" id="{{ family_row }}" data-folds data-queue-family>
-            <td class="queue-mark row-gutter">
-              <button type="button" class="row-fold" data-row-toggle data-fold-toggle aria-expanded="false" aria-label="{{ entry.family }}"><svg viewBox="0 0 6 10" width="7" height="11" aria-hidden="true"><path d="M1 1l4 4-4 4"/></svg></button>
-            </td>
+            <td class="queue-mark row-gutter">{% include "partials/_row_fold.html" with label=entry.family only %}</td>
             <td class="queue-what"><span class="queue-family-name">{{ entry.family|breakable }}&nbsp;<span class="count" data-queue-count>{{ entry.items|length }}</span></span> <span class="pill pill-{{ entry.status }} is-mark{% if entry.status != "serious" %} visually-hidden{% endif %}" tabindex="0" data-tip="{{ entry.status|urgency }}">{{ entry.status|urgency }}</span></td>
             <td class="queue-act">{% if aside_url %}{% post_button "Dismiss these" aside_url|add:"&family="|add:entry.id css="btn compact ghost queue-dismiss" %}{% endif %}</td>
           </tr>

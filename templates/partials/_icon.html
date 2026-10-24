@@ -11,6 +11,9 @@ screen reader announcing both would read each button twice.
   <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 3.5v9l7.5-4.5z" fill="currentColor"/></svg>
 {% elif name == "stop" %}
   <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"/></svg>
+{% elif name == "chevron" %}
+  {# A row's disclosure: turned when open (surfaces.css). #}
+  <svg class="icon" viewBox="0 0 6 10" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4-4 4"/></svg>
 {% elif name == "restart" %}
   <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5V5.2H10.3"/></svg>
 {% else %}

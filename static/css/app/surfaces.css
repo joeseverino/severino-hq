@@ -188,12 +188,10 @@
      cell moved to the line beneath an open row is open too. */
   .data-table tr:not(.is-expanded, .row-detail) .row-more,
   .data-table tr:is(.is-expanded, .row-detail) .row-less { display: none; }
-  :is(.row-expand, .row-fold) > svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s ease; }
-  :is(.row-expand, .row-fold)[aria-expanded="true"] > svg { transform: rotate(90deg); }
-  @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > svg { transition: none; } }
-  /* Every clamp in the row lifted at once. The rules it lifts are scattered and
-     each is specific to its column, so this one outranks them on purpose: an
-     expanded row shows everything, whatever clamped it. */
+  :is(.row-expand, .row-fold) > .icon { width: 7px; height: 11px; transition: transform .12s ease; }
+  :is(.row-expand, .row-fold)[aria-expanded="true"] > .icon { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > .icon { transition: none; } }
+  /* Every clamp in the row lifted at once; the rules it lifts are each specific to a column, so this one outranks them on purpose. */
   .data-table tr.is-expanded :is(td, th),
   .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *) {
     white-space: normal !important;
