@@ -8,7 +8,7 @@
 # each from mise.lock and refuses a download whose checksum differs from it.
 # mise is the release min_version names, from its image by digest
 # (checks:toolchain holds the tag to min_version).
-FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS tools
+FROM python:3.15-slim-trixie@sha256:044d5bd747976e21f8bc4d746c3479b19a84bb8ae6261b802acdd26b29036c93 AS tools
 COPY --from=ghcr.io/jdx/mise:2026.10.18@sha256:fc31de7b93d195613deb600d42c65a164b0205716ade38132aadeabac3838248 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
@@ -18,7 +18,7 @@ RUN mise install go uv \
     && install -D "$(mise which uv)" /opt/bin/uv
 
 
-FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS build
+FROM python:3.15-slim-trixie@sha256:044d5bd747976e21f8bc4d746c3479b19a84bb8ae6261b802acdd26b29036c93 AS build
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # The cache mount and /install are different filesystems, so files are copied.
 ENV UV_COMPILE_BYTECODE=1 \
@@ -63,7 +63,7 @@ RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq
         -o /out/hq-host ./cmd/hq-host
 
 
-FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS runtime
+FROM python:3.15-slim-trixie@sha256:044d5bd747976e21f8bc4d746c3479b19a84bb8ae6261b802acdd26b29036c93 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base

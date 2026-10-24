@@ -1,0 +1,9 @@
+#!/bin/sh
+#MISE description="Its decimal is the C module on libmpdec, not the pure-Python fallback"
+#MISE depends=["image:build"]
+set -eu
+
+# A Python built without libmpdec still imports decimal, as _pydecimal, which
+# runs money arithmetic many times slower; only _decimal says which one it got.
+docker run --rm --entrypoint python "${IMAGE:-severino-hq:ci-local}" -c \
+    "import decimal, _decimal; print('decimal runs on libmpdec', decimal.__libmpdec_version__)"

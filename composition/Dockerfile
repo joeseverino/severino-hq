@@ -13,7 +13,7 @@ ARG HQ_IMAGE=scratch
 # uv at the release mise.toml pins, installed by mise from mise.lock, which
 # refuses a download whose checksum differs from it (as the host image's
 # tools stage does, with the same mise).
-FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS tools
+FROM python:3.15-slim-trixie@sha256:044d5bd747976e21f8bc4d746c3479b19a84bb8ae6261b802acdd26b29036c93 AS tools
 COPY --from=ghcr.io/jdx/mise:2026.10.18@sha256:fc31de7b93d195613deb600d42c65a164b0205716ade38132aadeabac3838248 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
@@ -22,7 +22,7 @@ RUN mise install uv \
     && install -D "$(mise which uv)" /opt/bin/uv
 
 # The installer uses the same Python ABI as HQ.
-FROM python:3.15-slim-trixie@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619 AS installer-base
+FROM python:3.15-slim-trixie@sha256:044d5bd747976e21f8bc4d746c3479b19a84bb8ae6261b802acdd26b29036c93 AS installer-base
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # Every wheel an installer of this base installs carries its bytecode, as the
 # host's own packages do: the image is read-only to the account HQ runs as.
