@@ -376,10 +376,14 @@ def outbound_work() -> tuple[OutboundWork, ...]:
             refuse=_known,
             verb="Refresh",
             execution_notes=(
-                "Where the GitHub App reads the repository, ask the controller to read that "
-                "connection now, through infrastructure.controller.refresh.",
-                "For a repository the App does not read, read its last push from GitHub's "
-                "public API, which needs no credential.",
+                (
+                    "Where the GitHub App reads the repository, ask the controller to read that "
+                    "connection now, through infrastructure.controller.refresh."
+                ),
+                (
+                    "For a repository the App does not read, read its last push from GitHub's "
+                    "public API, which needs no credential."
+                ),
                 "Save when it was last pushed to, and record who asked.",
             ),
         ),

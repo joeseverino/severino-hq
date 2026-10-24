@@ -224,8 +224,10 @@ class PopoverTests(SimpleTestCase):
         self.assertEqual(
             found,
             [
-                "with #origin-two and 2 like it shown (var/look/example/one-820.popover-origin-two.png):"
-                " cut: a key in origin-two",
+                (
+                    "with #origin-two and 2 like it shown (var/look/example/one-820.popover-origin-two.png):"
+                    " cut: a key in origin-two"
+                ),
                 "with #origin-four shown (var/look/example/one-820.popover-origin-four.png): cut: a key in origin-four",
             ],
         )
@@ -481,18 +483,26 @@ class ReportTests(SimpleTestCase):
     # Findings as two runs of the same checkout wrote them: each run makes its
     # records anew, so their UUIDs and ids differ, and a finding cuts its text.
     FIRST_RUN = [
-        "cells: div#origin-hqauditapprovala9fe19de-601b-4d02-9088-41d7ba7d5f01.modal.origin-panel"
-        " runs 102px past its cell: an-example-agent-with-a-long-name wants",
+        (
+            "cells: div#origin-hqauditapprovala9fe19de-601b-4d02-9088-41d7ba7d5f01.modal.origin-panel"
+            " runs 102px past its cell: an-example-agent-with-a-long-name wants"
+        ),
         "cells: dd runs 168px past its cell: hq.audit:approval:a9fe19de-601b-4d02-908",
-        "cells: div#origin-hqinfrastructurefindingcontroller-sweep-stalecontrollere3d7aae8ff21.modal.origin-panel"
-        " runs 40px past its cell: The controller on example-controller has",
+        (
+            "cells: div#origin-hqinfrastructurefindingcontroller-sweep-stalecontrollere3d7aae8ff21.modal.origin-panel"
+            " runs 40px past its cell: The controller on example-controller has"
+        ),
     ]
     SECOND_RUN = [
-        "cells: div#origin-hqauditapproval53dac582-0ef6-43e8-a5e8-80f01bcdc43b.modal.origin-panel"
-        " runs 135px past its cell: an-example-agent-with-a-long-name wants",
+        (
+            "cells: div#origin-hqauditapproval53dac582-0ef6-43e8-a5e8-80f01bcdc43b.modal.origin-panel"
+            " runs 135px past its cell: an-example-agent-with-a-long-name wants"
+        ),
         "cells: dd runs 79px past its cell: hq.audit:approval:53dac582-0ef6-43e8-a5e",
-        "cells: div#origin-hqinfrastructurefindingcontroller-sweep-stalecontrollerfa0be9c1d7aa.modal.origin-panel"
-        " runs 41px past its cell: The controller on example-controller has",
+        (
+            "cells: div#origin-hqinfrastructurefindingcontroller-sweep-stalecontrollerfa0be9c1d7aa.modal.origin-panel"
+            " runs 41px past its cell: The controller on example-controller has"
+        ),
     ]
 
     def test_a_finding_naming_what_each_run_makes_anew_is_the_same_finding_on_every_run(self):

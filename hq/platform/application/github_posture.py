@@ -276,8 +276,10 @@ def _delete_key(repo: Repository, title: str) -> str:
 def _writable_keys(repo: Repository) -> Runs:
     return tuple(
         (
-            f"{repo.short}: delete the writable key {key['title']}, then add its public key back "
-            f"with gh repo deploy-key add -R {repo.name}, which is read-only unless told otherwise",
+            (
+                f"{repo.short}: delete the writable key {key['title']}, then add its public key back "
+                f"with gh repo deploy-key add -R {repo.name}, which is read-only unless told otherwise"
+            ),
             _delete_key(repo, key["title"]),
         )
         for key in (_access(repo) or {}).get("deploy_keys", ())

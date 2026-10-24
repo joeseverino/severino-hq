@@ -161,8 +161,10 @@ class ServedFontTests(SimpleTestCase):
             "menu.js": ('// \u2603\nconst a = "\\u2192", b = "\\u{2026}";\n', {"\u2192", "\u2026", "\u2603"}),
             "menu.css": (
                 # An escape ends with its string, so "\00d7" and the "D" that follows are two characters.
-                '/* \u2603 */ a::after { content: "\\00a0\\2197"; } b { align-content: center; }'
-                ' c::before { content: "\\00d7" / ""; } d::before { content: "Dismissed"; }',
+                (
+                    '/* \u2603 */ a::after { content: "\\00a0\\2197"; } b { align-content: center; }'
+                    ' c::before { content: "\\00d7" / ""; } d::before { content: "Dismissed"; }'
+                ),
                 {"\u00a0", "\u2197", "\u00d7"},
             ),
         }

@@ -509,8 +509,10 @@ class PartReasonTests(SimpleTestCase):
         self.assertEqual(
             sight.part_reasons,
             (
-                "Code scanning alerts, Branch rules not read on app, site: "
-                "not available on this repository (its plan or settings leave it off)",
+                (
+                    "Code scanning alerts, Branch rules not read on app, site: "
+                    "not available on this repository (its plan or settings leave it off)"
+                ),
                 "Branch rules not read on app: GitHub timed out",
                 "Code scanning alerts, Branch rules not read on web: hidden from HQ's connection",
             ),

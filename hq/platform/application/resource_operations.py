@@ -534,8 +534,10 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, str]:
 
     return (
         False,
-        f"Renews automatically from {when_day(renewal_opens_at(expiry, window))} "
-        f"({counted(window, 'day')} before it expires).",
+        (
+            f"Renews automatically from {when_day(renewal_opens_at(expiry, window))} "
+            f"({counted(window, 'day')} before it expires)."
+        ),
     )
 
 

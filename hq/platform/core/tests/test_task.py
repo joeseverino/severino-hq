@@ -93,9 +93,16 @@ class WorktreeTests(SimpleTestCase):
     def test_the_worktree_and_its_folder_are_gone_however_the_block_ends(self):
         with tempfile.TemporaryDirectory() as folder:
             checkout = _repository(Path(folder))
-            with self.assertRaises(KeyError), task.worktree("HEAD", checkout) as tree:
-                self.assertTrue((tree / "page.txt").is_file())
-                raise KeyError("the run broke")
+            trees = []
+
+            def broken_run():
+                with task.worktree("HEAD", checkout) as tree:
+                    trees.append(tree)
+                    self.assertTrue((tree / "page.txt").is_file())
+                    raise KeyError("the run broke")
+
+            self.assertRaises(KeyError, broken_run)
+            [tree] = trees
             self.assertFalse(tree.parent.exists())
             self.assertNotIn(str(tree), _git("worktree", "list", "--porcelain", cwd=checkout))
 

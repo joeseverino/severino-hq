@@ -263,8 +263,10 @@ CORE_CAPABILITY_SPECS = (
         execution_notes=(
             "Read HQ's copy of the policy and find the groups with no members that a rule names.",
             "Refuse when such a group is named anywhere else, since removing it would change what the policy means.",
-            "Strike them from their rules, dropping a rule left admitting nobody, and "
-            "propose the changed policy, which a person approves.",
+            (
+                "Strike them from their rules, dropping a rule left admitting nobody, and "
+                "propose the changed policy, which a person approves."
+            ),
         ),
         label="Remove empty groups",
     ),
@@ -299,10 +301,14 @@ CORE_CAPABILITY_SPECS = (
         look_up_name,
         execution_notes=(
             "Validate the hostname before anything leaves this machine.",
-            "Ask one resolver outside this network, so internal rewrites cannot "
-            "answer a question about the public internet.",
-            "Return the records as the resolver gave them, with no TTL: this "
-            "resolver reports a constant, which is not a measurement.",
+            (
+                "Ask one resolver outside this network, so internal rewrites cannot "
+                "answer a question about the public internet."
+            ),
+            (
+                "Return the records as the resolver gave them, with no TTL: this "
+                "resolver reports a constant, which is not a measurement."
+            ),
         ),
         label="Look up a name",
     ),
@@ -314,11 +320,15 @@ CORE_CAPABILITY_SPECS = (
         AddressCommand,
         look_up_address,
         execution_notes=(
-            "Refuse a private address locally; nothing outside can describe it, "
-            "and asking would disclose it for no answer.",
+            (
+                "Refuse a private address locally; nothing outside can describe it, "
+                "and asking would disclose it for no answer."
+            ),
             "Read reverse DNS, which the address holder publishes and which usually carries a brand name.",
-            "Read the RDAP allocation, which the registry publishes and which "
-            "carries the company. Either registry may fail without the other.",
+            (
+                "Read the RDAP allocation, which the registry publishes and which "
+                "carries the company. Either registry may fail without the other."
+            ),
         ),
         label="Look up an address",
     ),

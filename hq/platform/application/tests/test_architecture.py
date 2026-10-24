@@ -1171,8 +1171,7 @@ PLAIN_WORDS_EXEMPT = (
     (
         "hq/platform/application/resources.py",
         "resource",
-        "An API error for a list name that does not exist, read by whoever "
-        "wrote the client, in the API's own vocabulary.",
+        "An API error for a list name that does not exist, read by whoever wrote the client, in the API's own vocabulary.",
     ),
 )
 

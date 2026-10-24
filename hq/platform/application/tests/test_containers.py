@@ -153,8 +153,10 @@ class StandingTests(TestCase):
             [
                 (
                     "do",
-                    "On example-box, set the image of kuma to docker.io/example/kuma:2 where it is defined, "
-                    "then start it again.",
+                    (
+                        "On example-box, set the image of kuma to docker.io/example/kuma:2 where it is defined, "
+                        "then start it again."
+                    ),
                 ),
                 ("cannot", "HQ cannot apply an update itself yet."),
             ],
@@ -204,10 +206,14 @@ class StandingTests(TestCase):
             (step.phase, step.label, step.summary),
             (
                 "run",
-                "On example-box, set the image of kuma to docker.io/example/kuma:2 in "
-                "/opt/apps/kuma/compose.override.yaml, then run",
-                'ssh example-box "sudo docker compose -f /opt/apps/kuma/compose.yaml '
-                '-f /opt/apps/kuma/compose.override.yaml up -d kuma-web"',
+                (
+                    "On example-box, set the image of kuma to docker.io/example/kuma:2 in "
+                    "/opt/apps/kuma/compose.override.yaml, then run"
+                ),
+                (
+                    'ssh example-box "sudo docker compose -f /opt/apps/kuma/compose.yaml '
+                    '-f /opt/apps/kuma/compose.override.yaml up -d kuma-web"'
+                ),
             ),
         )
 

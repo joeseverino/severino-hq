@@ -28,6 +28,15 @@ query-filters:
   # hq/platform/application/tests/test_import_cycles.py.
   - exclude:
       id: py/unsafe-cyclic-import
+  # py/uninitialized-local-variable reads a PEP 695 type parameter (`def
+  # display[T](...)`) as a local used before it is bound. Ruff's F821 and F823
+  # hold the rule it makes, on every file.
+  - exclude:
+      id: py/uninitialized-local-variable
+  # py/implicit-string-concatenation-in-list is Ruff's ISC004, which holds it
+  # on every file in the gates a change runs before it is pushed.
+  - exclude:
+      id: py/implicit-string-concatenation-in-list
 
 # The type checker's settings shim, for the host's mypy and each extension's.
 # django-stubs reads a settings module's names statically, so it re-exports

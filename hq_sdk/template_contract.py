@@ -529,8 +529,10 @@ def markdown(templates: dict[str, Any]) -> str:
     )
     lines += [
         "",
-        f"Host tags: {tags}. Host filters: {filters}. Django's own tags and filters, and "
-        f"`{{% load %}}` of {_code(templates['django']['libraries'])} or the extension's own libraries.",
+        (
+            f"Host tags: {tags}. Host filters: {filters}. Django's own tags and filters, and "
+            f"`{{% load %}}` of {_code(templates['django']['libraries'])} or the extension's own libraries."
+        ),
         "",
         f"Classes: {_code(templates['classes'])}.",
         "",
