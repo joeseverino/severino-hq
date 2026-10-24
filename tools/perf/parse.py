@@ -60,11 +60,10 @@ def docker_memory_bytes(output: str) -> int:
 
 
 def cookie(output: str) -> tuple[str, str]:
-    """(name, value) from the `<name>=<value>` line `manage.py dev_session` ends on,
-    under whatever label a task runner puts before it."""
+    """(name, value) from the `<name>=<value>` line `manage.py dev_session` ends on."""
 
-    lines = [line.split()[-1] for line in output.splitlines() if "=" in line]
-    if not lines:
+    lines = output.strip().splitlines()
+    name, _, value = lines[-1].partition("=") if lines else ("", "", "")
+    if not name or not value or any(char.isspace() for char in name + value):
         raise ValueError(f"dev_session printed no cookie: {output.strip()[-200:]!r}")
-    name, _, value = lines[-1].partition("=")
     return name, value

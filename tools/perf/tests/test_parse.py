@@ -74,15 +74,17 @@ class MemoryTests(SimpleTestCase):
 
 
 class CookieTests(SimpleTestCase):
-    def test_under_the_task_runners_label_and_bare(self):
-        for output in (
-            "[dev:session] sessionid=k3y\n",
-            "sessionid=k3y\n",
-            "[dev:session] $ uv run python manage.py dev_session operator\n[dev:session] sessionid=k3y\n",
-        ):
+    def test_the_line_dev_session_ends_on(self):
+        for output in ("sessionid=k3y\n", "Loaded 2 plugins\nsessionid=k3y\n"):
             with self.subTest(output=output):
                 self.assertEqual(parse.cookie(output), ("sessionid", "k3y"))
 
-    def test_no_cookie_is_refused(self):
-        with self.assertRaises(ValueError):
-            parse.cookie("CommandError: dev_session runs only with DEBUG on\n")
+    def test_anything_else_is_refused(self):
+        for output in (
+            "",
+            "CommandError: dev_session runs only with DEBUG on\n",
+            "[dev:session] sessionid=k3y\n",
+            "sessionid=\n",
+        ):
+            with self.subTest(output=output), self.assertRaises(ValueError):
+                parse.cookie(output)

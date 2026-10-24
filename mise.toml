@@ -228,6 +228,8 @@ run = "tools/dev/dev.sh"
 [tasks."dev:session"]
 extends = "dev:scratch-env"
 description = "A signed-in session cookie for this checkout's scratch server"
+# A program reads the cookie, so stdout is the command's own, unlabeled.
+raw = true
 run = "uv run python manage.py dev_session operator"
 
 [tasks."dev:manage"]

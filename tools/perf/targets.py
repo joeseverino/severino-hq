@@ -155,13 +155,18 @@ class Scratch:
         stop_group(self.server)
         self.server = None
 
+    def _read(self, task: str, *args: str, env: dict[str, str] | None = None) -> str:
+        """What ``task`` prints. Each task read here is raw, so its stdout is the command's own, unlabeled."""
+
+        return run(self._mise(task, *args), env=env or self.env)
+
     def session(self) -> tuple[str, str]:
-        return parse.cookie(run(self._mise("dev:session"), env=self.env))
+        return parse.cookie(self._read("dev:session"))
 
     def queries(self, pages: list[str]) -> dict[str, int | None]:
         env = self.env | {"PERF_PAGES": json.dumps(pages), "PERF_USER": USER}
         code = PROBE.read_text(encoding="utf-8")
-        return probe_counts(run(self._mise("dev:manage", "--", "shell", "--no-imports", "-c", code), env=env))
+        return probe_counts(self._read("dev:manage", "--", "shell", "--no-imports", "-c", code, env=env))
 
     def memory(self) -> int:
         """The serving processes' footprint: under the reloader, its worker alone."""
