@@ -25,8 +25,8 @@ run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parall
 # Not a gate: the tests a developer names, as the gates run them. Whatever
 # follows the labels reaches manage.py test as typed, so a later --parallel or
 # -k wins. `--at <ref>` first runs them on the ref with this tree's test files
-# laid over it (tools/gate/at.py).
+# laid over it, but the support files `--keep <path>` names (tools/gate/at.py).
 [test]
-description = "manage.py test on the labels named, as the gates run it: mise run test [--at <ref>] <label>..."
+description = "manage.py test on the labels named, as the gates run it: mise run test [--at <ref> [--keep <path>]...] <label>..."
 extends = "django-heavy"
 run = "uv run --group browser python -m tools.gate.at"

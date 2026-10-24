@@ -22,6 +22,7 @@ seen = {
     "code": (here / "app.py").read_text(),
     "tests": sorted(str(p.relative_to(here)) for p in here.rglob("*.py") if p.name != "app.py"),
     "changed": (here / "tests" / "test_app.py").read_text(),
+    "support": (here / "hq" / "core" / "tests" / "browser" / "estate.py").read_text(),
 }
 pathlib.Path(sys.argv[1]).write_text(json.dumps(seen))
 sys.exit(int(sys.argv[2]))
@@ -95,6 +96,51 @@ class TestAtRefTests(GateTestCase):
         verdict = out.strip().splitlines()[-1]
         self.assertIn(self.old[:12], verdict)
         self.assertIn("FAILED", verdict)
+        self.assert_nothing_left()
+
+    def test_support_is_laid_over_and_named_and_test_modules_are_counted(self):
+        code, out = self.run_main("--at", self.old, str(self.seen), "1")
+
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(self.seen.read_text())["support"], "new browser\n")
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("3 test modules and support hq/core/tests/browser/estate.py from this tree", verdict)
+        self.assertNotIn("kept at the ref", verdict)
+
+    def test_kept_support_runs_as_the_ref_has_it_and_the_line_says_so(self):
+        code, out = self.run_main("--at", self.old, "--keep", "hq/core/tests/browser/estate.py", str(self.seen), "0")
+
+        self.assertEqual(code, 0)
+        seen = json.loads(self.seen.read_text())
+        self.assertEqual(seen["support"], "old browser\n")
+        self.assertEqual(seen["changed"], "edited\n")
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("kept at the ref: hq/core/tests/browser/estate.py", verdict)
+        self.assertNotIn("and support", verdict)
+        self.assert_nothing_left()
+
+    def test_a_module_a_label_names_is_a_test_module_whatever_its_name(self):
+        label = "hq.core.tests.browser.estate.EstateTests"
+        code, out = self.run_main(f"--at={self.old}", str(self.seen), "0", label)
+
+        self.assertEqual(code, 0)
+        self.assertIn("4 test modules from this tree", out.strip().splitlines()[-1])
+        with patch("sys.stderr", io.StringIO()) as err:
+            code, _ = self.run_main("--at", self.old, "--keep=hq/core/tests/browser/estate.py", label)
+        self.assertEqual(code, 2)
+        self.assertIn("is a test module", err.getvalue())
+        self.assert_nothing_left()
+
+    def test_a_keep_that_names_no_changed_support_is_refused(self):
+        for keep in ("tests/test_app.py", "app.py", "hq/core/tests/browser/missing.py"):
+            with self.subTest(keep=keep), patch("sys.stderr", io.StringIO()) as err:
+                code, _ = self.run_main("--at", self.old, "--keep", keep, str(self.seen), "0")
+                self.assertEqual(code, 2)
+                self.assertIn(keep, err.getvalue())
+                self.assertFalse(self.seen.exists())
+        with patch("sys.stderr", io.StringIO()) as err:
+            self.assertEqual(self.run_main("--at", self.old, "label", "--keep")[0], 2)
+        self.assertIn("--keep needs a path", err.getvalue())
         self.assert_nothing_left()
 
     def test_a_pass_at_the_ref_names_it(self):

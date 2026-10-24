@@ -517,13 +517,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """`#%` is a legal fragment and no encoding of a row's id: it names no
         row, and everything the table script sets up after landing still runs."""
 
-        errors = []
-        self.page.on("pageerror", lambda error: errors.append(str(error)))
         self.page.goto(f"{ORIGIN}/projects/#%", wait_until="load")
         ready = self.page.eval_on_selector_all(
             SELECTORS["selectable_table"], "(tables) => tables.map((table) => table.dataset.selectionReady)"
         )
-        self.assertEqual(errors, [])
+        self.kept_the_policy()
         self.assertTrue(ready)
         self.assertEqual(set(ready), {"true"})
 
